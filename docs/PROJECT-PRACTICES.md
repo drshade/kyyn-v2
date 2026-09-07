@@ -26,11 +26,14 @@ does not become another specification of the product's runtime workflows.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
 - **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
 - **Current scope:** documentation/ADR checks, checker regressions, explicit pure-module
-  import allowlists, native package builds and actual MicroHs generated-codec tests.
+  import allowlists, native package builds, scoped process lifetime tests and actual MicroHs generated-codec tests.
   `tools/test-guest.sh` builds the vendored compiler/evaluator/preprocessor and the
   native test suite inspects authored types, generates codecs, compiles them and
   exchanges runtime values with the resulting guest. It does not substitute GHC
-  for guest execution. No complete KB workflow, plugin or Web build exists yet.
+  for guest execution. Codec guest invocation uses the native ProcessExecution
+  interpreter. Process tests exercise real children, byte pipes, failures and
+  cancellation; their reaping assertions currently require POSIX (Linux in CI).
+  No complete KB workflow, plugin or Web build exists yet.
 - **As implementation arrives:** extend this same gate with the relevant checks.
   The earlier documentation-only guard is removed because native and guest builds
   now run unconditionally; do not silently skip their failures.

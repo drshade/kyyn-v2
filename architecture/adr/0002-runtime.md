@@ -1,6 +1,14 @@
-# 0002 — Native Haskell kernel and bundled MicroHs execution
+---
+id: 0002
+title: 'Native Haskell kernel and bundled MicroHs execution'
+status: proposed
+date: 2026-09-07
+---
+# Native Haskell kernel and bundled MicroHs execution
 
-Status: Proposed. Basis: owner-established distribution direction; implementation gated.
+Basis: owner-established distribution direction. Runtime integration and release
+gates remain outstanding; the scoped process interface below specifies native
+implementation mechanics, not a renewed toolchain choice.
 
 ## Context
 
@@ -88,24 +96,66 @@ can express who releases the child without handing native `IO` to porcelain:
 ```haskell
 data ProcessExecution :: Effect where
   WithProcess
-    :: ProcessSpec -> (ProcessPipes -> m a) -> ProcessExecution m a
+    :: ProcessSpec -> Eff (ProcessPipes : es) a
+    -> ProcessExecution (Eff es) a
+
+withProcess
+  :: ProcessExecution :> es
+  => ProcessSpec -> Eff (ProcessPipes : es) a -> Eff es a
+
+data ProcessPipes :: Effect where
   WriteStdin
-    :: ProcessPipes -> Bytes -> ProcessExecution m ()
+    :: Bytes -> ProcessPipes m ()
+  CloseStdin
+    :: ProcessPipes m ()
   ReadStdout
-    :: ProcessPipes -> ProcessExecution m (Maybe Bytes)
+    :: ProcessPipes m (Maybe Bytes)
+  AwaitExit
+    :: ProcessPipes m ProcessExit
+
+data ProcessExit = ProcessExit
+  { exitCode :: Int
+  , stderr   :: Bytes
+  }
 
 runProcessExecutionIO
   :: (IOE :> es, Failure :> es)
   => Eff (ProcessExecution : es) a -> Eff es a
 ```
 
-`ProcessPipes` is opaque; `Nothing` means EOF, not a successful protocol result.
-Reads are chunks, not complete messages; [the adapter](0007-wire.md) owns framing.
-`WithProcess` scopes cleanup to the callback on return, failure and cancellation.
-Its higher-order handling mechanics must be proved with the chosen effectful
-interpreter, not replaced with an `IO` callback in a public semantic record.
-Exit status and stderr diagnostics are also required in the real process API;
-these selected constructors illustrate ownership, not a full subprocess library.
+`ProcessPipes` is the inner effect installed for the selected child, not a native
+handle or a token requiring a registry. Nested `withProcess` calls install distinct
+pipe scopes; ordinary effect-row lifting can address an outer scope explicitly.
+The interpreter holds native handles privately and preserves the caller's local
+effects when interpreting the inner action. It uses effectful's scoped lifting,
+not an `IO` callback in the public API.
+The initial handler uses `SeqUnlift`: pipe operations stay on the inner action's
+thread. An inner action must not fork work that uses these pipes. The sequential
+protocol adapter fits this constraint; cancellation comes from the owning caller.
+The native stderr worker handles bytes privately and does not execute guest or
+caller effects on its worker thread.
+
+`Nothing` means EOF, not a successful protocol result. Reads are byte chunks, not
+complete messages; [the adapter](0007-wire.md) owns framing. Writes flush; closing
+stdin signals input completion. Callers drain stdout or finish their protocol
+before awaiting exit, since an unread output pipe can fill. Stderr drains
+concurrently and is returned as bytes with the exit status, not printed or logged.
+A nonzero exit is data for the compiler/runtime caller to interpret. Spawn and
+pipe IO failures use the operational Failure channel; cancellation propagates
+after cleanup rather than being misclassified as process rejection.
+If cleanup itself fails after a successful inner action, report that operational
+failure. When already unwinding an exception or cancellation, a secondary cleanup
+IO error must not replace the primary failure; cleanup is best-effort on that path.
+
+`ProcessSpec` supplies an executable, argument list, working directory and complete
+environment explicitly. There is no implicit shell command or environment merge.
+`WithProcess` owns the child and stderr reader until its inner action returns,
+fails or is cancelled; leaving early terminates and reaps the child. Use
+`AwaitExit` when normal completion is required. The native interpreter reuses
+typed-process for process lifetime and scopes the stderr worker so it is cancelled
+before pipes are closed. This is ownership of the directly launched child, not a
+process-tree supervisor or a promise of forced termination of arbitrary programs
+that ignore termination. Those are not capabilities required by the bundled guest.
 
 ## Boundaries and alternatives
 

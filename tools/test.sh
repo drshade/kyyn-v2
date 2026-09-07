@@ -19,5 +19,6 @@ node tools/checks/check-docs.mjs
 node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
+cabal test processes --test-show-details=direct
 bash tools/test-guest.sh
-echo "Complete gate passed: documentation, import boundaries, native builds and real MicroHs codec tests."
+echo "Complete gate passed: documentation, import boundaries, native process lifetimes and real MicroHs codec tests."

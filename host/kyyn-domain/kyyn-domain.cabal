@@ -7,7 +7,7 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Domain.DataType
+  exposed-modules: Kyyn.Domain.DataType Kyyn.Domain.Failure
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror

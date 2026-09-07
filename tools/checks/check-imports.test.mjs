@@ -30,3 +30,15 @@ test('compiler internals stay native and guest transport stays private', () => {
   assert.deepEqual(checkImports('kyyn-runtime', 'import Kyyn.MicroHs.Inspection'), ['Kyyn.MicroHs.Inspection']);
   assert.deepEqual(checkImports('kyyn-microhs', 'import Kyyn.Porcelain.Capability.RootStore'), ['Kyyn.Porcelain.Capability.RootStore']);
 });
+
+test('effect APIs do not grant IO to capabilities or pure codec generation', () => {
+  const header = 'module Kyyn.Plumbing.Capability.ProcessExecution where\n';
+  assert.deepEqual(checkImports('kyyn-plumbing', header + 'import Effectful (Eff, (:>))'), []);
+  for (const clause of ['Effectful', 'Effectful (Eff, liftIO)', 'qualified Effectful as E']) {
+    assert.match(checkImports('kyyn-plumbing', header + `import ${clause}`).join(), /API-only/);
+  }
+  assert.deepEqual(checkImports('kyyn-plumbing', 'import Effectful (Eff)'), ['Effectful']);
+  assert.deepEqual(checkImports('kyyn-plumbing', header + 'import System.Process.Typed'), ['System.Process.Typed']);
+  assert.deepEqual(checkImports('kyyn-plumbing-interpreters', 'import System.Process.Typed'), []);
+  assert.deepEqual(checkImports('kyyn-plumbing-interpreters', 'import MicroHs.Expr'), ['MicroHs.Expr']);
+});

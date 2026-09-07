@@ -4,12 +4,17 @@ import Control.Monad (unless, forM_)
 import Data.List (isInfixOf)
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as Bytes
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
+import Kyyn.Plumbing.Capability.ProcessExecution
+import Kyyn.Plumbing.Interpreter.Failure (runFailure)
+import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
+import Effectful (runEff)
 import System.Directory (createDirectoryIfMissing)
-import System.Environment (getEnv)
+import System.Environment (getEnv, getEnvironment)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode)
@@ -17,6 +22,7 @@ import System.Process (readProcessWithExitCode)
 main :: IO ()
 main = do
   repo <- getEnv "KYYN_TEST_ROOT"
+  environment <- getEnvironment
   let compiler = repo </> "vendor/MicroHs"
       fixtures = repo </> "tests/integration/codecs"
       output = repo </> ".build/codecs"
@@ -46,16 +52,23 @@ main = do
       ["-i" ++ concatPaths [fixtures, output, guest, json], fixtures </> "RoundTrip.hs", "-o" ++ output </> "roundtrip"] ""
     unless (compiled == ExitSuccess) (fail errors)
     let invoke input = do
-          (status, actual, diagnostics) <- readProcessWithExitCode (output </> "roundtrip") [] (input ++ "\n")
-          unless (status == ExitSuccess) (fail diagnostics)
-          decoded <- either fail pure (A.eitherDecode (utf8 actual))
+          outcome <- runEff . runFailure . runProcessExecutionIO $
+            withProcess (ProcessSpec (output </> "roundtrip") [] repo environment) $ do
+              writeStdin (B.toStrict (utf8 (input ++ "\n")))
+              closeStdin
+              actual <- collectStdout
+              status <- awaitExit
+              pure (actual, status)
+          (actual, ProcessExit status diagnostics) <- either (fail . show) pure outcome
+          unless (status == 0) (fail (show diagnostics))
+          decoded <- either fail pure (A.eitherDecodeStrict actual)
           pure (decoded, diagnostics)
         success input expected = do
           (actual, errors') <- invoke input
-          unless (actual == expected && null errors') (fail (show (actual, errors')))
+          unless (actual == expected && Bytes.null errors') (fail (show (actual, errors')))
         rejection input = do
           (actual, diagnostics) <- invoke input
-          unless (actual == A.object ["error" A..= True] && not (null diagnostics))
+          unless (actual == A.object ["error" A..= True] && not (Bytes.null diagnostics))
             (fail ("expected diagnostic rejection, received " ++ show actual))
         value = A.object ["todos" A..= [A.object ["contents" A..= A.object
           ["name" A..= ("München 日本語 🦋\n\0" :: String), "identity" A..= tag "Wrapped" (Just (A.String "todo-001"))
