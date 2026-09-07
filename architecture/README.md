@@ -16,8 +16,8 @@ The [repository layout](adr/0026-repository-layout.md) records the agreed monore
 and package ownership; ADR 0003 defines interpreter versus application-execution naming.
 The [todo evolution walkthrough](walkthroughs/todo-evolution.md) makes the proposed
 storage/workspace layout, saved candidate and acceptance path concrete. It is a
-review fixture before an executable proof, not a new implementation or a claim
-that the remaining review findings are resolved.
+concrete integration fixture for the first real CLI implementation, not a claim
+that the remaining technical gates have passed.
 The [protocol investigation](protocol-investigation.md) separates observations
 from assumptions about JSON libraries. Each ADR records a concrete recommendation,
 alternatives, consequences, and evidence required before implementation relies on it.
@@ -43,8 +43,9 @@ needed; nominal Haskell types do not prove equal Git revisions or atomic writes.
 This repository is the target for the Kyyn build and the maintained home of these
 architecture documents. The initial import includes the experiment working tree's
 ADR updates and walkthrough, including the agreed schema-module naming convention.
-It does not yet incorporate the follow-up mechanics agreed in the subsequent Fable
-review. Those remain a documentation task before implementing the affected boundaries.
+The storage, workspace and acceptance ADRs incorporate the follow-up mechanics
+for the first local evolution journey. Their proposed revisions require design
+review before implementation; the runtime codec remains an explicit technical gate.
 
 Historical experiment and working-KB evidence is cited by repository-relative source
 path for readers with those checkouts. These references are supporting context,

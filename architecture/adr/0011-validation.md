@@ -1,6 +1,14 @@
-# 0011 — Validation checks a complete candidate, not reality
+---
+id: 0011
+title: 'Validation checks a complete candidate, not reality'
+status: proposed
+date: 2026-09-07
+---
+# Validation checks a complete candidate, not reality
 
-Status: Proposed. Whole-root performance and examples are implementation gates.
+Basis: complete-root checking and the distinction between Candidate and Validated
+follow owner direction. Example representation, execution interfaces and whole-root
+performance remain implementation proposals and gates.
 
 ## Context
 
@@ -186,7 +194,11 @@ Checking examples is allowed on structurally readable candidates before they ear
 contracts after schema migration produce actionable diagnostics, not silent skips.
 Persist the example's argument/result values and recorded contracts, not just a
 query name and an untyped expected literal. Do not bypass whole-contract identity
-using shape-only equality. When bindings become incompatible, the author explicitly
+using shape-only equality. Compare the saved argument/result contract identities with the selected query's
+argument/result contracts, not with the whole Root contract. A Root schema change
+alone does not invalidate an assertion whose query contracts remain equal. The
+comparison still uses each whole contract, including its roles; there is no separate
+presentation-only compatibility rule. When a query contract changes, the author explicitly
 rebuilds the example against the new descriptor, checks its values and reviews the
 change. A compatible assertion is carried forward in the target copy without
 re-entering it for every evolution; no automatic compatibility subsystem is needed.
