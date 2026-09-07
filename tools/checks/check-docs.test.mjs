@@ -32,6 +32,8 @@ test('new ADR metadata and imported prose statuses both work', () => {
   assert.deepEqual(checkAdr('0027-example.md', adr), []);
   assert.deepEqual(checkAdr('0003-effects.md', '# 0003 — Effects\n\nStatus: Proposed mechanics; owner-selected boundaries.\n'), []);
   assert.match(checkAdr('0027-example.md', '# 0027 — Example\n\nStatus: Proposed.\n').join('\n'), /requires front matter/);
+  assert.deepEqual(checkAdr('0026-layout.md', '# 0026 — Layout\n\nStatus: Accepted.\n'), []);
+  assert.deepEqual(checkAdr('0026-layout.md', adr.replace('id: 0027', 'id: 0026')), []);
 });
 
 test('metadata errors fail rather than manufacturing a lifecycle state', () => {
@@ -81,6 +83,26 @@ test('generated and third-party docs are outside authored documentation checks',
   const errors = checkRepository(root).errors.join('\n');
   assert.doesNotMatch(errors, /missing local link/);
   assert.match(errors, /extend tools\/test.sh/);
+});
+
+test('single-line code spans hide literal links but not adjacent real links', t => {
+  const { root } = fixture(t);
+  for (const source of [
+    '`[Literal](missing.md)`\n',
+    '``[Literal](missing.md) with a ` inside``\n',
+    '``[One](missing.md)`` and `[Two](missing-too.md)`\n',
+  ]) assert.deepEqual(checkMarkdown(root, 'README.md', source), []);
+  assert.match(checkMarkdown(root, 'README.md', '`code \\` then [Real](missing.md)\n').join('\n'), /missing local/);
+  assert.match(checkMarkdown(root, 'README.md', '`[Literal](ignored.md)` [Real](missing.md)\n').join('\n'), /missing local.*missing.md/);
+  assert.match(checkMarkdown(root, 'README.md', '[`Label`](missing.md)\n').join('\n'), /missing local/);
+  assert.match(checkMarkdown(root, 'README.md', '`unclosed [Real](missing.md)\n').join('\n'), /missing local/);
+  assert.match(checkMarkdown(root, 'README.md', '\\`[Real](missing.md)\\`\n').join('\n'), /missing local/);
+});
+
+test('integration test inputs cannot bypass the documentation-only guard', t => {
+  const { root, write } = fixture(t);
+  write('tests/integration/Example.hs', 'main = pure ()\n');
+  assert.match(checkRepository(root).errors.join('\n'), /tests\/integration\/ contains implementation inputs/);
 });
 
 test('documentation-only success cannot silently stand for a new software build', t => {
