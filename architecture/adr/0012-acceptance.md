@@ -1,6 +1,10 @@
-# 0012 — Acceptance is one conditional step from local head
-
-Status: Proposed. Basis: owner-established local expected-base guarantee.
+---
+id: 0012
+title: 'Acceptance is one conditional step from local head'
+status: proposed
+date: 2026-09-07
+---
+# Acceptance is one conditional step from local head
 
 ## Context
 
@@ -61,8 +65,9 @@ changes without running archived code. No separate provenance commit, receipt or
 database is required.
 
 Keep evaluation, validation and diff inspection available before acceptance.
-For a new CLI/Web process, first use EvolutionStore's `LoadCandidate`, then
-`checkCandidate` on that stored result, and only pass a successful checked value
+For a new CLI/Web process, perform the already-accepted lookup described below,
+then use EvolutionStore's `LoadCandidate` and `checkCandidate` on that stored
+result, and only pass a successful checked value
 to `AcceptEvolution`. Missing saved material is an actionable request to evaluate,
 not an implicit evaluation during acceptance. A saved passing report does not
 replace fresh validation. This application path needs RootExecution for checking;
@@ -128,6 +133,7 @@ whose working-tree update needs attention:
 data AcceptanceResult
   = NotAccepted AcceptanceProblem
   | AcceptedCommit GitRevision WorkingTreeOutcome
+  | AlreadyAccepted GitRevision Diagnostic
 
 data AcceptanceProblem
   = BaseMismatch GitRevision (Maybe GitRevision)
@@ -154,6 +160,30 @@ pre-publication IO failures use [Failure](0019-failures.md). After a successful 
 update, returned errors/cancellation must retain `AcceptedCommit` and its revision;
 they are not permission to retry acceptance as though nothing happened.
 
+A process can die after the ref update and before returning or synchronizing the
+workspace. On the next acceptance request, inspect the selected branch's Git
+history before loading/checking a candidate or diagnosing an old Before as a
+rebase request. The committed Accepted archive is authoritative for this lookup,
+not the possibly still-Ready local manifest:
+
+```haskell
+-- EvolutionStore operation; reads Git, not a second acceptance registry.
+FindAcceptance
+  :: KnowledgeBase -> EvolutionId -> GitRevision
+  -> EvolutionStore m (Maybe GitRevision)
+```
+
+The input revision selects the branch history to inspect. Match the stable
+workspace ID and the archive's recorded Before to the accepting commit's parent;
+return the commit that introduced that Accepted archive, not a later head that
+merely carries it. An ambiguous or malformed history is a diagnostic, not a guess.
+The application returns `AlreadyAccepted` with that revision and guidance to
+inspect/repair local files through Git. Publication repeats this lookup before
+base/readiness checks so a concurrent completed acceptance is diagnosed honestly.
+It does not automatically overwrite a live workspace, replay the evolution or
+publish a replacement acceptance. Missing disposable candidate files do not hide
+an acceptance already recorded in Git. No durable recovery coordinator is needed.
+
 The guarantee is local to the selected accepted branch. It does not reserve a
 remote branch. Push rejection and upstream conflicts belong to the user/agent's
 ordinary Git workflow (ADR 0013). Simultaneous edits of an uncommitted workspace
@@ -174,17 +204,19 @@ and share draft files through ordinary Git when desired; that commit advances
 head and can require rebasing their evolutions. Ready is author intent, not an
 automatic commit. Accepted workspaces are committed and retained.
 
-Build the accepting tree from `Before.revision`'s tree, replacing the complete
-`root/` subtree with RootStore's export, and the selected `evolutions/<id>/`
-subtree with EvolutionStore's accepted archive, under the proposed ADR 0006 layout.
+Build the accepting tree from `Before.revision`'s tree, applying the complete
+subtree replacements exported by RootStore and EvolutionStore. Their prefixes
+are relative to the explicit KB location (ADR 0006); publication does not
+hardcode either store's layout.
 This includes facts, source, configuration and examples; missing files are deletions.
 Preserve already committed unrelated files. Do not sweep other uncommitted
 drafts, staged files or raw edits into that tree. Other drafts become base-mismatched
 when acceptance advances head; an explicit in-place rebase is the intended repair.
 
 Tree construction must not use the user's index as an implicit source of changes.
-After the conditional ref update, synchronize only the paths written by this
-acceptance while preserving unrelated working-tree and staged changes. Refuse
+After the conditional ref update, synchronize the paths written or removed by
+this acceptance in both the working tree and index, while preserving unrelated
+working-tree and staged changes. Refuse
 known overlapping edits before publication rather than silently discard them.
 This requires a tested Git tree/index/worktree sequence; no particular checkout
 command is endorsed here as already sufficient. Simultaneous arbitrary raw edits
@@ -223,3 +255,8 @@ the other's local files, rebase it and accept it. Include unrelated staged and
 unstaged files, a previously committed draft, overlapping edits, detached HEAD
 and changed branch selection. Assert both the committed tree and remaining
 index/worktree contents; a passing ref-update test alone does not prove this seam.
+Kill the process after successful ref update but before local synchronization,
+then retry with disposable candidates removed. It must identify the actual
+accepting commit without evaluating or creating another commit. Repeat after a
+later unrelated commit: inherited archive presence must not misidentify that
+later head as the accepting commit.

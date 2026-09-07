@@ -1,6 +1,10 @@
-# 0006 — Materialized facts and runtime data loading
-
-Status: Owner-selected Dhall fact storage. Concrete storage mechanics remain proposed.
+---
+id: 0006
+title: 'Materialized facts and runtime data loading'
+status: proposed
+date: 2026-09-07
+---
+# Materialized facts and runtime data loading
 
 ## Context
 
@@ -55,7 +59,7 @@ data RootStore :: Effect where
   ReadExamples
     :: Root -> RootStore m [Example]
   ExportRootFiles
-    :: Root -> RootStore m RootFiles
+    :: Root -> RootStore m SubtreeReplacement
   MaterializeRoot
     :: KnowledgeBase -> CheckedContract -> CodeSnapshot -> CheckedValue
     -> RootStore m Root
@@ -74,20 +78,39 @@ publication with a complete, fixed file tree, including facts, code, configurati
 and examples. It is not a callback or a path to an editable directory:
 
 ```haskell
-data RootFiles  -- complete root-relative paths and bytes, including empty collections
+type FileTree = [(RelativePath, Bytes)]
+
+data SubtreeReplacement = SubtreeReplacement
+  { prefix :: RelativePath  -- relative to the KB directory
+  , files  :: FileTree      -- paths relative to that prefix
+  }
 ```
 
-RootStore owns its layout and encoding. Git plumbing consumes paths/bytes supplied
-by publication; it does not infer how to decode an opaque `Root` handle.
+Use plain immutable file trees for `FactSnapshot`, `CodeSnapshot` and captured
+workspace material. Their owning store defines the path base and partitions;
+they contain bytes, not live paths or callbacks. `FileTree` is a representation,
+not a CAS service. Duplicate paths and file/directory collisions are errors.
+An empty collection is represented by its empty membership file, not an empty
+directory which Git cannot retain.
+
+These pure host values, including repository/path primitives, live in
+`kyyn-domain`; plumbing may import the small primitive modules, not KB workflow
+modules. They need no guest-side counterpart or new package. RootStore owns its
+layout and encoding and exports prefix `root`; EvolutionStore exports its own
+archive prefix. Publication composes each prefix with `KnowledgeBase.prefix`.
+Git consumes repository-relative paths and bytes, without knowing either layout.
+Each export replaces its complete subtree: missing paths mean deletion.
 
 `LoadRootAt` structurally decodes a commit; it cannot confer semantic validation
 without the [checker](0011-validation.md). `MaterializeRoot` verifies that the
-value matches the target root contract, writes a separate snapshot and never
+value matches the target root contract, produces an in-memory file tree and never
 advances the accepted ref. Its signature requires no guest evaluation. Its inputs
 contain no implicit current schema or code. DhallHandling owns plugin-config
 and fact decoding; neither leaks into the domain API. SchemaInspection
 derives the contract from the selected authored schema under ADR 0005; that is
-separate from parsing fact files.
+separate from parsing fact files. `MaterializeRoot` does not write a second
+temporary root: `SaveCandidate` owns persistence of that returned value, context
+and report. Loading a saved candidate reconstructs these same value representations.
 Structural root loading includes its plugin configuration. A malformed or
 structurally incompatible config fails the whole load (ADR 0016); no partial root
 or silently disabled connector is returned. Pure config validation subsequently

@@ -1,6 +1,10 @@
-# 0021 — Architecture is a tested deliverable before feature volume
-
-Status: Proposed. Basis: owner requirement for deliberate, expressive implementation.
+---
+id: 0021
+title: 'Architecture is a tested deliverable before feature volume'
+status: proposed
+date: 2026-09-07
+---
+# Architecture is a tested deliverable before feature volume
 
 ## Context
 
@@ -27,6 +31,16 @@ No direct provider access in routine tests; use synthetic fixtures and explicit
 opt-in integration runs.
 
 ## Ordered implementation slices
+
+The first implementation is a CLI journey through the real kernel and MicroHs:
+load–compile–validate, followed by evolution, saved-candidate checking and local
+acceptance/reopen. Use the [todo walkthrough](../walkthroughs/todo-evolution.md)
+as its integration fixture. Create only the packages needed for those operations,
+with real build/tests at each merge, rather than a package-scaffolding PR or a
+separate native-Haskell stand-in for guest execution. The codec compatibility and
+dependency gates below must be resolved before relying on that runtime boundary.
+This establishes a narrow working foundation; it does not discharge the reporting,
+Web/MCP, capability, performance or distribution proofs below.
 
 1. Accept meaning/boundary decisions. Compile a tiny package DAG and operation
    signatures with forbidden imports checked. No empty capability implementations

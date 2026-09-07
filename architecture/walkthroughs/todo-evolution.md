@@ -102,6 +102,7 @@ evolutions/simplify-todos/
     examples/receipts-title.dhall    existing assertion, checked for target bindings
     examples/report-done.dhall       new required assertion
   change/Evolution.hs
+  notes/                            review notes, outside evaluation inputs
 ```
 
 `target/` is the **complete proposed non-fact root**, not a partial overlay. In
@@ -183,8 +184,9 @@ Inside `applyEvolution`, the meaningful sequence is:
    obtain the target value plus the derived step report.
 2. `TargetCode captured.context.material`: select the captured target files only.
 3. `MaterializeRoot kb after.schema targetCode value`: encode the returned facts
-   as Dhall alongside the proposed source/configuration/examples in a separate
-   snapshot. The accepted root remains A.
+   as Dhall alongside the proposed source/configuration/examples in an immutable
+   in-memory file tree. Saving, not materialization, writes that result to disk.
+   The accepted root remains A.
 4. Construct `Candidate captured.context report materializedRoot`, then
    `SaveCandidate candidate`. Return that unchecked candidate to the application.
 5. The application calls `checkCandidate candidate`: validate the materialized
@@ -211,9 +213,9 @@ capture context and step report. A possible private cache layout is:
 .kyyn/candidates/latest/<evolution-id>    selects its most recent complete result
 ```
 
-Private directory names are implementation details. The store must not mutate
-bytes behind a previously returned snapshot handle or select a partially saved
-result. This is local result persistence, not a committed registry of every attempt.
+Private directory names are implementation details. Previously loaded snapshot
+values remain unchanged, and loading must not select a partially saved result.
+This is local result persistence, not a committed registry of every attempt.
 
 The user/agent inspects the facts, schema/source changes, examples and report, then
 marks the workspace Ready. Ready changes lifecycle metadata, not captured program
@@ -226,6 +228,8 @@ The next process resolves the workspace and performs this sequence:
 
 | Call | Result and purpose |
 | --- | --- |
+| `ResolveEvolution kb id` | Resolve the stable ID returned by creation/listing; names are labels |
+| `FindAcceptance kb id head` | Diagnose an already accepted workspace from Git before needing local candidate files |
 | `LoadCandidate workspace` | `Maybe (Candidate Root)`; load fixed saved data, not a saved validation authority |
 | `checkCandidate candidate` | `CheckResult (Candidate (Validated Root))`; rerun pure validation and examples |
 | `AcceptEvolution main checked` | `AcceptanceResult`; publish only after readiness, input-match and expected-head checks |
@@ -266,7 +270,10 @@ evolutions/simplify-todos/
 The archive does not embed B's own hash. Git records B and its parent. The live
 workspace becomes Accepted when the accepted tree is synchronized; a failure after
 the ref update is reported as acceptance with incomplete working-tree update,
-not as an unaccepted operation safe to repeat. Unrelated drafts and staged files
+not as an unaccepted operation safe to repeat. If the process dies, the next
+acceptance request identifies B from the committed archive and reports
+`AlreadyAccepted`; it does not reinterpret the old local Before as a request to
+rebase and accept again. Unrelated drafts and staged files
 are not swept into the commit or discarded.
 
 Closing the process and deleting disposable candidate/build caches does not erase
@@ -291,15 +298,16 @@ deleted fact. A passing, intentionally changed specification is not forbidden by
 an additional governance layer. Acceptance then removes both files from current
 root while their prior forms remain in Git/history.
 
-## 6. What the executable proof must test next
+## 6. Implementation acceptance tests
 
-After reviewing these proposals, implement a separate small proof with real files
-and Git, initially using a compiled Haskell fixture for guest execution. Keep the
-host workflow schema-agnostic; the fixture-specific types/codecs belong behind the
-test execution/schema adapters. That proves persistence and publication, not the
-MicroHs protocol. Then connect the existing compiler experiment to the same loop.
+Build this journey in the actual kernel with real MicroHs execution, starting
+with load–compile–validate and extending it through evaluation and publication.
+Keep the host schema-agnostic. Do not substitute a native Haskell fake for the
+guest boundary or create another disposable prototype before integrating it.
+Resolve the library-backed codec gate in ADR 0007 through representative runtime
+values and actual pipes; an ASCII-only fixture or passing GHC build is insufficient.
 
-The proof should exercise:
+The integration tests should exercise:
 
 - Evaluation and acceptance in different processes; no invocation of the evolution
   on the accept path. Count fixture entry calls so an accidental rerun is observable.
@@ -313,14 +321,15 @@ The proof should exercise:
 - Two drafts plus unrelated staged/unstaged files; acceptance preserves them and
   does not publish their contents. Failure after ref update reports the new commit.
 - Cache removal after acceptance; current reads and archived rationale still work.
+- Process death after ref update, followed by an already-accepted diagnosis even
+  without local candidates; later commits do not change the reported accepting commit.
+- Identical shared modules compiled once, conflicting definitions rejected during
+  build preparation, and invalid proposed source still capturable for review.
 
 No Web/MCP server, live provider, new wire parser, plugin manager or full method
-registration system is needed for that bounded proof. Those are not thereby
+registration system is needed for this first CLI journey. Those are not thereby
 settled or removed from the product. In particular the review's query-effect,
 registration, evidence-reference and wire-library questions remain separate work.
 
-The decisions to review now are the `Fact` identity envelope, complete `root/`
-publication subtree, complete non-fact target copy, and the explicit
-save/load/check/publication boundary. Distinct schema module names with friendly
-qualified aliases are agreed. Do not start the
-executable proof by silently replacing any of these with different conventions.
+The owning ADRs define these boundaries; this fixture supplies concrete assertions
+for their implementation rather than a parallel specification.

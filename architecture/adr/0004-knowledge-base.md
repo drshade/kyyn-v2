@@ -1,6 +1,10 @@
-# 0004 — Distinguish the KB, its root and its evolutions
-
-Status: Proposed. Basis: owner-established distinctions and wrapper conventions.
+---
+id: 0004
+title: 'Distinguish the KB, its root and its evolutions'
+status: proposed
+date: 2026-09-07
+---
+# Distinguish the KB, its root and its evolutions
 
 ## Context
 
@@ -21,7 +25,10 @@ On the **host**, we can describe the contents without importing the KB's `Todo`,
 `Forecast` or the guest's authored `Root` type:
 
 ```haskell
-data KnowledgeBase  -- opaque repository + KB-location identity
+data KnowledgeBase = KnowledgeBase
+  { repository :: Repository
+  , prefix     :: RelativePath  -- KB directory relative to repository root
+  }
 
 data Root = Root
   { schema :: CheckedContract
@@ -31,12 +38,13 @@ data Root = Root
 ```
 
 `CheckedContract` belongs to [contracts](0005-contracts.md). `FactSnapshot` and
-`CodeSnapshot` are opaque references to fixed contents, including vendored dependency
-source, executable examples and supporting non-secret config files alongside code. They are not paths
-that silently resolve to whatever is currently on disk. A read either returns
-those contents or reports that they are unavailable.
-The host stores create these handles; the guest receives decoded domain values.
-This describes snapshot semantics, not a new public content-addressing service.
+`CodeSnapshot` contain immutable file-tree values as defined in
+[storage](0006-storage.md), including vendored dependency source, executable
+examples and supporting non-secret config files alongside code. Loading reads
+the bytes into the value; subsequent reads do not resolve editable paths or
+require a store-specific handle service. The guest receives decoded domain values.
+The explicit repository and KB-relative prefix let publication address the selected
+KB without guessing its location. The prefix may denote the repository root.
 Under the proposed [storage layout](0006-storage.md), the host root's selected
 source/config files include `root/plugins/config/*.dhall` and `root/examples/`.
 They belong to the accepted snapshot, not to the guest's domain facts type;
@@ -119,5 +127,5 @@ validation identity matters. Do not rely on wrapper names alone as enforcement.
 ## Alternatives and verification
 
 Reject a universal mutable `Kb` holding disk paths, IO callbacks and current
-values. Test two explicit snapshot handles in one operation, draft listing
+values. Test two explicit snapshot values in one operation, draft listing
 without compilation, and fresh checking when loading a root for validated use.
