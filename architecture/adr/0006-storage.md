@@ -1,0 +1,214 @@
+# 0006 — Materialized facts and runtime data loading
+
+Status: Owner-selected Dhall fact storage. Concrete storage mechanics remain proposed.
+
+## Context
+
+The prototype's generated fact literals couple data volume to compilation.
+That is not required by pure validation or typed transformations. Normal reads
+also must not execute the history of every past mutation.
+
+## Decision
+
+Keep one current materialized fact tree, readable without replay. Use
+data-only Dhall files per identified fact, parsed and structurally checked by
+the host's library. Encoding and normalizing fact files is host plumbing. Guest
+functions receive decoded typed values through ADR 0007, never Dhall source.
+Workspace manifests use Dhall as well. DhallHandling supplies the real host
+library for these files and ADR 0016's plugin configuration; it is not a guest
+parser or another schema authority. The runtime wire remains a separate decision.
+
+Dhall's structural checks do not establish domain validity: exact decimal,
+date and money conventions still need their semantic checks. Storage contracts
+are generated from the checked Haskell declarations under ADR 0005.
+Dhall is the chosen implementation path, not a conditional default requiring
+parallel JSON support. Revisit it only if concrete authoring, compatibility or
+performance evidence makes a case against it. Measure parsing/normalization costs
+in the existing representative tests; hypothetical concerns do not keep the
+decision permanently open or justify a storage-backend abstraction in advance.
+
+Collection routing belongs to the root contract/store, not business names in
+the kernel. Stable `FactId`s address values, not list positions or display names.
+An ordered collection preserves order explicitly if meaningful; an unordered
+collection has deterministic ID order. Generated routing detects ID/path
+collisions. Paths are not parsed to infer arbitrary domain meaning.
+
+The store makes snapshot selection explicit. These host operations use
+[Root and its wrappers](0004-knowledge-base.md), not the guest's domain types:
+
+```haskell
+data RootStore :: Effect where
+  OpenKnowledgeBase
+    :: KnowledgeBaseRef -> RootStore m KnowledgeBase
+  ResolveHead
+    :: KnowledgeBase -> LocalBranch -> RootStore m GitRevision
+  LoadRootAt
+    :: KnowledgeBase -> GitRevision -> RootStore m Root
+  LoadRootValueForChecking
+    :: Root -> RootStore m CheckedValue
+  ListFacts
+    :: Validated Root -> CollectionId -> PageRequest
+    -> RootStore m (Page FactId)
+  ReadFact
+    :: Validated Root -> CollectionId -> FactId
+    -> RootStore m (Maybe CheckedValue)
+  ReadExamples
+    :: Root -> RootStore m [Example]
+  ExportRootFiles
+    :: Root -> RootStore m RootFiles
+  MaterializeRoot
+    :: KnowledgeBase -> CheckedContract -> CodeSnapshot -> CheckedValue
+    -> RootStore m Root
+
+runRootStore
+  :: (FileSystem :> es, Git :> es, SchemaInspection :> es,
+      DhallHandling :> es, Failure :> es)
+  => Eff (RootStore : es) a -> Eff es a
+```
+
+`ReadExamples` loads the selected root's saved assertions, including their recorded
+contracts. It does not run them or silently rebind them to new query contracts;
+[checking](0011-validation.md) reports incompatibility. Its raw-root input permits
+checking a candidate before it earns validation. `ExportRootFiles` supplies
+publication with a complete, fixed file tree, including facts, code, configuration
+and examples. It is not a callback or a path to an editable directory:
+
+```haskell
+data RootFiles  -- complete root-relative paths and bytes, including empty collections
+```
+
+RootStore owns its layout and encoding. Git plumbing consumes paths/bytes supplied
+by publication; it does not infer how to decode an opaque `Root` handle.
+
+`LoadRootAt` structurally decodes a commit; it cannot confer semantic validation
+without the [checker](0011-validation.md). `MaterializeRoot` verifies that the
+value matches the target root contract, writes a separate snapshot and never
+advances the accepted ref. Its signature requires no guest evaluation. Its inputs
+contain no implicit current schema or code. DhallHandling owns plugin-config
+and fact decoding; neither leaks into the domain API. SchemaInspection
+derives the contract from the selected authored schema under ADR 0005; that is
+separate from parsing fact files.
+Structural root loading includes its plugin configuration. A malformed or
+structurally incompatible config fails the whole load (ADR 0016); no partial root
+or silently disabled connector is returned. Pure config validation subsequently
+participates in the whole-root semantic check.
+
+`ResolveHead` reads the selected branch once and returns a revision for callers
+to pass explicitly to loading, creation or rebasing. Source reads do not substitute
+an ambient latest root. Publication still compares the live ref atomically; the
+earlier resolution is not a reservation or a substitute for that comparison.
+
+`ReadFact` returns `Nothing` only for an absent ID in an existing collection.
+Unknown collections, corrupt data and inaccessible storage are explicit failures.
+`CheckedValue` carries the collection's payload contract, not an arbitrary JSON
+object. Reads remain effects even when the initial interpreter answers from an
+already loaded snapshot.
+`LoadRootValueForChecking` is the explicit diagnostic/execution path for a
+structurally readable but not yet semantically validated root. It is not used to
+silently weaken the validation requirement on ordinary fact browsing.
+Evolution execution uses this path for its source too: domain-invalid facts may
+be transformed into a valid candidate without first earning `Validated`.
+
+Browsing facts and consuming connector evidence need manageable result pages.
+Paging here is that user-facing operation, not a paged storage engine or an
+incremental evaluator. The initial fact interpreter can slice an already loaded
+collection. A cursor is opaque and tied to its selected snapshot and query; it
+is not a portable offset into whichever root is latest:
+
+```haskell
+data Page a = Page
+  { items :: [a]
+  , next  :: Maybe PageCursor
+  }
+
+data PageRequest = FirstPage | ContinuePage PageCursor
+```
+
+Batch size is an implementation/operation policy, not a per-field contract bound.
+A mismatched cursor is an error. The [evidence](0014-evidence.md) store uses the
+same envelope but binds its cursors to evidence snapshots, not root snapshots.
+
+On the guest side, identity remains outside the typed payload so migration can
+change payload shape without accidentally replacing record identity:
+
+```haskell
+data Fact a = Fact
+  { id    :: FactId
+  , value :: a
+  }
+
+data CollectionBinding a  -- generated collection ID + payload codec/contract
+```
+
+The generated binding is consumed by [SnapshotRead](0009-capabilities.md).
+No native host function imports the payload type `a`; its corresponding data is
+checked structurally through the collection contract.
+
+Propose one complete `root/` subtree for accepted executable knowledge:
+
+```text
+root/
+  kb.dhall                 selected schema and declaration exports
+  src/                     current authored Haskell modules
+  facts/<collection>/      identified Dhall fact files
+  examples/                persistent executable assertions
+  plugins/                 vendored source, origins and non-secret configuration
+evolutions/<evolution>/     editable workspaces and retained accepted archives
+.kyyn/                     ignored checkout-local data and disposable caches
+```
+
+This is a proposed layout for review, illustrated by the
+[todo walkthrough](../walkthroughs/todo-evolution.md), not an implemented format.
+The important distinction is one complete publication subtree versus evolution
+archaeology and local runtime data. RootStore exports the whole subtree, so absence
+from the new tree means deletion; acceptance does not guess which old files to keep.
+The schema and collection declarations distinguish an empty collection from missing
+data; use an explicit ordered ID list per collection to record membership/order,
+including the empty list. A listed fact must exist; duplicate IDs and unlisted fact
+files are errors. For unordered collections the list is sorted by ID.
+
+Propose that each fact file encodes the full `Fact` envelope, not only its payload.
+The path is derived from its collection and ID, using an unambiguous filename
+encoding; a path/envelope mismatch is an error. The payload's title is never an ID.
+The collection's membership list is storage structure, not another authored schema.
+
+Secrets and machine-local configuration never become facts or committed defaults.
+Non-secret connector configuration is different: RootStore persists named instances
+beneath their plugin in `root/plugins/config/<plugin>.dhall`, checked against that
+plugin's advertised connector types and Haskell configuration schemas under ADR 0016.
+It is captured and materialized with a root's schema/code, not stored in a separate
+plugin-instance service. EvolutionStore captures proposed configuration files;
+normal validation and acceptance apply. Live secret values are not part of that
+snapshot or its review artifacts.
+
+Keep compiled guest artifacts reusable by complete source, contract, SDK,
+dependency, compiler and build-option identity. This directly addresses the
+prototype's compile-all-facts problem: fact contents are runtime inputs, absent
+from the compilation key. Use the whole contract, including roles, without
+special compatibility rules for particular edits.
+
+Schema inspection and pure metadata evaluation may run again when loading or
+capturing a root. Do not require a separate cache for their results. Begin with
+whole-root in-memory evaluation and complete validation; the page interface above
+does not promise lazy or incremental guest evaluation.
+
+For the compiled-artifact cache, build into private temporary locations and
+publish complete entries atomically; never expose partially written artifacts
+as cache hits. Multiple processes may duplicate compilation work; no duplicate-
+work coordinator is needed. Draft and acceptance working-tree responsibilities
+are specified in ADR 0012.
+
+## Alternatives, consequences and verification
+
+Reject event replay on reads and compilation of records as Haskell literals.
+Do not introduce a database until measured needs justify an interpreter change.
+Deleting caches must not delete accepted knowledge. Reopen tests must preserve
+record deletions and distinguish an empty collection from a missing/corrupt file.
+Changing one fact must not rebuild unchanged guest code. Measure runtime memory
+and validation time separately from compilation on representative synthetic sizes.
+Include many-small-file Dhall parsing/normalization in that measurement rather
+than attributing all loading cost to guest execution. ADR 0021 places this proof
+before the first product slice relies on whole-root performance. If representative
+interactive work is impractical, revisit the execution/storage choice then.
+Browsing pages are not a claim that whole-root computation scales; do not add
+storage-streaming or incremental-validation APIs in anticipation.

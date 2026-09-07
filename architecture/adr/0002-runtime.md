@@ -1,0 +1,140 @@
+# 0002 — Native Haskell kernel and bundled MicroHs execution
+
+Status: Proposed. Basis: owner-established distribution direction; implementation gated.
+
+## Context
+
+KBs and plugins contain code written after Kyyn is installed. Requiring a
+different language toolchain for every plugin defeats a coherent distribution.
+The native kernel needs mature integration libraries; authored programs need a
+small, uniform typed runtime, not the kernel's full dependency graph.
+
+## Decision
+
+Use a GHC-built Haskell kernel and pinned MicroHs compiler/evaluator for both
+KB-resident and tap-provided programs. Ship the compiler, evaluator, base/SDK
+libraries and required preprocessing tools, including `cpphs`.
+Tap plugins arrive as vendored source under ADR 0015 and are compiled locally
+with this toolchain. The bundled compiler/evaluator are release executables;
+third-party plugin executables are not an additional distribution contract.
+
+Initially invoke a managed child process with a private typed protocol. A
+generated adapter retains the live continuation while requesting host effects.
+Only request/result data crosses that boundary. Process loss loses the current
+call, not accepted state. No serialization of closures or durable continuations.
+No in-process ABI or persistent worker pool until demonstrated needs justify it.
+
+The native side compiles code separately from loading fact values. Porcelain
+interpretation selects the source modules and prepares generated adapters from the
+captured code; it does not assemble MicroHs commands. Compilation is a plumbing
+capability whose inputs contain no KB/root layout or fact data:
+
+```haskell
+data GuestSources  -- fixed module contents, generated adapters and selected entry
+data BuildOptions  -- supported build choices, not raw MicroHs arguments or paths
+data CompiledEntry  -- local executable and launch information produced by compilation
+
+data GuestCompilation :: Effect where
+  CompileGuest
+    :: GuestSources -> BuildOptions
+    -> GuestCompilation m (Either [Diagnostic] CompiledEntry)
+
+compileGuest
+  :: GuestCompilation :> es
+  => GuestSources -> BuildOptions -> Eff es (Either [Diagnostic] CompiledEntry)
+```
+
+`GuestSources` is a fixed compilation input, not the host's `CodeSnapshot` or a
+live workspace directory. It includes the selected local dependency source closure;
+semantic preparation selects which captured files become source and which are
+runtime configuration, examples or data. Schema inspection and pure adapter
+generation retain their ownership in [ADR 0005](0005-contracts.md).
+
+The capability and its forwarding helper belong to `kyyn-plumbing`. Its interpreter
+belongs to `kyyn-microhs`, where compiler flags, `MHSDIR`, `cpphs` paths and compiled
+artifact layout are understood. The installed toolchain is supplied explicitly by
+application composition, not rediscovered from a caller's ambient PATH:
+
+```haskell
+data GuestToolchain  -- resolved installed compiler/evaluator, preprocessor and SDK
+
+runGuestCompilation
+  :: (FileSystem :> es, ProcessExecution :> es, Failure :> es)
+  => GuestToolchain -> Eff (GuestCompilation : es) a -> Eff es a
+```
+
+The interpreter writes source/build artifacts through FileSystem and invokes the
+compiler through ProcessExecution; it does not need ambient IO merely because its
+package also contains native compiler-library integration. Composition supplies
+the same selected toolchain to schema inspection and guest compilation. Inspection
+and compilation do not choose independent compiler revisions.
+
+Compilation derives the complete build/cache identity from the actual source,
+dependencies, SDK, compiler and options, following [ADR 0006](0006-storage.md).
+Fact contents remain absent from that identity. `CompiledEntry` is built for that
+local toolchain, not an arbitrary executable supplied by guest code; consumers
+use its launch information rather than reconstructing MicroHs flags. Writing
+generated sources and invoking the compiler are effects, even though the authored
+transformation and adapter generation are pure. This is one compiler capability,
+not a generic compiler-backend framework or a separate build service.
+
+Ordinary parse/type rejection returns diagnostics. The preview/checking caller
+maps them into its normal result channel; inability to start the compiler or a
+compiler crash uses Failure. A broken proposed module is not a broken installation.
+
+Process ownership belongs below the semantic runtime. A scoped plumbing primitive
+can express who releases the child without handing native `IO` to porcelain:
+
+```haskell
+data ProcessExecution :: Effect where
+  WithProcess
+    :: ProcessSpec -> (ProcessPipes -> m a) -> ProcessExecution m a
+  WriteStdin
+    :: ProcessPipes -> Bytes -> ProcessExecution m ()
+  ReadStdout
+    :: ProcessPipes -> ProcessExecution m (Maybe Bytes)
+
+runProcessExecutionIO
+  :: (IOE :> es, Failure :> es)
+  => Eff (ProcessExecution : es) a -> Eff es a
+```
+
+`ProcessPipes` is opaque; `Nothing` means EOF, not a successful protocol result.
+Reads are chunks, not complete messages; [the adapter](0007-wire.md) owns framing.
+`WithProcess` scopes cleanup to the callback on return, failure and cancellation.
+Its higher-order handling mechanics must be proved with the chosen effectful
+interpreter, not replaced with an `IO` callback in a public semantic record.
+Exit status and stderr diagnostics are also required in the real process API;
+these selected constructors illustrate ownership, not a full subprocess library.
+
+## Boundaries and alternatives
+
+The native host must not import KB-specific types; it operates on checked
+contracts and opaque root/artifact handles. MicroHs-authored modules must not
+import host implementation libraries. A child process is a packaging/failure
+boundary, not a sandbox. Reject per-plugin native binaries as the primary model,
+and reject moving all host integrations into MicroHs merely to have one compiler.
+
+## Consequences and verification
+
+Dependency/import tests prohibit MicroHs implementation imports and command
+construction in porcelain interpreters. Exercise GuestCompilation's diagnostics
+versus operational failures, and compilation through the same installed toolchain
+used by schema inspection. A fact-only change must reuse an unchanged code build;
+changed source, compiler, SDK or build options must not reuse an incompatible one.
+
+MicroHs compatibility is a release gate, not inferred from valid GHC code.
+The pinned `4557821` identifies version 0.16.6.0 and matched upstream head when
+checked on 5 September 2026. Probes reject type-family syntax used by microlens
+and dhall-haskell even after bundled preprocessing. Updating a pin is deliberate.
+
+Before adopting this runtime for production, pass runtime-data decoding,
+heterogeneous-root evolution, cancellation and clean-install tests with the
+chosen SDK dependencies. If the bridge needs substantial compiler/library forks,
+reopen this ADR instead of concealing that cost inside an interpreter.
+Name the compatibility checks separately: compile the GADT/existential request
+tree and rank-N fold under pinned MicroHs; prove the higher-order `WithProcess`
+handler and cleanup under native GHC/effectful. The latter is not guest code.
+ADR 0005 records the passing bounded checked-type extraction experiment and the
+owner's Haskell schema-authority decision. Production schema-adapter integration
+and maintenance remain separate from these runtime compatibility checks.

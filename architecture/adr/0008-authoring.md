@@ -1,0 +1,163 @@
+# 0008 — Domain authors write typed functions, not adapters
+
+Status: Proposed. Basis: owner-established requirement to unburden KB programs.
+
+## Context
+
+A cleaner wire is insufficient if every helper imports a parser, constructs
+request envelopes, repeats schema declarations and writes an IO entry point.
+The training-session helper should talk about sessions and people.
+
+## Decision
+
+The authored surface consists of ordinary MicroHs schema/code modules, generated
+bindings, pure functions, and explicit host-capability operations. Under the
+selected Haskell schema authority in ADR 0005, bindings refer to authored
+domain types; generated declarations are only genuinely derived adapters or
+projections, never a replacement authoritative set of domain types.
+Kyyn generates entry adapters, codecs, transport calls and typed registration
+wrappers. No authored `main :: IO ()`, manual JSON/Dhall decoding, response IDs,
+paths to runtime artifacts or printer callbacks for ordinary KB tools.
+
+KB-authored code has three entry-point kinds:
+
+| Entry point | Result and boundary |
+| --- | --- |
+| Query | Answer or view over the selected snapshot, without proposing a change |
+| Evolution | Use declared capabilities to obtain inputs and produce a candidate, never implicitly accept it |
+| Validation | Pure checks of supplied root/config values, returning diagnostics |
+
+A report is a query result. Agent-facing tools expose queries and operations on
+evolution workspaces; evaluating a prepared workspace is not a fourth KB execution
+model or a separate proposal-authoring program.
+Plugin methods remain callable integration operations, not additional KB entry-point
+kinds. Acquisition need not itself propose knowledge. ADR 0010 defines the
+effectful evolution entry and the pure transformation helpers usable inside it.
+An output declaration binds an ordinary renderer function to a typed plugin sink,
+as defined in [outputs](0017-outputs.md). Renderer execution is selected-snapshot
+computation, like a query, not a fourth effectful KB workflow. It can compose
+multiple queries. Generated output adapters prepare values; a separate host
+operation invokes the sink. Queries remain independently discoverable/callable.
+Each evolution workspace has a single `evolution` binding; reusable helper
+selection and arguments are expressed in that source, such as
+`evolution = importSales September`. Evaluating a workspace does not require a
+separate named-entry/arguments manifest. Query and plugin method arguments remain
+ordinary typed request data; this convention concerns evolution authoring.
+
+Authors also export the pure `SchemaMetadata` value defined in
+[ADR 0005](0005-contracts.md), alongside their schema. It attaches KB-defined
+roles to actual fields and declares collection identities/reference targets.
+The host uses those roles for titles, timelines and badges without knowing the
+domain model. This is checked interpretation metadata, not a second copy of field
+types. The initial name-based field references are validated against extracted
+declarations; moving them into Haskell does not by itself make them typed lenses.
+Kyyn generates the metadata entry/transport; authors supply no IO entry point.
+
+Registration binds one name and description to an implementation with a checked
+request/result contract and declared capability requirements. Fixed plugin functions
+(description, health, configuration checks) coexist with explicitly registered domain methods. “Dynamic”
+means discovered from the installed program rather than compiled into the
+kernel; it need not mean mutable registrations during an invocation.
+Related connector methods and account-setup declarations live in one authored
+plugin package under ADR 0015. Authors do not split authentication, mail and
+meetings into separately distributed plugins merely because their effects differ.
+They distribute source; Kyyn's installed toolchain generates and builds the adapters.
+Connector methods are advertised under a plugin-defined connector type. Generated
+caller bindings select a named instance under that plugin; the host verifies its
+type and supplies that instance's typed configuration, as specified in ADR 0015.
+Two configured instances of the same type share code, not configuration or identity.
+
+In the **guest authoring API**, a generated method handle fixes its input, output
+and request algebra. Registration cannot attach an unrelated function to it:
+
+```haskell
+data Method requests input output  -- generated handle; constructor private
+
+registerMethod
+  :: Method requests input output
+  -> (input -> Program requests output)
+  -> RegisteredMethod requests
+```
+
+`RegisteredMethod` hides the individual input/output types only after this check.
+The selected `Program` representation is explained in
+[capabilities](0009-capabilities.md). Generated handles contain the matching
+adapter/codec information; they are not unchecked user-authored phantom casts.
+Pure calculations can be lifted into a method without acquiring host capabilities.
+
+The **host** cannot use those native Haskell input/output types. Discovery carries
+a structural counterpart, generated from the same contract authority:
+
+```haskell
+data MethodDescriptor = MethodDescriptor
+  { identity       :: MethodIdentity
+  , inputContract  :: CheckedContract
+  , outputContract :: CheckedContract
+  , capabilities   :: [CapabilityId]
+  }
+
+data QueryDescriptor = QueryDescriptor
+  { name           :: QueryName
+  , inputContract  :: CheckedContract
+  , outputContract :: CheckedContract
+  }
+```
+
+`MethodIdentity` locates an entry in a particular code/package context, not just
+a globally meaningful string. `QueryDescriptor` is instead a **root-local name
+and contract** description, with construction restricted to snapshot queries.
+It permits only pure computation/selected-snapshot reads. Its input and output
+contracts serve [human-authored examples](0011-validation.md) as well as invocation.
+Resolve that name in the explicitly selected root's code on execution and compare
+contracts/capabilities. Persisted examples can therefore test a revised calculation
+with unchanged types. They do not pin an old implementation, contain a future
+commit hash, or silently authorize a same-named incompatible function.
+
+For example, the reporting KB—not the kernel—might define this reusable query:
+
+```haskell
+-- Guest reporting module; all three types belong to this KB/its SDK.
+monthlySummary :: ReportingPolicy -> Root -> MonthlySummary
+```
+
+At registration, the pure function is lifted with pure into the single
+snapshot-query form owned by ADR 0017. Its generated query adapter supplies the explicitly selected Root. The externally
+visible argument is `ReportingPolicy`, and the host sees its checked contract,
+not an import of that Haskell declaration. This is why guest static typing and
+host structural checking are complementary, not interchangeable representations.
+
+KB helpers call generated bindings such as a configured provider's occurrence
+query, receiving typed pages. Provider JSON interpretation belongs inside the
+plugin or its generated provider client, not in the KB. A tool evaluating a
+prepared evolution invokes its fixed entry point. Kyyn turns its returned root into a candidate;
+the authored function does not call a nested `propose` operation or silently update
+accepted fact files. Generated plugin proxies expose concrete input/output types
+while routing calls through the host and the plugin's own capability context.
+
+Pure calculations are reusable from validation, queries and views. Provide a
+small SDK for identified facts, diagnostics, selected existing exact-value library
+types/adapters and evolution composition. Do not create a Kyyn arithmetic library
+in place of evaluating existing Haskell/MicroHs implementations. Use standard
+optics if compatible; do not expand the custom optics
+implementation as a substitute for evaluating dependencies. Keep `After` imports
+qualified in evolution scaffolds and generate record field optics mechanically.
+
+## Alternatives and consequences
+
+Reject hand-maintained registries that duplicate structural schema, blanket Generic/Template-Haskell
+derivation assumptions, and a single stringly `invoke` API as the author surface.
+Some generated code is a deliberate maintenance cost, but the author edits one
+contract plus its implementation, not an encoder and a schema in parallel.
+Diagnostics should identify authored sources rather than generated boilerplate.
+Keep source positions when supplied by the compiler/inspector; when only compiler
+message text exists, display it with no structured location under ADR 0019. Do not
+invent a span or parse compiler prose merely to make it clickable.
+
+## Verification
+
+First prove the reporting tool and schema-changing evolution in ADR 0021, including
+scaffolded Before/After modules and generated bindings, several host requests and no codec/transport
+imports in authored code. Then implement the synthetic training tool. Its
+request includes structured people and sessions, not `record_json`/`record_dhall`
+strings. Break a result type and see a compile error. Change an imported plugin
+contract and see a binding error. The kernel must remain unchanged in both cases.
