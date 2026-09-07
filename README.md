@@ -7,5 +7,11 @@ For development, read [the SDLC](docs/SDLC.md),
 [project practices](docs/PROJECT-PRACTICES.md) and [contributing](CONTRIBUTING.md).
 Run the complete current gate with `bash tools/test.sh`.
 
-This repository currently contains the architecture baseline; implementation has
-not started. Earlier experiments remain in the separate `kyyn-v2-experiment` repo.
+The first implementation boundary inspects Haskell data types with the native
+MicroHs frontend and generates private JSON codecs importing the authored types.
+The gate compiles and executes those codecs with the vendored MicroHs toolchain.
+See [the codec integration fixture](tests/integration/codecs/README.md) for scope
+and supported cases. There is not yet a user-facing KB CLI.
+
+Build prerequisites are in [project practices](docs/PROJECT-PRACTICES.md).
+Earlier experiments remain in the separate `kyyn-v2-experiment` repo.

@@ -10,11 +10,14 @@ fi
 node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Node.js 22+ is required for the development gate."); process.exit(1); }'
 
 bash -n tools/test.sh
+bash -n tools/test-guest.sh
 node --check tools/checks/check-docs.mjs
 node --check tools/checks/check-docs.test.mjs
 node --check architecture/evidence/json-probe/check.mjs
 node tools/checks/check-docs.test.mjs
 node tools/checks/check-docs.mjs
-
-echo "Complete current gate passed: documentation and checker regression tests."
-echo "No host, guest, plugin or Web implementation is present yet."
+node --test tools/checks/check-imports.test.mjs
+node tools/checks/check-imports.mjs
+cabal build all
+bash tools/test-guest.sh
+echo "Complete gate passed: documentation, import boundaries, native builds and real MicroHs codec tests."

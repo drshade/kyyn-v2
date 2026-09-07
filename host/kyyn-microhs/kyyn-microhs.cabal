@@ -1,0 +1,34 @@
+cabal-version: 3.0
+name: kyyn-microhs
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved for Kyyn-owned code; upstream notices remain applicable.
+build-type: Simple
+
+library
+  hs-source-dirs: src ../../vendor/MicroHs/ghc ../../vendor/MicroHs/src
+  exposed-modules: Kyyn.MicroHs.Inspection
+  default-language: Haskell2010
+  default-extensions: ScopedTypeVariables TypeSynonymInstances MultiParamTypeClasses FlexibleInstances FlexibleContexts
+  ghc-options: -Wall -Wno-unrecognised-warning-flags -Wno-x-partial -Wno-deprecations
+  build-depends: base >=4.20 && <4.21, kyyn-domain, containers, bytestring,
+    deepseq, filepath, haskeline, time, process, directory, text, array
+  other-modules:
+    MicroHs.Abstract MicroHs.Builtin MicroHs.Compile MicroHs.CompileCache MicroHs.Config
+    MicroHs.Deriving MicroHs.Desugar MicroHs.EncodeData MicroHs.Embed MicroHs.Exp
+    MicroHs.Expr MicroHs.Flags MicroHs.Fixity MicroHs.Graph MicroHs.Ident
+    MicroHs.IdentMap MicroHs.IntMap MicroHs.IntSet MicroHs.Lex MicroHs.List MicroHs.Names
+    MicroHs.Package MicroHs.Parse MicroHs.State MicroHs.StateIO MicroHs.SymTab
+    MicroHs.TCMonad MicroHs.TypeCheck MicroHs.Version MHSPrelude Data.Integer
+    System.IO.MD5 System.IO.Serialize System.IO.TimeMilli
+    Text.ParserComb Text.PrettyPrint.HughesPJLite Text.PrettyPrint.HughesPJLiteClass
+
+test-suite codecs
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors OverloadedStrings
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain, kyyn-plumbing,
+    aeson ==2.2.5.0, bytestring, directory, filepath, process, text

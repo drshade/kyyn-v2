@@ -136,15 +136,6 @@ export function checkRepository(root) {
     if (id) ids.set(id, file);
   }
 
-  // Remove this documentation-phase guard only alongside the real build/test gate.
-  for (const directory of ['host', 'guest', 'shared', 'plugins', 'examples', 'web', 'vendor', 'tests/integration']) {
-    if (filesUnder(path.join(root, directory)).length) {
-      errors.push(`${directory}/ contains implementation inputs; extend tools/test.sh with their actual checks`);
-    }
-  }
-  if (fs.existsSync(path.join(root, 'cabal.project'))) {
-    errors.push('cabal.project exists; replace the documentation-only gate with the native/guest build checks');
-  }
   return { files: files.length, adrs, errors };
 }
 
