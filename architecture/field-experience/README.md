@@ -3,7 +3,7 @@
 Proposed method under [ADR 0024](../adr/0024-field-experience.md). This folder
 contains specifications/templates, not an implemented harness or executed reports.
 It adapts the useful two-part practice in
-[kyyn-v1's scenarios](../../../kyyn/field-scenarios/README.md), without inheriting
+kyyn-v1's scenarios (`kyyn/field-scenarios/README.md`), without inheriting
 mandatory owner-only verbs, causal receipts or its SDLC release queue.
 
 ## A scenario is an outcome, not a tool recipe

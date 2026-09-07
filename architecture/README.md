@@ -3,6 +3,10 @@
 Decision set under review. Each owning ADR distinguishes owner-established choices
 from proposed signatures and implementation details; this index is navigation,
 not a second specification.
+Development process is owned by [the SDLC](../docs/SDLC.md) and
+[project practices](../docs/PROJECT-PRACTICES.md); ADR file mechanics are in
+[adr/README.md](adr/README.md). Adoption does not change the imported decisions'
+authority or silently resolve their proposed mechanics.
 Kyyn means the rebuild; **kyyn-v1** means the legacy implementation. These are
 design proposals for discussion, not permission to start a production rewrite.
 
@@ -42,15 +46,16 @@ ADR updates and walkthrough, including the agreed schema-module naming conventio
 It does not yet incorporate the follow-up mechanics agreed in the subsequent Fable
 review. Those remain a documentation task before implementing the affected boundaries.
 
-Historical experiment and working-KB evidence links refer to neighbouring checkouts;
-they are supporting context, not build dependencies. No prototype implementation was
-copied with these documents.
+Historical experiment and working-KB evidence is cited by repository-relative source
+path for readers with those checkouts. These references are supporting context,
+not required files or build dependencies in a clean checkout. No prototype
+implementation was copied with these documents.
 
 ## Basis and precedence
 
 Current owner direction is recorded in the owning ADRs. Earlier reviews and
 prototypes supply evidence, not competing specifications. This set supersedes
-conflicting recommendations in [the earlier clean-slate note](../../kyyn-v2-experiment/design-notes/clean-slate.md)
+conflicting recommendations in the earlier clean-slate note (`kyyn-v2-experiment/design-notes/clean-slate.md`)
 without amending kyyn-v1's contracts or authorizing a production rewrite.
 
 Start with the [principles](principles.md); use the index below to find the
