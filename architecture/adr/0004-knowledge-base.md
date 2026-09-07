@@ -6,6 +6,11 @@ date: 2026-09-07
 ---
 # Distinguish the KB, its root and its evolutions
 
+Basis: the KB/root/evolution distinctions and Candidate/Validated wrapper
+conventions are owner-established. Concrete snapshot representations and store
+interfaces are proposed implementation mechanics; the metadata does not reopen
+those established decisions.
+
 ## Context
 
 A KB is not a list of facts or a single evolution workspace. Confusing these

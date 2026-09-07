@@ -6,6 +6,10 @@ date: 2026-09-07
 ---
 # Validation checks a complete candidate, not reality
 
+Basis: complete-root checking and the distinction between Candidate and Validated
+follow owner direction. Example representation, execution interfaces and whole-root
+performance remain implementation proposals and gates.
+
 ## Context
 
 Per-fact checks are useful, but cross-record relationships and reconciliation

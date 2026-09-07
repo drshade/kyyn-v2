@@ -6,6 +6,10 @@ date: 2026-09-07
 ---
 # Acceptance is one conditional step from local head
 
+Basis: the equality check against local Git head and the absence of remote
+coordination are owner-established guarantees. The publication sequence, result
+types and recovery diagnostics are proposed implementation mechanics.
+
 ## Context
 
 Kyyn must not accept an evolution based on a root other than its current local
@@ -173,13 +177,19 @@ FindAcceptance
   -> EvolutionStore m (Maybe GitRevision)
 ```
 
-The input revision selects the branch history to inspect. Match the stable
-workspace ID and the archive's recorded Before to the accepting commit's parent;
-return the commit that introduced that Accepted archive, not a later head that
-merely carries it. An ambiguous or malformed history is a diagnostic, not a guess.
+Start by reading this workspace's archive in the input revision's tree. If absent
+or not Accepted, return `Nothing`: a Git revert can remove an acceptance. Otherwise
+take its recorded Before B and walk the input revision's ancestors through all
+parents, finding the commit with parent B that introduced that Accepted archive.
+Return that introducing commit, not a later head that merely carries the archive.
+An ambiguous or malformed history is a diagnostic, not a guess. A subsequent
+re-acceptance uses the current archive's Before and resolves to its new commit.
 The application returns `AlreadyAccepted` with that revision and guidance to
 inspect/repair local files through Git. Publication repeats this lookup before
 base/readiness checks so a concurrent completed acceptance is diagnosed honestly.
+If conditional ref update loses a race, repeat the lookup once at the returned
+actual revision before reporting `BaseMismatch`; the competing operation may
+have accepted this very workspace. This is diagnosis, not a retry of publication.
 It does not automatically overwrite a live workspace, replay the evolution or
 publish a replacement acceptance. Missing disposable candidate files do not hide
 an acceptance already recorded in Git. No durable recovery coordinator is needed.
@@ -260,3 +270,7 @@ then retry with disposable candidates removed. It must identify the actual
 accepting commit without evaluating or creating another commit. Repeat after a
 later unrelated commit: inherited archive presence must not misidentify that
 later head as the accepting commit.
+Revert the acceptance so its archive is absent/not Accepted at head: lookup returns
+`Nothing`. Re-accept from the new base and verify lookup identifies the new commit.
+After interrupted synchronization, listing reports the committed Accepted state
+and accepting revision even when the local workspace still says Ready.

@@ -6,6 +6,10 @@ date: 2026-09-07
 ---
 # Architecture is a tested deliverable before feature volume
 
+Basis: deliberate implementation with precise, expressive boundaries is an
+owner requirement. The ordered proofs and their workload choices are proposed
+engineering mechanics, not a claim that any software gate has already passed.
+
 ## Context
 
 The prototypes answered useful feasibility questions and accumulated boundary
@@ -42,9 +46,10 @@ dependency gates below must be resolved before relying on that runtime boundary.
 This establishes a narrow working foundation; it does not discharge the reporting,
 Web/MCP, capability, performance or distribution proofs below.
 
-1. Accept meaning/boundary decisions. Compile a tiny package DAG and operation
-   signatures with forbidden imports checked. No empty capability implementations
-   pretending the product exists.
+1. Accept meaning/boundary decisions. Establish the package DAG and operation
+   signatures inside the first working CLI PR, with forbidden imports checked.
+   Load/compile can be established before validation exercises the runtime codec.
+   No empty capability implementations pretending the product exists.
 2. Carry ADR 0005's passing standalone schema-extraction/binding proof into the
    production boundary, retaining its conformance tests; resolve local source capture,
    packaging/maintenance and the remaining wire/library/license gates.

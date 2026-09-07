@@ -6,6 +6,10 @@ date: 2026-09-07
 ---
 # One evolution mechanism for facts, schema and meaning
 
+Basis: one composable evolution mechanism, retained archives and distinct schema
+module names with friendly qualified aliases are owner-established. Capture,
+persistence and workspace operation signatures are proposed mechanics.
+
 ## Context
 
 Updating facts, migrating a schema and revising the tools that interpret them
@@ -326,6 +330,14 @@ Names may repeat; IDs do not. Commands use the ID returned by creation/listing,
 and `ResolveEvolution` reports an unknown ID without creating a workspace.
 This also resolves a saved candidate's context to its owning workspace without
 publication reconstructing a private directory convention.
+
+`ListEvolutions` and `ReadEvolutionState` resolve the checkout's current HEAD once
+per operation and use the [acceptance lookup](0012-acceptance.md) for that revision.
+An Accepted archive there takes precedence over a stale local Ready manifest;
+the summary includes the accepting commit. Otherwise they report local manifest
+state. This reads Git metadata, not guest code, and neither repairs local files
+nor advances a ref. Listing after interrupted synchronization must not invite
+accepting the same change again.
 
 `TargetCode` selects only the captured `target/` contents. `SaveCandidate` persists
 the materialized root, context and derived report so another process can load them;

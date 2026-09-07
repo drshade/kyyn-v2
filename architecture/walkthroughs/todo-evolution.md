@@ -183,7 +183,7 @@ Inside `applyEvolution`, the meaningful sequence is:
    the entry and proposed executable entries, decode source data, evaluate, and
    obtain the target value plus the derived step report.
 2. `TargetCode captured.context.material`: select the captured target files only.
-3. `MaterializeRoot kb after.schema targetCode value`: encode the returned facts
+3. `MaterializeRoot after.schema targetCode value`: encode the returned facts
    as Dhall alongside the proposed source/configuration/examples in an immutable
    in-memory file tree. Saving, not materialization, writes that result to disk.
    The accepted root remains A.
@@ -323,6 +323,8 @@ The integration tests should exercise:
 - Cache removal after acceptance; current reads and archived rationale still work.
 - Process death after ref update, followed by an already-accepted diagnosis even
   without local candidates; later commits do not change the reported accepting commit.
+- Listing after that interruption reports Accepted from Git. Reverting acceptance
+  removes that diagnosis; a later re-acceptance reports its own introducing commit.
 - Identical shared modules compiled once, conflicting definitions rejected during
   build preparation, and invalid proposed source still capturable for review.
 

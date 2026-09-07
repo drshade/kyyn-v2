@@ -6,6 +6,10 @@ date: 2026-09-07
 ---
 # Materialized facts and runtime data loading
 
+Basis: Dhall fact storage and materialized current facts are owner-selected.
+The file layout, snapshot representation and store signatures specify proposed
+implementation mechanics, not a renewed choice of storage format.
+
 ## Context
 
 The prototype's generated fact literals couple data volume to compilation.
@@ -61,7 +65,7 @@ data RootStore :: Effect where
   ExportRootFiles
     :: Root -> RootStore m SubtreeReplacement
   MaterializeRoot
-    :: KnowledgeBase -> CheckedContract -> CodeSnapshot -> CheckedValue
+    :: CheckedContract -> CodeSnapshot -> CheckedValue
     -> RootStore m Root
 
 runRootStore
@@ -95,7 +99,9 @@ directory which Git cannot retain.
 
 These pure host values, including repository/path primitives, live in
 `kyyn-domain`; plumbing may import the small primitive modules, not KB workflow
-modules. They need no guest-side counterpart or new package. RootStore owns its
+modules. ADR 0003's module import checks enforce that restriction within the
+package dependency; a Cabal dependency alone does not enforce it. They need no
+guest-side counterpart or new package. RootStore owns its
 layout and encoding and exports prefix `root`; EvolutionStore exports its own
 archive prefix. Publication composes each prefix with `KnowledgeBase.prefix`.
 Git consumes repository-relative paths and bytes, without knowing either layout.
