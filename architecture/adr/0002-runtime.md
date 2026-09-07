@@ -129,6 +129,11 @@ pipe scopes; ordinary effect-row lifting can address an outer scope explicitly.
 The interpreter holds native handles privately and preserves the caller's local
 effects when interpreting the inner action. It uses effectful's scoped lifting,
 not an `IO` callback in the public API.
+The initial handler uses `SeqUnlift`: pipe operations stay on the inner action's
+thread. An inner action must not fork work that uses these pipes. The sequential
+protocol adapter fits this constraint; cancellation comes from the owning caller.
+The native stderr worker handles bytes privately and does not execute guest or
+caller effects on its worker thread.
 
 `Nothing` means EOF, not a successful protocol result. Reads are byte chunks, not
 complete messages; [the adapter](0007-wire.md) owns framing. Writes flush; closing
@@ -138,6 +143,9 @@ concurrently and is returned as bytes with the exit status, not printed or logge
 A nonzero exit is data for the compiler/runtime caller to interpret. Spawn and
 pipe IO failures use the operational Failure channel; cancellation propagates
 after cleanup rather than being misclassified as process rejection.
+If cleanup itself fails after a successful inner action, report that operational
+failure. When already unwinding an exception or cancellation, a secondary cleanup
+IO error must not replace the primary failure; cleanup is best-effort on that path.
 
 `ProcessSpec` supplies an executable, argument list, working directory and complete
 environment explicitly. There is no implicit shell command or environment merge.

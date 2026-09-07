@@ -18,9 +18,11 @@ runProcessExecutionIO
   => Eff (ProcessExecution : es) a -> Eff es a
 runProcessExecutionIO = interpret $ \env (WithProcess spec action) ->
   localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
-    Exception.bracket
+    fmap fst $ Exception.generalBracket
       (native StartProcess (Process.startProcess (configuration spec)))
-      (native StopProcess . Process.stopProcess)
+      (\child exitCase -> case exitCase of
+        Exception.ExitCaseSuccess _ -> native StopProcess (Process.stopProcess child)
+        _ -> liftIO (Process.stopProcess child) `Exception.catch` \(_ :: IOException) -> pure ())
       (\child -> Exception.bracket
         (liftIO (async (Bytes.hGetContents (Process.getStderr child))))
         (liftIO . cancel)
