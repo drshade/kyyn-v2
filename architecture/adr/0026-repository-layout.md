@@ -1,8 +1,14 @@
-# 0026 — One repository, explicit package boundaries
+---
+id: 0026
+title: 'One repository, explicit package boundaries'
+status: proposed
+date: 2026-09-07
+---
+# One repository, explicit package boundaries
 
-Status: Owner-agreed monorepo layout, interpreter package names and shared-source
-boundaries. Wire-support package placement and the MicroHs source-vendoring
-mechanism remain to be selected.
+Basis: the monorepo layout, interpreter package names and shared-source boundaries
+are owner-agreed. Source-copy/build integration below specifies the initial
+implementation; full distribution mechanics remain to be proved.
 
 ## Context
 
@@ -116,8 +122,11 @@ The pinned upstream source lives at `vendor/MicroHs/` as an explicit build input
 Native compiler integration and the bundled guest toolchain use that same selected
 revision. Its source and build integration must be available in a source build;
 do not rely on Cabal reaching an experiment checkout or an undocumented ignored
-download-cache path. Vendored copy versus submodule remains to be chosen, including
-how a release source archive supplies the source. This is upstream dependency
+download-cache path. Use a vendored source copy; a complete Git source archive
+includes it. Record the revision, archive digest and notices in `vendor/README.md`.
+Native Cabal packages build within that complete monorepo, not independently
+packaged adapter source tarballs. Release binary/toolchain packaging remains a
+separate proof. This is upstream dependency
 management, not an assumed compiler fork. Preserve upstream notices and follow the
 dependency review and distribution requirements in ADRs 0020 and 0022.
 

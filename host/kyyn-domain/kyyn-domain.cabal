@@ -1,0 +1,14 @@
+cabal-version: 3.0
+name: kyyn-domain
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved for Kyyn-owned code; upstream notices remain applicable.
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules: Kyyn.Domain.DataType
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, deepseq

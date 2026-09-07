@@ -98,8 +98,9 @@ An empty collection is represented by its empty membership file, not an empty
 directory which Git cannot retain.
 
 These pure host values, including repository/path primitives, live in
-`kyyn-domain`; plumbing may import the small primitive modules, not KB workflow
-modules. ADR 0003's module import checks enforce that restriction within the
+`kyyn-domain`; plumbing may import explicitly allowlisted pure value modules,
+including schema shapes/bindings and diagnostics as well as path/byte primitives,
+not KB workflow modules. ADR 0003's module import checks enforce that restriction within the
 package dependency; a Cabal dependency alone does not enforce it. They need no
 guest-side counterpart or new package. RootStore owns its
 layout and encoding and exports prefix `root`; EvolutionStore exports its own

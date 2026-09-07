@@ -20,21 +20,22 @@ does not become another specification of the product's runtime workflows.
 ## Verification
 
 - **Complete gate:** `bash tools/test.sh`, invoked identically locally and in CI.
-- **Development prerequisites for this gate:** Bash 3.2+ and Node.js 22+; no npm packages.
+- **Development prerequisites for this gate:** Bash 3.2+, Node.js 22+, GHC 9.10.3,
+  Cabal 3.16.1.0, Make and a C compiler; no npm packages. Fetch native dependencies
+  with `cabal update` on a new development machine.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
 - **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
-- **Current scope:** documentation, ADR metadata, process-script syntax and regression
-  tests of the documentation checks, including final newlines and trailing whitespace
-  (stricter than the foundation's checker). No GHC, MicroHs, plugin or Web build exists yet.
-  The gate reports this scope explicitly and refuses newly populated implementation
-  directories, including `tests/integration/`, until its owner adds the corresponding
-  real checks in that change.
-- **As implementation arrives:** replace the documentation-only guard with actual
-  host/shared/guest, integration and Web checks as applicable. Use the entry-point
-  locations in ADR 0026; do not silently skip MicroHs/plugin failures behind a native
-  build. No placeholder scripts are required now.
+- **Current scope:** documentation/ADR checks, checker regressions, explicit pure-module
+  import allowlists, native package builds and actual MicroHs generated-codec tests.
+  `tools/test-guest.sh` builds the vendored compiler/evaluator/preprocessor and the
+  native test suite inspects authored types, generates codecs, compiles them and
+  exchanges runtime values with the resulting guest. It does not substitute GHC
+  for guest execution. No complete KB workflow, plugin or Web build exists yet.
+- **As implementation arrives:** extend this same gate with the relevant checks.
+  The earlier documentation-only guard is removed because native and guest builds
+  now run unconditionally; do not silently skip their failures.
 
-The check validates project-owned documentation, not third-party/vendor/cache trees.
+The documentation check validates project-owned documentation, not third-party/vendor/cache trees.
 Historical evidence in neighbouring repositories is cited as source paths rather
 than required local links; a clean checkout is sufficient for this gate. External
 HTTP links and heading anchors are not validated. The small checker handles inline
@@ -84,7 +85,7 @@ established by this PR; configure the `check` job as required where available.
 
 ## Releases
 
-- **Published releases:** none. The repo currently contains design and process work.
+- **Published releases:** none. The repo contains design, process and initial codec implementation.
 - **Release runbook:** not yet applicable. Establish and verify one before publishing
   a build; ADRs 0020 and 0022 own distribution and licensing decisions.
 

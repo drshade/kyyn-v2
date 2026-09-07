@@ -82,7 +82,7 @@ test('generated and third-party docs are outside authored documentation checks',
   write('vendor/upstream/README.md', '[Upstream](upstream-missing.md)\n');
   const errors = checkRepository(root).errors.join('\n');
   assert.doesNotMatch(errors, /missing local link/);
-  assert.match(errors, /extend tools\/test.sh/);
+  assert.equal(errors, '');
 });
 
 test('single-line code spans hide literal links but not adjacent real links', t => {
@@ -99,17 +99,10 @@ test('single-line code spans hide literal links but not adjacent real links', t 
   assert.match(checkMarkdown(root, 'README.md', '\\`[Real](missing.md)\\`\n').join('\n'), /missing local/);
 });
 
-test('integration test inputs cannot bypass the documentation-only guard', t => {
+test('software inputs are checked by the build gate, not the Markdown checker', t => {
   const { root, write } = fixture(t);
   write('tests/integration/Example.hs', 'main = pure ()\n');
-  assert.match(checkRepository(root).errors.join('\n'), /tests\/integration\/ contains implementation inputs/);
-});
-
-test('documentation-only success cannot silently stand for a new software build', t => {
-  const { root, write } = fixture(t);
   write('host/example/src/Main.hs', 'main = pure ()\n');
   write('cabal.project', 'packages: host/example\n');
-  const errors = checkRepository(root).errors.join('\n');
-  assert.match(errors, /implementation inputs/);
-  assert.match(errors, /replace the documentation-only gate/);
+  assert.deepEqual(checkRepository(root).errors, []);
 });
