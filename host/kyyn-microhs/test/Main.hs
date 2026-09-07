@@ -6,7 +6,7 @@ import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
-import Kyyn.MicroHs.Inspection (inspectDataType)
+import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (getEnv)
@@ -24,15 +24,24 @@ main = do
       json = repo </> "vendor/json"
   createDirectoryIfMissing True output
   forM_ [("FunctionField", "function-valued"), ("Recursive", "recursive"),
-         ("IllTyped", "IllTyped.hs"), ("Hidden", "opaque"), ("Positional", "positional")] $ \(name, expected) -> do
+         ("IllTyped", "IllTyped.hs"), ("Hidden", "opaque"), ("Positional", "positional"),
+         ("AbsentModule", "not found"), ("TupleField", "tuples"),
+         ("CharField", "unsupported"), ("DoubleField", "unsupported"),
+         ("NaturalField", "opaque")] $ \(name, expected) -> do
     result <- inspectDataType compiler [fixtures] (name ++ ".Root")
-    case result >>= generateCodecs of
+    case either (Left . show) Right result >>= generateCodecs "KyynGeneratedCodec" of
       Left message | expected `isInfixOf` message -> pure ()
       other -> fail (name ++ ": expected rejection containing " ++ expected ++ ", received " ++ show other)
+  absentType <- inspectDataType compiler [fixtures] "Model.AbsentType"
+  case absentType of
+    Left (CompilerError _) -> pure ()
+    other -> fail ("expected missing-type compiler diagnostic: " ++ show other)
   forM_ ["Model.Root", "Model.RootAlias"] $ \selected -> do
-    inspected <- inspectDataType compiler [fixtures] selected >>= either fail pure
-    generated <- either fail pure (generateCodecs inspected)
+    inspected <- inspectDataType compiler [fixtures] selected >>= either (fail . show) pure
+    generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
+    second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
     writeFile (output </> "KyynGeneratedCodec.hs") generated
+    writeFile (output </> "KyynSecondCodec.hs") second
     (compiled, _, errors) <- readProcessWithExitCode (compiler </> "bin/mhs")
       ["-i" ++ concatPaths [fixtures, output, guest, json], fixtures </> "RoundTrip.hs", "-o" ++ output </> "roundtrip"] ""
     unless (compiled == ExitSuccess) (fail errors)
@@ -49,7 +58,9 @@ main = do
           unless (actual == A.object ["error" A..= True] && not (null diagnostics))
             (fail ("expected diagnostic rejection, received " ++ show actual))
         value = A.object ["todos" A..= [A.object ["contents" A..= A.object
-          ["name" A..= ("München 日本語 🦋\n\0" :: String), "status" A..= tag "Blocked" (Just (A.String "awaiting review"))
+          ["name" A..= ("München 日本語 🦋\n\0" :: String), "identity" A..= tag "Wrapped" (Just (A.String "todo-001"))
+          ,"decision" A..= tag "Right" (Just (A.String "42"))
+          ,"status" A..= tag "Blocked" (Just (A.String "awaiting review"))
           ,"note" A..= tag "Some" (Just (tag "None" Nothing))
           ,"budget" A..= ("123456789012345678901234567890" :: String)
           ,"choice" A..= tag "Detailed" (Just (A.object ["title" A..= ("detail" :: String), "count" A..= ("-42" :: String)]))]]]

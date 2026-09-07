@@ -3,12 +3,12 @@ module Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs) where
 import Data.List (intercalate, nub, elemIndex)
 import Kyyn.Domain.DataType
 
-generateCodecs :: DataType -> Either String String
-generateCodecs root = do
+generateCodecs :: String -> DataType -> Either String String
+generateCodecs moduleName root = do
   _ <- shapeOf root
   definitions <- mapM codec types
   pure $ unlines $
-    ["module KyynGeneratedCodec (rootCodec) where", "import Kyyn.Runtime.Json"] ++
+    ["module " ++ moduleName ++ " (rootCodec) where", "import Kyyn.Runtime.Json"] ++
     ["import qualified " ++ name | name <- nub [definingModule n | Algebraic n _ _ <- types]] ++
     ["rootCodec :: Codec " ++ haskellType root, "rootCodec = codec0"] ++ concat definitions
   where

@@ -1,18 +1,21 @@
+{-# LANGUAGE DeriveAnyClass #-}
 module Kyyn.Domain.DataType
   ( DataType(..), Constructor(..), Shape(..), ScalarKind(..), shapeOf
   , haskellType, reachableTypes, definingModule ) where
 
 import Data.List (nub)
+import Control.DeepSeq (NFData)
+import GHC.Generics (Generic)
 
 -- Resolved data declarations only; a complete KB contract also needs metadata.
 data DataType
   = StringType | IntegerType | BoolType
   | ListType DataType | OptionalType DataType
   | Algebraic String [DataType] [Constructor]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 data Constructor = Constructor String [(Maybe String, DataType)]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 data Shape
   = Record [(String, Shape)] | List Shape | Optional Shape

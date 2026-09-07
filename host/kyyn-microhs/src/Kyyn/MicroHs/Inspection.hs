@@ -1,10 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Kyyn.MicroHs.Inspection (inspectDataType) where
+{-# OPTIONS_GHC -Werror #-}
+module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType) where
 
 import Control.DeepSeq (force)
-import Control.Exception (ErrorCall, catch, evaluate, displayException)
+import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (unless)
-import Data.List (nubBy)
+import Data.List (nubBy, nub)
 import Kyyn.Domain.DataType
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
@@ -15,11 +16,20 @@ import MicroHs.SymTab (Entry(..))
 import MicroHs.StateIO (runStateIO)
 import MicroHs.TypeCheck (TModule(..), TypeExport(..), ValueExport(..))
 
+data InspectionError
+  = TypeNotSupported String
+  | CompilerError String
+  | NativeError String
+  deriving (Eq, Show)
+
 -- Native compiler integration, not a porcelain operation or a complete KB contract.
-inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either String DataType)
+inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either InspectionError DataType)
 inspectDataType compiler sources selected = inspect `catch` failure
   where
-    failure (err :: ErrorCall) = pure (Left (displayException err))
+    failure (err :: SomeException)
+      | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
+      | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (displayException err)))
+      | otherwise = pure (Left (NativeError (displayException err)))
     inspect = do
       let flags = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"] }
           witness = addPreludeImport (EModule (mkIdent "KyynTypeWitness")
@@ -32,10 +42,12 @@ inspectDataType compiler sources selected = inspect `catch` failure
       let exports = [(unIdent qi, vs) | m <- cachedModules cache,
             TypeExport _ (Entry (EVar qi) _) vs <- tTypeExps m]
           constructors name = maybe [] id (lookup name exports)
-      pure $ case [fst (arrows (snd (stripForall t))) |
-          TypeExport _ _ vs <- tTypeExps checked, ValueExport _ (Entry (ECon _) t) <- vs] of
-        [[root]] -> lowerType constructors [] [] root
-        _ -> Left "compiler witness did not expose the selected data type"
+      let result = case [fst (arrows (snd (stripForall t))) |
+              TypeExport _ _ vs <- tTypeExps checked, ValueExport _ (Entry (ECon _) t) <- vs] of
+            [[root]] -> lowerType constructors [] [] root
+            _ -> Left "compiler witness did not expose the selected data type"
+      forced <- evaluate (force result)
+      pure (either (Left . TypeNotSupported) Right forced)
 
 type Constructors = String -> [ValueExport]
 
@@ -49,8 +61,10 @@ lowerType table active env original =
       (headType,args) = unApps original
       bad reason = Left reason
   in case (headType,args) of
+    -- These identities are specific to the vendored MicroHs revision.
     (EVar n,[]) | unIdent n == "Data.Integer_Type.Integer" -> Right IntegerType
     (EVar n,[]) | unIdent n == "Data.Bool_Type.Bool" -> Right BoolType
+    (EVar n,_) | not (null (unIdent n)) && all (== ',') (unIdent n) -> bad "tuples are outside the data algebra"
     (EVar n,[EVar c]) | unIdent n == "Data.List_Type.[]", unIdent c == "Primitives.Char" -> Right StringType
     (EVar n,[x]) | unIdent n == "Data.List_Type.[]" -> ListType <$> lowerType table active env x
     (EVar n,[x]) | unIdent n == "Data.Maybe_Type.Maybe" -> OptionalType <$> lowerType table active env x
@@ -72,7 +86,8 @@ lowerConstructor table active targetType (con,signature) = do
       (args,result) = arrows body
       regularArgument (EVar n) = n `elem` vars
       regularArgument _ = False
-  unless (all regularArgument (snd (unApps result)))
+  let parameters = snd (unApps result)
+  unless (all regularArgument parameters && length (nub [n | EVar n <- parameters]) == length parameters)
     (Left (showSLoc (getSLoc con) ++ ": indexed GADT constructors are outside the data algebra"))
   bindings <- match vars result targetType
   unless (all (`elem` map fst bindings) vars)

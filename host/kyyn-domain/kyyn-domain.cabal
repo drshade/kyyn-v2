@@ -11,4 +11,4 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21
+  build-depends: base >=4.20 && <4.21, deepseq
