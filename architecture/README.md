@@ -106,7 +106,8 @@ already works. The outstanding technical work has these owners:
 - [0005 — contracts](adr/0005-contracts.md): production compiler-adapter integration,
   supported scalar libraries and generated bindings.
 - [0007 — wire](adr/0007-wire.md) and [0009 — capabilities](adr/0009-capabilities.md):
-  guest JSON library, exact encoding and MicroHs-compatible request interpretation.
+  generated ADT codec integration, exact scalar encoding and MicroHs-compatible
+  request interpretation with the selected JSON libraries.
   Dependency selection follows [0022](adr/0022-open-source.md).
 - [0006 — storage](adr/0006-storage.md), [0010 — evolutions](adr/0010-evolutions.md)
   and [0017 — outputs](adr/0017-outputs.md): representative performance and complete

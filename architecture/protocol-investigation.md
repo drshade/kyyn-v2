@@ -1,8 +1,9 @@
 # Runtime protocol: evidence and selection gate
 
 Initial research: 5 September 2026. The bounded `json` probe below was performed
-on 7 September. Library selection remains open in ADR 0007; successful syntax
-round trips alone do not establish the complete runtime protocol.
+on 7 September. [ADR 0007](adr/0007-wire.md) records the subsequently accepted
+library/profile decision; successful syntax round trips alone do not establish
+the complete runtime protocol.
 
 ## What is actually established
 
@@ -116,7 +117,8 @@ reject surrogate Chars before dispatch or encoding. This needs no parser patch
 or additional JSON scanner. Both generators must be tested; a passing ASCII-only
 test would not establish it. It preserves every Unicode scalar value but does
 not promise to accept every valid equivalent JSON spelling in the guest.
-This tradeoff remains a decision to resolve, not an adopted implementation.
+The owner accepted this tradeoff in ADR 0007. The probe is evidence for that
+direction, not an implemented production adapter.
 
 A second temporary executable added only decoded-value validation and first-key
 normalization around those unchanged library calls. Six asserted real-pipe cases
