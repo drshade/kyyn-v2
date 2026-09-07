@@ -8,7 +8,8 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Plumbing.Capability.SchemaInspection.Codecs
+    Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain
+  build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0
