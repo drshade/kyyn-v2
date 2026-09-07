@@ -12,6 +12,7 @@ node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("
 bash -n tools/test.sh
 node --check tools/checks/check-docs.mjs
 node --check tools/checks/check-docs.test.mjs
+node --check architecture/evidence/json-probe/check.mjs
 node tools/checks/check-docs.test.mjs
 node tools/checks/check-docs.mjs
 

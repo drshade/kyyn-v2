@@ -46,11 +46,10 @@ a future open-source possibility as permission today. Obtain legal review where
 the implications are unclear; no particular combined-artifact licensing conclusion
 is established by this ADR.
 
-The guest JSON library remains unselected. The
-[protocol investigation](../protocol-investigation.md) identifies Aeson and
-microaeson as candidates with different licensing considerations. Check the exact
-selected source/dependency terms alongside the compatibility proof; neither is
-approved for a guest bundle merely because its API is convenient. This is one
+The selected host/guest JSON libraries are recorded in [ADR 0007](0007-wire.md),
+with source/license evidence in the [protocol investigation](../protocol-investigation.md).
+Check the exact selected source/dependency terms alongside the compatibility proof;
+API convenience alone is not distribution clearance. This is one
 dependency-selection check, not a new runtime enforcement mechanism.
 
 ## Verification and later release

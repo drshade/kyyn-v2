@@ -1,8 +1,9 @@
 # Runtime protocol: evidence and selection gate
 
-Research notes, 5 September 2026. This is not a completed JSON compatibility
-experiment. Library selection remains open in ADR 0007. No JSON library was
-compiled under MicroHs during this documentation task.
+Initial research: 5 September 2026. The bounded `json` probe below was performed
+on 7 September. [ADR 0007](adr/0007-wire.md) records the subsequently accepted
+library/profile decision; successful syntax round trips alone do not establish
+the complete runtime protocol.
 
 ## What is actually established
 
@@ -69,6 +70,72 @@ Consequences for Kyyn are recommendations, not claims of library defects:
 JSON's interoperability cautions about duplicate keys and numeric precision are
 documented in [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259). Restricting the
 typed value mapping is different from writing a restricted JSON syntax parser.
+
+## Bounded `json-0.11` probe — 7 September 2026
+
+The [retained sources and commands](evidence/json-probe/README.md) reproduce this
+evidence, including the failing baseline. They are not production adapters.
+
+The published [json-0.11 source](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz)
+has SHA-256 `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690`.
+Its included license is BSD-3-Clause, with source/binary notice and non-endorsement
+conditions. No dependency adoption or distribution clearance is implied by the
+probe. The upstream repository is [GaloisInc/json](https://github.com/GaloisInc/json).
+
+Pinned MicroHs `455782164e75998b140d869c1b7cdde0c8a21508` compiled the unchanged
+`Text.JSON.Types` and `Text.JSON.String` modules. This uses the latter's direct
+`runGetJSON readJSValue` parser and `showJSValue` encoder, not the umbrella
+`Text.JSON` module or its optional Parsec/ReadP backends. The small executable read
+one line with `getLine` and wrote the library-encoded result with `putStrLn`.
+Node supplied runtime input through real child-process pipes and inspected output.
+
+Observed results:
+
+| Input | Observed result |
+| --- | --- |
+| Literal `München 日本語 🦋`, escaped controls including NUL | Values round-trip over actual UTF-8 pipes |
+| Very large integer/decimal strings, explicit nested Some/None objects, empty list | Structure/text round-trip; no numeric arithmetic or generated scalar codec proved |
+| Truncated object or trailing garbage | Library returns a syntax diagnostic |
+| Duplicate object fields | Association-list representation preserves their order |
+| JSON number with leading zero (`01`) | Accepted and re-encoded as `1`; not strict JSON syntax conformance |
+| Valid escaped surrogate pair (`\ud83e\udd8b`) | Decoded as two surrogate Chars; output crashes with `hPutChar: surrogate` after a partial frame |
+
+Native GHC 9.10.3 with Aeson 2.2.5.0 independently confirmed that its encoder emits
+literal UTF-8 for these non-ASCII characters and escapes the control characters.
+Its default decoder keeps the first duplicate object key. Guest normalization
+would have to use that same policy rather than assume the two libraries agree.
+
+The surrogate result is a library decoding limitation, not proof that MicroHs
+cannot carry Unicode: the literal form works. Inspection of upstream `String.hs`
+still showed independent decoding of each `\\uXXXX` escape. A second source-only
+inspection, `yocto-1.0.0`, found the same per-escape decoding pattern and a Parsec
+dependency; it was not compiled and is not an established alternative.
+
+A possible restricted private profile uses library-generated literal UTF-8,
+number strings as already proposed in ADR 0007, and decoded-value checks that
+reject surrogate Chars before dispatch or encoding. This needs no parser patch
+or additional JSON scanner. Both generators must be tested; a passing ASCII-only
+test would not establish it. It preserves every Unicode scalar value but does
+not promise to accept every valid equivalent JSON spelling in the guest.
+The owner accepted this tradeoff in ADR 0007. The probe is evidence for that
+direction, not an implemented production adapter.
+
+A second temporary executable added only decoded-value validation and first-key
+normalization around those unchanged library calls. Six asserted real-pipe cases
+passed: the combined Unicode/control/exact-string/tagged-option/empty-list value;
+escaped surrogate-pair rejection; JSON-number rejection (including `01`);
+truncated-object rejection; trailing-garbage rejection; and first-key duplicate
+normalization. Rejections produced one complete fixed error object, with no
+partial output or runtime exception. This checks the proposed mitigation, not
+Kyyn's still-unimplemented protocol-error envelope or generated domain codecs.
+The retained driver adds nested string-value and object-key cases: decoded-value
+checks apply at every depth of the retained value. It also asserts the native
+duplicate policy specifically for Aeson 2.2.5.0; dependency updates must rerun that
+assertion rather than assume the policy is unchanged.
+
+The probe does not establish generated schema bindings, full framing/envelopes,
+capability requests, cancellation, clean installation or whole-root validation.
+Do not count it as completing those gates or the first implementation outcome.
 
 ## Smallest decisive experiment, after review
 
