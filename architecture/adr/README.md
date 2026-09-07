@@ -29,6 +29,10 @@ heading and presence of that status text, but does not reinterpret its mixed
 decision/proposal wording. New numbers require standard front matter. Review, not
 metadata lint, establishes the truth of a lifecycle status. Navigation or source-link
 repairs alone do not require claiming that a significant decision was revisited.
+The checker cannot detect whether a revision is substantive: even a completely
+rewritten imported ADR can pass with a syntactically valid `Status:` line. Review
+must ensure such a revision adopts metadata and resolves its decision status.
+The imported cutoff is fixed at 0026, not advanced when a new ADR is added.
 
 Run `bash tools/test.sh` to check metadata and local links. Retain only current
 guidance in active decision sections; Git and the design PR preserve former wording.

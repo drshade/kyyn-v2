@@ -14,8 +14,8 @@ does not become another specification of the product's runtime workflows.
   design approvals or implementation completion for it.
 - **Foundation:** adapted from `sdlc` commit
   `347b154d9c5be56d2506401b134625850ed4adf4`. This repository owns its process copy;
-  execution does not fetch instructions from another checkout. The baseline adoption
-  guidance is made explicit in SDLC section 5; other lifecycle rules are retained.
+  execution does not fetch instructions from another checkout. `SDLC.md` retains
+  that baseline verbatim; Kyyn's adoption details live here.
 
 ## Verification
 
@@ -24,9 +24,11 @@ does not become another specification of the product's runtime workflows.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
 - **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
 - **Current scope:** documentation, ADR metadata, process-script syntax and regression
-  tests of the documentation checks. No GHC, MicroHs, plugin or Web build exists yet.
+  tests of the documentation checks, including final newlines and trailing whitespace
+  (stricter than the foundation's checker). No GHC, MicroHs, plugin or Web build exists yet.
   The gate reports this scope explicitly and refuses newly populated implementation
-  directories until its owner adds the corresponding real checks in that change.
+  directories, including `tests/integration/`, until its owner adds the corresponding
+  real checks in that change.
 - **As implementation arrives:** replace the documentation-only guard with actual
   host/shared/guest, integration and Web checks as applicable. Use the entry-point
   locations in ADR 0026; do not silently skip MicroHs/plugin failures behind a native
@@ -35,7 +37,14 @@ does not become another specification of the product's runtime workflows.
 The check validates project-owned documentation, not third-party/vendor/cache trees.
 Historical evidence in neighbouring repositories is cited as source paths rather
 than required local links; a clean checkout is sufficient for this gate. External
-HTTP links are not network-probed. Branch protection is a repository setting, not
+HTTP links and heading anchors are not validated. The small checker handles inline
+links outside top-level fenced blocks and single-line backtick code spans; it is
+not a full Markdown parser. Multiline code spans and fences nested at four or more
+spaces inside lists are not interpreted as code. Use top-level fenced examples
+when demonstrating links that are not actual documentation references.
+HTML comments are not excluded from inline-link checks, and reference-style link
+definitions are not validated; use ordinary inline links for checked references.
+Branch protection is a repository setting, not
 established by this PR; configure the `check` job as required where available.
 
 ## Review and merge
@@ -51,6 +60,9 @@ established by this PR; configure the `check` job as required where available.
 - **Review record:** PR review/comments contain findings and their resolution.
   Switchboard can coordinate reviewers, but material conclusions must reach the PR
   and, for design decisions, the owning ADR or process document.
+  When agents share a GitHub identity, the PR identifies its authoring and reviewing
+  agents, and each agent-authored review names its author. The reviewing agent must
+  differ from the authoring agent; the shared GitHub login is not that distinction.
 - **Merge strategy:** not prescribed; do not force-push or rewrite another contributor's
   history without agreement.
 

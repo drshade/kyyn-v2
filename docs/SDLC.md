@@ -90,14 +90,6 @@ Use an ADR when a choice:
 Routine bugs, contained features, local refactoring and implementation choices
 do not need ADRs when the existing design already determines their shape.
 
-### Adoption into an existing project
-
-Adoption is prospective, not historical reconstruction. Existing current design
-records retain their documented authority and unresolved choices until the relevant
-concern is revised. Project practices identify the imported baseline; do not infer
-blanket acceptance from importing documents or invent retrospective Issues and
-approvals. New decisions and substantive revisions follow this lifecycle.
-
 ### ADR states
 
 - **proposed** — under design review and not yet authoritative;

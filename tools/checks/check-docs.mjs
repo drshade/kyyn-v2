@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const adrName = /^(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
 const metadataKeys = ['id', 'title', 'status', 'date'];
+// Fixed imported baseline; see docs/PROJECT-PRACTICES.md, "Decisions and active work".
+const lastImportedAdrId = 26;
 
 export function checkAdr(name, source) {
   const errors = [];
@@ -12,7 +14,7 @@ export function checkAdr(name, source) {
   const id = match[1];
 
   if (!source.startsWith('---\n')) {
-    if (Number(id) > 26) return [`${name}: new ADR requires front matter`];
+    if (Number(id) > lastImportedAdrId) return [`${name}: new ADR requires front matter`];
     if (!source.startsWith(`# ${id} — `)) errors.push(`${name}: imported ADR heading must match its ID`);
     if (!/^Status: \S.+$/m.test(source)) errors.push(`${name}: imported ADR needs its existing Status text`);
     return errors;
@@ -64,7 +66,7 @@ export function checkMarkdown(root, file, source) {
       continue;
     }
     if (fence) continue;
-    for (const match of line.matchAll(/!?\[[^\]\n]*\]\(([^)\n]+)\)/g)) {
+    for (const match of withoutInlineCode(line).matchAll(/!?\[[^\]\n]*\]\(([^)\n]+)\)/g)) {
       const target = match[1];
       if (/^(https?:|mailto:|#)/i.test(target)) continue;
       let local;
@@ -81,6 +83,24 @@ export function checkMarkdown(root, file, source) {
   }
   if (fence) errors.push(`${file}: unclosed Markdown fence`);
   return errors;
+}
+
+function withoutInlineCode(line) {
+  const markers = [...line.matchAll(/`+/g)];
+  let output = '';
+  let start = 0;
+  for (let i = 0; i < markers.length; i++) {
+    const open = markers[i];
+    const precedingBackslashes = /\\*$/.exec(line.slice(0, open.index))[0].length;
+    if (precedingBackslashes % 2) continue;
+    const closeIndex = markers.findIndex((marker, j) => j > i && marker[0].length === open[0].length);
+    if (closeIndex < 0) continue;
+    const close = markers[closeIndex];
+    output += line.slice(start, open.index) + ' ';
+    start = close.index + close[0].length;
+    i = closeIndex;
+  }
+  return output + line.slice(start);
 }
 
 function filesUnder(directory) {
@@ -117,7 +137,7 @@ export function checkRepository(root) {
   }
 
   // Remove this documentation-phase guard only alongside the real build/test gate.
-  for (const directory of ['host', 'guest', 'shared', 'plugins', 'examples', 'web', 'vendor']) {
+  for (const directory of ['host', 'guest', 'shared', 'plugins', 'examples', 'web', 'vendor', 'tests/integration']) {
     if (filesUnder(path.join(root, directory)).length) {
       errors.push(`${directory}/ contains implementation inputs; extend tools/test.sh with their actual checks`);
     }
