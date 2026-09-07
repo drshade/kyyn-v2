@@ -72,6 +72,9 @@ typed value mapping is different from writing a restricted JSON syntax parser.
 
 ## Bounded `json-0.11` probe — 7 September 2026
 
+The [retained sources and commands](evidence/json-probe/README.md) reproduce this
+evidence, including the failing baseline. They are not production adapters.
+
 The published [json-0.11 source](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz)
 has SHA-256 `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690`.
 Its included license is BSD-3-Clause, with source/binary notice and non-endorsement
@@ -123,6 +126,10 @@ truncated-object rejection; trailing-garbage rejection; and first-key duplicate
 normalization. Rejections produced one complete fixed error object, with no
 partial output or runtime exception. This checks the proposed mitigation, not
 Kyyn's still-unimplemented protocol-error envelope or generated domain codecs.
+The retained driver adds nested string-value and object-key cases: decoded-value
+checks apply at every depth of the retained value. It also asserts the native
+duplicate policy specifically for Aeson 2.2.5.0; dependency updates must rerun that
+assertion rather than assume the policy is unchanged.
 
 The probe does not establish generated schema bindings, full framing/envelopes,
 capability requests, cancellation, clean installation or whole-root validation.
