@@ -42,6 +42,8 @@ links outside top-level fenced blocks and single-line backtick code spans; it is
 not a full Markdown parser. Multiline code spans and fences nested at four or more
 spaces inside lists are not interpreted as code. Use top-level fenced examples
 when demonstrating links that are not actual documentation references.
+HTML comments are not excluded from inline-link checks, and reference-style link
+definitions are not validated; use ordinary inline links for checked references.
 Branch protection is a repository setting, not
 established by this PR; configure the `check` job as required where available.
 
