@@ -146,7 +146,7 @@ payload field. Reject a collection declaration on an incompatible root field.
 There is no `idField` metadata to keep consistent with a second identity model.
 
 The demonstrated extraction route is the pinned MicroHs frontend linked into the
-native GHC host. A separate [bounded experiment](../../../kyyn-v2-experiment/haskell-schema-experiment/README.md)
+native GHC host. A separate bounded experiment (`kyyn-v2-experiment/haskell-schema-experiment/README.md`)
 now demonstrates source-linking, checked-type extraction and generated guest
 bindings on Linux, without upstream source edits. It does **not** establish a
 stable library component, production packaging or the whole integration gate.
@@ -319,7 +319,7 @@ not separately authored truth. No Dhall parser is required in the guest.
 
 ## Evidence and remaining implementation gates
 
-The [separate experiment](../../../kyyn-v2-experiment/haskell-schema-experiment/README.md) passed native
+The separate experiment (`kyyn-v2-experiment/haskell-schema-experiment/README.md`) passed native
 source-linking, checked extraction across imported/aliased/applied types, payload
 unions, nested collections/optionals, exact values and generated bindings against
 the original declarations. It exercises runtime-loaded facts, rejects unsupported

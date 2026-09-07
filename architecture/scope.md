@@ -14,9 +14,9 @@ related views; surface unresolved anomalies; refresh inputs and preview/publish
 dashboards. Shared business calculations should live in ordinary KB modules,
 not be independently reimplemented in each renderer.
 
-Evidence: [schema](../../exco-sales-reporting/kb-1/schema/src/model.rs),
-[professional-services calculations](../../exco-sales-reporting/kb-1/renderers/ps-detail-ron-v1/src/model.rs),
-[publication runbook](../../exco-sales-reporting/docs/publications.md).
+Evidence: schema (`exco-sales-reporting/kb-1/schema/src/model.rs`),
+professional-services calculations (`exco-sales-reporting/kb-1/renderers/ps-detail-ron-v1/src/model.rs`),
+publication runbook (`exco-sales-reporting/docs/publications.md`).
 Related report sources contain differing overlap caveats. That motivates visible
 assumptions and shared computations, not a claim that a particular number is wrong.
 
@@ -25,10 +25,10 @@ from attendance, and attendance from learning time; represent teaching segments,
 trainer identity, evidence basis and uncertainty independently; update people and
 sessions together; apply alternative reporting policies without recuration.
 
-Evidence: [schema](../../bee-skills-development/kb/schema/src/model.rs),
-[warning/error validation](../../bee-skills-development/kb/schema/src/validate.rs),
-[occurrence helper](../../bee-skills-development/kb/agent-tools/training/tier-0-graph-org-meetings/src/lib.rs),
-[coherent staging helper](../../bee-skills-development/kb/agent-tools/training/stage-training-session/src/lib.rs).
+Evidence: schema (`bee-skills-development/kb/schema/src/model.rs`),
+warning/error validation (`bee-skills-development/kb/schema/src/validate.rs`),
+occurrence helper (`bee-skills-development/kb/agent-tools/training/tier-0-graph-org-meetings/src/lib.rs`),
+coherent staging helper (`bee-skills-development/kb/agent-tools/training/stage-training-session/src/lib.rs`).
 The last currently accepts nested `record_ron` strings. Eliminating that plumbing
 from the authored domain operation is a concrete design target.
 
@@ -115,8 +115,8 @@ Domain complexity is not excluded. Exact arithmetic, heterogeneous roots,
 relationships, payload unions, warnings, uncertainty and partial evidence are
 required now. Transport simplicity must not erase these distinctions.
 
-Historical context: [working-KB synthesis](../../kyyn-v2-experiment/design-notes/working-kbs.md),
-[August review](../../kyyn/docs/review/2026-08-26/README.md), and
-[website page charters](../../kyyn-public-website/docs/site-page-charters.md).
+Historical context: working-KB synthesis (`kyyn-v2-experiment/design-notes/working-kbs.md`),
+August review (`kyyn/docs/review/2026-08-26/README.md`), and
+website page charters (`kyyn-public-website/docs/site-page-charters.md`).
 The site's collaborative-workspace emphasis survives; its kyyn-v1 containment
 and governance claims are not promises inherited by this design.
