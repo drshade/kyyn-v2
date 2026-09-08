@@ -9,7 +9,7 @@ import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub)
 import Kyyn.Domain.DataType
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Types.SchemaMetadata
 
 newtype ContractId = ContractId Bytes.ByteString deriving (Eq, Show)
@@ -32,7 +32,7 @@ contractId :: CheckedContract -> ContractId
 contractId (CheckedContract _ _ _ _ i) = i
 
 checkContract :: DataType -> SchemaMetadata -> Either [Diagnostic] CheckedContract
-checkContract root meta = either (Left . pure . Diagnostic "schema.incoherent") Right $ do
+checkContract root meta = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
   validateStructure root
   rootFields <- recordFields root
   let SchemaMetadata roles assignments declarations = meta

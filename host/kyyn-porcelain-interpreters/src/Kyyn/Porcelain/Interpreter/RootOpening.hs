@@ -9,7 +9,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Root (Root(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
@@ -55,5 +55,5 @@ openTree sdk tree = runExceptT $ do
   _ <- ExceptT (loadRootValueForChecking root)
   pure root
   where
-    rejected message = throwE [Diagnostic "root.opening" message]
+    rejected message = throwE [errorDiagnostic "root.opening" message]
     checked = either rejected pure

@@ -19,7 +19,7 @@ const allowed = {
     'MicroHs.Compile', 'MicroHs.CompileCache', 'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident',
     'MicroHs.SymTab', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
   ],
-  'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Runtime.Json'],
+  'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json'],
   'kyyn-plumbing-interpreters': [
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.Exception',
@@ -32,6 +32,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Diagnostic': ['Kyyn.Types.Diagnostic'],
   'Kyyn.Domain.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
@@ -41,6 +42,8 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Validation': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
+    'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable', 'Data.List', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Plumbing.Capability.Git': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Git', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Plumbing.Capability.SchemaInspection': ['Data.ByteString', 'Data.Text', 'Data.Text.Encoding',

@@ -13,7 +13,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git
 import Kyyn.Domain.Path
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.Git
@@ -114,7 +114,7 @@ runGit executable = interpret $ \_ -> \case
       (output, Process.ProcessExit status diagnostics) <- commandInput repo env args input
       if status == 0 then pure output else broken (unwords args ++ ": " ++ Char8.unpack diagnostics)
     rejected :: String -> String -> ExceptT [Diagnostic] (Eff es) b
-    rejected code message = throwE [Diagnostic code message]
+    rejected code message = throwE [errorDiagnostic code message]
     broken :: String -> Eff es b
     broken = raiseFailure . GitUnavailable
     resolve :: Repository -> String -> Eff es (Either [Diagnostic] GitRevision)
@@ -122,7 +122,7 @@ runGit executable = interpret $ \_ -> \case
       (output, Process.ProcessExit status diagnostics) <- command repo ["rev-parse", "--verify", "--quiet", "--end-of-options", name ++ "^{commit}"]
       case status of
         0 -> either broken (pure . Right) (gitRevision (Char8.unpack (Char8.strip output)))
-        1 -> pure (Left [Diagnostic "git.unknown-revision" name])
+        1 -> pure (Left [errorDiagnostic "git.unknown-revision" name])
         _ -> broken (Char8.unpack diagnostics)
     successful :: Repository -> [String] -> ExceptT [Diagnostic] (Eff es) Bytes.ByteString
     successful repo args = ExceptT $ do

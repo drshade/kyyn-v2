@@ -9,6 +9,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runEff, runPureEff)
 import Kyyn.Domain.Root (CheckedValue(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(Diagnostic), Severity(..), DiagnosticLocation(..), ValidationReport(..), CheckResult(..), checkReport)
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
@@ -16,6 +17,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Protocol.Validation (decodeReport)
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
 import Kyyn.Domain.Contract (metadataOf, rootType)
 import Kyyn.Plumbing.Capability.SchemaInspection
@@ -35,6 +37,7 @@ import System.IO.Temp (withSystemTempDirectory)
 main :: IO ()
 main = do
   codecTests
+  reportTests
   contractTests
   args <- getArgs
   case args of
@@ -134,3 +137,60 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   unless (rejected /= 0) (fail "tagged SDK FactId accepted")
   putStrLn "Checked SDK Fact envelope round trip uses plain-string IDs and rejects tagged IDs."
   putStrLn "Named Haskell metadata evaluated through real MicroHs and fixed JSON codec."
+  reportFiles <- mapM (\(base,file) -> (,) (path file) <$> Bytes.readFile (repo </> base </> file))
+    [("shared/kyyn-types/src", "Kyyn/Types/Diagnostic.hs"),
+     ("guest/kyyn-runtime/src", "Kyyn/Runtime/Validation.hs")]
+  let reportSource = unlines
+        ["module ValidationEntry where", "import Kyyn.Types.Diagnostic", "import Kyyn.Runtime.Validation",
+         "validate :: String -> ValidationReport",
+         "validate input = ValidationReport ([Diagnostic Warning \"uncertain\" \"München 🦋\" Nothing,",
+         "  Diagnostic Warning \"fact\" \"Review name\" (Just (FactLocation \"todos\" \"todo-001\" (Just \"name\"))),",
+         "  Diagnostic Warning \"source\" \"Check source\" (Just (SourceLocation \"Validate.hs\" 12 3)),",
+         "  Diagnostic Warning \"example\" \"Illustrative\" (Just (ExampleLocation \"sample\"))] ++",
+         "  if null input then [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])",
+         "main :: IO ()", "main = getContents >>= either fail putStrLn . encodeReport . validate"]
+  reportSources <- either fail pure (guestSources (path "ValidationEntry.hs")
+    (files ++ reportFiles ++ [(path "ValidationEntry.hs", utf8 reportSource)]))
+  reportCompilation <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
+    compileGuest reportSources
+  reportEntry <- either (fail . show) (either (fail . show) pure) reportCompilation
+  forM_ [("name", expectedWarnings), ("", expectedWarnings ++ [blankError])] $ \(inputBytes, expectedDiagnostics) -> do
+    response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope $
+      withCompiledEntry reportEntry $ do
+        writeStdin inputBytes
+        closeStdin
+        responseBytes <- collectStdout
+        exit <- awaitExit
+        pure (responseBytes,exit)
+    (responseBytes,exit) <- either (fail . show) pure response
+    report <- either fail pure (decodeReport responseBytes)
+    unless (exit == ProcessExit 0 "" && report == ValidationReport expectedDiagnostics)
+      (fail ("Validation report changed across MicroHs boundary: " ++ show response))
+  putStrLn "Real MicroHs validation reports preserve errors, warnings, Unicode and all diagnostic locations."
+
+expectedWarnings :: [Diagnostic]
+expectedWarnings =
+  [Diagnostic Warning "uncertain" "München 🦋" Nothing,
+   Diagnostic Warning "fact" "Review name" (Just (FactLocation "todos" "todo-001" (Just "name"))),
+   Diagnostic Warning "source" "Check source" (Just (SourceLocation "Validate.hs" 12 3)),
+   Diagnostic Warning "example" "Illustrative" (Just (ExampleLocation "sample"))]
+
+blankError :: Diagnostic
+blankError = Diagnostic Error "blank" "Name is blank" (Just (FactLocation "todos" "todo-001" Nothing))
+
+reportTests :: IO ()
+reportTests = do
+  let empty = ValidationReport []
+      warnings = ValidationReport expectedWarnings
+      errors = ValidationReport (expectedWarnings ++ [blankError])
+  unless (decodeReport "[]" == Right empty && checkReport True empty == Passed True empty &&
+      checkReport True warnings == Passed True warnings && checkReport True errors == Rejected errors)
+    (fail "Report classification lost diagnostics or rejected warnings")
+  forM_ ["null", "{}", "[{}]", "[] trailing", "[1]",
+    "[{\"severity\":{\"tag\":\"Info\"},\"code\":\"c\",\"message\":\"m\",\"location\":{\"tag\":\"None\"}}]",
+    "[{\"severity\":{\"tag\":\"Error\"},\"code\":\"c\",\"message\":\"m\",\"location\":null}]",
+    "[{\"severity\":{\"tag\":\"Error\",\"value\":true},\"code\":\"c\",\"message\":\"m\",\"location\":{\"tag\":\"None\"}}]",
+    "[{\"severity\":{\"tag\":\"Error\"},\"code\":\"c\",\"message\":\"m\",\"location\":{\"tag\":\"Some\",\"value\":{\"tag\":\"Source\",\"value\":{\"file\":\"x\",\"line\":1,\"column\":\"2\"}}}}]"] $ \source ->
+      case decodeReport source of Left _ -> pure (); Right _ -> fail ("Malformed report accepted: " ++ show source)
+  case decodeReport (Bytes.pack [255]) of Left _ -> pure (); Right _ -> fail "Invalid report UTF-8 accepted"
+  putStrLn "Validation report decoding and warning/error classification passed."

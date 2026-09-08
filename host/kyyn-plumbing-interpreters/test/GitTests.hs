@@ -38,7 +38,7 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
           _ -> fail (show result)
       command args = () <$ inspect args
       commit = command ["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","-qm","fixture"]
-  command ["init","-q","-b","main"]
+  command ["init","-q","--ref-format=files","-b","main"]
   createDirectoryIfMissing True (directory </> "root/nested")
   let bytes = Bytes.pack [0..255]
       filename = "nested/spaces\tand\nlines.bin"

@@ -23,7 +23,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Prettyprinter (layoutPretty, defaultLayoutOptions)
 import Prettyprinter.Render.Text (renderStrict)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
 
 runDhallHandling :: Eff (DhallHandling : es) a -> Eff es a
@@ -33,8 +33,8 @@ runDhallHandling = interpret $ \_ -> \case
 
 encodeValueSource :: Shape -> Value -> Either [Diagnostic] Text
 encodeValueSource contract value = do
-  expression <- first (pure . Diagnostic "dhall.wire-value") (fromWire contract value)
-  _ <- first (pure . Diagnostic "dhall.internal-encoding" . show)
+  expression <- first (pure . errorDiagnostic "dhall.wire-value") (fromWire contract value)
+  _ <- first (pure . errorDiagnostic "dhall.internal-encoding" . show)
     (TypeCheck.typeOf (D.Annot expression (project contract)))
   pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr expression)) <> "\n")
 
@@ -111,7 +111,7 @@ decodeValueSource contract source = do
   value <- first (problem "dhall.internal-conversion") (toWire contract (D.normalize closed))
   pure value
   where
-    problem code message = [Diagnostic code message]
+    problem code message = [errorDiagnostic code message]
 
 toWire :: Shape -> D.Expr Src Void -> Either String Value
 toWire (Scalar TextScalar) (D.TextLit (D.Chunks [] text)) = Right (toJSON text)

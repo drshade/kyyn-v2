@@ -11,6 +11,7 @@ library
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
     Kyyn.Plumbing.Capability.GuestCompilation.Types
+    Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Capability.SchemaInspection.Metadata
     Kyyn.Plumbing.Capability.SchemaInspection
     Kyyn.Plumbing.Capability.Git
