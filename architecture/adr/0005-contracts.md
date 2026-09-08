@@ -200,16 +200,20 @@ checked algebra and binding information, not compiler ASTs throughout the kernel
 `SchemaSource` identifies fixed source modules, captured local imports, the exported type
 and the named `SchemaMetadata` export. It is not a live source path.
 It refers to captured source, which may still be ill-typed; inspection establishes
-that separately. Workspace creation instead takes authored contents through
-[ProposedSchemaModules](0010-evolutions.md), before there is a capture to identify.
+that separately. Workspace creation copies the selected root's source as described in
+[evolutions](0010-evolutions.md), before the author edits and captures a proposal.
+
+Captured authored Haskell sources use `.hs`. Literate `.lhs` and hsc2hs `.hsc`
+inputs are out of scope and rejected with a source-format diagnostic before
+inspection or compilation. This avoids source-extension precedence and does not
+claim a hermetic preprocessing boundary for ordinary `.hs` sources.
 
 ```haskell
 data SchemaSource
-data TypeBindings  -- checked correspondence to authored modules/types/constructors
 
 data InspectedSchema = InspectedSchema
   { contract :: CheckedContract
-  , bindings :: TypeBindings
+  , loadedSources :: [RelativePath]
   }
 
 data SchemaInspection :: Effect where
@@ -233,10 +237,13 @@ valueContract :: CheckedValue -> ContractId
 ```
 
 `inspectSchema` reports unsupported/ill-typed source as diagnostics. Runtime or
-frontend infrastructure failure remains Failure. `TypeBindings` preserves the
-names needed to generate codecs against real declarations; the structural algebra
-alone would erase that information. It is derived by inspection, never a second
-hand-maintained registry. A `CheckedValue` proves
+frontend infrastructure failure remains Failure. The contract's inspected datatype
+retains the qualified type/constructor names needed to generate codecs against real
+declarations; it does not erase them into wire shapes alone. `loadedSources` lists
+captured files loaded by the compiler while inspecting that type. It excludes the
+installed compiler library and metadata-evaluation-only imports. Build preparation
+uses this closure to select old schema dependencies; it is not another component
+of contract identity or a hand-maintained dependency registry. A `CheckedValue` proves
 only conformity to its recorded contract, not KB semantic validity. Whenever a
 different expected contract is supplied, compare identities or perform an explicit
 checked conversion; the wrapper alone does not establish that they match.

@@ -23,7 +23,7 @@ data InspectionError
   deriving (Eq, Show)
 
 -- Native compiler integration, not a porcelain operation or a complete KB contract.
-inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either InspectionError DataType)
+inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either InspectionError (DataType, [FilePath]))
 inspectDataType compiler sources selected = inspect `catch` failure
   where
     failure (err :: SomeException)
@@ -47,7 +47,8 @@ inspectDataType compiler sources selected = inspect `catch` failure
             [[root]] -> lowerType constructors [] [] root
             _ -> Left "compiler witness did not expose the selected data type"
       forced <- evaluate (force result)
-      pure (either (Left . TypeNotSupported) Right forced)
+      let loaded = nub [slocFile (slocIdent (tModuleName m)) | m <- cachedModules cache]
+      pure (either (Left . TypeNotSupported) (\structure -> Right (structure,loaded)) forced)
 
 type Constructors = String -> [ValueExport]
 

@@ -17,8 +17,8 @@ import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
-import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, withCompiledEntry)
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution, ProcessPipes, ProcessExit(..), writeStdin, closeStdin, collectStdout, awaitExit)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, executeCompiledEntry)
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Plumbing.Protocol.Query (queryBindings, querySources, decodeQueryReply)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
@@ -49,7 +49,7 @@ runRootExecution sdk = interpret $ \_ -> \case
     sources <- checked "root.validation-source"
       (validationSources (rootType (rootSchema contract)) selected (bindings : files authored ++ files sdk))
     entry <- ExceptT (compileGuest sources)
-    output <- ExceptT (Right <$> withCompiledEntry entry (exchange selected (Bytes.toStrict (encode value))))
+    output <- ExceptT (Right <$> executeCompiledEntry selected entry (Bytes.toStrict (encode value)))
     case decodeReport output of
       Left message -> protocolFailure selected message
       Right report -> pure report
@@ -73,8 +73,8 @@ runRootExecution sdk = interpret $ \_ -> \case
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
     sources <- checked "query.source" (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
     entry <- ExceptT (compileGuest sources)
-    output <- ExceptT (Right <$> withCompiledEntry entry
-      (exchange selected (Bytes.toStrict (encode (object ["root" .= value, "arguments" .= arguments])))))
+    output <- ExceptT (Right <$> executeCompiledEntry selected entry
+      (Bytes.toStrict (encode (object ["root" .= value, "arguments" .= arguments]))))
     (valueResult, trace) <- either (protocolFailure selected) pure (decodeQueryReply output)
     checkedResult <- ExceptT (Right <$> Dhall.encodeValue (contractShape result) valueResult)
     case checkedResult of
@@ -89,21 +89,10 @@ inspectQuery :: Schema.SchemaInspection :> es
 inspectQuery sources (QueryDefinition name description _ input inputMetadata result resultMetadata) = do
   inputSource <- checked "query.input-contract" (Schema.schemaSource sources input inputMetadata)
   resultSource <- checked "query.result-contract" (Schema.schemaSource sources result resultMetadata)
-  inputContract <- ExceptT (Schema.inspectSchema inputSource)
-  resultContract <- ExceptT (Schema.inspectSchema resultSource)
+  Schema.InspectedSchema inputContract _ <- ExceptT (Schema.inspectSchema inputSource)
+  Schema.InspectedSchema resultContract _ <- ExceptT (Schema.inspectSchema resultSource)
   pure (QueryDescriptor name description inputContract resultContract)
 
 protocolFailure :: Failure :> es => String -> String -> ExceptT [Diagnostic] (Eff es) a
 protocolFailure selected message = ExceptT (raiseFailure
   (RuntimeUnavailable (ProcessDiagnostic ReadOutput (selected ++ ": " ++ message))))
-
-exchange :: (ProcessPipes :> es, Failure :> es) => String -> Strict.ByteString -> Eff es Strict.ByteString
-exchange selected input = do
-    writeStdin input
-    closeStdin
-    output <- collectStdout
-    ProcessExit status diagnostics <- awaitExit
-    if status /= 0
-      then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
-        (selected ++ " exited " ++ show status ++ ": " ++ show diagnostics)))
-      else pure output

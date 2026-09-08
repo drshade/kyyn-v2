@@ -44,7 +44,7 @@ openSource
 openSource sdk tree = runExceptT $ do
   definition@(RootDefinition typeName metadataName _ _ authored) <- ExceptT (readRootDefinition tree)
   source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
-  inspected <- ExceptT (Schema.inspectSchema source)
+  Schema.InspectedSchema inspected _ <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))
   let (_, codeEntries) = partition (\(p,_) -> "facts/" `isPrefixOf` relativeName p) (files tree)
   code <- checked (fileTree codeEntries)

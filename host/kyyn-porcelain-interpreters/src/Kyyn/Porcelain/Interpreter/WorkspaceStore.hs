@@ -3,6 +3,7 @@ module Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value(..), object, (.=))
+import Data.Foldable (toList)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -26,10 +27,12 @@ runWorkspaceStore = interpret $ \_ -> \case
     decoded <- ExceptT (Dhall.decodeValue manifestShape source)
     manifest <- checked (parseManifest decoded)
     checked (projectWorkspace manifest tree)
-  EncodeWorkspaceSnapshot (WorkspaceSnapshot manifest@(WorkspaceManifest revision name explanation state) before target change notes) -> runExceptT $ do
+  EncodeWorkspaceSnapshot (WorkspaceSnapshot manifest@(WorkspaceManifest revision name explanation state intermediates) before target change notes) -> runExceptT $ do
     encoded <- ExceptT (Dhall.encodeValue manifestShape (object
       [ "before" .= object ["revision" .= revisionName revision]
       , "name" .= name, "explanation" .= explanation, "state" .= object ["tag" .= show state]
+      , "intermediates" .= [object ["name" .= binding, "schemaType" .= selected, "schemaMetadata" .= metadata] |
+          IntermediateBinding binding selected metadata <- intermediates]
       ]))
     manifestPath <- checked (relativePath "manifest.dhall")
     entries <- checked (traverse (\(pathName,bytes) -> (,bytes) <$> relativePath pathName)
@@ -45,6 +48,7 @@ manifestShape = Record
   , ("name", Scalar TextScalar)
   , ("explanation", Scalar TextScalar)
   , ("state", Union [("Draft", Nothing), ("Ready", Nothing), ("Accepted", Nothing)])
+  , ("intermediates", List (Record [("name", Scalar TextScalar), ("schemaType", Scalar TextScalar), ("schemaMetadata", Scalar TextScalar)]))
   ]
 
 parseManifest :: Value -> Either String WorkspaceManifest
@@ -58,8 +62,13 @@ parseManifest value = do
     "Ready" -> Right Ready
     "Accepted" -> Right Accepted
     _ -> Left "Unknown evolution state"
-  pure (WorkspaceManifest revision name explanation state)
+  intermediates <- field "intermediates" value >>= \entries -> case entries of
+    Array declarations -> traverse parseBinding (toList declarations)
+    _ -> Left "Expected intermediate binding list"
+  pure (WorkspaceManifest revision name explanation state intermediates)
   where
+    parseBinding declaration = IntermediateBinding <$> (field "name" declaration >>= string) <*>
+      (field "schemaType" declaration >>= string) <*> (field "schemaMetadata" declaration >>= string)
     field key (Object fields) = maybe (Left "Missing workspace manifest field") Right (Keys.lookup key fields)
     field _ _ = Left "Expected workspace manifest record"
     string (String text) = Right (Text.unpack text)

@@ -96,8 +96,8 @@ schemaMock input output = interpret $ \_ (InspectSchema source) -> do
       lookup "Sdk.hs" entries == Just "explicit SDK" && lookup "KyynQueryBindings.hs" entries /= Nothing)
     (error "Query inspection did not use captured code and generated bindings")
   case selectedType source of
-    "Queries.Input" -> pure (Right input)
-    "Queries.Result" -> pure (Right output)
+    "Queries.Input" -> pure (Right (InspectedSchema input []))
+    "Queries.Result" -> pure (Right (InspectedSchema output []))
     _ -> error "Unexpected selected query type"
 
 compileMock :: Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a

@@ -92,7 +92,7 @@ After editing, the workspace looks like:
 
 ```text
 evolutions/simplify-todos/
-  manifest.dhall                     Before = A; state = Draft; name; explanation
+  manifest.dhall                     Before = A; state = Draft; name; explanation; intermediates = []
   before/src/SchemaV1.hs             definitions from A, plus necessary imports
   target/
     kb.dhall                        now selects SchemaV2.Root
@@ -170,19 +170,19 @@ an editable workspace path and let later reads silently pick up source changes:
 
 ```haskell
 captured <- send (CaptureEvolution workspace)
-beforeRoot <- send (LoadRootAt kb captured.context.before.revision)
-result <- applyEvolution captured beforeRoot
+result <- applyEvolution captured
 ```
 
 These host operations have the types defined in
 [evolutions](../adr/0010-evolutions.md) and [storage](../adr/0006-storage.md).
-`beforeRoot` is a structurally readable host Root; the source can be repaired even
+EvolutionExecution loads a structurally readable host Root at the captured Before
+revision; the source can be repaired even
 if its semantic validation fails. It is not the guest's `Before.Root` value.
 
 Inside `applyEvolution`, the meaningful sequence is:
 
-1. `EvaluateEvolution captured beforeRoot`: inspect the target schema, compile
-   the entry and proposed executable entries, decode source data, evaluate, and
+1. `EvaluateEvolution captured`: load Before from its selected KB/revision, inspect the target schema, compile
+   the entry and its schema dependencies, decode source data, evaluate, and
    obtain the target value plus the derived step report.
 2. `TargetCode captured.context.material`: select the captured target files only.
 3. `MaterializeRoot after.schema targetCode value`: encode the returned facts
@@ -191,7 +191,8 @@ Inside `applyEvolution`, the meaningful sequence is:
    The accepted root remains A.
 4. Construct `Candidate captured.context report materializedRoot`, then
    `SaveCandidate candidate`. Return that unchecked candidate to the application.
-5. The application calls `checkCandidate candidate`: validate the materialized
+5. The application calls `checkCandidate candidate`: compile its validators and
+   queries, validate the materialized
    root and execute its own examples, returning diagnostics and, on success,
    `Candidate (Validated Root)`.
 

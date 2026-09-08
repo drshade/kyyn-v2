@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.SchemaInspection
-  ( SchemaInspection(..), inspectSchema, SchemaSource, schemaSource, schemaSources, selectedType ) where
+  ( SchemaInspection(..), InspectedSchema(..), inspectSchema, SchemaSource, schemaSource, schemaSources, selectedType ) where
 
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
@@ -14,6 +14,9 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSourc
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata (metadataAdapter)
 
 data SchemaSource = SchemaSource String GuestSources deriving (Eq, Show)
+
+data InspectedSchema = InspectedSchema
+  { contract :: CheckedContract, loadedSources :: [RelativePath] } deriving (Eq, Show)
 
 schemaSource :: [(RelativePath, ByteString)] -> String -> String -> Either String SchemaSource
 schemaSource files typeName metadataName = do
@@ -29,9 +32,9 @@ selectedType :: SchemaSource -> String
 selectedType (SchemaSource name _) = name
 
 data SchemaInspection :: Effect where
-  InspectSchema :: SchemaSource -> SchemaInspection m (Either [Diagnostic] CheckedContract)
+  InspectSchema :: SchemaSource -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
 
 type instance DispatchOf SchemaInspection = Dynamic
 
-inspectSchema :: SchemaInspection :> es => SchemaSource -> Eff es (Either [Diagnostic] CheckedContract)
+inspectSchema :: SchemaInspection :> es => SchemaSource -> Eff es (Either [Diagnostic] InspectedSchema)
 inspectSchema = send . InspectSchema

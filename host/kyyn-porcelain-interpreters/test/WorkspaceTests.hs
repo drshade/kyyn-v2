@@ -19,12 +19,19 @@ workspaceTests = do
   encoded <- right (runPureEff (runDhallHandling (runWorkspaceStore (encodeWorkspaceSnapshot snapshot))))
   reopened <- right (readSnapshot encoded)
   unless (reopened == snapshot) (fail "Workspace encoding did not preserve projected data")
+  let WorkspaceSnapshot (WorkspaceManifest base label explanation initialState _) old proposed authored notes0 = snapshot
+      annotated = WorkspaceSnapshot (WorkspaceManifest base label explanation initialState
+        [IntermediateBinding "middleRoot" "SchemaMid.Root" "SchemaMid.metadata"]) old proposed authored notes0
+  intermediateBytes <- right (runPureEff (runDhallHandling (runWorkspaceStore (encodeWorkspaceSnapshot annotated))))
+  intermediateRoundTrip <- right (readSnapshot intermediateBytes)
+  unless (intermediateRoundTrip == annotated && not (matchesCapturedInputs snapshot intermediateRoundTrip))
+    (fail "Intermediate declarations must round-trip and count as captured inputs")
   revision <- right (gitRevision (replicate 40 'a'))
   before <- tree [("SchemaV1.hs", "before source")]
   target <- tree [("kb.dhall", "unfinished target manifest"), ("src/SchemaV2.hs", "unfinished target source")]
   change <- tree [("Evolution.hs", "unfinished transformation"), ("inputs.csv", "a,b")]
   notes <- tree [("review.md", "please review")]
-  unless (snapshot == WorkspaceSnapshot (WorkspaceManifest revision "September" "Import sales" Draft) before target change notes)
+  unless (snapshot == WorkspaceSnapshot (WorkspaceManifest revision "September" "Import sales" Draft []) before target change notes)
     (fail "Workspace projection changed manifest, bytes or relative paths")
   let compareWith entries' expected = do
         changed <- tree entries' >>= right . readSnapshot
@@ -78,7 +85,8 @@ entries =
 manifest :: String -> String -> String -> String -> Bytes.ByteString
 manifest digit state name explanation = Char8.pack
   ("{ before = { revision = " ++ show (concat (replicate 40 digit)) ++ " }, name = " ++ show name ++
-   ", explanation = " ++ show explanation ++ ", state = < Draft | Ready | Accepted >." ++ state ++ " }")
+   ", explanation = " ++ show explanation ++ ", state = < Draft | Ready | Accepted >." ++ state ++
+   ", intermediates = [] : List { name : Text, schemaType : Text, schemaMetadata : Text } }")
 
 tree :: [(FilePath, Bytes.ByteString)] -> IO FileTree
 tree entries' = traverse (\(p,b) -> do path <- right (relativePath p); pure (path,b)) entries' >>= right . fileTree

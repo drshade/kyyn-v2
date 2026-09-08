@@ -1,4 +1,5 @@
-module Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply) where
+module Kyyn.Plumbing.Protocol.Evolution
+  ( evolutionBindings, identityEvolutionSource, decodeEvolutionReply, evolutionSources ) where
 
 import Control.Monad (unless)
 import Data.List (nub, intercalate, sort)
@@ -12,14 +13,14 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Contract (RootContract, rootSchema, rootType, contractId, contractFingerprint)
 import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, reachableTypes)
-import Kyyn.Domain.FileTree (FileTree, fileTree)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionObservation(..), StepObservation(..), ObservedRoot(..))
 import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Plumbing.Protocol.Validation (parseReport)
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
 identityEvolutionSource :: ByteString
@@ -31,6 +32,25 @@ identityEvolutionSource = Text.encodeUtf8 (Text.pack (unlines
   , "evolution :: root -> Program calls (Either EvolutionFailure (EvolutionOutput root))"
   , "evolution = pure . evaluateEvolution identityEvolution"
   ]))
+
+evolutionSources :: RootContract -> RootContract -> [(String,RootContract)] -> FileTree -> Either String GuestSources
+evolutionSources before after intermediates authored = do
+  bindings <- evolutionBindings ([("beforeRoot",before),("afterRoot",after)] ++ intermediates)
+  entryPath <- relativePath "KyynEvolutionEntry.hs"
+  let beforeType = rootType (rootSchema before)
+      afterType = rootType (rootSchema after)
+      entry = unlines $
+        ["module KyynEvolutionEntry where", "import qualified Evolution"] ++
+        ["import qualified " ++ name | name <- nub [definingModule name |
+          t <- [beforeType,afterType], Algebraic name _ _ <- reachableTypes t]] ++
+        ["import qualified KyynEvolutionCodec0 as BeforeCodec", "import qualified KyynEvolutionCodec1 as AfterCodec",
+         "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure, EvolutionOutput)",
+         "import Kyyn.Types.Program (Program)",
+         "selected :: " ++ haskellType beforeType ++ " -> Program NoRequests (Either EvolutionFailure (EvolutionOutput " ++ haskellType afterType ++ "))",
+         "selected = Evolution.evolution", "main :: IO ()", "main = do", "  input <- getContents",
+         "  output <- either fail pure (executeEvolution BeforeCodec.rootCodec AfterCodec.rootCodec selected input)",
+         "  putStrLn output"]
+  guestSources entryPath (files authored ++ files bindings ++ [(entryPath,Text.encodeUtf8 (Text.pack entry))])
 
 evolutionBindings :: [(String, RootContract)] -> Either String FileTree
 evolutionBindings declarations = do
