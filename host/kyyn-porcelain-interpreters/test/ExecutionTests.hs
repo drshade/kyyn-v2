@@ -12,6 +12,7 @@ import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Domain.Path (relativePath, relativeName, directoryScope)
 import Kyyn.Domain.Root (Root(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
+import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (CompiledEntry(..), BuildIdentity(..), sourceFiles)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -29,14 +30,14 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
   shell <- findExecutable "sh" >>= maybe (fail "sh required for process failure fixtures") pure
   let path = either error id . relativePath
       tree = either error id . fileTree
-      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" }"
+      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
       code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest)]
       sdk = tree [(path "Sdk.hs", "explicit SDK")]
       root = Root contract facts code
       entry script = CompiledEntry (BuildIdentity "fixture" "fixture") (path "fixture.comb", "") shell
         ["-c", "read -r input; " ++ script] []
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock compilation . runDhallHandling . runRootStore . runRootExecution sdkFiles $ validateRoot selected
+        . compileMock compilation . noInspection . runDhallHandling . runRootStore . runRootExecution sdkFiles $ validateRoot selected
       unexpected = error "Invalid root reached compilation"
   success <- execute sdk (Right (entry "printf '[]'")) root
   unless (success == Right (Right (ValidationReport []))) (fail (show success))
@@ -53,8 +54,8 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
     _ -> fail ("Malformed report became semantic diagnostics: " ++ show malformed)
   forM_ [tree [], tree [(path "kb.dhall", "True")],
       tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" }")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" }")]] $ \badCode -> do
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }")],
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }")]] $ \badCode -> do
     failure <- execute sdk unexpected (Root contract facts badCode)
     case failure of Right (Left _) -> pure (); _ -> fail "Invalid manifest reached execution"
   noFacts <- execute sdk unexpected (Root contract (tree []) code)
@@ -72,3 +73,6 @@ compileMock result = interpret $ \_ (CompileGuest captured) -> do
       maybe False (Bytes.isInfixOf "rootCodec") (lookup "KyynValidationCodec.hs" entries))
     (error "RootExecution did not compile captured sources with explicit SDK and adapter")
   pure result
+
+noInspection :: Eff (SchemaInspection : es) a -> Eff es a
+noInspection = interpret $ \_ _ -> error "Validation unexpectedly inspected query contracts"

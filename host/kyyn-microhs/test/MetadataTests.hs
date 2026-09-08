@@ -152,7 +152,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
          "  Diagnostic Warning \"example\" \"Illustrative\" (Just (ExampleLocation \"sample\"))] ++",
          "  if any (\\(Fact _ (Authored.Todo title _)) -> null title) todos then",
          "    [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])"]
-      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" }"
+      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
   authoredBytes <- maybe (fail "Missing captured Authored.hs") pure (lookup (path "Authored.hs") files)
   validationCode <- either fail pure (fileTree
     [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])
@@ -163,7 +163,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode checkedFacts))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
-      . runDhallHandling . runRootStore . runRootExecution sdk $ validateRoot validationRoot
+      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ validateRoot validationRoot
     report <- either (fail . show) (either (fail . show) pure) response
     unless (report == ValidationReport expectedDiagnostics)
       (fail ("RootExecution changed the report: " ++ show response))
