@@ -47,6 +47,11 @@ data ScalarKind
 
 data CheckedContract  -- supported shape + checked metadata/codec descriptors + identity
 
+newtype RootContract = RootContract CheckedContract -- constructor private
+
+checkRootLayout :: CheckedContract -> Either [Diagnostic] RootContract
+rootSchema :: RootContract -> CheckedContract
+
 shapeOf :: CheckedContract -> Shape
 metadataOf :: CheckedContract -> SchemaMetadata
 contractId :: CheckedContract -> ContractId
@@ -63,7 +68,21 @@ avoid that work. Conservative invalidation keeps one understandable rule.
 
 The initial pure `Kyyn.Domain.Contract.checkContract` combines an inspected
 `DataType` with decoded `SchemaMetadata`, returning diagnostics or a checked value.
-It keeps the resolved type for code generation, checks collection envelopes and
+It accepts every shape in the currently supported algebra, not only records:
+query arguments and results may be scalars, lists, optionals or unions. Roles
+can still refer to reachable record types within those values. Declared collection
+metadata is checked, but a query value containing a list of facts need not declare
+that list as a persistent collection.
+
+Persistent roots additionally pass `checkRootLayout`: a nonempty single record
+constructor, with every direct `[Fact a]` field declared as a collection.
+`RootContract` refines the existing checked value without computing another
+identity or duplicating its schema. `rootSchema` returns that same checked value;
+the identity encoding is unchanged. RootOpening refines inspected contracts, and
+Root/RootStore require the refined type. This structural distinction does not
+confer semantic validation or introduce a second query-contract representation.
+
+The general checker keeps the resolved type for code generation, checks collection envelopes and
 metadata references, and annotates reference fields in the checked shape. It does
 not establish that referenced IDs exist in particular facts. Title accepts text
 and badge accepts nullary enums (optionally wrapped); timeline assignments remain
@@ -381,7 +400,8 @@ integration fixture now uses SchemaInspection to inspect and evaluate the same
 capture, materializes and reopens runtime facts through RootStore, and sends the
 reopened value through the generated real-MicroHs codec. RootOpening now selects
 schema declarations from the captured kb.dhall manifest as specified in ADR 0006;
-application commands and semantic checking are still outstanding.
+RootExecution provides semantic validator execution as specified in ADR 0011.
+Application commands and the complete candidate-checking gate remain outstanding.
 Coherence coverage must include missing/renamed
 fields, incompatible title/timeline/badge assignments and invalid reference targets.
 Test a role-only edit invalidating the complete contract and dependent bindings,

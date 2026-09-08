@@ -102,7 +102,7 @@ data RootStore :: Effect where
   ExportRootFiles
     :: Root -> RootStore m SubtreeReplacement
   MaterializeRoot
-    :: CheckedContract -> CodeSnapshot -> CheckedValue
+    :: RootContract -> CodeSnapshot -> CheckedValue
     -> RootStore m Root
 
 runRootStore

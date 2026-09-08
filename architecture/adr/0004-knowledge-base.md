@@ -36,13 +36,14 @@ data KnowledgeBase = KnowledgeBase
   }
 
 data Root = Root
-  { schema :: CheckedContract
+  { schema :: RootContract
   , facts  :: FactSnapshot
   , code   :: CodeSnapshot
   }
 ```
 
-`CheckedContract` belongs to [contracts](0005-contracts.md). `FactSnapshot` and
+`RootContract` is the persistent-root refinement of the checked value contract
+owned by [contracts](0005-contracts.md). `FactSnapshot` and
 `CodeSnapshot` contain immutable file-tree values as defined in
 [storage](0006-storage.md), including vendored dependency source, executable
 examples and supporting non-secret config files alongside code. Loading reads

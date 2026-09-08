@@ -4,6 +4,7 @@ module Kyyn.Domain.Contract
   , RootContract, checkRootLayout, rootSchema ) where
 
 import Control.Monad (unless, forM_)
+import Data.Coerce (coerce)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson (Value, toJSON, encode)
 import qualified Data.ByteString as Bytes
@@ -23,7 +24,7 @@ data CheckedContract = CheckedContract DataType SchemaMetadata Shape [Collection
 newtype RootContract = RootContract CheckedContract deriving (Eq, Show)
 
 rootSchema :: RootContract -> CheckedContract
-rootSchema (RootContract contract) = contract
+rootSchema = coerce
 
 rootType :: CheckedContract -> DataType
 rootType (CheckedContract t _ _ _ _) = t
