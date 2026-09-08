@@ -32,7 +32,7 @@ On the **host**, we can describe the contents without importing the KB's `Todo`,
 ```haskell
 data KnowledgeBase = KnowledgeBase
   { repository :: Repository
-  , prefix     :: RelativePath  -- KB directory relative to repository root
+  , prefix     :: TreePath  -- WholeTree or Subtree RelativePath
   }
 
 data Root = Root
@@ -50,7 +50,10 @@ examples and supporting non-secret config files alongside code. Loading reads
 the bytes into the value; subsequent reads do not resolve editable paths or
 require a store-specific handle service. The guest receives decoded domain values.
 The explicit repository and KB-relative prefix let publication address the selected
-KB without guessing its location. The prefix may denote the repository root.
+KB without guessing its location. `WholeTree` denotes the repository root;
+`Subtree` supplies a nonempty relative directory. Stores derive `root/` and
+`evolutions/<id>/` beneath that KB prefix rather than accepting a second,
+independently selected root or workspace path.
 Under the proposed [storage layout](0006-storage.md), the host root's selected
 source/config files include `root/plugins/config/*.dhall` and `root/examples/`.
 They belong to the accepted snapshot, not to the guest's domain facts type;

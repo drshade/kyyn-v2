@@ -150,10 +150,10 @@ on every authored transformation:
 ```haskell
 data Before = Before
   { revision :: GitRevision
-  , schema   :: CheckedContract
+  , schema   :: RootContract
   }
 
-data After = After { schema :: CheckedContract }
+data After = After { schema :: RootContract }
 ```
 
 These are host specifications. The concrete guest types remain `Before.Root`
@@ -169,7 +169,10 @@ supporting input files before
 starting evaluation. There is exactly one base/provenance context in a candidate:
 
 ```haskell
-data EvolutionWorkspace  -- opaque KB-scoped editable workspace location
+data EvolutionWorkspace = EvolutionWorkspace
+  { knowledgeBase :: KnowledgeBase
+  , workspace :: EvolutionId
+  }
 data WorkspaceSnapshot  -- immutable file-tree value; ADR 0006
 
 data EvolutionContext = EvolutionContext
@@ -179,10 +182,7 @@ data EvolutionContext = EvolutionContext
   , material      :: WorkspaceSnapshot
   }
 
-data CapturedEvolution = CapturedEvolution
-  { context      :: EvolutionContext
-  , targetSource :: SchemaSource
-  }
+newtype CapturedEvolution = CapturedEvolution EvolutionContext
 ```
 
 Here a workspace is simply the evolution's folder inside the KB, containing its
@@ -285,8 +285,13 @@ Kyyn can scaffold these imports without compiler namespace rewriting. The accept
 root retains only the current definitions; previous definitions live in evolution
 archives and Git, as illustrated in the [walkthrough](../walkthroughs/todo-evolution.md).
 
-`targetSource` references source within the captured material, not an independently
-edited schema copy. Capture does not require that proposed source to compile;
+Captured material contains the projected target bytes, not a stored compiler
+adapter or independently selected schema descriptor. During build preparation,
+EvolutionExecution reads `target/kb.dhall` through RootStore's
+`ReadRootDefinition`, then constructs `SchemaSource` from those captured modules,
+selected exports and the installed SDK. That compiler input is derived, not
+persisted in the context. Capture does not require even an unfinished target
+manifest or proposed source to compile;
 the context exists even when deriving `After` or compiling the evolution fails.
 That permits reviewing failed proposals under ADR 0023.
 Module inventory and collision diagnostics belong to build preparation inside
@@ -319,7 +324,7 @@ data EvolutionStore :: Effect where
     :: KnowledgeBase -> EvolutionName -> GitRevision -> TargetSchemaRequest
     -> EvolutionStore m EvolutionWorkspace
   CaptureEvolution
-    :: EvolutionWorkspace -> EvolutionStore m CapturedEvolution
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] CapturedEvolution)
   TargetCode
     :: WorkspaceSnapshot -> EvolutionStore m CodeSnapshot
   SaveCandidate
@@ -333,7 +338,7 @@ data EvolutionStore :: Effect where
   MarkDraft
     :: EvolutionWorkspace -> EvolutionStore m ()
   MatchesCapturedInputs
-    :: EvolutionContext -> EvolutionStore m Bool
+    :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
   ExportAcceptedWorkspace
     :: Candidate Root -> EvolutionStore m SubtreeReplacement
 
@@ -363,9 +368,30 @@ the semantic handlers needed by the command.
 Installing Git plumbing for a complete store handler does not launch Git on every
 list call; do not use partial handlers that fail on the store's other operations.
 
+The implemented capture/matching handler currently requires only `FileSystem`,
+`WorkspaceStore` and `RootOpening`. It reads the workspace at the derived location,
+decodes its manifest, and calls `LoadSourceAt` for that manifest's Before revision
+and the owning KB's root subtree. The projected `before/` tree must equal that
+source root's entire authored `src/` tree (prefix stripped) exactly, including
+helper additions, deletions and byte edits. A mismatch returns a diagnostic asking
+the author to refresh the copy; it does not choose edited definitions over Git.
+The resulting Before contract comes from the selected source root, never the
+target or copied modules. The captured context and files are immutable values;
+this operation does not yet save them to local storage.
+
+Live `MatchesCapturedInputs` reads and decodes the current workspace and applies
+the pure comparison above. It does not load the source root or require its compiler
+to run. A valid changed workspace returns `Right False`; malformed workspace
+contents return diagnostics, and storage/compiler/Git infrastructure errors remain
+operational Failure. Neither operation confers readiness or acceptance.
+
 Each `EvolutionSummary` includes its stable `EvolutionId`, human name and state.
 Names may repeat; IDs do not. Commands use the ID returned by creation/listing,
 and `ResolveEvolution` reports an unknown ID without creating a workspace.
+IDs use nonempty lowercase hexadecimal directory keys, distinct from author-chosen
+names. They are within the storage filename pass-through alphabet and need no
+escaping; generation belongs to workspace creation. The workspace's location is
+derived from its owning KB and ID, not stored as another path that can disagree.
 This also resolves a saved candidate's context to its owning workspace without
 publication reconstructing a private directory convention.
 
@@ -376,6 +402,9 @@ the summary includes the accepting commit. Otherwise they report local manifest
 state. This reads Git metadata, not guest code, and neither repairs local files
 nor advances a ref. Listing after interrupted synchronization must not invite
 accepting the same change again.
+The manifest's state field never establishes acceptance: the committed archive
+and its introducing commit do (ADR 0012). A local `Accepted` label alone is not
+a successful acceptance lookup.
 
 `TargetCode` selects only the captured `target/` contents. `SaveCandidate` persists
 the materialized root, context and derived report so another process can load them;
