@@ -30,7 +30,8 @@ does not become another specification of the product's runtime workflows.
   RootStore handlers and recording schema/Git test handlers. It checks source/SDK
   capture and revision forwarding, not a second real-compiler execution.
   `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
-  capture against Git in a temporary repository; it is included in the fast check
+  capture, isolated commit construction and expected-head ref updates against Git
+  in a temporary repository; it is included in the fast check
   and requires an installed Git executable (tested locally with Git 2.55.0).
   `cabal test file-trees --test-show-details=direct` checks local directory capture
   without running the process cancellation or MicroHs suites; it is included in
