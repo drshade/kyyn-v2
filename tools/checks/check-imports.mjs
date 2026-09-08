@@ -37,6 +37,10 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.SchemaInspection': ['Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
+    'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
+    'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
+    'Kyyn.Plumbing.Capability.SchemaInspection.Metadata'],
   'Kyyn.Plumbing.Capability.DhallHandling': ['Data.Aeson', 'Data.Text',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.DataType'],
@@ -65,6 +69,12 @@ const interpreterModules = {
 };
 
 const compilerModules = {
+  'Kyyn.MicroHs.Interpreter.SchemaInspection': ['Control.Monad', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path',
+    'Kyyn.MicroHs.Inspection', 'Kyyn.MicroHs.Toolchain', 'Kyyn.Plumbing.Capability.Failure',
+    'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.GuestCompilation',
+    'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.ProcessExecution',
+    'Kyyn.Plumbing.Capability.SchemaInspection', 'Kyyn.Plumbing.Capability.SchemaInspection.Metadata'],
   'Kyyn.MicroHs.Toolchain': ['Kyyn.Domain.Path'],
   'Kyyn.MicroHs.Interpreter.GuestCompilation': ['Control.Monad', 'Data.ByteString', 'Data.Text',
     'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic',

@@ -56,8 +56,9 @@ does not become another specification of the product's runtime workflows.
   run `KYYN_TEST_ROOT="$PWD" cabal test metadata --test-show-details=direct`.
   This compiles the shared metadata declarations with MicroHs and evaluates the
   named export through the fixed SDK codec, without running the full codec suite.
-  It also combines compiler-inspected structure with evaluated metadata into a
-  checked contract; no materialized facts or storage interpreter are required.
+  It combines structural inspection and metadata evaluation from the same captured
+  sources, then materializes/reopens runtime facts through RootStore and passes
+  the resulting value through a generated guest codec. It does not open a KB from Git.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

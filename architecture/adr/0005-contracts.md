@@ -250,10 +250,19 @@ The metadata adapter uses its fixed SDK codec; compiling it must not call
 SchemaInspection again or require bindings derived from the KB contract being
 inspected. Composition supplies the same toolchain selection to both interpreters.
 
-This signature locates the implementation boundary; the separate experiment
-establishes a source-linked route, not an implemented production runner or approval
-to build it. Source graphs and dependencies are supplied explicitly, not discovered
-through arbitrary ambient imports inside the inspector.
+The initial interpreter now implements this boundary. `schemaSource` captures
+supplied module/dependency bytes, the selected type and named metadata export,
+adding a fixed metadata adapter. Duplicate paths and adapter-path collisions are
+rejected. `inspectSchema` returns a checked contract, whose retained `DataType`
+already contains the names required by current codec generation; no separate
+bindings registry is implemented. Native structural inspection materializes those
+same bytes in a temporary scope; metadata evaluation compiles that capture through
+GuestCompilation. It does not read a second live KB source tree. Unsupported or
+ill-typed source is diagnostic output; native frontend infrastructure failures use
+`CompilerUnavailable`. Async exceptions retain cancellation semantics.
+Source graphs and dependencies are supplied explicitly, not discovered through
+arbitrary ambient module paths inside the inspector. This does not establish
+preprocessor isolation or release packaging on every platform.
 Under the [repository layout](0026-repository-layout.md), this native interpreter
 belongs to `kyyn-microhs`, behind the plumbing API. The pure projections below
 remain capability-owned helpers outside that native compiler integration package;
@@ -368,8 +377,10 @@ export through a fixed JSON adapter, using the shared `kyyn-types` vocabulary.
 `SchemaInspection.Metadata.evaluateMetadata` consumes a complete captured adapter
 input and returns decoded `SchemaMetadata`, not a `CheckedContract`. The pure
 contract checker combines this result with structural inspection; the focused
-integration fixture exercises both against the same authored modules. A production
-captured-source SchemaInspection interpreter is still outstanding.
+integration fixture now uses SchemaInspection to inspect and evaluate the same
+capture, materializes and reopens runtime facts through RootStore, and sends the
+reopened value through the generated real-MicroHs codec. Schema capture from a KB
+manifest and filesystem/Git-backed root opening are still outstanding.
 Coherence coverage must include missing/renamed
 fields, incompatible title/timeline/badge assignments and invalid reference targets.
 Test a role-only edit invalidating the complete contract and dependent bindings,

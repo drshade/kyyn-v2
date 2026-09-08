@@ -3,6 +3,7 @@ module Kyyn.Domain.Failure
   , StorageDiagnostic(..), StorageOperation(..) ) where
 
 data OperationalFailure = RuntimeUnavailable ProcessDiagnostic | StorageUnavailable StorageDiagnostic
+  | CompilerUnavailable String
   deriving (Eq, Show)
 
 data ProcessDiagnostic = ProcessDiagnostic
