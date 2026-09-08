@@ -39,6 +39,14 @@ API exposes no Dhall types or dependency. An unexpected conversion failure after
 successful type checking is reported as `dhall.internal-conversion`, a kernel
 implementation defect rather than invalid authored data.
 
+`EncodeValue` takes the expected checked contract and a runtime wire value,
+checks its structure, and renders self-contained Dhall through the library AST
+and pretty-printer. It returns text, not a filesystem write. Malformed wire values
+are `dhall.wire-value` diagnostics; failure to type-check the generated expression
+is `dhall.internal-encoding`. Semantic values round-trip; authored formatting and
+comments do not. RootStore will own splitting a root into its fact files and
+membership lists, not this format adapter.
+
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts
 are generated from the checked Haskell declarations under ADR 0005.

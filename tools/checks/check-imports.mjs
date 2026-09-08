@@ -45,7 +45,8 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
-  'Kyyn.Plumbing.Interpreter.DhallHandling': ['Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
+  'Kyyn.Plumbing.Interpreter.DhallHandling': ['Control.Monad', 'Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
+    'Data.Aeson.KeyMap', 'Data.List', 'Data.Sequence', 'Dhall.Pretty', 'Prettyprinter', 'Prettyprinter.Render.Text',
     'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
     'Dhall.Src', 'Dhall.TypeCheck', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic',
