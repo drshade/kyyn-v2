@@ -9,6 +9,9 @@ import Kyyn.Types.Fact
 import Kyyn.Types.Program (Program(..))
 import KyynEvolutionBindings
 import Kyyn.Runtime.Json (parseValue)
+import Kyyn.Runtime.Evolution (encodeEvolutionReply)
+import Kyyn.Types.Diagnostic
+import qualified KyynEvolutionCodec2 as AfterCodec
 import qualified SchemaV1 as Before
 import qualified SchemaV2 as After
 
@@ -34,8 +37,14 @@ main = do
         , StepObservation (Rationale "Display metadata" []) (RecordedRoot oldId expectedRenamed) (RecordedRoot metadataId expectedRenamed)
         , StepObservation (Rationale "Add completion status" []) (RecordedRoot metadataId expectedRenamed) (RecordedRoot targetId expectedAfter)
         ])
+      encoded <- either fail pure (encodeEvolutionReply AfterCodec.rootCodec (Right (EvolutionOutput value observations)))
+      putStrLn encoded
     _ -> fail "Expected a pure successful evolution entry"
   putStrLn "Generated evolution bindings preserve typed schema and metadata transitions."
+  refusal <- either fail pure (encodeEvolutionReply AfterCodec.rootCodec
+    (Left (EvolutionFailure [Diagnostic Error "evolution.refused" "Cannot reconcile λ"
+      (Just (FactLocation "todos" "todo-001" (Just "title")))])))
+  putStrLn refusal
 
 assert :: Bool -> IO ()
 assert True = pure ()
