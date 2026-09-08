@@ -1,11 +1,11 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
-  ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs, saveCandidate, loadCandidate ) where
+  ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs, saveCandidate, loadCandidate, findAcceptance ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evolution (EvolutionName, EvolutionWorkspace, EvolutionContext, CapturedEvolution, Candidate)
+import Kyyn.Domain.Evolution (EvolutionId, EvolutionName, EvolutionWorkspace, EvolutionContext, CapturedEvolution, Candidate)
 import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Git (GitRevision)
@@ -16,6 +16,7 @@ data EvolutionStore :: Effect where
   MatchesCapturedInputs :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
   SaveCandidate :: Candidate Root -> EvolutionStore m ()
   LoadCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
+  FindAcceptance :: KnowledgeBase -> EvolutionId -> GitRevision -> EvolutionStore m (Either [Diagnostic] (Maybe GitRevision))
 
 type instance DispatchOf EvolutionStore = Dynamic
 
@@ -33,3 +34,6 @@ saveCandidate = send . SaveCandidate
 
 loadCandidate :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
 loadCandidate = send . LoadCandidate
+
+findAcceptance :: EvolutionStore :> es => KnowledgeBase -> EvolutionId -> GitRevision -> Eff es (Either [Diagnostic] (Maybe GitRevision))
+findAcceptance kb identity = send . FindAcceptance kb identity

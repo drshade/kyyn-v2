@@ -404,7 +404,8 @@ Installing Git plumbing for a complete store handler does not launch Git on ever
 list call; do not use partial handlers that fail on the store's other operations.
 
 The implemented store handler requires `FileSystem`, `WorkspaceStore`, `RootOpening`,
-`RootStore`, `DhallHandling` and `Failure`. Capture reads the workspace at the derived location,
+`RootStore`, `DhallHandling`, `Git` and `Failure`. Git supplies the implemented
+FindAcceptance lookup from ADR 0012. Capture reads the workspace at the derived location,
 decodes its manifest, and calls `LoadSourceAt` for that manifest's Before revision
 and the owning KB's root subtree. The projected `before/` tree must equal that
 source root's entire authored `src/` tree (prefix stripped) exactly, including

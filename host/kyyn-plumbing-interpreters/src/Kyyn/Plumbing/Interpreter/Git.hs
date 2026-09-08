@@ -22,6 +22,20 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es) => FilePath -> Eff (Git : es) a -> Eff es a
 runGit executable = interpret $ \_ -> \case
   ResolveRevision repo name -> resolve repo name
+  ReadFileAt repo revision path -> runExceptT $ do
+    _ <- ExceptT (resolve repo (revisionName revision))
+    found <- successful repo ["ls-tree", "-z", revisionName revision, "--", relativeName path]
+    if Bytes.null found then pure Nothing else
+      case Char8.words (Char8.takeWhile (/= '\t') found) of
+        [mode, "blob", objectId] | mode `elem` ["100644", "100755"] ->
+          Just <$> successful repo ["cat-file", "blob", Char8.unpack objectId]
+        _ -> rejected "git.unsupported-entry" "Expected a regular file"
+  ReadCommitParents repo revision -> runExceptT $ do
+    _ <- ExceptT (resolve repo (revisionName revision))
+    commit <- successful repo ["cat-file", "commit", revisionName revision]
+    let headers = takeWhile (not . Bytes.null) (Char8.lines commit)
+    traverse (either (rejected "git.invalid-commit") pure . gitRevision . Char8.unpack . Bytes.drop 7)
+      (filter ("parent " `Bytes.isPrefixOf`) headers)
   CreateCommit repo (GitTree replacements) parent (CommitMetadata author committer message) -> do
     let components WholeTree = []
         components (Subtree prefix) = Char8.split '/' (utf8 (relativeName prefix))
