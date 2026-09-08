@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Domain.DataType Kyyn.Domain.Failure Kyyn.Domain.Path Kyyn.Domain.Diagnostic
     Kyyn.Domain.Contract Kyyn.Domain.Root
+    Kyyn.Domain.FileTree Kyyn.Domain.Git
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror

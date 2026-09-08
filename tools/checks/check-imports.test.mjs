@@ -6,6 +6,12 @@ test('pure dependencies are permitted', () => {
   assert.deepEqual(checkImports('kyyn-domain', 'import Data.List (nub)'), []);
   assert.deepEqual(checkImports('kyyn-plumbing', 'import Kyyn.Domain.DataType'), []);
 });
+test('Git reads lower through process plumbing rather than native IO', () => {
+  const module = 'module Kyyn.Plumbing.Interpreter.Git where\n';
+  assert.deepEqual(checkImports('kyyn-plumbing-interpreters', module + 'import Kyyn.Plumbing.Capability.ProcessExecution'), []);
+  assert.deepEqual(checkImports('kyyn-plumbing-interpreters', module + 'import System.Process.Typed'), ['System.Process.Typed']);
+  assert.match(checkImports('kyyn-plumbing-interpreters', module + 'import Effectful (Eff, IOE)').join(), /API-only/);
+});
 test('RootStore API cannot depend on plumbing and its interpreter cannot acquire IO', () => {
   assert.deepEqual(checkImports('kyyn-porcelain', 'import Kyyn.Plumbing.Capability.DhallHandling'),
     ['Kyyn.Plumbing.Capability.DhallHandling']);

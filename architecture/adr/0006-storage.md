@@ -168,6 +168,16 @@ to pass explicitly to loading, creation or rebasing. Source reads do not substit
 an ambient latest root. Publication still compares the live ref atomically; the
 earlier resolution is not a reservation or a substitute for that comparison.
 
+The initial Git plumbing supplies `ResolveRevision Repository String` and
+`ReadTreeAt Repository GitRevision RelativePath`. Resolution returns a full commit
+object ID; subtree capture reads that fixed revision, not the working tree. Its
+interpreter lowers through ProcessExecution using an explicitly supplied Git
+executable, with no IOE of its own. NUL-delimited tree entries preserve whitespace
+in file names; blob contents remain bytes. Symlinks, submodules and unsupported
+paths are explicit failures. Regular and executable blobs are captured as byte
+files; FileTree does not retain mode bits. Missing subtrees are failures, not empty
+snapshots. Ref mutation and commit construction are not implemented by this reader.
+
 `ReadFact` returns `Nothing` only for an absent ID in an existing collection.
 Unknown collections, corrupt data and inaccessible storage are explicit failures.
 `CheckedValue` carries the collection's payload contract, not an arbitrary JSON

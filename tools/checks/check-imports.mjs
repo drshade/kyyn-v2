@@ -5,12 +5,12 @@ import { fileURLToPath } from 'node:url';
 const allowed = {
   'kyyn-types': [],
   'kyyn-porcelain': ['Data.Aeson', 'Effectful', 'Effectful.Dispatch.Dynamic',
-    'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root'],
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.FileTree'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
     'Data.Aeson', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable',
     'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Numeric', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path',
-    'Kyyn.Domain.Root', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Porcelain.Capability.RootStore'],
+    'Kyyn.Domain.Root', 'Kyyn.Domain.FileTree', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Porcelain.Capability.RootStore'],
   'kyyn-domain': ['Data.List', 'Control.DeepSeq', 'GHC.Generics', 'System.FilePath'],
   'kyyn-plumbing': ['Data.List', 'Kyyn.Domain.DataType'],
   'kyyn-microhs': [
@@ -33,10 +33,14 @@ const domainModules = {
   'Kyyn.Domain.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
-  'Kyyn.Domain.Root': ['Data.Aeson', 'Data.ByteString', 'Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Path'],
+  'Kyyn.Domain.Root': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Domain.FileTree'],
+  'Kyyn.Domain.FileTree': ['Data.ByteString', 'Data.List', 'Kyyn.Domain.Path'],
+  'Kyyn.Domain.Git': ['Kyyn.Domain.Path'],
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.Git': ['Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Git', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path'],
   'Kyyn.Plumbing.Capability.SchemaInspection': ['Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
@@ -60,6 +64,10 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Plumbing.Interpreter.Git': ['Control.Monad', 'Data.ByteString', 'Data.ByteString.Char8',
+    'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure',
+    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Interpreter.DhallHandling': ['Control.Monad', 'Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
     'Data.Aeson.KeyMap', 'Data.List', 'Data.Sequence', 'Dhall.Pretty', 'Prettyprinter', 'Prettyprinter.Render.Text',
     'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
@@ -94,7 +102,7 @@ export function checkImports(packageName, source) {
     const match = /^\s*import\s+(?:qualified\s+)?([A-Z][\w.]*)(?:\s|$)/.exec(line);
     if (!match) return ['unsupported import syntax; use a plain single-line module import'];
     if (!permitted.includes(match[1])) return [match[1]];
-    if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters'].includes(packageName) || moduleName === 'Kyyn.MicroHs.Interpreter.GuestCompilation') && match[1] === 'Effectful') {
+    if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters'].includes(packageName) || ['Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.Plumbing.Interpreter.Git'].includes(moduleName)) && match[1] === 'Effectful') {
       const explicit = /^\s*import Effectful \((.*)\)\s*$/.exec(line);
       const names = explicit?.[1].split(',').map(name => name.trim());
       const pureNames = ['Effect', 'Eff', 'DispatchOf', 'Dispatch(..)', '(:>)'];
