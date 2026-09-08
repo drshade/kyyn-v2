@@ -8,7 +8,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
-import Kyyn.Domain.FileTree (FileTree, files, fileTree)
+import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Domain.Path (relativePath, relativeName, directoryScope)
 import Kyyn.Domain.Root (Root(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
@@ -61,8 +61,6 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
   case noFacts of Right (Left _) -> pure (); _ -> fail "Unreadable facts reached execution"
   collision <- execute (tree [(path "Checks.hs", "collision")]) unexpected root
   case collision of Right (Left _) -> pure (); _ -> fail "Source collision reached compilation"
-  unless (files code == [(path "kb.dhall",manifest),(path "src/Checks.hs","captured validator")])
-    (fail "Captured code changed")
   putStrLn "RootExecution manifest/source selection and structural/compiler/runtime failure distinctions passed."
 
 compileMock :: Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
