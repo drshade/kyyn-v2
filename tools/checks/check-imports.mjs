@@ -37,7 +37,7 @@ const domainModules = {
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Domain.Root': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Domain.FileTree'],
   'Kyyn.Domain.FileTree': ['Data.ByteString', 'Data.List', 'Kyyn.Domain.Path'],
-  'Kyyn.Domain.Git': ['Kyyn.Domain.Path'],
+  'Kyyn.Domain.Git': ['Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
 };
 
 const plumbingModules = {
@@ -66,7 +66,7 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
-  'Kyyn.Plumbing.Interpreter.Git': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.ByteString', 'Data.ByteString.Char8',
+  'Kyyn.Plumbing.Interpreter.Git': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.List', 'Data.ByteString', 'Data.ByteString.Char8',
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.ProcessExecution'],

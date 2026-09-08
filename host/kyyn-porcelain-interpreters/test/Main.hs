@@ -119,6 +119,8 @@ gitMock captured = interpret $ \_ -> \case
   Git.ReadTreeAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root" -> pure (Right captured)
   Git.ReadTreeAt _ _ _ -> pure (Left [Diagnostic "test.git" "Unusable root selection"])
+  Git.CreateCommit {} -> error "RootOpening must not create commits"
+  Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

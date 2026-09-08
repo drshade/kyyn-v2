@@ -5,7 +5,7 @@ import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import Effectful (runEff)
-import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Git
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.Git
@@ -24,7 +24,7 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
   let repo = Repository scope
       path = either error id . relativePath
       execute action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) (either (fail . show) pure)
-      command args = do
+      inspect args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
           (Process.ProcessSpec executable args directory
             [("PATH",""),("LC_ALL","C"),("GIT_CONFIG_NOSYSTEM","1")]) $ do
@@ -33,8 +33,9 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
             exit <- Process.awaitExit
             pure (output,exit)
         case result of
-          Right (_,Process.ProcessExit 0 _) -> pure ()
+          Right (output,Process.ProcessExit 0 _) -> pure output
           _ -> fail (show result)
+      command args = () <$ inspect args
       commit = command ["-c","user.name=Fixture","-c","user.email=fixture@example.invalid","commit","-qm","fixture"]
   command ["init","-q","-b","main"]
   createDirectoryIfMissing True (directory </> "root/nested")

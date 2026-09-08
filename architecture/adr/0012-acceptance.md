@@ -22,6 +22,9 @@ The rule is **`Before.revision == current local accepted head`**. Require equali
 not an ancestry or timestamp comparison: a divergent base is also unsuitable.
 The revision identifies the complete source root, not merely its schema version.
 
+KB initialization creates the first commit as a separate operation; evolution
+acceptance always advances an existing local head.
+
 The selected workspace must also be Ready. A Draft is not implicitly submitted
 by calling accept, even if it happens to have a passing candidate; an already
 Accepted workspace is not replayed. Ready expresses intent, not validation or
