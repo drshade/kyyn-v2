@@ -1,6 +1,5 @@
-module Kyyn.Porcelain.Capability.Validation (Validated, validatedValue, checkRoot, checkExample) where
+module Kyyn.Porcelain.Capability.Validation (checkRoot, checkExample) where
 
-import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Diagnostic
@@ -10,9 +9,6 @@ import Kyyn.Domain.Root (Root, CheckedValue(..))
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution, checkRootCode, discoverQueries, queryRoot, validateRoot)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readExamples)
 import Kyyn.Porcelain.Validation.Types (Validated(..))
-
-validatedValue :: Validated a -> a
-validatedValue = coerce
 
 checkRoot :: (RootExecution :> es, RootStore :> es) => Root -> Eff es (CheckResult (Validated Root))
 checkRoot root = do

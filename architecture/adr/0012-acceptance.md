@@ -139,6 +139,10 @@ diffs; do not reuse the old result. This is ordinary correct use of a checked
 value, not a mandatory sealed-candidate identity, approval receipt or custody
 protocol. Kyyn need not prove that a reviewer noticed every semantic overwrite.
 
+The Root validated and the Root committed are the same value within this sequence.
+ExportRootFiles reads only that validated value's captured files; it does not reload
+the checkout or substitute a freshly materialized root before commit construction.
+
 `After` has no preassigned commit revision. Retain `Before.revision` in the
 workspace; ordinary Git history records the accepting commit and parent. No
 additional from/to root-content hash scheme is required by acceptance.
@@ -260,6 +264,12 @@ accepted root checks it as specified in ADRs 0004 and 0013; selecting an ordinar
 branch does not make every commit valid by definition.
 
 ## Implementation responsibilities and exclusions
+
+Root export and Git commit/CAS primitives are implemented and tested together;
+this is not an implemented AcceptEvolution path. Full acceptance still requires
+the evolution context, Ready/captured-input checks, retained archive/history lookup
+and checkout synchronization specified above. Do not expose a bare-root commit
+helper as an alternative acceptance workflow while those pieces are absent.
 
 Validate the complete result before publication; acceptance writes that checked
 result, preserves unrelated files and reports errors honestly. The publication

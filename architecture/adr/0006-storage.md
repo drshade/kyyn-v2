@@ -102,7 +102,7 @@ data RootStore :: Effect where
   EncodeExample
     :: Example -> RootStore m (Either [Diagnostic] FileTree)
   ExportRootFiles
-    :: Root -> RootStore m SubtreeReplacement
+    :: Validated Root -> RootStore m (Either [Diagnostic] FileTree)
   MaterializeRoot
     :: RootContract -> CodeSnapshot -> CheckedValue
     -> RootStore m Root
@@ -111,6 +111,13 @@ runRootStore
   :: DhallHandling :> es
   => Eff (RootStore : es) a -> Eff es a
 ```
+
+ExportRootFiles combines the validated root's captured fact and code trees,
+including examples, configuration and supporting files, without reading disk or
+re-encoding content. FileTree rejects overlapping paths rather than choosing one
+silently. The exported paths remain root-relative; publication places this complete
+replacement at the selected KB's root location. RootStore does not acquire a Git
+dependency or choose a branch/parent, and export does not itself accept an evolution.
 
 RootOpening has a separate row because locating source and inspecting a schema
 requires capabilities that snapshot-only materialization and publication do not:

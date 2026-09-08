@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootStore
   ( RootStore(..), readRootDefinition, checkRootValue, materializeRoot, loadRootValueForChecking
-  , readExamples, encodeExample ) where
+  , readExamples, encodeExample, exportRootFiles ) where
 
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -12,6 +12,7 @@ import Kyyn.Domain.Root (Root, RootDefinition, CheckedValue)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Example (Example)
 import Kyyn.Domain.Query (QueryDescriptor)
+import Kyyn.Porcelain.Validated (Validated)
 
 data RootStore :: Effect where
   ReadRootDefinition :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
@@ -20,6 +21,7 @@ data RootStore :: Effect where
   LoadRootValueForChecking :: Root -> RootStore m (Either [Diagnostic] CheckedValue)
   ReadExamples :: Root -> [QueryDescriptor] -> RootStore m (Either [Diagnostic] [Example])
   EncodeExample :: Example -> RootStore m (Either [Diagnostic] FileTree)
+  ExportRootFiles :: Validated Root -> RootStore m (Either [Diagnostic] FileTree)
 
 type instance DispatchOf RootStore = Dynamic
 
@@ -40,3 +42,6 @@ readExamples root = send . ReadExamples root
 
 encodeExample :: RootStore :> es => Example -> Eff es (Either [Diagnostic] FileTree)
 encodeExample = send . EncodeExample
+
+exportRootFiles :: RootStore :> es => Validated Root -> Eff es (Either [Diagnostic] FileTree)
+exportRootFiles = send . ExportRootFiles

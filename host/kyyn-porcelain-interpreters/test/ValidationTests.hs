@@ -22,6 +22,7 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Validation
+import Kyyn.Porcelain.Validated (validatedValue)
 import Kyyn.Porcelain.Interpreter.RootStore
 
 validationTests :: RootContract -> FileTree -> IO ()
@@ -50,8 +51,10 @@ validationTests contract facts = do
       semanticError = errorDiagnostic "invalid" "Broken root"
       valid = run (Right ()) (ValidationReport [semanticWarning]) True root
   case valid of
-    Passed checked (ValidationReport diagnostics) ->
+    Passed checked (ValidationReport diagnostics) -> do
       unless (validatedValue checked == root && diagnostics == [semanticWarning]) (fail "Validation changed the snapshot/report")
+      unless (storage (exportRootFiles checked) == Right (tree (files facts ++ files encoded)))
+        (fail "Root export dropped saved examples or changed their bytes")
     _ -> fail (show valid)
   case run (Right ()) (ValidationReport []) False root of
     Rejected (ValidationReport [Diagnostic Error "example.mismatch" _ (Just (ExampleLocation "Done 🦋"))]) -> pure ()
