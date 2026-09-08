@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 const allowed = {
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types'],
-  'kyyn-porcelain': ['Data.Aeson', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+  'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
     'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
@@ -27,7 +28,8 @@ const allowed = {
     'MicroHs.Compile', 'MicroHs.CompileCache', 'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident',
     'MicroHs.SymTab', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
   ],
-  'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query'],
+  'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
+    'Kyyn.Evolution.Internal', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Runtime.Validation'],
   'kyyn-plumbing-interpreters': [
     'Data.Word', 'Numeric', 'System.IO.Error', 'System.Random',
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
@@ -41,6 +43,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.EvolutionReport': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.KnowledgeBase': ['Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Evolution': ['Data.Coerce', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Workspace'],
   'Kyyn.Domain.Workspace': ['Data.List', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
@@ -58,6 +61,8 @@ const domainModules = {
 
 const plumbingModules = {
   'Kyyn.Plumbing.Protocol.Evolution': ['Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
+    'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.Foldable',
+    'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Diagnostic', 'Kyyn.Plumbing.Protocol.Validation',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Protocol.Query': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',

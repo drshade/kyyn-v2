@@ -68,11 +68,11 @@ evaluateEvolution
 data EvolutionFailure = EvolutionFailure [Diagnostic]
 ```
 
-`EvolutionOutput` and `StepObservation` are abstract to authored KB code. Their
-constructors and record-update selectors remain private to the SDK; authors
-obtain a successful output through `evaluateEvolution`, not by supplying a root
-with a hand-built or empty observation list. This guides correct construction,
-not a sandbox or substitute for checking the returned data at the host boundary.
+`EvolutionOutput` and `StepObservation` are abstract in the public SDK API; authors
+obtain a successful output through `evaluateEvolution`. The generated adapter uses
+`Kyyn.Evolution.Internal`, which an author can also import from the vendored source.
+Public exports guide construction; they do not enforce observation completeness.
+The host's contract/value and chain checks below are the actual boundary checks.
 
 `RootBinding` is also abstract. Generated `beforeRoot`, `afterRoot` and explicit
 intermediate bindings pair a checked whole contract identity with its typed
@@ -640,7 +640,10 @@ data FactChange = FactChange
   , after      :: Maybe RecordedFact
   }
 
-data RecordedFact  -- fixed contract-tagged fact value, readable without old code
+data RecordedFact = RecordedFact
+  { contract :: RootContract
+  , value    :: Value  -- complete Fact envelope
+  }
 ```
 
 `Nothing` before means addition, `Nothing` after deletion, and two present values
@@ -649,6 +652,35 @@ Preserve the relevant contract descriptions with recorded values, including acro
 schema changes, so history does not depend on recompiling archived modules.
 The host compares identified facts at each boundary, including changes of their
 contracts, rather than relying on transformation labels or file paths.
+Use collection identity plus FactId as the key, not collection position. Duplicate
+IDs within a collection are rejected at every boundary, including intermediate
+roots; the same ID in different collections is independent. Report ordering is
+step order, then collection identity and FactId. A list reorder alone is not a
+fact modification, though its root values still participate in the chain check.
+
+The recorded contract is the whole root contract. A whole-contract identity change,
+including metadata-only changes, therefore records retained facts as interpretation
+changes even if their encoded values are equal. Do not introduce a second,
+fact-specific compatibility identity to suppress these changes.
+
+Result checking uses the independently inspected contracts, never contract
+descriptions supplied by the guest:
+
+```haskell
+checkEvolutionReport
+  :: RootStore :> es
+  => [RootContract]   -- explicitly inspected intermediate contracts
+  -> RootContract -> Value  -- selected Before and its decoded value
+  -> RootContract           -- inspected target
+  -> EvolutionObservation   -- decoded guest After value and step observations
+  -> Eff es (Either [Diagnostic] (CheckedValue, EvolutionReport))
+```
+
+This capability function checks every source, intermediate and target value through
+RootStore, checks the complete chain, then derives the report. It does not claim
+that an arbitrary supplied Before value came from Git: EvolutionExecution owns
+selecting that input as described above. Guest refusal is decoded separately from
+malformed protocol; no partial successful output accompanies a refused evolution.
 
 These reports duplicate changed fact data: each modified fact retains both its
 before and after values for each step that changes it. A whole-schema migration
@@ -764,5 +796,10 @@ identity, failed-step short-circuiting with no partial success, cancelling chang
 schema changes and a same-type metadata-only transition. Both compilers reject
 wrong typed bindings and public construction of EvolutionOutput. The actual
 identity scaffold is compiled in this proof too. This establishes SDK composition
-and encoding, not host execution, observation-chain checking, report derivation
-or Candidate persistence; those remain the next integration boundary.
+and encoding. The proof also transports successful observations and structured
+refusal diagnostics through the guest JSON encoder and native decoder, and derives
+the three expected host step reports. Focused native tests check chain discontinuity,
+unknown contracts, malformed intermediate values, duplicate IDs, metadata/schema
+changes, additions/deletions, cancelling edits and position-independent matching.
+Workspace build preparation/execution and Candidate persistence remain unimplemented;
+the fixture's explicit compilation is not a workspace execution handler.

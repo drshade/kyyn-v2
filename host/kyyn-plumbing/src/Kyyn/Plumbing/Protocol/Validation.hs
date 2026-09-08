@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Validation (decodeReport, validationSources) where
+module Kyyn.Plumbing.Protocol.Validation (decodeReport, parseReport, validationSources) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, Object, eitherDecodeStrict, withObject, withArray, parseJSON, (.:))
@@ -36,8 +36,10 @@ validationSources root selected sources = do
   guestSources entryPath (sources ++ [(entryPath, utf8 entry), (codecPath, utf8 codec)])
 
 decodeReport :: Bytes.ByteString -> Either String ValidationReport
-decodeReport bytes = eitherDecodeStrict bytes >>= parseEither
-  (withArray "ValidationReport" (fmap ValidationReport . traverse diagnostic . toList))
+decodeReport bytes = eitherDecodeStrict bytes >>= parseEither parseReport
+
+parseReport :: Value -> Parser ValidationReport
+parseReport = withArray "ValidationReport" (fmap ValidationReport . traverse diagnostic . toList)
   where
     diagnostic = exact "Diagnostic" ["severity", "code", "message", "location"] $ \o ->
       Diagnostic <$> (o .: "severity" >>= level) <*> o .: "code" <*> o .: "message"

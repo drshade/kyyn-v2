@@ -72,6 +72,10 @@ does not become another specification of the product's runtime workflows.
   composition, observations and failure behavior. `cabal test evolutions
   --test-options=--pure --test-show-details=direct` checks binding generation;
   both are included in the fast check and neither invokes a guest compiler.
+  `cabal test evolution-reports --test-show-details=direct` checks observation
+  chains, structural values and identity-based reports through real RootStore/Dhall,
+  plus malformed protocol rejection. It is included in the fast check and needs
+  neither Git nor a guest compiler.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
   compilation and codec tests. Run it before declaring an Issue complete, or when
   needed for a particular change or investigation; not for every PR or merge.
@@ -117,7 +121,8 @@ does not become another specification of the product's runtime workflows.
   their results, and checks rejection of wrong binding types and private output
   constructors. It also compiles the identity scaffold used by creation. This
   focused SDK/encoding proof is in the full check, not a per-PR requirement; it
-  does not claim host evolution execution or report derivation.
+  additionally checks guest JSON replies through the native decoder and report
+  capability. It does not claim workspace evolution execution or candidate persistence.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

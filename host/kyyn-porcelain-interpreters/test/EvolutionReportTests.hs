@@ -1,0 +1,134 @@
+{-# LANGUAGE OverloadedStrings #-}
+module Main (main) where
+
+import Control.Monad (unless, forM_)
+import Data.Aeson (Value(..), object, (.=), encode)
+import qualified Data.ByteString.Lazy as Lazy
+import Effectful (runPureEff)
+import Kyyn.Domain.Contract
+import Kyyn.Domain.DataType
+import Kyyn.Domain.EvolutionReport
+import Kyyn.Domain.Root (CheckedValue(..))
+import Kyyn.Types.Diagnostic
+import Kyyn.Types.Evolution
+import Kyyn.Types.Evidence
+import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Types.SchemaMetadata
+import Kyyn.Porcelain.Capability.EvolutionReport
+import Kyyn.Porcelain.Interpreter.RootStore
+import Kyyn.Plumbing.Interpreter.DhallHandling
+import Kyyn.Plumbing.Protocol.Evolution (decodeEvolutionReply)
+
+main :: IO ()
+main = do
+  old <- contract "V1" "Todos" [(Just "title",StringType)] ["todos"]
+  renamed <- contract "V1" "Renamed" [(Just "title",StringType)] ["todos"]
+  new <- contract "V2" "Todos" [(Just "title",StringType),(Just "done",BoolType)] ["todos"]
+  let input = root [fact "a" "First",fact "b" "Second"]
+      edited = root [fact "c" "New",fact "a" "Changed"]
+      rationale = Rationale "Reconcile todos" [EvidenceRef "graph" "work" "email-id" ["https://example.test/email"]]
+      observed c = ObservedRoot (contractFingerprint (contractId (rootSchema c)))
+      step c a d b = StepObservation rationale (observed c a) (observed d b)
+      check source value target steps output = runPureEff . runDhallHandling . runRootStore $
+        checkEvolutionReport [renamed] source value target (EvolutionObservation output steps)
+      changed before after identifier = FactChange "todos" (FactId identifier) before after
+      recorded c value = Just (RecordedFact c value)
+  (checked, report) <- right (check old input old [step old input old edited] edited)
+  assert (checked == CheckedValue (contractId (rootSchema old)) edited) "After was not contract-tagged"
+  assert (report == EvolutionReport [StepReport rationale
+    [changed (recorded old (fact "a" "First")) (recorded old (fact "a" "Changed")) "a",
+     changed (recorded old (fact "b" "Second")) Nothing "b",
+     changed Nothing (recorded old (fact "c" "New")) "c"]]) "Wrong identified additions/modifications/deletions"
+  (_,EvolutionReport reversed) <- right (check old input old
+    [step old input old edited,step old edited old input] input)
+  assert (length reversed == 2 && all (\(StepReport r cs) -> r == rationale && length cs == 3) reversed)
+    "Cancelling edits or declared evidence disappeared"
+  (_,empty) <- right (check old input old [] input)
+  assert (empty == EvolutionReport []) "Identity produced a report"
+  let reordered = root [fact "b" "Second",fact "a" "First"]
+  (_,reorderReport) <- right (check old input old [step old input old reordered] reordered)
+  assert (reorderReport == EvolutionReport [StepReport rationale []]) "Reordering became record edits"
+  (_,metadataReport) <- right (check old input renamed [step old input renamed input] input)
+  assert (metadataReport == EvolutionReport [StepReport rationale
+    [changed (recorded old f) (recorded renamed f) identifier | (identifier,f) <- [("a",fact "a" "First"),("b",fact "b" "Second")]]])
+    "Metadata interpretation change disappeared"
+  let migrated = root [object ["id" .= ("a" :: String),"value" .= object ["title" .= ("First" :: String),"done" .= False]]]
+  (_,migration) <- right (check old input new [step old input new migrated] migrated)
+  assert (migration == EvolutionReport [StepReport rationale
+    [changed (recorded old (fact "a" "First")) (recorded new (object ["id" .= ("a" :: String),"value" .= object ["title" .= ("First" :: String),"done" .= False]])) "a",
+     changed (recorded old (fact "b" "Second")) Nothing "b"]]) "Migration lost old or new contract/value"
+  forM_
+    [ check old input old [] edited
+    , check old input renamed [] input
+    , check old input old [step old edited old input] input
+    , check old input old [step old input old edited,step old input old input] input
+    , check old input old [step old input renamed input,step old input old input] input
+    , check old input old [step old input old edited] input
+    , check old input old [StepObservation rationale (observed old input) (ObservedRoot "unknown" edited)] edited
+    , check old input old [step old input old Null,step old Null old input] input
+    , check old input old [step old input renamed (root [fact "a" "First",fact "a" "Second"]),
+        step renamed (root [fact "a" "First",fact "a" "Second"]) old input] input
+    , check old Null old [] Null
+    , check old (root [fact "a" "First",fact "a" "Second"]) old [] (root [fact "a" "First",fact "a" "Second"])
+    , check old input new [step old input new input] input
+    ] rejected
+  two <- contract "Two" "Todos" [(Just "title",StringType)] ["todos","other"]
+  let both = object ["todos" .= [fact "a" "First"],"other" .= [fact "a" "Second"]]
+      moved = object ["todos" .= ([] :: [Value]),"other" .= [fact "a" "Second"]]
+  (_,scoped) <- right (check two both two [step two both two moved] moved)
+  assert (scoped == EvolutionReport [StepReport rationale [changed (recorded two (fact "a" "First")) Nothing "a"]])
+    "Fact identity was not scoped to its collection"
+  protocolTests
+  putStrLn "Evolution chain, structural values, identity-based reports and protocol rejection checks passed."
+
+protocolTests :: IO ()
+protocolTests = do
+  let decode = decodeEvolutionReply . Lazy.toStrict . encode
+      success value = object ["tag" .= ("Succeeded" :: String),"value" .= value]
+      output = object ["after" .= root [],"steps" .= ([] :: [Value])]
+  result <- right (decode (success output))
+  assert (result == Right (EvolutionObservation (root []) [])) "Success decoding changed value"
+  let citation = object ["producer" .= ("graph" :: String),"connector" .= ("work" :: String),
+        "source" .= ("email-λ" :: String),"references" .= (["https://example.test/λ","/tmp/email"] :: [String])]
+      boundary = object ["contract" .= ("contract-id" :: String),"value" .= root []]
+      step evidence = object ["before" .= boundary,"after" .= boundary,
+        "rationale" .= object ["explanation" .= ("Explain λ" :: String),"evidence" .= [evidence]]]
+      withStep value = success (object ["after" .= root [],"steps" .= [value]])
+  cited <- right (decode (withStep (step citation)))
+  assert (cited == Right (EvolutionObservation (root [])
+    [StepObservation (Rationale "Explain λ" [EvidenceRef "graph" "work" "email-λ" ["https://example.test/λ","/tmp/email"]])
+      (ObservedRoot "contract-id" (root [])) (ObservedRoot "contract-id" (root []))])) "Citation decoding lost identifiers or references"
+  rejected (decode (withStep (step (object ["producer" .= ("graph" :: String)]))))
+  refusal <- right (decode (object ["tag" .= ("Rejected" :: String),"value" .=
+    [object ["severity" .= object ["tag" .= ("Error" :: String)],"code" .= ("refused" :: String),
+      "message" .= ("No" :: String),"location" .= object ["tag" .= ("None" :: String)]]]]))
+  assert (refusal == Left (EvolutionFailure [Diagnostic Error "refused" "No" Nothing])) "Refusal was not distinguished from malformed protocol"
+  forM_ [Null,object [],object ["tag" .= ("Other" :: String),"value" .= output],
+    success (object ["after" .= root []]),
+    success (object ["after" .= root [],"steps" .= ([] :: [Value]),"extra" .= True]),
+    success (object ["after" .= root [],"steps" .= [object []]])] (rejected . decode)
+
+root :: [Value] -> Value
+root facts = object ["todos" .= facts]
+
+fact :: String -> String -> Value
+fact identifier title = object ["id" .= identifier,"value" .= object ["title" .= title]]
+
+contract :: String -> String -> [(Maybe String,DataType)] -> [String] -> IO RootContract
+contract namespace label fields collections = right (checkContract schema metadata >>= checkRootLayout)
+  where
+    payload = Algebraic (namespace ++ ".Todo") [] [Constructor (namespace ++ ".Todo") fields]
+    envelope = Algebraic "Kyyn.Types.Fact.Fact" [payload]
+      [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,payload)]]
+    schema = Algebraic (namespace ++ ".Root") [] [Constructor (namespace ++ ".Root") [(Just name,ListType envelope) | name <- collections]]
+    metadata = SchemaMetadata [RoleDecl "title" label Title] [] [CollectionDecl name name [] | name <- collections]
+
+right :: Show e => Either e a -> IO a
+right = either (fail . show) pure
+
+rejected :: Show a => Either e a -> IO ()
+rejected (Left _) = pure ()
+rejected (Right value) = fail ("Expected rejection, received " ++ show value)
+
+assert :: Bool -> String -> IO ()
+assert condition message = unless condition (fail message)

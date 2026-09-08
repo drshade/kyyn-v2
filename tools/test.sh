@@ -32,6 +32,7 @@ cabal test file-trees --test-show-details=direct
 cabal test metadata --test-options=--codec-only --test-show-details=direct
 cabal test queries --test-options=--pure --test-show-details=direct
 cabal test evolution-core --test-show-details=direct
+cabal test evolution-reports --test-show-details=direct
 cabal test evolutions --test-options=--pure --test-show-details=direct
 if [[ "${1:-}" == --full ]]; then
   bash tools/test-guest.sh

@@ -5,13 +5,19 @@ import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Effectful (runEff)
+import Effectful (runEff, runPureEff)
+import Kyyn.Domain.EvolutionReport
+import Kyyn.Types.Evolution
+import Kyyn.Types.Diagnostic
+import Kyyn.Porcelain.Capability.EvolutionReport
+import Kyyn.Porcelain.Interpreter.RootStore
+import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path
 import Kyyn.Types.SchemaMetadata
-import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource)
+import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.Plumbing.Interpreter.Failure
@@ -40,7 +46,7 @@ main = do
     (fail "Generated bindings lost their whole contract identities")
   getArgs >>= \args -> case args of
     ["--pure"] -> pure ()
-    [] -> integration bindings
+    [] -> integration before renamed after bindings
     _ -> fail "usage: evolutions [--pure]"
 
 checked :: String -> [(Maybe String,DataType)] -> String -> IO RootContract
@@ -52,8 +58,8 @@ checked moduleName fields label = right $ checkContract root metadata >>= checkR
     root = Algebraic (moduleName ++ ".Root") [] [Constructor (moduleName ++ ".Root") [(Just "todos",ListType fact)]]
     metadata = SchemaMetadata [RoleDecl "title" label Title] [] [CollectionDecl "todos" "todos" []]
 
-integration :: FileTree -> IO ()
-integration bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
+integration :: RootContract -> RootContract -> RootContract -> FileTree -> IO ()
+integration before renamed after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope (repo </> "vendor/MicroHs"))
@@ -63,7 +69,8 @@ integration bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \tempora
   support <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs"]] ++
-     [load "guest/kyyn-sdk/test" "EvolutionCore.hs", load "guest/kyyn-runtime/src" "Kyyn/Runtime/Json.hs"] ++
+     [load "guest/kyyn-sdk/test" "EvolutionCore.hs"] ++
+     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 identityEvolutionSource))
       captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings
@@ -90,6 +97,17 @@ integration bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \tempora
     pure (output,exit)
   actual <- right guest
   unless (actual == (Text.encodeUtf8 (Text.pack expected),ProcessExit 0 "")) (fail ("GHC/MicroHs evolution proof differed: " ++ show actual))
+  replies <- traverse (right . decodeEvolutionReply . Text.encodeUtf8 . Text.pack)
+    [line | line <- lines expected, take 1 line == "{"]
+  case replies of
+    [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _)), Left refusal] -> do
+      (_,EvolutionReport reports) <- right (runPureEff . runDhallHandling . runRootStore $
+        checkEvolutionReport [renamed] before input after observation)
+      unless (length reports == 3 && all (\(StepReport _ changes) -> length changes == 1) reports)
+        (fail "Guest observations did not derive the three real fact changes")
+      unless (refusal == EvolutionFailure [Diagnostic Error "evolution.refused" "Cannot reconcile λ"
+        (Just (FactLocation "todos" "todo-001" (Just "title")))]) (fail "Guest refusal lost its structured diagnostic")
+    _ -> fail "Expected successful guest observations and a separate refusal"
   let badType = [(p,if relativeName p == "Evolution.hs"
         then Text.encodeUtf8 (Text.replace "evolve beforeRoot beforeRoot" "evolve afterRoot beforeRoot" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
       badConstructor = [(p,if relativeName p == "Proof.hs" then
