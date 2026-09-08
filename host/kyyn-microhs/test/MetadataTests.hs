@@ -3,18 +3,24 @@ module Main (main) where
 
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
+import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Effectful (runEff)
+import Effectful (runEff, runPureEff)
+import Kyyn.Domain.Root (CheckedValue(..), fileTree)
+import Kyyn.Porcelain.Capability.RootStore
+import Kyyn.Porcelain.Interpreter.RootStore
+import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
-import Kyyn.Domain.Contract (checkContract, rootType)
+import Kyyn.Domain.Contract (metadataOf, rootType)
+import Kyyn.Plumbing.Capability.SchemaInspection
+import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Capability.ProcessExecution
-import Kyyn.MicroHs.Inspection (inspectDataType)
 import ContractTests (contractTests)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation
@@ -54,6 +60,13 @@ codecTests = do
       Left _ -> pure ()
       Right _ -> fail ("invalid export accepted: " ++ name)
   putStrLn "Metadata codec and adapter checks passed."
+  reserved <- either fail pure (relativePath "KyynMetadataEntry.hs")
+  case schemaSource [(reserved,"collision")] "Authored.Root" "Authored.schemaMetadata" of
+    Left _ -> pure ()
+    Right _ -> fail "reserved adapter path collision accepted"
+  case schemaSource [] "Authored.Root" "notQualified" of
+    Left _ -> pure ()
+    Right _ -> fail "unqualified metadata export accepted"
 
 integration :: IO ()
 integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
@@ -69,22 +82,24 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/SchemaMetadata.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/Json.hs"),
      ("vendor/json", "Text/JSON/Types.hs"), ("vendor/json", "Text/JSON/String.hs")]
-  adapter <- either fail pure (metadataAdapter "Authored.schemaMetadata")
-  sources <- either fail pure (guestSources (path "KyynMetadataEntry.hs")
-    ((path "KyynMetadataEntry.hs", utf8 adapter) : files))
-  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
-    evaluateMetadata sources
+  selected <- either fail pure (schemaSource files "Authored.Root" "Authored.schemaMetadata")
+  let sources = schemaSources selected
+  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+    . runSchemaInspectionIO toolchain $ inspectSchema selected
   let expected = SchemaMetadata
         [RoleDecl "task-name" "Tasks in München 🦋" Title,
          RoleDecl "date" "When" Timeline, RoleDecl "status" "State" Badge]
         [FieldRole "Authored.Todo" "title" "task-name"]
         [CollectionDecl n n [("owner", "people")] | n <- ["todos", "people"]]
-  unless (result == Right (Right expected)) (fail (show result))
-  inspected <- inspectDataType (repo </> "vendor/MicroHs")
-    [repo </> "host/kyyn-microhs/test/metadata", repo </> "shared/kyyn-types/src"] "Authored.Root"
-    >>= either (fail . show) pure
-  evaluated <- either (fail . show) (either (fail . show) pure) result
-  checked <- either (fail . show) pure (checkContract inspected evaluated)
+  checked <- either (fail . show) (either (fail . show) pure) result
+  unless (metadataOf checked == expected) (fail (show result))
+  unsupported <- either fail pure (schemaSource ((path "Unsupported.hs", "module Unsupported where\ndata Root = Root { recursive :: Root }\n") : files)
+    "Unsupported.Root" "Authored.schemaMetadata")
+  rejectedSchema <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+    . runSchemaInspectionIO toolchain $ inspectSchema unsupported
+  case rejectedSchema of
+    Right (Left _) -> pure ()
+    _ -> fail ("recursive schema not rejected as diagnostics: " ++ show rejectedSchema)
   generated <- either fail pure (generateCodecs "KyynFactCodec" (rootType checked))
   let entrySource = unlines ["module FactRoundTrip where", "import KyynFactCodec", "import Kyyn.Runtime.Json",
         "main :: IO ()", "main = do", "  input <- getContents",
@@ -103,7 +118,12 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
           output <- collectStdout
           status <- awaitExit
           pure (output, status)
-  (output, status) <- invoke input >>= either (fail . show) pure
+  inputValue <- either fail pure (Aeson.eitherDecodeStrict input)
+  code <- either fail pure (fileTree files)
+  checkedInput <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue checked inputValue))))
+  root <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot checked code checkedInput))))
+  CheckedValue _ reloaded <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking root))))
+  (output, status) <- invoke (Lazy.toStrict (Aeson.encode reloaded)) >>= either (fail . show) pure
   let expectedValue = Aeson.eitherDecodeStrict input :: Either String Aeson.Value
   unless (status == ProcessExit 0 "" && Aeson.eitherDecodeStrict output == expectedValue)
     (fail ("FactId string/envelope round trip failed: " ++ show (output,status)))
