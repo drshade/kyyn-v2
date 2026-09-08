@@ -29,6 +29,9 @@ does not become another specification of the product's runtime workflows.
   `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
   capture against Git in a temporary repository; it is included in the fast check
   and requires an installed Git executable (tested locally with Git 2.55.0).
+  `cabal test file-trees --test-show-details=direct` checks local directory capture
+  without running the process cancellation or MicroHs suites; it is included in
+  the fast check.
   Authors choose relevant local checks and record their revision and results;
   this command is not mandatory for every PR.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
