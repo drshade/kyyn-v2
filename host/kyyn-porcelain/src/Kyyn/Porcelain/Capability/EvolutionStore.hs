@@ -1,18 +1,23 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
   ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs, saveCandidate, loadCandidate, findAcceptance
-  , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace ) where
+  , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace, workspaceLocation ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evolution (EvolutionId, EvolutionName, EvolutionWorkspace, EvolutionContext, CapturedEvolution, Candidate, EvolutionFilter, EvolutionSummary)
+import Kyyn.Domain.Evolution (EvolutionId, evolutionIdName, EvolutionName, EvolutionWorkspace(..), EvolutionContext, CapturedEvolution, Candidate, EvolutionFilter, EvolutionSummary)
 import Kyyn.Domain.Workspace (EvolutionState)
 import Kyyn.Domain.Root (Root)
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBasePath)
+import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Git (GitRevision, TreePath)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Porcelain.Validated (Validated)
+
+workspaceLocation :: EvolutionWorkspace -> Either String RelativePath
+workspaceLocation (EvolutionWorkspace kb identity) =
+  relativePath ("evolutions/" ++ evolutionIdName identity) >>= knowledgeBasePath kb
 
 data EvolutionStore :: Effect where
   ListEvolutions :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])

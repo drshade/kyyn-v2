@@ -6,12 +6,14 @@ const allowed = {
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types'],
   'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Publication', 'Kyyn.Domain.Path', 'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.Validation',
     'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionStore',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
     'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Kyyn.Domain.Publication', 'Kyyn.Porcelain.Capability.RootPublication',
     'Data.Aeson.Types', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
     'Data.ByteString.Char8', 'Kyyn.Plumbing.Protocol.EvolutionRecord',
     'Kyyn.Types.Evolution', 'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionReport',
@@ -47,6 +49,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace'],
   'Kyyn.Domain.EvolutionReport': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.KnowledgeBase': ['Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Evolution': ['Data.Coerce', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Workspace',
@@ -109,6 +112,11 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Porcelain.Interpreter.RootPublication': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution',
+    'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Publication', 'Kyyn.Domain.Workspace',
+    'Kyyn.Plumbing.Capability.Git', 'Kyyn.Porcelain.Capability.RootPublication',
+    'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.RootStore'],
   'Kyyn.Plumbing.Interpreter.Git': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.List', 'Data.ByteString', 'Data.ByteString.Char8',
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Diagnostic',
@@ -143,7 +151,7 @@ export function checkImports(packageName, source) {
   const permitted = (packageName === 'kyyn-domain' && domainModules[moduleName]) || (packageName === 'kyyn-plumbing' && plumbingModules[moduleName]) ||
     (packageName === 'kyyn-porcelain' && ['Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Validated'].includes(moduleName) && [...allowed['kyyn-porcelain'], 'Kyyn.Porcelain.Validation.Types']) ||
     (packageName === 'kyyn-microhs' && compilerModules[moduleName]) ||
-    (packageName === 'kyyn-plumbing-interpreters' && interpreterModules[moduleName]) || allowed[packageName];
+    (['kyyn-plumbing-interpreters', 'kyyn-porcelain-interpreters'].includes(packageName) && interpreterModules[moduleName]) || allowed[packageName];
   return source.split('\n').filter(line => /^\s*import\b/.test(line)).flatMap(line => {
     const match = /^\s*import\s+(?:qualified\s+)?([A-Z][\w.]*)(?:\s|$)/.exec(line);
     if (!match) return ['unsupported import syntax; use a plain single-line module import'];

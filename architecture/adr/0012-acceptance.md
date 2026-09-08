@@ -45,8 +45,7 @@ data RootPublication :: Effect where
     -> RootPublication m AcceptanceResult
 
 runRootPublication
-  :: (RootStore :> es, EvolutionStore :> es,
-      Git :> es, FileSystem :> es, Failure :> es)
+  :: (RootStore :> es, EvolutionStore :> es, Git :> es)
   => Eff (RootPublication : es) a -> Eff es a
 ```
 
@@ -86,6 +85,23 @@ not an implicit evaluation during acceptance. A saved passing report does not
 replace fresh validation. This application path needs RootExecution for checking;
 the publication handler itself does not. Source acquisition and the evolution
 entry are never rerun on this path.
+
+The application operation lives with the semantic evolution operations, not in
+CLI/MCP/Web adapters:
+
+```haskell
+acceptStoredEvolution
+  :: (RootPublication :> es, EvolutionStore :> es,
+      RootExecution :> es, RootStore :> es)
+  => LocalBranch -> CommitMetadata -> EvolutionWorkspace -> Eff es AcceptanceResult
+```
+
+It calls `FindAcceptanceOnBranch` first, returning an existing acceptance without
+candidate access. Otherwise it loads the saved candidate, runs `checkCandidate`,
+and calls `AcceptEvolution` only for a passing result. Missing, stale or rejected
+material is `NotAccepted (InvalidMaterial diagnostics)`. The application has no
+Git or filesystem dependency; publication owns branch resolution and delegates
+the history walk to EvolutionStore.
 
 Accept the resulting validated evolution by constructing its complete Git tree,
 including deletions and its retained workspace, and creating a commit whose parent
@@ -176,10 +192,11 @@ data AcceptanceProblem
   | CheckoutMismatch LocalBranch (Maybe LocalBranch)
   | WorkspaceChanged EvolutionId
   | OverlappingEdits [RelativePath]
+  | InvalidMaterial [Diagnostic]
 
 data WorkingTreeOutcome
   = WorkingTreeUpdated
-  | WorkingTreeUpdateIncomplete Diagnostic
+  | WorkingTreeUpdateIncomplete [Diagnostic]
 ```
 
 `NotReady` reports the observed lifecycle state; the CLI exits non-zero rather
@@ -262,6 +279,33 @@ have accepted this very workspace. This is diagnosis, not a retry of publication
 It does not automatically overwrite a live workspace, replay the evolution or
 publish a replacement acceptance. Missing disposable candidate files do not hide
 an acceptance already recorded in Git. No durable recovery coordinator is needed.
+
+Branch-aware lookup and explicit recovery are also RootPublication operations:
+
+```haskell
+FindAcceptanceOnBranch
+  :: LocalBranch -> EvolutionWorkspace
+  -> RootPublication m (Either [Diagnostic] (Maybe GitRevision))
+
+RecoverAcceptedEvolution
+  :: LocalBranch -> EvolutionWorkspace
+  -> RootPublication m (Either [Diagnostic] (Maybe CheckoutRecovery))
+
+data CheckoutRecovery = CheckoutRecovery
+  { acceptingCommit :: GitRevision
+  , checkoutRevision :: GitRevision
+  , outcome :: WorkingTreeOutcome
+  }
+```
+
+Lookup resolves the branch and delegates to `FindAcceptance`; it does not maintain
+another history reader. Recovery first requires that branch to be checked out,
+resolves HEAD and finds this workspace's acceptance at that revision. If none is
+present, it returns `Right Nothing`. Otherwise it inspects the root and this
+archive's checkout paths: no differences means already synchronized; differences
+invoke scoped synchronization. It targets the current head, **not** the original
+accepting commit, so later accepted work is not rolled back. The result names both
+revisions. Other evolutions' archives are outside this explicit repair selection.
 
 The guarantee is local to the selected accepted branch. It does not reserve a
 remote branch. Push rejection and upstream conflicts belong to the user/agent's
@@ -348,10 +392,11 @@ unrelated staged/working/untracked preservation, tracked and untracked drafts,
 deletions, branch/head refusal and retry after an index-lock failure.
 authoritative FindAcceptance is implemented with real-Git history fixtures.
 Lifecycle reads and Ready/Draft transitions are implemented as specified in ADR 0010.
-This is not an implemented AcceptEvolution path. Full acceptance still requires
-publication's Ready/captured-input checks
-and checkout synchronization specified above. Do not expose a bare-root commit
-helper as an alternative acceptance workflow while those pieces are absent.
+RootPublication and `acceptStoredEvolution` implement the publication and saved-result
+application sequence above. Native journey fixtures use real Git, Dhall, stores
+and reporting, with recording schema/guest/validation handlers; they do not claim
+another real-MicroHs execution or an installed CLI journey. Issue #3 still owns
+the executable surface and full integration closeout.
 
 Validate the complete result before publication; acceptance writes that checked
 result, preserves unrelated files and reports errors honestly. The publication

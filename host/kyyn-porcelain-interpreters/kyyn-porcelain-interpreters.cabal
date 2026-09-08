@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.RootOpening
+    Kyyn.Porcelain.Interpreter.RootPublication
     Kyyn.Porcelain.Interpreter.WorkspaceStore
     Kyyn.Porcelain.Interpreter.EvolutionStore
     Kyyn.Porcelain.Interpreter.EvolutionExecution
@@ -32,7 +33,7 @@ test-suite evolution-reports
 test-suite roots
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests
+  other-modules: ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests PublicationTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: OverloadedStrings

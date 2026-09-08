@@ -14,8 +14,8 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Git (TreePath(..))
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
-import Kyyn.Domain.Path (RelativePath, relativePath)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
+import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.Root (Root(..), RootDefinition(..), CheckedValue(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), IntermediateBinding(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
@@ -28,7 +28,7 @@ import Kyyn.Plumbing.Protocol.Evolution (evolutionSources, decodeEvolutionReply)
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
-import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, rootLocation)
 
 runEvolutionExecution
   :: (RootStore :> es, RootOpening.RootOpening :> es, Schema.SchemaInspection :> es,
@@ -37,7 +37,7 @@ runEvolutionExecution
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext kb@(KnowledgeBase repository _) _ (Before revision expected)
       (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ declarations) before target change _)))) -> runExceptT $ do
-  rootPath <- checked "evolution.before-path" (relativePath "root" >>= knowledgeBasePath kb)
+  rootPath <- checked "evolution.before-path" (rootLocation kb)
   source@(Root actual _ acceptedCode) <- proposed (RootOpening.loadRootAt repository revision (Subtree rootPath))
   unless (actual == expected) (reject "evolution.before-contract" "Before's contract changed; capture the evolution again")
   RootDefinition beforeType beforeMetadata _ _ acceptedSources <- proposed (readRootDefinition acceptedCode)
