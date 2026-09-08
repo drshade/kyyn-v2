@@ -23,12 +23,13 @@ import System.Posix.Process (getProcessID)
 import System.Posix.Signals (signalProcess, nullSignal)
 import System.Posix.Types (ProcessID)
 import System.Timeout (timeout)
+import FileSystemTests (testFileSystem)
 
 main :: IO ()
 main = getArgs >>= \args -> case args of
   ["--child", mode] -> child mode
   _ -> do
-    completed <- timeout 30000000 tests
+    completed <- timeout 30000000 (tests >> testFileSystem)
     unless (completed == Just ()) (fail "process tests timed out")
     putStrLn "Process scope tests passed: bytes, diagnostics, nesting, failure and cancellation."
 

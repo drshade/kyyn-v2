@@ -30,8 +30,9 @@ does not become another specification of the product's runtime workflows.
   `tools/test-guest.sh` builds the vendored compiler/evaluator/preprocessor and the
   native test suite inspects authored types, generates codecs, compiles them and
   exchanges runtime values with the resulting guest. It does not substitute GHC
-  for guest execution. Codec guest invocation uses the native ProcessExecution
-  interpreter. Process tests exercise real children, byte pipes, failures and
+  for guest execution. Captured source compilation uses GuestCompilation and
+  emits bytecode consumed by the bundled evaluator, not C-compiled guest binaries.
+  Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
   cancellation; their reaping assertions currently require POSIX (Linux in CI).
   No complete KB workflow, plugin or Web build exists yet.
 - **As implementation arrives:** extend this same gate with the relevant checks.
@@ -91,6 +92,8 @@ established by this PR; configure the `check` job as required where available.
 - **Published releases:** none. The repo contains design, process and initial codec implementation.
 - **Release runbook:** not yet applicable. Establish and verify one before publishing
   a build; ADRs 0020 and 0022 own distribution and licensing decisions.
+- **Dependency evidence:** [native runtime source inventory](dependency-sources.md)
+  records inspected archive licenses; it is not a complete distribution audit.
 
 ## Additional practices
 

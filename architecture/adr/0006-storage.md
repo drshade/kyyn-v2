@@ -211,22 +211,25 @@ plugin-instance service. EvolutionStore captures proposed configuration files;
 normal validation and acceptance apply. Live secret values are not part of that
 snapshot or its review artifacts.
 
-Keep compiled guest artifacts reusable by complete source, contract, SDK,
-dependency, compiler and build-option identity. This directly addresses the
-prototype's compile-all-facts problem: fact contents are runtime inputs, absent
-from the compilation key. Use the whole contract, including roles, without
-special compatibility rules for particular edits.
+Keep compilation separate from runtime fact inputs. The initial
+[runtime boundary](0002-runtime.md) returns an immutable compiled value which
+callers can use for multiple inputs; it does not persist a compiled-artifact cache.
+Generated contract bindings, SDK and dependency source belong to its compilation
+inputs. Use the whole contract, including roles, without special compatibility
+rules for particular edits.
 
 Schema inspection and pure metadata evaluation may run again when loading or
 capturing a root. Do not require a separate cache for their results. Begin with
 whole-root in-memory evaluation and complete validation; the page interface above
 does not promise lazy or incremental guest evaluation.
 
-For the compiled-artifact cache, build into private temporary locations and
-publish complete entries atomically; never expose partially written artifacts
-as cache hits. Multiple processes may duplicate compilation work; no duplicate-
-work coordinator is needed. Draft and acceptance working-tree responsibilities
-are specified in ADR 0012.
+Add persistent compiled-artifact caching only when the concrete loading/checking
+journey demonstrates the need. Such reuse requires the complete source, contract,
+SDK, dependency, actual compiler/toolchain and build-option identity, not merely a
+revision label for independently built or altered installations. Publish complete
+entries atomically; never expose partial artifacts as cache hits. Multiple processes
+may duplicate compilation work; no duplicate-work coordinator is needed. Draft and
+acceptance working-tree responsibilities are specified in ADR 0012.
 
 ## Alternatives, consequences and verification
 

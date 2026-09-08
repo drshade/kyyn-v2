@@ -1,7 +1,8 @@
 module Kyyn.Domain.Failure
-  ( OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..) ) where
+  ( OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..)
+  , StorageDiagnostic(..), StorageOperation(..) ) where
 
-data OperationalFailure = RuntimeUnavailable ProcessDiagnostic
+data OperationalFailure = RuntimeUnavailable ProcessDiagnostic | StorageUnavailable StorageDiagnostic
   deriving (Eq, Show)
 
 data ProcessDiagnostic = ProcessDiagnostic
@@ -10,4 +11,8 @@ data ProcessDiagnostic = ProcessDiagnostic
   } deriving (Eq, Show)
 
 data ProcessOperation = StartProcess | StopProcess | WriteInput | CloseInput | ReadOutput | WaitForExit
+  deriving (Eq, Show)
+
+data StorageDiagnostic = StorageDiagnostic StorageOperation FilePath String deriving (Eq, Show)
+data StorageOperation = CreateTemporaryScope | RemoveTemporaryScope | ReadFile | WriteFile
   deriving (Eq, Show)
