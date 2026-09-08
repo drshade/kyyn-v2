@@ -162,6 +162,9 @@ gitMock captured = interpret $ \_ -> \case
   Git.ReadFileAt {} -> error "RootOpening must read the selected complete tree"
   Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
   Git.ReadDirectoryAt {} -> error "RootOpening must read the selected complete tree"
+  Git.CheckedOutBranch {} -> error "RootOpening must not inspect the checkout"
+  Git.CheckoutChanges {} -> error "RootOpening must not inspect the checkout"
+  Git.SynchronizeCheckout {} -> error "RootOpening must not synchronize the checkout"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

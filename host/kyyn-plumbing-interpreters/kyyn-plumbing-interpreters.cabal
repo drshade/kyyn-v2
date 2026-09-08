@@ -31,6 +31,7 @@ test-suite file-trees
 test-suite git-snapshots
   type: exitcode-stdio-1.0
   main-is: GitTests.hs
+  other-modules: CheckoutTests
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror -threaded

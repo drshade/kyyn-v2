@@ -1,5 +1,8 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Plumbing.Capability.Git (Git(..), resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents, createCommit, compareAndSwapRef) where
+module Kyyn.Plumbing.Capability.Git
+  ( Git(..), resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents
+  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout
+  ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -17,6 +20,9 @@ data Git :: Effect where
   ReadDirectoryAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] (Maybe [RelativePath]))
   CreateCommit :: Repository -> GitTree -> GitRevision -> CommitMetadata -> Git m GitRevision
   CompareAndSwapRef :: Repository -> LocalBranch -> GitRevision -> GitRevision -> Git m RefUpdate
+  CheckedOutBranch :: Repository -> Git m (Maybe LocalBranch)
+  CheckoutChanges :: Repository -> GitRevision -> [RelativePath] -> Git m [RelativePath]
+  SynchronizeCheckout :: Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Git m (Either [Diagnostic] ())
 
 type instance DispatchOf Git = Dynamic
 
@@ -40,3 +46,12 @@ createCommit repo tree parent = send . CreateCommit repo tree parent
 
 compareAndSwapRef :: Git :> es => Repository -> LocalBranch -> GitRevision -> GitRevision -> Eff es RefUpdate
 compareAndSwapRef repo branch expected = send . CompareAndSwapRef repo branch expected
+
+checkedOutBranch :: Git :> es => Repository -> Eff es (Maybe LocalBranch)
+checkedOutBranch = send . CheckedOutBranch
+
+checkoutChanges :: Git :> es => Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
+checkoutChanges repo revision = send . CheckoutChanges repo revision
+
+synchronizeCheckout :: Git :> es => Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Eff es (Either [Diagnostic] ())
+synchronizeCheckout repo branch revision = send . SynchronizeCheckout repo branch revision

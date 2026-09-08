@@ -5,11 +5,12 @@ import Control.Monad (forM, foldM, unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
-import Data.List (groupBy, sortOn, isPrefixOf, tails)
+import Data.List (groupBy, sortOn, isPrefixOf, tails, nub, sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.Error.Static (catchError)
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git
 import Kyyn.Domain.Path
@@ -22,6 +23,23 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es) => FilePath -> Eff (Git : es) a -> Eff es a
 runGit executable = interpret $ \_ -> \case
   ResolveRevision repo name -> resolve repo name
+  CheckedOutBranch repo -> currentBranch repo
+  CheckoutChanges repo revision paths -> changedPaths repo revision paths
+  SynchronizeCheckout repo branch revision paths ->
+    catchError @OperationalFailure (runExceptT $ do
+      actualBranch <- liftChecked (currentBranch repo)
+      unless (actualBranch == Just branch)
+        (rejected "git.checkout-mismatch" "The selected branch is not checked out; checkout was not synchronized")
+      actualHead <- ExceptT (resolve repo "HEAD")
+      unless (actualHead == revision)
+        (rejected "git.checkout-head-changed" "HEAD no longer points to the selected revision; checkout was not synchronized")
+      unless (null paths) $ do
+        _ <- successful repo (["restore", "--source=" ++ revisionName revision,
+          "--staged", "--worktree", "--no-overlay", "--"] ++ map relativeName paths)
+        remaining <- liftChecked (changedPaths repo revision paths)
+        unless (null remaining) (rejected "git.checkout-incomplete"
+          ("Checkout still differs at: " ++ show (map relativeName remaining))))
+      (\_ failure -> pure (Left [errorDiagnostic "git.checkout-incomplete" (show failure)]))
   ReadDirectoryAt repo revision location -> runExceptT $ do
     _ <- ExceptT (resolve repo (revisionName revision))
     selected <- case location of
@@ -78,7 +96,8 @@ runGit executable = interpret $ \_ -> \case
       ["update-ref", "--no-deref", ref, revisionName desired, revisionName expected]
     if status == 0 then pure RefUpdated else do
       actual <- resolve repo ref >>= either (const (pure Nothing)) (pure . Just)
-      if actual /= Just expected then pure (RefNotUpdated actual)
+      if actual == Just desired then pure RefUpdated
+      else if actual /= Just expected then pure (RefNotUpdated actual)
         else broken ("Conditional ref update failed: " ++ Char8.unpack diagnostics)
   ReadTreeAt repo revision location -> runExceptT $ do
     _ <- ExceptT (resolve repo (revisionName revision))
@@ -107,6 +126,34 @@ runGit executable = interpret $ \_ -> \case
       pure (path,bytes)
     either (rejected "git.invalid-tree") pure (fileTree entries)
   where
+    liftChecked :: Eff es b -> ExceptT [Diagnostic] (Eff es) b
+    liftChecked action = ExceptT (Right <$> action)
+    currentBranch :: Repository -> Eff es (Maybe LocalBranch)
+    currentBranch repo = do
+      (output, Process.ProcessExit status diagnostics) <- command repo ["symbolic-ref", "--quiet", "HEAD"]
+      case status of
+        0 | "refs/heads/" `Bytes.isPrefixOf` output -> do
+          name <- either (broken . show) (pure . Text.unpack)
+            (Text.decodeUtf8' (Bytes.drop 11 (Char8.strip output)))
+          pure (Just (LocalBranch name))
+        1 -> pure Nothing
+        _ -> broken ("Cannot inspect checked-out branch: " ++ Char8.unpack diagnostics)
+    changedPaths :: Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
+    changedPaths _ _ [] = pure []
+    changedPaths repo revision paths = do
+      let selection = "--" : map relativeName paths
+          diffOptions = ["--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z"]
+      staged <- checked repo [] (["diff", "--cached"] ++ diffOptions ++ [revisionName revision] ++ selection) Bytes.empty
+      working <- checked repo [] (["diff"] ++ diffOptions ++ selection) Bytes.empty
+      untracked <- checked repo [] (["ls-files", "--others", "-z"] ++ selection) Bytes.empty
+      sort . nub . concat <$> traverse parsePaths [staged, working, untracked]
+    parsePaths :: Bytes.ByteString -> Eff es [RelativePath]
+    parsePaths output = do
+      unless (Bytes.null output || Bytes.last output == 0) (broken "Unterminated Git path response")
+      traverse (\bytes -> do
+        name <- either (broken . show) (pure . Text.unpack) (Text.decodeUtf8' bytes)
+        either broken pure (relativePath name))
+        (if Bytes.null output then [] else Char8.split '\0' (Bytes.init output))
     utf8 = Text.encodeUtf8 . Text.pack
     oid = Char8.unpack . Char8.strip
     identity prefix (CommitIdentity name email date) =

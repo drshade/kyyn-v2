@@ -272,7 +272,12 @@ matchesCapturedInputs :: WorkspaceSnapshot -> WorkspaceSnapshot -> Bool
 ```
 
 The snapshot retains the parsed manifest and separate before, target, change and
-notes trees with their directory prefixes stripped. Projection rejects files
+notes trees with their directory prefixes stripped. The root-level `result.json`
+is reserved for the host-produced archive record. Projection accepts but excludes
+it from the snapshot and captured-input comparison, without parsing it; its presence
+does not establish acceptance. Re-encoding a WorkspaceSnapshot does not emit it;
+archive export supplies the fixed record separately. `result.json` is a file,
+not another captured subtree. Projection rejects other files
 outside the layout and any `target/facts` tree. Incomplete draft source is
 capturable; projection does not promise that it compiles or matches the selected
 commit. Evolution capture performs that source-selection check separately.
