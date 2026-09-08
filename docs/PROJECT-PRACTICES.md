@@ -68,6 +68,10 @@ does not become another specification of the product's runtime workflows.
   `cabal test queries --test-options=--pure --test-show-details=direct` exercises
   typed query composition, read traces, binding generation and reply decoding
   without invoking MicroHs. It is included in the fast check.
+  `cabal test evolution-core --test-show-details=direct` exercises pure SDK
+  composition, observations and failure behavior. `cabal test evolutions
+  --test-options=--pure --test-show-details=direct` checks binding generation;
+  both are included in the fast check and neither invokes a guest compiler.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
   compilation and codec tests. Run it before declaring an Issue complete, or when
   needed for a particular change or investigation; not for every PR or merge.
@@ -108,6 +112,12 @@ does not become another specification of the product's runtime workflows.
   generated bindings, dependent reads over distinct payload types, typed result
   plus ordered trace, and rejection of a mismatched collection payload. It is
   included in the full check, not a mandatory per-PR command.
+  `KYYN_TEST_ROOT="$PWD" cabal test evolutions --test-show-details=direct` compiles
+  one generated-binding fixture and the SDK with both GHC and MicroHs, compares
+  their results, and checks rejection of wrong binding types and private output
+  constructors. It also compiles the identity scaffold used by creation. This
+  focused SDK/encoding proof is in the full check, not a per-PR requirement; it
+  does not claim host evolution execution or report derivation.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

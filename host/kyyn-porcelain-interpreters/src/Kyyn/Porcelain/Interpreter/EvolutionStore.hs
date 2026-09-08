@@ -15,6 +15,7 @@ import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
+import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..))
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
@@ -28,8 +29,10 @@ runEvolutionStore = interpret $ \_ -> \case
     SourceRoot _ code (RootDefinition _ _ _ _ sources) <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
     empty <- checked (fileTree [])
+    entryPath <- checked (relativePath "Evolution.hs")
+    change <- checked (fileTree [(entryPath,identityEvolutionSource)])
     tree <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
-      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft) sources code empty empty))
+      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft) sources code change empty))
     parentPath <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)
     parent <- checked (directoryScope (scopedPath scope parentPath))
     allocated <- ExceptT (Right <$> FileSystem.createUniqueDirectory parent)

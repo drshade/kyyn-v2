@@ -43,11 +43,11 @@ data Rationale = Rationale
 
 data Evolution before after  -- pure transformation with annotated boundaries
 
-class RecordableRoot a  -- generated contract/encoding support; not authored plumbing
+data RootBinding a  -- generated contract identity and encoding support
 
 evolve
-  :: (RecordableRoot before, RecordableRoot after)
-  => Rationale -> (before -> Either EvolutionFailure after)
+  :: RootBinding before -> RootBinding after
+  -> Rationale -> (before -> Either EvolutionFailure after)
   -> Evolution before after
 
 (>=>) :: Evolution a b -> Evolution b c -> Evolution a c
@@ -74,6 +74,25 @@ obtain a successful output through `evaluateEvolution`, not by supplying a root
 with a hand-built or empty observation list. This guides correct construction,
 not a sandbox or substitute for checking the returned data at the host boundary.
 
+`RootBinding` is also abstract. Generated `beforeRoot`, `afterRoot` and explicit
+intermediate bindings pair a checked whole contract identity with its typed
+encoder; authors supply those values, not codecs. A type-indexed class would
+conflate distinct metadata contracts on the same Haskell type, so bindings name
+contracts explicitly. For example, a metadata-only edge can use two bindings of
+type `RootBinding Schema.Root` with different identities:
+
+```haskell
+changeMetadata = evolve beforeRoot afterRoot (Rationale "Revise display metadata" []) Right
+```
+
+The guest `kyyn-sdk` package owns the pure composition implementation and private
+observation constructors. Its public `Kyyn.Evolution` module exposes no JSON types.
+The private encoding values use the existing JSON library; the guest runtime can
+consume them without the SDK depending on runtime transport. Pure binding generation
+lives with the host plumbing protocol helpers, outside compiler-specific code.
+An SDK output is not yet a host EvolutionReport: execution must check its chain
+and derive changes as described below.
+
 The intermediate type must line up, including across a schema change. A failed
 step stops composition; `Diagnostic` is the shared value described in
 [validation](0011-validation.md). The `evaluateEvolution` function is pure guest
@@ -83,11 +102,11 @@ capability appears in that pure helper. The enclosing entry point is different:
 ```haskell
 -- Guest entry; generated MicrosoftCalls is illustrated in ADR 0009.
 fromEmail
-  :: (EvidenceRef, EmailId) -> Before.Root
+  :: (EvidenceSnapshotRef, EvidenceRef, EmailId) -> Before.Root
   -> Program MicrosoftCalls (Either EvolutionFailure (EvolutionOutput After.Root))
 
-fromEmail (evidence, emailId) before = do
-  email <- Microsoft.readEmail evidence emailId
+fromEmail (snapshot, evidence, emailId) before = do
+  email <- Microsoft.readEmail snapshot emailId
   pure (evaluateEvolution (changeFromEmail email) before)
 
 changeFromEmail :: Email -> Evolution Before.Root After.Root
@@ -449,10 +468,18 @@ operational Failure, not a successful workspace; an unfinished directory can rem
 for inspection/removal. Creation does not update Git and does not promise atomic
 multi-file persistence under crashes.
 
-The initial scaffold leaves `change/` empty; no undefined function or invented SDK
-import is generated. Identity-entry scaffolding follows when the evolution SDK
-supplies its real entry convention. Meanwhile capture can inspect the draft, and
-execution requires the author's conventional `change/Evolution.hs` entry.
+Creation writes a real identity entry at `change/Evolution.hs`, with module name
+`Evolution` and binding `evolution`. Its generic signature is valid for the copied
+same-schema target and specializes to the selected root at build preparation:
+
+```haskell
+evolution :: root -> Program calls (Either EvolutionFailure (EvolutionOutput root))
+evolution = pure . evaluateEvolution identityEvolution
+```
+
+Authors refine that entry with their concrete Before/After types and declared
+capabilities when implementing a change. A pure entry stays polymorphic in its
+request algebra; it does not gain a host capability through the identity scaffold.
 `EvolutionWorkspace` carries only its key and owning KB; its location is derived.
 
 The host then evaluates against an explicit structurally readable source snapshot
@@ -730,3 +757,12 @@ only through the normal checks and local-head comparison.
 Test rebasing both with and without a schema change: the new input comes from
 the selected commit and the diff compares the result with that base, not the old
 root. Acceptance requires `Before.revision == local head` under ADR 0012.
+
+The implemented SDK and generated-binding proof runs the same source under GHC
+and pinned MicroHs. It covers ordered per-step observations, associative composition,
+identity, failed-step short-circuiting with no partial success, cancelling changes,
+schema changes and a same-type metadata-only transition. Both compilers reject
+wrong typed bindings and public construction of EvolutionOutput. The actual
+identity scaffold is compiled in this proof too. This establishes SDK composition
+and encoding, not host execution, observation-chain checking, report derivation
+or Candidate persistence; those remain the next integration boundary.

@@ -115,14 +115,14 @@ data (left :+: right) a = InLeft (left a) | InRight (right a)
 
 -- Illustrative generated proxy for a registered Microsoft method.
 data MicrosoftCalls a where
-  ReadEmail :: EvidenceRef -> EmailId -> MicrosoftCalls Email
+  ReadEmail :: EvidenceSnapshotRef -> EmailId -> MicrosoftCalls Email
 
 type EvolutionHost root = SnapshotRead root :+: MicrosoftCalls
 ```
 
 This particular `EvolutionHost` is an illustrative evolution entry's
 context, not an all-purpose permanent role. [Storage](0006-storage.md) owns the
-guest `Fact` envelope. `EvidenceRef` selects already fetched evidence; the plugin reads it
+guest `Fact` envelope. `EvidenceSnapshotRef` selects already fetched evidence; the plugin reads it
 through its own host capabilities. This method need not contact the provider.
 Another registered method can explicitly acquire fresh evidence. The generated
 proxy carries a method identity and checked types, not arbitrary code over JSON.

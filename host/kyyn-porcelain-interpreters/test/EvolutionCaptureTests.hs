@@ -19,6 +19,7 @@ import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), Evol
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -73,8 +74,9 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
+    identityEntry <- tree [("Evolution.hs",identityEvolutionSource)]
     unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
-      createdBefore == sourceTree && createdTarget == sourceCode && createdChange == empty && createdNotes == empty)
+      createdBefore == sourceTree && createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
       (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
     another <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
     unless (another /= created) (fail "Repeated creation reused a workspace")

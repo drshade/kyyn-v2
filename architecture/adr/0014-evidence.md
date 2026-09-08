@@ -63,7 +63,7 @@ If a KB needs to prove every source item was considered, it can model that rule
 with ordinary facts, queries and validation. It is not mandatory connector machinery.
 
 An evolution entry may invoke a plugin to read an existing evidence snapshot or
-explicitly acquire new evidence. Generated typed proxies carry an `EvidenceRef`
+explicitly acquire new evidence. Generated typed proxies carry an `EvidenceSnapshotRef`
 identifying the selected host snapshot; subsequent pages must not silently switch
 to refreshed contents. This is snapshot read semantics, not a mandatory separate
 capture/proposal-authoring phase.
@@ -83,6 +83,25 @@ an explanation and a list of `EvidenceRef`s, paired with the actual changes
 derived at that boundary. Reading evidence does not automatically cite it;
 fetching evidence does not create a review obligation. The kernel does not infer
 support from call traces or promise to prove that a cited item caused a change.
+
+`EvidenceRef` is the shared durable citation value, not the transient acquisition
+snapshot handle:
+
+```haskell
+data EvidenceRef = EvidenceRef
+  { producer   :: String
+  , connector  :: String
+  , source     :: String
+  , references :: [String]
+  }
+```
+
+Producer and connector identify the integration and selected instance; source is
+the plugin-supplied scoped item identity. References carry useful source links or
+paths. These are authored descriptive values, not proof that the source is still
+available. `EvidenceSnapshotRef` instead selects cached data for plugin reads;
+its representation and acquisition operations remain unimplemented. A citation
+must not silently become a cache lookup handle.
 
 An archived citation must retain enough source identity to describe what was
 cited independently of a transient cache lookup: producer/connector identity,

@@ -1,0 +1,23 @@
+cabal-version: 3.0
+name: kyyn-sdk
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved.
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules: Kyyn.Evolution
+  other-modules: Kyyn.Evolution.Internal
+  default-language: Haskell2010
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11
+
+test-suite evolution-core
+  type: exitcode-stdio-1.0
+  main-is: EvolutionCore.hs
+  hs-source-dirs: test src
+  other-modules: Kyyn.Evolution Kyyn.Evolution.Internal
+  default-language: Haskell2010
+  ghc-options: -Wall -Werror -main-is EvolutionCore.main
+  build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11
