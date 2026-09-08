@@ -42,6 +42,15 @@ test('domain cannot depend on effects or higher layers', () => {
   }
 });
 
+test('only validation can import the private Validated constructor', () => {
+  const privateImport = 'import Kyyn.Porcelain.Validation.Types';
+  assert.deepEqual(checkImports('kyyn-porcelain',
+    'module Kyyn.Porcelain.Capability.Validation where\n' + privateImport), []);
+  for (const pkg of ['kyyn-domain', 'kyyn-porcelain', 'kyyn-porcelain-interpreters']) {
+    assert.deepEqual(checkImports(pkg, 'module Other where\n' + privateImport), ['Kyyn.Porcelain.Validation.Types']);
+  }
+});
+
 test('indented imports are checked and unrecognized syntax fails closed', () => {
   assert.deepEqual(checkImports('kyyn-domain', '  import System.IO'), ['System.IO']);
   for (const source of ['import {-# SOURCE #-} System.IO', 'import "base" System.IO', 'import\n  System.IO']) {

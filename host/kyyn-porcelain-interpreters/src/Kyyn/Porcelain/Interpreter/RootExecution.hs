@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, forM_, void)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode, object, (.=))
 import qualified Data.ByteString as Strict
@@ -31,11 +31,23 @@ runRootExecution
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
+  CheckRootCode (Root contract _ code) -> runExceptT $ do
+    RootDefinition _ _ validator declarations authored <- ExceptT (readRootDefinition code)
+    bindings <- checked "query.bindings" (queryBindings contract)
+    validation <- checked "root.validation-source"
+      (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))
+    _ <- ExceptT (compileGuest validation)
+    forM_ declarations $ \declaration@(QueryDefinition _ _ selected _ _ _ _) -> do
+      QueryDescriptor _ _ input result <- inspectQuery (bindings : files authored ++ files sdk) declaration
+      sources <- checked "query.source"
+        (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
+      void (ExceptT (compileGuest sources))
   ValidateRoot root@(Root contract _ code) -> runExceptT $ do
     RootDefinition _ _ selected _ authored <- ExceptT (readRootDefinition code)
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
+    bindings <- checked "query.bindings" (queryBindings contract)
     sources <- checked "root.validation-source"
-      (validationSources (rootType (rootSchema contract)) selected (files authored ++ files sdk))
+      (validationSources (rootType (rootSchema contract)) selected (bindings : files authored ++ files sdk))
     entry <- ExceptT (compileGuest sources)
     output <- ExceptT (Right <$> withCompiledEntry entry (exchange selected (Bytes.toStrict (encode value))))
     case decodeReport output of

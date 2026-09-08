@@ -1,7 +1,7 @@
 ---
 id: 0004
 title: 'Distinguish the KB, its root and its evolutions'
-status: proposed
+status: accepted
 date: 2026-09-07
 ---
 # Distinguish the KB, its root and its evolutions
@@ -129,6 +129,12 @@ an arbitrary edited directory never earns it automatically.
 Use ordinary identity newtypes without `unThing` selectors. Prefer `coerce`
 where representation conversion is intended; keep constructors private where
 validation identity matters. Do not rely on wrapper names alone as enforcement.
+
+The implemented `checkRoot` in ADR 0011 is the constructor-owning path for
+Validated Root. `validatedValue :: Validated a -> a` exposes the checked payload
+without granting a constructor or mapping operation. Saved reports do not bypass
+checking. Candidate/evolution and accepted-load composition remain unimplemented;
+no placeholder wrappers are required to use this root checker.
 
 ## Alternatives and verification
 

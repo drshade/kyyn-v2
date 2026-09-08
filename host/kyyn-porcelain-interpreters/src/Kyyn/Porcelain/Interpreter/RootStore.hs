@@ -17,10 +17,11 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiagnostic)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Root
-import Kyyn.Domain.Query (QueryDefinition(..))
+import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..))
+import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
@@ -54,6 +55,8 @@ runRootStore = interpret $ \_ -> \case
     pure (CheckedValue (contractId contract) value)
   MaterializeRoot contract code checked -> runExceptT (materialize contract code checked)
   LoadRootValueForChecking root -> runExceptT (loadValue root)
+  ReadExamples (Root _ _ code) descriptors -> runExceptT (loadExamples code descriptors)
+  EncodeExample example -> runExceptT (saveExample example)
 
 type Result es = ExceptT [Diagnostic] (Eff es)
 
@@ -166,3 +169,64 @@ loadValue (Root selected snapshot _) = do
   ensure (sort expected == sort [relativeName path | (path,_) <- files snapshot]) "Unlisted fact files in snapshot"
   let values = foldr (\(name,value,_) -> Keys.insert (Key.fromString name) value) residual loaded
   pure (CheckedValue (contractId contract) (Object values))
+
+exampleShape :: Shape
+exampleShape = Record ([(name, Scalar TextScalar) | name <-
+  ["name", "query", "inputContract", "resultContract", "explanation"]] ++
+  [("requirement", Union [("Required",Nothing),("Illustrative",Nothing)])])
+
+exampleDirectory :: String -> String
+exampleDirectory name = "examples/" ++ encoded (Text.pack name) ++ "/"
+
+saveExample :: Dhall.DhallHandling :> es => Example -> Result es FileTree
+saveExample (Example name (QueryDescriptor queryName _ input result) (CheckedValue argId arguments)
+    (CheckedValue resultId expected) requirement explanation) = do
+  ensure (not (null name)) "Example name must not be empty"
+  ensure (argId == contractId input && resultId == contractId result) "Example values belong to different query contracts"
+  let prefix = exampleDirectory name
+      metadata = object ["name" .= name, "query" .= queryName,
+        "inputContract" .= contractFingerprint argId, "resultContract" .= contractFingerprint resultId,
+        "explanation" .= explanation, "requirement" .= object ["tag" .= show requirement]]
+  manifest <- encodeFile (prefix ++ "example.dhall") exampleShape metadata
+  args <- encodeFile (prefix ++ "arguments.dhall") (contractShape input) arguments
+  expectedFile <- encodeFile (prefix ++ "expected.dhall") (contractShape result) expected
+  liftChecked (fileTree [manifest,args,expectedFile])
+
+loadExamples :: Dhall.DhallHandling :> es => FileTree -> [QueryDescriptor] -> Result es [Example]
+loadExamples code descriptors = do
+  let paths = [relativeName path | (path,_) <- files code,
+        relativeName path == "examples" || "examples/" `isPrefixOf` relativeName path]
+      directories = nub [takeWhile (/= '/') suffix | path <- paths, Just suffix <- [stripPrefix "examples/" path]]
+      expectedPaths = ["examples/" ++ directory ++ "/" ++ file | directory <- directories,
+        file <- ["example.dhall","arguments.dhall","expected.dhall"]]
+  ensure (sort paths == sort expectedPaths) "Each example must contain exactly example.dhall, arguments.dhall and expected.dhall"
+  forM directories $ \directory -> do
+    let prefix = "examples/" ++ directory ++ "/"
+    values <- decodeFile code (prefix ++ "example.dhall") exampleShape >>= record
+    name <- Text.unpack <$> (field "name" values >>= text)
+    let withLocation action = ExceptT $ do
+          outcome <- runExceptT action
+          pure (either (Left . map (\(Diagnostic level diagnosticCode message _) ->
+            Diagnostic level diagnosticCode message (Just (ExampleLocation name)))) Right outcome)
+    withLocation $ do
+      ensure (not (null name) && prefix == exampleDirectory name) "Example name does not match its directory"
+      queryName <- Text.unpack <$> (field "query" values >>= text)
+      descriptor@(QueryDescriptor _ _ input result) <- case
+        [d | d@(QueryDescriptor n _ _ _) <- descriptors, n == queryName] of
+          [d] -> pure d
+          _ -> problem ("Unknown query " ++ queryName ++ "; update the example")
+      inputId <- field "inputContract" values >>= text
+      resultId <- field "resultContract" values >>= text
+      ensure (inputId == Text.pack (contractFingerprint (contractId input)) &&
+        resultId == Text.pack (contractFingerprint (contractId result)))
+        (queryName ++ ": contracts changed; rebuild the example against the current query")
+      requirementTag <- field "requirement" values >>= record >>= field "tag" >>= text
+      requirement <- case requirementTag of
+        "Required" -> pure Required
+        "Illustrative" -> pure Illustrative
+        _ -> problem "Unknown example requirement"
+      explanation <- Text.unpack <$> (field "explanation" values >>= text)
+      arguments <- decodeFile code (prefix ++ "arguments.dhall") (contractShape input)
+      expected <- decodeFile code (prefix ++ "expected.dhall") (contractShape result)
+      pure (Example name descriptor (CheckedValue (contractId input) arguments)
+        (CheckedValue (contractId result) expected) requirement explanation)

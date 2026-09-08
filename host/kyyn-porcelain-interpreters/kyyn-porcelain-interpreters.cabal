@@ -19,7 +19,7 @@ library
 test-suite roots
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: ExecutionTests QueryExecutionTests
+  other-modules: ExecutionTests QueryExecutionTests ValidationTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: OverloadedStrings

@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Porcelain.Capability.RootExecution (RootExecution(..), validateRoot, discoverQueries, queryRoot) where
+module Kyyn.Porcelain.Capability.RootExecution (RootExecution(..), checkRootCode, validateRoot, discoverQueries, queryRoot) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -8,11 +8,15 @@ import Kyyn.Domain.Root (Root, CheckedValue)
 import Kyyn.Domain.Query (QueryDescriptor, QueryResult)
 
 data RootExecution :: Effect where
+  CheckRootCode :: Root -> RootExecution m (Either [Diagnostic] ())
   ValidateRoot :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
   DiscoverQueries :: Root -> RootExecution m (Either [Diagnostic] [QueryDescriptor])
   ExecuteQuery :: Root -> QueryDescriptor -> CheckedValue -> RootExecution m (Either [Diagnostic] QueryResult)
 
 type instance DispatchOf RootExecution = Dynamic
+
+checkRootCode :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] ())
+checkRootCode = send . CheckRootCode
 
 validateRoot :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] ValidationReport)
 validateRoot = send . ValidateRoot

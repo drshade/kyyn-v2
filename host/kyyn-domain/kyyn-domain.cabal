@@ -8,7 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Domain.DataType Kyyn.Domain.Failure Kyyn.Domain.Path Kyyn.Domain.Diagnostic
-    Kyyn.Domain.Contract Kyyn.Domain.Root Kyyn.Domain.Value Kyyn.Domain.Query
+    Kyyn.Domain.Contract Kyyn.Domain.Root Kyyn.Domain.Value Kyyn.Domain.Query Kyyn.Domain.Example
     Kyyn.Domain.FileTree Kyyn.Domain.Git
   default-language: GHC2021
   default-extensions: NoFieldSelectors

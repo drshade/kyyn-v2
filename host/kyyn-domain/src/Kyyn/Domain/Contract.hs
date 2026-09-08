@@ -1,6 +1,6 @@
 module Kyyn.Domain.Contract
   ( CheckedContract, ContractId, CollectionContract(..), checkContract
-  , rootType, metadataOf, contractShape, contractId, collectionContracts
+  , rootType, metadataOf, contractShape, contractId, contractFingerprint, collectionContracts
   , RootContract, checkRootLayout, rootSchema ) where
 
 import Control.Monad (unless, forM_)
@@ -10,6 +10,7 @@ import Data.Aeson (Value, toJSON, encode)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub)
+import Numeric (showHex)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Types.SchemaMetadata
@@ -36,6 +37,11 @@ collectionContracts :: CheckedContract -> [CollectionContract]
 collectionContracts (CheckedContract _ _ _ cs _) = cs
 contractId :: CheckedContract -> ContractId
 contractId (CheckedContract _ _ _ _ i) = i
+
+contractFingerprint :: ContractId -> String
+contractFingerprint (ContractId bytes) = concatMap hex (Bytes.unpack bytes)
+  where
+    hex byte = let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits
 
 checkContract :: DataType -> SchemaMetadata -> Either [Diagnostic] CheckedContract
 checkContract root meta = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
