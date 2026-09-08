@@ -2,7 +2,9 @@
 module Main (main) where
 
 import Control.Monad (unless, forM_)
-import Data.Aeson (Value, eitherDecodeStrict')
+import Data.Aeson (Value(..), eitherDecodeStrict', object, (.=))
+import Data.Aeson.Key (Key)
+import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Text.Encoding as Text
 import Data.Text (Text)
 import Effectful (runPureEff)
@@ -31,7 +33,47 @@ main = do
   collectionValue <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue collectionContract collectionSource)))
   expectedCollection <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 collectionJson) :: Either String Value)
   unless (wireValue collectionValue == expectedCollection) (fail (show (wireValue collectionValue)))
-  putStrLn "Dhall projection, typed decoding, wire conversion and pure interpreter passed."
+  forM_ [expected, expectedEmpty, set "title" (String "quote: \" slash: \\ newline:\n${notAnImport} 🌍") expected] $
+    roundTrip contract
+  roundTrip collectionContract expectedCollection
+  roundTrip collectionContract (object ["items" .= ([] :: [Value])])
+  forM_ badWire $ \value -> case runPureEff (runDhallHandling (encodeValue contract value)) of
+    Left _ -> pure ()
+    Right _ -> fail ("Encoded invalid wire value: " ++ show value)
+  forM_ ["+1", "01", "-0", "1.0", " 1", "1 ", "1e3", "", "--1"] $ \number ->
+    rejectEncoding contract (set "count" (String number) expected)
+  forM_ [Number 42, Null, String "yes"] $ \value ->
+    rejectEncoding contract (set "active" value expected)
+  forM_ [object ["tag" .= ("Open" :: Text), "value" .= True]
+        ,object ["tag" .= ("Done" :: Text)]
+        ,object ["tag" .= ("Unknown" :: Text)]
+        ,object ["tag" .= ("Open" :: Text), "extra" .= True]] $ \value ->
+    rejectEncoding contract (set "status" value expected)
+  forM_ [Null, object ["tag" .= ("None" :: Text), "value" .= True]
+        ,object ["tag" .= ("Some" :: Text)]] $ \value ->
+    rejectEncoding contract (set "note" value expected)
+  putStrLn "Dhall typed decoding, checked encoding and semantic round trips passed."
+
+roundTrip :: CheckedContract -> Value -> IO ()
+roundTrip contract value = do
+  rendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue contract value)))
+  decoded <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue contract rendered)))
+  unless (wireValue decoded == value && valueContract decoded == contractId contract)
+    (fail ("Round trip changed value: " ++ show rendered))
+  rerendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue contract (wireValue decoded))))
+  unless (rendered == rerendered) (fail "Unstable Dhall rendering")
+
+rejectEncoding :: CheckedContract -> Value -> IO ()
+rejectEncoding contract value = case runPureEff (runDhallHandling (encodeValue contract value)) of
+  Left _ -> pure ()
+  Right _ -> fail ("Encoded invalid wire value: " ++ show value)
+
+set :: Key -> Value -> Value -> Value
+set key value (Object values) = Object (Keys.insert key value values)
+set _ _ value = value
+
+badWire :: [Value]
+badWire = [Null, Number 1, String "not a root", object [], object ["extra" .= True]]
 
 root :: DataType
 root = Algebraic "Example.Root" [] [Constructor "Example.Root"

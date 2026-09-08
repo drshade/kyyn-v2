@@ -2,19 +2,26 @@
 module Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling) where
 
 import Data.Bifunctor (first)
-import Data.Aeson (Value, object, (.=), toJSON)
+import Control.Monad (unless)
+import Data.Aeson (Value(..), object, (.=), toJSON)
 import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as Keys
 import Data.Foldable (toList)
+import Data.List (sort)
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Void (Void)
 import qualified Dhall.Core as D
 import qualified Dhall.Map as Map
 import qualified Dhall.Parser as Parser
+import qualified Dhall.Pretty as Pretty
 import Dhall.Src (Src)
 import qualified Dhall.TypeCheck as TypeCheck
 import Effectful (Eff)
 import Effectful.Dispatch.Dynamic (interpret)
+import Prettyprinter (layoutPretty, defaultLayoutOptions)
+import Prettyprinter.Render.Text (renderStrict)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Plumbing.Capability.SchemaInspection.Contract
@@ -25,6 +32,66 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..), CheckedDhallVa
 runDhallHandling :: Eff (DhallHandling : es) a -> Eff es a
 runDhallHandling = interpret $ \_ -> \case
   DecodeValue contract contents -> pure (decodeValueSource contract contents)
+  EncodeValue contract value -> pure (encodeValueSource contract value)
+
+encodeValueSource :: CheckedContract -> Value -> Either [Diagnostic] Text
+encodeValueSource contract value = do
+  expression <- first (pure . Diagnostic "dhall.wire-value") (fromWire (contractShape contract) value)
+  _ <- first (pure . Diagnostic "dhall.internal-encoding" . show)
+    (TypeCheck.typeOf (D.Annot expression (projectDhallType contract)))
+  pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr expression)) <> "\n")
+
+fromWire :: Shape -> Value -> Either String (D.Expr Src Void)
+fromWire (Scalar TextScalar) (String text) = Right (D.TextLit (D.Chunks [] text))
+fromWire (Reference _) value = fromWire (Scalar TextScalar) value
+fromWire (Scalar IntegerScalar) (String text) = case reads (Text.unpack text) of
+  [(n, "")] | Text.pack (show (n :: Integer)) == text -> Right (D.IntegerLit n)
+  _ -> Left "Expected canonical integer string"
+fromWire (Scalar BoolScalar) (Bool b) = Right (D.BoolLit b)
+fromWire (List s) (Array values) = do
+  items <- traverse (fromWire s) (toList values)
+  pure (D.ListLit (if null items then Just (D.App D.List (project s)) else Nothing) (Seq.fromList items))
+fromWire (Record fields) value = do
+  values <- exactFields (map (Text.pack . fst) fields) value
+  D.RecordLit . Map.fromList <$> traverse (field values) fields
+  where
+    field values (name,s) = do
+      item <- requireField (Text.pack name) values >>= fromWire s
+      pure (Text.pack name, D.makeRecordField item)
+fromWire (Optional s) value = do
+  (name,payload) <- variant value
+  case (name,payload) of
+    ("None", Nothing) -> Right (D.App D.None (project s))
+    ("Some", Just item) -> D.Some <$> fromWire s item
+    _ -> Left "Expected None or Some with one value"
+fromWire shape@(Union arms) value = do
+  (name,payload) <- variant value
+  let selected = D.Field (project shape) (D.makeFieldSelection name)
+  case (lookup (Text.unpack name) arms, payload) of
+    (Just Nothing, Nothing) -> Right selected
+    (Just (Just s), Just item) -> D.App selected <$> fromWire s item
+    _ -> Left "Unknown union alternative or incorrect payload"
+fromWire _ _ = Left "Wire value does not match the expected shape"
+
+exactFields :: [Text] -> Value -> Either String (Keys.KeyMap Value)
+exactFields expected (Object values) = do
+  unless (sort expected == sort (map Key.toText (Keys.keys values)))
+    (Left ("Expected fields: " ++ show expected))
+  pure values
+exactFields _ _ = Left "Expected object"
+
+requireField :: Text -> Keys.KeyMap Value -> Either String Value
+requireField name = maybe (Left ("Missing field: " ++ Text.unpack name)) Right . Keys.lookup (Key.fromText name)
+
+variant :: Value -> Either String (Text, Maybe Value)
+variant value@(Object values) = do
+  let payload = Keys.lookup "value" values
+  _ <- exactFields (case payload of Nothing -> ["tag"]; Just _ -> ["tag", "value"]) value
+  name <- requireField "tag" values
+  case name of
+    String text -> Right (text,payload)
+    _ -> Left "Expected string tag"
+variant _ = Left "Expected tagged object"
 
 projectDhallType :: CheckedContract -> D.Expr Src Void
 projectDhallType = project . contractShape
