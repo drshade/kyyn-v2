@@ -115,7 +115,8 @@ before the first slice. Avoid combining unrelated methods solely to shorten rows
 | Capability | Owns | Does not own |
 | --- | --- | --- |
 | RootStore | Snapshot loading/materialization, plugin-scoped named connector instances/configs, identified fact reads, stable pages | Local secrets, business validation, accepted-ref update |
-| EvolutionStore | Workspace creation/list/removal, drafts, captured code/config/inputs, candidates, review notes, archived step reports and record-history reads | Local secrets, provider effects or accepted-root update |
+| EvolutionAuthoring | Create drafts and capture them against an inspected Before source root | Evolution execution, candidate validation, accepted-ref update |
+| EvolutionStore | Workspace list/removal, snapshots and lifecycle, candidates, review notes, archived step reports and record-history reads | Source inspection, local secrets, provider effects or accepted-root update |
 | RootExecution | Validate selected roots/configs, execute snapshot queries/examples, prepare typed output inputs through renderers | Live acquisition, effectful evolution entries, sink invocation, publication |
 | EvolutionExecution | Compile/evaluate evolution entries, dispatch declared snapshot/plugin calls, derive step reports from annotated before/after values | Accepted-ref publication, inferred evidence provenance, implicit delivery or nested proposals |
 | RootPublication | Commit a checked evolution and conditionally advance from its Before revision | Conflict resolution, remote coordination, delivery |

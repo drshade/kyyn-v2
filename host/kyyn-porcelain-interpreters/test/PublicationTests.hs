@@ -38,6 +38,7 @@ import Kyyn.Porcelain.Capability.Evolution (applyEvolution, acceptStoredEvolutio
 import Kyyn.Porcelain.Capability.EvolutionExecution
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
 import Kyyn.Porcelain.Capability.EvolutionStore
+import Kyyn.Porcelain.Capability.EvolutionAuthoring
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootOpening
 import Kyyn.Porcelain.Capability.RootPublication
@@ -45,6 +46,7 @@ import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Validation (checkCandidate)
 import Kyyn.Porcelain.Capability.WorkspaceStore
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
+import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
@@ -54,7 +56,7 @@ import System.Directory (createDirectoryIfMissing, findExecutable, removeFile, d
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type Effects = '[RootPublication, RootExecution, EvolutionExecution, EvolutionStore,
+type Effects = '[RootPublication, RootExecution, EvolutionExecution, EvolutionAuthoring, EvolutionStore,
   RootOpening, Schema.SchemaInspection, WorkspaceStore, RootStore, DhallHandling,
   Git.Git, Git.Git, Process.ProcessExecution, FileSystem, Failure, IOE]
 
@@ -97,7 +99,7 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
             . runGit executable . gitHook hook . runDhallHandling . runRootStore
             . runWorkspaceStore . schemaMock contract
             . (if opening then runRootOpening (tree []) else noOpening)
-            . runEvolutionStore . evaluationMock output . validationMock validation
+            . runEvolutionStore . runEvolutionAuthoring . evaluationMock output . validationMock validation
             . runRootPublication $ action
           either (fail . show) pure result
         normal :: Eff Effects a -> IO a

@@ -78,6 +78,9 @@ does not become another specification of the product's runtime workflows.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.
+  Creation/capture use EvolutionAuthoring. Candidate and lifecycle/history tests
+  install EvolutionStore with no RootOpening effect or placeholder handler; their
+  interpreter rows require no compiler or SDK.
   RootExecution tests use a recording compiler handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.

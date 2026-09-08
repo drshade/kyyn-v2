@@ -12,6 +12,7 @@ library
     Kyyn.Porcelain.Interpreter.RootPublication
     Kyyn.Porcelain.Interpreter.WorkspaceStore
     Kyyn.Porcelain.Interpreter.EvolutionStore
+    Kyyn.Porcelain.Interpreter.EvolutionAuthoring
     Kyyn.Porcelain.Interpreter.EvolutionExecution
     Kyyn.Porcelain.Interpreter.RootExecution
   default-language: GHC2021

@@ -29,7 +29,7 @@ import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.RootExecution
-import Kyyn.Porcelain.Capability.RootOpening (RootOpening, openCapturedRoot)
+import Kyyn.Porcelain.Capability.RootOpening (openCapturedRoot)
 import Kyyn.Porcelain.Capability.EvolutionStore (exportAcceptedWorkspace, findAcceptance)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
@@ -93,7 +93,7 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   createDirectoryIfMissing True (directory </> "kb/evolutions/e001/notes")
   Bytes.writeFile (directory </> "kb/evolutions/e001/notes/review.md") "later review note"
   archiveResult <- runEff . runFailure . runFileSystemIO scope . noGitExport
-    . runDhallHandling . runRootStore . runWorkspaceStore . noOpeningExport . runEvolutionStore $
+    . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
       exportAcceptedWorkspace candidate
   archiveReplacement@(archivePrefix,archiveFiles) <- either (fail . show) pure archiveResult >>= either (fail . show) pure
   unless (archivePrefix == Subtree (path "kb/evolutions/e001")) (fail "Archive export returned wrong replacement prefix")
@@ -118,7 +118,7 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   decodedRecord <- either fail pure (decodeEvolutionRecord recordBytes) >>= either (fail . show) pure
   unless (decodedRecord == (workspaceId,contract,contract,report)) (fail "Committed record changed contracts/report")
   accepted <- runEff . runFailure . runProcessExecutionIO . runGit executable . runFileSystemIO scope
-    . runDhallHandling . runRootStore . runWorkspaceStore . noOpeningExport . runEvolutionStore $
+    . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
       findAcceptance kb workspaceId revision
   unless (accepted == Right (Right (Just revision))) (fail "Combined commit did not introduce its Accepted archive")
   opened <- runEff . runFailure . runProcessExecutionIO . runGit executable . schemaMock (rootSchema contract)
@@ -140,9 +140,6 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
 
 noGitExport :: Eff (Git : es) a -> Eff es a
 noGitExport = interpret $ \_ _ -> error "Archive export used Git"
-
-noOpeningExport :: Eff (RootOpening : es) a -> Eff es a
-noOpeningExport = interpret $ \_ _ -> error "Archive export opened or compiled a root"
 
 checkingMock :: Root -> Eff (RootExecution : es) a -> Eff es a
 checkingMock expected = interpret $ \_ -> \case

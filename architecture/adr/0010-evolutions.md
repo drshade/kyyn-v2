@@ -368,11 +368,8 @@ data EvolutionStore :: Effect where
     :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
   ResolveEvolution
     :: KnowledgeBase -> EvolutionId -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
-  CreateEvolution
-    :: KnowledgeBase -> EvolutionName -> GitRevision
-    -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
-  CaptureEvolution
-    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] CapturedEvolution)
+  ReadWorkspace
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] WorkspaceSnapshot)
   SaveCandidate
     :: Candidate Root -> EvolutionStore m ()
   LoadCandidate
@@ -390,14 +387,30 @@ data EvolutionStore :: Effect where
     -> EvolutionStore m (Either [Diagnostic] (TreePath, FileTree))
 
 runEvolutionStore
-  :: (RootStore :> es, RootOpening :> es, WorkspaceStore :> es,
+  :: (RootStore :> es, WorkspaceStore :> es,
       FileSystem :> es, Git :> es, DhallHandling :> es, Failure :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
+
+data EvolutionAuthoring :: Effect where
+  CreateEvolution
+    :: KnowledgeBase -> EvolutionName -> GitRevision
+    -> EvolutionAuthoring m (Either [Diagnostic] EvolutionWorkspace)
+  CaptureEvolution
+    :: EvolutionWorkspace -> EvolutionAuthoring m (Either [Diagnostic] CapturedEvolution)
+
+runEvolutionAuthoring
+  :: (EvolutionStore :> es, RootOpening :> es,
+      WorkspaceStore :> es, FileSystem :> es)
+  => Eff (EvolutionAuthoring : es) a -> Eff es a
 ```
 
 These are selected constructors; review-note persistence is defined in
-[interaction](0023-interaction.md). Git is needed to resolve the specified source
-commit, not to advance it. RootOpening supplies the source commit's derived contract
+[interaction](0023-interaction.md). Creation and capture belong to EvolutionAuthoring
+because they need source inspection; EvolutionStore's metadata, candidate and archive
+operations remain installable without RootOpening, the compiler or SDK.
+`ReadWorkspace` captures and decodes the local workspace without interpreting its
+Haskell; capture delegates this read to the store before checking the Before copy.
+RootOpening supplies the source commit's derived contract
 through `LoadSourceAt` (ADR 0006); RootStore remains Dhall-only. WorkspaceStore
 decodes workspace manifests through DhallHandling; it does not execute proposed
 Haskell. Listing needs no compiler frontend,

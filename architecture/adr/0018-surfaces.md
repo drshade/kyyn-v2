@@ -16,6 +16,11 @@ requests and web events translate into these requests; renderers format returned
 values. No adapter implements acceptance rules or reaches directly into Git,
 provider, runtime or persistence interpreters. Compose only the handlers needed
 by the selected operation, not one global kitchen-sink environment.
+Each command installs exactly the interpreters its effect row requires. When
+operations need different dependencies, separate their capabilities rather than
+install dummy handlers or a lazily initialized global runtime. For example,
+[EvolutionAuthoring](0010-evolutions.md) owns compiler-dependent creation/capture;
+EvolutionStore supports listing and metadata operations without a compiler or SDK.
 
 Transport conversion is a real boundary, not another spelling of the domain
 operation. For example, an MCP adapter may accept JSON while the store never does:
