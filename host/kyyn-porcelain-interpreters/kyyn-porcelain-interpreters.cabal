@@ -10,6 +10,7 @@ library
   exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.RootOpening
     Kyyn.Porcelain.Interpreter.WorkspaceStore
+    Kyyn.Porcelain.Interpreter.EvolutionStore
     Kyyn.Porcelain.Interpreter.RootExecution
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
