@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
     Kyyn.Porcelain.Capability.RootOpening
+    Kyyn.Porcelain.Capability.WorkspaceStore
     Kyyn.Porcelain.Capability.RootExecution
     Kyyn.Porcelain.Capability.Validation
     Kyyn.Porcelain.Validated

@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.RootOpening
+    Kyyn.Porcelain.Interpreter.WorkspaceStore
     Kyyn.Porcelain.Interpreter.RootExecution
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
@@ -19,7 +20,7 @@ library
 test-suite roots
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: ExecutionTests QueryExecutionTests ValidationTests RootExportTests
+  other-modules: ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: OverloadedStrings

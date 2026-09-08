@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, LambdaCase #-}
+{-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Main (main) where
 
 import Control.Monad (unless, forM_)
@@ -12,6 +12,7 @@ import ExecutionTests (executionTests)
 import QueryExecutionTests (queryExecutionTests)
 import ValidationTests (validationTests)
 import RootExportTests (rootExportTests)
+import WorkspaceTests (workspaceTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -28,6 +29,7 @@ import Kyyn.Porcelain.Interpreter.RootOpening
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import qualified Kyyn.Plumbing.Capability.GuestCompilation.Types as Sources
 import qualified Kyyn.Plumbing.Capability.Git as Git
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 
 main :: IO ()
 main = do
@@ -80,6 +82,7 @@ main = do
   orderB <- tree [("a-b","two"),("a/c","one")]
   unless (orderA == orderB) (fail "FileTree depends on producer ordering")
   openingTests contract snapshot
+  workspaceTests
   executionTests contract snapshot
   queryExecutionTests contract snapshot
   validationTests contract snapshot
@@ -91,15 +94,34 @@ openingTests contract factFiles = do
   authored <- tree [("src/Example.hs","authored source"),("kb.dhall",manifest)]
   captured <- right (fileTree (files authored ++ files factFiles))
   sdk <- tree [("Kyyn/Types/Fact.hs","installed SDK")]
-  let execute sdkFiles action = runPureEff (runDhallHandling (schemaMock (rootSchema contract) (gitMock captured
+  let execute :: FileTree -> Eff '[RootOpening, RootStore, Git.Git, Schema.SchemaInspection, DhallHandling] a -> a
+      execute sdkFiles action = runPureEff (runDhallHandling (schemaMock (rootSchema contract) (gitMock captured
         (runRootStore (runRootOpening sdkFiles action)))))
   opened <- right (execute sdk (openCapturedRoot captured))
   unless (opened == Root contract factFiles authored) (fail "Opening changed the selected files")
+  definition <- right (runPureEff (runDhallHandling (runRootStore (readRootDefinition authored))))
+  source <- right (execute sdk (openCapturedSource captured))
+  unless (source == SourceRoot contract authored definition) (fail "Source opening changed schema/code/definition")
+  sourceWithoutFacts <- right (execute sdk (openCapturedSource authored))
+  unless (sourceWithoutFacts == source) (fail "Source opening depends on facts")
+  corrupt <- tree [("facts/root.dhall", "not Dhall"), ("facts/unknown.bin", Bytes.pack [255,0])]
+  withCorruptFacts <- right (fileTree (files authored ++ files corrupt))
+  corruptSource <- right (execute sdk (openCapturedSource withCorruptFacts))
+  unless (corruptSource == source) (fail "Source opening decoded corrupt facts")
+  rejected (execute sdk (openCapturedRoot withCorruptFacts))
   repo <- Repository <$> right (directoryScope "/unused-test-repository")
   revision <- right (gitRevision (replicate 40 'a'))
   prefix <- right (relativePath "root")
   fromGit <- right (execute sdk (loadRootAt repo revision (Subtree prefix)))
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
+  sourceFromGit <- right (execute sdk (loadSourceAt repo revision (Subtree prefix)))
+  unless (sourceFromGit == source) (fail "Source loading differs from captured source opening")
+  otherRevision <- right (gitRevision (replicate 40 'b'))
+  rejected (execute sdk (loadSourceAt repo otherRevision (Subtree prefix)))
+  rejected (execute sdk (loadSourceAt repo revision WholeTree))
+  forM_ ["kb.dhall", "src/Example.hs"] $ \missing -> do
+    incomplete <- right (fileTree (filter ((/= missing) . relativeName . fst) (files authored)))
+    rejected (execute sdk (openCapturedSource incomplete))
   forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
     [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
     [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }" else b) | (p,b) <- files captured],

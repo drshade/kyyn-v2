@@ -216,6 +216,43 @@ proposal, including source/config/example-only changes with no fact history entr
 Its explanation and Before selection are captured; lifecycle state and separate
 review notes are not evaluation inputs. Changing a note does not change a candidate.
 
+The manifest is a hermetic Dhall value with this shape:
+
+```dhall
+{ before : { revision : Text }
+, name : Text
+, explanation : Text
+, state : < Draft | Ready | Accepted >
+}
+```
+
+The revision is a full Git commit object ID, not a branch name or short prefix.
+`WorkspaceStore` decodes and projects an explicit file tree; it does not inspect
+Haskell or resolve the selected revision:
+
+```haskell
+data WorkspaceStore :: Effect where
+  ReadWorkspaceSnapshot
+    :: FileTree -> WorkspaceStore m (Either [Diagnostic] WorkspaceSnapshot)
+
+runWorkspaceStore
+  :: DhallHandling :> es
+  => Eff (WorkspaceStore : es) a -> Eff es a
+
+matchesCapturedInputs :: WorkspaceSnapshot -> WorkspaceSnapshot -> Bool
+```
+
+The snapshot retains the parsed manifest and separate before, target, change and
+notes trees with their directory prefixes stripped. Projection rejects files
+outside the layout and any `target/facts` tree. Incomplete draft source is
+capturable; projection does not promise that it compiles or matches the selected
+commit. Evolution capture performs that source-selection check separately.
+Input equality compares the parsed Before revision, name and explanation, and
+the exact before/target/change paths and bytes. Manifest formatting, lifecycle
+state and notes are excluded. A same-schema code/configuration edit still changes
+the inputs. This pure comparison is not the store's live-workspace read or its
+independent Accepted/Ready check.
+
 Use stable, non-conflicting authored module names for schema definitions that must
 coexist in an evolution build. Two different definitions of a module named `Schema`
 cannot simply be placed on the same import path. Friendly qualified aliases keep
@@ -307,20 +344,21 @@ data TargetSchemaRequest
 data ProposedSchemaModules  -- authored module contents and target export/descriptors
 
 runEvolutionStore
-  :: (RootStore :> es, FileSystem :> es, Git :> es,
-      DhallHandling :> es, Failure :> es)
+  :: (RootStore :> es, RootOpening :> es, WorkspaceStore :> es,
+      FileSystem :> es, Git :> es, DhallHandling :> es, Failure :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
 ```
 
 These are selected constructors; review-note persistence is defined in
 [interaction](0023-interaction.md). Git is needed to resolve the specified source
-commit, not to advance it. RootStore supplies the source commit's derived contract;
-DhallHandling reads the Dhall manifests selected in ADR 0006; it does not execute
-proposed Haskell. Listing needs no compiler frontend,
+commit, not to advance it. RootOpening supplies the source commit's derived contract
+through `LoadSourceAt` (ADR 0006); RootStore remains Dhall-only. WorkspaceStore
+decodes workspace manifests through DhallHandling; it does not execute proposed
+Haskell. Listing needs no compiler frontend,
 and capturing proposed bytes does not compile them. Creation/capture may derive
-the source schema on a cold load through RootStore's SchemaInspection dependency,
+the source schema on a cold load through RootOpening's SchemaInspection dependency,
 including evaluation of its pure schema metadata export under ADR 0005. This does
-not load facts or run root validators/transformations. Operation-specific composition installs
+not decode facts or run root validators/transformations. Operation-specific composition installs
 the semantic handlers needed by the command.
 Installing Git plumbing for a complete store handler does not launch Git on every
 list call; do not use partial handlers that fail on the store's other operations.
