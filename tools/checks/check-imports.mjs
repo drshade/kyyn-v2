@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const allowed = {
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program'],
   'kyyn-porcelain': ['Data.Aeson', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
-    'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution',
+    'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
@@ -28,6 +28,7 @@ const allowed = {
   ],
   'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query'],
   'kyyn-plumbing-interpreters': [
+    'Data.Word', 'Numeric', 'System.IO.Error', 'System.Random',
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.Exception',
     'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure',

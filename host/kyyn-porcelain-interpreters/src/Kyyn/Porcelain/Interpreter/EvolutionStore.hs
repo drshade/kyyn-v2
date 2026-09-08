@@ -1,17 +1,18 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
-import Kyyn.Domain.Path (relativePath, scopedPath, directoryScope)
+import Kyyn.Domain.Path (relativePath, relativeName, scopedPath, directoryScope)
 import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..))
@@ -22,6 +23,20 @@ runEvolutionStore
   :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootOpening.RootOpening :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
 runEvolutionStore = interpret $ \_ -> \case
+  CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
+    rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)
+    SourceRoot _ code (RootDefinition _ _ _ _ sources) <-
+      ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
+    empty <- checked (fileTree [])
+    tree <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
+      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft) sources code empty empty))
+    parentPath <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)
+    parent <- checked (directoryScope (scopedPath scope parentPath))
+    allocated <- ExceptT (Right <$> FileSystem.createUniqueDirectory parent)
+    identity <- checked (evolutionId (relativeName allocated))
+    location <- checked (directoryScope (scopedPath parent allocated))
+    forM_ (files tree) $ \(path,bytes) -> ExceptT (Right <$> FileSystem.writeBytes location path bytes)
+    pure (EvolutionWorkspace kb identity)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
     snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) beforeCopy _ _ _) <- readWorkspace location
     rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)

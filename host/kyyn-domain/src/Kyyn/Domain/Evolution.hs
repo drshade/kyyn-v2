@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evolution
-  ( EvolutionId, evolutionId, evolutionIdName, EvolutionWorkspace(..), Before(..)
+  ( EvolutionId, evolutionId, evolutionIdName, EvolutionName(..), EvolutionWorkspace(..), Before(..)
   , EvolutionContext(..), CapturedEvolution(..)
   ) where
 
@@ -11,6 +11,7 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot)
 
 newtype EvolutionId = EvolutionId String deriving (Eq, Show)
+newtype EvolutionName = EvolutionName String deriving (Eq, Show)
 
 evolutionId :: String -> Either String EvolutionId
 evolutionId value
