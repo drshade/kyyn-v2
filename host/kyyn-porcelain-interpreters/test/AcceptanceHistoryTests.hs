@@ -26,7 +26,6 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.EvolutionStore
-import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Capability.WorkspaceStore
 import Kyyn.Porcelain.Interpreter.EvolutionStore
@@ -36,7 +35,7 @@ import System.Directory (findExecutable, createDirectoryIfMissing, removeFile, d
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type LifecycleEffects = '[EvolutionStore, RootOpening, WorkspaceStore, RootStore, DhallHandling,
+type LifecycleEffects = '[EvolutionStore, WorkspaceStore, RootStore, DhallHandling,
   FileSystem, FileSystem, Git, Process.ProcessExecution, Failure, IOE]
 
 acceptanceHistoryTests :: IO ()
@@ -70,7 +69,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
         encodeWorkspaceSnapshot (WorkspaceSnapshot (WorkspaceManifest before "Example" "Reason" state []) empty empty empty empty)
       commit parent contents message = git (createCommit repo (GitTree [(archivePath,contents)]) parent (metadata message))
       lookupAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable . noFiles
-        . runDhallHandling . runRootStore . runWorkspaceStore . noOpening . runEvolutionStore $
+        . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
           findAcceptance kb identity revision
       expect revision result = do
         actual <- lookupAt revision >>= right >>= right
@@ -137,7 +136,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   let lifecycle :: Eff LifecycleEffects a -> IO (Either OperationalFailure a)
       lifecycle action = runEff . runFailure . runProcessExecutionIO . runGit executable
         . runFileSystemIO scope . shallowFiles Nothing . runDhallHandling . runRootStore
-        . runWorkspaceStore . noOpening . runEvolutionStore $ action
+        . runWorkspaceStore . runEvolutionStore $ action
       runLifecycle :: Eff LifecycleEffects a -> IO a
       runLifecycle action = lifecycle action >>= right
       workspace = EvolutionWorkspace kb identity
@@ -199,7 +198,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   let writeFailure = StorageUnavailable (StorageDiagnostic ReplaceFile livePath "Injected transition failure")
   failedTransition <- runEff . runFailure . runProcessExecutionIO . runGit executable
     . runFileSystemIO scope . shallowFiles (Just writeFailure) . runDhallHandling . runRootStore
-    . runWorkspaceStore . noOpening . runEvolutionStore $ markReady workspace
+    . runWorkspaceStore . runEvolutionStore $ markReady workspace
   afterFailedWrite <- Bytes.readFile livePath
   unless (failedTransition == Left writeFailure && beforeFailedWrite == afterFailedWrite)
     (fail "Failed transition lost its operational failure or changed the manifest")
@@ -245,9 +244,6 @@ shallowFiles failure = interpret $ \_ -> \case
 
 noFiles :: Eff (FileSystem : es) a -> Eff es a
 noFiles = interpret $ \_ _ -> error "Acceptance lookup read the live checkout or candidate storage"
-
-noOpening :: Eff (RootOpening : es) a -> Eff es a
-noOpening = interpret $ \_ _ -> error "Acceptance lookup loaded or compiled a root"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

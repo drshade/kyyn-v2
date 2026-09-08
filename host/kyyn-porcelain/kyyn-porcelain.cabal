@@ -12,6 +12,7 @@ library
     Kyyn.Porcelain.Capability.RootPublication
     Kyyn.Porcelain.Capability.WorkspaceStore
     Kyyn.Porcelain.Capability.EvolutionStore
+    Kyyn.Porcelain.Capability.EvolutionAuthoring
     Kyyn.Porcelain.Capability.EvolutionReport
     Kyyn.Porcelain.Capability.EvolutionExecution
     Kyyn.Porcelain.Capability.Evolution

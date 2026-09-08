@@ -69,17 +69,20 @@ do not make an upstream structured-diagnostic API a prerequisite for the initial
 implementation. Generated-source diagnostics remain honestly identified if an
 authored-source mapping is unavailable.
 
-In particular, after a commit or possible external write, catch cancellation or
-native failure at that operation's boundary and report its meaningful outcome.
-Do not raise `OperationCancelled` in place of an already-known accepting revision.
-A hard process kill cannot return a value; inspecting persisted state afterward
-must distinguish that case from a returned pre-effect failure.
+After a commit or possible external write, preserve the meaningful outcome in
+normal returned results rather than replacing it with a generic failure. Local
+publication follows [ADR 0012](0012-acceptance.md): asynchronous cancellation or
+process death may yield no normal result at all. Neither means acceptance failed
+or was rolled back. The next invocation inspects Git to establish the outcome.
 
 Cancellation is operation-scoped. The composition root releases process pipes,
 workers, temporary files and locks. Cancelling a pure computation prevents later
 publication; cancelling after a remote write may leave `Uncertain`. Cancelling
-after the local Git ref update reports acceptance, even if later checkout work
-was stopped. This does not require a dedicated projection/recovery service.
+after the local Git ref update may require that explicit recovery lookup. A CLI
+handling interruption reports that acceptance status may need inspection and
+identifies the recovery command for the selected evolution; it must not claim
+non-acceptance. Its interruption exit status is distinct from an ordinary refusal.
+This does not require a dedicated projection/recovery service.
 Do not promise that killing a guest rolls back host actions it already requested.
 
 Report progress and results to the owning caller. Do not add a generic persisted

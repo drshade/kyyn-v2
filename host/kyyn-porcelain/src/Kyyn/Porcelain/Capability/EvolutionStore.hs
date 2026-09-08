@@ -1,13 +1,13 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
-  ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs, saveCandidate, loadCandidate, findAcceptance
+  ( EvolutionStore(..), readWorkspace, matchesCapturedInputs, saveCandidate, loadCandidate, findAcceptance
   , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace, workspaceLocation ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evolution (EvolutionId, evolutionIdName, EvolutionName, EvolutionWorkspace(..), EvolutionContext, CapturedEvolution, Candidate, EvolutionFilter, EvolutionSummary)
-import Kyyn.Domain.Workspace (EvolutionState)
+import Kyyn.Domain.Evolution (EvolutionId, evolutionIdName, EvolutionWorkspace(..), EvolutionContext, Candidate, EvolutionFilter, EvolutionSummary)
+import Kyyn.Domain.Workspace (EvolutionState, WorkspaceSnapshot)
 import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBasePath)
 import Kyyn.Domain.Path (RelativePath, relativePath)
@@ -26,8 +26,7 @@ data EvolutionStore :: Effect where
   MarkReady :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] ())
   MarkDraft :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] ())
   ExportAcceptedWorkspace :: Candidate (Validated Root) -> EvolutionStore m (Either [Diagnostic] (TreePath, FileTree))
-  CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
-  CaptureEvolution :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] CapturedEvolution)
+  ReadWorkspace :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] WorkspaceSnapshot)
   MatchesCapturedInputs :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
   SaveCandidate :: Candidate Root -> EvolutionStore m ()
   LoadCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
@@ -35,11 +34,8 @@ data EvolutionStore :: Effect where
 
 type instance DispatchOf EvolutionStore = Dynamic
 
-createEvolution :: EvolutionStore :> es => KnowledgeBase -> EvolutionName -> GitRevision -> Eff es (Either [Diagnostic] EvolutionWorkspace)
-createEvolution kb name = send . CreateEvolution kb name
-
-captureEvolution :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] CapturedEvolution)
-captureEvolution = send . CaptureEvolution
+readWorkspace :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] WorkspaceSnapshot)
+readWorkspace = send . ReadWorkspace
 
 matchesCapturedInputs :: EvolutionStore :> es => EvolutionContext -> Eff es (Either [Diagnostic] Bool)
 matchesCapturedInputs = send . MatchesCapturedInputs

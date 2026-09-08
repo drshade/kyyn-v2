@@ -26,9 +26,11 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Porcelain.Capability.EvolutionStore
+import Kyyn.Porcelain.Capability.EvolutionAuthoring
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
+import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
@@ -36,7 +38,7 @@ import System.Directory (createDirectoryIfMissing, removeFile, listDirectory)
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type TestEffects = '[EvolutionStore, RootOpening, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
+type TestEffects = '[EvolutionAuthoring, EvolutionStore, RootOpening, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
 
 evolutionCaptureTests :: RootContract -> IO ()
 evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture" $ \directory -> do
@@ -64,7 +66,8 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
           -> Eff TestEffects a
           -> IO (Either OperationalFailure a)
         execute selected answer = runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-          . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock repo selected rootPath answer . runEvolutionStore
+          . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock repo selected rootPath answer
+          . runEvolutionStore . runEvolutionAuthoring
         success :: Eff TestEffects a -> IO (Either OperationalFailure a)
         success = execute revision (Right (Right source))
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
@@ -104,6 +107,9 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
     expectedTarget <- tree [("kb.dhall", "unfinished target manifest"), ("src/Schema.hs", "unfinished target source")]
     unless (target == expectedTarget) (fail "Capture changed proposed target bytes")
+    snapshot <- noOpening (readWorkspace location) >>= right >>= right
+    unless (case context of EvolutionContext _ _ _ material -> snapshot == material)
+      (fail "Store read changed the captured workspace")
     noOpening (matchesCapturedInputs context) >>= right >>= right >>= assertTrue
     write "manifest.dhall" (manifest 'a' "Ready")
     write "notes/review.md" "later note"
@@ -151,7 +157,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
   rootPath <- Subtree <$> right (relativePath "root")
   failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
-    . openingMock repo revision rootPath (Right (Right source)) . runEvolutionStore $
+    . openingMock repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   putStrLn "Evolution capture verifies selected Before copies, KB paths and live input matching."
