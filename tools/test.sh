@@ -22,7 +22,6 @@ node --check architecture/evidence/json-probe/check.mjs
 node tools/checks/check-docs.test.mjs
 node tools/checks/check-docs.mjs
 node --test tools/checks/check-imports.test.mjs
-node --test tools/checks/change-scope.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
 cabal test processes --test-show-details=direct

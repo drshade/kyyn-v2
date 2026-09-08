@@ -148,11 +148,11 @@ PR that establishes the completion criteria closes it.
 
 ## 7. Verification is proportional to the change
 
-`PROJECT-PRACTICES.md` names the default PR check and the full integration check,
-and states when each is required. Local development and CI use the same commands.
-Every PR needs the default check plus targeted verification relevant to its change;
-it does not automatically require the full integration suite. Issue completion
-requires the full check before the Issue is closed.
+`PROJECT-PRACTICES.md` names the available local checks and full integration check.
+The author chooses proportionate verification and records the tested revision,
+commands and results in the PR. No blanket test command or remote CI run is required
+for every PR. Independent review is the merge gate. Issue completion requires the
+full integration check before the Issue is closed.
 
 The project decides what the gate contains. Common components include
 formatting, compilation, linting, unit tests, integration tests, contract tests
@@ -179,7 +179,11 @@ Review establishes:
 - important failure cases and boundaries were considered;
 - the repository remains coherent and maintainable;
 - tests and documentation changed where behaviour changed; and
-- the passing gate belongs to the final revision under review.
+- recorded verification applies to the change under review.
+
+Reviewers assess the change and the author's evidence; they do not routinely
+repeat local tests, clean-export builds or remote CI. Request or run additional
+targeted checks when a concrete concern warrants them, not as a default ceremony.
 
 Findings and discussion live on the PR. The author updates the implementation,
 PR description and any governing documentation as required. The reviewer
@@ -193,7 +197,7 @@ merge control.
 A PR may merge when:
 
 - its intended outcome and boundary are clear;
-- the project gate passes for the final revision;
+- proportionate verification evidence is recorded and any concrete concerns resolved;
 - independent review is complete;
 - material findings are resolved; and
 - relevant documentation represents the resulting behaviour.
