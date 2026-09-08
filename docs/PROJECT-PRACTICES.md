@@ -57,6 +57,13 @@ does not become another specification of the product's runtime workflows.
   Accepted state despite stale/missing/malformed local manifests, and refusal to edit
   accepted workspaces. Recording filesystem forwarding rejects recursive reads and
   non-manifest writes; no source opening/compiler or candidate loading occurs.
+  Archive export tests retain captured source/manifest/report despite live edits,
+  preserve current review-note bytes and deletions, reject inconsistent captured
+  target code, and distinguish unsupported durable record versions from private
+  candidate staleness. Root-export integration writes root and archive replacements
+  into one real Git commit and reopens both exactly, including FindAcceptance of
+  that commit. It exercises export/commit/CAS primitives, not the full acceptance
+  readiness/overlap/checkout-synchronization workflow.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.
