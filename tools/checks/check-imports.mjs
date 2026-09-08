@@ -18,10 +18,15 @@ const allowed = {
     'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure',
     'Kyyn.Plumbing.Capability.ProcessExecution', 'System.IO', 'System.Process.Typed',
     'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.FileSystem', 'System.Directory', 'System.FilePath', 'System.IO.Temp',
+    'Kyyn.Plumbing.Capability.DhallHandling',
   ],
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.DhallHandling': ['Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
+    'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
+    'Dhall.Src', 'Dhall.TypeCheck', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Plumbing.Capability.SchemaInspection.Contract'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],

@@ -26,6 +26,15 @@ Workspace manifests use Dhall as well. DhallHandling supplies the real host
 library for these files and ADR 0016's plugin configuration; it is not a guest
 parser or another schema authority. The runtime wire remains a separate decision.
 
+The initial `DhallHandling` boundary takes a checked contract and supplied text;
+it performs no file reads or import resolution. Fact contents are self-contained:
+local, environment and remote imports are rejected before normalization. The host
+library projects the contract to a Dhall type, checks and normalizes the value,
+then converts it to the guest codec representation. Exact integers become canonical
+decimal strings on that wire; Dhall optionals and unions become its tagged values.
+The returned `CheckedDhallValue` retains the complete contract identity. This is
+structural decoding only, not semantic validation or an implemented RootStore.
+
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts
 are generated from the checked Haskell declarations under ADR 0005.
