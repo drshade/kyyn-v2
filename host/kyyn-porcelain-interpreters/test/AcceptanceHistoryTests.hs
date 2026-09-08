@@ -1,33 +1,43 @@
-{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module AcceptanceHistoryTests (acceptanceHistoryTests) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, forM_)
 import qualified Data.ByteString.Char8 as Bytes
-import Effectful (Eff, IOE, runEff, runPureEff)
-import Effectful.Dispatch.Dynamic (interpret)
+import Effectful (Eff, IOE, (:>), runEff, runPureEff)
+import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Workspace
+import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.Plumbing.Capability.Failure (Failure)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Capability.Git
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
+import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.EvolutionStore
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
+import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Capability.WorkspaceStore
 import Kyyn.Porcelain.Interpreter.EvolutionStore
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Porcelain.Interpreter.WorkspaceStore
-import System.Directory (findExecutable)
+import System.Directory (findExecutable, createDirectoryIfMissing, removeFile, doesPathExist)
+import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
+
+type LifecycleEffects = '[EvolutionStore, RootOpening, WorkspaceStore, RootStore, DhallHandling,
+  FileSystem, FileSystem, Git, Process.ProcessExecution, Failure, IOE]
 
 acceptanceHistoryTests :: IO ()
 acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \directory -> do
@@ -120,7 +130,105 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   git (readCommitParents repo unknown) >>= rightResult >>= \rejected -> unless rejected (fail "Unknown commit silently had no parents")
   headAfter <- git (resolveRevision repo "HEAD") >>= right
   unless (headAfter == base) (fail "History inspection moved HEAD")
+  let lifecycle :: Eff LifecycleEffects a -> IO (Either OperationalFailure a)
+      lifecycle action = runEff . runFailure . runProcessExecutionIO . runGit executable
+        . runFileSystemIO scope . shallowFiles . runDhallHandling . runRootStore
+        . runWorkspaceStore . noOpening . runEvolutionStore $ action
+      runLifecycle :: Eff LifecycleEffects a -> IO a
+      runLifecycle action = lifecycle action >>= right
+      workspace = EvolutionWorkspace kb identity
+      livePath = directory </> "nested/kb/evolutions/e001/manifest.dhall"
+      sourceFiles = tree [(path "Schema.hs","unfinished schema")]
+      targetFiles = tree [(path "kb.dhall","unfinished manifest"),(path "src/Schema.hs","broken Haskell")]
+      changeFiles = tree [(path "Evolution.hs","not compilable")]
+      notes = tree [(path "review.md","unchanged notes")]
+      initialSnapshot = WorkspaceSnapshot
+        (WorkspaceManifest base "Same label λ" "Keep this explanation" Draft [IntermediateBinding "middleRoot" "Middle.Root" "Middle.metadata"])
+        sourceFiles targetFiles changeFiles notes
+      encodeSnapshot snapshot = right $ runPureEff . runDhallHandling . runWorkspaceStore $ encodeWorkspaceSnapshot snapshot
+      writeWorkspace key snapshot = do
+        encoded <- encodeSnapshot snapshot
+        forM_ (files encoded) $ \(p,b) -> do
+          let destination = directory </> "nested/kb/evolutions" </> key </> relativeName p
+          createDirectoryIfMissing True (takeDirectory destination)
+          Bytes.writeFile destination b
+      expectDiagnostic :: Eff LifecycleEffects (Either [Diagnostic] a) -> IO ()
+      expectDiagnostic action = runLifecycle action >>= \result -> case result of
+        Left _ -> pure ()
+        Right _ -> fail "Expected lifecycle diagnostic"
+  emptyList <- runLifecycle (listEvolutions kb AllEvolutions) >>= right
+  unless (null emptyList) (fail "Empty KB listed evolutions")
+  missingId <- right (evolutionId "deadbeef")
+  expectDiagnostic (resolveEvolution kb missingId)
+  expectDiagnostic (markReady (EvolutionWorkspace kb missingId))
+  createdMissing <- doesPathExist (directory </> "nested/kb/evolutions/deadbeef")
+  unless (not createdMissing) (fail "Unknown workspace was created by lifecycle operation")
+  writeWorkspace "e001" initialSnapshot
+  writeWorkspace "e002" initialSnapshot
+  secondId <- right (evolutionId "e002")
+  let secondWorkspace = EvolutionWorkspace kb secondId
+  listed <- runLifecycle (listEvolutions kb AllEvolutions) >>= right
+  unless (listed == [EvolutionSummary workspace (EvolutionName "Same label λ") Draft Nothing,
+      EvolutionSummary secondWorkspace (EvolutionName "Same label λ") Draft Nothing])
+    (fail "Listing lost duplicate labels or changed stable order/IDs")
+  hidden <- runLifecycle (listEvolutions kb ExcludeDrafts) >>= right
+  unless (null hidden) (fail "Draft filter retained drafts")
+  runLifecycle (markReady workspace) >>= right
+  state <- runLifecycle (readEvolutionState workspace) >>= right
+  unless (state == Ready) (fail "MarkReady did not change observed state")
+  resolved <- runLifecycle (resolveEvolution kb identity) >>= right
+  unless (resolved == workspace) (fail "Resolve returned another workspace")
+  liveScope <- right (directoryScope (directory </> "nested/kb/evolutions/e001"))
+  currentTree <- runEff (runFailure (runFileSystemIO scope (FS.readTree liveScope))) >>= right
+  currentSnapshot <- right $ runPureEff . runDhallHandling . runWorkspaceStore $ readWorkspaceSnapshot currentTree
+  unless (Workspace.matchesCapturedInputs initialSnapshot currentSnapshot)
+    (fail "Ready transition invalidated captured inputs")
+  let WorkspaceSnapshot _ beforeAfter targetAfter changeAfter notesAfter = currentSnapshot
+  unless ((beforeAfter,targetAfter,changeAfter,notesAfter) == (sourceFiles,targetFiles,changeFiles,notes))
+    (fail "State transition rewrote non-manifest files")
+  filtered <- runLifecycle (listEvolutions kb ExcludeDrafts) >>= right
+  unless (filtered == [EvolutionSummary workspace (EvolutionName "Same label λ") Ready Nothing])
+    (fail "Draft filter used a different state derivation")
+  runLifecycle (markDraft workspace) >>= right
+  runLifecycle (readEvolutionState workspace) >>= right >>= \s -> unless (s == Draft) (fail "MarkDraft failed")
+  let WorkspaceSnapshot (WorkspaceManifest r n e _ bindings) b t c ns = initialSnapshot
+  writeWorkspace "e001" (WorkspaceSnapshot (WorkspaceManifest r n e Accepted bindings) b t c ns)
+  expectDiagnostic (readEvolutionState workspace)
+  runLifecycle (markReady workspace) >>= right
+  validLocal <- Bytes.readFile livePath
+  Bytes.writeFile livePath "True"
+  expectDiagnostic (listEvolutions kb AllEvolutions)
+  expectDiagnostic (markReady workspace)
+  Bytes.writeFile livePath validLocal
+  update <- git (compareAndSwapRef repo (LocalBranch "main") base later)
+  unless (update == RefUpdated) (fail "Could not install acceptance fixture")
+  acceptedList <- runLifecycle (listEvolutions kb ExcludeDrafts) >>= right
+  unless (acceptedList == [EvolutionSummary workspace (EvolutionName "Example") Accepted (Just accepted)])
+    (fail "Committed acceptance did not override stale local Ready/name")
+  expectDiagnostic (markReady workspace)
+  expectDiagnostic (markDraft workspace)
+  refusedBytes <- Bytes.readFile livePath
+  unless (refusedBytes == validLocal) (fail "Refused transition edited an accepted workspace")
+  Bytes.writeFile livePath "malformed local manifest"
+  runLifecycle (readEvolutionState workspace) >>= right >>= \s -> unless (s == Accepted) (fail "Local corruption hid acceptance")
+  removeFile livePath
+  resolvedArchive <- runLifecycle (resolveEvolution kb identity) >>= right
+  unless (resolvedArchive == workspace) (fail "Missing live manifest hid accepted archive")
+  deletedDraftHead <- git (createCommit repo (GitTree [(Subtree (path "nested/kb/evolutions/e003"),draftFiles)]) later (metadata "Shared draft"))
+  _ <- git (compareAndSwapRef repo (LocalBranch "main") later deletedDraftHead)
+  afterSharedDraft <- runLifecycle (listEvolutions kb AllEvolutions) >>= right
+  unless (length afterSharedDraft == 2) (fail "Listing resurrected an absent local unaccepted draft")
+  finalHead <- git (resolveRevision repo "HEAD") >>= right
+  unless (finalHead == deletedDraftHead) (fail "Lifecycle operations advanced HEAD")
   putStrLn "Acceptance lookup identifies introductions across all parents, reverts, reacceptance and ambiguous histories."
+  putStrLn "Lifecycle state/listing uses authoritative archives and state edits preserve captured inputs."
+
+shallowFiles :: FileSystem :> es => Eff (FileSystem : es) a -> Eff es a
+shallowFiles = interpret $ \_ -> \case
+  FS.ListDirectory scope -> send (FS.ListDirectory scope)
+  FS.ReadOptionalBytes scope path -> send (FS.ReadOptionalBytes scope path)
+  FS.ReplaceBytes scope path bytes -> send (FS.ReplaceBytes scope path bytes)
+  _ -> error "Lifecycle operation read source/evidence/candidates or wrote non-manifest files"
 
 noFiles :: Eff (FileSystem : es) a -> Eff es a
 noFiles = interpret $ \_ _ -> error "Acceptance lookup read the live checkout or candidate storage"

@@ -161,6 +161,7 @@ gitMock captured = interpret $ \_ -> \case
   Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
   Git.ReadFileAt {} -> error "RootOpening must read the selected complete tree"
   Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
+  Git.ReadDirectoryAt {} -> error "RootOpening must read the selected complete tree"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

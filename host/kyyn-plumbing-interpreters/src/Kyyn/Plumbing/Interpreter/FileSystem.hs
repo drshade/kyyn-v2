@@ -15,7 +15,8 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
-import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectoryRecursive, listDirectory, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
+import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectoryRecursive, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
+import qualified System.Directory as Directory
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hClose, hSetBinaryMode)
 import System.IO.Temp (createTempDirectory, withTempFile)
@@ -55,6 +56,12 @@ runFileSystemIO parent = interpret $ \env -> \case
       hClose handle
       renameFile temporary target
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
+  ListDirectory scope -> native Failure.ListDirectory (scopePath scope) $ do
+    result <- try (Directory.listDirectory (scopePath scope))
+    case result of
+      Right names -> Just <$> traverse (either (ioError . userError) pure . relativePath) (sort names)
+      Left err | isDoesNotExistError err -> pure Nothing
+               | otherwise -> ioError err
   CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
 
 allocateDirectory :: FilePath -> IO RelativePath
@@ -77,7 +84,7 @@ captureTree base = do
   either (ioError . userError) pure (fileTree entries)
   where
     walk prefix = do
-      names <- sort <$> listDirectory (base </> prefix)
+      names <- sort <$> Directory.listDirectory (base </> prefix)
       fmap concat $ forM names $ \name -> do
         let relative = if null prefix then name else prefix ++ "/" ++ name
             absolute = base </> relative

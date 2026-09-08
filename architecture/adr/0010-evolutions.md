@@ -360,9 +360,9 @@ independent of root compilation:
 ```haskell
 data EvolutionStore :: Effect where
   ListEvolutions
-    :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m [EvolutionSummary]
+    :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
   ResolveEvolution
-    :: KnowledgeBase -> EvolutionId -> EvolutionStore m EvolutionWorkspace
+    :: KnowledgeBase -> EvolutionId -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
   CreateEvolution
     :: KnowledgeBase -> EvolutionName -> GitRevision
     -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
@@ -373,11 +373,11 @@ data EvolutionStore :: Effect where
   LoadCandidate
     :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
   ReadEvolutionState
-    :: EvolutionWorkspace -> EvolutionStore m EvolutionState
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] EvolutionState)
   MarkReady
-    :: EvolutionWorkspace -> EvolutionStore m ()
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] ())
   MarkDraft
-    :: EvolutionWorkspace -> EvolutionStore m ()
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] ())
   MatchesCapturedInputs
     :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
   ExportAcceptedWorkspace
@@ -400,8 +400,7 @@ the source schema on a cold load through RootOpening's SchemaInspection dependen
 including evaluation of its pure schema metadata export under ADR 0005. This does
 not decode facts or run root validators/transformations. Operation-specific composition installs
 the semantic handlers needed by the command.
-Installing Git plumbing for a complete store handler does not launch Git on every
-list call; do not use partial handlers that fail on the store's other operations.
+Do not use partial handlers that fail on the store's other operations.
 
 The implemented store handler requires `FileSystem`, `WorkspaceStore`, `RootOpening`,
 `RootStore`, `DhallHandling`, `Git` and `Failure`. Git supplies the implemented
@@ -441,6 +440,45 @@ accepting the same change again.
 The manifest's state field never establishes acceptance: the committed archive
 and its introducing commit do (ADR 0012). A local `Accepted` label alone is not
 a successful acceptance lookup.
+
+The implemented lifecycle operations return diagnostics for unknown or malformed
+workspaces. Their summaries and filter are ordinary data:
+
+```haskell
+data EvolutionSummary = EvolutionSummary
+  { workspace :: EvolutionWorkspace
+  , name :: EvolutionName
+  , state :: EvolutionState
+  , acceptingCommit :: Maybe GitRevision
+  }
+
+data EvolutionFilter = AllEvolutions | ExcludeDrafts
+```
+
+Listing enumerates immediate names under the live and selected Git `evolutions/`
+directories, considers hexadecimal evolution IDs, then derives each summary once.
+It sorts by ID and applies ExcludeDrafts as a pure filter over those same summaries.
+It reads manifests, not source/evidence/candidate files, and does not compile even
+unfinished drafts. Malformed manifests/history are diagnostics rather than silently
+omitted workspaces. The filter is not a way to suppress malformed metadata.
+The history lookup cost in ADR 0012 is incurred per selected evolution; no listing
+index or cache is introduced.
+
+For each summary, committed acceptance is checked before reading the local manifest.
+Its name and accepting revision come from the selected Git history, so a missing or
+malformed local manifest cannot hide acceptance. Without committed acceptance, a
+local manifest is required: absent unaccepted drafts are not resurrected from Git.
+A local Accepted label without authoritative acceptance returns an
+`evolution.unverified-acceptance` diagnostic, not Accepted or an implicit downgrade.
+Resolve uses this same existence/state derivation and never creates a workspace.
+
+MarkReady and MarkDraft pin HEAD once, refuse already-accepted and unknown workspaces,
+then atomically replace only the local manifest. They preserve Before, name,
+explanation and intermediate declarations; source, target, changes and notes are
+untouched. Manifest formatting may normalize through Dhall. Neither transition
+compiles, evaluates, validates or commits anything, and matchesCapturedInputs remains
+true across the transition. An explicit transition can correct an unverified local
+Accepted label when Git confirms no acceptance. Storage failures remain Failure.
 
 The target code is a pure projection of the captured WorkspaceSnapshot; it needs
 no store effect. `SaveCandidate` persists
