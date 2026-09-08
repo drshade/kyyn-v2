@@ -19,7 +19,7 @@ data Constructor = Constructor String [(Maybe String, DataType)]
 
 data Shape
   = Record [(String, Shape)] | List Shape | Optional Shape
-  | Union [(String, Maybe Shape)] | Scalar ScalarKind
+  | Union [(String, Maybe Shape)] | Scalar ScalarKind | Reference String
   deriving (Eq, Show)
 
 data ScalarKind = TextScalar | IntegerScalar | BoolScalar deriving (Eq, Show)

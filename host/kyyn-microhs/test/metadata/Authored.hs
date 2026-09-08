@@ -1,9 +1,10 @@
 module Authored where
 
 import Kyyn.Types.SchemaMetadata
+import Kyyn.Types.Fact
 
-data Root = Root { todos :: [Todo] }
-data Todo = Todo { title :: String }
+data Root = Root { todos :: [Fact Todo], people :: [Fact Todo] }
+data Todo = Todo { title :: String, owner :: FactId }
 
 schemaMetadata :: SchemaMetadata
 schemaMetadata = SchemaMetadata

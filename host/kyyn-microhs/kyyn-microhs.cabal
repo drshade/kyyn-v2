@@ -39,6 +39,7 @@ test-suite codecs
 test-suite metadata
   type: exitcode-stdio-1.0
   main-is: MetadataTests.hs
+  other-modules: ContractTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: NoFieldSelectors

@@ -10,6 +10,9 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
+import Kyyn.Plumbing.Capability.SchemaInspection.Contract (checkContract, contractId)
+import Kyyn.MicroHs.Inspection (inspectDataType)
+import ContractTests (contractTests)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation
 import Kyyn.Plumbing.Interpreter.Failure
@@ -22,6 +25,7 @@ import System.IO.Temp (withSystemTempDirectory)
 main :: IO ()
 main = do
   codecTests
+  contractTests
   args <- getArgs
   case args of
     ["--codec-only"] -> pure ()
@@ -58,6 +62,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   files <- mapM (\(base, file) -> (,) (path file) <$> Bytes.readFile (repo </> base </> file))
     [("host/kyyn-microhs/test/metadata", "Authored.hs"),
      ("shared/kyyn-types/src", "Kyyn/Types/SchemaMetadata.hs"),
+     ("shared/kyyn-types/src", "Kyyn/Types/Fact.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/SchemaMetadata.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/Json.hs"),
      ("vendor/json", "Text/JSON/Types.hs"), ("vendor/json", "Text/JSON/String.hs")]
@@ -72,4 +77,10 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
         [FieldRole "Authored.Todo" "title" "task-name"]
         [CollectionDecl n n [("owner", "people")] | n <- ["todos", "people"]]
   unless (result == Right (Right expected)) (fail (show result))
+  inspected <- inspectDataType (repo </> "vendor/MicroHs")
+    [repo </> "host/kyyn-microhs/test/metadata", repo </> "shared/kyyn-types/src"] "Authored.Root"
+    >>= either (fail . show) pure
+  evaluated <- either (fail . show) (either (fail . show) pure) result
+  checked <- either (fail . show) pure (checkContract inspected evaluated)
+  putStrLn ("Compiler structure and guest metadata checked together: " ++ show (contractId checked))
   putStrLn "Named Haskell metadata evaluated through real MicroHs and fixed JSON codec."
