@@ -37,6 +37,11 @@ does not become another specification of the product's runtime workflows.
   repository-root/nested KB paths, exact Before copies, revision changes, unfinished
   targets, live matching without source loading, and diagnostics versus operational
   failures. No new MicroHs or Git execution is involved in those capture tests.
+  Evolution execution tests use real Dhall/filesystem/process handling and recording
+  RootOpening/schema/compiler handlers. They check exact nested-KB Before selection,
+  contract/source mismatch, closure deduplication/collisions, intermediate declarations,
+  generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
+  No real guest compilation is involved in these native tests.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.
@@ -123,6 +128,13 @@ does not become another specification of the product's runtime workflows.
   focused SDK/encoding proof is in the full check, not a per-PR requirement; it
   additionally checks guest JSON replies through the native decoder and report
   capability. It does not claim workspace evolution execution or candidate persistence.
+  `KYYN_TEST_ROOT="$PWD" cabal test workspace-evolutions --test-show-details=direct`
+  exercises the actual EvolutionExecution handler with real RootOpening, schema
+  inspection, MicroHs, RootStore and Dhall. A recording Git handler supplies only
+  the selected Before revision/subtree; the test verifies a schema-changing chain,
+  exclusion of unrelated old modules, preserved context and exact After materialization
+  and reopening. It is part of full integration, not a per-PR requirement. It does
+  not save Candidates or accept proposals.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

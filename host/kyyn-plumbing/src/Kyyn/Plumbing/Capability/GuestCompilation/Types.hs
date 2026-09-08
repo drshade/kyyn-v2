@@ -8,7 +8,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as Lazy
-import Data.List (sortOn, nub, isPrefixOf)
+import Data.List (sortOn, nub, isPrefixOf, isSuffixOf)
 import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -34,8 +34,12 @@ guestSources entry files
   | length (nub paths) /= length paths = Left "duplicate captured source path"
   | or [ (relativeName a ++ "/") `isPrefixOf` relativeName b | a <- paths, b <- paths ] =
       Left "captured source file/directory collision"
+  | path : _ <- unsupported = Left ("unsupported Haskell source format; use .hs: " ++ path)
   | otherwise = Right (GuestSources entry (sortOn fst files))
-  where paths = map fst files
+  where
+    paths = map fst files
+    unsupported = [name | p <- paths, let name = relativeName p,
+      any (`isSuffixOf` name) [".lhs",".hsc"]]
 
 sourceFiles :: GuestSources -> [(RelativePath, ByteString)]
 sourceFiles (GuestSources _ files) = files

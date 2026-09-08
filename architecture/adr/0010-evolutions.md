@@ -213,7 +213,7 @@ Propose a complete target copy, not a patch overlay on the current root:
 
 ```text
 evolutions/<id>/
-  manifest.dhall      Before revision, lifecycle state, name and explanation
+  manifest.dhall      Before revision, state, name, explanation, intermediate bindings
   before/            source schema/imports copied from the selected commit
   target/            complete proposed non-fact contents of root/
   change/            Evolution.hs and evolution-only helpers/input files
@@ -232,7 +232,7 @@ selected Git commit remains authoritative. Capture verifies those definitions
 against that commit; rebasing refreshes them. `change/` and `before/` are archived,
 not installed into the current root. The manifest's explanation covers the whole
 proposal, including source/config/example-only changes with no fact history entry.
-Its explanation and Before selection are captured; lifecycle state and separate
+Its explanation, Before selection and intermediate declarations are captured; lifecycle state and separate
 review notes are not evaluation inputs. Changing a note does not change a candidate.
 
 The manifest is a hermetic Dhall value with this shape:
@@ -242,8 +242,16 @@ The manifest is a hermetic Dhall value with this shape:
 , name : Text
 , explanation : Text
 , state : < Draft | Ready | Accepted >
+, intermediates : List { name : Text, schemaType : Text, schemaMetadata : Text }
 }
 ```
+
+Creation sets `intermediates` to an empty list. An author declares a named intermediate
+binding here, selecting its Haskell type and metadata export; the defining modules
+can live in `change/`. `beforeRoot` and `afterRoot` are generated from the selected
+Before and target, not repeated in this list. Names must be valid, unique binding
+identifiers and must not collide with those two generated names. Build preparation
+checks declarations and inspects their exports; capture still permits unfinished code.
 
 The revision is a full Git commit object ID, not a branch name or short prefix.
 `WorkspaceStore` decodes and projects an explicit file tree; it does not inspect
@@ -268,7 +276,7 @@ notes trees with their directory prefixes stripped. Projection rejects files
 outside the layout and any `target/facts` tree. Incomplete draft source is
 capturable; projection does not promise that it compiles or matches the selected
 commit. Evolution capture performs that source-selection check separately.
-Input equality compares the parsed Before revision, name and explanation, and
+Input equality compares the parsed Before revision, name, explanation and intermediate declarations, and
 the exact before/target/change paths and bytes. Manifest formatting, lifecycle
 state and notes are excluded. A same-schema code/configuration edit still changes
 the inputs. This pure comparison is not the store's live-workspace read or its
@@ -326,6 +334,17 @@ their source locations. Import-path order must not choose a winner. This include
 changed dependencies of schemas: rename those modules and update their importers
 when both versions are needed. Do not import Before's unrelated validators/queries
 or delete its archival copies merely to deduplicate compiler inputs.
+SchemaInspection returns the captured source paths loaded while checking the selected
+type, using compiler module source locations. These paths select the Before subset;
+they are not part of contract identity. Keep the target's authored sources and
+`change/` available for ordinary helper imports: a helper used by the entry need
+not occur in the target Root type's own import closure. The compiler selects what
+the resulting entry actually imports. Generated adapters must not overwrite authored
+files. Collision diagnostics identify the path and direct authors to use distinct
+module names for definitions that must coexist. Authored Haskell inputs use `.hs`;
+preparation rejects `.lhs` and `.hsc` rather than allowing the compiler's extension
+search order to select a different definition. This does not prohibit non-code
+supporting files in the workspace.
 The material identifies both the proposed executable code and the selected
 workspace contents to archive. Together with the evaluated root it is sufficient
 to construct acceptance without rereading live source and substituting different
@@ -482,23 +501,25 @@ capabilities when implementing a change. A pure entry stays polymorphic in its
 request algebra; it does not gain a host capability through the identity scaffold.
 `EvolutionWorkspace` carries only its key and owning KB; its location is derived.
 
-The host then evaluates against an explicit structurally readable source snapshot
-and materializes an unchecked candidate through [RootStore](0006-storage.md):
+The host loads the selected structurally readable source snapshot and evaluates the
+entry. The application then materializes and saves an unchecked candidate through
+[RootStore](0006-storage.md) and EvolutionStore:
 
 ```haskell
 data EvolutionExecution :: Effect where
   EvaluateEvolution
-    :: CapturedEvolution -> Root
+    :: CapturedEvolution
     -> EvolutionExecution m (Either PreviewRejection EvaluatedEvolution)
 
 data EvaluatedEvolution = EvaluatedEvolution
-  { after  :: After
+  { captured :: CapturedEvolution
+  , after  :: After
   , value  :: CheckedValue
   , report :: EvolutionReport
   }
 
 runEvolutionExecution
-  :: (RootStore :> es, PluginInvocation :> es, EvidenceStore :> es,
+  :: (RootStore :> es, RootOpening :> es, PluginInvocation :> es, EvidenceStore :> es,
       GuestCompilation :> es, ProcessExecution :> es,
       FileSystem :> es, SchemaInspection :> es,
       Failure :> es)
@@ -506,7 +527,7 @@ runEvolutionExecution
 
 applyEvolution
   :: (RootStore :> es, EvolutionStore :> es, EvolutionExecution :> es, Failure :> es)
-  => CapturedEvolution -> Root
+  => CapturedEvolution
   -> Eff es (Either PreviewRejection (Candidate Root))
 
 data PreviewRejection
@@ -514,8 +535,8 @@ data PreviewRejection
   | EvolutionRejected EvolutionFailure
 ```
 
-EvolutionExecution owns source/adapter preparation, the proposal's compilation gate
-and effectful entry evaluation, including typed dispatch to declared plugin methods.
+EvolutionExecution owns source/adapter preparation, entry/schema compilation and
+effectful entry evaluation, including typed dispatch to declared plugin methods.
 It delegates compilation to [GuestCompilation](0002-runtime.md), not a locally
 assembled MicroHs command. ProcessExecution remains necessary for the compiled
 entry's execution and protocol, separately from compiler invocation.
@@ -526,10 +547,11 @@ retains validation and snapshot queries without acquiring plugin/acquisition
 handlers merely to check a root. Source, dependency and config bytes are fixed
 by capture; providers are not contacted during compilation.
 
-The source must be the root selected by `context.before.revision`, and all handles
-must belong to the same KB. These are runtime checks; two values having Haskell
-type `Root` does not prove equal snapshot identity. Load this input with
-`LoadRootAt`; it need not pass semantic validation. An evolution can therefore
+EvolutionExecution itself calls `LoadRootAt` for the captured context's KB and
+Before revision. It does not accept an independently supplied Root: that type
+alone cannot establish its origin. Compare the loaded contract and copied source
+with the captured Before before preparation; a mismatch requires a new capture.
+The input need not pass semantic validation. An evolution can therefore
 repair invalid facts introduced by an ordinary Git edit or merge. Preview surfaces
 the source validation report separately, without treating its errors as rejection
 of the transformation. The resulting candidate must still pass its own checks
@@ -540,12 +562,20 @@ does not acquire this diagnostic/execution exception to validated reads.
 The candidate uses the target contract and `CodeSnapshot` projected from
 `context.material`, not the accepted root's code or validator by default.
 `MaterializeRoot` receives that proposed code snapshot. Ill-typed/unsupported
-proposed schema or code returns `Left (ProposedCodeRejected diagnostics)` before
+proposed schema or entry dependency returns `Left (ProposedCodeRejected diagnostics)` before
 a candidate root exists. An entry's or pure helper's
 refusal returns `Left (EvolutionRejected failure)`. These are
 ordinary preview outcomes, with the captured context still available for review.
 A missing compiler or compiler crash is an operational
 [Failure](0019-failures.md), not an empty successful result.
+
+Independent target validators and queries compile in `CheckRootCode` during
+candidate checking, after materialization, not through an additional pre-evaluation
+gate. An evolution may therefore evaluate successfully and its candidate then fail
+because a target validator does not compile. Evaluation answers whether the change
+runs; candidate checking answers whether its result is acceptable. Both outcomes
+remain visible on the same proposal. Do not construct an empty-facts Root merely
+to invoke code checking earlier.
 
 After materialization, `applyEvolution` calls `SaveCandidate` before returning
 `Right candidate`. Subsequent semantic/example rejection leaves that unchecked
@@ -801,5 +831,18 @@ refusal diagnostics through the guest JSON encoder and native decoder, and deriv
 the three expected host step reports. Focused native tests check chain discontinuity,
 unknown contracts, malformed intermediate values, duplicate IDs, metadata/schema
 changes, additions/deletions, cancelling edits and position-independent matching.
-Workspace build preparation/execution and Candidate persistence remain unimplemented;
-the fixture's explicit compilation is not a workspace execution handler.
+The separate workspace execution proof uses the actual EvolutionExecution handler,
+RootOpening, schema inspection, MicroHs compilation/evaluation and Dhall stores.
+Its recording Git handler supplies only the context's exact Before subtree. The
+handler evaluates a value edit, metadata transition and schema migration, retaining
+the captured context; the test materializes and reopens exactly the checked After.
+Changed unrelated Before validators/metadata modules do not enter the compilation.
+Native recording-handler tests cover preparation/compilation errors, guest refusal,
+runtime/protocol failure, closure collisions and captured intermediate declarations.
+
+The implemented execution path specializes the entry to `Program NoRequests`;
+no plugin handlers are installed until the plugin invocation slice exists. A
+concretely effectful entry is a type error on this path, not an ignored request.
+Successful evaluation returns `EvaluatedEvolution`, not a Candidate. Candidate
+materialization/persistence through `applyEvolution` remains unimplemented; no
+unsaved candidate bypasses the SaveCandidate-before-return rule above.

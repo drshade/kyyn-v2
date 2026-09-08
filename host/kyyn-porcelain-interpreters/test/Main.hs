@@ -14,6 +14,7 @@ import ValidationTests (validationTests)
 import RootExportTests (rootExportTests)
 import WorkspaceTests (workspaceTests)
 import EvolutionCaptureTests (evolutionCaptureTests)
+import EvolutionExecutionTests (evolutionExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -85,6 +86,7 @@ main = do
   openingTests contract snapshot
   workspaceTests
   evolutionCaptureTests contract
+  evolutionExecutionTests contract snapshot
   executionTests contract snapshot
   queryExecutionTests contract snapshot
   validationTests contract snapshot

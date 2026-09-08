@@ -1,12 +1,25 @@
-module Kyyn.Runtime.Evolution (encodeEvolutionReply) where
+{-# LANGUAGE GADTs, EmptyDataDecls, EmptyCase #-}
+module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, encodeEvolutionReply) where
 
 import Kyyn.Evolution.Internal (EvolutionOutput(..), StepObservation(..), RecordedRoot(..))
 import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
+import Kyyn.Types.Program (Program(..))
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Validation (encodeReportValue)
 import Text.JSON.Types (JSValue(JSArray))
+
+data NoRequests a
+
+executeEvolution :: Codec a -> Codec b
+  -> (a -> Program NoRequests (Either EvolutionFailure (EvolutionOutput b)))
+  -> String -> Either String String
+executeEvolution beforeCodec afterCodec selected input = do
+  before <- parseValue input >>= decodeWith beforeCodec
+  case selected before of
+    Pure result -> encodeEvolutionReply afterCodec result
+    Request operation _ -> case operation of {}
 
 encodeEvolutionReply :: Codec a -> Either EvolutionFailure (EvolutionOutput a) -> Either String String
 encodeEvolutionReply codec result = do

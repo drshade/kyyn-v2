@@ -2,6 +2,7 @@
 module Kyyn.Domain.Evolution
   ( EvolutionId, evolutionId, evolutionIdName, EvolutionName(..), EvolutionWorkspace(..), Before(..)
   , EvolutionContext(..), CapturedEvolution(..)
+  , After(..), EvaluatedEvolution(..), PreviewRejection(..)
   ) where
 
 import Data.Coerce (coerce)
@@ -9,6 +10,10 @@ import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot)
+import Kyyn.Domain.Value (CheckedValue)
+import Kyyn.Domain.EvolutionReport (EvolutionReport)
+import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Types.Evolution (EvolutionFailure)
 
 newtype EvolutionId = EvolutionId String deriving (Eq, Show)
 newtype EvolutionName = EvolutionName String deriving (Eq, Show)
@@ -39,3 +44,12 @@ data EvolutionContext = EvolutionContext
   } deriving (Eq, Show)
 
 newtype CapturedEvolution = CapturedEvolution EvolutionContext deriving (Eq, Show)
+
+data After = After { schema :: RootContract } deriving (Eq, Show)
+data EvaluatedEvolution = EvaluatedEvolution
+  { captured :: CapturedEvolution, after :: After, value :: CheckedValue, report :: EvolutionReport }
+  deriving (Eq, Show)
+data PreviewRejection
+  = ProposedCodeRejected [Diagnostic]
+  | EvolutionRejected EvolutionFailure
+  deriving (Eq, Show)

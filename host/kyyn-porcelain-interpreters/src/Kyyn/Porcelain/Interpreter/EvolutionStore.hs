@@ -32,7 +32,7 @@ runEvolutionStore = interpret $ \_ -> \case
     entryPath <- checked (relativePath "Evolution.hs")
     change <- checked (fileTree [(entryPath,identityEvolutionSource)])
     tree <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
-      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft) sources code change empty))
+      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft []) sources code change empty))
     parentPath <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)
     parent <- checked (directoryScope (scopedPath scope parentPath))
     allocated <- ExceptT (Right <$> FileSystem.createUniqueDirectory parent)
@@ -41,7 +41,7 @@ runEvolutionStore = interpret $ \_ -> \case
     forM_ (files tree) $ \(path,bytes) -> ExceptT (Right <$> FileSystem.writeBytes location path bytes)
     pure (EvolutionWorkspace kb identity)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
-    snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) beforeCopy _ _ _) <- readWorkspace location
+    snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _ _) beforeCopy _ _ _) <- readWorkspace location
     rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)
     SourceRoot contract _ (RootDefinition _ _ _ _ sources) <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
