@@ -1,0 +1,14 @@
+cabal-version: 3.0
+name: kyyn-porcelain
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved.
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules: Kyyn.Porcelain.Capability.RootStore
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, aeson, effectful-core ==2.6.1.0

@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Capability.SchemaInspection.Contract
+module Kyyn.Domain.Contract
   ( CheckedContract, ContractId, CollectionContract(..), checkContract
   , rootType, metadataOf, contractShape, contractId, collectionContracts ) where
 

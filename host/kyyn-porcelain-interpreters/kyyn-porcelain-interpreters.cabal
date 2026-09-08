@@ -1,0 +1,26 @@
+cabal-version: 3.0
+name: kyyn-porcelain-interpreters
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved.
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors OverloadedStrings
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-porcelain, kyyn-plumbing,
+    effectful-core ==2.6.1.0, aeson, bytestring, text, transformers
+
+test-suite roots
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
+    kyyn-porcelain-interpreters, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    aeson, bytestring, text

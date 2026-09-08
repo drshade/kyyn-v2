@@ -11,7 +11,7 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
-import Kyyn.Plumbing.Capability.SchemaInspection.Contract (checkContract, rootType)
+import Kyyn.Domain.Contract (checkContract, rootType)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.MicroHs.Inspection (inspectDataType)

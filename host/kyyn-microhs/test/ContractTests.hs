@@ -4,7 +4,7 @@ import Control.Monad (unless, forM_)
 import Data.List (isInfixOf)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
-import Kyyn.Plumbing.Capability.SchemaInspection.Contract
+import Kyyn.Domain.Contract
 import Kyyn.Types.SchemaMetadata
 
 contractTests :: IO ()

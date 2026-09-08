@@ -12,7 +12,6 @@ library
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
     Kyyn.Plumbing.Capability.GuestCompilation.Types
     Kyyn.Plumbing.Capability.SchemaInspection.Metadata
-    Kyyn.Plumbing.Capability.SchemaInspection.Contract
     Kyyn.Plumbing.Capability.DhallHandling
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings

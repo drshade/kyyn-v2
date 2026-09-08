@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Effectful (runPureEff)
 import Kyyn.Domain.DataType
 import Kyyn.Plumbing.Capability.DhallHandling
-import Kyyn.Plumbing.Capability.SchemaInspection.Contract
+import Kyyn.Domain.Contract
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Types.SchemaMetadata
 
@@ -18,26 +18,25 @@ main :: IO ()
 main = do
   contract <- either (fail . show) pure (checkContract root (SchemaMetadata [] [] []))
   expected <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 expectedJson) :: Either String Value)
-  let result = runPureEff (runDhallHandling (decodeValue contract source))
+  let result = runPureEff (runDhallHandling (decodeValue (contractShape contract) source))
   checked <- either (fail . show) pure result
-  unless (wireValue checked == expected) (fail (show (wireValue checked)))
-  unless (valueContract checked == contractId contract) (fail "lost contract identity")
-  forM_ invalid $ \contents -> case runPureEff (runDhallHandling (decodeValue contract contents)) of
+  unless (checked == expected) (fail (show (checked)))
+  forM_ invalid $ \contents -> case runPureEff (runDhallHandling (decodeValue (contractShape contract) contents)) of
     Left _ -> pure ()
     Right _ -> fail ("Accepted invalid input: " ++ show contents)
-  empty <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue contract emptySource)))
+  empty <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue (contractShape contract) emptySource)))
   expectedEmpty <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 emptyJson) :: Either String Value)
-  unless (wireValue empty == expectedEmpty) (fail (show (wireValue empty)))
+  unless (empty == expectedEmpty) (fail (show (empty)))
   collectionContract <- either (fail . show) pure
     (checkContract collectionRoot (SchemaMetadata [] [] [CollectionDecl "items" "items" [("parent", "items")]]))
-  collectionValue <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue collectionContract collectionSource)))
+  collectionValue <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue (contractShape collectionContract) collectionSource)))
   expectedCollection <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 collectionJson) :: Either String Value)
-  unless (wireValue collectionValue == expectedCollection) (fail (show (wireValue collectionValue)))
+  unless (collectionValue == expectedCollection) (fail (show (collectionValue)))
   forM_ [expected, expectedEmpty, set "title" (String "quote: \" slash: \\ newline:\n${notAnImport} 🌍") expected] $
     roundTrip contract
   roundTrip collectionContract expectedCollection
   roundTrip collectionContract (object ["items" .= ([] :: [Value])])
-  forM_ badWire $ \value -> case runPureEff (runDhallHandling (encodeValue contract value)) of
+  forM_ badWire $ \value -> case runPureEff (runDhallHandling (encodeValue (contractShape contract) value)) of
     Left _ -> pure ()
     Right _ -> fail ("Encoded invalid wire value: " ++ show value)
   forM_ ["+1", "01", "-0", "1.0", " 1", "1 ", "1e3", "", "--1"] $ \number ->
@@ -56,15 +55,15 @@ main = do
 
 roundTrip :: CheckedContract -> Value -> IO ()
 roundTrip contract value = do
-  rendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue contract value)))
-  decoded <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue contract rendered)))
-  unless (wireValue decoded == value && valueContract decoded == contractId contract)
+  rendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue (contractShape contract) value)))
+  decoded <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue (contractShape contract) rendered)))
+  unless (decoded == value)
     (fail ("Round trip changed value: " ++ show rendered))
-  rerendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue contract (wireValue decoded))))
+  rerendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue (contractShape contract) (decoded))))
   unless (rendered == rerendered) (fail "Unstable Dhall rendering")
 
 rejectEncoding :: CheckedContract -> Value -> IO ()
-rejectEncoding contract value = case runPureEff (runDhallHandling (encodeValue contract value)) of
+rejectEncoding contract value = case runPureEff (runDhallHandling (encodeValue (contractShape contract) value)) of
   Left _ -> pure ()
   Right _ -> fail ("Encoded invalid wire value: " ++ show value)
 

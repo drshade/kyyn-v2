@@ -4,6 +4,13 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-types': [],
+  'kyyn-porcelain': ['Data.Aeson', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root'],
+  'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Data.Aeson', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable',
+    'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Numeric', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path',
+    'Kyyn.Domain.Root', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Porcelain.Capability.RootStore'],
   'kyyn-domain': ['Data.List', 'Control.DeepSeq', 'GHC.Generics', 'System.FilePath'],
   'kyyn-plumbing': ['Data.List', 'Kyyn.Domain.DataType'],
   'kyyn-microhs': [
@@ -22,13 +29,17 @@ const allowed = {
   ],
 };
 
+const domainModules = {
+  'Kyyn.Domain.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
+    'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
+  'Kyyn.Domain.Root': ['Data.Aeson', 'Data.ByteString', 'Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Path'],
+};
+
 const plumbingModules = {
   'Kyyn.Plumbing.Capability.DhallHandling': ['Data.Aeson', 'Data.Text',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic',
-    'Kyyn.Plumbing.Capability.SchemaInspection.Contract'],
-  'Kyyn.Plumbing.Capability.SchemaInspection.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
-    'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
-    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
+    'Kyyn.Domain.DataType'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Metadata': ['Control.Monad', 'Data.Aeson',
     'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.List', 'Data.Char', 'Effectful',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure',
@@ -50,7 +61,7 @@ const interpreterModules = {
     'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
     'Dhall.Src', 'Dhall.TypeCheck', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic',
-    'Kyyn.Plumbing.Capability.SchemaInspection.Contract', 'Kyyn.Plumbing.Capability.DhallHandling'],
+    'Kyyn.Domain.DataType', 'Kyyn.Plumbing.Capability.DhallHandling'],
 };
 
 const compilerModules = {
@@ -66,14 +77,14 @@ const compilerModules = {
 export function checkImports(packageName, source) {
   if (!allowed[packageName]) throw new Error(`No import policy for ${packageName}`);
   const moduleName = /^module\s+([\w.]+)/m.exec(source)?.[1];
-  const permitted = (packageName === 'kyyn-plumbing' && plumbingModules[moduleName]) ||
+  const permitted = (packageName === 'kyyn-domain' && domainModules[moduleName]) || (packageName === 'kyyn-plumbing' && plumbingModules[moduleName]) ||
     (packageName === 'kyyn-microhs' && compilerModules[moduleName]) ||
     (packageName === 'kyyn-plumbing-interpreters' && interpreterModules[moduleName]) || allowed[packageName];
   return source.split('\n').filter(line => /^\s*import\b/.test(line)).flatMap(line => {
     const match = /^\s*import\s+(?:qualified\s+)?([A-Z][\w.]*)(?:\s|$)/.exec(line);
     if (!match) return ['unsupported import syntax; use a plain single-line module import'];
     if (!permitted.includes(match[1])) return [match[1]];
-    if ((packageName === 'kyyn-plumbing' || moduleName === 'Kyyn.MicroHs.Interpreter.GuestCompilation') && match[1] === 'Effectful') {
+    if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters'].includes(packageName) || moduleName === 'Kyyn.MicroHs.Interpreter.GuestCompilation') && match[1] === 'Effectful') {
       const explicit = /^\s*import Effectful \((.*)\)\s*$/.exec(line);
       const names = explicit?.[1].split(',').map(name => name.trim());
       const pureNames = ['Effect', 'Eff', 'DispatchOf', 'Dispatch(..)', '(:>)'];
