@@ -34,6 +34,10 @@ then converts it to the guest codec representation. Exact integers become canoni
 decimal strings on that wire; Dhall optionals and unions become its tagged values.
 The returned `CheckedDhallValue` retains the complete contract identity. This is
 structural decoding only, not semantic validation or an implemented RootStore.
+The format-library adapter lives in `kyyn-plumbing-interpreters`; the capability
+API exposes no Dhall types or dependency. An unexpected conversion failure after
+successful type checking is reported as `dhall.internal-conversion`, a kernel
+implementation defect rather than invalid authored data.
 
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts

@@ -23,10 +23,9 @@ const allowed = {
 };
 
 const plumbingModules = {
-  'Kyyn.Plumbing.Capability.DhallHandling': ['Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
-    'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
-    'Dhall.Src', 'Dhall.TypeCheck', 'Effectful', 'Effectful.Dispatch.Dynamic',
-    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Plumbing.Capability.SchemaInspection.Contract'],
+  'Kyyn.Plumbing.Capability.DhallHandling': ['Data.Aeson', 'Data.Text',
+    'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic',
+    'Kyyn.Plumbing.Capability.SchemaInspection.Contract'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
@@ -45,6 +44,14 @@ const plumbingModules = {
     'Data.ByteString.Builder', 'Data.ByteString.Lazy', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Path'],
 };
 
+const interpreterModules = {
+  'Kyyn.Plumbing.Interpreter.DhallHandling': ['Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
+    'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
+    'Dhall.Src', 'Dhall.TypeCheck', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic',
+    'Kyyn.Plumbing.Capability.SchemaInspection.Contract', 'Kyyn.Plumbing.Capability.DhallHandling'],
+};
+
 const compilerModules = {
   'Kyyn.MicroHs.Toolchain': ['Kyyn.Domain.Path'],
   'Kyyn.MicroHs.Interpreter.GuestCompilation': ['Control.Monad', 'Data.ByteString', 'Data.Text',
@@ -59,7 +66,8 @@ export function checkImports(packageName, source) {
   if (!allowed[packageName]) throw new Error(`No import policy for ${packageName}`);
   const moduleName = /^module\s+([\w.]+)/m.exec(source)?.[1];
   const permitted = (packageName === 'kyyn-plumbing' && plumbingModules[moduleName]) ||
-    (packageName === 'kyyn-microhs' && compilerModules[moduleName]) || allowed[packageName];
+    (packageName === 'kyyn-microhs' && compilerModules[moduleName]) ||
+    (packageName === 'kyyn-plumbing-interpreters' && interpreterModules[moduleName]) || allowed[packageName];
   return source.split('\n').filter(line => /^\s*import\b/.test(line)).flatMap(line => {
     const match = /^\s*import\s+(?:qualified\s+)?([A-Z][\w.]*)(?:\s|$)/.exec(line);
     if (!match) return ['unsupported import syntax; use a plain single-line module import'];

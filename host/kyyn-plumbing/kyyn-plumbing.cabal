@@ -18,4 +18,4 @@ library
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0,
-    cryptohash-sha256 ==0.11.102.1, text, kyyn-types, aeson ==2.2.5.0, dhall ==1.42.3
+    cryptohash-sha256 ==0.11.102.1, text, kyyn-types, aeson ==2.2.5.0

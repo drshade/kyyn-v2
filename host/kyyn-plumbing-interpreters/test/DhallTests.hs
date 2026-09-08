@@ -20,15 +20,15 @@ main = do
   checked <- either (fail . show) pure result
   unless (wireValue checked == expected) (fail (show (wireValue checked)))
   unless (valueContract checked == contractId contract) (fail "lost contract identity")
-  forM_ invalid $ \contents -> case decodeValueSource contract contents of
+  forM_ invalid $ \contents -> case runPureEff (runDhallHandling (decodeValue contract contents)) of
     Left _ -> pure ()
     Right _ -> fail ("Accepted invalid input: " ++ show contents)
-  empty <- either (fail . show) pure (decodeValueSource contract emptySource)
+  empty <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue contract emptySource)))
   expectedEmpty <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 emptyJson) :: Either String Value)
   unless (wireValue empty == expectedEmpty) (fail (show (wireValue empty)))
   collectionContract <- either (fail . show) pure
     (checkContract collectionRoot (SchemaMetadata [] [] [CollectionDecl "items" "items" [("parent", "items")]]))
-  collectionValue <- either (fail . show) pure (decodeValueSource collectionContract collectionSource)
+  collectionValue <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue collectionContract collectionSource)))
   expectedCollection <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 collectionJson) :: Either String Value)
   unless (wireValue collectionValue == expectedCollection) (fail (show (wireValue collectionValue)))
   putStrLn "Dhall projection, typed decoding, wire conversion and pure interpreter passed."

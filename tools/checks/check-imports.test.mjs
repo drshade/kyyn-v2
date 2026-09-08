@@ -6,6 +6,14 @@ test('pure dependencies are permitted', () => {
   assert.deepEqual(checkImports('kyyn-domain', 'import Data.List (nub)'), []);
   assert.deepEqual(checkImports('kyyn-plumbing', 'import Kyyn.Domain.DataType'), []);
 });
+test('Dhall library stays behind its interpreter', () => {
+  const api = 'module Kyyn.Plumbing.Capability.DhallHandling where\n';
+  const implementation = 'module Kyyn.Plumbing.Interpreter.DhallHandling where\n';
+  for (const name of ['Dhall.Core', 'Dhall.Parser', 'Dhall.TypeCheck']) {
+    assert.deepEqual(checkImports('kyyn-plumbing', api + `import ${name}`), [name]);
+    assert.deepEqual(checkImports('kyyn-plumbing-interpreters', implementation + `import ${name}`), []);
+  }
+});
 test('native compiler and IO cannot enter pure generation', () => {
   for (const name of ['MicroHs.Expr', 'Kyyn.MicroHs.Inspection', 'System.IO', 'System.IO.Unsafe', 'Data.Text.IO']) {
     assert.deepEqual(checkImports('kyyn-plumbing', `import qualified ${name} as X`), [name]);
