@@ -66,6 +66,10 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   unless (compilation == Right (Left (ProposedCodeRejected errors))) (fail "Compile failure became guest refusal")
   refusal <- execute (Right (entry "printf '{\"tag\":\"Rejected\",\"value\":[]}'")) root captured
   unless (refusal == Right (Left (EvolutionRejected (EvolutionFailure [])))) (fail "Guest refusal lost its classification")
+  invalidOutput <- execute (Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":null,\"steps\":[]}}'")) root captured
+  case invalidOutput of
+    Right (Left (ProposedCodeRejected _)) -> pure ()
+    _ -> fail "Host output rejection was misclassified as guest refusal"
   forM_ [("exit 17",WaitForExit),("printf '{}'",ReadOutput)] $ \(script,operation) -> do
     failure <- execute (Right (entry script)) root captured
     case failure of

@@ -68,6 +68,9 @@ does not become another specification of the product's runtime workflows.
   the fast check.
   It also checks exclusive hexadecimal directory allocation, a seeded collision
   retry with existing contents preserved, concurrent allocations and parent failure.
+  Optional reads distinguish absence from failure. Atomic replacement tests cover
+  initial creation, concurrent complete-value reads/writes, temporary cleanup and
+  failed replacement preserving the existing directory.
   Authors choose relevant local checks and record their revision and results;
   this command is not mandatory for every PR.
   `cabal test queries --test-options=--pure --test-show-details=direct` exercises

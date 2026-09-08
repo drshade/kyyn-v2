@@ -136,7 +136,7 @@ IDs is not the diff. Compare contract identities and decoded values structurally
 the first observed before must match the selected Before, adjacent endpoints
 must match, and the final observed after must match the returned result. An empty
 chain is valid only for an unchanged root value and contract, as with identity.
-A mismatch returns `EvolutionRejected` with a diagnostic, not a successful
+A mismatch returns `ProposedCodeRejected` with a host diagnostic, not a successful
 candidate with an invented unannotated step or incomplete report.
 This checks the report's completeness, not whether its declared rationale is true.
 

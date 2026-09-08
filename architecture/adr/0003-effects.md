@@ -74,7 +74,11 @@ data FileSystem :: Effect where
     :: (DirectoryScope -> m a) -> FileSystem m a
   ReadBytes
     :: DirectoryScope -> RelativePath -> FileSystem m Bytes
+  ReadOptionalBytes
+    :: DirectoryScope -> RelativePath -> FileSystem m (Maybe Bytes)
   WriteBytes
+    :: DirectoryScope -> RelativePath -> Bytes -> FileSystem m ()
+  ReplaceBytes
     :: DirectoryScope -> RelativePath -> Bytes -> FileSystem m ()
   CreateUniqueDirectory
     :: DirectoryScope -> FileSystem m RelativePath
@@ -106,10 +110,15 @@ collisions; existing files/directories are never reused or overwritten. This is
 allocation, not a cryptographic identity or automatically cleaned temporary scope.
 Other native errors remain storage Failure.
 
-These initial byte writes populate private compiler/artifact scopes. They do not
-promise atomic persistent-file replacement. Store and sink operations that publish
-files require that additional operation; atomic replacement of one file still
-does not promise atomic updates of a KB. [Acceptance](0012-acceptance.md) owns the
+`WriteBytes` populates private compiler/artifact scopes; it is not atomic replacement.
+`ReplaceBytes` writes a temporary file in the destination directory, closes it,
+then renames it over the destination. Missing parents are created. Readers see a
+complete old or new file, never the intermediate write. Temporary files are cleaned
+on failure; this does not promise power-loss durability or atomic updates of a KB.
+`ReadOptionalBytes` returns Nothing only for a missing path; inaccessible files,
+directory reads and other native errors remain Failure. Stores use this distinction
+for optional selections without interpreting unreadable data as absence.
+[Acceptance](0012-acceptance.md) owns the
 Git-level publication operation. A temporary scope is not a root snapshot: callers
 return captured bytes or results, not a path-dependent snapshot after cleanup.
 The interpreter translates native failures into [Failure](0019-failures.md); callers
@@ -127,7 +136,7 @@ writeRequestedFile
 The composition root supplies the base; for a file sink it is the selected KB's
 checkout directory (ADR 0017). The adapter resolves a relative request against
 that base, or uses an absolute request as given, producing DirectoryScope and
-RelativePath for WriteBytesAtomically. Native path handling and access errors
+RelativePath for ReplaceBytes. Native path handling and access errors
 belong to filesystem plumbing, not the plugin's configuration parser. This is
 location resolution, not a grant registry or a proof of filesystem containment.
 The helper needs no IOE in its public row; any native work goes through FileSystem.
