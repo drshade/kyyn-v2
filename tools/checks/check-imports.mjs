@@ -22,6 +22,9 @@ const allowed = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.SchemaInspection.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
+    'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Metadata': ['Control.Monad', 'Data.Aeson',
     'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.List', 'Data.Char', 'Effectful',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure',

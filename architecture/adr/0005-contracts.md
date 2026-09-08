@@ -61,6 +61,23 @@ bindings through the normal regeneration path, even when their encoding would
 be unchanged. Do not split presentation and codec compatibility identities to
 avoid that work. Conservative invalidation keeps one understandable rule.
 
+The initial pure `SchemaInspection.Contract.checkContract` combines an inspected
+`DataType` with decoded `SchemaMetadata`, returning diagnostics or a checked value.
+It keeps the resolved type for code generation, checks collection envelopes and
+metadata references, and annotates reference fields in the checked shape. It does
+not establish that referenced IDs exist in particular facts. Title accepts text
+and badge accepts nullary enums (optionally wrapped); timeline assignments remain
+unsupported until a date/instant scalar codec is implemented.
+The initial checker reports the first incoherence. A role may name a single
+reachable instantiation of a polymorphic record, but multiple distinct reachable
+instantiations of that name are ambiguous and are rejected.
+
+The initial contract identity is SHA-256 of a version-tagged JSON-array encoding
+of resolved types and all metadata, including descriptions and declaration order.
+It does not use derived Show output or claim behavioral/source-package identity.
+Declaration reordering may conservatively invalidate it. There is no separate
+presentation identity or compatibility exception.
+
 A nullary union arm has `Nothing` for its payload shape; that is separate from a
 value of an optional type. Checking rejects duplicate field/case names and invalid
 collection/ID descriptors. Reference shape checking verifies an ID's representation
@@ -349,9 +366,11 @@ The experiment's JSON descriptor sidecar remains a test fixture, not the selecte
 rebuild authoring form. The implementation now evaluates a named Haskell metadata
 export through a fixed JSON adapter, using the shared `kyyn-types` vocabulary.
 `SchemaInspection.Metadata.evaluateMetadata` consumes a complete captured adapter
-input and returns decoded `SchemaMetadata`, not a `CheckedContract`. Structural
-inspection and role/collection coherence checking are not yet composed with it.
-Prove those coherence checks without loading facts. Include missing/renamed
+input and returns decoded `SchemaMetadata`, not a `CheckedContract`. The pure
+contract checker combines this result with structural inspection; the focused
+integration fixture exercises both against the same authored modules. A production
+captured-source SchemaInspection interpreter is still outstanding.
+Coherence coverage must include missing/renamed
 fields, incompatible title/timeline/badge assignments and invalid reference targets.
 Test a role-only edit invalidating the complete contract and dependent bindings,
 then recovering through normal regeneration; no presentation-only exception.

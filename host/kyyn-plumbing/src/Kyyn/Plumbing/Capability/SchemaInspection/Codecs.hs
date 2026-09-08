@@ -22,7 +22,12 @@ generateCodecs moduleName root = do
     definition name BoolType = pure [name ++ " = boolCodec"]
     definition name (ListType t) = pure [name ++ " = listCodec " ++ ref t]
     definition name (OptionalType t) = pure [name ++ " = optionalCodec " ++ ref t]
-    definition name (Algebraic _ _ constructors) = do
+    definition name t | t == sdkFactIdType = pure
+      [name ++ " = Codec (\\(Kyyn.Types.Fact.FactId value) -> encodeWith stringCodec value) (\\value -> Kyyn.Types.Fact.FactId <$> decodeWith stringCodec value)"]
+    definition name t@(Algebraic _ _ original) = do
+      let constructors = case sdkFactPayload t of
+            Just p -> [Constructor "Kyyn.Types.Fact.Fact" [(Just "id", sdkFactIdType), (Just "value", p)]]
+            Nothing -> original
       let enc = name ++ "Encode"; dec = name ++ "Decode"
       pure $ [name ++ " = Codec " ++ enc ++ " " ++ dec] ++
         concatMap (encodeConstructor enc (isRecord constructors)) constructors ++

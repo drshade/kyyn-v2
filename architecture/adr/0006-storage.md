@@ -162,15 +162,17 @@ On the guest side, identity remains outside the typed payload so migration can
 change payload shape without accidentally replacing record identity:
 
 ```haskell
-data Fact a = Fact
-  { id    :: FactId
-  , value :: a
-  }
+newtype FactId = FactId String
+data Fact a = Fact FactId a
 
 data CollectionBinding a  -- generated collection ID + payload codec/contract
 ```
 
 The generated binding is consumed by [SnapshotRead](0009-capabilities.md).
+The positional SDK constructor avoids introducing a selector named `id` into
+author imports. Its generated data representation is still the `id`/`value`
+record envelope. The recognised SDK `FactId` projects and encodes as plain text,
+not a tagged constructor; unrelated authored newtypes retain their normal encoding.
 No native host function imports the payload type `a`; its corresponding data is
 checked structurally through the collection contract.
 
