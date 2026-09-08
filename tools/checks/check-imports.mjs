@@ -12,6 +12,7 @@ const allowed = {
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Data.Aeson.Types', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
     'Data.ByteString.Char8', 'Kyyn.Plumbing.Protocol.Candidate',
     'Kyyn.Types.Evolution', 'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionReport',
     'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Plumbing.Protocol.Evolution',

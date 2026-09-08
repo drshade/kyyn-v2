@@ -3,6 +3,7 @@ module CandidateTests (candidateTests) where
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), encode, eitherDecodeStrict', object, (.=))
+import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Lazy as Lazy
@@ -10,6 +11,7 @@ import Data.Text (pack)
 import Effectful (Eff, IOE, (:>), runEff)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Contract
+import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
@@ -23,6 +25,7 @@ import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
@@ -49,6 +52,7 @@ type StoreEffects = '[EvolutionStore, RootOpening, WorkspaceStore, RootStore, Dh
 
 candidateTests :: RootContract -> FileTree -> IO ()
 candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \directory -> do
+  contractDescriptions schema
   scope <- right (directoryScope directory)
   revision <- right (gitRevision (replicate 40 'a'))
   identity <- right (evolutionId "e001")
@@ -61,9 +65,10 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       context = EvolutionContext kb identity (Before revision schema) snapshot
       captured = CapturedEvolution context
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
+      previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       report = EvolutionReport
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
-          [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact schema factValue))],
+          [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
          StepReport (Rationale "No fact changes" []) []]
       root = Root schema facts code
       candidate = Candidate context report root
@@ -95,6 +100,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     other -> fail ("Changed contract did not report staleness: " ++ show other)
   Bytes.writeFile metadataPath "not json"
   execute (loadCandidate location) >>= storageRejected
+  let corruptFact v | v == factValue = Null
+      corruptFact (Array xs) = Array (fmap corruptFact xs)
+      corruptFact (Object xs) = Object (fmap corruptFact xs)
+      corruptFact v = v
+  Bytes.writeFile metadataPath (Lazy.toStrict (encode (corruptFact document)))
+  execute (loadCandidate location) >>= storageRejected
   Bytes.writeFile metadataPath metadata
   (missingPath, missingBytes) <- case files facts of
     entry : _ -> pure entry
@@ -105,6 +116,28 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   Bytes.writeFile factPath missingBytes
   value <- runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root
   checked <- right value
+  let migrationType = case rootType (rootSchema schema) of
+        Algebraic _ args [Constructor _ fields] -> Algebraic "Migrated.Root" args
+          [Constructor "Migrated.Root" (fields ++ [(Just "confirmed",BoolType)])]
+        _ -> error "Expected record root fixture"
+  migratedSchema <- right (checkContract migrationType (metadataOf (rootSchema schema)) >>= checkRootLayout)
+  migratedId <- right (evolutionId "e002")
+  migratedCode <- right (fileTree [(either error id (relativePath "src/Migrated.hs"),"new schema source")])
+  let migratedValue = case checked of
+        CheckedValue _ (Object values) -> Object (KeyMap.insert "confirmed" (Bool True) values)
+        _ -> error "Expected record root value"
+      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft []) empty migratedCode empty empty
+      migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
+      migratedCapture = CapturedEvolution migratedContext
+      migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
+        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
+  migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
+  migratedInput <- right migratedChecked
+  migrated <- execute (evaluationMock migratedCapture
+    (Right (EvaluatedEvolution migratedCapture (After migratedSchema) migratedInput migratedReport))
+    (applyEvolution migratedCapture)) >>= right >>= right
+  migratedLoaded <- execute (loadCandidate (EvolutionWorkspace kb migratedId)) >>= right >>= right
+  unless (migratedLoaded == Just migrated) (fail "Schema-changing candidate lost Before/After or recorded contracts")
   let evaluated = EvaluatedEvolution captured (After schema) checked report
   applied <- execute (evaluationMock captured (Right evaluated) (applyEvolution captured)) >>= right >>= right
   unless (applied == candidate) (fail "Application changed the evaluated context/value/report")
@@ -119,6 +152,10 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   unless (refused == Right (Left rejection)) (fail "Application lost evaluation rejection")
   afterRejection <- Char8.readFile pointer
   unless (afterRejection == second) (fail "Rejected evaluation replaced the last successful result")
+  let malformed = EvaluatedEvolution captured (After schema) (CheckedValue (contractId (rootSchema schema)) Null) report
+  execute (evaluationMock captured (Right malformed) (applyEvolution captured)) >>= \case
+    Right (Left (ProposedCodeRejected _)) -> pure ()
+    other -> fail ("Invalid materialization returned a candidate: " ++ show other)
   let failure = StorageUnavailable (StorageDiagnostic ReplaceFile "latest/e001" "Cannot publish")
   failed <- runEff . runFailure . runFileSystemIO scope . failPublication failure . runDhallHandling
     . runRootStore . runWorkspaceStore . noOpening . runEvolutionStore $
@@ -126,7 +163,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   unless (failed == Left failure) (fail "Failed save returned a successful candidate")
   afterFailure <- Char8.readFile pointer
   unless (afterFailure == second) (fail "Failed publication replaced the previous result")
-  warning <- pure (Diagnostic Warning "test.warning" "Review this" Nothing)
+  let warning = Diagnostic Warning "test.warning" "Review this" Nothing
   validation <- runEff . runDhallHandling . runRootStore . validationMock root (ValidationReport [warning]) $ checkCandidate candidate
   case validation of
     Passed checkedCandidate (ValidationReport ds) ->
@@ -136,6 +173,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let invalid = errorDiagnostic "test.invalid" "Invalid root"
   invalidResult <- runEff . runDhallHandling . runRootStore . validationMock root (ValidationReport [invalid]) $ checkCandidate candidate
   unless (invalidResult == Rejected (ValidationReport [invalid])) (fail "Invalid candidate earned validation")
+  let compileError = [errorDiagnostic "test.compile" "Broken validator"]
+      compileRejected = interpret (\_ -> \case
+        CheckRootCode selectedRoot | selectedRoot == root -> pure (Left compileError)
+        _ -> error "Compile-rejected candidate ran checking")
+  compileResult <- runEff . runDhallHandling . runRootStore . compileRejected $ checkCandidate candidate
+  unless (compileResult == Rejected (ValidationReport compileError)) (fail "Compile error did not reject candidate checking")
   forM_ ["../outside", "missing", ""] $ \bad -> do
     Char8.writeFile pointer bad
     execute (loadCandidate location) >>= storageRejected
@@ -144,6 +187,30 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   entries <- listDirectory candidateDir
   unless (length entries >= 3) (fail "Completed private directories were not retained")
   putStrLn "Candidate persistence, immutable reload, stale contracts, publication failure, application and checking passed."
+
+contractDescriptions :: RootContract -> IO ()
+contractDescriptions baseline = do
+  let status = Algebraic "Saved.Status" [] [Constructor "Saved.Open" [], Constructor "Saved.Done" []]
+      payload = Algebraic "Saved.Payload" [StringType]
+        [Constructor "Saved.Named" [(Just "label",StringType)], Constructor "Saved.Number" [(Nothing,IntegerType)]]
+      todo = Algebraic "Saved.Todo" [] [Constructor "Saved.Todo"
+        [(Just "title",StringType), (Just "status",status), (Just "parent",OptionalType sdkFactIdType)]]
+      fact = Algebraic "Kyyn.Types.Fact.Fact" [todo]
+        [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,todo)]]
+      rootType' = Algebraic "Saved.Root" [] [Constructor "Saved.Root"
+        [(Just "todos",ListType fact),(Just "count",IntegerType),(Just "enabled",BoolType),
+         (Just "optional",OptionalType StringType),(Just "payloads",ListType payload)]]
+      metadata = SchemaMetadata
+        [RoleDecl "name" "Readable name" Title, RoleDecl "badge" "Status" Badge, RoleDecl "time" "Unused timeline" Timeline]
+        [FieldRole "Saved.Todo" "title" "name", FieldRole "Saved.Todo" "status" "badge"]
+        [CollectionDecl "todos" "todos" [("parent","todos")]]
+  schema <- right (checkContract rootType' metadata >>= checkRootLayout)
+  forM_ [baseline,schema] $ \selected -> do
+    restored <- right (restoreRootContract (describeRootContract selected)) >>= right
+    unless (restored == selected) (fail "Contract descriptions changed types, metadata, layout or fingerprint")
+  case restoreRootContract Null of
+    Left _ -> pure ()
+    other -> fail ("Malformed contract description accepted: " ++ show other)
 
 noOpening :: Eff (RootOpening : es) a -> Eff es a
 noOpening = interpret $ \_ _ -> error "Candidate operation opened or compiled a source root"

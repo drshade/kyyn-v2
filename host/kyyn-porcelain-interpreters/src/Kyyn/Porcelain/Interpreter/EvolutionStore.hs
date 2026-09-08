@@ -3,12 +3,17 @@ module Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore) where
 
 import Control.Monad (unless, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Data.Aeson (withObject, (.:))
+import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Char8 as Bytes
 import Data.List (stripPrefix, isPrefixOf)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Contract (CollectionContract(..), collectionContracts, rootSchema)
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), FactChange(..), RecordedFact(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(..))
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
@@ -21,6 +26,8 @@ import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import Kyyn.Plumbing.Protocol.Candidate (encodeCandidateMetadata, decodeCandidateMetadata)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import qualified Kyyn.Plumbing.Capability.DhallHandling as DhallHandling
+import Kyyn.Types.Fact (FactId(..))
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..))
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
@@ -28,7 +35,7 @@ import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
 
 runEvolutionStore
   :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootOpening.RootOpening :> es,
-      RootStore.RootStore :> es, Failure :> es)
+      RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
 runEvolutionStore = interpret $ \_ -> \case
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
@@ -64,6 +71,7 @@ runEvolutionStore = interpret $ \_ -> \case
     unless (revision == selected && code == target)
       (storageFailure WriteFile "candidate.json" "Candidate disagrees with its captured Before or target")
     _ <- RootStore.loadRootValueForChecking root >>= stored WriteFile "root"
+    checkSavedReport WriteFile report
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
     tree <- stored WriteFile "root" (fileTree (files facts ++ files code))
     allocated <- FileSystem.createUniqueDirectory parent
@@ -104,7 +112,21 @@ runEvolutionStore = interpret $ \_ -> \case
             unless (owner == identity) (storageFailure ReadFile "candidate.json" "Saved result belongs to another evolution")
             let root = Root after facts code
             _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
+            checkSavedReport ReadFile report
             pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
+
+checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
+checkSavedReport operation (EvolutionReport steps) = forM_ steps $ \(StepReport _ changes) ->
+  forM_ changes $ \(FactChange collection (FactId identity) before after) -> do
+    unless (before /= Nothing || after /= Nothing)
+      (storageFailure operation "candidate.json" "Fact change has neither a before nor an after value")
+    forM_ [fact | Just fact <- [before,after]] $ \(RecordedFact schema value) -> do
+      shape <- case [shape | CollectionContract name _ _ shape <- collectionContracts (rootSchema schema), name == collection] of
+        [shape] -> pure (Record [("id", Scalar TextScalar), ("value", shape)])
+        _ -> storageFailure operation "candidate.json" "Recorded fact names an unknown collection"
+      _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.json"
+      recordedId <- stored operation "candidate.json" (parseEither (withObject "Fact" (.: "id")) value)
+      unless (recordedId == identity) (storageFailure operation "candidate.json" "Recorded fact ID disagrees with the change")
 
 candidateScope :: Failure :> es => KnowledgeBase -> Eff es DirectoryScope
 candidateScope kb@(KnowledgeBase (Repository scope) _) = stored ReadDirectoryTree ".kyyn/candidates" $ do

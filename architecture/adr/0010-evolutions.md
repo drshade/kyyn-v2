@@ -404,7 +404,7 @@ Installing Git plumbing for a complete store handler does not launch Git on ever
 list call; do not use partial handlers that fail on the store's other operations.
 
 The implemented store handler requires `FileSystem`, `WorkspaceStore`, `RootOpening`,
-`RootStore` and `Failure`. Capture reads the workspace at the derived location,
+`RootStore`, `DhallHandling` and `Failure`. Capture reads the workspace at the derived location,
 decodes its manifest, and calls `LoadSourceAt` for that manifest's Before revision
 and the owning KB's root subtree. The projected `before/` tree must equal that
 source root's entire authored `src/` tree (prefix stripped) exactly, including
@@ -471,6 +471,8 @@ contracts retained in each recorded fact. An unsupported saved format is stale;
 there is no migration or compatibility framework. The repository and KB prefix
 come from the explicit load location; the saved evolution ID must match it.
 This permits moving a checkout without persisting an absolute local path.
+Loading also checks stored root facts and recorded fact shapes/identities against
+those restored contracts. It does not rederive a report by replaying old code.
 
 Only after all files are written does `ReplaceBytes` atomically publish
 `latest/<evolution-id>`. Save failure leaves the previous selection intact; an
