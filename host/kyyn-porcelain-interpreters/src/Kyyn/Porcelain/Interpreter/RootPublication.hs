@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -46,11 +46,17 @@ runRootPublication = interpret $ \_ -> \case
       Nothing -> pure ()
     requireBranch repository branch
     observed <- material (Git.resolveRevision repository "HEAD")
-    unless (observed == expected) (refuse (BaseMismatch expected (Just observed)))
+    unless (observed == expected) $ do
+      acceptedNow <- material (EvolutionStore.findAcceptance kb identity observed)
+      throwE (maybe (NotAccepted (BaseMismatch expected (Just observed))) alreadyAccepted acceptedNow)
     rootPath <- material (pure (mapPath (RootStore.rootLocation kb)))
     overlaps <- liftEff (Git.checkoutChanges repository expected [rootPath])
     unless (null overlaps) (refuse (OverlappingEdits overlaps))
     state <- material (EvolutionStore.readEvolutionState (EvolutionWorkspace kb identity))
+    when (state == Accepted) $ do
+      current <- material (branchHead repository branch)
+      acceptedNow <- material (EvolutionStore.findAcceptance kb identity current)
+      case acceptedNow of Just revision -> throwE (alreadyAccepted revision); Nothing -> pure ()
     unless (state == Ready) (refuse (NotReady state))
     matches <- material (EvolutionStore.matchesCapturedInputs context)
     unless matches (refuse (WorkspaceChanged identity))

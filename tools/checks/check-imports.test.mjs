@@ -38,6 +38,15 @@ test('Dhall library stays behind its interpreter', () => {
     assert.deepEqual(checkImports('kyyn-plumbing-interpreters', implementation + `import ${name}`), []);
   }
 });
+test('publication cannot import validation, source loading or native effects', () => {
+  const header = 'module Kyyn.Porcelain.Interpreter.RootPublication where\n';
+  for (const name of ['Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Capability.RootOpening',
+    'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.EvolutionExecution',
+    'Kyyn.Plumbing.Capability.FileSystem', 'Effectful.Error.Static', 'System.IO']) {
+    assert.deepEqual(checkImports('kyyn-porcelain-interpreters', header + `import ${name}`), [name]);
+  }
+  assert.deepEqual(checkImports('kyyn-porcelain-interpreters', header + 'import Kyyn.Plumbing.Capability.Git'), []);
+});
 test('native compiler and IO cannot enter pure generation', () => {
   for (const name of ['MicroHs.Expr', 'Kyyn.MicroHs.Inspection', 'System.IO', 'System.IO.Unsafe', 'Data.Text.IO']) {
     assert.deepEqual(checkImports('kyyn-plumbing', `import qualified ${name} as X`), [name]);

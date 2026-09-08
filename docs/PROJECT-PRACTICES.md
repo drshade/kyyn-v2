@@ -64,6 +64,17 @@ does not become another specification of the product's runtime workflows.
   into one real Git commit and reopens both exactly, including FindAcceptance of
   that commit. It exercises export/commit/CAS primitives, not the full acceptance
   readiness/overlap/checkout-synchronization workflow.
+  Publication fixtures separately compose the full native application/store/Git
+  path: create/capture, recording guest output with real report construction,
+  save/fresh checks, refusal, atomic publication, reopening and explicit recovery.
+  They cover two drafts, root-level/nested KBs, deletion, stale/rebased and shared
+  drafts, invalid/missing candidates, workspace/root edits, detached/changed branch,
+  same/different-workspace CAS races, index-lock synchronization failure, injected
+  asynchronous interruption immediately after a successful ref update, recovery
+  without candidate files or a valid live manifest, later-head repair, archive
+  removal and reacceptance. Direct publication/recovery forbid source-opening and
+  validation calls. Schema inspection, guest computation and validation are recording
+  handlers: these fixtures are not a real-MicroHs or installed-CLI integration check.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.

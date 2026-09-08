@@ -34,6 +34,7 @@ import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import qualified Kyyn.Plumbing.Capability.GuestCompilation.Types as Sources
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import PublicationTests (publicationTests)
 
 main :: IO ()
 main = do
@@ -95,6 +96,7 @@ main = do
   candidateTests contract snapshot
   acceptanceHistoryTests
   rootExportTests root
+  publicationTests root
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
 openingTests :: RootContract -> FileTree -> IO ()
