@@ -5,7 +5,8 @@ and [architectural principles](architecture/principles.md).
 
 For development, read [the SDLC](docs/SDLC.md),
 [project practices](docs/PROJECT-PRACTICES.md) and [contributing](CONTRIBUTING.md).
-Run the complete current gate with `bash tools/test.sh`.
+Run the fast check with `bash tools/test.sh`. Run `bash tools/test.sh --full`
+for full integration verification before completing an issue.
 
 The first implementation boundary inspects Haskell data types with the native
 MicroHs frontend and generates private JSON codecs importing the authored types.

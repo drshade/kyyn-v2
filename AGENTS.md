@@ -10,6 +10,6 @@ For design, start with [architectural principles](architecture/principles.md),
 not a request to generate empty packages. Historical experiments are evidence,
 not implementation to copy by default.
 
-The complete verification entry point is `bash tools/test.sh`. Its current scope
+The default verification entry point is `bash tools/test.sh`. Its current scope
 and prerequisites are recorded in project practices. Use the repository's PR and
 Issue templates where applicable; transient execution details belong in the session.

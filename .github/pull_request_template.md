@@ -24,8 +24,8 @@ not every coding action. Remove it when a checklist adds no value.
 
 ## Verification
 
-What evidence establishes the result? Include the complete gate and any
-proportionate direct verification.
+What evidence establishes the result? Include the default check and targeted
+verification; include the full integration check when completing an Issue.
 
 ## Review focus
 
