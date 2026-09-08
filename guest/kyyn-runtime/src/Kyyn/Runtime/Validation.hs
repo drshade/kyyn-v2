@@ -1,13 +1,16 @@
-module Kyyn.Runtime.Validation (encodeReport) where
+module Kyyn.Runtime.Validation (encodeReport, encodeReportValue) where
 
 import Kyyn.Types.Diagnostic
 import Kyyn.Runtime.Json
 import Text.JSON.Types (JSValue(JSArray))
 
 encodeReport :: ValidationReport -> Either String String
-encodeReport (ValidationReport diagnostics)
+encodeReport report = encodeReportValue report >>= printValue
+
+encodeReportValue :: ValidationReport -> Either String JSValue
+encodeReportValue (ValidationReport diagnostics)
   | any invalidPosition diagnostics = Left "Expected positive source coordinates"
-  | otherwise = printValue (JSArray (map encodeDiagnostic diagnostics))
+  | otherwise = Right (JSArray (map encodeDiagnostic diagnostics))
   where
     invalidPosition (Diagnostic _ _ _ (Just (SourceLocation _ line column))) = line <= 0 || column <= 0
     invalidPosition _ = False

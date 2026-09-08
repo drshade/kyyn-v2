@@ -11,6 +11,7 @@ library
     Kyyn.Porcelain.Capability.RootOpening
     Kyyn.Porcelain.Capability.WorkspaceStore
     Kyyn.Porcelain.Capability.EvolutionStore
+    Kyyn.Porcelain.Capability.EvolutionReport
     Kyyn.Porcelain.Capability.RootExecution
     Kyyn.Porcelain.Capability.Validation
     Kyyn.Porcelain.Validated
@@ -18,4 +19,4 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, aeson, effectful-core ==2.6.1.0
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson, effectful-core ==2.6.1.0
