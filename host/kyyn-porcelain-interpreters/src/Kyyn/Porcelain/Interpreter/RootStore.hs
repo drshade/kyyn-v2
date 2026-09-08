@@ -1,0 +1,136 @@
+{-# LANGUAGE GADTs, LambdaCase #-}
+module Kyyn.Porcelain.Interpreter.RootStore (runRootStore) where
+
+import Control.Monad (unless, forM)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Data.Aeson (Value(..), object, (.=), toJSON)
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as Keys
+import qualified Data.ByteString as Bytes
+import Data.Foldable (toList)
+import Data.List (nub, sort, isPrefixOf)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
+import Numeric (showHex)
+import Effectful (Eff, (:>))
+import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.Contract
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
+import Kyyn.Domain.Root
+import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
+import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
+
+runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
+runRootStore = interpret $ \_ -> \case
+  CheckRootValue contract value -> runExceptT $ do
+    _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)
+    pure (CheckedValue (contractId contract) value)
+  MaterializeRoot contract code checked -> runExceptT (materialize contract code checked)
+  LoadRootValueForChecking root -> runExceptT (loadValue root)
+
+type Result es = ExceptT [Diagnostic] (Eff es)
+
+problem :: String -> Result es a
+problem = throwE . pure . Diagnostic "root.storage"
+
+ensure :: Bool -> String -> Result es ()
+ensure condition message = unless condition (problem message)
+
+liftChecked :: Either String a -> Result es a
+liftChecked = either problem pure
+
+rootFields :: CheckedContract -> Result es [(String, Shape)]
+rootFields contract = case contractShape contract of
+  Record fields -> pure fields
+  _ -> problem "Root contract is not a record"
+
+record :: Value -> Result es (Keys.KeyMap Value)
+record (Object values) = pure values
+record _ = problem "Expected record"
+
+field :: String -> Keys.KeyMap Value -> Result es Value
+field name = maybe (problem ("Missing field: " ++ name)) pure . Keys.lookup (Key.fromString name)
+
+list :: Value -> Result es [Value]
+list (Array values) = pure (toList values)
+list _ = problem "Expected list"
+
+text :: Value -> Result es Text
+text (String value) = pure value
+text _ = problem "Expected text"
+
+factShape :: Shape -> Shape
+factShape payload = Record [("id", Scalar TextScalar), ("value", payload)]
+
+collectionDirectory :: String -> String
+collectionDirectory name = "facts/c-" ++ encoded (Text.pack name)
+
+factName :: String -> Text -> String
+factName collection identity = collectionDirectory collection ++ "/f-" ++ encoded identity ++ ".dhall"
+
+indexName :: String -> String
+indexName collection = collectionDirectory collection ++ "/index.dhall"
+
+encoded :: Text -> String
+encoded = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
+  . Bytes.unpack . Text.encodeUtf8
+
+encodeFile :: Dhall.DhallHandling :> es => String -> Shape -> Value -> Result es (RelativePath, Bytes.ByteString)
+encodeFile name shape value = do
+  path <- liftChecked (relativePath name)
+  contents <- ExceptT (Dhall.encodeValue shape value)
+  pure (path, Text.encodeUtf8 contents)
+
+materialize :: Dhall.DhallHandling :> es => CheckedContract -> FileTree -> CheckedValue -> Result es Root
+materialize contract code (CheckedValue identity value) = do
+  ensure (identity == contractId contract) "Checked value belongs to a different contract"
+  ensure (all (\(p,_) -> let name = relativeName p in name /= "facts" && not ("facts/" `isPrefixOf` name)) (files code))
+    "Code snapshot overlaps the facts subtree"
+  fields <- rootFields contract
+  values <- record value
+  ensure (sort (map fst fields) == sort (map (Key.toString) (Keys.keys values))) "Root fields do not match contract"
+  let collections = collectionContracts contract
+      collectionFields = [f | CollectionContract _ f _ _ <- collections]
+      residualFields = [(n,s) | (n,s) <- fields, n `notElem` collectionFields]
+      residual = object [Key.fromString n .= v | (n,_) <- residualFields, Just v <- [Keys.lookup (Key.fromString n) values]]
+  rootFile <- encodeFile "facts/root.dhall" (Record residualFields) residual
+  entries <- fmap concat $ forM collections $ \(CollectionContract name rootField _ payload) -> do
+    members <- field rootField values >>= list
+    identities <- forM members $ \member -> record member >>= field "id" >>= text
+    ensure (length identities == length (nub identities)) (name ++ ": duplicate fact IDs")
+    index <- encodeFile (indexName name) (List (Scalar TextScalar)) (toJSON identities)
+    facts <- forM (zip identities members) $ \(factId,member) -> encodeFile (factName name factId) (factShape payload) member
+    pure (index : facts)
+  snapshot <- liftChecked (fileTree (rootFile : entries))
+  pure (Root contract snapshot code)
+
+decodeFile :: Dhall.DhallHandling :> es => FileTree -> String -> Shape -> Result es Value
+decodeFile tree name shape = do
+  path <- liftChecked (relativePath name)
+  contents <- maybe (problem ("Missing file: " ++ name)) pure (lookup path (files tree))
+  source <- liftChecked (either (Left . show) Right (Text.decodeUtf8' contents))
+  ExceptT (Dhall.decodeValue shape source)
+
+loadValue :: Dhall.DhallHandling :> es => Root -> Result es CheckedValue
+loadValue (Root contract snapshot _) = do
+  fields <- rootFields contract
+  let collections = collectionContracts contract
+      collectionFields = [f | CollectionContract _ f _ _ <- collections]
+      residualFields = [(n,s) | (n,s) <- fields, n `notElem` collectionFields]
+  residual <- decodeFile snapshot "facts/root.dhall" (Record residualFields) >>= record
+  loaded <- forM collections $ \(CollectionContract name rootField _ payload) -> do
+    identities <- decodeFile snapshot (indexName name) (List (Scalar TextScalar)) >>= list >>= traverse text
+    ensure (length identities == length (nub identities)) (name ++ ": duplicate membership IDs")
+    members <- forM identities $ \identity -> do
+      member <- decodeFile snapshot (factName name identity) (factShape payload)
+      storedId <- record member >>= field "id" >>= text
+      ensure (storedId == identity) (name ++ ": fact path/envelope identity mismatch")
+      pure member
+    pure (rootField, toJSON members, indexName name : map (factName name) identities)
+  let expected = "facts/root.dhall" : concat [paths | (_,_,paths) <- loaded]
+  ensure (sort expected == sort [relativeName path | (path,_) <- files snapshot]) "Unlisted fact files in snapshot"
+  let values = foldr (\(name,value,_) -> Keys.insert (Key.fromString name) value) residual loaded
+  pure (CheckedValue (contractId contract) (Object values))

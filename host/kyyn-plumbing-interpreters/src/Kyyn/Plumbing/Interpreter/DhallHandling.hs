@@ -24,21 +24,18 @@ import Prettyprinter (layoutPretty, defaultLayoutOptions)
 import Prettyprinter.Render.Text (renderStrict)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
-import Kyyn.Plumbing.Capability.SchemaInspection.Contract
-  ( CheckedContract, contractId, contractShape )
-
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..), CheckedDhallValue(..))
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
 
 runDhallHandling :: Eff (DhallHandling : es) a -> Eff es a
 runDhallHandling = interpret $ \_ -> \case
   DecodeValue contract contents -> pure (decodeValueSource contract contents)
   EncodeValue contract value -> pure (encodeValueSource contract value)
 
-encodeValueSource :: CheckedContract -> Value -> Either [Diagnostic] Text
+encodeValueSource :: Shape -> Value -> Either [Diagnostic] Text
 encodeValueSource contract value = do
-  expression <- first (pure . Diagnostic "dhall.wire-value") (fromWire (contractShape contract) value)
+  expression <- first (pure . Diagnostic "dhall.wire-value") (fromWire contract value)
   _ <- first (pure . Diagnostic "dhall.internal-encoding" . show)
-    (TypeCheck.typeOf (D.Annot expression (projectDhallType contract)))
+    (TypeCheck.typeOf (D.Annot expression (project contract)))
   pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr expression)) <> "\n")
 
 fromWire :: Shape -> Value -> Either String (D.Expr Src Void)
@@ -93,9 +90,6 @@ variant value@(Object values) = do
     _ -> Left "Expected string tag"
 variant _ = Left "Expected tagged object"
 
-projectDhallType :: CheckedContract -> D.Expr Src Void
-projectDhallType = project . contractShape
-
 project :: Shape -> D.Expr Src Void
 project (Scalar TextScalar) = D.Text
 project (Scalar IntegerScalar) = D.Integer
@@ -108,14 +102,14 @@ project (Record fields) = D.Record (Map.fromList
 project (Union arms) = D.Union (Map.fromList
   [(Text.pack name, project <$> payload) | (name,payload) <- arms])
 
-decodeValueSource :: CheckedContract -> Text -> Either [Diagnostic] CheckedDhallValue
+decodeValueSource :: Shape -> Text -> Either [Diagnostic] Value
 decodeValueSource contract source = do
   parsed <- first (problem "dhall.parse" . show) (Parser.exprFromText "fact contents" source)
   closed <- traverse (const (Left (problem "dhall.import" "Fact contents must be self-contained; imports are not supported"))) parsed
   _ <- first (problem "dhall.type" . show)
-    (TypeCheck.typeOf (D.Annot closed (projectDhallType contract)))
-  value <- first (problem "dhall.internal-conversion") (toWire (contractShape contract) (D.normalize closed))
-  pure (CheckedDhallValue (contractId contract) value)
+    (TypeCheck.typeOf (D.Annot closed (project contract)))
+  value <- first (problem "dhall.internal-conversion") (toWire contract (D.normalize closed))
+  pure value
   where
     problem code message = [Diagnostic code message]
 

@@ -15,8 +15,9 @@ own provenance and retained notices.
 | temporary | 1.3 | BSD-3-Clause | [source](https://hackage.haskell.org/package/temporary-1.3/temporary-1.3.tar.gz) |
 | cryptohash-sha256 | 0.11.102.1 | BSD-3-Clause | [source](https://hackage.haskell.org/package/cryptohash-sha256-0.11.102.1/cryptohash-sha256-0.11.102.1.tar.gz) |
 | dhall | 1.42.3 | BSD-3-Clause | [source](https://hackage.haskell.org/package/dhall-1.42.3/dhall-1.42.3.tar.gz) |
+| prettyprinter | 1.7.2 | BSD-2-Clause | [source](https://hackage.haskell.org/package/prettyprinter-1.7.2/prettyprinter-1.7.2.tar.gz) |
 
-Each archive contains `LICENSE`; its Cabal declaration and that file were inspected.
+Each archive contains `LICENSE` (`LICENSE.md` for prettyprinter); its Cabal declaration and that file were inspected.
 These are native Cabal dependencies, not copied into guest source. The table does
 not pin the solver: Cabal files govern dependency constraints, and the resolved
 build plan must be reviewed for any distribution.

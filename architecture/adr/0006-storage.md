@@ -26,26 +26,42 @@ Workspace manifests use Dhall as well. DhallHandling supplies the real host
 library for these files and ADR 0016's plugin configuration; it is not a guest
 parser or another schema authority. The runtime wire remains a separate decision.
 
-The initial `DhallHandling` boundary takes a checked contract and supplied text;
-it performs no file reads or import resolution. Fact contents are self-contained:
-local, environment and remote imports are rejected before normalization. The host
-library projects the contract to a Dhall type, checks and normalizes the value,
-then converts it to the guest codec representation. Exact integers become canonical
-decimal strings on that wire; Dhall optionals and unions become its tagged values.
-The returned `CheckedDhallValue` retains the complete contract identity. This is
-structural decoding only, not semantic validation or an implemented RootStore.
-The format-library adapter lives in `kyyn-plumbing-interpreters`; the capability
-API exposes no Dhall types or dependency. An unexpected conversion failure after
-successful type checking is reported as `dhall.internal-conversion`, a kernel
-implementation defect rather than invalid authored data.
+DhallHandling is shape-directed: its decode operation takes a `Shape` and text,
+returning a structurally checked value; its encode operation takes a `Shape` and
+runtime wire value, returning self-contained Dhall text. The library adapter lives
+in `kyyn-plumbing-interpreters`; its API exposes no Dhall types or dependency.
+It performs no file reads or import resolution. Local, environment and remote
+imports in fact contents are rejected before normalization. Exact integers become
+canonical decimal strings on the wire; optionals and unions use tagged values.
+Encoding uses the library AST and pretty-printer, not concatenated source.
+Semantic values round-trip; authored formatting and comments do not.
 
-`EncodeValue` takes the expected checked contract and a runtime wire value,
-checks its structure, and renders self-contained Dhall through the library AST
-and pretty-printer. It returns text, not a filesystem write. Malformed wire values
-are `dhall.wire-value` diagnostics; failure to type-check the generated expression
-is `dhall.internal-encoding`. Semantic values round-trip; authored formatting and
-comments do not. RootStore will own splitting a root into its fact files and
-membership lists, not this format adapter.
+Malformed inputs return diagnostics. Unexpected conversion failure after successful
+type checking is `dhall.internal-conversion`; an ill-typed generated expression is
+`dhall.internal-encoding`. These indicate kernel defects, not invalid authored
+data. The format adapter knows shapes, not collection layout or whole-contract
+identity. RootStore supplies shapes from the selected contract and kernel-owned
+storage structures such as the membership list.
+
+The initial RootStore implements checking runtime values, materialization into
+immutable file trees, and reopening those trees. It tags a checked value with the
+whole contract identity and compares that identity before materialization. A
+role-only contract change therefore rejects an old checked value. Materialization
+does not confer semantic validation, execute guest code or write files. Its
+porcelain interpreter requires only DhallHandling, with no IOE. Code and supporting
+files are preserved verbatim in a separate tree; code paths cannot overlap `facts/`.
+
+Fact-tree paths are relative to `root/`. `facts/root.dhall` retains non-collection
+root fields (an empty record when there are none). Each collection uses
+`facts/c-<hex-utf8-collection>/index.dhall` plus
+`f-<hex-utf8-id>.dhall` files. Lowercase bytewise hex avoids separators, case-folding,
+reserved filename and Unicode-normalization collisions without interpreting IDs
+as paths. Readable IDs remain in the envelopes and membership files. Membership
+preserves the guest list order; no unordered-collection metadata is implemented.
+RootStore rejects duplicate IDs, missing/unlisted files, malformed UTF-8 and
+path/envelope mismatches. File trees reject duplicate paths and file/directory
+collisions. Opening a Git revision, inspecting its schema, validating supporting
+configuration and publishing a complete root remain unimplemented.
 
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts

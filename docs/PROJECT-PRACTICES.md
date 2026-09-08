@@ -23,6 +23,9 @@ does not become another specification of the product's runtime workflows.
   compilation, process/filesystem tests and pure metadata codec/adapter/contract tests.
   The native Dhall boundary has a focused `cabal test dhall-values --test-show-details=direct`
   check, also included in the fast check; it does not compile guest code.
+  `cabal test roots --test-show-details=direct` checks RootStore materialization
+  and reopening from immutable file trees through the Dhall interpreter. It is
+  included in the fast check and does not compile guest code or publish Git refs.
   Authors choose relevant local checks and record their revision and results;
   this command is not mandatory for every PR.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs

@@ -6,6 +6,17 @@ test('pure dependencies are permitted', () => {
   assert.deepEqual(checkImports('kyyn-domain', 'import Data.List (nub)'), []);
   assert.deepEqual(checkImports('kyyn-plumbing', 'import Kyyn.Domain.DataType'), []);
 });
+test('RootStore API cannot depend on plumbing and its interpreter cannot acquire IO', () => {
+  assert.deepEqual(checkImports('kyyn-porcelain', 'import Kyyn.Plumbing.Capability.DhallHandling'),
+    ['Kyyn.Plumbing.Capability.DhallHandling']);
+  for (const packageName of ['kyyn-porcelain', 'kyyn-porcelain-interpreters']) {
+    for (const name of ['System.IO', 'Dhall.Core', 'Kyyn.Plumbing.Interpreter.DhallHandling']) {
+      assert.deepEqual(checkImports(packageName, `import ${name}`), [name]);
+    }
+    assert.match(checkImports(packageName, 'import Effectful (Eff, IOE)').join(), /API-only/);
+  }
+  assert.deepEqual(checkImports('kyyn-porcelain-interpreters', 'import Kyyn.Plumbing.Capability.DhallHandling'), []);
+});
 test('Dhall library stays behind its interpreter', () => {
   const api = 'module Kyyn.Plumbing.Capability.DhallHandling where\n';
   const implementation = 'module Kyyn.Plumbing.Interpreter.DhallHandling where\n';

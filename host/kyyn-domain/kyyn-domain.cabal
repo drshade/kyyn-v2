@@ -8,7 +8,9 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Domain.DataType Kyyn.Domain.Failure Kyyn.Domain.Path Kyyn.Domain.Diagnostic
+    Kyyn.Domain.Contract Kyyn.Domain.Root
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, deepseq, filepath
+  build-depends: base >=4.20 && <4.21, deepseq, filepath, kyyn-types, bytestring,
+    aeson ==2.2.5.0, cryptohash-sha256 ==0.11.102.1

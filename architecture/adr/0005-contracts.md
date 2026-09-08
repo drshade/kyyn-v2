@@ -61,7 +61,7 @@ bindings through the normal regeneration path, even when their encoding would
 be unchanged. Do not split presentation and codec compatibility identities to
 avoid that work. Conservative invalidation keeps one understandable rule.
 
-The initial pure `SchemaInspection.Contract.checkContract` combines an inspected
+The initial pure `Kyyn.Domain.Contract.checkContract` combines an inspected
 `DataType` with decoded `SchemaMetadata`, returning diagnostics or a checked value.
 It keeps the resolved type for code generation, checks collection envelopes and
 metadata references, and annotates reference fields in the checked shape. It does
