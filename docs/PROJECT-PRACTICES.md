@@ -25,6 +25,10 @@ does not become another specification of the product's runtime workflows.
   with `cabal update` on a new development machine.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
 - **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
+  CI caches Cabal's compiled dependency store by platform, toolchain and resolved
+  build configuration. Compatible older stores can seed changed dependency plans;
+  Cabal still resolves and builds the current plan. Project build outputs and test
+  results are not cached, and the complete gate runs on cache hits and misses.
 - **Current scope:** documentation/ADR checks, checker regressions, explicit pure-module
   import allowlists, native package builds, scoped process lifetime tests and actual MicroHs generated-codec tests.
   `tools/test-guest.sh` builds the vendored compiler/evaluator/preprocessor and the
