@@ -1,10 +1,16 @@
-# 0005 — One authoritative contract and mechanical projections
+---
+id: 0005
+title: 'One authoritative contract and mechanical projections'
+status: proposed
+date: 2026-09-08
+---
+# One authoritative contract and mechanical projections
 
-Status: Proposed implementation details. **Schema authority accepted by the owner
-on 5 September 2026: authored Haskell types, following the successful bounded
-MicroHs experiment. The owner also selected pure Haskell metadata declarations
-alongside the schema, and reuse of existing numeric libraries rather than custom
-Kyyn arithmetic.** Interface sketches and production integration remain under review.
+Basis: schema authority was accepted by the owner on 5 September 2026: authored
+Haskell types, following the bounded MicroHs experiment. Pure Haskell metadata
+alongside the schema and reuse of existing numeric libraries are owner-selected.
+Interface mechanics and production integration remain under review; this status
+does not reopen those established choices.
 
 ## Context
 
@@ -213,11 +219,14 @@ through RootExecution, which already depends on schema inspection:
 
 ```haskell
 runSchemaInspectionIO
-  :: (GuestCompilation :> es, ProcessExecution :> es, IOE :> es, Failure :> es)
+  :: (GuestCompilation :> es, FileSystem :> es, ProcessExecution :> es,
+      IOE :> es, Failure :> es)
   => GuestToolchain -> Eff (SchemaInspection : es) a -> Eff es a
 ```
 
 The [runtime capability](0002-runtime.md) owns GuestCompilation and GuestToolchain.
+Its scoped artifact helper needs FileSystem when materializing the metadata entry
+for ProcessExecution; no build-directory handle is retained in the schema value.
 The metadata adapter uses its fixed SDK codec; compiling it must not call
 SchemaInspection again or require bindings derived from the KB contract being
 inspected. Composition supplies the same toolchain selection to both interpreters.

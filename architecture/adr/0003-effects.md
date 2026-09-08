@@ -1,7 +1,14 @@
-# 0003 — Effects express architectural dependencies
+---
+id: 0003
+title: 'Effects express architectural dependencies'
+status: proposed
+date: 2026-09-08
+---
+# Effects express architectural dependencies
 
-Status: Proposed implementation details. Basis: owner-established porcelain/plumbing
-separation and interpreter/application-execution naming convention.
+Basis: owner-established porcelain/plumbing separation and interpreter/application
+execution naming convention. Concrete filesystem operations and remaining
+implementation mechanics refine those boundaries rather than reopen them.
 
 ## Context
 
@@ -63,21 +70,32 @@ API. `DirectoryScope` and `RelativePath` are opaque resolved/checked values;
 
 ```haskell
 data FileSystem :: Effect where
+  WithTemporaryScope
+    :: (DirectoryScope -> m a) -> FileSystem m a
   ReadBytes
     :: DirectoryScope -> RelativePath -> FileSystem m Bytes
-  ListEntries
-    :: DirectoryScope -> RelativePath -> FileSystem m [DirectoryEntry]
-  WriteBytesAtomically
+  WriteBytes
     :: DirectoryScope -> RelativePath -> Bytes -> FileSystem m ()
 
 runFileSystemIO
   :: (IOE :> es, Failure :> es)
-  => Eff (FileSystem : es) a -> Eff es a
+  => DirectoryScope -> Eff (FileSystem : es) a -> Eff es a
 ```
 
 Here `()` really means a completed write; it is not printed output hiding a
-missing result. Atomic replacement of one file does not promise atomic updates
-of an entire KB. [Acceptance](0012-acceptance.md) owns that Git-level operation.
+missing result. `runFileSystemIO` receives the parent of its temporary directories
+explicitly. WithTemporaryScope creates a private child there and removes it on
+return, failure or cancellation, preserving local effects. Directory scopes hold
+absolute paths; file operations take checked relative paths with no empty, `.` or
+`..` components. The process adapter can resolve a scoped file path at its native
+boundary. These are path conventions, not symlink containment or a sandbox.
+
+These initial byte writes populate private compiler/artifact scopes. They do not
+promise atomic persistent-file replacement. Store and sink operations that publish
+files require that additional operation; atomic replacement of one file still
+does not promise atomic updates of a KB. [Acceptance](0012-acceptance.md) owns the
+Git-level publication operation. A temporary scope is not a root snapshot: callers
+return captured bytes or results, not a path-dependent snapshot after cleanup.
 The interpreter translates native failures into [Failure](0019-failures.md); callers
 cannot recover a fact by interpreting an inaccessible file as empty data.
 

@@ -10,25 +10,32 @@ import qualified Data.Text.Encoding as T
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Capability.ProcessExecution
+import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Domain.Path
+import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
+import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
+import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Effectful (runEff)
-import System.Directory (createDirectoryIfMissing)
-import System.Environment (getEnv, getEnvironment)
-import System.Exit (ExitCode(..))
+import System.Directory (listDirectory)
+import System.Environment (getEnv)
 import System.FilePath ((</>))
-import System.Process (readProcessWithExitCode)
+import System.IO.Temp (withSystemTempDirectory)
+import CompilationTests (testCompilation)
 
 main :: IO ()
-main = do
+main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
-  environment <- getEnvironment
+  temporaryScope <- either fail pure (directoryScope temporary)
   let compiler = repo </> "vendor/MicroHs"
       fixtures = repo </> "tests/integration/codecs"
-      output = repo </> ".build/codecs"
       guest = repo </> "guest/kyyn-runtime/src"
       json = repo </> "vendor/json"
-  createDirectoryIfMissing True output
+  toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)
+  testCompilation temporaryScope toolchain
+  let compile sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
+        compileGuest sources
   forM_ [("FunctionField", "function-valued"), ("Recursive", "recursive"),
          ("IllTyped", "IllTyped.hs"), ("Hidden", "opaque"), ("Positional", "positional"),
          ("AbsentModule", "not found"), ("TupleField", "tuples"),
@@ -46,14 +53,18 @@ main = do
     inspected <- inspectDataType compiler [fixtures] selected >>= either (fail . show) pure
     generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
     second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
-    writeFile (output </> "KyynGeneratedCodec.hs") generated
-    writeFile (output </> "KyynSecondCodec.hs") second
-    (compiled, _, errors) <- readProcessWithExitCode (compiler </> "bin/mhs")
-      ["-i" ++ concatPaths [fixtures, output, guest, json], fixtures </> "RoundTrip.hs", "-o" ++ output </> "roundtrip"] ""
-    unless (compiled == ExitSuccess) (fail errors)
+    files <- mapM (\(base, path) -> (,) (checkedPath path) <$> Bytes.readFile (base </> path))
+      [(fixtures, "Model.hs"), (fixtures, "RoundTrip.hs"), (guest, "Kyyn/Runtime/Json.hs"),
+       (json, "Text/JSON/Types.hs"), (json, "Text/JSON/String.hs")]
+    sources <- either fail pure (guestSources (checkedPath "RoundTrip.hs")
+      (files ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),
+                 (checkedPath "KyynSecondCodec.hs", B.toStrict (utf8 second))]))
+    compiled <- compile sources >>= either (fail . show) (either (fail . show) pure)
+    remaining <- listDirectory temporary
+    unless (null remaining) (fail "compilation leaked its temporary sources")
     let invoke input = do
-          outcome <- runEff . runFailure . runProcessExecutionIO $
-            withProcess (ProcessSpec (output </> "roundtrip") [] repo environment) $ do
+          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope $
+            withCompiledEntry compiled $ do
               writeStdin (B.toStrict (utf8 (input ++ "\n")))
               closeStdin
               actual <- collectStdout
@@ -99,7 +110,5 @@ utf8 = B.fromStrict . T.encodeUtf8 . T.pack
 encode :: A.Value -> String
 encode = T.unpack . T.decodeUtf8 . B.toStrict . A.encode
 
-concatPaths :: [FilePath] -> String
-concatPaths [] = ""
-concatPaths [p] = p
-concatPaths (p:ps) = p ++ ":" ++ concatPaths ps
+checkedPath :: FilePath -> RelativePath
+checkedPath = either error id . relativePath

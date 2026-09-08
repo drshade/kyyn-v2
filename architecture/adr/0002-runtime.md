@@ -39,21 +39,24 @@ capability whose inputs contain no KB/root layout or fact data:
 
 ```haskell
 data GuestSources  -- fixed module contents, generated adapters and selected entry
-data BuildOptions  -- supported build choices, not raw MicroHs arguments or paths
-data CompiledEntry  -- local executable and launch information produced by compilation
+data CompiledEntry  -- immutable bytecode, build identity and evaluator launch description
 
 data GuestCompilation :: Effect where
   CompileGuest
-    :: GuestSources -> BuildOptions
+    :: GuestSources
     -> GuestCompilation m (Either [Diagnostic] CompiledEntry)
 
 compileGuest
   :: GuestCompilation :> es
-  => GuestSources -> BuildOptions -> Eff es (Either [Diagnostic] CompiledEntry)
+  => GuestSources -> Eff es (Either [Diagnostic] CompiledEntry)
 ```
 
 `GuestSources` is a fixed compilation input, not the host's `CodeSnapshot` or a
-live workspace directory. It includes the selected local dependency source closure;
+live workspace directory. Composition combines captured KB/generated modules with
+the installed SDK/runtime/dependency source bytes to form this input. It does not
+require vendoring the installed SDK into each KB repository. Its digest covers
+those bytes alongside authored sources, not an unrecorded SDK include directory.
+It includes the selected local dependency source closure;
 semantic preparation selects which captured files become source and which are
 runtime configuration, examples or data. Schema inspection and pure adapter
 generation retain their ownership in [ADR 0005](0005-contracts.md).
@@ -77,18 +80,62 @@ package also contains native compiler-library integration. Composition supplies
 the same selected toolchain to schema inspection and guest compilation. Inspection
 and compilation do not choose independent compiler revisions.
 
-Compilation derives the complete build/cache identity from the actual source,
-dependencies, SDK, compiler and options, following [ADR 0006](0006-storage.md).
-Fact contents remain absent from that identity. `CompiledEntry` is built for that
-local toolchain, not an arbitrary executable supplied by guest code; consumers
-use its launch information rather than reconstructing MicroHs flags. Writing
-generated sources and invoking the compiler are effects, even though the authored
-transformation and adapter generation are pure. This is one compiler capability,
-not a generic compiler-backend framework or a separate build service.
+The first interpreter compiles the captured files in a temporary filesystem scope
+and returns MicroHs `.comb` bytes. It does not ask MicroHs to generate a native
+executable, which would invoke a C compiler on the user's machine. The installed
+`mhseval` consumes these bytes. C remains a development/distribution build input
+for the bundled compiler and evaluator, not a KB-authoring dependency.
+
+`GuestSources` checks duplicate paths, file/directory collisions and presence of
+the selected entry. Its source identity is SHA-256 over the selected entry and a
+sorted, length-delimited path/byte sequence. The captured file tree includes the
+generated adapters and required SDK/dependency source; it contains no fact values.
+The interpreter clears ambient source/package search paths and selects the bundled
+library explicitly. Its compiler environment selects `MHSDIR` and `MHSCPPHS` and
+has an empty `PATH`. Compilation currently has one supported mode: uncompressed
+combinators. No build-options type precedes a concrete second mode.
+The current locale selection is `C.UTF-8`, verified on Linux; the installed
+toolchain composition must establish the appropriate selection on other supported
+platforms before their release gates pass.
+Source-path collision checks currently compare names case-sensitively. Platforms
+with case-insensitive filesystems also need their filename collision behavior
+verified before the same source-tree contract can be claimed there.
+
+The returned artifact records its input identity:
+
+```haskell
+data BuildIdentity = BuildIdentity
+  { toolchainRevision :: String
+  , sourcesDigest     :: Bytes
+  }
+
+buildIdentity :: CompiledEntry -> BuildIdentity
+
+withCompiledEntry
+  :: (FileSystem :> es, ProcessExecution :> es)
+  => CompiledEntry -> Eff (ProcessPipes : es) a -> Eff es a
+```
+
+The revision identifies the selected pinned MicroHs source; it is not an
+attestation of arbitrary installed binaries. There is no persistent artifact cache
+in this increment. Reuse the immutable `CompiledEntry` for multiple runtime inputs.
+`withCompiledEntry` is a capability-owned helper: it materializes the artifact in
+a fresh temporary scope and supplies its recorded launch description to
+ProcessExecution. Evaluator flags remain compiler-owned; callers do not reconstruct
+them. The build scope can disappear before any invocation, and the invocation
+scope is removed after process cleanup. No live build path is returned as the
+artifact. This is one compiler capability, not a compiler-backend framework.
 
 Ordinary parse/type rejection returns diagnostics. The preview/checking caller
 maps them into its normal result channel; inability to start the compiler or a
 compiler crash uses Failure. A broken proposed module is not a broken installation.
+For the pinned command-line compiler, status 1 returns its UTF-8 diagnostic text
+under `guest.compiler-rejected`, without parsing prose for control flow or source
+locations. Other nonzero statuses (including signals) and malformed diagnostic
+encoding are operational failures. This does not distinguish an internal compiler
+error that itself exits with status 1 from other compiler rejection. Missing or
+unreadable artifacts fail at the filesystem boundary; an empty artifact is an
+operational failure, not successful compilation.
 
 Process ownership belongs below the semantic runtime. A scoped plumbing primitive
 can express who releases the child without handing native `IO` to porcelain:
