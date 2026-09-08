@@ -28,7 +28,7 @@ openTree
   :: (Schema.SchemaInspection :> es, RootStore :> es)
   => FileTree -> FileTree -> Eff es (Either [Diagnostic] Root)
 openTree sdk tree = runExceptT $ do
-  RootDefinition typeName metadataName _ authored <- ExceptT (readRootDefinition tree)
+  RootDefinition typeName metadataName _ _ authored <- ExceptT (readRootDefinition tree)
   source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
   inspected <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))

@@ -9,6 +9,7 @@ import Data.Text (Text)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import ExecutionTests (executionTests)
+import QueryExecutionTests (queryExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -78,6 +79,7 @@ main = do
   unless (orderA == orderB) (fail "FileTree depends on producer ordering")
   openingTests contract snapshot
   executionTests contract snapshot
+  queryExecutionTests contract snapshot
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
 openingTests :: RootContract -> FileTree -> IO ()
@@ -96,8 +98,8 @@ openingTests contract factFiles = do
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
   forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
     [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" }" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }" else b) | (p,b) <- files captured],
     filter ((/= "facts/root.dhall") . relativeName . fst) (files captured)] $ \entries -> do
       bad <- right (fileTree entries)
       rejected (execute sdk (openCapturedRoot bad))
@@ -105,7 +107,7 @@ openingTests contract factFiles = do
   rejected (execute collision (openCapturedRoot captured))
   rejected (execute sdk (loadRootAt repo revision WholeTree))
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->

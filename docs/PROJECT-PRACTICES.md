@@ -41,6 +41,9 @@ does not become another specification of the product's runtime workflows.
   the fast check.
   Authors choose relevant local checks and record their revision and results;
   this command is not mandatory for every PR.
+  `cabal test queries --test-options=--pure --test-show-details=direct` exercises
+  typed query composition, read traces, binding generation and reply decoding
+  without invoking MicroHs. It is included in the fast check.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
   compilation and codec tests. Run it before declaring an Issue complete, or when
   needed for a particular change or investigation; not for every PR or merge.
@@ -76,6 +79,11 @@ does not become another specification of the product's runtime workflows.
   guest validator, including warning-only and semantic-error outcomes with
   structured locations. It does not open a KB from Git or implement the full
   candidate/required-example validation gate.
+  `KYYN_TEST_ROOT="$PWD" cabal test queries --test-show-details=direct` is the
+  focused real-MicroHs query integration check: named input/result metadata,
+  generated bindings, dependent reads over distinct payload types, typed result
+  plus ordered trace, and rejection of a mismatched collection payload. It is
+  included in the full check, not a mandatory per-PR command.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

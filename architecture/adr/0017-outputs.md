@@ -1,6 +1,6 @@
 # 0017 — Outputs bind snapshot renderers to typed plugin sinks
 
-Status: Proposed implementation details. Owner-established model: renderers compose
+Status: Accepted. Output implementation remains outstanding. Renderers compose
 queries over one selected root and produce the input of a configured plugin sink.
 Preparation and external mutation are separate operations.
 
@@ -34,17 +34,15 @@ ordinary business calculations need not themselves acquire an effect parameter.
 The type relationships are:
 
 ```haskell
-newtype Query root args result =
-  Query (args -> root -> Program SnapshotRead result)
-
-query :: Query root args result -> args -> root -> Program SnapshotRead result
+-- Generated for this KB; the SDK representation is owned by ADR 0009.
+type Query a = SDK.Query Root a
 
 data SinkBinding input
   -- Generated typed reference to a plugin, configured sink instance and operation.
 
 data Output root args where
   Output
-    :: (args -> root -> Program SnapshotRead input)
+    :: (args -> SDK.Query root input)
     -> SinkBinding input
     -> Output root args
 ```
@@ -54,15 +52,15 @@ requiring independent registration or a lifecycle. There is no single query slot
 on Output: query composition belongs inside the function.
 
 ```haskell
-salesSummary :: Query Root Month SalesSummary
-monthlyBudget :: Query Root Month Budget
-salesAnomalies :: Query Root Month [Anomaly]
+salesSummary :: Month -> Query SalesSummary
+monthlyBudget :: Month -> Query Budget
+salesAnomalies :: Month -> Query [Anomaly]
 
-renderSalesReport :: Month -> Root -> Program SnapshotRead FileSink.Input
-renderSalesReport month root = do
-  sales    <- query salesSummary month root
-  budget   <- query monthlyBudget month root
-  warnings <- query salesAnomalies month root
+renderSalesReport :: Month -> Query FileSink.Input
+renderSalesReport month = do
+  sales    <- salesSummary month
+  budget   <- monthlyBudget month
+  warnings <- salesAnomalies month
   pure (renderFile sales budget warnings)
 
 salesReportFile :: SinkBinding FileSink.Input
@@ -78,9 +76,8 @@ format. The generated SinkBinding cannot be constructed by casting an arbitrary
 source connector or a sink expecting another type. Configuration selects the
 destination; it comes from the named instance in the selected root.
 
-Pure calculations are lifted at registration, for example
-`Query (\args root -> pure (calculate args root))`; calculate and renderFile remain
-ordinary pure functions. A renderer that needs no query requests can likewise
+Queries obtain typed collections/facts through generated bindings and can pass
+the resulting values to ordinary pure calculations. A renderer that needs no query requests can likewise
 return its result with pure. There is one Output constructor, not separate pure
 and effectful renderer variants. SnapshotRead permits no live source acquisition,
 sink invocation or accepted-root publication. Its interpreter supplies reads from
@@ -90,7 +87,7 @@ A KB can declare several differently typed queries and outputs:
 
 ```haskell
 data SomeQuery root where
-  SomeQuery :: Query root args result -> SomeQuery root
+  SomeQuery :: (args -> SDK.Query root result) -> SomeQuery root
 
 data SomeOutput root where
   SomeOutput :: Output root args -> SomeOutput root
@@ -116,12 +113,21 @@ Queries remain independently callable through the application operation:
 ```haskell
 queryRoot
   :: (RootExecution :> es, Failure :> es)
-  => Validated Root -> QueryDescriptor -> CheckedValue -> Eff es CheckedValue
+  => Validated Root -> QueryDescriptor -> CheckedValue -> Eff es QueryResult
 ```
 
 RootExecution checks the selected query's argument/result contracts as described
 in ADRs 0008 and 0011. Web can display its structured values without invoking a
 renderer or sink and without reimplementing authoritative calculations in JS.
+
+QueryResult includes the checked result and ordered read trace from ADR 0009.
+Queries should eventually be visible alongside schemas, facts and evolutions,
+with SQL-like explanations where reads/filters are expressed as data; arbitrary
+Haskell following a read remains opaque to that display. A sufficiently expressive
+request language might also allow some queries to execute entirely host-side;
+queries expressible in both interpreters must then agree exactly. These are future
+directions, not a predicate language, static read declaration, or extra check to
+implement now.
 
 For outputs, the host has a generated structural counterpart of the declaration:
 
