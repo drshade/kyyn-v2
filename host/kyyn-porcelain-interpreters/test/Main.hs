@@ -8,7 +8,7 @@ import Data.List (isSuffixOf)
 import Data.Text (Text)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
@@ -111,14 +111,14 @@ schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->
   in pure $ if Schema.selectedType source == "Example.Root" &&
        lookup "Example.hs" entries == Just "authored source" && lookup "Kyyn/Types/Fact.hs" entries == Just "installed SDK" &&
        maybe False (Bytes.isInfixOf "Example.schemaMetadata") (lookup "KyynMetadataEntry.hs" entries)
-     then Right contract else Left [Diagnostic "test.schema" "Incorrect source capture"]
+     then Right contract else Left [errorDiagnostic "test.schema" "Incorrect source capture"]
 
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case
   Git.ResolveRevision _ _ -> error "RootOpening must not resolve the revision again"
   Git.ReadTreeAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root" -> pure (Right captured)
-  Git.ReadTreeAt _ _ _ -> pure (Left [Diagnostic "test.git" "Unusable root selection"])
+  Git.ReadTreeAt _ _ _ -> pure (Left [errorDiagnostic "test.git" "Unusable root selection"])
   Git.CreateCommit {} -> error "RootOpening must not create commits"
   Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
 

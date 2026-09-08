@@ -1,6 +1,3 @@
-module Kyyn.Domain.Diagnostic (Diagnostic(..)) where
+module Kyyn.Domain.Diagnostic (module Kyyn.Types.Diagnostic) where
 
-data Diagnostic = Diagnostic
-  { code :: String
-  , message :: String
-  } deriving (Eq, Show)
+import Kyyn.Types.Diagnostic

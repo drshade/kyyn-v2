@@ -6,7 +6,7 @@ import Control.Monad (forM_)
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (checkContract)
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Domain.Path (scopePath)
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
@@ -29,8 +29,8 @@ runSchemaInspectionIO (GuestToolchain compiler) = interpret $ \_ (InspectSchema 
     inspected <- liftIO (inspectDataType (scopePath compiler) [scopePath scope] (selectedType source))
     case inspected of
       Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
-      Left (CompilerError message) -> pure (Left [Diagnostic "schema.compiler-rejected" message])
-      Left (TypeNotSupported message) -> pure (Left [Diagnostic "schema.unsupported" message])
+      Left (CompilerError message) -> pure (Left [errorDiagnostic "schema.compiler-rejected" message])
+      Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "schema.unsupported" message])
       Right structure -> do
         metadata <- evaluateMetadata sources
         pure (metadata >>= checkContract structure)

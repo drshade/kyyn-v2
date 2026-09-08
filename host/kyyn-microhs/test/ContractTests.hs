@@ -3,7 +3,7 @@ module ContractTests (contractTests) where
 import Control.Monad (unless, forM_)
 import Data.List (isInfixOf)
 import Kyyn.Domain.DataType
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(Diagnostic))
 import Kyyn.Domain.Contract
 import Kyyn.Types.SchemaMetadata
 
@@ -44,7 +44,7 @@ contractTests = do
     ("duplicate Model.Todo fields", record "Model.Root" [("todos", factList (record "Model.Todo" [("title",StringType),("title",StringType)]))], metadata),
     ("constructor tags", record "Model.Root" [("x",Algebraic "Model.Bad" [] [Constructor "A.Same" [],Constructor "B.Same" []])], SchemaMetadata [] [] [])
     ] $ \(expected,t,m) -> case checkContract t m of
-      Left [Diagnostic _ message] | expected `isInfixOf` message -> pure ()
+      Left [Diagnostic _ _ message _] | expected `isInfixOf` message -> pure ()
       other -> fail (expected ++ ": " ++ show other)
   putStrLn "Contract coherence, reference projection and whole-contract identity checks passed."
   where

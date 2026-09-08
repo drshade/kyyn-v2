@@ -8,7 +8,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure
 import Kyyn.Domain.Path
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -49,7 +49,7 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest so
             (output, bytes) (root ++ "/bin/mhseval") ["+RTS", "-r" ++ relativeName output, "-RTS"] [("LC_ALL", "C.UTF-8"), ("PATH", "")]))
       1 -> case Text.decodeUtf8' (stderr <> stdout) of
         Left _ -> broken "compiler emitted invalid UTF-8 diagnostics"
-        Right message -> pure (Left [Diagnostic "guest.compiler-rejected" (Text.unpack message)])
+        Right message -> pure (Left [errorDiagnostic "guest.compiler-rejected" (Text.unpack message)])
       _ -> broken ("compiler terminated with exit status " ++ show status)
   where
     broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit message))

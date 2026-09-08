@@ -17,7 +17,7 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Root
 import Kyyn.Domain.FileTree
@@ -35,7 +35,7 @@ runRootStore = interpret $ \_ -> \case
 type Result es = ExceptT [Diagnostic] (Eff es)
 
 problem :: String -> Result es a
-problem = throwE . pure . Diagnostic "root.storage"
+problem = throwE . pure . errorDiagnostic "root.storage"
 
 ensure :: Bool -> String -> Result es ()
 ensure condition message = unless condition (problem message)
