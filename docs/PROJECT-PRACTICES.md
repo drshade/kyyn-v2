@@ -30,6 +30,9 @@ does not become another specification of the product's runtime workflows.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
 - **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
   Automatic runs use the fast check. Manual dispatch offers a `full` checkbox.
+  Changes limited to root README/AGENTS Markdown or Markdown under docs/architecture
+  run documentation checks only, without Haskell setup. Other paths, unknown diffs
+  and manual dispatch use normal checks. The workflow still reports a check result.
   After merge, sync and continue without waiting for another CI run; failures are
   investigated when reported. This policy applies during private, pre-release development.
   CI caches Cabal's compiled dependency store by platform, toolchain and resolved
