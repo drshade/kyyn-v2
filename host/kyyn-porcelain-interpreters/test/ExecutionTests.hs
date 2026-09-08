@@ -69,6 +69,7 @@ compileMock result = interpret $ \_ (CompileGuest captured) -> do
   let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
   unless (lookup "Checks.hs" entries == Just "captured validator" &&
       lookup "Sdk.hs" entries == Just "explicit SDK" &&
+      lookup "KyynQueryBindings.hs" entries /= Nothing &&
       maybe False (Bytes.isInfixOf "validate = Checks.validate") (lookup "KyynValidationEntry.hs" entries) &&
       maybe False (Bytes.isInfixOf "rootCodec") (lookup "KyynValidationCodec.hs" entries))
     (error "RootExecution did not compile captured sources with explicit SDK and adapter")

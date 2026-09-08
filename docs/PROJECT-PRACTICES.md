@@ -32,6 +32,11 @@ does not become another specification of the product's runtime workflows.
   RootExecution tests use a recording compiler handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.
+  They also check that registered query entries are compiled without executing
+  them. Saved-example tests use the real Dhall/store handler and recording
+  RootExecution: path/contract round trips, required/illustrative mismatches,
+  unchanged-root Validated minting and operational-failure propagation. The
+  private constructor boundary has an import-check regression test.
   `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
   capture, isolated commit construction and expected-head ref updates against Git
   in a temporary repository; it is included in the fast check

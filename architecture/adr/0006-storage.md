@@ -1,7 +1,7 @@
 ---
 id: 0006
 title: 'Materialized facts and runtime data loading'
-status: proposed
+status: accepted
 date: 2026-09-07
 ---
 # Materialized facts and runtime data loading
@@ -98,7 +98,9 @@ data RootStore :: Effect where
     :: Validated Root -> CollectionId -> FactId
     -> RootStore m (Maybe CheckedValue)
   ReadExamples
-    :: Root -> RootStore m [Example]
+    :: Root -> [QueryDescriptor] -> RootStore m (Either [Diagnostic] [Example])
+  EncodeExample
+    :: Example -> RootStore m (Either [Diagnostic] FileTree)
   ExportRootFiles
     :: Root -> RootStore m SubtreeReplacement
   MaterializeRoot
@@ -137,7 +139,7 @@ layout. Each caller appends the explicit SDK
 source tree. Duplicate compiler paths fail. The SDK is supplied by the installed
 runtime, not loaded from a KB-selected location, and participates in compilation
 identity under ADR 0002. ADR 0005 owns schema capture and inspection.
-`kb.dhall`, `src/` and `facts/` are distinct reserved layout locations; the manifest
+`kb.dhall`, `src/`, `facts/` and `examples/` are distinct reserved layout locations; the manifest
 is retained verbatim in the supporting-code snapshot alongside source and other
 supporting files. FileTree rejects overlapping file/directory paths.
 
@@ -153,8 +155,17 @@ nonempty and unique; their contracts are inspected on discovery/invocation, not
 by the opener. The manifest does not yet advertise plugins, and the opener does
 not validate other supporting files.
 
-`ReadExamples` loads the selected root's saved assertions, including their recorded
-contracts. It does not run them or silently rebind them to new query contracts;
+Examples occupy `examples/<encoded-name>/`, using the same readable-name/UTF-8
+escape as facts. Each contains exactly `example.dhall`, `arguments.dhall` and
+`expected.dhall`. Metadata retains the original name and it must match the directory;
+stray/missing files and name/path mismatches reject loading. `EncodeExample`
+returns those files as a FileTree, not a disk mutation or a changed/validated Root.
+They become supporting code-snapshot material when the caller captures/materializes
+the proposed root; ordinary source files do not occupy the examples subtree.
+
+`ReadExamples` loads the selected root's saved assertions using query descriptors
+discovered from that same root. It compares recorded whole-contract fingerprints
+before decoding arguments/expectations. It does not run them or silently rebind them to new query contracts;
 [checking](0011-validation.md) reports incompatibility. Its raw-root input permits
 checking a candidate before it earns validation. `ExportRootFiles` supplies
 publication with a complete, fixed file tree, including facts, code, configuration

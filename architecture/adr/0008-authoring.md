@@ -143,9 +143,11 @@ query modules. Source collisions with generated adapter modules are diagnostics,
 not silent overwrites. Discovery inspects contracts without executing queries;
 the generated entry type-checks the chosen implementation at invocation.
 
-Current RootExecution takes structurally checked Root values. The `Validated Root`
-boundary above becomes available only with the required-example validation gate
-in ADR 0011; query execution alone must not mint that wrapper.
+RootExecution takes structurally checked Root values so it can evaluate candidate
+examples. ADR 0011's checkRoot now produces Validated Root after code, semantic and
+example checks; query execution alone cannot mint that wrapper. The eventual
+CLI/Web/MCP browsing operations use that validated boundary, not the raw checking
+operation directly. Those surface wrappers are not implemented yet.
 
 KB helpers call generated bindings such as a configured provider's occurrence
 query, receiving typed pages. Provider JSON interpretation belongs inside the

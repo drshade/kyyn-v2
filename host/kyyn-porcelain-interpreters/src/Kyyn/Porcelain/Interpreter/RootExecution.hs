@@ -33,10 +33,10 @@ runRootExecution
 runRootExecution sdk = interpret $ \_ -> \case
   CheckRootCode (Root contract _ code) -> runExceptT $ do
     RootDefinition _ _ validator declarations authored <- ExceptT (readRootDefinition code)
-    validation <- checked "root.validation-source"
-      (validationSources (rootType (rootSchema contract)) validator (files authored ++ files sdk))
-    _ <- ExceptT (compileGuest validation)
     bindings <- checked "query.bindings" (queryBindings contract)
+    validation <- checked "root.validation-source"
+      (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))
+    _ <- ExceptT (compileGuest validation)
     forM_ declarations $ \declaration@(QueryDefinition _ _ selected _ _ _ _) -> do
       QueryDescriptor _ _ input result <- inspectQuery (bindings : files authored ++ files sdk) declaration
       sources <- checked "query.source"
@@ -45,8 +45,9 @@ runRootExecution sdk = interpret $ \_ -> \case
   ValidateRoot root@(Root contract _ code) -> runExceptT $ do
     RootDefinition _ _ selected _ authored <- ExceptT (readRootDefinition code)
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
+    bindings <- checked "query.bindings" (queryBindings contract)
     sources <- checked "root.validation-source"
-      (validationSources (rootType (rootSchema contract)) selected (files authored ++ files sdk))
+      (validationSources (rootType (rootSchema contract)) selected (bindings : files authored ++ files sdk))
     entry <- ExceptT (compileGuest sources)
     output <- ExceptT (Right <$> withCompiledEntry entry (exchange selected (Bytes.toStrict (encode value))))
     case decodeReport output of

@@ -67,6 +67,13 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   let rejected = [errorDiagnostic "guest.compiler-rejected" "bad query"]
   rejection <- execute (Left rejected) descriptor args
   unless (rejection == Right (Left rejected)) (fail "Compiler rejection lost diagnostics")
+  let checkCode compilation = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+        . gateCompiler (entry "exit 97") compilation . schemaMock input output
+        . runDhallHandling . runRootStore . runRootExecution sdk $ checkRootCode root
+  unusedQuery <- checkCode (Left rejected)
+  unless (unusedQuery == Right (Left rejected)) (fail "Unused registered query escaped compilation checking")
+  checkedCode <- checkCode (Right (entry "exit 97"))
+  unless (checkedCode == Right (Right ())) (fail "Code checking executed a validator/query or failed to check it")
   forM_ ["printf '{}'", "printf '{\"result\":\"wrong type\",\"trace\":[]}'"] $ \script -> do
     response <- execute (Right (entry script)) descriptor args
     case response of
@@ -102,3 +109,13 @@ compileMock result = interpret $ \_ (CompileGuest captured) -> do
       all (\name -> lookup name entries /= Nothing) ["KyynQueryBindings.hs","KyynQueryRootCodec.hs","KyynQueryInputCodec.hs","KyynQueryResultCodec.hs"])
     (error "Query compilation did not use captured sources and generated adapter")
   pure result
+
+gateCompiler :: CompiledEntry -> Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
+gateCompiler validator query = interpret $ \_ (CompileGuest captured) -> do
+  let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
+  unless (lookup "KyynQueryBindings.hs" entries /= Nothing) (error "Code-check entry lacks query bindings for shared helper imports")
+  if lookup "KyynValidationEntry.hs" entries /= Nothing
+    then pure (Right validator)
+    else if lookup "KyynQueryEntry.hs" entries /= Nothing
+      then pure query
+      else error "Unexpected code-check entry"

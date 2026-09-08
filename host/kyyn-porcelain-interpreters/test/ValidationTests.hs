@@ -4,18 +4,21 @@ module ValidationTests (validationTests) where
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..))
 import Data.List (isPrefixOf, isSuffixOf)
-import Effectful (Eff, runPureEff)
+import Effectful (Eff, runPureEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Example
+import Kyyn.Domain.Failure
 import Kyyn.Domain.FileTree
 import Kyyn.Domain.Path
 import Kyyn.Domain.Query
 import Kyyn.Domain.Root
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Interpreter.DhallHandling
+import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Validation
@@ -67,6 +70,19 @@ validationTests contract facts = do
   case storage (readExamples root [incompatible]) of
     Left [Diagnostic Error _ _ (Just (ExampleLocation "Done 🦋"))] -> pure ()
     _ -> fail "Changed query contract silently rebound the saved example"
+  presentationChanged <- either (fail . show) pure
+    (checkContract BoolType (SchemaMetadata [RoleDecl "badge" "Changed presentation" Badge] [] []))
+  case storage (readExamples root [QueryDescriptor "isDone" "" input presentationChanged]) of
+    Left _ -> pure ()
+    _ -> fail "Role-only query contract change bypassed the whole fingerprint"
+  let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
+  changedRoot <- either (fail . show) pure (checkContract (rootType (rootSchema contract))
+    (SchemaMetadata (RoleDecl "root-extra" "Unrelated root change" Title : roles) assignments collections) >>= checkRootLayout)
+  unless (storage (readExamples (Root changedRoot facts encoded) [descriptor]) == Right [example])
+    (fail "Unchanged query contracts were incorrectly pinned to the whole root")
+  let equivalent = tree [(p,if "/expected.dhall" `isSuffixOf` relativeName p then "let answer = True in answer" else b) | (p,b) <- files encoded]
+  unless (storage (readExamples (Root contract facts equivalent) [descriptor]) == Right [example])
+    (fail "Example comparison retained Dhall source spelling rather than values")
   case storage (readExamples root []) of Left _ -> pure (); _ -> fail "Unknown query accepted"
   forM_ [tree (drop 1 (files encoded)), tree ((either error id (relativePath "examples/stray"),"bad") : files encoded),
       tree [(p,if "/expected.dhall" `isSuffixOf` relativeName p then "\"wrong type\"" else b) | (p,b) <- files encoded]] $ \bad ->
@@ -80,6 +96,10 @@ validationTests contract facts = do
   case run (Right ()) (ValidationReport []) True noExamples of
     Passed checked _ | validatedValue checked == noExamples -> pure ()
     _ -> fail "Root without examples could not validate"
+  let failure = RuntimeUnavailable (ProcessDiagnostic WaitForExit "validator exited")
+      failed = runPureEff . runFailure . failingExecution failure
+        . runDhallHandling . runRootStore $ checkRoot noExamples
+  unless (failed == Left failure) (fail "Runtime failure became a validation report")
   putStrLn "Saved example round trips, contract staleness, required/illustrative outcomes and Validated minting passed."
 
 executionMock :: Root -> QueryDescriptor -> Either [Diagnostic] () -> ValidationReport -> Bool
@@ -96,3 +116,10 @@ executionMock expectedRoot descriptor codeResult report actual = interpret $ \_ 
   where
     same :: Root -> Eff xs ()
     same root = unless (root == expectedRoot) (error "Checking switched root snapshots")
+
+failingExecution :: Failure :> es => OperationalFailure -> Eff (RootExecution : es) a -> Eff es a
+failingExecution failure = interpret $ \_ -> \case
+  CheckRootCode _ -> pure (Right ())
+  DiscoverQueries _ -> pure (Right [])
+  ValidateRoot _ -> raiseFailure failure
+  ExecuteQuery _ _ _ -> error "Example ran after failed validation"

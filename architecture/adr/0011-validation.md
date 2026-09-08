@@ -1,14 +1,14 @@
 ---
 id: 0011
 title: 'Validation checks a complete candidate, not reality'
-status: proposed
+status: accepted
 date: 2026-09-07
 ---
 # Validation checks a complete candidate, not reality
 
 Basis: complete-root checking and the distinction between Candidate and Validated
-follow owner direction. Example representation, execution interfaces and whole-root
-performance remain implementation proposals and gates.
+follow owner direction. Saved examples and root checking are implemented; candidate,
+accepted-load and complete proposal integration remain outstanding.
 
 ## Context
 
@@ -84,6 +84,8 @@ evaluation distinct from persisting or publishing its output:
 
 ```haskell
 data RootExecution :: Effect where
+  CheckRootCode
+    :: Root -> RootExecution m (Either [Diagnostic] ())
   ValidateRoot
     :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
   ExecuteQuery
@@ -115,8 +117,8 @@ The outer `Left` means the captured definition/facts are unreadable or the selec
 source cannot compile. `Right report` means the validator ran, including when the
 report contains semantic errors. Process failures and malformed protocol replies
 remain Failure, identifying the selected validator. This operation alone does not
-mint `Validated Root`: the required-example and proposal-level compilation gates
-remain separate. Query discovery/execution use the same captured-source boundary;
+mint `Validated Root`: the checking function below owns that decision.
+Query discovery/execution use the same captured-source boundary;
 PrepareOutput remains unimplemented.
 
 Query contracts are selected through the named declarations in ADR 0008.
@@ -150,6 +152,15 @@ validators into the proposed program. Before contributes the schema/decoding
 definitions needed by the transformation. There is one proposal-level compilation
 gate and rejection channel; this does not prescribe a module-level build cache.
 
+The current root checker calls CheckRootCode before semantic/example evaluation.
+It compiles the validator and every registered query entry using generated typed
+adapters, including queries no example invokes, without executing those entries.
+Only entries selected by this root's declarations and their imports participate;
+unrelated source files, drafts and archives do not. When evolution/output/plugin
+entries are implemented, their proposal-level compilation must join this gate.
+This initial check returns compiler diagnostics in CheckResult.Rejected; the
+distinct proposal-level outcome belongs to the later evolution integration.
+
 The source input need only be structurally readable; semantic errors in its
 validation report are information for review, not a prerequisite failure for
 evaluation. This allows a typed transformation to repair an invalid head.
@@ -182,14 +193,15 @@ Both `checkCandidate` and `loadAcceptedRoot` obtain examples through RootStore's
 root therefore retains their meaning after the authoring workspace becomes an
 archive. Deleting or weakening an example is an ordinary visible root change.
 
-Human-authored executable examples need a concrete, data-based form. Propose an
-example naming a registered snapshot query, its typed arguments and expected
+Human-authored executable examples use a concrete, data-based form. An
+example names a registered snapshot query, its typed arguments and expected
 typed result. Free-text review notes are different objects. The host does not
 know the query's Haskell types, so it checks these values against its descriptor:
 
 ```haskell
 data Example = Example
-  { query       :: QueryDescriptor
+  { name        :: String
+  , query       :: QueryDescriptor
   , arguments   :: CheckedValue
   , expected    :: CheckedValue
   , requirement :: ExampleRequirement
@@ -198,22 +210,27 @@ data Example = Example
 
 data ExampleRequirement = Required | Illustrative
 
-makeExample
-  :: QueryDescriptor -> UncheckedValue -> UncheckedValue
-  -> ExampleRequirement -> Text
-  -> Either [ContractDiagnostic] Example
+encodeExample
+  :: RootStore :> es
+  => Example -> Eff es (Either [Diagnostic] FileTree)
 ```
 
-`Example` construction checks the argument and expected-value contract identities;
-two arbitrary `CheckedValue`s are not sufficient. `QueryDescriptor`, owned by
+`Example` is ordinary data. EncodeExample checks its argument and expected-value
+identities and shapes before producing files; two arbitrary `CheckedValue`s are
+not sufficient. Loading checks the recorded identities before decoding either
+value against the current query contract. `QueryDescriptor`, owned by
 [authoring](0008-authoring.md), admits only selected-snapshot reads and pure
 calculation. The example has no saved answer from a different root smuggled in
 as a result of running it. Evaluation always receives the explicit target root:
 
 ```haskell
 checkExample
-  :: (RootExecution :> es, Failure :> es)
+  :: RootExecution :> es
   => Root -> Example -> Eff es ValidationReport
+
+checkRoot
+  :: (RootStore :> es, RootExecution :> es)
+  => Root -> Eff es (CheckResult (Validated Root))
 
 checkCandidate
   :: (RootStore :> es, RootExecution :> es, Failure :> es)
@@ -226,21 +243,41 @@ loadAcceptedRoot
   -> Eff es (CheckResult (Validated Root))
 ```
 
+`checkRoot` is implemented as composition of RootStore and RootExecution, not a
+new effect or IO interpreter. It checks code, discovers query contracts, loads
+examples, runs the root validator and checks every example against that same root.
+Errors reject; warnings remain attached to a returned Validated value. Runtime
+Failure propagates unchanged. A root with no examples still requires code and
+semantic checking. The Candidate and accepted-load wrappers above are the later
+composition, not placeholder implementations in this slice.
+
 `checkExample` uses `ExecuteQuery`, not another effect. That operation resolves
 the named query in the supplied root, checks arguments and checks the response
 contract. Its raw-root input admits candidate checking, not an implicit relaxation
 of ordinary query/browsing requirements. Required mismatches are errors;
 illustrative mismatches remain visible warnings. Compare values using their
 contract's exact structural/semantic equality, not floating-point coercion or
-source spelling. A small named query can expose the one amount a person wants to
+source spelling. The current supported wire subset has canonical scalar values,
+so equality is structural Value equality: object key order is irrelevant, list
+order remains significant. Only a well-formed illustrative result mismatch is a
+warning; malformed example files, missing queries, incompatible contracts and
+execution rejection remain errors regardless of that label. A small named query
+can expose the one amount a person wants to
 test; no field-selector/assertion language is required. Agents may additionally
 author code-based checks in the ordinary validator.
 
 Checking examples is allowed on structurally readable candidates before they earn
 `Validated`; ordinary browsing still requires validation. Incompatible query
 contracts after schema migration produce actionable diagnostics, not silent skips.
-Persist the example's argument/result values and recorded contracts, not just a
-query name and an untyped expected literal. Do not bypass whole-contract identity
+Persist the example's argument/result values and whole-contract fingerprints,
+not just a query name and an untyped expected literal. Metadata records the query
+name, requirement, explanation and the lowercase hexadecimal input/result
+ContractIds from ADR 0005. Compare fingerprints before decoding saved values;
+a mismatch asks the author to rebuild the example, never silently rebinds it.
+The stored identity is enough for compatibility checking. Serializing the complete
+DataType/SchemaMetadata again would only add a second representation to maintain;
+Git retains the schema source for historical inspection. This is contract identity,
+not a code seal or implementation pin. Do not bypass whole-contract identity
 using shape-only equality. Compare the saved argument/result contract identities with the selected query's
 argument/result contracts, not with the whole Root contract. A Root schema change
 alone does not invalidate an assertion whose query contracts remain equal. The
