@@ -8,6 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
+    Kyyn.Porcelain.Capability.RootOpening
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror

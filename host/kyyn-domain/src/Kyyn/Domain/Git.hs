@@ -1,9 +1,10 @@
-module Kyyn.Domain.Git (Repository(..), GitRevision, gitRevision, revisionName) where
+module Kyyn.Domain.Git (Repository(..), GitRevision, gitRevision, revisionName, TreePath(..)) where
 
-import Kyyn.Domain.Path (DirectoryScope)
+import Kyyn.Domain.Path (DirectoryScope, RelativePath)
 
 newtype Repository = Repository DirectoryScope deriving (Eq, Show)
 newtype GitRevision = GitRevision String deriving (Eq, Show)
+data TreePath = WholeTree | Subtree RelativePath deriving (Eq, Show)
 
 gitRevision :: String -> Either String GitRevision
 gitRevision value

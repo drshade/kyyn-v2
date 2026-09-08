@@ -379,8 +379,9 @@ input and returns decoded `SchemaMetadata`, not a `CheckedContract`. The pure
 contract checker combines this result with structural inspection; the focused
 integration fixture now uses SchemaInspection to inspect and evaluate the same
 capture, materializes and reopens runtime facts through RootStore, and sends the
-reopened value through the generated real-MicroHs codec. Schema capture from a KB
-manifest and filesystem/Git-backed root opening are still outstanding.
+reopened value through the generated real-MicroHs codec. RootOpening now selects
+schema declarations from the captured kb.dhall manifest as specified in ADR 0006;
+application commands and semantic checking are still outstanding.
 Coherence coverage must include missing/renamed
 fields, incompatible title/timeline/badge assignments and invalid reference targets.
 Test a role-only edit invalidating the complete contract and dependent bindings,

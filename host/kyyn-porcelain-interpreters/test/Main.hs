@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs, LambdaCase #-}
 module Main (main) where
 
 import Control.Monad (unless, forM_)
@@ -5,7 +6,10 @@ import Data.Aeson (Value, object, (.=))
 import qualified Data.ByteString as Bytes
 import Data.List (isSuffixOf)
 import Data.Text (Text)
-import Effectful (runPureEff)
+import Effectful (Eff, runPureEff)
+import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Path
@@ -15,6 +19,11 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Plumbing.Interpreter.DhallHandling
+import Kyyn.Porcelain.Capability.RootOpening
+import Kyyn.Porcelain.Interpreter.RootOpening
+import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
+import qualified Kyyn.Plumbing.Capability.GuestCompilation.Types as Sources
+import qualified Kyyn.Plumbing.Capability.Git as Git
 
 main :: IO ()
 main = do
@@ -63,7 +72,53 @@ main = do
   rejected (fileTree [(a,""),(a,"")])
   rejected (fileTree [(a,""),(ab,"")])
   unless (root == Root contract snapshot code) (fail "Snapshot mutated")
+  orderA <- tree [("a/c","one"),("a-b","two")]
+  orderB <- tree [("a-b","two"),("a/c","one")]
+  unless (orderA == orderB) (fail "FileTree depends on producer ordering")
+  openingTests contract snapshot
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
+
+openingTests :: CheckedContract -> FileTree -> IO ()
+openingTests contract factFiles = do
+  authored <- tree [("src/Example.hs","authored source"),("kb.dhall",manifest)]
+  captured <- right (fileTree (files authored ++ files factFiles))
+  sdk <- tree [("Kyyn/Types/Fact.hs","installed SDK")]
+  let execute sdkFiles action = runPureEff (runDhallHandling (schemaMock contract (gitMock captured
+        (runRootStore (runRootOpening sdkFiles action)))))
+  opened <- right (execute sdk (openCapturedRoot captured))
+  unless (opened == Root contract factFiles authored) (fail "Opening changed the selected files")
+  repo <- Repository <$> right (directoryScope "/unused-test-repository")
+  revision <- right (gitRevision (replicate 40 'a'))
+  prefix <- right (relativePath "root")
+  fromGit <- right (execute sdk (loadRootAt repo revision (Subtree prefix)))
+  unless (fromGit == opened) (fail "Git opening differs from captured opening")
+  forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
+    [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\" }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\" }" else b) | (p,b) <- files captured],
+    filter ((/= "facts/root.dhall") . relativeName . fst) (files captured)] $ \entries -> do
+      bad <- right (fileTree entries)
+      rejected (execute sdk (openCapturedRoot bad))
+  collision <- tree [("Example.hs","SDK collision")]
+  rejected (execute collision (openCapturedRoot captured))
+  rejected (execute sdk (loadRootAt repo revision WholeTree))
+  where
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }"
+
+schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
+schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->
+  let entries = [(relativeName p,b) | (p,b) <- Sources.sourceFiles (Schema.schemaSources source)]
+  in pure $ if Schema.selectedType source == "Example.Root" &&
+       lookup "Example.hs" entries == Just "authored source" && lookup "Kyyn/Types/Fact.hs" entries == Just "installed SDK" &&
+       maybe False (Bytes.isInfixOf "Example.schemaMetadata") (lookup "KyynMetadataEntry.hs" entries)
+     then Right contract else Left [Diagnostic "test.schema" "Incorrect source capture"]
+
+gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
+gitMock captured = interpret $ \_ -> \case
+  Git.ResolveRevision _ _ -> error "RootOpening must not resolve the revision again"
+  Git.ReadTreeAt _ revision (Subtree prefix)
+    | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root" -> pure (Right captured)
+  Git.ReadTreeAt _ _ _ -> pure (Left [Diagnostic "test.git" "Unusable root selection"])
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
