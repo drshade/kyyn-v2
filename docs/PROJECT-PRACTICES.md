@@ -42,6 +42,11 @@ does not become another specification of the product's runtime workflows.
   contract/source mismatch, closure deduplication/collisions, intermediate declarations,
   generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
   No real guest compilation is involved in these native tests.
+  Candidate tests in the roots suite check contract-description round trips,
+  exact context/root/report persistence, immutable repeated saves, missing/stale/corrupt
+  selections and failed publication preserving the last result. Application uses a
+  recording evolution handler with real RootStore/Dhall; checking records RootExecution
+  calls. Reload has no source-opening/compiler path and does not restore Validated.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.

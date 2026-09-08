@@ -29,11 +29,13 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
+import Kyyn.Porcelain.Capability.RootStore (RootStore)
+import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (createDirectoryIfMissing, removeFile, listDirectory)
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type TestEffects = '[EvolutionStore, RootOpening, WorkspaceStore, DhallHandling, FileSystem, Failure, IOE]
+type TestEffects = '[EvolutionStore, RootOpening, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
 
 evolutionCaptureTests :: RootContract -> IO ()
 evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture" $ \directory -> do
@@ -61,7 +63,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
           -> Eff TestEffects a
           -> IO (Either OperationalFailure a)
         execute selected answer = runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-          . runDhallHandling . runWorkspaceStore . openingMock repo selected rootPath answer . runEvolutionStore
+          . runDhallHandling . runRootStore . runWorkspaceStore . openingMock repo selected rootPath answer . runEvolutionStore
         success :: Eff TestEffects a -> IO (Either OperationalFailure a)
         success = execute revision (Right (Right source))
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
@@ -147,7 +149,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       _ -> fail "Missing workspace did not remain an operational storage failure"
   let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
   rootPath <- Subtree <$> right (relativePath "root")
-  failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runWorkspaceStore
+  failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore
     . openingMock repo revision rootPath (Right (Right source)) . runEvolutionStore $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")

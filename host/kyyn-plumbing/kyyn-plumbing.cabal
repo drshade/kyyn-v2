@@ -14,6 +14,7 @@ library
     Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Protocol.Query
     Kyyn.Plumbing.Protocol.Evolution
+    Kyyn.Plumbing.Protocol.Candidate
     Kyyn.Plumbing.Capability.SchemaInspection.Metadata
     Kyyn.Plumbing.Capability.SchemaInspection
     Kyyn.Plumbing.Capability.Git
