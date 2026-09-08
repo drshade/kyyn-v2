@@ -37,6 +37,12 @@ does not become another specification of the product's runtime workflows.
   RootExecution: path/contract round trips, required/illustrative mismatches,
   unchanged-root Validated minting and operational-failure propagation. The
   private constructor boundary has an import-check regression test.
+  The roots suite also requires Git for export integration: a checked root is
+  exported, committed as a complete subtree replacement, conditionally published
+  and reopened with identical Root/files. Git and Dhall are real; validation and
+  schema inspection are recording handlers, not another guest compilation run.
+  It checks deletions and unrelated committed/staged/unstaged preservation; it
+  does not exercise evolution acceptance or checkout synchronization.
   `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
   capture, isolated commit construction and expected-head ref updates against Git
   in a temporary repository; it is included in the fast check

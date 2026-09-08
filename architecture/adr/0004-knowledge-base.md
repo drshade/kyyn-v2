@@ -95,12 +95,14 @@ newtype Validated a = Validated a  -- constructor private to checking code
 This ADR owns the wrapper convention, not a requirement to define both wrappers
 in the domain package. `Validated` is implemented in a non-public, validation-owned
 module inside `kyyn-porcelain`, alongside the checking implementation that constructs
-it. The public validation capability exports the abstract type for store APIs and
-other consumers. Keep its type-definition module separate from effectful checking
+it. The dependency-free public `Kyyn.Porcelain.Validated` module exports only the
+abstract type and `validatedValue` accessor for store APIs and other consumers.
+It imports neither checking functions nor the constructor. Keep its type-definition module separate from effectful checking
 dependencies so capability modules can refer to it without an import cycle. No
 public unchecked constructor is needed to bridge a package boundary; domain values
 such as `Root` do not import porcelain. Package/import checks govern construction
-within the owning package. `Candidate` remains ordinary host data with its stated
+within the owning package, allowing the public facade only its abstract import.
+`Candidate` remains ordinary host data with its stated
 Functor convention, not a sealed constructor or validation certificate.
 
 There is no `Functor Validated`. Mapping `Root -> Root` over a candidate produces

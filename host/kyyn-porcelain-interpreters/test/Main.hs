@@ -11,6 +11,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import ExecutionTests (executionTests)
 import QueryExecutionTests (queryExecutionTests)
 import ValidationTests (validationTests)
+import RootExportTests (rootExportTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -82,6 +83,7 @@ main = do
   executionTests contract snapshot
   queryExecutionTests contract snapshot
   validationTests contract snapshot
+  rootExportTests root
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
 openingTests :: RootContract -> FileTree -> IO ()

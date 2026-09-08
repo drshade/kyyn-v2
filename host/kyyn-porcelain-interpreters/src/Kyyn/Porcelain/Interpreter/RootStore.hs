@@ -25,6 +25,7 @@ import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
+import Kyyn.Porcelain.Validated (validatedValue)
 
 runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
 runRootStore = interpret $ \_ -> \case
@@ -57,6 +58,9 @@ runRootStore = interpret $ \_ -> \case
   LoadRootValueForChecking root -> runExceptT (loadValue root)
   ReadExamples (Root _ _ code) descriptors -> runExceptT (loadExamples code descriptors)
   EncodeExample example -> runExceptT (saveExample example)
+  ExportRootFiles checked -> runExceptT $ do
+    let Root _ facts code = validatedValue checked
+    liftChecked (fileTree (files facts ++ files code))
 
 type Result es = ExceptT [Diagnostic] (Eff es)
 

@@ -6,7 +6,7 @@ const allowed = {
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program'],
   'kyyn-porcelain': ['Data.Aeson', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
-    'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore'],
+    'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
     'Data.Aeson', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable',
     'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Data.ByteString.Lazy', 'Numeric', 'Effectful', 'Effectful.Dispatch.Dynamic',
@@ -15,7 +15,7 @@ const allowed = {
     'Kyyn.Plumbing.Capability.SchemaInspection', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Porcelain.Capability.RootOpening',
     'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.FileSystem',
     'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.ProcessExecution',
-    'Kyyn.Plumbing.Protocol.Validation', 'Kyyn.Plumbing.Protocol.Query', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Porcelain.Capability.RootExecution'],
+    'Kyyn.Plumbing.Protocol.Validation', 'Kyyn.Plumbing.Protocol.Query', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Validated'],
   'kyyn-domain': ['Data.List', 'Control.DeepSeq', 'GHC.Generics', 'System.FilePath'],
   'kyyn-plumbing': ['Data.List', 'Kyyn.Domain.DataType'],
   'kyyn-microhs': [
@@ -114,13 +114,17 @@ export function checkImports(packageName, source) {
   if (!allowed[packageName]) throw new Error(`No import policy for ${packageName}`);
   const moduleName = /^module\s+([\w.]+)/m.exec(source)?.[1];
   const permitted = (packageName === 'kyyn-domain' && domainModules[moduleName]) || (packageName === 'kyyn-plumbing' && plumbingModules[moduleName]) ||
-    (packageName === 'kyyn-porcelain' && moduleName === 'Kyyn.Porcelain.Capability.Validation' && [...allowed['kyyn-porcelain'], 'Kyyn.Porcelain.Validation.Types']) ||
+    (packageName === 'kyyn-porcelain' && ['Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Validated'].includes(moduleName) && [...allowed['kyyn-porcelain'], 'Kyyn.Porcelain.Validation.Types']) ||
     (packageName === 'kyyn-microhs' && compilerModules[moduleName]) ||
     (packageName === 'kyyn-plumbing-interpreters' && interpreterModules[moduleName]) || allowed[packageName];
   return source.split('\n').filter(line => /^\s*import\b/.test(line)).flatMap(line => {
     const match = /^\s*import\s+(?:qualified\s+)?([A-Z][\w.]*)(?:\s|$)/.exec(line);
     if (!match) return ['unsupported import syntax; use a plain single-line module import'];
     if (!permitted.includes(match[1])) return [match[1]];
+    if (moduleName === 'Kyyn.Porcelain.Validated' && match[1] === 'Kyyn.Porcelain.Validation.Types' &&
+        line.trim() !== 'import Kyyn.Porcelain.Validation.Types (Validated, validatedValue)') {
+      return ['Validated facade must import only the abstract type and accessor'];
+    }
     if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters'].includes(packageName) || ['Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.Plumbing.Interpreter.Git'].includes(moduleName)) && match[1] === 'Effectful') {
       const explicit = /^\s*import Effectful \((.*)\)\s*$/.exec(line);
       const names = explicit?.[1].split(',').map(name => name.trim());

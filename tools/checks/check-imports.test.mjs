@@ -49,6 +49,9 @@ test('only validation can import the private Validated constructor', () => {
   for (const pkg of ['kyyn-domain', 'kyyn-porcelain', 'kyyn-porcelain-interpreters']) {
     assert.deepEqual(checkImports(pkg, 'module Other where\n' + privateImport), ['Kyyn.Porcelain.Validation.Types']);
   }
+  const facade = 'module Kyyn.Porcelain.Validated where\n';
+  assert.deepEqual(checkImports('kyyn-porcelain', facade + privateImport + ' (Validated, validatedValue)'), []);
+  assert.match(checkImports('kyyn-porcelain', facade + privateImport + ' (Validated(..))').join(), /abstract type/);
 });
 
 test('indented imports are checked and unrecognized syntax fails closed', () => {
