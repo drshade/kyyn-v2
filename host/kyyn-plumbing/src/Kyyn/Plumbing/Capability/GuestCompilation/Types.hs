@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Capability.GuestCompilation.Types
   ( GuestSources, guestSources, sourceFiles, selectedEntry, sourceIdentity
-  , BuildIdentity(..), CompiledEntry(..) ) where
+  , BuildIdentity(..), CompiledEntry(..), bindingModule ) where
 
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.ByteString (ByteString)
@@ -9,11 +9,24 @@ import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (sortOn, nub, isPrefixOf)
+import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path
 
 data GuestSources = GuestSources RelativePath [(RelativePath, ByteString)] deriving (Eq, Show)
+
+bindingModule :: String -> Either String String
+bindingModule selected = case reverse (segments selected) of
+  binding : modules@(_:_) | identifier isAsciiLower binding && all (identifier isAsciiUpper) modules ->
+    Right (take (length selected - length binding - 1) selected)
+  _ -> Left "Expected a qualified Haskell binding, such as Schema.validate"
+  where
+    segments input = case break (== '.') input of
+      (part, []) -> [part]
+      (part, _:rest) -> part : segments rest
+    identifier first (c:cs) = first c && all (\x -> isAsciiLower x || isAsciiUpper x || isDigit x || x == '_' || x == '\'') cs
+    identifier _ [] = False
 
 guestSources :: RelativePath -> [(RelativePath, ByteString)] -> Either String GuestSources
 guestSources entry files

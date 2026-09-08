@@ -87,6 +87,8 @@ The store makes snapshot selection explicit. These host operations use
 
 ```haskell
 data RootStore :: Effect where
+  ReadRootDefinition
+    :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
   LoadRootValueForChecking
     :: Root -> RootStore m CheckedValue
   ListFacts
@@ -118,15 +120,18 @@ data RootOpening :: Effect where
              -> RootOpening m (Either [Diagnostic] Root)
 
 runRootOpening
-  :: (Git :> es, SchemaInspection :> es, DhallHandling :> es, RootStore :> es)
+  :: (Git :> es, SchemaInspection :> es, RootStore :> es)
   => FileTree -- installed SDK sources, with compiler-relative paths
   -> Eff (RootOpening : es) a -> Eff es a
 ```
 
 The initial manifest is exactly `kb.dhall` inside the selected root subtree:
-`{ schemaType = "Schema.Root", schemaMetadata = "Schema.schemaMetadata" }`.
+`{ schemaType = "Schema.Root", schemaMetadata = "Schema.schemaMetadata", validator = "Validate.validate" }`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
-the opener strips that prefix for compiler inputs and appends the explicit SDK
+RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,
+returning the selected exports and authored source tree. RootOpening and
+RootExecution share this operation, so neither interprets Dhall or duplicates the
+layout. Each caller appends the explicit SDK
 source tree. Duplicate compiler paths fail. The SDK is supplied by the installed
 runtime, not loaded from a KB-selected location, and participates in compilation
 identity under ADR 0002. ADR 0005 owns schema capture and inspection.
@@ -139,8 +144,11 @@ under concurrent editing. Accepted roots open only from a fixed Git revision.
 LoadRootAt captures the selected tree then follows the same manifest path; it does
 not resolve a newer head. Missing/malformed manifests, rejected schemas and bad fact
 files return diagnostics. Compiler/Git infrastructure failures remain Failure.
-The result is Root, not Validated Root. This initial manifest does not advertise
-validators, queries or plugins, and the opener does not validate supporting files.
+The result is Root, not Validated Root. A validator declaration is required;
+there is no implicit successful validation when it is absent. The opener does not
+execute it; RootExecution owns that operation (ADR 0011). This initial manifest
+does not advertise queries or plugins, and the opener does not validate other
+supporting files.
 
 `ReadExamples` loads the selected root's saved assertions, including their recorded
 contracts. It does not run them or silently rebind them to new query contracts;

@@ -85,7 +85,7 @@ evaluation distinct from persisting or publishing its output:
 ```haskell
 data RootExecution :: Effect where
   ValidateRoot
-    :: Root -> RootExecution m ValidationReport
+    :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
   ExecuteQuery
     :: Root -> QueryDescriptor -> CheckedValue -> RootExecution m CheckedValue
   PrepareOutput
@@ -93,9 +93,28 @@ data RootExecution :: Effect where
 
 runRootExecution
   :: (RootStore :> es, GuestCompilation :> es, ProcessExecution :> es,
-      FileSystem :> es, SchemaInspection :> es, Failure :> es)
-  => Eff (RootExecution : es) a -> Eff es a
+      FileSystem :> es, Failure :> es)
+  => FileTree -- explicitly installed SDK/runtime sources
+  -> Eff (RootExecution : es) a -> Eff es a
 ```
+
+`ValidateRoot` is the first implemented operation. RootStore's `ReadRootDefinition`
+decodes the captured manifest and extracts captured authored sources; its
+`LoadRootValueForChecking` supplies the structurally checked whole-root value.
+The manifest-selected validator is compiled with a generated root codec and a
+fixed adapter requiring `Root -> ValidationReport`. Facts travel at runtime over
+stdin, not as generated source literals. The host decodes the SDK report on stdout.
+The contract already belongs to the supplied root; execution does not inspect
+a new schema or read current workspace files. SDK/runtime sources are explicit
+interpreter inputs, not acquired through the KB's manifest.
+
+The outer `Left` means the captured definition/facts are unreadable or the selected
+source cannot compile. `Right report` means the validator ran, including when the
+report contains semantic errors. Process failures and malformed protocol replies
+remain Failure, identifying the selected validator. This operation alone does not
+mint `Validated Root`: the required-example and proposal-level compilation gates
+remain separate. Query and output operations above describe the intended expansion,
+not additional implemented constructors.
 
 Effectful entry evaluation belongs to [EvolutionExecution](0010-evolutions.md),
 not this snapshot-checking/query effect. It derives `After`, generates bindings,

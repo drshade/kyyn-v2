@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
     Kyyn.Porcelain.Capability.RootOpening
+    Kyyn.Porcelain.Capability.RootExecution
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror

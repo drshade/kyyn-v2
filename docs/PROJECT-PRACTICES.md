@@ -29,6 +29,9 @@ does not become another specification of the product's runtime workflows.
   The same suite exercises manifest-driven RootOpening with the real Dhall and
   RootStore handlers and recording schema/Git test handlers. It checks source/SDK
   capture and revision forwarding, not a second real-compiler execution.
+  RootExecution tests use a recording compiler handler and small shell fixtures
+  for process exits/malformed replies; they check pre-execution rejection and
+  failure classification without compiling MicroHs. These fixtures require `sh`.
   `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
   capture, isolated commit construction and expected-head ref updates against Git
   in a temporary repository; it is included in the fast check
@@ -68,10 +71,11 @@ does not become another specification of the product's runtime workflows.
   named export through the fixed SDK codec, without running the full codec suite.
   It combines structural inspection and metadata evaluation from the same captured
   sources, then materializes/reopens runtime facts through RootStore and passes
-  the resulting value through a generated guest codec. It also compiles a small pure
-  guest validator and checks the SDK validation-report wire, including warnings,
-  errors and structured locations. This report fixture is not the RootExecution
-  handler or a complete root-validation gate. It does not open a KB from Git.
+  the resulting value through a generated guest codec. It also executes the real
+  RootExecution handler over materialized snapshots with a manifest-selected pure
+  guest validator, including warning-only and semantic-error outcomes with
+  structured locations. It does not open a KB from Git or implement the full
+  candidate/required-example validation gate.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 
