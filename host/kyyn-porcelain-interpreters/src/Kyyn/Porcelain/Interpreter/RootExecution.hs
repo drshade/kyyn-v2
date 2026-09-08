@@ -45,7 +45,7 @@ runRootExecution sdk = interpret $ \_ -> \case
     RootDefinition _ _ _ declarations authored <- ExceptT (readRootDefinition code)
     bindings <- checked "query.bindings" (queryBindings contract)
     traverse (inspectQuery (bindings : files authored ++ files sdk)) declarations
-  QueryRoot root@(Root contract _ code) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
+  ExecuteQuery root@(Root contract _ code) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
     RootDefinition _ _ _ declarations authored <- ExceptT (readRootDefinition code)
     declaration@(QueryDefinition _ _ selected _ _ _ _) <- case
       [d | d@(QueryDefinition n _ _ _ _ _ _) <- declarations, n == name] of

@@ -87,13 +87,16 @@ data RootExecution :: Effect where
   ValidateRoot
     :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
   ExecuteQuery
-    :: Root -> QueryDescriptor -> CheckedValue -> RootExecution m CheckedValue
+    :: Root -> QueryDescriptor -> CheckedValue
+    -> RootExecution m (Either [Diagnostic] QueryResult)
+  DiscoverQueries
+    :: Root -> RootExecution m (Either [Diagnostic] [QueryDescriptor])
   PrepareOutput
     :: Root -> OutputDescriptor -> CheckedValue -> RootExecution m PreparedOutput
 
 runRootExecution
   :: (RootStore :> es, GuestCompilation :> es, ProcessExecution :> es,
-      FileSystem :> es, Failure :> es)
+      FileSystem :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
   => FileTree -- explicitly installed SDK/runtime sources
   -> Eff (RootExecution : es) a -> Eff es a
 ```
@@ -113,8 +116,18 @@ source cannot compile. `Right report` means the validator ran, including when th
 report contains semantic errors. Process failures and malformed protocol replies
 remain Failure, identifying the selected validator. This operation alone does not
 mint `Validated Root`: the required-example and proposal-level compilation gates
-remain separate. Query and output operations above describe the intended expansion,
-not additional implemented constructors.
+remain separate. Query discovery/execution use the same captured-source boundary;
+PrepareOutput remains unimplemented.
+
+Query contracts are selected through the named declarations in ADR 0008.
+DiscoverQueries inspects input/result contracts without executing the query.
+ExecuteQuery resolves the root-local name in the supplied root, compares those
+contracts with the descriptor, checks the arguments and compiles the generated
+entry. The result is checked against its declared contract and accompanied by
+the logical read trace from ADR 0009. Unknown names, changed contracts, invalid
+arguments and compile rejection return diagnostics; process failure, malformed
+replies and a returned value violating its contract remain operational Failure.
+Examples compare the checked result, not the trace.
 
 Effectful entry evaluation belongs to [EvolutionExecution](0010-evolutions.md),
 not this snapshot-checking/query effect. It derives `After`, generates bindings,
@@ -142,9 +155,10 @@ validation report are information for review, not a prerequisite failure for
 evaluation. This allows a typed transformation to repair an invalid head.
 `ValidateRoot` reads the selected snapshot's
 code/facts, never latest workspace files. None of these constructors can accept a root
-or fetch live evidence. There is no Dhall dependency in execution: RootStore owns
-fact/config-file decoding, SchemaInspection owns extracting contracts, and
-binding generation is pure. Runtime helper names
+or fetch live evidence. RootStore owns fact/config-file decoding, SchemaInspection
+owns extracting query contracts, and binding generation is pure. Query execution
+uses DhallHandling's structural value check for arguments/results against the
+checked contract; it does not parse storage files itself. Runtime helper names
 and native process protocol are owned by [runtime](0002-runtime.md) and
 [wire](0007-wire.md), not repeated implementations here.
 RootStore supplies the explicit whole-root checking read; the interpreter does

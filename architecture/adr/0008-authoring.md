@@ -1,6 +1,6 @@
 # 0008 — Domain authors write typed functions, not adapters
 
-Status: Proposed. Basis: owner-established requirement to unburden KB programs.
+Status: Accepted. Full authoring surfaces remain under implementation.
 
 ## Context
 
@@ -117,14 +117,35 @@ For example, the reporting KB—not the kernel—might define this reusable quer
 
 ```haskell
 -- Guest reporting module; all three types belong to this KB/its SDK.
-monthlySummary :: ReportingPolicy -> Root -> MonthlySummary
+monthlySummary :: ReportingPolicy -> Query MonthlySummary
 ```
 
-At registration, the pure function is lifted with pure into the single
-snapshot-query form owned by ADR 0017. Its generated query adapter supplies the explicitly selected Root. The externally
+The generated query adapter interprets its typed reads against the explicitly
+selected Root, using the representation owned by ADRs 0009 and 0017. The externally
 visible argument is `ReportingPolicy`, and the host sees its checked contract,
 not an import of that Haskell declaration. This is why guest static typing and
 host structural checking are complementary, not interchangeable representations.
+
+The initial query registration is a `queries` list in `kb.dhall`. Each declaration
+supplies `name`, `description`, `implementation`, `inputType`, `inputMetadata`,
+`resultType`, and `resultMetadata`. The latter five are qualified Haskell export
+names, not repeated structural type definitions. Input/result metadata are explicit
+named exports of SchemaMetadata, checked against their respective types; the
+kernel does not copy the root's collection declarations into arbitrary query
+contracts. An empty metadata value can be shared where appropriate. Type aliases
+can give scalar/list/optional contracts an exported name.
+
+The generated `KyynQueryBindings` module exports the KB-specific `Query a` alias
+and a typed binding for each collection, named after its Haskell root field while
+retaining its declared collection identity. Schema modules must not depend on
+this derived module: Kyyn first inspects the schema, then generates bindings for
+query modules. Source collisions with generated adapter modules are diagnostics,
+not silent overwrites. Discovery inspects contracts without executing queries;
+the generated entry type-checks the chosen implementation at invocation.
+
+Current RootExecution takes structurally checked Root values. The `Validated Root`
+boundary above becomes available only with the required-example validation gate
+in ADR 0011; query execution alone must not mint that wrapper.
 
 KB helpers call generated bindings such as a configured provider's occurrence
 query, receiving typed pages. Provider JSON interpretation belongs inside the

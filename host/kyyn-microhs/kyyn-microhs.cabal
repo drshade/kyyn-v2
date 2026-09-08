@@ -49,3 +49,16 @@ test-suite metadata
     kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
     bytestring, text, filepath, temporary ==1.3, aeson ==2.2.5.0
     , kyyn-porcelain, kyyn-porcelain-interpreters
+
+test-suite queries
+  type: exitcode-stdio-1.0
+  main-is: QueryTests.hs
+  other-modules: QueryCore
+  hs-source-dirs: test ../../tests/integration
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-microhs, kyyn-domain,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    bytestring, text, filepath, temporary ==1.3, aeson ==2.2.5.0,
+    kyyn-porcelain, kyyn-porcelain-interpreters

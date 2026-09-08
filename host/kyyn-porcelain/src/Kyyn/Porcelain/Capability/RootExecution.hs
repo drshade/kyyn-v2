@@ -10,7 +10,7 @@ import Kyyn.Domain.Query (QueryDescriptor, QueryResult)
 data RootExecution :: Effect where
   ValidateRoot :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
   DiscoverQueries :: Root -> RootExecution m (Either [Diagnostic] [QueryDescriptor])
-  QueryRoot :: Root -> QueryDescriptor -> CheckedValue -> RootExecution m (Either [Diagnostic] QueryResult)
+  ExecuteQuery :: Root -> QueryDescriptor -> CheckedValue -> RootExecution m (Either [Diagnostic] QueryResult)
 
 type instance DispatchOf RootExecution = Dynamic
 
@@ -21,4 +21,4 @@ discoverQueries :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] [Q
 discoverQueries = send . DiscoverQueries
 
 queryRoot :: RootExecution :> es => Root -> QueryDescriptor -> CheckedValue -> Eff es (Either [Diagnostic] QueryResult)
-queryRoot root descriptor = send . QueryRoot root descriptor
+queryRoot root descriptor = send . ExecuteQuery root descriptor

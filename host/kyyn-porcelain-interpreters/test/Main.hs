@@ -9,6 +9,7 @@ import Data.Text (Text)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import ExecutionTests (executionTests)
+import QueryExecutionTests (queryExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -78,6 +79,7 @@ main = do
   unless (orderA == orderB) (fail "FileTree depends on producer ordering")
   openingTests contract snapshot
   executionTests contract snapshot
+  queryExecutionTests contract snapshot
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
 openingTests :: RootContract -> FileTree -> IO ()

@@ -125,8 +125,10 @@ runRootOpening
   -> Eff (RootOpening : es) a -> Eff es a
 ```
 
-The initial manifest is exactly `kb.dhall` inside the selected root subtree:
-`{ schemaType = "Schema.Root", schemaMetadata = "Schema.schemaMetadata", validator = "Validate.validate" }`.
+The manifest is `kb.dhall` inside the selected root subtree. Its fields are
+`schemaType`, `schemaMetadata`, `validator` and the `queries` registration list
+defined in [authoring](0008-authoring.md). The first three select qualified exports
+such as `Schema.Root`, `Schema.schemaMetadata` and `Validate.validate`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
 RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,
 returning the selected exports and authored source tree. RootOpening and
@@ -146,9 +148,10 @@ not resolve a newer head. Missing/malformed manifests, rejected schemas and bad 
 files return diagnostics. Compiler/Git infrastructure failures remain Failure.
 The result is Root, not Validated Root. A validator declaration is required;
 there is no implicit successful validation when it is absent. The opener does not
-execute it; RootExecution owns that operation (ADR 0011). This initial manifest
-does not advertise queries or plugins, and the opener does not validate other
-supporting files.
+execute it; RootExecution owns that operation (ADR 0011). Query names must be
+nonempty and unique; their contracts are inspected on discovery/invocation, not
+by the opener. The manifest does not yet advertise plugins, and the opener does
+not validate other supporting files.
 
 `ReadExamples` loads the selected root's saved assertions, including their recorded
 contracts. It does not run them or silently rebind them to new query contracts;

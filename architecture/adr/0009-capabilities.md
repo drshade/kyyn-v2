@@ -1,6 +1,8 @@
 # 0009 — Typed capability rows describe program effects
 
-Status: Proposed. Guest effect encoding remains a bounded SDK design gate.
+Status: Accepted. The typed Program and snapshot-read encoding has passed the
+pinned MicroHs/GHC feasibility proof; plugin capability composition and transport
+remain unimplemented.
 
 ## Context
 
@@ -51,8 +53,8 @@ assumed to be host `effectful`. `PluginHost` and `KnowledgeBaseHost` can be alia
 for selected capabilities, not an all-access record. A request's result type
 determines the continuation input; a raw wire value never reaches it unchecked.
 
-We can show the request/result relationship without prematurely selecting a
-type-family-based row library. One candidate core is a typed request tree:
+The request/result relationship uses a typed request tree, without selecting a
+type-family-based row library:
 
 ```haskell
 data Program request a where
@@ -71,33 +73,56 @@ interpretProgram
 The existential `x` links a request to exactly the value accepted by its
 continuation. `interpretProgram` is a pure fold into an explicit handler, not
 native IO hidden in the authored program. The generated transport handler uses
-private adapter IO; ordinary code builds `Program`. This is the candidate encoding
-to compile/test under pinned MicroHs, not a claim that the proof already passed.
+private adapter IO; ordinary code builds `Program`. The shared implementation
+compiles unchanged under GHC and pinned MicroHs, including dependent continuations
+whose read operations return different payload types.
 The continuation stays in the running guest and is never encoded on the wire.
 
-Composition of capability algebras can initially be as small as a typed sum:
+The first snapshot interpreter is entirely local and pure. Its generated binding
+associates a collection's declared identity with its typed root selector:
+
+```haskell
+data CollectionBinding root fact = CollectionBinding String (root -> [Fact fact])
+
+data SnapshotRead root a where
+  ReadCollection :: CollectionBinding root fact -> SnapshotRead root [Fact fact]
+  ReadFact :: CollectionBinding root fact -> FactId
+           -> SnapshotRead root (Maybe (Fact fact))
+
+newtype Query root a = Query (Program (SnapshotRead root) a)
+
+runLocally :: root -> Program (SnapshotRead root) a -> (a, [ReadAccess])
+data ReadAccess = CollectionRead String | FactRead String FactId
+```
+
+The adapter receives the whole root and query arguments on stdin and returns the
+result and ordered logical read trace. There is no request wire encoding or host
+request loop in this implementation. Missing facts still appear as fact-read
+requests; repeated reads and conditional branches retain their execution order.
+This is execution information, not declared evolution evidence, a cache key, or
+a claim that arbitrary Haskell computation is statically understandable. It does
+not list every physical read needed to load the root.
+
+Generated bindings give authored modules a root-specific `Query a` alias. Changing
+the storage/transport interpreter must not force business queries to handle wire
+values or continuations themselves. Paging and plugin calls are later additions,
+not speculative constructors in the current request algebra.
+
+Composition of capability algebras can later be as small as a typed sum:
 
 ```haskell
 data (left :+: right) a = InLeft (left a) | InRight (right a)
-
-data SnapshotRead a where
-  ReadPage
-    :: SnapshotRef -> CollectionBinding fact -> PageRequest
-    -> SnapshotRead (Page (Fact fact))
 
 -- Illustrative generated proxy for a registered Microsoft method.
 data MicrosoftCalls a where
   ReadEmail :: EvidenceRef -> EmailId -> MicrosoftCalls Email
 
-type EvolutionHost = SnapshotRead :+: MicrosoftCalls
+type EvolutionHost root = SnapshotRead root :+: MicrosoftCalls
 ```
 
 This particular `EvolutionHost` is an illustrative evolution entry's
-context, not an all-purpose permanent role. `SnapshotRef` denotes an explicitly
-selected host snapshot; `CollectionBinding fact` is a generated handle connecting
-the collection contract to the guest payload type. The host verifies both snapshot
-and collection context. [Storage](0006-storage.md) owns `Page` and the guest `Fact`
-envelope. `EvidenceRef` selects already fetched evidence; the plugin reads it
+context, not an all-purpose permanent role. [Storage](0006-storage.md) owns the
+guest `Fact` envelope. `EvidenceRef` selects already fetched evidence; the plugin reads it
 through its own host capabilities. This method need not contact the provider.
 Another registered method can explicitly acquire fresh evidence. The generated
 proxy carries a method identity and checked types, not arbitrary code over JSON.
