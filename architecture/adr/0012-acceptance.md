@@ -109,11 +109,29 @@ data RefUpdate
 ```
 
 `createCommit` takes one parent; publication supplies `Before.revision`.
+`GitTree` supplies non-overlapping complete replacements, each located at a
+subtree prefix or the whole tree. Empty subtree replacements remove that subtree;
+an empty whole-tree replacement produces an empty root tree. Unrelated entries
+retain their existing objects and modes, including symlinks and executable files.
+Replacement `FileTree` values carry bytes, not modes: their files are written as
+regular `100644` entries. Construction uses Git objects directly, without the
+live index or working tree.
+
+`CommitMetadata` supplies the message and separate author/committer identities,
+each with a name, email and explicit Git-format date (Unix seconds and timezone
+offset). The caller supplies these; construction does not consult the clock or
+derive identity from user configuration.
+
 `compareAndSwapRef` takes expected-old then desired-new revision. Its comparison
 and update must be atomic in the interpreter. `Nothing` means the ref no longer
 exists. Failure of that comparison leaves the accepted ref unchanged, even if
 unreachable candidate Git objects were already written. These signatures do not
 themselves prove the atomic implementation; real Git tests must do that.
+The actual revision returned after a refused update is a subsequent observation,
+not a frozen snapshot of the comparison instant. A failed update while the ref
+still has the expected value is an operational failure, such as a held ref lock.
+The raw ref primitive does not synchronize the checkout; the publication sequence
+below owns that separate step.
 
 Validation applies to the result being accepted. If the author changes the base,
 transformation, target schema or other evaluation inputs, rerun the checks and
