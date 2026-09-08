@@ -37,6 +37,9 @@ does not become another specification of the product's runtime workflows.
   repository-root/nested KB paths, exact Before copies, revision changes, unfinished
   targets, live matching without source loading, and diagnostics versus operational
   failures. No new MicroHs or Git execution is involved in those capture tests.
+  Creation is checked by immediately capturing its returned workspace, including
+  repeated labels, source rejection before allocation and failed writes. Workspace
+  encoding round-trips through real Dhall, preserving non-manifest file bytes.
   RootExecution tests use a recording compiler handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.
@@ -58,6 +61,8 @@ does not become another specification of the product's runtime workflows.
   `cabal test file-trees --test-show-details=direct` checks local directory capture
   without running the process cancellation or MicroHs suites; it is included in
   the fast check.
+  It also checks exclusive hexadecimal directory allocation, a seeded collision
+  retry with existing contents preserved, concurrent allocations and parent failure.
   Authors choose relevant local checks and record their revision and results;
   this command is not mandatory for every PR.
   `cabal test queries --test-options=--pure --test-show-details=direct` exercises

@@ -9,13 +9,16 @@ import Kyyn.Domain.Git (gitRevision)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Domain.Workspace
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Porcelain.Capability.WorkspaceStore (readWorkspaceSnapshot)
+import Kyyn.Porcelain.Capability.WorkspaceStore (readWorkspaceSnapshot, encodeWorkspaceSnapshot)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 
 workspaceTests :: IO ()
 workspaceTests = do
   initial <- tree entries
   snapshot <- right (readSnapshot initial)
+  encoded <- right (runPureEff (runDhallHandling (runWorkspaceStore (encodeWorkspaceSnapshot snapshot))))
+  reopened <- right (readSnapshot encoded)
+  unless (reopened == snapshot) (fail "Workspace encoding did not preserve projected data")
   revision <- right (gitRevision (replicate 40 'a'))
   before <- tree [("SchemaV1.hs", "before source")]
   target <- tree [("kb.dhall", "unfinished target manifest"), ("src/SchemaV2.hs", "unfinished target source")]
@@ -52,6 +55,10 @@ workspaceTests = do
   -- Capturing an unfinished draft must not try to compile its target or entry.
   draft <- tree [("manifest.dhall", manifest "a" "Draft" "New" "Work in progress")]
   _ <- right (readSnapshot draft)
+  illegalTarget <- tree [("facts/root.dhall", "parallel facts")]
+  let WorkspaceSnapshot definition beforeFiles _ changeFiles noteFiles = snapshot
+  rejected (runPureEff (runDhallHandling (runWorkspaceStore
+    (encodeWorkspaceSnapshot (WorkspaceSnapshot definition beforeFiles illegalTarget changeFiles noteFiles)))))
   putStrLn "Workspace manifest, projection and captured-input matching checks passed."
   where
     readSnapshot = runPureEff . runDhallHandling . runWorkspaceStore . readWorkspaceSnapshot

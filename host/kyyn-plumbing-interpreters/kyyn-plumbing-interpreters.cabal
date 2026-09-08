@@ -17,7 +17,7 @@ library
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
     effectful-core ==2.6.1.0, bytestring, async, typed-process ==0.2.13.0,
     directory, filepath, temporary ==1.3, dhall ==1.42.3, aeson ==2.2.5.0, text,
-    containers, prettyprinter, transformers
+    containers, prettyprinter, transformers, random ==1.3.1
 
 test-suite file-trees
   type: exitcode-stdio-1.0
@@ -26,7 +26,7 @@ test-suite file-trees
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
-    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, directory, filepath, temporary ==1.3
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, directory, filepath, temporary ==1.3, random ==1.3.1, async
 
 test-suite git-snapshots
   type: exitcode-stdio-1.0

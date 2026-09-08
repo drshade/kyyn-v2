@@ -9,16 +9,17 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.Failure (OperationalFailure(..))
+import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(WriteFile))
 import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (directoryScope, relativePath)
 import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -27,7 +28,7 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
-import System.Directory (createDirectoryIfMissing, removeFile)
+import System.Directory (createDirectoryIfMissing, removeFile, listDirectory)
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -42,7 +43,9 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   identity <- right (evolutionId "e001")
   missing <- right (evolutionId "e002")
   sourceTree <- tree [("Schema.hs", "selected source"), ("Helpers.hs", "selected helper")]
-  sourceCode <- tree [("kb.dhall", "selected manifest"), ("src/Schema.hs", "selected source")]
+  sourceCode <- tree [("kb.dhall", "selected manifest"), ("src/Schema.hs", "selected source"),
+    ("src/Helpers.hs", "selected helper"), ("examples/check.dhall", "selected example"),
+    ("plugins/config/provider.dhall", "selected config")]
   let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] sourceTree)
   forM_ [Nothing, Just "examples/sales"] $ \prefixName -> do
     prefix <- maybe (pure WholeTree) (fmap Subtree . right . relativePath) prefixName
@@ -58,9 +61,30 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
           -> IO (Either OperationalFailure a)
         execute selected answer = runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
           . runDhallHandling . runWorkspaceStore . openingMock repo selected rootPath answer . runEvolutionStore
+        success :: Eff TestEffects a -> IO (Either OperationalFailure a)
         success = execute revision (Right (Right source))
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
         noOpening = execute revision (error "Input matching/malformed capture unexpectedly opened a source root")
+        displayName = "Sales / ../ \"September\" λ"
+    created@(EvolutionWorkspace createdKb createdId) <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
+    unless (createdKb == kb && Right createdId == evolutionId (evolutionIdName createdId))
+      (fail "Creation returned an invalid KB or directory ID")
+    CapturedEvolution (EvolutionContext _ _ (Before createdBase _) (WorkspaceSnapshot
+      (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) <-
+        success (captureEvolution created) >>= right >>= right
+    empty <- tree []
+    unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
+      createdBefore == sourceTree && createdTarget == sourceCode && createdChange == empty && createdNotes == empty)
+      (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
+    another <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
+    unless (another /= created) (fail "Repeated creation reused a workspace")
+    let evolutionDirectory = directory </> maybe "" id prefixName </> "evolutions"
+        sourceError = [errorDiagnostic "test.source-rejected" "Source schema rejected"]
+    beforeRejection <- listDirectory evolutionDirectory
+    denied <- execute revision (Right (Left sourceError)) (createEvolution kb (EvolutionName "Bad") revision)
+    afterRejection <- listDirectory evolutionDirectory
+    unless (denied == Right (Left sourceError) && beforeRejection == afterRejection)
+      (fail "Source rejection created a draft or lost diagnostics")
     write "manifest.dhall" (manifest 'a' "Draft")
     write "before/Schema.hs" "selected source"
     write "before/Helpers.hs" "selected helper"
@@ -119,7 +143,19 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     case missingResult of
       Left (StorageUnavailable _) -> pure ()
       _ -> fail "Missing workspace did not remain an operational storage failure"
+  let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
+  rootPath <- Subtree <$> right (relativePath "root")
+  failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runWorkspaceStore
+    . openingMock repo revision rootPath (Right (Right source)) . runEvolutionStore $
+      createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
+  unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   putStrLn "Evolution capture verifies selected Before copies, KB paths and live input matching."
+
+failingWrites :: Failure :> es => OperationalFailure -> Eff (FileSystem : es) a -> Eff es a
+failingWrites failure = interpret $ \_ -> \case
+  FS.CreateUniqueDirectory _ -> pure (either error id (relativePath "e003"))
+  FS.WriteBytes {} -> raiseFailure failure
+  _ -> error "Creation unexpectedly read files or used a temporary scope"
 
 openingMock
   :: Failure :> es => Repository -> GitRevision -> TreePath

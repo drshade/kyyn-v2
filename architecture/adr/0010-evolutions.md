@@ -234,6 +234,8 @@ Haskell or resolve the selected revision:
 data WorkspaceStore :: Effect where
   ReadWorkspaceSnapshot
     :: FileTree -> WorkspaceStore m (Either [Diagnostic] WorkspaceSnapshot)
+  EncodeWorkspaceSnapshot
+    :: WorkspaceSnapshot -> WorkspaceStore m (Either [Diagnostic] FileTree)
 
 runWorkspaceStore
   :: DhallHandling :> es
@@ -252,6 +254,9 @@ the exact before/target/change paths and bytes. Manifest formatting, lifecycle
 state and notes are excluded. A same-schema code/configuration edit still changes
 the inputs. This pure comparison is not the store's live-workspace read or its
 independent Accepted/Ready check.
+Encoding restores those prefixes and uses DhallHandling to render the manifest;
+it preserves source/input/note bytes, not the manifest's formatting. The same
+layout checks apply when encoding an authored snapshot.
 
 Use stable, non-conflicting authored module names for schema definitions that must
 coexist in an evolution build. Two different definitions of a module named `Schema`
@@ -321,8 +326,8 @@ data EvolutionStore :: Effect where
   ResolveEvolution
     :: KnowledgeBase -> EvolutionId -> EvolutionStore m EvolutionWorkspace
   CreateEvolution
-    :: KnowledgeBase -> EvolutionName -> GitRevision -> TargetSchemaRequest
-    -> EvolutionStore m EvolutionWorkspace
+    :: KnowledgeBase -> EvolutionName -> GitRevision
+    -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
   CaptureEvolution
     :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] CapturedEvolution)
   TargetCode
@@ -341,12 +346,6 @@ data EvolutionStore :: Effect where
     :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
   ExportAcceptedWorkspace
     :: Candidate Root -> EvolutionStore m SubtreeReplacement
-
-data TargetSchemaRequest
-  = KeepSchema
-  | NewSchema ProposedSchemaModules
-
-data ProposedSchemaModules  -- authored module contents and target export/descriptors
 
 runEvolutionStore
   :: (RootStore :> es, RootOpening :> es, WorkspaceStore :> es,
@@ -368,8 +367,8 @@ the semantic handlers needed by the command.
 Installing Git plumbing for a complete store handler does not launch Git on every
 list call; do not use partial handlers that fail on the store's other operations.
 
-The implemented capture/matching handler currently requires only `FileSystem`,
-`WorkspaceStore` and `RootOpening`. It reads the workspace at the derived location,
+The implemented creation/capture/matching handler currently requires only `FileSystem`,
+`WorkspaceStore` and `RootOpening`. Capture reads the workspace at the derived location,
 decodes its manifest, and calls `LoadSourceAt` for that manifest's Before revision
 and the owning KB's root subtree. The projected `before/` tree must equal that
 source root's entire authored `src/` tree (prefix stripped) exactly, including
@@ -432,16 +431,29 @@ from captured evaluation inputs, not silently dropped when replacing the archive
 Publication calls this operation only for a checked candidate. It can therefore
 fail before publication without changing the workspace lifecycle.
 
-`KeepSchema` scaffolds target source from the selected base; `NewSchema` preserves
-the author's explicit target-source request, including an unfinished declaration.
-`ProposedSchemaModules` is content to write into the new workspace, not a live
-path or an already captured identity. After editing, capture fixes the actual
-module contents and constructs `SchemaSource` within that captured material.
-Creation derives Before from the revision and writes the requested target source;
-capture later reads the actual edited source, not a stale creation-time After.
-`EvolutionName` is the human label, `EvolutionId` the KB-local workspace key, and
-`EvolutionWorkspace` carries that key, its owning KB and location. It therefore
-supplies the KB context for capture without another argument that can disagree.
+Creation has one scaffold form. It loads source at the selected revision, copies
+its entire authored `src/` tree to `before/`, copies all non-fact root files to
+`target/`, and writes a Draft manifest with the supplied human name, Before revision
+and an initially empty explanation. Examples and configuration are copied too;
+their suitability after editing is checked with the candidate, not guessed during
+creation. The author edits `target/` for either same-schema or schema-changing work;
+there is no separate schema-request mode or stale creation-time After descriptor.
+
+Source inspection and workspace encoding finish before directory allocation.
+FileSystem reserves a fresh hexadecimal child of the live `evolutions/` directory
+using exclusive creation, then the store writes the encoded files and returns its
+KB-scoped handle. Exclusivity is against that live directory, including archives
+that remain there, not a global ID registry or a scan of deleted Git history.
+Names can repeat and never choose filesystem paths. Write failure returns an
+operational Failure, not a successful workspace; an unfinished directory can remain
+for inspection/removal. Creation does not update Git and does not promise atomic
+multi-file persistence under crashes.
+
+The initial scaffold leaves `change/` empty; no undefined function or invented SDK
+import is generated. Identity-entry scaffolding follows when the evolution SDK
+supplies its real entry convention. Meanwhile capture can inspect the draft, and
+execution requires the author's conventional `change/Evolution.hs` entry.
+`EvolutionWorkspace` carries only its key and owning KB; its location is derived.
 
 The host then evaluates against an explicit structurally readable source snapshot
 and materializes an unchecked candidate through [RootStore](0006-storage.md):

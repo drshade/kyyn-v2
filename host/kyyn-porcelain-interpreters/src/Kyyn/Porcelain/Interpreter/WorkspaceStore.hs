@@ -1,8 +1,8 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (Value(..))
+import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -10,21 +10,34 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.FileTree (files)
-import Kyyn.Domain.Git (gitRevision)
-import Kyyn.Domain.Path (relativePath)
+import Kyyn.Domain.FileTree (files, fileTree)
+import Kyyn.Domain.Git (gitRevision, revisionName)
+import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.Workspace
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore(..))
 
 runWorkspaceStore :: Dhall.DhallHandling :> es => Eff (WorkspaceStore : es) a -> Eff es a
-runWorkspaceStore = interpret $ \_ (ReadWorkspaceSnapshot tree) -> runExceptT $ do
-  path <- checked (relativePath "manifest.dhall")
-  bytes <- checked (maybe (Left "Missing manifest.dhall") Right (lookup path (files tree)))
-  source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
-  decoded <- ExceptT (Dhall.decodeValue manifestShape source)
-  manifest <- checked (parseManifest decoded)
-  checked (projectWorkspace manifest tree)
+runWorkspaceStore = interpret $ \_ -> \case
+  ReadWorkspaceSnapshot tree -> runExceptT $ do
+    path <- checked (relativePath "manifest.dhall")
+    bytes <- checked (maybe (Left "Missing manifest.dhall") Right (lookup path (files tree)))
+    source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
+    decoded <- ExceptT (Dhall.decodeValue manifestShape source)
+    manifest <- checked (parseManifest decoded)
+    checked (projectWorkspace manifest tree)
+  EncodeWorkspaceSnapshot (WorkspaceSnapshot manifest@(WorkspaceManifest revision name explanation state) before target change notes) -> runExceptT $ do
+    encoded <- ExceptT (Dhall.encodeValue manifestShape (object
+      [ "before" .= object ["revision" .= revisionName revision]
+      , "name" .= name, "explanation" .= explanation, "state" .= object ["tag" .= show state]
+      ]))
+    manifestPath <- checked (relativePath "manifest.dhall")
+    entries <- checked (traverse (\(pathName,bytes) -> (,bytes) <$> relativePath pathName)
+      [(prefix ++ relativeName path,bytes) | (prefix,tree) <-
+        [("before/",before),("target/",target),("change/",change),("notes/",notes)], (path,bytes) <- files tree])
+    tree <- checked (fileTree ((manifestPath,Text.encodeUtf8 encoded) : entries))
+    _ <- checked (projectWorkspace manifest tree)
+    pure tree
 
 manifestShape :: Shape
 manifestShape = Record

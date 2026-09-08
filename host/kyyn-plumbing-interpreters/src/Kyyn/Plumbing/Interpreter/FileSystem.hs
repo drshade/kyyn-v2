@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO) where
 
-import Control.Exception (IOException, displayException)
+import Control.Exception (IOException, displayException, try)
 import Control.Monad (forM)
 import qualified Data.ByteString as Bytes
 import Data.List (sort)
+import Data.Word (Word64)
+import Numeric (showHex)
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
 import qualified Effectful.Exception as Exception
@@ -13,9 +15,11 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
-import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, listDirectory, pathIsSymbolicLink, doesDirectoryExist, doesFileExist)
+import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectoryRecursive, listDirectory, pathIsSymbolicLink, doesDirectoryExist, doesFileExist)
 import System.FilePath (takeDirectory, (</>))
 import System.IO.Temp (createTempDirectory)
+import System.IO.Error (isAlreadyExistsError)
+import System.Random (randomIO)
 
 runFileSystemIO
   :: (IOE :> es, Failure :> es)
@@ -35,6 +39,19 @@ runFileSystemIO parent = interpret $ \env -> \case
     createDirectoryIfMissing True (takeDirectory (scopedPath scope path))
     Bytes.writeFile (scopedPath scope path) bytes
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
+  CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
+
+allocateDirectory :: FilePath -> IO RelativePath
+allocateDirectory parent = createDirectoryIfMissing True parent >> allocate
+  where
+    allocate = do
+      number <- randomIO :: IO Word64
+      let name = showHex number ""
+      created <- try (createDirectory (parent </> name))
+      case created of
+        Right () -> either (ioError . userError) pure (relativePath name)
+        Left err | isAlreadyExistsError err -> allocate
+                 | otherwise -> ioError err
 
 captureTree :: FilePath -> IO FileTree
 captureTree base = do
