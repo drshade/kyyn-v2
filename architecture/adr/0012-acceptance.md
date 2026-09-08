@@ -71,6 +71,12 @@ history from the final diff. Later history reads can therefore explain intermedi
 changes without running archived code. No separate provenance commit, receipt or
 database is required.
 
+Archive export is implemented as described in ADR 0010. Only its notes subtree is
+read from the live workspace; captured manifest fields, source and fixed report
+are not replaced by current files. The host-produced JSON record and its durable
+version/readability policy are owned there. Root export and archive export return
+the two replacements for one commit, not two publication steps.
+
 Keep evaluation, validation and diff inspection available before acceptance.
 For a new CLI/Web process, perform the already-accepted lookup described below,
 then use EvolutionStore's `LoadCandidate` and `checkCandidate` on that stored
@@ -298,7 +304,7 @@ Root export and Git commit/CAS primitives are implemented and tested together;
 authoritative FindAcceptance is implemented with real-Git history fixtures.
 Lifecycle reads and Ready/Draft transitions are implemented as specified in ADR 0010.
 This is not an implemented AcceptEvolution path. Full acceptance still requires
-Ready/captured-input checks, retained archive export
+publication's Ready/captured-input checks
 and checkout synchronization specified above. Do not expose a bare-root commit
 helper as an alternative acceptance workflow while those pieces are absent.
 

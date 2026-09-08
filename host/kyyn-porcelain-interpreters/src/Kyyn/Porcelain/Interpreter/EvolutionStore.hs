@@ -25,7 +25,7 @@ import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
-import Kyyn.Plumbing.Protocol.Candidate (encodeCandidateMetadata, decodeCandidateMetadata)
+import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as DhallHandling
 import Kyyn.Types.Fact (FactId(..))
@@ -33,6 +33,7 @@ import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..))
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
+import Kyyn.Porcelain.Validated (validatedValue)
 
 runEvolutionStore
   :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootOpening.RootOpening :> es,
@@ -61,6 +62,23 @@ runEvolutionStore = interpret $ \_ -> \case
     pure state
   MarkReady workspace -> runExceptT (setState workspace Ready)
   MarkDraft workspace -> runExceptT (setState workspace Draft)
+  ExportAcceptedWorkspace (Candidate (EvolutionContext kb@(KnowledgeBase (Repository scope) _) identity (Before revision before)
+      (WorkspaceSnapshot (WorkspaceManifest selected name explanation _ intermediates) source target change _)) report validated) -> runExceptT $ do
+    let Root after _ code = validatedValue validated
+    unless (revision == selected && target == code) (throwE [errorDiagnostic "evolution.archive-context"
+      "Checked root or Before revision disagrees with captured workspace inputs"])
+    notesPath <- checked (relativePath ("evolutions/" ++ evolutionIdName identity ++ "/notes") >>= knowledgeBasePath kb)
+    notesScope <- checked (directoryScope (scopedPath scope notesPath))
+    present <- ExceptT (Right <$> FileSystem.listDirectory notesScope)
+    notes <- case present of
+      Nothing -> checked (fileTree [])
+      Just _ -> ExceptT (Right <$> FileSystem.readTree notesScope)
+    encoded <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
+      (WorkspaceSnapshot (WorkspaceManifest revision name explanation Accepted intermediates) source target change notes))
+    resultPath <- checked (relativePath "result.json")
+    archive <- checked (fileTree ((resultPath,encodeEvolutionRecord identity before after report) : files encoded))
+    destination <- checked (relativePath ("evolutions/" ++ evolutionIdName identity) >>= knowledgeBasePath kb)
+    pure (Subtree destination, archive)
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
     rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)
     SourceRoot _ code (RootDefinition _ _ _ _ sources) <-
@@ -102,7 +120,7 @@ runEvolutionStore = interpret $ \_ -> \case
     writeTree location "capture/" capture
     writeTree location "root/" tree
     metadata <- stored WriteFile "candidate.json" (relativePath "candidate.json")
-    FileSystem.writeBytes location metadata (encodeCandidateMetadata identity before after report)
+    FileSystem.writeBytes location metadata (encodeEvolutionRecord identity before after report)
     pointer <- stored WriteFile "latest" (relativePath ("latest/" ++ evolutionIdName identity))
     FileSystem.replaceBytes parent pointer (Bytes.pack (relativeName allocated))
   LoadCandidate (EvolutionWorkspace kb identity) -> do
@@ -121,7 +139,7 @@ runEvolutionStore = interpret $ \_ -> \case
           (storageFailure ReadFile "candidate" "Unexpected saved-result file")
         metadata <- stored ReadFile "candidate.json" $ maybe (Left ("Missing candidate metadata" :: String)) Right
           (lookup "candidate.json" [(relativeName p,b) | (p,b) <- files tree])
-        decoded <- stored ReadFile "candidate.json" (decodeCandidateMetadata metadata)
+        decoded <- stored ReadFile "candidate.json" (decodeEvolutionRecord metadata)
         capture <- stored ReadFile "capture" (subtree "capture/" tree)
         snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _ _) _ target _ _) <-
           WorkspaceStore.readWorkspaceSnapshot capture >>= stored ReadFile "capture"
@@ -130,7 +148,7 @@ runEvolutionStore = interpret $ \_ -> \case
         code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
         unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
         case decoded of
-          Left diagnostics -> pure (Left diagnostics)
+          Left _ -> pure (Left [errorDiagnostic "candidate.stale" "Saved result no longer matches this kernel; apply the evolution again"])
           Right (owner,before,after,report) -> do
             unless (owner == identity) (storageFailure ReadFile "candidate.json" "Saved result belongs to another evolution")
             let root = Root after facts code

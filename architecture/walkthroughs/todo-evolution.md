@@ -266,7 +266,7 @@ evolutions/simplify-todos/
   before/src/SchemaV1.hs
   target/                           proposed source/config/examples, retained
   change/Evolution.hs
-  report.dhall                      fixed step report, readable without guest code
+  result.json                       contracts and fixed report, readable without guest code
 ```
 
 The archive does not embed B's own hash. Git records B and its parent. The live

@@ -381,7 +381,8 @@ data EvolutionStore :: Effect where
   MatchesCapturedInputs
     :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
   ExportAcceptedWorkspace
-    :: Candidate Root -> EvolutionStore m SubtreeReplacement
+    :: Candidate (Validated Root)
+    -> EvolutionStore m (Either [Diagnostic] (TreePath, FileTree))
 
 runEvolutionStore
   :: (RootStore :> es, RootOpening :> es, WorkspaceStore :> es,
@@ -534,6 +535,34 @@ review notes, retaining their original subjects; those notes are read separately
 from captured evaluation inputs, not silently dropped when replacing the archive.
 Publication calls this operation only for a checked candidate. It can therefore
 fail before publication without changing the workspace lifecycle.
+
+The implemented export returns the `Subtree` prefix and FileTree pair consumed by
+GitTree. It admits a Candidate (Validated Root), checks that the captured target
+code and Before revision agree, then emits an Accepted manifest from the captured
+manifest values, exact before/target/change bytes, and the fixed report. The only
+archive component read from the live workspace is `notes/`: its current bytes,
+including additions and deletions, replace the captured notes tree. Absent notes
+mean an empty notes tree. Notes retain their stored subjects unchanged. No other
+live manifest, source, target, report or candidate file supplies export content.
+Export itself does not check readiness, reread HEAD, compile, evaluate, validate,
+write files or advance Git; publication owns its separate checks and writes.
+
+`result.json` stores the evolution ID, Before/After contract descriptions and fixed
+report using the same host-owned EvolutionRecord codec as private candidate storage.
+JSON is used for this host-produced, machine-read record; authored facts and
+workspace manifests remain Dhall. The encoded shape remains the existing version-1
+format. Once committed, this record is durable history, not a disposable cache:
+future readers must either support an older version or return an unsupported-record
+version diagnostic, never classify a recognised unsupported version as corruption
+or require recompiling/reapplying archived modules. Generic contract/record decode
+diagnostics do not suggest replay; only LoadCandidate converts incompatibility into
+`candidate.stale` with reapplication guidance. There is no version migration
+framework in this implementation.
+
+The replacement is confined to the owning KB's `evolutions/<id>/`. It includes no
+materialized root facts, absolute candidate-store paths, validation marker or
+`.kyyn/` contents. RootStore independently exports the same Validated Root's files;
+publication combines those two replacements into one GitTree.
 
 Creation has one scaffold form. It loads source at the selected revision, copies
 its entire authored `src/` tree to `before/`, copies all non-fact root files to

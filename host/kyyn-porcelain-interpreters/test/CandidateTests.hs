@@ -8,6 +8,7 @@ import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Text (pack)
+import Data.List (isInfixOf)
 import Effectful (Eff, IOE, (:>), runEff)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Contract
@@ -33,6 +34,7 @@ import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
+import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution)
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionStore
@@ -40,12 +42,12 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Validation (checkCandidate)
-import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
+import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore, readWorkspaceSnapshot)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Validated (validatedValue)
-import System.Directory (listDirectory, removeFile)
+import System.Directory (listDirectory, removeFile, createDirectoryIfMissing)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -60,9 +62,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   prefix <- Subtree <$> right (relativePath "nested/kb")
   empty <- right (fileTree [])
   code <- right (fileTree [(either error id (relativePath "src/Schema.hs"), "captured source λ")])
+  beforeFiles <- right (fileTree [(either error id (relativePath "Before.hs"),"captured Before")])
+  changeFiles <- right (fileTree [(either error id (relativePath "Evolution.hs"),"captured entry")])
+  capturedNotes <- right (fileTree [(either error id (relativePath "old.md"),"old review note")])
   let kb = KnowledgeBase (Repository scope) prefix
       location = EvolutionWorkspace kb identity
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) empty code empty empty
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
       captured = CapturedEvolution context
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
@@ -89,6 +94,17 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let latestPath = candidateDir </> Char8.unpack first
       metadataPath = latestPath </> "candidate.json"
   metadata <- Bytes.readFile metadataPath
+  let futureRecord = Lazy.toStrict (encode (2 :: Int, evolutionIdName identity,
+        describeRootContract schema, describeRootContract schema, [] :: [Value]))
+  case decodeEvolutionRecord futureRecord of
+    Right (Left [Diagnostic Error "evolution.record-format" message _])
+      | not ("apply" `isInfixOf` message) -> pure ()
+    other -> fail ("Unsupported archive format was corruption or requested replay: " ++ show other)
+  Bytes.writeFile metadataPath futureRecord
+  execute (loadCandidate location) >>= \case
+    Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
+    other -> fail ("Unsupported private result did not request reapplication: " ++ show other)
+  Bytes.writeFile metadataPath metadata
   document <- right (eitherDecodeStrict' metadata)
   let fingerprint = pack (contractFingerprint (contractId (rootSchema schema)))
       stale (String s) | s == fingerprint = String "different-contract"
@@ -167,9 +183,44 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let warning = Diagnostic Warning "test.warning" "Review this" Nothing
   validation <- runEff . runDhallHandling . runRootStore . validationMock root (ValidationReport [warning]) $ checkCandidate candidate
   case validation of
-    Passed checkedCandidate (ValidationReport ds) ->
+    Passed checkedCandidate (ValidationReport ds) -> do
       unless (fmap validatedValue checkedCandidate == candidate && ds == [warning])
         (fail "Candidate checking changed context/report or lost warnings")
+      (_,absentNotesExport) <- execute (exportAcceptedWorkspace checkedCandidate) >>= right >>= right
+      unless (all (\(p,_) -> take 6 (relativeName p) /= "notes/") (files absentNotesExport))
+        (fail "Absent live notes resurrected captured review notes")
+      let liveWorkspace = directory </> "nested/kb/evolutions/e001"
+          noteBytes = "subject: original evaluated result\nKeep this later note unchanged"
+      createDirectoryIfMissing True (liveWorkspace </> "notes")
+      createDirectoryIfMissing True (liveWorkspace </> "target/src")
+      Bytes.writeFile (liveWorkspace </> "notes/new.md") noteBytes
+      Bytes.writeFile (liveWorkspace </> "manifest.dhall") "invalid live manifest"
+      Bytes.writeFile (liveWorkspace </> "target/src/Schema.hs") "edited source, not captured"
+      (archivePrefix,exported) <- execute (exportAcceptedWorkspace checkedCandidate) >>= right >>= right
+      expectedPrefix <- Subtree <$> right (relativePath "nested/kb/evolutions/e001")
+      unless (archivePrefix == expectedPrefix) (fail "Archive export escaped its KB/workspace prefix")
+      let entries = [(relativeName p,b) | (p,b) <- files exported]
+      recordBytes <- maybe (fail "Missing archive record") pure (lookup "result.json" entries)
+      decoded <- right (decodeEvolutionRecord recordBytes) >>= right
+      unless (decoded == (identity,schema,schema,report)) (fail "Archive changed contract identities, step report or rationale")
+      workspaceFiles <- right (fileTree [(p,b) | (p,b) <- files exported, relativeName p /= "result.json"])
+      archived <- runEff . runDhallHandling . runWorkspaceStore $ readWorkspaceSnapshot workspaceFiles
+      currentNotes <- right (fileTree [(either error id (relativePath "new.md"),noteBytes)])
+      unless (archived == Right (WorkspaceSnapshot
+          (WorkspaceManifest revision "Review λ" "Explain this" Accepted []) beforeFiles code changeFiles currentNotes))
+        (fail "Archive substituted live source/manifest or failed to preserve current notes/deletions")
+      liveManifest <- Bytes.readFile (liveWorkspace </> "manifest.dhall")
+      unless (liveManifest == "invalid live manifest") (fail "Export modified the live lifecycle state")
+      removeFile (liveWorkspace </> "notes/new.md")
+      (_,withoutNotes) <- execute (exportAcceptedWorkspace checkedCandidate) >>= right >>= right
+      unless (all (\(p,_) -> take 6 (relativeName p) /= "notes/") (files withoutNotes))
+        (fail "Export resurrected captured notes after deletion")
+      let Candidate _ _ checkedRoot = checkedCandidate
+          wrongContext = EvolutionContext kb identity (Before revision schema)
+            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) beforeFiles empty changeFiles capturedNotes)
+      execute (exportAcceptedWorkspace (Candidate wrongContext report checkedRoot)) >>= right >>= \case
+        Left [Diagnostic Error "evolution.archive-context" _ _] -> pure ()
+        _ -> fail "Archive accepted code differing from the checked root"
     other -> fail (show other)
   let invalid = errorDiagnostic "test.invalid" "Invalid root"
   invalidResult <- runEff . runDhallHandling . runRootStore . validationMock root (ValidationReport [invalid]) $ checkCandidate candidate
