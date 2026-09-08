@@ -15,10 +15,11 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
-import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectoryRecursive, listDirectory, pathIsSymbolicLink, doesDirectoryExist, doesFileExist)
+import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectoryRecursive, listDirectory, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
 import System.FilePath (takeDirectory, (</>))
-import System.IO.Temp (createTempDirectory)
-import System.IO.Error (isAlreadyExistsError)
+import System.IO (hClose, hSetBinaryMode)
+import System.IO.Temp (createTempDirectory, withTempFile)
+import System.IO.Error (isAlreadyExistsError, isDoesNotExistError)
 import System.Random (randomIO)
 
 runFileSystemIO
@@ -35,9 +36,24 @@ runFileSystemIO parent = interpret $ \env -> \case
         Right scope -> unlift (action scope)
         Left message -> raiseFailure (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.CreateTemporaryScope path message)))
   ReadBytes scope path -> native Failure.ReadFile (scopedPath scope path) $ Bytes.readFile (scopedPath scope path)
+  ReadOptionalBytes scope path -> native Failure.ReadFile (scopedPath scope path) $ do
+    result <- try (Bytes.readFile (scopedPath scope path))
+    case result of
+      Right bytes -> pure (Just bytes)
+      Left err | isDoesNotExistError err -> pure Nothing
+               | otherwise -> ioError err
   WriteBytes scope path bytes -> native Failure.WriteFile (scopedPath scope path) $ do
     createDirectoryIfMissing True (takeDirectory (scopedPath scope path))
     Bytes.writeFile (scopedPath scope path) bytes
+  ReplaceBytes scope path bytes -> native Failure.ReplaceFile (scopedPath scope path) $ do
+    let target = scopedPath scope path
+        parentDirectory = takeDirectory target
+    createDirectoryIfMissing True parentDirectory
+    withTempFile parentDirectory ".kyyn-replace-" $ \temporary handle -> do
+      hSetBinaryMode handle True
+      Bytes.hPut handle bytes
+      hClose handle
+      renameFile temporary target
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
   CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
 

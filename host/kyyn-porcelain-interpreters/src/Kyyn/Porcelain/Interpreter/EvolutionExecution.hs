@@ -18,7 +18,6 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Root (Root(..), RootDefinition(..), CheckedValue(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), IntermediateBinding(..))
-import Kyyn.Types.Evolution (EvolutionFailure(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
@@ -61,8 +60,7 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
       ("Evolution.evolution: " ++ message))))
     Right (Left failure) -> throwE (EvolutionRejected failure)
     Right (Right result) -> pure result
-  result <- ExceptT (fmap (either (Left . EvolutionRejected . EvolutionFailure) Right)
-    (checkEvolutionReport (map snd intermediates) expected input after reply))
+  result <- proposed (checkEvolutionReport (map snd intermediates) expected input after reply)
   let (value,report) = result
   pure (EvaluatedEvolution captured (After after) value report)
 

@@ -4,6 +4,7 @@ module Main (main) where
 import Control.Monad (unless, forM_)
 import Control.Concurrent.Async (mapConcurrently)
 import Data.List (nub)
+import qualified Data.ByteString as Bytes
 import Data.Word (Word64)
 import Numeric (showHex)
 import Effectful (runEff)
@@ -12,7 +13,7 @@ import Kyyn.Domain.Path
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.Failure
-import System.Directory (createDirectory, createFileLink)
+import System.Directory (createDirectory, createFileLink, listDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import System.Random (mkStdGen, random, setStdGen, StdGen)
@@ -59,4 +60,24 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   badParent <- either fail pure (directoryScope (base </> "nested/value.dhall"))
   failedAllocation <- runEff (runFailure (runFileSystemIO scope (FS.createUniqueDirectory badParent)))
   case failedAllocation of Left _ -> pure (); Right _ -> fail "File was accepted as allocation parent"
+  missingBytes <- execute (FS.readOptionalBytes scope (path "absent/file"))
+  unless (missingBytes == Nothing) (fail "Absent file was not optional")
+  let target = path "pointer/latest"
+      completeA = Bytes.replicate 131072 65
+      completeB = Bytes.replicate 131072 66
+  execute (FS.replaceBytes scope target completeA)
+  firstPointer <- execute (FS.readOptionalBytes scope target)
+  unless (firstPointer == Just completeA) (fail "Replacement did not create complete file")
+  observed <- mapConcurrently (\n -> do
+    execute (FS.replaceBytes scope target (if even n then completeA else completeB))
+    execute (FS.readBytes scope target)) [1..20 :: Int]
+  unless (all (`elem` [completeA,completeB]) observed) (fail "Concurrent replacement exposed partial bytes")
+  leftovers <- listDirectory (base </> "pointer")
+  unless (leftovers == ["latest"]) (fail "Replacement leaked temporary files")
+  badRead <- runEff (runFailure (runFileSystemIO scope (FS.readOptionalBytes scope (path "pointer"))))
+  case badRead of Left _ -> pure (); Right _ -> fail "Directory read failure became absence"
+  badReplace <- runEff (runFailure (runFileSystemIO scope (FS.replaceBytes scope (path "pointer") "bad")))
+  case badReplace of Left _ -> pure (); Right _ -> fail "Directory replacement succeeded"
+  retainedPointer <- execute (FS.readBytes scope target)
+  unless (retainedPointer `elem` [completeA,completeB]) (fail "Failed replacement damaged existing directory")
   putStrLn "Directory byte-tree capture, empty trees and read failures passed."
