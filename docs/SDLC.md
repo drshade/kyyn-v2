@@ -146,10 +146,13 @@ when doing so makes each change easier to understand, verify or integrate and
 each merge leaves the repository correct. Earlier PRs reference the Issue; the
 PR that establishes the completion criteria closes it.
 
-## 7. Verification has one project entry point
+## 7. Verification is proportional to the change
 
-`PROJECT-PRACTICES.md` names one command that represents the complete project
-gate. Local development and CI invoke the same entry point.
+`PROJECT-PRACTICES.md` names the default PR check and the full integration check,
+and states when each is required. Local development and CI use the same commands.
+Every PR needs the default check plus targeted verification relevant to its change;
+it does not automatically require the full integration suite. Issue completion
+requires the full check before the Issue is closed.
 
 The project decides what the gate contains. Common components include
 formatting, compilation, linting, unit tests, integration tests, contract tests

@@ -14,21 +14,28 @@ does not become another specification of the product's runtime workflows.
   design approvals or implementation completion for it.
 - **Foundation:** adapted from `sdlc` commit
   `347b154d9c5be56d2506401b134625850ed4adf4`. This repository owns its process copy;
-  execution does not fetch instructions from another checkout. `SDLC.md` retains
-  that baseline verbatim; Kyyn's adoption details live here.
+  execution does not fetch instructions from another checkout. `SDLC.md` is
+  maintained locally, including Kyyn's proportional verification policy.
 
 ## Verification
 
-- **Complete gate:** `bash tools/test.sh`, invoked identically locally and in CI.
+- **Default PR check:** `bash tools/test.sh`: documentation/import checks, native
+  compilation and process/filesystem tests. Add targeted tests relevant to the change.
+- **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
+  compilation and codec tests. Run it before declaring an Issue complete, or when
+  needed for a particular change or investigation; not for every PR or merge.
 - **Development prerequisites for this gate:** Bash 3.2+, Node.js 22+, GHC 9.10.3,
   Cabal 3.16.1.0, Make and a C compiler; no npm packages. Fetch native dependencies
   with `cabal update` on a new development machine.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
 - **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
+  Automatic runs use the fast check. Manual dispatch offers a `full` checkbox.
+  After merge, sync and continue without waiting for another CI run; failures are
+  investigated when reported. This policy applies during private, pre-release development.
   CI caches Cabal's compiled dependency store by platform, toolchain and resolved
   build configuration. Compatible older stores can seed changed dependency plans;
   Cabal still resolves and builds the current plan. Project build outputs and test
-  results are not cached, and the complete gate runs on cache hits and misses.
+  results are not cached, and the selected check runs on cache hits and misses.
 - **Current scope:** documentation/ADR checks, checker regressions, explicit pure-module
   import allowlists, native package builds, scoped process lifetime tests and actual MicroHs generated-codec tests.
   `tools/test-guest.sh` builds the vendored compiler/evaluator/preprocessor and the
@@ -39,9 +46,8 @@ does not become another specification of the product's runtime workflows.
   Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
   cancellation; their reaping assertions currently require POSIX (Linux in CI).
   No complete KB workflow, plugin or Web build exists yet.
-- **As implementation arrives:** extend this same gate with the relevant checks.
-  The earlier documentation-only guard is removed because native and guest builds
-  now run unconditionally; do not silently skip their failures.
+- **As implementation arrives:** keep the default check fast and extend full
+  integration coverage separately. Do not silently skip failures in a selected check.
 
 The documentation check validates project-owned documentation, not third-party/vendor/cache trees.
 Historical evidence in neighbouring repositories is cited as source paths rather

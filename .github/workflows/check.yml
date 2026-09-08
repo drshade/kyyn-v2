@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      full:
+        description: Run full integration checks for issue completion
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -32,4 +37,4 @@ jobs:
           key: cabal-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-${{ hashFiles('cabal.project', '**/*.cabal', 'dist-newstyle/cache/plan.json') }}
           restore-keys: |
             cabal-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-
-      - run: bash tools/test.sh
+      - run: bash tools/test.sh ${{ inputs.full && '--full' || '' }}

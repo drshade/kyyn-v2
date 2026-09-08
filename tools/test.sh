@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+case "${*}" in
+  ""|--full) ;;
+  *) echo "Usage: bash tools/test.sh [--full]" >&2; exit 2 ;;
+esac
+
 if ! command -v node >/dev/null 2>&1; then
     echo "The development gate requires Node.js 22+; see docs/PROJECT-PRACTICES.md." >&2
     exit 1
@@ -20,5 +25,9 @@ node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
 cabal test processes --test-show-details=direct
-bash tools/test-guest.sh
-echo "Complete gate passed: documentation, import boundaries, native process lifetimes and real MicroHs codec tests."
+if [[ "${1:-}" == --full ]]; then
+  bash tools/test-guest.sh
+  echo "Full check passed, including real MicroHs integration tests."
+else
+  echo "Fast check passed: documentation, import boundaries, native build and process/filesystem tests."
+fi
