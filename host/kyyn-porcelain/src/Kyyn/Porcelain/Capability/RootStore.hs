@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootStore
   ( RootStore(..), readRootDefinition, checkRootValue, materializeRoot, loadRootValueForChecking
-  , readExamples, encodeExample, exportRootFiles ) where
+  , readExamples, encodeExample, exportRootFiles, rootLocation ) where
 
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -13,6 +13,11 @@ import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Example (Example)
 import Kyyn.Domain.Query (QueryDescriptor)
 import Kyyn.Porcelain.Validated (Validated)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBasePath)
+import Kyyn.Domain.Path (RelativePath, relativePath)
+
+rootLocation :: KnowledgeBase -> Either String RelativePath
+rootLocation kb = relativePath "root" >>= knowledgeBasePath kb
 
 data RootStore :: Effect where
   ReadRootDefinition :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)

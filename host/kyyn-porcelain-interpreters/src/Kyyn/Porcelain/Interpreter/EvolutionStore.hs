@@ -29,7 +29,7 @@ import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvol
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as DhallHandling
 import Kyyn.Types.Fact (FactId(..))
-import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..))
+import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..), workspaceLocation)
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
@@ -67,7 +67,7 @@ runEvolutionStore = interpret $ \_ -> \case
     let Root after _ code = validatedValue validated
     unless (revision == selected && target == code) (throwE [errorDiagnostic "evolution.archive-context"
       "Checked root or Before revision disagrees with captured workspace inputs"])
-    notesPath <- checked (relativePath ("evolutions/" ++ evolutionIdName identity ++ "/notes") >>= knowledgeBasePath kb)
+    notesPath <- checked (workspaceLocation (EvolutionWorkspace kb identity) >>= \p -> relativePath (relativeName p ++ "/notes"))
     notesScope <- checked (directoryScope (scopedPath scope notesPath))
     present <- ExceptT (Right <$> FileSystem.listDirectory notesScope)
     notes <- case present of
@@ -77,10 +77,10 @@ runEvolutionStore = interpret $ \_ -> \case
       (WorkspaceSnapshot (WorkspaceManifest revision name explanation Accepted intermediates) source target change notes))
     resultPath <- checked (relativePath "result.json")
     archive <- checked (fileTree ((resultPath,encodeEvolutionRecord identity before after report) : files encoded))
-    destination <- checked (relativePath ("evolutions/" ++ evolutionIdName identity) >>= knowledgeBasePath kb)
+    destination <- checked (workspaceLocation (EvolutionWorkspace kb identity))
     pure (Subtree destination, archive)
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
-    rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)
+    rootPath <- checked (RootStore.rootLocation kb)
     SourceRoot _ code (RootDefinition _ _ _ _ sources) <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
     empty <- checked (fileTree [])
@@ -97,7 +97,7 @@ runEvolutionStore = interpret $ \_ -> \case
     pure (EvolutionWorkspace kb identity)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
     snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _ _) beforeCopy _ _ _) <- readWorkspace location
-    rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)
+    rootPath <- checked (RootStore.rootLocation kb)
     SourceRoot contract _ (RootDefinition _ _ _ _ sources) <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
     unless (beforeCopy == sources) (throwE [errorDiagnostic "evolution.before-mismatch"
@@ -205,8 +205,8 @@ setState workspace@(EvolutionWorkspace kb@(KnowledgeBase repository@(Repository 
   ExceptT (Right <$> FileSystem.replaceBytes scope path source)
 
 manifestPath :: EvolutionWorkspace -> ExceptT [Diagnostic] (Eff es) RelativePath
-manifestPath (EvolutionWorkspace kb identity) = checked
-  (relativePath ("evolutions/" ++ evolutionIdName identity ++ "/manifest.dhall") >>= knowledgeBasePath kb)
+manifestPath workspace = checked
+  (workspaceLocation workspace >>= \p -> relativePath (relativeName p ++ "/manifest.dhall"))
 
 localManifest :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es)
   => EvolutionWorkspace -> ExceptT [Diagnostic] (Eff es) (Maybe WorkspaceManifest)
@@ -229,7 +229,7 @@ requireWorkspace = maybe (throwE [errorDiagnostic "evolution.unknown" "No evolut
 archiveBefore :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
   => KnowledgeBase -> EvolutionId -> GitRevision -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)
 archiveBefore kb@(KnowledgeBase repository _) identity revision = do
-  path <- checked (relativePath ("evolutions/" ++ evolutionIdName identity ++ "/manifest.dhall") >>= knowledgeBasePath kb)
+  path <- manifestPath (EvolutionWorkspace kb identity)
   bytes <- ExceptT (Git.readFileAt repository revision path)
   case bytes of
     Nothing -> pure Nothing
@@ -291,7 +291,7 @@ readWorkspace
   :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es)
   => EvolutionWorkspace -> ExceptT [Diagnostic] (Eff es) WorkspaceSnapshot
 readWorkspace (EvolutionWorkspace kb@(KnowledgeBase (Repository scope) _) identity) = do
-  path <- checked (relativePath ("evolutions/" ++ evolutionIdName identity) >>= knowledgeBasePath kb)
+  path <- checked (workspaceLocation (EvolutionWorkspace kb identity))
   location <- checked (directoryScope (scopedPath scope path))
   tree <- ExceptT (Right <$> FileSystem.readTree location)
   ExceptT (WorkspaceStore.readWorkspaceSnapshot tree)
