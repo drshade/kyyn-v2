@@ -27,7 +27,7 @@ runGit executable = interpret $ \_ -> \case
     selected <- case location of
       WholeTree -> pure (Just (revisionName revision))
       Subtree path -> do
-        found <- successful repo ["ls-tree", "-d", "-z", revisionName revision, "--", relativeName path]
+        found <- successful repo ["ls-tree", "-z", revisionName revision, "--", relativeName path]
         if Bytes.null found then pure Nothing else case Char8.words (Char8.takeWhile (/= '\t') found) of
           [_, "tree", objectId] -> pure (Just (Char8.unpack objectId))
           _ -> rejected "git.unsupported-entry" "Expected a directory tree"
