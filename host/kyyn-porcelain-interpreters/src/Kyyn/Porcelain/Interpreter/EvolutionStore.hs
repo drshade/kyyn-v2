@@ -16,13 +16,14 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), FactChange(..), RecordedFact(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(..))
-import Kyyn.Domain.Git (Repository(..), TreePath(..))
+import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path (DirectoryScope, relativePath, relativeName, scopedPath, directoryScope)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
+import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import Kyyn.Plumbing.Protocol.Candidate (encodeCandidateMetadata, decodeCandidateMetadata)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -35,9 +36,19 @@ import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
 
 runEvolutionStore
   :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootOpening.RootOpening :> es,
-      RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es)
+      RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Git.Git :> es, Failure :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
 runEvolutionStore = interpret $ \_ -> \case
+  FindAcceptance kb identity revision -> runExceptT $ do
+    current <- archiveBefore kb identity revision
+    case current of
+      Nothing -> pure Nothing
+      Just before -> do
+        introductions <- introducingCommits kb identity before [] [revision]
+        case introductions of
+          [accepted] -> pure (Just accepted)
+          [] -> throwE [errorDiagnostic "evolution.acceptance-history" "Accepted archive has no introducing commit with its recorded Before as a parent"]
+          _ -> throwE [errorDiagnostic "evolution.acceptance-history" "Accepted archive has multiple introducing commits; inspect the Git history"]
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
     rootPath <- checked (relativePath "root" >>= knowledgeBasePath kb)
     SourceRoot _ code (RootDefinition _ _ _ _ sources) <-
@@ -114,6 +125,36 @@ runEvolutionStore = interpret $ \_ -> \case
             _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
             checkSavedReport ReadFile report
             pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
+
+archiveBefore :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
+  => KnowledgeBase -> EvolutionId -> GitRevision -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)
+archiveBefore kb@(KnowledgeBase repository _) identity revision = do
+  path <- checked (relativePath ("evolutions/" ++ evolutionIdName identity ++ "/manifest.dhall") >>= knowledgeBasePath kb)
+  bytes <- ExceptT (Git.readFileAt repository revision path)
+  case bytes of
+    Nothing -> pure Nothing
+    Just source -> do
+      manifestPath <- checked (relativePath "manifest.dhall")
+      tree <- checked (fileTree [(manifestPath,source)])
+      WorkspaceSnapshot (WorkspaceManifest before _ _ state _) _ _ _ _ <- ExceptT (WorkspaceStore.readWorkspaceSnapshot tree)
+      pure (if state == Accepted then Just before else Nothing)
+
+introducingCommits :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
+  => KnowledgeBase -> EvolutionId -> GitRevision -> [GitRevision] -> [GitRevision]
+  -> ExceptT [Diagnostic] (Eff es) [GitRevision]
+introducingCommits _ _ _ _ [] = pure []
+introducingCommits kb@(KnowledgeBase repository _) identity before visited (revision:remaining)
+  | revision `elem` visited = introducingCommits kb identity before visited remaining
+  | otherwise = do
+      parents <- ExceptT (Git.readCommitParents repository revision)
+      introduced <- if before `elem` parents then do
+        selected <- archiveBefore kb identity revision
+        if selected /= Just before then pure False else do
+          inherited <- traverse (archiveBefore kb identity) parents
+          pure (Just before `notElem` inherited)
+        else pure False
+      rest <- introducingCommits kb identity before (revision:visited) (parents ++ remaining)
+      pure (if introduced then revision:rest else rest)
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
 checkSavedReport operation (EvolutionReport steps) = forM_ steps $ \(StepReport _ changes) ->

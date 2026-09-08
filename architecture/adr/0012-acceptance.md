@@ -199,7 +199,7 @@ not the possibly still-Ready local manifest:
 -- EvolutionStore operation; reads Git, not a second acceptance registry.
 FindAcceptance
   :: KnowledgeBase -> EvolutionId -> GitRevision
-  -> EvolutionStore m (Maybe GitRevision)
+  -> EvolutionStore m (Either [Diagnostic] (Maybe GitRevision))
 ```
 
 Start by reading this workspace's archive in the input revision's tree. If absent
@@ -209,6 +209,35 @@ parents, finding the commit with parent B that introduced that Accepted archive.
 Return that introducing commit, not a later head that merely carries the archive.
 An ambiguous or malformed history is a diagnostic, not a guess. A subsequent
 re-acceptance uses the current archive's Before and resolves to its new commit.
+The implementing walk visits each reachable commit once, follows every parent,
+and examines the selected archive manifest at potential introductions and their
+parents. An introduction has B as a parent, declares Accepted with Before B, and
+does not inherit that Accepted/Before pair from any parent. A merge carrying an
+acceptance from its second parent therefore resolves to the original acceptance,
+not the merge. Multiple reachable introductions for the selected Before are
+ambiguous. Later note edits do not require byte-identical archive trees.
+
+This is a history walk, not a lookup index: Git reads grow with the reachable
+ancestor count, and the initial list-based visited set can require quadratic local
+membership work. There is no history cap or cache. Missing history needed to prove
+the introduction returns diagnostics; it is not silently treated as a root commit.
+The implementation reads raw commit parent headers and only `manifest.dhall`, not
+archived Haskell, reports or evidence. It does not read the live checkout or private
+candidate storage and never invokes the compiler. Its plumbing inputs are explicit:
+
+```haskell
+readFileAt
+  :: Git :> es => Repository -> GitRevision -> RelativePath
+  -> Eff es (Either [Diagnostic] (Maybe ByteString))
+
+readCommitParents
+  :: Git :> es => Repository -> GitRevision
+  -> Eff es (Either [Diagnostic] [GitRevision])
+```
+
+An absent path is `Right Nothing`; a directory or unsupported entry is a diagnostic.
+An unknown revision is a diagnostic, not an absent file or a parentless commit.
+Git infrastructure failures remain Failure.
 The application returns `AlreadyAccepted` with that revision and guidance to
 inspect/repair local files through Git. Publication repeats this lookup before
 base/readiness checks so a concurrent completed acceptance is diagnosed honestly.
@@ -266,8 +295,9 @@ branch does not make every commit valid by definition.
 ## Implementation responsibilities and exclusions
 
 Root export and Git commit/CAS primitives are implemented and tested together;
+authoritative FindAcceptance is implemented with real-Git history fixtures.
 this is not an implemented AcceptEvolution path. Full acceptance still requires
-the evolution context, Ready/captured-input checks, retained archive/history lookup
+Ready/captured-input checks, retained archive export
 and checkout synchronization specified above. Do not expose a bare-root commit
 helper as an alternative acceptance workflow while those pieces are absent.
 

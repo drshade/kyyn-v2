@@ -18,6 +18,7 @@ import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
@@ -35,7 +36,7 @@ import System.Directory (createDirectoryIfMissing, removeFile, listDirectory)
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type TestEffects = '[EvolutionStore, RootOpening, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
+type TestEffects = '[EvolutionStore, RootOpening, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
 
 evolutionCaptureTests :: RootContract -> IO ()
 evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture" $ \directory -> do
@@ -63,7 +64,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
           -> Eff TestEffects a
           -> IO (Either OperationalFailure a)
         execute selected answer = runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-          . runDhallHandling . runRootStore . runWorkspaceStore . openingMock repo selected rootPath answer . runEvolutionStore
+          . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock repo selected rootPath answer . runEvolutionStore
         success :: Eff TestEffects a -> IO (Either OperationalFailure a)
         success = execute revision (Right (Right source))
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
@@ -149,7 +150,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       _ -> fail "Missing workspace did not remain an operational storage failure"
   let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
   rootPath <- Subtree <$> right (relativePath "root")
-  failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore
+  failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
     . openingMock repo revision rootPath (Right (Right source)) . runEvolutionStore $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
@@ -160,6 +161,9 @@ failingWrites failure = interpret $ \_ -> \case
   FS.CreateUniqueDirectory _ -> pure (either error id (relativePath "e003"))
   FS.WriteBytes {} -> raiseFailure failure
   _ -> error "Creation unexpectedly read files or used a temporary scope"
+
+noGit :: Eff (Git.Git : es) a -> Eff es a
+noGit = interpret $ \_ _ -> error "Capture bypassed RootOpening for Git"
 
 openingMock
   :: Failure :> es => Repository -> GitRevision -> TreePath

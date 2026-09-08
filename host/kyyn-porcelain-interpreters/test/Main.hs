@@ -15,6 +15,7 @@ import RootExportTests (rootExportTests)
 import WorkspaceTests (workspaceTests)
 import EvolutionCaptureTests (evolutionCaptureTests)
 import CandidateTests (candidateTests)
+import AcceptanceHistoryTests (acceptanceHistoryTests)
 import EvolutionExecutionTests (evolutionExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
@@ -92,6 +93,7 @@ main = do
   queryExecutionTests contract snapshot
   validationTests contract snapshot
   candidateTests contract snapshot
+  acceptanceHistoryTests
   rootExportTests root
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
@@ -157,6 +159,8 @@ gitMock captured = interpret $ \_ -> \case
   Git.ReadTreeAt _ _ _ -> pure (Left [errorDiagnostic "test.git" "Unusable root selection"])
   Git.CreateCommit {} -> error "RootOpening must not create commits"
   Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
+  Git.ReadFileAt {} -> error "RootOpening must read the selected complete tree"
+  Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

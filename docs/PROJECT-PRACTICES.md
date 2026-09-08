@@ -47,6 +47,10 @@ does not become another specification of the product's runtime workflows.
   selections and failed publication preserving the last result. Application uses a
   recording evolution handler with real RootStore/Dhall; checking records RootExecution
   calls. Reload has no source-opening/compiler path and does not restore Validated.
+  Acceptance-history tests use real Git and Dhall: original introducing commit,
+  inherited archive, revert/removal, reacceptance, all-parent merges, ambiguous and
+  malformed histories. They forbid live-file/root-opening calls, check exact commit
+  parents and optional file reads, and do not publish a ref or run guest code.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.

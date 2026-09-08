@@ -28,6 +28,7 @@ import Kyyn.Types.Fact (FactId(..))
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -48,7 +49,7 @@ import System.Directory (listDirectory, removeFile)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
-type StoreEffects = '[EvolutionStore, RootOpening, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
+type StoreEffects = '[EvolutionStore, RootOpening, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
 
 candidateTests :: RootContract -> FileTree -> IO ()
 candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \directory -> do
@@ -74,7 +75,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
       execute = runEff . runFailure . runFileSystemIO scope . runDhallHandling . runRootStore
-        . runWorkspaceStore . noOpening . runEvolutionStore
+        . runWorkspaceStore . noGit . noOpening . runEvolutionStore
       candidateDir = directory </> "nested/kb/.kyyn/candidates"
       pointer = candidateDir </> "latest/e001"
   unless (fmap id candidate == candidate && fmap (const ()) candidate == Candidate context report ())
@@ -158,7 +159,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     other -> fail ("Invalid materialization returned a candidate: " ++ show other)
   let failure = StorageUnavailable (StorageDiagnostic ReplaceFile "latest/e001" "Cannot publish")
   failed <- runEff . runFailure . runFileSystemIO scope . failPublication failure . runDhallHandling
-    . runRootStore . runWorkspaceStore . noOpening . runEvolutionStore $
+    . runRootStore . runWorkspaceStore . noGit . noOpening . runEvolutionStore $
       evaluationMock captured (Right evaluated) (applyEvolution captured)
   unless (failed == Left failure) (fail "Failed save returned a successful candidate")
   afterFailure <- Char8.readFile pointer
@@ -214,6 +215,9 @@ contractDescriptions baseline = do
 
 noOpening :: Eff (RootOpening : es) a -> Eff es a
 noOpening = interpret $ \_ _ -> error "Candidate operation opened or compiled a source root"
+
+noGit :: Eff (Git.Git : es) a -> Eff es a
+noGit = interpret $ \_ _ -> error "Candidate operation read Git"
 
 evaluationMock :: CapturedEvolution -> Either PreviewRejection EvaluatedEvolution
   -> Eff (EvolutionExecution : es) a -> Eff es a
