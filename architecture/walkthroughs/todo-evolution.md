@@ -134,7 +134,9 @@ evolution before = pure (evaluateEvolution change before)
 
 Here `NoRequests` denotes the empty request algebra: this fixture has no host
 requests from authored code. The three helpers are ordinary `evolve` steps with
-these concrete transformations and declared explanations:
+generated typed bindings: `beforeRoot` to `afterRoot` for `simplifyStatuses`, then
+`afterRoot` on both sides of each same-contract step. They have these concrete
+transformations and declared explanations:
 
 | Step | Transformation | Rationale |
 | --- | --- | --- |

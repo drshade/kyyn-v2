@@ -10,7 +10,7 @@ const allowed = {
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
-    'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Porcelain.Capability.EvolutionStore',
+    'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Plumbing.Protocol.Evolution',
     'Kyyn.Domain.Git', 'Kyyn.Domain.Workspace', 'Kyyn.Porcelain.Capability.WorkspaceStore',
     'Data.Aeson', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable',
     'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Data.ByteString.Lazy', 'Numeric', 'Effectful', 'Effectful.Dispatch.Dynamic',
@@ -57,7 +57,7 @@ const domainModules = {
 };
 
 const plumbingModules = {
-  'Kyyn.Plumbing.Protocol.Evolution': ['Control.Monad', 'Data.List', 'Data.Text', 'Data.Text.Encoding',
+  'Kyyn.Plumbing.Protocol.Evolution': ['Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Protocol.Query': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',

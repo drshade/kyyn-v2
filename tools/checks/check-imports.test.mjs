@@ -6,6 +6,13 @@ test('pure dependencies are permitted', () => {
   assert.deepEqual(checkImports('kyyn-domain', 'import Data.List (nub)'), []);
   assert.deepEqual(checkImports('kyyn-plumbing', 'import Kyyn.Domain.DataType'), []);
 });
+test('evolution SDK stays pure and independent of private transport and native host', () => {
+  for (const name of ['System.IO', 'Kyyn.Runtime.Json', 'Effectful', 'Kyyn.Domain.Root']) {
+    assert.deepEqual(checkImports('kyyn-sdk', `import ${name}`), [name]);
+  }
+  assert.deepEqual(checkImports('kyyn-sdk', 'import Kyyn.Types.Evolution'), []);
+  assert.deepEqual(checkImports('kyyn-domain', 'import Kyyn.Evolution.Internal'), ['Kyyn.Evolution.Internal']);
+});
 test('Git reads lower through process plumbing rather than native IO', () => {
   const module = 'module Kyyn.Plumbing.Interpreter.Git where\n';
   assert.deepEqual(checkImports('kyyn-plumbing-interpreters', module + 'import Kyyn.Plumbing.Capability.ProcessExecution'), []);
