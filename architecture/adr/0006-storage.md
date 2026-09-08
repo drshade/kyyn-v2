@@ -123,7 +123,16 @@ RootOpening has a separate row because locating source and inspecting a schema
 requires capabilities that snapshot-only materialization and publication do not:
 
 ```haskell
+data SourceRoot = SourceRoot
+  { schema :: RootContract
+  , code :: FileTree
+  , definition :: RootDefinition
+  }
+
 data RootOpening :: Effect where
+  OpenCapturedSource :: FileTree -> RootOpening m (Either [Diagnostic] SourceRoot)
+  LoadSourceAt :: Repository -> GitRevision -> TreePath
+               -> RootOpening m (Either [Diagnostic] SourceRoot)
   OpenCapturedRoot :: FileTree -> RootOpening m (Either [Diagnostic] Root)
   LoadRootAt :: Repository -> GitRevision -> TreePath
              -> RootOpening m (Either [Diagnostic] Root)
@@ -152,6 +161,11 @@ supporting files. FileTree rejects overlapping file/directory paths.
 
 Drafts can use FileSystem.ReadTree followed by OpenCapturedRoot, without atomicity
 under concurrent editing. Accepted roots open only from a fixed Git revision.
+Source-only opening follows the same manifest and schema-inspection path but
+returns the contract, non-fact code snapshot and parsed definition without
+decoding facts. `LoadSourceAt` uses the same full Git subtree capture; captured
+fact bytes are ignored. Missing or corrupt facts therefore do not prevent source
+inspection. This supports evolution scaffolding without running root validation.
 LoadRootAt captures the selected tree then follows the same manifest path; it does
 not resolve a newer head. Missing/malformed manifests, rejected schemas and bad fact
 files return diagnostics. Compiler/Git infrastructure failures remain Failure.

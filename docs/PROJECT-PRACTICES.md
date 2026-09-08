@@ -29,6 +29,10 @@ does not become another specification of the product's runtime workflows.
   The same suite exercises manifest-driven RootOpening with the real Dhall and
   RootStore handlers and recording schema/Git test handlers. It checks source/SDK
   capture and revision forwarding, not a second real-compiler execution.
+  Source-only opening is checked with absent/corrupt facts and explicit revision
+  forwarding. Workspace tests use real Dhall with pure projection/matching:
+  malformed manifests/layout, input additions/edits/deletions, and exclusion of
+  lifecycle state and notes. They neither compile drafts nor verify archives.
   RootExecution tests use a recording compiler handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.
