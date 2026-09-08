@@ -76,6 +76,8 @@ data FileSystem :: Effect where
     :: DirectoryScope -> RelativePath -> FileSystem m Bytes
   WriteBytes
     :: DirectoryScope -> RelativePath -> Bytes -> FileSystem m ()
+  CreateUniqueDirectory
+    :: DirectoryScope -> FileSystem m RelativePath
 
 runFileSystemIO
   :: (IOE :> es, Failure :> es)
@@ -95,6 +97,14 @@ an immutable FileTree with relative paths. It does not follow symlinks, preserve
 empty directories or retain mode bits. Missing/unreadable directories fail rather
 than becoming empty trees. This is a sequential working-directory capture, not an
 atomic snapshot under concurrent edits; use a fixed Git revision for that selection.
+
+`CreateUniqueDirectory` creates missing parents and reserves a persistent empty
+child using exclusive directory creation. It returns the child's single-component
+lowercase hexadecimal name relative to the supplied parent. The native interpreter
+generates a random Word64 through the random library and retries only name
+collisions; existing files/directories are never reused or overwritten. This is
+allocation, not a cryptographic identity or automatically cleaned temporary scope.
+Other native errors remain storage Failure.
 
 These initial byte writes populate private compiler/artifact scopes. They do not
 promise atomic persistent-file replacement. Store and sink operations that publish
