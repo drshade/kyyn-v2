@@ -90,6 +90,12 @@ absolute paths; file operations take checked relative paths with no empty, `.` o
 `..` components. The process adapter can resolve a scoped file path at its native
 boundary. These are path conventions, not symlink containment or a sandbox.
 
+`ReadTree DirectoryScope` captures the files beneath one selected directory into
+an immutable FileTree with relative paths. It does not follow symlinks, preserve
+empty directories or retain mode bits. Missing/unreadable directories fail rather
+than becoming empty trees. This is a sequential working-directory capture, not an
+atomic snapshot under concurrent edits; use a fixed Git revision for that selection.
+
 These initial byte writes populate private compiler/artifact scopes. They do not
 promise atomic persistent-file replacement. Store and sink operations that publish
 files require that additional operation; atomic replacement of one file still

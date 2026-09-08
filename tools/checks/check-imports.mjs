@@ -26,6 +26,7 @@ const allowed = {
     'Kyyn.Plumbing.Capability.ProcessExecution', 'System.IO', 'System.Process.Typed',
     'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.FileSystem', 'System.Directory', 'System.FilePath', 'System.IO.Temp',
     'Kyyn.Plumbing.Capability.DhallHandling',
+    'Control.Monad', 'Data.List', 'Kyyn.Domain.FileTree',
   ],
 };
 
@@ -55,7 +56,7 @@ const plumbingModules = {
     'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Capability.Failure': ['Effectful', 'Effectful.Error.Static', 'Kyyn.Domain.Failure'],
   'Kyyn.Plumbing.Capability.ProcessExecution': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic'],
-  'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path'],
+  'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
   'Kyyn.Plumbing.Capability.GuestCompilation': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.FileSystem',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.ProcessExecution'],

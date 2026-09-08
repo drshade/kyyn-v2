@@ -28,6 +28,7 @@ cabal test processes --test-show-details=direct
 cabal test dhall-values --test-show-details=direct
 cabal test roots --test-show-details=direct
 cabal test git-snapshots --test-show-details=direct
+cabal test file-trees --test-show-details=direct
 cabal test metadata --test-options=--codec-only --test-show-details=direct
 if [[ "${1:-}" == --full ]]; then
   bash tools/test-guest.sh
