@@ -94,8 +94,8 @@ openingTests contract factFiles = do
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
   forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
     [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\" }" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\" }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" }" else b) | (p,b) <- files captured],
     filter ((/= "facts/root.dhall") . relativeName . fst) (files captured)] $ \entries -> do
       bad <- right (fileTree entries)
       rejected (execute sdk (openCapturedRoot bad))
@@ -103,7 +103,7 @@ openingTests contract factFiles = do
   rejected (execute collision (openCapturedRoot captured))
   rejected (execute sdk (loadRootAt repo revision WholeTree))
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" }"
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->

@@ -8,7 +8,6 @@ import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as Bytes
 import Data.List (sort)
-import Data.Char (isAsciiLower, isAsciiUpper, isDigit)
 import Effectful (Eff, (:>))
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -16,22 +15,15 @@ import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), Proce
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
 import Kyyn.Plumbing.Capability.ProcessExecution
 
 metadataAdapter :: String -> Either String String
-metadataAdapter selected = case reverse (segments selected) of
-  binding : modules@(_:_) | identifier isAsciiLower binding && all (identifier isAsciiUpper) modules ->
-    Right (unlines ["module KyynMetadataEntry where", "import qualified " ++ moduleName,
+metadataAdapter selected = do
+  moduleName <- bindingModule selected
+  pure (unlines ["module KyynMetadataEntry where", "import qualified " ++ moduleName,
       "import Kyyn.Runtime.SchemaMetadata (encodeMetadata)",
       "main :: IO ()", "main = either fail putStrLn (encodeMetadata " ++ selected ++ ")"])
-    where moduleName = take (length selected - length binding - 1) selected
-  _ -> Left "expected a qualified metadata export, such as Schema.schemaMetadata"
-  where
-    segments input = case break (== '.') input of
-      (part, []) -> [part]
-      (part, _:rest) -> part : segments rest
-    identifier first (c:cs) = first c && all (\x -> isAsciiLower x || isAsciiUpper x || isDigit x || x == '_' || x == '\'') cs
-    identifier _ [] = False
 
 decodeMetadata :: Bytes.ByteString -> Either String SchemaMetadata
 decodeMetadata bytes = eitherDecodeStrict bytes >>= parseEither metadata

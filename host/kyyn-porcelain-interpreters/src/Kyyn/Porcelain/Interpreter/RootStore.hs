@@ -8,7 +8,7 @@ import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
 import Data.Foldable (toList)
-import Data.List (nub, sort, isPrefixOf)
+import Data.List (nub, sort, isPrefixOf, stripPrefix)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -26,6 +26,18 @@ import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
 
 runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
 runRootStore = interpret $ \_ -> \case
+  ReadRootDefinition code -> runExceptT $ do
+    manifest <- decodeFile code "kb.dhall"
+      (Record [(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]]) >>= record
+    typeName <- field "schemaType" manifest >>= text
+    metadataName <- field "schemaMetadata" manifest >>= text
+    validatorName <- field "validator" manifest >>= text
+    ensure (not (Text.null validatorName)) "No semantic validator declared in kb.dhall"
+    authored <- traverse (\(name,bytes) -> do
+      path <- liftChecked (relativePath name)
+      pure (path,bytes)) [(name,bytes) | (path,bytes) <- files code, Just name <- [stripPrefix "src/" (relativeName path)]]
+    sources <- liftChecked (fileTree authored)
+    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) sources)
   CheckRootValue contract value -> runExceptT $ do
     _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)
     pure (CheckedValue (contractId contract) value)
