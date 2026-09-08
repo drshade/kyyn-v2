@@ -21,7 +21,7 @@ import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Protocol.Validation (decodeReport)
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
-import Kyyn.Domain.Contract (metadataOf, rootType)
+import Kyyn.Domain.Contract (metadataOf, rootType, checkRootLayout)
 import Kyyn.Plumbing.Capability.SchemaInspection
 import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
@@ -98,6 +98,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
         [FieldRole "Authored.Todo" "title" "task-name"]
         [CollectionDecl n n [("owner", "people")] | n <- ["todos", "people"]]
   checked <- either (fail . show) (either (fail . show) pure) result
+  rootContract <- either (fail . show) pure (checkRootLayout checked)
   unless (metadataOf checked == expected) (fail (show result))
   unsupported <- either fail pure (schemaSource ((path "Unsupported.hs", "module Unsupported where\ndata Root = Root { recursive :: Root }\n") : files)
     "Unsupported.Root" "Authored.schemaMetadata")
@@ -126,8 +127,8 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
           pure (output, status)
   inputValue <- either fail pure (Aeson.eitherDecodeStrict input)
   code <- either fail pure (fileTree files)
-  checkedInput <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue checked inputValue))))
-  root <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot checked code checkedInput))))
+  checkedInput <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract inputValue))))
+  root <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract code checkedInput))))
   CheckedValue _ reloaded <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking root))))
   (output, status) <- invoke (Lazy.toStrict (Aeson.encode reloaded)) >>= either (fail . show) pure
   let expectedValue = Aeson.eitherDecodeStrict input :: Either String Aeson.Value
@@ -159,8 +160,8 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   forM_ [(input, expectedWarnings),
          (Text.encodeUtf8 (Text.replace "A task" "" (Text.decodeUtf8 input)), expectedWarnings ++ [blankError])] $ \(inputBytes, expectedDiagnostics) -> do
     factValue <- either fail pure (Aeson.eitherDecodeStrict inputBytes)
-    checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue checked factValue))))
-    validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot checked validationCode checkedFacts))))
+    checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
+    validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode checkedFacts))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
       . runDhallHandling . runRootStore . runRootExecution sdk $ validateRoot validationRoot
     report <- either (fail . show) (either (fail . show) pure) response

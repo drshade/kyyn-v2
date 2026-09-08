@@ -36,7 +36,7 @@ const allowed = {
 
 const domainModules = {
   'Kyyn.Domain.Diagnostic': ['Kyyn.Types.Diagnostic'],
-  'Kyyn.Domain.Contract': ['Control.Monad', 'Crypto.Hash.SHA256',
+  'Kyyn.Domain.Contract': ['Control.Monad', 'Data.Coerce', 'Crypto.Hash.SHA256',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Domain.Root': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Domain.FileTree'],

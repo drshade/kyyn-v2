@@ -2,7 +2,7 @@
 module Main (main) where
 
 import Control.Monad (unless, forM_)
-import Data.Aeson (Value(..), eitherDecodeStrict', object, (.=))
+import Data.Aeson (Value(..), eitherDecodeStrict', object, (.=), toJSON)
 import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Text.Encoding as Text
@@ -16,6 +16,20 @@ import Kyyn.Types.SchemaMetadata
 
 main :: IO ()
 main = do
+  let choice = Algebraic "Query.Choice" []
+        [Constructor "Query.All" [], Constructor "Query.Named" [(Just "name", StringType)]]
+      fact = Algebraic "Kyyn.Types.Fact.Fact" [StringType]
+        [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,StringType)]]
+  forM_ [(StringType, String "München 🦋"), (IntegerType, String "9007199254740993123456789"),
+      (BoolType, Bool True), (ListType IntegerType, toJSON (["1", "-2"] :: [Text])),
+      (ListType StringType, toJSON ([] :: [Text])),
+      (OptionalType StringType, object ["tag" .= ("None" :: Text)]),
+      (OptionalType StringType, object ["tag" .= ("Some" :: Text), "value" .= ("name" :: Text)]),
+      (choice, object ["tag" .= ("All" :: Text)]),
+      (choice, object ["tag" .= ("Named" :: Text), "value" .= object ["name" .= ("todo" :: Text)]]),
+      (ListType fact, toJSON [object ["id" .= ("todo-001" :: Text), "value" .= ("task" :: Text)]])] $ \(valueType,value) -> do
+    valueContract <- either (fail . show) pure (checkContract valueType (SchemaMetadata [] [] []))
+    roundTrip valueContract value
   contract <- either (fail . show) pure (checkContract root (SchemaMetadata [] [] []))
   expected <- either fail pure (eitherDecodeStrict' (Text.encodeUtf8 expectedJson) :: Either String Value)
   let result = runPureEff (runDhallHandling (decodeValue (contractShape contract) source))
