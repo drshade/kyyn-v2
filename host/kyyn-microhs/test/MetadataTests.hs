@@ -97,7 +97,9 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
          RoleDecl "date" "When" Timeline, RoleDecl "status" "State" Badge]
         [FieldRole "Authored.Todo" "title" "task-name"]
         [CollectionDecl n n [("owner", "people")] | n <- ["todos", "people"]]
-  checked <- either (fail . show) (either (fail . show) pure) result
+  InspectedSchema checked closure <- either (fail . show) (either (fail . show) pure) result
+  unless (path "Authored.hs" `elem` closure && path "Kyyn/Types/Fact.hs" `elem` closure &&
+      path "Kyyn/Runtime/Json.hs" `notElem` closure) (fail ("Wrong schema import closure: " ++ show closure))
   rootContract <- either (fail . show) pure (checkRootLayout checked)
   unless (metadataOf checked == expected) (fail (show result))
   unsupported <- either fail pure (schemaSource ((path "Unsupported.hs", "module Unsupported where\ndata Root = Root { recursive :: Root }\n") : files)

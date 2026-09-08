@@ -116,4 +116,4 @@ checkingMock expected = interpret $ \_ -> \case
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ (Schema.InspectSchema source) -> do
   unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")
-  pure (Right contract)
+  pure (Right (Schema.InspectedSchema contract []))

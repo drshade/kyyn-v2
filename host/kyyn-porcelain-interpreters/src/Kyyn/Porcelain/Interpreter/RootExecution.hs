@@ -89,8 +89,8 @@ inspectQuery :: Schema.SchemaInspection :> es
 inspectQuery sources (QueryDefinition name description _ input inputMetadata result resultMetadata) = do
   inputSource <- checked "query.input-contract" (Schema.schemaSource sources input inputMetadata)
   resultSource <- checked "query.result-contract" (Schema.schemaSource sources result resultMetadata)
-  inputContract <- ExceptT (Schema.inspectSchema inputSource)
-  resultContract <- ExceptT (Schema.inspectSchema resultSource)
+  Schema.InspectedSchema inputContract _ <- ExceptT (Schema.inspectSchema inputSource)
+  Schema.InspectedSchema resultContract _ <- ExceptT (Schema.inspectSchema resultSource)
   pure (QueryDescriptor name description inputContract resultContract)
 
 protocolFailure :: Failure :> es => String -> String -> ExceptT [Diagnostic] (Eff es) a

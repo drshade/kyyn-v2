@@ -42,7 +42,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
          ("CharField", "unsupported"), ("DoubleField", "unsupported"),
          ("NaturalField", "opaque")] $ \(name, expected) -> do
     result <- inspectDataType compiler [fixtures] (name ++ ".Root")
-    case either (Left . show) Right result >>= generateCodecs "KyynGeneratedCodec" of
+    case either (Left . show) (Right . fst) result >>= generateCodecs "KyynGeneratedCodec" of
       Left message | expected `isInfixOf` message -> pure ()
       other -> fail (name ++ ": expected rejection containing " ++ expected ++ ", received " ++ show other)
   absentType <- inspectDataType compiler [fixtures] "Model.AbsentType"
@@ -50,7 +50,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
     Left (CompilerError _) -> pure ()
     other -> fail ("expected missing-type compiler diagnostic: " ++ show other)
   forM_ ["Model.Root", "Model.RootAlias"] $ \selected -> do
-    inspected <- inspectDataType compiler [fixtures] selected >>= either (fail . show) pure
+    (inspected,_) <- inspectDataType compiler [fixtures] selected >>= either (fail . show) pure
     generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
     second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
     files <- mapM (\(base, path) -> (,) (checkedPath path) <$> Bytes.readFile (base </> path))

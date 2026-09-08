@@ -8,7 +8,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (checkContract)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
-import Kyyn.Domain.Path (scopePath)
+import Kyyn.Domain.Path (scopePath, scopedPath)
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -31,6 +31,7 @@ runSchemaInspectionIO (GuestToolchain compiler) = interpret $ \_ (InspectSchema 
       Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
       Left (CompilerError message) -> pure (Left [errorDiagnostic "schema.compiler-rejected" message])
       Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "schema.unsupported" message])
-      Right structure -> do
+      Right (structure,loaded) -> do
         metadata <- evaluateMetadata sources
-        pure (metadata >>= checkContract structure)
+        let closure = [path | (path,_) <- sourceFiles sources, scopedPath scope path `elem` loaded]
+        pure ((\contract -> InspectedSchema contract closure) <$> (metadata >>= checkContract structure))

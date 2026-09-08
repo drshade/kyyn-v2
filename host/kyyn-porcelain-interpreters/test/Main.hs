@@ -143,7 +143,7 @@ schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->
   in pure $ if Schema.selectedType source == "Example.Root" &&
        lookup "Example.hs" entries == Just "authored source" && lookup "Kyyn/Types/Fact.hs" entries == Just "installed SDK" &&
        maybe False (Bytes.isInfixOf "Example.schemaMetadata") (lookup "KyynMetadataEntry.hs" entries)
-     then Right contract else Left [errorDiagnostic "test.schema" "Incorrect source capture"]
+     then Right (Schema.InspectedSchema contract []) else Left [errorDiagnostic "test.schema" "Incorrect source capture"]
 
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case
