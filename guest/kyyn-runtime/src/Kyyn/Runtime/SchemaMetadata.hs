@@ -13,7 +13,10 @@ encodeMetadata (SchemaMetadata rs fs cs) = printValue $ record
   where
     text = encodeWith stringCodec
     roleValue (RoleDecl n d a) = record
-      [("name", text n), ("description", text d), ("affordance", tagged (show a) Nothing)]
+      [("name", text n), ("description", text d), ("affordance", tagged (affordanceTag a) Nothing)]
+    affordanceTag Title = "Title"
+    affordanceTag Timeline = "Timeline"
+    affordanceTag Badge = "Badge"
     fieldValue (FieldRole t f r) = record
       [("recordType", text t), ("field", text f), ("role", text r)]
     collectionValue (CollectionDecl c f refs) = record

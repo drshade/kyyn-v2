@@ -89,6 +89,8 @@ vocabulary so authors need no separate knowledge of the repository arrangement.
 The shared package depends only on pure libraries supported by both toolchains,
 not host packages, effects, compiler internals or guest transport implementation.
 CI must exercise it under both compilers; source sharing is not proof of compatibility.
+Shared modules carry any required language pragmas in their source rather than
+relying on Cabal defaults, and use features with matching semantics in both compilers.
 
 Host `KnowledgeBase` and `Root` snapshot descriptors stay host-side. Guest-authored
 KB schemas stay in their KBs. Sharing a name or concept does not make these different
@@ -99,6 +101,9 @@ host/guest definitions. Mechanically generated representations are not prohibite
 where an actual boundary needs them.
 
 ### Host ownership
+
+Pure format decoding may live in plumbing capability helpers: the fixed metadata
+decoder uses Aeson without granting native IO or compiler access to that package.
 
 [ADR 0003](0003-effects.md) and the [boundary map](../boundaries.md) define permitted
 dependencies and module ownership. The package names above implement those boundaries,

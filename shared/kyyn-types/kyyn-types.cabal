@@ -9,6 +9,5 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Types.SchemaMetadata
   default-language: Haskell2010
-  default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21

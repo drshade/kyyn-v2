@@ -86,7 +86,9 @@ interpretation roles, not program capability grants.
 Authors attach roles through **pure Haskell data declarations alongside the
 schema**, in the schema module or a nearby imported metadata module. They do not
 maintain a JSON/RON sidecar as the rebuild's authoritative authoring surface.
-These selected SDK value types make the distinction concrete:
+These sketches label the semantic components. The initial shared implementation
+uses positional constructors in the same order, avoiding different selector APIs
+between GHC and MicroHs:
 
 ```haskell
 data Affordance = Title | Timeline | Badge
