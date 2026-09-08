@@ -13,6 +13,8 @@ import Kyyn.Domain.Diagnostic (Diagnostic(Diagnostic), Severity(..), DiagnosticL
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
+import Kyyn.Porcelain.Capability.RootExecution
+import Kyyn.Porcelain.Interpreter.RootExecution
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
@@ -141,32 +143,30 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     [("shared/kyyn-types/src", "Kyyn/Types/Diagnostic.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/Validation.hs")]
   let reportSource = unlines
-        ["module ValidationEntry where", "import Kyyn.Types.Diagnostic", "import Kyyn.Runtime.Validation",
-         "validate :: String -> ValidationReport",
-         "validate input = ValidationReport ([Diagnostic Warning \"uncertain\" \"München 🦋\" Nothing,",
+        ["module ValidationEntry where", "import Kyyn.Types.Diagnostic", "import qualified Authored", "import Kyyn.Types.Fact",
+         "validate :: Authored.Root -> ValidationReport",
+         "validate (Authored.Root todos _) = ValidationReport ([Diagnostic Warning \"uncertain\" \"München 🦋\" Nothing,",
          "  Diagnostic Warning \"fact\" \"Review name\" (Just (FactLocation \"todos\" \"todo-001\" (Just \"name\"))),",
          "  Diagnostic Warning \"source\" \"Check source\" (Just (SourceLocation \"Validate.hs\" 12 3)),",
          "  Diagnostic Warning \"example\" \"Illustrative\" (Just (ExampleLocation \"sample\"))] ++",
-         "  if null input then [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])",
-         "main :: IO ()", "main = getContents >>= either fail putStrLn . encodeReport . validate"]
-  reportSources <- either fail pure (guestSources (path "ValidationEntry.hs")
-    (files ++ reportFiles ++ [(path "ValidationEntry.hs", utf8 reportSource)]))
-  reportCompilation <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
-    compileGuest reportSources
-  reportEntry <- either (fail . show) (either (fail . show) pure) reportCompilation
-  forM_ [("name", expectedWarnings), ("", expectedWarnings ++ [blankError])] $ \(inputBytes, expectedDiagnostics) -> do
-    response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope $
-      withCompiledEntry reportEntry $ do
-        writeStdin inputBytes
-        closeStdin
-        responseBytes <- collectStdout
-        exit <- awaitExit
-        pure (responseBytes,exit)
-    (responseBytes,exit) <- either (fail . show) pure response
-    report <- either fail pure (decodeReport responseBytes)
-    unless (exit == ProcessExit 0 "" && report == ValidationReport expectedDiagnostics)
-      (fail ("Validation report changed across MicroHs boundary: " ++ show response))
-  putStrLn "Real MicroHs validation reports preserve errors, warnings, Unicode and all diagnostic locations."
+         "  if any (\\(Fact _ (Authored.Todo title _)) -> null title) todos then",
+         "    [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])"]
+      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" }"
+  authoredBytes <- maybe (fail "Missing captured Authored.hs") pure (lookup (path "Authored.hs") files)
+  validationCode <- either fail pure (fileTree
+    [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])
+  sdk <- either fail pure (fileTree (reportFiles ++ filter ((/= path "Authored.hs") . fst) files))
+  forM_ [(input, expectedWarnings),
+         (Text.encodeUtf8 (Text.replace "A task" "" (Text.decodeUtf8 input)), expectedWarnings ++ [blankError])] $ \(inputBytes, expectedDiagnostics) -> do
+    factValue <- either fail pure (Aeson.eitherDecodeStrict inputBytes)
+    checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue checked factValue))))
+    validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot checked validationCode checkedFacts))))
+    response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+      . runDhallHandling . runRootStore . runRootExecution sdk $ validateRoot validationRoot
+    report <- either (fail . show) (either (fail . show) pure) response
+    unless (report == ValidationReport expectedDiagnostics)
+      (fail ("RootExecution changed the report: " ++ show response))
+  putStrLn "Real RootExecution reads captured facts, invokes the manifest validator, and preserves semantic errors and warnings."
 
 expectedWarnings :: [Diagnostic]
 expectedWarnings =

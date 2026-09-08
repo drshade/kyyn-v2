@@ -8,6 +8,7 @@ import Data.List (isSuffixOf)
 import Data.Text (Text)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
+import ExecutionTests (executionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -76,6 +77,7 @@ main = do
   orderB <- tree [("a-b","two"),("a/c","one")]
   unless (orderA == orderB) (fail "FileTree depends on producer ordering")
   openingTests contract snapshot
+  executionTests contract snapshot
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
 openingTests :: CheckedContract -> FileTree -> IO ()

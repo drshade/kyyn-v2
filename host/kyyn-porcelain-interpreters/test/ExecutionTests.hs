@@ -1,0 +1,76 @@
+{-# LANGUAGE GADTs, OverloadedStrings #-}
+module ExecutionTests (executionTests) where
+
+import Control.Monad (unless, forM_)
+import qualified Data.ByteString as Bytes
+import Effectful (Eff, runEff)
+import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.Contract (CheckedContract)
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
+import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
+import Kyyn.Domain.FileTree (FileTree, files, fileTree)
+import Kyyn.Domain.Path (relativePath, relativeName, directoryScope)
+import Kyyn.Domain.Root (Root(..))
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (CompiledEntry(..), BuildIdentity(..), sourceFiles)
+import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
+import Kyyn.Plumbing.Interpreter.Failure (runFailure)
+import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
+import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
+import Kyyn.Porcelain.Capability.RootExecution (validateRoot)
+import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
+import System.Directory (findExecutable)
+import System.IO.Temp (withSystemTempDirectory)
+
+executionTests :: CheckedContract -> FileTree -> IO ()
+executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ \directory -> do
+  scope <- either fail pure (directoryScope directory)
+  shell <- findExecutable "sh" >>= maybe (fail "sh required for process failure fixtures") pure
+  let path = either error id . relativePath
+      tree = either error id . fileTree
+      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" }"
+      code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest)]
+      sdk = tree [(path "Sdk.hs", "explicit SDK")]
+      root = Root contract facts code
+      entry script = CompiledEntry (BuildIdentity "fixture" "fixture") (path "fixture.comb", "") shell
+        ["-c", "read -r input; " ++ script] []
+      execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+        . compileMock compilation . runDhallHandling . runRootStore . runRootExecution sdkFiles $ validateRoot selected
+      unexpected = error "Invalid root reached compilation"
+  success <- execute sdk (Right (entry "printf '[]'")) root
+  unless (success == Right (Right (ValidationReport []))) (fail (show success))
+  let compilerErrors = [errorDiagnostic "guest.compiler-rejected" "wrong validator type"]
+  rejected <- execute sdk (Left compilerErrors) root
+  unless (rejected == Right (Left compilerErrors)) (fail "Compilation rejection became a semantic report")
+  crashed <- execute sdk (Right (entry "exit 17")) root
+  case crashed of
+    Left (RuntimeUnavailable (ProcessDiagnostic WaitForExit _)) -> pure ()
+    _ -> fail ("Validator exit did not remain Failure: " ++ show crashed)
+  malformed <- execute sdk (Right (entry "printf '{}'")) root
+  case malformed of
+    Left (RuntimeUnavailable (ProcessDiagnostic ReadOutput _)) -> pure ()
+    _ -> fail ("Malformed report became semantic diagnostics: " ++ show malformed)
+  forM_ [tree [], tree [(path "kb.dhall", "True")],
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }")],
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" }")],
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" }")]] $ \badCode -> do
+    failure <- execute sdk unexpected (Root contract facts badCode)
+    case failure of Right (Left _) -> pure (); _ -> fail "Invalid manifest reached execution"
+  noFacts <- execute sdk unexpected (Root contract (tree []) code)
+  case noFacts of Right (Left _) -> pure (); _ -> fail "Unreadable facts reached execution"
+  collision <- execute (tree [(path "Checks.hs", "collision")]) unexpected root
+  case collision of Right (Left _) -> pure (); _ -> fail "Source collision reached compilation"
+  unless (files code == [(path "kb.dhall",manifest),(path "src/Checks.hs","captured validator")])
+    (fail "Captured code changed")
+  putStrLn "RootExecution manifest/source selection and structural/compiler/runtime failure distinctions passed."
+
+compileMock :: Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
+compileMock result = interpret $ \_ (CompileGuest captured) -> do
+  let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
+  unless (lookup "Checks.hs" entries == Just "captured validator" &&
+      lookup "Sdk.hs" entries == Just "explicit SDK" &&
+      maybe False (Bytes.isInfixOf "validate = Checks.validate") (lookup "KyynValidationEntry.hs" entries) &&
+      maybe False (Bytes.isInfixOf "rootCodec") (lookup "KyynValidationCodec.hs" entries))
+    (error "RootExecution did not compile captured sources with explicit SDK and adapter")
+  pure result

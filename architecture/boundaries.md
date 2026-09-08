@@ -177,17 +177,18 @@ preview composes evaluation and checking without acquiring publication:
 
 ```haskell
 preview captured source = do
-  sourceReport <- send (ValidateRoot source)
+  sourceCheck <- send (ValidateRoot source)
   evaluated <- applyEvolution captured source
   checked <- case evaluated of
     Left rejection  -> pure (Left rejection)
     Right candidate -> Right <$> checkCandidate candidate
-  pure (sourceReport, checked)
+  pure (sourceCheck, checked)
 ```
 
 Here `source` is the structurally readable `Root` loaded at Before's revision,
-not a `Validated Root`. The source report remains visible even if it contains
-errors; it does not block a repair. `ValidateRoot` runs the checks on this preview;
+not a `Validated Root`. The source checking result retains either a pre-execution
+diagnostic rejection or the executed report, including semantic errors; it does
+not block a repair. `ValidateRoot` runs the checks on this preview;
 there is no saved-report fast path. The result separately distinguishes proposed-
 code/transformation rejection, candidate validation failure and a checked candidate;
 operational failures remain in Failure. This expression
