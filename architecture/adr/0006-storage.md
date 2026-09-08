@@ -63,8 +63,9 @@ IDs as paths. Original IDs remain in the envelopes and membership files. Members
 preserves the guest list order; no unordered-collection metadata is implemented.
 RootStore rejects duplicate IDs, missing/unlisted files, malformed UTF-8 and
 path/envelope mismatches. File trees reject duplicate paths and file/directory
-collisions. Opening a Git revision, inspecting its schema, validating supporting
-configuration and publishing a complete root remain unimplemented.
+collisions, and canonicalize entry order. RootOpening handles manifest-driven
+schema inspection from a captured tree or Git revision. Supporting configuration
+validation and publication of a complete root remain unimplemented.
 
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts
@@ -86,12 +87,6 @@ The store makes snapshot selection explicit. These host operations use
 
 ```haskell
 data RootStore :: Effect where
-  OpenKnowledgeBase
-    :: KnowledgeBaseRef -> RootStore m KnowledgeBase
-  ResolveHead
-    :: KnowledgeBase -> LocalBranch -> RootStore m GitRevision
-  LoadRootAt
-    :: KnowledgeBase -> GitRevision -> RootStore m Root
   LoadRootValueForChecking
     :: Root -> RootStore m CheckedValue
   ListFacts
@@ -109,10 +104,43 @@ data RootStore :: Effect where
     -> RootStore m Root
 
 runRootStore
-  :: (FileSystem :> es, Git :> es, SchemaInspection :> es,
-      DhallHandling :> es, Failure :> es)
+  :: DhallHandling :> es
   => Eff (RootStore : es) a -> Eff es a
 ```
+
+RootOpening has a separate row because locating source and inspecting a schema
+requires capabilities that snapshot-only materialization and publication do not:
+
+```haskell
+data RootOpening :: Effect where
+  OpenCapturedRoot :: FileTree -> RootOpening m (Either [Diagnostic] Root)
+  LoadRootAt :: Repository -> GitRevision -> TreePath
+             -> RootOpening m (Either [Diagnostic] Root)
+
+runRootOpening
+  :: (Git :> es, SchemaInspection :> es, DhallHandling :> es, RootStore :> es)
+  => FileTree -- installed SDK sources, with compiler-relative paths
+  -> Eff (RootOpening : es) a -> Eff es a
+```
+
+The initial manifest is exactly `kb.dhall` inside the selected root subtree:
+`{ schemaType = "Schema.Root", schemaMetadata = "Schema.schemaMetadata" }`.
+It selects declarations, not a second schema. Authored modules are under `src/`;
+the opener strips that prefix for compiler inputs and appends the explicit SDK
+source tree. Duplicate compiler paths fail. The SDK is supplied by the installed
+runtime, not loaded from a KB-selected location, and participates in compilation
+identity under ADR 0002. ADR 0005 owns schema capture and inspection.
+`kb.dhall`, `src/` and `facts/` are distinct reserved layout locations; the manifest
+is retained verbatim in the supporting-code snapshot alongside source and other
+supporting files. FileTree rejects overlapping file/directory paths.
+
+Drafts can use FileSystem.ReadTree followed by OpenCapturedRoot, without atomicity
+under concurrent editing. Accepted roots open only from a fixed Git revision.
+LoadRootAt captures the selected tree then follows the same manifest path; it does
+not resolve a newer head. Missing/malformed manifests, rejected schemas and bad fact
+files return diagnostics. Compiler/Git infrastructure failures remain Failure.
+The result is Root, not Validated Root. This initial manifest does not advertise
+validators, queries or plugins, and the opener does not validate supporting files.
 
 `ReadExamples` loads the selected root's saved assertions, including their recorded
 contracts. It does not run them or silently rebind them to new query contracts;
@@ -163,20 +191,24 @@ structurally incompatible config fails the whole load (ADR 0016); no partial roo
 or silently disabled connector is returned. Pure config validation subsequently
 participates in the whole-root semantic check.
 
-`ResolveHead` reads the selected branch once and returns a revision for callers
+Git's `ResolveRevision` reads the selected branch once and returns a revision for callers
 to pass explicitly to loading, creation or rebasing. Source reads do not substitute
 an ambient latest root. Publication still compares the live ref atomically; the
 earlier resolution is not a reservation or a substitute for that comparison.
 
 The initial Git plumbing supplies `ResolveRevision Repository String` and
-`ReadTreeAt Repository GitRevision RelativePath`. Resolution returns a full commit
+`ReadTreeAt Repository GitRevision TreePath`. `WholeTree` selects the repository
+tree itself; `Subtree RelativePath` selects a directory beneath it. Both operations
+return Either [Diagnostic] for content conditions. Resolution returns a full commit
 object ID; subtree capture reads that fixed revision, not the working tree. Its
 interpreter lowers through ProcessExecution using an explicitly supplied Git
 executable, with no IOE of its own. NUL-delimited tree entries preserve whitespace
 in file names; blob contents remain bytes. Symlinks, submodules and unsupported
-paths are explicit failures. Regular and executable blobs are captured as byte
-files; FileTree does not retain mode bits. Missing subtrees are failures, not empty
-snapshots. Ref mutation and commit construction are not implemented by this reader.
+paths are explicit diagnostics. Regular and executable blobs are captured as byte
+files; FileTree does not retain mode bits. Missing selectors/subtrees are diagnostics,
+not empty snapshots. Nonzero infrastructure outcomes remain GitUnavailable; the
+interpreter does not classify errors by parsing human-readable stderr. Ref mutation
+and commit construction are not implemented by this reader.
 
 `ReadFact` returns `Nothing` only for an absent ID in an existing collection.
 Unknown collections, corrupt data and inaccessible storage are explicit failures.

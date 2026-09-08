@@ -23,7 +23,7 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
   scope <- either fail pure (directoryScope directory)
   let repo = Repository scope
       path = either error id . relativePath
-      execute action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) pure
+      execute action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) (either (fail . show) pure)
       command args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
           (Process.ProcessSpec executable args directory
@@ -44,7 +44,9 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
   command ["add","root"]
   commit
   first <- execute (resolveRevision repo "HEAD")
-  captured <- execute (readTreeAt repo first (path "root"))
+  whole <- execute (readTreeAt repo first WholeTree)
+  unless (lookup (path ("root/" ++ filename)) (files whole) == Just bytes) (fail "Repository-root capture")
+  captured <- execute (readTreeAt repo first (Subtree (path "root")))
   unless (lookup (path filename) (files captured) == Just bytes) (fail "Git capture changed bytes or paths")
   Bytes.writeFile (directory </> "root" </> filename) "changed"
   command ["add","root"]
@@ -52,19 +54,22 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
   second <- execute (resolveRevision repo "refs/heads/main")
   unless (first /= second) (fail "Revision did not change")
   Bytes.writeFile (directory </> "root" </> filename) "uncommitted"
-  old <- execute (readTreeAt repo first (path "root"))
-  current <- execute (readTreeAt repo second (path "root"))
+  old <- execute (readTreeAt repo first (Subtree (path "root")))
+  current <- execute (readTreeAt repo second (Subtree (path "root")))
   unless (old == captured && lookup (path filename) (files current) == Just "changed")
     (fail "Fixed revision capture read live files")
-  missing <- runEff (runFailure (runProcessExecutionIO (runGit executable (readTreeAt repo first (path "missing")))))
-  case missing of Left _ -> pure (); Right _ -> fail "Missing subtree accepted"
+  missing <- runEff (runFailure (runProcessExecutionIO (runGit executable (readTreeAt repo first (Subtree (path "missing"))))))
+  case missing of Right (Left _) -> pure (); _ -> fail "Missing subtree accepted"
   invalid <- runEff (runFailure (runProcessExecutionIO (runGit executable (resolveRevision repo "--help"))))
-  case invalid of Left _ -> pure (); Right _ -> fail "Invalid revision accepted"
+  case invalid of Right (Left _) -> pure (); _ -> fail "Invalid revision accepted"
+  absentRepo <- Repository <$> either fail pure (directoryScope (directory </> "missing-repository"))
+  unavailable <- runEff (runFailure (runProcessExecutionIO (runGit executable (resolveRevision absentRepo "HEAD"))))
+  case unavailable of Left _ -> pure (); _ -> fail "Missing repository did not remain an infrastructure failure"
   createFileLink filename (directory </> "root/link")
   command ["add","root/link"]
   commit
   linked <- execute (resolveRevision repo "HEAD")
-  result <- runEff (runFailure (runProcessExecutionIO (runGit executable (readTreeAt repo linked (path "root")))))
-  case result of Left _ -> pure (); Right _ -> fail "Symlink silently captured as a fact"
+  result <- runEff (runFailure (runProcessExecutionIO (runGit executable (readTreeAt repo linked (Subtree (path "root"))))))
+  case result of Right (Left _) -> pure (); _ -> fail "Symlink silently captured as a fact"
   unless (Char8.length (Char8.pack (revisionName first)) == 40 || length (revisionName first) == 64) (fail "Not a full revision")
   putStrLn "Git fixed-revision byte capture, unusual paths and failure cases passed."
