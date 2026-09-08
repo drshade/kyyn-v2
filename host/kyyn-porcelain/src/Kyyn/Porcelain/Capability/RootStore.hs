@@ -7,7 +7,8 @@ import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Root (Root, CheckedValue, FileTree)
+import Kyyn.Domain.Root (Root, CheckedValue)
+import Kyyn.Domain.FileTree (FileTree)
 
 data RootStore :: Effect where
   CheckRootValue :: CheckedContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)

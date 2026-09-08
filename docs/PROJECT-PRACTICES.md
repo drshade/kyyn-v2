@@ -26,6 +26,9 @@ does not become another specification of the product's runtime workflows.
   `cabal test roots --test-show-details=direct` checks RootStore materialization
   and reopening from immutable file trees through the Dhall interpreter. It is
   included in the fast check and does not compile guest code or publish Git refs.
+  `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
+  capture against Git in a temporary repository; it is included in the fast check
+  and requires an installed Git executable (tested locally with Git 2.55.0).
   Authors choose relevant local checks and record their revision and results;
   this command is not mandatory for every PR.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs

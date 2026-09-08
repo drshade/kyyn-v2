@@ -20,6 +20,7 @@ import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Root
+import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
 

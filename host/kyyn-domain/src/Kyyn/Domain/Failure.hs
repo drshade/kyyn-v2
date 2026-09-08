@@ -4,6 +4,7 @@ module Kyyn.Domain.Failure
 
 data OperationalFailure = RuntimeUnavailable ProcessDiagnostic | StorageUnavailable StorageDiagnostic
   | CompilerUnavailable String
+  | GitUnavailable String
   deriving (Eq, Show)
 
 data ProcessDiagnostic = ProcessDiagnostic

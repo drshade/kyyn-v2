@@ -8,7 +8,8 @@ import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runEff, runPureEff)
-import Kyyn.Domain.Root (CheckedValue(..), fileTree)
+import Kyyn.Domain.Root (CheckedValue(..))
+import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Plumbing.Interpreter.DhallHandling

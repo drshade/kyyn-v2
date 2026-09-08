@@ -10,6 +10,7 @@ import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Path
 import Kyyn.Domain.Root
+import Kyyn.Domain.FileTree
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
