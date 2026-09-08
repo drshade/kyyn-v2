@@ -25,6 +25,7 @@ node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
 cabal test processes --test-show-details=direct
+cabal test dhall-values --test-show-details=direct
 cabal test metadata --test-options=--codec-only --test-show-details=direct
 if [[ "${1:-}" == --full ]]; then
   bash tools/test-guest.sh
