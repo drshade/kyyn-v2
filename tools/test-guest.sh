@@ -5,3 +5,4 @@ export KYYN_TEST_ROOT="$PWD"
 export MHSDIR="$PWD/vendor/MicroHs"
 make -C vendor/MicroHs bin/mhs bin/mhseval bin/cpphs
 cabal test codecs --test-show-details=direct
+cabal test metadata --test-show-details=direct

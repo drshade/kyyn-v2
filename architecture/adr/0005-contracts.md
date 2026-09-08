@@ -86,7 +86,9 @@ interpretation roles, not program capability grants.
 Authors attach roles through **pure Haskell data declarations alongside the
 schema**, in the schema module or a nearby imported metadata module. They do not
 maintain a JSON/RON sidecar as the rebuild's authoritative authoring surface.
-These selected SDK value types make the distinction concrete:
+These sketches label the semantic components. The initial shared implementation
+uses positional constructors in the same order, avoiding different selector APIs
+between GHC and MicroHs:
 
 ```haskell
 data Affordance = Title | Timeline | Badge
@@ -344,8 +346,12 @@ behavior. The pinned upstream package has no Cabal library component; the proof
 links exported source modules, not a stable supported library API. No upstream
 compiler source patches were needed, but compiler-internal coupling remains real.
 The experiment's JSON descriptor sidecar remains a test fixture, not the selected
-rebuild authoring form. Prove the named Haskell metadata export, fixed SDK codec and
-role/collection coherence checks without loading facts. Include missing/renamed
+rebuild authoring form. The implementation now evaluates a named Haskell metadata
+export through a fixed JSON adapter, using the shared `kyyn-types` vocabulary.
+`SchemaInspection.Metadata.evaluateMetadata` consumes a complete captured adapter
+input and returns decoded `SchemaMetadata`, not a `CheckedContract`. Structural
+inspection and role/collection coherence checking are not yet composed with it.
+Prove those coherence checks without loading facts. Include missing/renamed
 fields, incompatible title/timeline/badge assignments and invalid reference targets.
 Test a role-only edit invalidating the complete contract and dependent bindings,
 then recovering through normal regeneration; no presentation-only exception.
