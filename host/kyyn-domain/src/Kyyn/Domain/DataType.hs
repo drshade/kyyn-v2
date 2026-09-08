@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Kyyn.Domain.DataType
   ( DataType(..), Constructor(..), Shape(..), ScalarKind(..), shapeOf
-  , haskellType, reachableTypes, definingModule ) where
+  , haskellType, reachableTypes, definingModule, sdkFactIdType, sdkFactPayload ) where
 
 import Data.List (nub)
 import Control.DeepSeq (NFData)
@@ -31,6 +31,12 @@ shapeOf IntegerType = Right (Scalar IntegerScalar)
 shapeOf BoolType = Right (Scalar BoolScalar)
 shapeOf (ListType t) = List <$> shapeOf t
 shapeOf (OptionalType t) = Optional <$> shapeOf t
+shapeOf t@(Algebraic "Kyyn.Types.Fact.FactId" _ _)
+  | t == sdkFactIdType = Right (Scalar TextScalar)
+  | otherwise = Left "unsupported SDK FactId representation"
+shapeOf t@(Algebraic "Kyyn.Types.Fact.Fact" _ _) = case sdkFactPayload t of
+  Just p -> Record <$> sequence [(,) "id" <$> shapeOf sdkFactIdType, (,) "value" <$> shapeOf p]
+  Nothing -> Left "unsupported SDK Fact representation"
 shapeOf (Algebraic _ _ [Constructor _ fs])
   | not (null fs) && all named fs = Record <$> recordFields fs
 shapeOf (Algebraic _ _ cs) = Union <$> mapM arm cs
@@ -43,6 +49,16 @@ shapeOf (Algebraic _ _ cs) = Union <$> mapM arm cs
 
 named :: (Maybe String, a) -> Bool
 named (name, _) = name /= Nothing
+
+sdkFactIdType :: DataType
+sdkFactIdType = Algebraic "Kyyn.Types.Fact.FactId" []
+  [Constructor "Kyyn.Types.Fact.FactId" [(Nothing, StringType)]]
+
+sdkFactPayload :: DataType -> Maybe DataType
+sdkFactPayload (Algebraic "Kyyn.Types.Fact.Fact" [p]
+  [Constructor "Kyyn.Types.Fact.Fact" [(Nothing, i), (Nothing, v)]])
+  | i == sdkFactIdType && p == v = Just p
+sdkFactPayload _ = Nothing
 
 recordFields :: [(Maybe String, DataType)] -> Either String [(String, Shape)]
 recordFields fs = mapM (\(name,t) -> (,) name <$> shapeOf t) [(name,t) | (Just name,t) <- fs]

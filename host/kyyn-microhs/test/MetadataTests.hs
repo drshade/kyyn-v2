@@ -3,6 +3,7 @@ module Main (main) where
 
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
+import qualified Data.Aeson as Aeson
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runEff)
@@ -10,7 +11,9 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
-import Kyyn.Plumbing.Capability.SchemaInspection.Contract (checkContract, contractId)
+import Kyyn.Plumbing.Capability.SchemaInspection.Contract (checkContract, rootType)
+import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
+import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.MicroHs.Inspection (inspectDataType)
 import ContractTests (contractTests)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -82,5 +85,31 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     >>= either (fail . show) pure
   evaluated <- either (fail . show) (either (fail . show) pure) result
   checked <- either (fail . show) pure (checkContract inspected evaluated)
-  putStrLn ("Compiler structure and guest metadata checked together: " ++ show (contractId checked))
+  generated <- either fail pure (generateCodecs "KyynFactCodec" (rootType checked))
+  let entrySource = unlines ["module FactRoundTrip where", "import KyynFactCodec", "import Kyyn.Runtime.Json",
+        "main :: IO ()", "main = do", "  input <- getContents",
+        "  value <- either fail pure (parseValue input >>= decodeWith rootCodec)",
+        "  output <- either fail pure (printValue (encodeWith rootCodec value))", "  putStrLn output"]
+  roundTripSources <- either fail pure (guestSources (path "FactRoundTrip.hs")
+    (sourceFiles sources ++ [(path "FactRoundTrip.hs", utf8 entrySource), (path "KyynFactCodec.hs", utf8 generated)]))
+  compiled <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
+    compileGuest roundTripSources
+  entry <- either (fail . show) (either (fail . show) pure) compiled
+  let input = "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"A task\",\"owner\":\"todo-001\"}}],\"people\":[]}"
+      invoke bytes = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope $
+        withCompiledEntry entry $ do
+          writeStdin bytes
+          closeStdin
+          output <- collectStdout
+          status <- awaitExit
+          pure (output, status)
+  (output, status) <- invoke input >>= either (fail . show) pure
+  let expectedValue = Aeson.eitherDecodeStrict input :: Either String Aeson.Value
+  unless (status == ProcessExit 0 "" && Aeson.eitherDecodeStrict output == expectedValue)
+    (fail ("FactId string/envelope round trip failed: " ++ show (output,status)))
+  let wrapped = Text.encodeUtf8 (Text.replace "\"id\":\"todo-001\""
+        "\"id\":{\"tag\":\"FactId\",\"value\":\"todo-001\"}" (Text.decodeUtf8 input))
+  (_, ProcessExit rejected _) <- invoke wrapped >>= either (fail . show) pure
+  unless (rejected /= 0) (fail "tagged SDK FactId accepted")
+  putStrLn "Checked SDK Fact envelope round trip uses plain-string IDs and rejects tagged IDs."
   putStrLn "Named Haskell metadata evaluated through real MicroHs and fixed JSON codec."

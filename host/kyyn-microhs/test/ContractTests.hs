@@ -9,6 +9,9 @@ import Kyyn.Types.SchemaMetadata
 
 contractTests :: IO ()
 contractTests = do
+  unless (shapeOf sdkFactIdType == Right (Scalar TextScalar)) (fail "SDK FactId must project to text")
+  unless (shapeOf (Algebraic "Model.FactId" [] [Constructor "Model.FactId" [(Nothing,StringType)]])
+    == Right (Union [("FactId", Just (Scalar TextScalar))])) (fail "author type must not gain SDK scalar semantics by short name")
   checked <- either (fail . show) pure (checkContract root metadata)
   unless (metadataOf checked == metadata && rootType checked == root) (fail "contract lost its input")
   case collectionContracts checked of
@@ -48,7 +51,7 @@ contractTests = do
     record name fs = Algebraic name [] [Constructor name [(Just n,t) | (n,t) <- fs]]
     factId = Algebraic "Kyyn.Types.Fact.FactId" [] [Constructor "Kyyn.Types.Fact.FactId" [(Nothing,StringType)]]
     factList t = ListType (Algebraic "Kyyn.Types.Fact.Fact" [t]
-      [Constructor "Kyyn.Types.Fact.Fact" [(Just "id",factId),(Just "value",t)]])
+      [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,factId),(Nothing,t)]])
     payload = record "Model.Todo" [("title",OptionalType StringType),
       ("status",Algebraic "Model.Status" [] [Constructor "Model.Open" [],Constructor "Model.Done" []]),
       ("owner",OptionalType factId)]

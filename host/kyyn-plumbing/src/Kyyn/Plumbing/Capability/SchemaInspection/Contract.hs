@@ -98,14 +98,8 @@ compatible Title StringType = True
 compatible Badge (Algebraic _ _ cs) = not (null cs) && all (\(Constructor _ fs) -> null fs) cs
 compatible _ _ = False
 
-factIdType :: DataType
-factIdType = Algebraic "Kyyn.Types.Fact.FactId" []
-  [Constructor "Kyyn.Types.Fact.FactId" [(Nothing, StringType)]]
-
 factPayload :: DataType -> Maybe DataType
-factPayload (ListType (Algebraic "Kyyn.Types.Fact.Fact" [p]
-  [Constructor "Kyyn.Types.Fact.Fact" [(Just "id", i), (Just "value", v)]]))
-  | i == factIdType && p == v = Just p
+factPayload (ListType t) = sdkFactPayload t
 factPayload _ = Nothing
 
 checkCollection :: [(String, DataType)] -> [String] -> CollectionDecl -> Either String CollectionContract
@@ -126,7 +120,7 @@ checkCollection fields names (CollectionDecl name field references) = do
   pure (CollectionContract name field payload annotated)
 
 referenceType :: DataType -> Bool
-referenceType t | t == factIdType = True
+referenceType t | t == sdkFactIdType = True
 referenceType (OptionalType t) = referenceType t
 referenceType (ListType t) = referenceType t
 referenceType _ = False
@@ -138,7 +132,7 @@ referenceShape _ target = Reference target
 
 collectionShape :: CollectionContract -> Either String Shape
 collectionShape (CollectionContract _ _ _ payload) = do
-  identity <- shapeOf factIdType
+  identity <- shapeOf sdkFactIdType
   pure (List (Record [("id", identity), ("value", payload)]))
 
 shortName :: String -> String

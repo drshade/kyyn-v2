@@ -68,6 +68,9 @@ metadata references, and annotates reference fields in the checked shape. It doe
 not establish that referenced IDs exist in particular facts. Title accepts text
 and badge accepts nullary enums (optionally wrapped); timeline assignments remain
 unsupported until a date/instant scalar codec is implemented.
+The initial checker reports the first incoherence. A role may name a single
+reachable instantiation of a polymorphic record, but multiple distinct reachable
+instantiations of that name are ambiguous and are rejected.
 
 The initial contract identity is SHA-256 of a version-tagged JSON-array encoding
 of resolved types and all metadata, including descriptions and declaration order.
