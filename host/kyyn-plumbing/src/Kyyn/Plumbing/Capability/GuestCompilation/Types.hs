@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Capability.GuestCompilation.Types
   ( GuestSources, guestSources, sourceFiles, selectedEntry, sourceIdentity
-  , BuildOptions(..), BuildIdentity(..), CompiledEntry(..) ) where
+  , BuildIdentity(..), CompiledEntry(..) ) where
 
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.ByteString (ByteString)
@@ -38,12 +38,9 @@ sourceIdentity (GuestSources entry files) = SHA256.hash . Lazy.toStrict . Builde
     path = framed . Text.encodeUtf8 . Text.pack . relativeName
     framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes
 
-data BuildOptions = BuildOptions { compressCombinators :: Bool } deriving (Eq, Show)
-
 data BuildIdentity = BuildIdentity
   { toolchainRevision :: String
   , sourcesDigest :: ByteString
-  , options :: BuildOptions
   } deriving (Eq, Show)
 
 data CompiledEntry = CompiledEntry

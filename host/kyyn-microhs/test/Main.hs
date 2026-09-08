@@ -22,6 +22,7 @@ import System.Directory (listDirectory)
 import System.Environment (getEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import CompilationTests (testCompilation)
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
@@ -32,8 +33,9 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
       guest = repo </> "guest/kyyn-runtime/src"
       json = repo </> "vendor/json"
   toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)
-  let compile sources options = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
-        compileGuest sources options
+  testCompilation temporaryScope toolchain
+  let compile sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
+        compileGuest sources
   forM_ [("FunctionField", "function-valued"), ("Recursive", "recursive"),
          ("IllTyped", "IllTyped.hs"), ("Hidden", "opaque"), ("Positional", "positional"),
          ("AbsentModule", "not found"), ("TupleField", "tuples"),
@@ -57,7 +59,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
     sources <- either fail pure (guestSources (checkedPath "RoundTrip.hs")
       (files ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),
                  (checkedPath "KyynSecondCodec.hs", B.toStrict (utf8 second))]))
-    compiled <- compile sources (BuildOptions False) >>= either (fail . show) (either (fail . show) pure)
+    compiled <- compile sources >>= either (fail . show) (either (fail . show) pure)
     remaining <- listDirectory temporary
     unless (null remaining) (fail "compilation leaked its temporary sources")
     let invoke input = do

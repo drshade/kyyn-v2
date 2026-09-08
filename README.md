@@ -9,7 +9,8 @@ Run the complete current gate with `bash tools/test.sh`.
 
 The first implementation boundary inspects Haskell data types with the native
 MicroHs frontend and generates private JSON codecs importing the authored types.
-The gate compiles and executes those codecs with the vendored MicroHs toolchain.
+GuestCompilation builds captured sources into immutable bytecode, then executes
+it with the vendored evaluator; guest compilation does not invoke a C compiler.
 Guest invocation uses a scoped native process interpreter, tested for pipe exchange,
 failure and cancellation cleanup.
 See [the codec integration fixture](tests/integration/codecs/README.md) for scope

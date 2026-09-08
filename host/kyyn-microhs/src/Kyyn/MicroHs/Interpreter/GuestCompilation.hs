@@ -22,7 +22,7 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 runGuestCompilation
   :: (FileSystem :> es, Process.ProcessExecution :> es, Failure :> es)
   => GuestToolchain -> Eff (GuestCompilation : es) a -> Eff es a
-runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest sources options@BuildOptions{compressCombinators}) ->
+runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest sources) ->
   withTemporaryScope $ \scope -> do
     let sourceDirectory = "sources"
         sourcePath path = checkedPath (sourceDirectory ++ "/" ++ relativeName path)
@@ -30,7 +30,6 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest so
         root = scopePath toolchain
         compilerEnvironment = [("MHSDIR", root), ("MHSCPPHS", root ++ "/bin/cpphs"), ("LC_ALL", "C.UTF-8"), ("PATH", "")]
         arguments = ["-a", "-i", "-i" ++ sourceDirectory, "-i" ++ root ++ "/lib"] ++
-          ["-z" | compressCombinators] ++
           [relativeName (sourcePath (selectedEntry sources)), "-o" ++ relativeName output]
     forM_ (sourceFiles sources) $ \(path, bytes) -> writeBytes scope (sourcePath path) bytes
     (stdout, Process.ProcessExit status stderr) <- Process.withProcess
@@ -45,7 +44,7 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest so
         if Bytes.null bytes
           then broken "compiler produced an empty artifact"
           else pure (Right (Types.CompiledEntry
-            (BuildIdentity Toolchain.toolchainRevision (sourceIdentity sources) options)
+            (BuildIdentity Toolchain.toolchainRevision (sourceIdentity sources))
             (output, bytes) (root ++ "/bin/mhseval") ["+RTS", "-r" ++ relativeName output, "-RTS"] [("LC_ALL", "C.UTF-8"), ("PATH", "")]))
       1 -> case Text.decodeUtf8' (stderr <> stdout) of
         Left _ -> broken "compiler emitted invalid UTF-8 diagnostics"
@@ -53,4 +52,5 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest so
       _ -> broken ("compiler terminated with exit status " ++ show status)
   where
     broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit message))
+    -- Only fixed names and a fixed prefix joined to an already checked path enter here.
     checkedPath = either error id . relativePath

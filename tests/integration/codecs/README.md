@@ -26,10 +26,18 @@ Inspection forces its result before returning, reports compiler/unsupported-type
 diagnostics separately from native operational failures, and rethrows asynchronous
 exceptions. It is a native library boundary, not an installed porcelain handler.
 
-The test harness invokes the compiler directly by its explicit vendored path;
-production compilation workflows will use the GuestCompilation capability.
-Its artifacts are isolated in `.build/codecs`, never a production compiler cache.
-No porcelain code or effect handlers are introduced merely to wrap a test harness.
+Compilation uses GuestCompilation with captured authored/generated/SDK sources.
+It produces `.comb` bytes, which are executed by the bundled evaluator through
+ProcessExecution. Both subprocesses have an empty PATH; no C compiler is needed
+after the MicroHs toolchain is built. Build directories are removed before the
+same compiled value is exercised against multiple runtime inputs. Each invocation
+has its own temporary artifact scope. No test artifact persists in the checkout.
+
+Additional cases exercise captured CPP imports, reusable bytecode, canonical
+source identity (including selected entry), source/path rejection, missing compiler,
+and structured distinction between code rejection and operational failure. Native
+compiler exit/crash policy is also checked with deterministic process responses;
+these complement rather than replace the real compiler/evaluator tests.
 
 The native adapter package builds compiler sources from the monorepo's `vendor/`
 tree. Use a complete checkout or Git source archive, not an individual package's

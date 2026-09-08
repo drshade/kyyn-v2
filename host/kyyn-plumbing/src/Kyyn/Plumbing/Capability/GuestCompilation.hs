@@ -2,7 +2,7 @@
 module Kyyn.Plumbing.Capability.GuestCompilation
   ( GuestCompilation(..), compileGuest, withCompiledEntry
   , GuestSources, guestSources, sourceFiles, selectedEntry, sourceIdentity
-  , BuildOptions(..), BuildIdentity(..), CompiledEntry, buildIdentity ) where
+  , BuildIdentity(..), CompiledEntry, buildIdentity ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -13,12 +13,12 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 
 data GuestCompilation :: Effect where
-  CompileGuest :: GuestSources -> BuildOptions -> GuestCompilation m (Either [Diagnostic] CompiledEntry)
+  CompileGuest :: GuestSources -> GuestCompilation m (Either [Diagnostic] CompiledEntry)
 
 type instance DispatchOf GuestCompilation = Dynamic
 
-compileGuest :: GuestCompilation :> es => GuestSources -> BuildOptions -> Eff es (Either [Diagnostic] CompiledEntry)
-compileGuest sources = send . CompileGuest sources
+compileGuest :: GuestCompilation :> es => GuestSources -> Eff es (Either [Diagnostic] CompiledEntry)
+compileGuest = send . CompileGuest
 
 buildIdentity :: CompiledEntry -> BuildIdentity
 buildIdentity CompiledEntry{identity} = identity
