@@ -13,6 +13,21 @@ contractTests = do
   unless (shapeOf (Algebraic "Model.FactId" [] [Constructor "Model.FactId" [(Nothing,StringType)]])
     == Right (Union [("FactId", Just (Scalar TextScalar))])) (fail "author type must not gain SDK scalar semantics by short name")
   checked <- either (fail . show) pure (checkContract root metadata)
+  refined <- either (fail . show) pure (checkRootLayout checked)
+  unless (rootSchema refined == checked && contractId (rootSchema refined) == contractId checked)
+    (fail "Root refinement changed the contract or its identity")
+  unregistered <- either (fail . show) pure (checkContract root (SchemaMetadata [] [] []))
+  case checkRootLayout unregistered of
+    Left [Diagnostic _ "schema.incoherent" message _] | "missing collection declaration" `isInfixOf` message -> pure ()
+    result -> fail ("Unregistered persistent collection accepted: " ++ show result)
+  forM_ [StringType, IntegerType, BoolType, ListType payload, OptionalType payload,
+      Algebraic "Model.Choice" [] [Constructor "Model.Yes" [], Constructor "Model.No" []]] $ \valueType -> do
+    valueContract <- either (fail . show) pure (checkContract valueType (SchemaMetadata [] [] []))
+    unless (Right (contractShape valueContract) == shapeOf valueType) (fail "Value shape changed")
+    case checkRootLayout valueContract of Left _ -> pure (); Right _ -> fail "Nonrecord accepted as a persistent root"
+  listRoles <- either (fail . show) pure (checkContract (ListType payload)
+    (SchemaMetadata [RoleDecl "title" "title" Title] [FieldRole "Model.Todo" "title" "title"] []))
+  unless (Right (contractShape listRoles) == shapeOf (ListType payload)) (fail "Roles changed list shape")
   unless (metadataOf checked == metadata && rootType checked == root) (fail "contract lost its input")
   case collectionContracts checked of
     [CollectionContract "todos" "todos" _ (Record fs)] ->
@@ -39,7 +54,6 @@ contractTests = do
     ("missing reference field", root, SchemaMetadata roles fields [CollectionDecl "todos" "todos" [("absent","todos")]]),
     ("expected FactId", root, SchemaMetadata roles fields [CollectionDecl "todos" "todos" [("title","todos")]]),
     ("duplicate todos reference", root, SchemaMetadata roles fields [CollectionDecl "todos" "todos" [("owner","todos"),("owner","todos")]]),
-    ("missing collection declaration", root, SchemaMetadata roles fields []),
     ("expected [Kyyn.Types.Fact.Fact", record "Model.Root" [("todos", ListType payload)], SchemaMetadata roles fields collections),
     ("duplicate Model.Todo fields", record "Model.Root" [("todos", factList (record "Model.Todo" [("title",StringType),("title",StringType)]))], metadata),
     ("constructor tags", record "Model.Root" [("x",Algebraic "Model.Bad" [] [Constructor "A.Same" [],Constructor "B.Same" []])], SchemaMetadata [] [] [])

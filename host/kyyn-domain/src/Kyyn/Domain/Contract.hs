@@ -1,6 +1,7 @@
 module Kyyn.Domain.Contract
   ( CheckedContract, ContractId, CollectionContract(..), checkContract
-  , rootType, metadataOf, contractShape, contractId, collectionContracts ) where
+  , rootType, metadataOf, contractShape, contractId, collectionContracts
+  , RootContract, checkRootLayout, rootSchema ) where
 
 import Control.Monad (unless, forM_)
 import qualified Crypto.Hash.SHA256 as SHA256
@@ -19,6 +20,10 @@ data CollectionContract = CollectionContract
   } deriving (Eq, Show)
 data CheckedContract = CheckedContract DataType SchemaMetadata Shape [CollectionContract] ContractId
   deriving (Eq, Show)
+newtype RootContract = RootContract CheckedContract deriving (Eq, Show)
+
+rootSchema :: RootContract -> CheckedContract
+rootSchema (RootContract contract) = contract
 
 rootType :: CheckedContract -> DataType
 rootType (CheckedContract t _ _ _ _) = t
@@ -34,7 +39,7 @@ contractId (CheckedContract _ _ _ _ i) = i
 checkContract :: DataType -> SchemaMetadata -> Either [Diagnostic] CheckedContract
 checkContract root meta = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
   validateStructure root
-  rootFields <- recordFields root
+  let rootFields = either (const []) id (recordFields root)
   let SchemaMetadata roles assignments declarations = meta
       roleNames = [n | RoleDecl n _ _ <- roles]
       collectionNames = [n | CollectionDecl n _ _ <- declarations]
@@ -47,15 +52,23 @@ checkContract root meta = either (Left . pure . errorDiagnostic "schema.incohere
   assigned <- mapM (checkRole root roles) assignments
   unique "affordance assignments per record" assigned
   collections <- mapM (checkCollection rootFields collectionNames) declarations
-  forM_ rootFields $ \(name,t) -> case factPayload t of
-    Just _ -> unless (name `elem` rootNames) (Left (name ++ ": missing collection declaration"))
-    Nothing -> pure ()
-  originalFields <- mapM (\(n,t) -> (,) n <$> shapeOf t) rootFields
+  originalShape <- shapeOf root
   collectionShapes <- mapM (\c@(CollectionContract _ f _ _) -> (,) f <$> collectionShape c) collections
-  let shape = Record [(n, maybe s id (lookup n collectionShapes)) | (n,s) <- originalFields]
+  let shape = case originalShape of
+        Record fields -> Record [(n, maybe s id (lookup n collectionShapes)) | (n,s) <- fields]
+        other -> other
       identity = ContractId (SHA256.hash (Lazy.toStrict (encode
         ("kyyn-contract-1" :: String, typeValue root, metadataValue meta))))
   pure (CheckedContract root meta shape collections identity)
+
+checkRootLayout :: CheckedContract -> Either [Diagnostic] RootContract
+checkRootLayout contract = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
+  fields <- recordFields (rootType contract)
+  let declared = [field | CollectionContract _ field _ _ <- collectionContracts contract]
+  forM_ fields $ \(name,t) -> case factPayload t of
+    Just _ -> unless (name `elem` declared) (Left (name ++ ": missing collection declaration"))
+    Nothing -> pure ()
+  pure (RootContract contract)
 
 unique :: (Eq a, Show a) => String -> [a] -> Either String ()
 unique label xs = unless (length (nub xs) == length xs) (Left ("duplicate " ++ label ++ ": " ++ show xs))

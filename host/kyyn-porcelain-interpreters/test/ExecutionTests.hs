@@ -5,7 +5,7 @@ import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (CheckedContract)
+import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree)
@@ -23,7 +23,7 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (findExecutable)
 import System.IO.Temp (withSystemTempDirectory)
 
-executionTests :: CheckedContract -> FileTree -> IO ()
+executionTests :: RootContract -> FileTree -> IO ()
 executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ \directory -> do
   scope <- either fail pure (directoryScope directory)
   shell <- findExecutable "sh" >>= maybe (fail "sh required for process failure fixtures") pure

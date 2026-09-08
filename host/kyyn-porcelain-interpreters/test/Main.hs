@@ -28,8 +28,8 @@ import qualified Kyyn.Plumbing.Capability.Git as Git
 
 main :: IO ()
 main = do
-  contract <- right (checkContract schema metadata)
-  other <- right (checkContract schema (SchemaMetadata [RoleDecl "label" "Changed metadata" Title] [] declarations))
+  contract <- right (checkContract schema metadata >>= checkRootLayout)
+  other <- right (checkContract schema (SchemaMetadata [RoleDecl "label" "Changed metadata" Title] [] declarations) >>= checkRootLayout)
   code <- tree [("src/Schema.hs", "authored code"), ("kb.dhall", "selected schema")]
   checked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract value))))
   root@(Root _ snapshot savedCode) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code checked))))
@@ -80,12 +80,12 @@ main = do
   executionTests contract snapshot
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 
-openingTests :: CheckedContract -> FileTree -> IO ()
+openingTests :: RootContract -> FileTree -> IO ()
 openingTests contract factFiles = do
   authored <- tree [("src/Example.hs","authored source"),("kb.dhall",manifest)]
   captured <- right (fileTree (files authored ++ files factFiles))
   sdk <- tree [("Kyyn/Types/Fact.hs","installed SDK")]
-  let execute sdkFiles action = runPureEff (runDhallHandling (schemaMock contract (gitMock captured
+  let execute sdkFiles action = runPureEff (runDhallHandling (schemaMock (rootSchema contract) (gitMock captured
         (runRootStore (runRootOpening sdkFiles action)))))
   opened <- right (execute sdk (openCapturedRoot captured))
   unless (opened == Root contract factFiles authored) (fail "Opening changed the selected files")

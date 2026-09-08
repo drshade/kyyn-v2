@@ -38,7 +38,8 @@ runRootStore = interpret $ \_ -> \case
       pure (path,bytes)) [(name,bytes) | (path,bytes) <- files code, Just name <- [stripPrefix "src/" (relativeName path)]]
     sources <- liftChecked (fileTree authored)
     pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) sources)
-  CheckRootValue contract value -> runExceptT $ do
+  CheckRootValue selected value -> runExceptT $ do
+    let contract = rootSchema selected
     _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)
     pure (CheckedValue (contractId contract) value)
   MaterializeRoot contract code checked -> runExceptT (materialize contract code checked)
@@ -103,8 +104,9 @@ encodeFile name shape value = do
   contents <- ExceptT (Dhall.encodeValue shape value)
   pure (path, Text.encodeUtf8 contents)
 
-materialize :: Dhall.DhallHandling :> es => CheckedContract -> FileTree -> CheckedValue -> Result es Root
-materialize contract code (CheckedValue identity value) = do
+materialize :: Dhall.DhallHandling :> es => RootContract -> FileTree -> CheckedValue -> Result es Root
+materialize selected code (CheckedValue identity value) = do
+  let contract = rootSchema selected
   ensure (identity == contractId contract) "Checked value belongs to a different contract"
   ensure (all (\(p,_) -> let name = relativeName p in name /= "facts" && not ("facts/" `isPrefixOf` name)) (files code))
     "Code snapshot overlaps the facts subtree"
@@ -124,7 +126,7 @@ materialize contract code (CheckedValue identity value) = do
     facts <- forM (zip identities members) $ \(factId,member) -> encodeFile (factName name factId) (factShape payload) member
     pure (index : facts)
   snapshot <- liftChecked (fileTree (rootFile : entries))
-  pure (Root contract snapshot code)
+  pure (Root selected snapshot code)
 
 decodeFile :: Dhall.DhallHandling :> es => FileTree -> String -> Shape -> Result es Value
 decodeFile tree name shape = do
@@ -134,7 +136,8 @@ decodeFile tree name shape = do
   ExceptT (Dhall.decodeValue shape source)
 
 loadValue :: Dhall.DhallHandling :> es => Root -> Result es CheckedValue
-loadValue (Root contract snapshot _) = do
+loadValue (Root selected snapshot _) = do
+  let contract = rootSchema selected
   fields <- rootFields contract
   let collections = collectionContracts contract
       collectionFields = [f | CollectionContract _ f _ _ <- collections]
