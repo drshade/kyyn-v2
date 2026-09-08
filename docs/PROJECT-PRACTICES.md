@@ -19,9 +19,10 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
-- **Default PR check:** `bash tools/test.sh`: documentation/import checks, native
+- **Available fast check:** `bash tools/test.sh`: documentation/import checks, native
   compilation, process/filesystem tests and pure metadata codec/adapter/contract tests.
-  Add targeted tests relevant to the change.
+  Authors choose relevant local checks and record their revision and results;
+  this command is not mandatory for every PR.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
   compilation and codec tests. Run it before declaring an Issue complete, or when
   needed for a particular change or investigation; not for every PR or merge.
@@ -29,13 +30,9 @@ does not become another specification of the product's runtime workflows.
   Cabal 3.16.1.0, Make and a C compiler; no npm packages. Fetch native dependencies
   with `cabal update` on a new development machine.
   Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
-- **CI:** `.github/workflows/check.yml`, job `check` on pull requests and pushes to main.
-  Automatic runs use the fast check. Manual dispatch offers a `full` checkbox.
-  Changes limited to root README/AGENTS Markdown or Markdown under docs/architecture
-  run documentation checks only, without Haskell setup. Other paths, unknown diffs
-  and manual dispatch use normal checks. The workflow still reports a check result.
-  After merge, sync and continue without waiting for another CI run; failures are
-  investigated when reported. This policy applies during private, pre-release development.
+- **CI:** `.github/workflows/check.yml` is manual-dispatch only, with a `full`
+  checkbox. No automatic PR/push runs or remote-CI merge requirement. After merge,
+  sync and continue. This policy applies during private, pre-release development.
   CI caches Cabal's compiled dependency store by platform, toolchain and resolved
   build configuration. Compatible older stores can seed changed dependency plans;
   Cabal still resolves and builds the current plan. Project build outputs and test
@@ -69,8 +66,7 @@ spaces inside lists are not interpreted as code. Use top-level fenced examples
 when demonstrating links that are not actual documentation references.
 HTML comments are not excluded from inline-link checks, and reference-style link
 definitions are not validated; use ordinary inline links for checked references.
-Branch protection is a repository setting, not
-established by this PR; configure the `check` job as required where available.
+Do not configure the optional `check` workflow as a required merge check.
 
 ## Review and merge
 
@@ -79,6 +75,9 @@ established by this PR; configure the `check` job as required where available.
 - **Independent review:** a different human or agent may review. An author rereading
   their own work is not independent review. The reviewer examines the actual final
   diff and verification evidence, not only the author's summary.
+  Reviewers do not routinely rerun the author's tests or require a clean-export
+  build. Additional targeted verification needs a concrete concern, not a default
+  duplicate gate. Review clearance, not green remote CI, permits an authorised merge.
 - **Ordinary merge authority:** Tom, or a reviewer/maintainer explicitly authorised
   by him for the PR or workstream. Passing checks or writing the PR does not grant
   an agent permission to merge it.

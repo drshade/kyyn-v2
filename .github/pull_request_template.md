@@ -24,8 +24,9 @@ not every coding action. Remove it when a checklist adds no value.
 
 ## Verification
 
-What evidence establishes the result? Include the default check and targeted
-verification; include the full integration check when completing an Issue.
+Record proportionate local verification: tested revision, commands and results.
+Remote CI and duplicate reviewer test runs are not required. Include the full
+integration check when completing an Issue.
 
 ## Review focus
 

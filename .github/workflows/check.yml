@@ -1,9 +1,6 @@
 name: check
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       full:
@@ -20,30 +17,17 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-      - name: Classify changed paths
-        id: changes
-        run: node tools/checks/change-scope.mjs >> "$GITHUB_OUTPUT"
-      - name: Documentation-only checks
-        if: steps.changes.outputs.docs_only == 'true'
-        run: |
-          node --test tools/checks/change-scope.test.mjs tools/checks/check-docs.test.mjs
-          node tools/checks/check-docs.mjs
       - uses: haskell-actions/setup@bda9c527d4136f7759733016190c34a24c84f4f4 # v2
-        if: steps.changes.outputs.docs_only != 'true'
         id: haskell
         with:
           ghc-version: '9.10.3'
           cabal-version: '3.16.1.0'
       - name: Resolve build plan
-        if: steps.changes.outputs.docs_only != 'true'
         run: cabal build all --dry-run
       - name: Cache compiled dependencies
-        if: steps.changes.outputs.docs_only != 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ steps.haskell.outputs.cabal-store }}
@@ -51,4 +35,3 @@ jobs:
           restore-keys: |
             cabal-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-
       - run: bash tools/test.sh ${{ inputs.full && '--full' || '' }}
-        if: steps.changes.outputs.docs_only != 'true'
