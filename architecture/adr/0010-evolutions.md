@@ -457,6 +457,11 @@ data EvolutionFilter = AllEvolutions | ExcludeDrafts
 
 Listing enumerates immediate names under the live and selected Git `evolutions/`
 directories, considers hexadecimal evolution IDs, then derives each summary once.
+Git's `ReadDirectoryAt Repository GitRevision TreePath` returns
+`Either [Diagnostic] (Maybe [RelativePath])`: immediate entry names, `Nothing`
+for an absent directory, and diagnostics for an invalid revision or non-directory
+selection. It never reads child blobs. The filesystem counterpart is defined in
+[effects](0003-effects.md).
 It sorts by ID and applies ExcludeDrafts as a pure filter over those same summaries.
 It reads manifests, not source/evidence/candidate files, and does not compile even
 unfinished drafts. Malformed manifests/history are diagnostics rather than silently

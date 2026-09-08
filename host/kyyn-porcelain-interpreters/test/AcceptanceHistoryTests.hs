@@ -7,14 +7,14 @@ import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.Failure (OperationalFailure)
+import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(ReplaceFile))
 import Kyyn.Domain.FileTree
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Workspace
 import qualified Kyyn.Domain.Workspace as Workspace
-import Kyyn.Plumbing.Capability.Failure (Failure)
+import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
@@ -126,13 +126,17 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
     _ -> fail "Malformed archive became missing acceptance"
   directoryResult <- git (readFileAt repo accepted (path "nested/kb/evolutions/e001")) >>= rightResult
   unless directoryResult (fail "Directory was treated as a file")
+  childNames <- git (readDirectoryAt repo accepted archivePath) >>= right
+  unless (childNames == Just [path "manifest.dhall"]) (fail "Git directory enumeration was not shallow")
+  fileListing <- git (readDirectoryAt repo accepted (Subtree manifestPath)) >>= rightResult
+  unless fileListing (fail "Git directory enumeration accepted a file")
   unknown <- right (gitRevision (replicate 40 'f'))
   git (readCommitParents repo unknown) >>= rightResult >>= \rejected -> unless rejected (fail "Unknown commit silently had no parents")
   headAfter <- git (resolveRevision repo "HEAD") >>= right
   unless (headAfter == base) (fail "History inspection moved HEAD")
   let lifecycle :: Eff LifecycleEffects a -> IO (Either OperationalFailure a)
       lifecycle action = runEff . runFailure . runProcessExecutionIO . runGit executable
-        . runFileSystemIO scope . shallowFiles . runDhallHandling . runRootStore
+        . runFileSystemIO scope . shallowFiles Nothing . runDhallHandling . runRootStore
         . runWorkspaceStore . noOpening . runEvolutionStore $ action
       runLifecycle :: Eff LifecycleEffects a -> IO a
       runLifecycle action = lifecycle action >>= right
@@ -191,6 +195,14 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
     (fail "Draft filter used a different state derivation")
   runLifecycle (markDraft workspace) >>= right
   runLifecycle (readEvolutionState workspace) >>= right >>= \s -> unless (s == Draft) (fail "MarkDraft failed")
+  beforeFailedWrite <- Bytes.readFile livePath
+  let writeFailure = StorageUnavailable (StorageDiagnostic ReplaceFile livePath "Injected transition failure")
+  failedTransition <- runEff . runFailure . runProcessExecutionIO . runGit executable
+    . runFileSystemIO scope . shallowFiles (Just writeFailure) . runDhallHandling . runRootStore
+    . runWorkspaceStore . noOpening . runEvolutionStore $ markReady workspace
+  afterFailedWrite <- Bytes.readFile livePath
+  unless (failedTransition == Left writeFailure && beforeFailedWrite == afterFailedWrite)
+    (fail "Failed transition lost its operational failure or changed the manifest")
   let WorkspaceSnapshot (WorkspaceManifest r n e _ bindings) b t c ns = initialSnapshot
   writeWorkspace "e001" (WorkspaceSnapshot (WorkspaceManifest r n e Accepted bindings) b t c ns)
   expectDiagnostic (readEvolutionState workspace)
@@ -223,11 +235,12 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   putStrLn "Acceptance lookup identifies introductions across all parents, reverts, reacceptance and ambiguous histories."
   putStrLn "Lifecycle state/listing uses authoritative archives and state edits preserve captured inputs."
 
-shallowFiles :: FileSystem :> es => Eff (FileSystem : es) a -> Eff es a
-shallowFiles = interpret $ \_ -> \case
+shallowFiles :: (FileSystem :> es, Failure :> es)
+  => Maybe OperationalFailure -> Eff (FileSystem : es) a -> Eff es a
+shallowFiles failure = interpret $ \_ -> \case
   FS.ListDirectory scope -> send (FS.ListDirectory scope)
   FS.ReadOptionalBytes scope path -> send (FS.ReadOptionalBytes scope path)
-  FS.ReplaceBytes scope path bytes -> send (FS.ReplaceBytes scope path bytes)
+  FS.ReplaceBytes scope path bytes -> maybe (send (FS.ReplaceBytes scope path bytes)) raiseFailure failure
   _ -> error "Lifecycle operation read source/evidence/candidates or wrote non-manifest files"
 
 noFiles :: Eff (FileSystem : es) a -> Eff es a
