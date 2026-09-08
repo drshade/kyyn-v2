@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
-  'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program'],
+  'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
+  'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types'],
   'kyyn-porcelain': ['Data.Aeson', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
@@ -56,6 +57,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Evolution': ['Control.Monad', 'Data.List', 'Data.Text', 'Data.Text.Encoding',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
+    'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Protocol.Query': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
     'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable', 'Data.List', 'Data.Text', 'Data.Text.Encoding',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
@@ -152,7 +156,7 @@ function files(directory) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = process.argv[2] || process.cwd();
   const errors = Object.keys(allowed).flatMap(pkg =>
-    files(path.join(root, pkg === 'kyyn-types' ? 'shared' : pkg === 'kyyn-runtime' ? 'guest' : 'host', pkg, 'src')).flatMap(file =>
+    files(path.join(root, pkg === 'kyyn-types' ? 'shared' : ['kyyn-runtime', 'kyyn-sdk'].includes(pkg) ? 'guest' : 'host', pkg, 'src')).flatMap(file =>
       checkImports(pkg, fs.readFileSync(file, 'utf8')).map(name => `${file}: forbidden import ${name}`)));
   if (errors.length) {
     console.error(errors.join('\n'));
