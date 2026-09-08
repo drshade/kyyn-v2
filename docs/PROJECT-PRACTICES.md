@@ -33,6 +33,10 @@ does not become another specification of the product's runtime workflows.
   forwarding. Workspace tests use real Dhall with pure projection/matching:
   malformed manifests/layout, input additions/edits/deletions, and exclusion of
   lifecycle state and notes. They neither compile drafts nor verify archives.
+  Evolution capture tests combine real filesystem/Dhall with recording RootOpening:
+  repository-root/nested KB paths, exact Before copies, revision changes, unfinished
+  targets, live matching without source loading, and diagnostics versus operational
+  failures. No new MicroHs or Git execution is involved in those capture tests.
   RootExecution tests use a recording compiler handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.

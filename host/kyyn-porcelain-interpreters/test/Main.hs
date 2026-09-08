@@ -13,6 +13,7 @@ import QueryExecutionTests (queryExecutionTests)
 import ValidationTests (validationTests)
 import RootExportTests (rootExportTests)
 import WorkspaceTests (workspaceTests)
+import EvolutionCaptureTests (evolutionCaptureTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
@@ -83,6 +84,7 @@ main = do
   unless (orderA == orderB) (fail "FileTree depends on producer ordering")
   openingTests contract snapshot
   workspaceTests
+  evolutionCaptureTests contract
   executionTests contract snapshot
   queryExecutionTests contract snapshot
   validationTests contract snapshot
