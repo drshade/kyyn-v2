@@ -19,8 +19,17 @@ jobs:
         with:
           node-version: '22'
       - uses: haskell-actions/setup@bda9c527d4136f7759733016190c34a24c84f4f4 # v2
+        id: haskell
         with:
           ghc-version: '9.10.3'
           cabal-version: '3.16.1.0'
-      - run: cabal update
+      - name: Resolve build plan
+        run: cabal build all --dry-run
+      - name: Cache compiled dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.haskell.outputs.cabal-store }}
+          key: cabal-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-${{ hashFiles('cabal.project', '**/*.cabal', 'dist-newstyle/cache/plan.json') }}
+          restore-keys: |
+            cabal-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-cabal-${{ steps.haskell.outputs.cabal-version }}-
       - run: bash tools/test.sh
