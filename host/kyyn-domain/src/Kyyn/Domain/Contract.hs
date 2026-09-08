@@ -192,7 +192,7 @@ restoreRootContract = parseEither $ \value -> do
       Right contract | contractFingerprint (contractId (rootSchema contract)) == fingerprint -> Right contract
       _ -> stale
   where
-    stale = Left [errorDiagnostic "candidate.stale" "Saved contract no longer matches this kernel; apply the evolution again"]
+    stale = Left [errorDiagnostic "schema.stored-contract" "Stored contract cannot be reconstructed with its fingerprint by this kernel"]
 
 parseType :: Value -> Parser DataType
 parseType value = do

@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Candidate (encodeCandidateMetadata, decodeCandidateMetadata) where
+module Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord) where
 
 import Data.Aeson (Value, toJSON, encode, eitherDecodeStrict')
 import Data.Aeson.Types (Parser, parseEither, parseJSON)
@@ -12,8 +12,8 @@ import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
 
-encodeCandidateMetadata :: EvolutionId -> RootContract -> RootContract -> EvolutionReport -> ByteString
-encodeCandidateMetadata identity before after (EvolutionReport steps) = Lazy.toStrict $ encode
+encodeEvolutionRecord :: EvolutionId -> RootContract -> RootContract -> EvolutionReport -> ByteString
+encodeEvolutionRecord identity before after (EvolutionReport steps) = Lazy.toStrict $ encode
   (1 :: Int, evolutionIdName identity, describeRootContract before, describeRootContract after, map step steps)
   where
     step (StepReport (Rationale explanation evidence) changes) = toJSON
@@ -22,15 +22,15 @@ encodeCandidateMetadata identity before after (EvolutionReport steps) = Lazy.toS
       (collection, identity', fmap fact old, fmap fact new)
     fact (RecordedFact schema value) = (describeRootContract schema,value)
 
-decodeCandidateMetadata :: ByteString
+decodeEvolutionRecord :: ByteString
   -> Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract, EvolutionReport))
-decodeCandidateMetadata bytes = eitherDecodeStrict' bytes >>= parseEither metadata
+decodeEvolutionRecord bytes = eitherDecodeStrict' bytes >>= parseEither metadata
   where
     metadata value = do
       (version, name, before, after, steps) <- parseJSON value
       identity <- either fail pure (evolutionId name)
       if version /= (1 :: Int)
-        then pure (Left [errorDiagnostic "candidate.stale" "Saved result format is no longer supported; apply the evolution again"])
+        then pure (Left [errorDiagnostic "evolution.record-format" "Stored evolution record format is not supported by this kernel"])
         else do
           source <- contract before
           target <- contract after

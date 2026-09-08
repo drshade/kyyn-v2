@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
   ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs, saveCandidate, loadCandidate, findAcceptance
-  , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft ) where
+  , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -10,7 +10,9 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionName, EvolutionWorkspace, Ev
 import Kyyn.Domain.Workspace (EvolutionState)
 import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
-import Kyyn.Domain.Git (GitRevision)
+import Kyyn.Domain.Git (GitRevision, TreePath)
+import Kyyn.Domain.FileTree (FileTree)
+import Kyyn.Porcelain.Validated (Validated)
 
 data EvolutionStore :: Effect where
   ListEvolutions :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
@@ -18,6 +20,7 @@ data EvolutionStore :: Effect where
   ReadEvolutionState :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] EvolutionState)
   MarkReady :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] ())
   MarkDraft :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] ())
+  ExportAcceptedWorkspace :: Candidate (Validated Root) -> EvolutionStore m (Either [Diagnostic] (TreePath, FileTree))
   CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
   CaptureEvolution :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] CapturedEvolution)
   MatchesCapturedInputs :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
@@ -59,3 +62,6 @@ markReady = send . MarkReady
 
 markDraft :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] ())
 markDraft = send . MarkDraft
+
+exportAcceptedWorkspace :: EvolutionStore :> es => Candidate (Validated Root) -> Eff es (Either [Diagnostic] (TreePath, FileTree))
+exportAcceptedWorkspace = send . ExportAcceptedWorkspace
