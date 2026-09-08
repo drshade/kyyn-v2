@@ -3,13 +3,14 @@ module Kyyn.Domain.Evolution
   ( EvolutionId, evolutionId, evolutionIdName, EvolutionName(..), EvolutionWorkspace(..), Before(..)
   , EvolutionContext(..), CapturedEvolution(..)
   , After(..), EvaluatedEvolution(..), PreviewRejection(..), Candidate(..)
+  , EvolutionFilter(..), EvolutionSummary(..)
   ) where
 
 import Data.Coerce (coerce)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
-import Kyyn.Domain.Workspace (WorkspaceSnapshot)
+import Kyyn.Domain.Workspace (WorkspaceSnapshot, EvolutionState)
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -17,6 +18,12 @@ import Kyyn.Types.Evolution (EvolutionFailure)
 
 newtype EvolutionId = EvolutionId String deriving (Eq, Show)
 newtype EvolutionName = EvolutionName String deriving (Eq, Show)
+
+data EvolutionFilter = AllEvolutions | ExcludeDrafts deriving (Eq, Show)
+data EvolutionSummary = EvolutionSummary
+  { workspace :: EvolutionWorkspace, name :: EvolutionName
+  , state :: EvolutionState, acceptingCommit :: Maybe GitRevision }
+  deriving (Eq, Show)
 
 evolutionId :: String -> Either String EvolutionId
 evolutionId value

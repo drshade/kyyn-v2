@@ -51,6 +51,12 @@ does not become another specification of the product's runtime workflows.
   inherited archive, revert/removal, reacceptance, all-parent merges, ambiguous and
   malformed histories. They forbid live-file/root-opening calls, check exact commit
   parents and optional file reads, and do not publish a ref or run guest code.
+  Lifecycle fixtures reuse that temporary Git history with explicit test-only ref
+  updates. They check duplicate names, Draft filtering, unknown/malformed diagnostics,
+  manifest-only Ready/Draft transitions preserving captured inputs, authoritative
+  Accepted state despite stale/missing/malformed local manifests, and refusal to edit
+  accepted workspaces. Recording filesystem forwarding rejects recursive reads and
+  non-manifest writes; no source opening/compiler or candidate loading occurs.
   Creation is checked by immediately capturing its returned workspace, including
   repeated labels, source rejection before allocation and failed writes. Workspace
   encoding round-trips through real Dhall, preserving non-manifest file bytes.

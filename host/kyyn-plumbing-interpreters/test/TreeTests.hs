@@ -24,6 +24,8 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   let execute action = runEff (runFailure (runFileSystemIO scope action)) >>= either (fail . show) pure
       path = either error id . relativePath
   empty <- execute (FS.readTree scope)
+  initialNames <- execute (FS.listDirectory scope)
+  unless (initialNames == Just []) (fail "Empty directory listing was not present")
   unless (null (files empty)) (fail "Empty directory capture")
   execute (FS.writeBytes scope (path "nested/value.dhall") "old")
   first <- execute (FS.readTree scope)
@@ -38,6 +40,10 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   rejected <- runEff (runFailure (runFileSystemIO scope (FS.readTree scope)))
   case rejected of Left _ -> pure (); Right _ -> fail "Symlink accepted"
   missing <- either fail pure (directoryScope (base </> "missing"))
+  absentNames <- execute (FS.listDirectory missing)
+  unless (absentNames == Nothing) (fail "Absent directory listing was not missing")
+  names <- execute (FS.listDirectory scope)
+  unless (names == Just [path "empty",path "link",path "nested"]) (fail "Directory listing descended, lost entries or changed order")
   absent <- runEff (runFailure (runFileSystemIO scope (FS.readTree missing)))
   case absent of Left _ -> pure (); Right _ -> fail "Missing directory treated as empty"
   allocations <- either fail pure (directoryScope (base </> "allocations"))
@@ -58,6 +64,8 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
     snapshot <- execute (FS.readTree child)
     unless (null (files snapshot)) (fail "Allocated directory not empty")
   badParent <- either fail pure (directoryScope (base </> "nested/value.dhall"))
+  badListing <- runEff (runFailure (runFileSystemIO scope (FS.listDirectory badParent)))
+  case badListing of Left _ -> pure (); Right _ -> fail "Listing a file became empty/absent directory"
   failedAllocation <- runEff (runFailure (runFileSystemIO scope (FS.createUniqueDirectory badParent)))
   case failedAllocation of Left _ -> pure (); Right _ -> fail "File was accepted as allocation parent"
   missingBytes <- execute (FS.readOptionalBytes scope (path "absent/file"))

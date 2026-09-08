@@ -82,6 +82,8 @@ data FileSystem :: Effect where
     :: DirectoryScope -> RelativePath -> Bytes -> FileSystem m ()
   CreateUniqueDirectory
     :: DirectoryScope -> FileSystem m RelativePath
+  ListDirectory
+    :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
 
 runFileSystemIO
   :: (IOE :> es, Failure :> es)
@@ -101,6 +103,12 @@ an immutable FileTree with relative paths. It does not follow symlinks, preserve
 empty directories or retain mode bits. Missing/unreadable directories fail rather
 than becoming empty trees. This is a sequential working-directory capture, not an
 atomic snapshot under concurrent edits; use a fixed Git revision for that selection.
+
+`ListDirectory` returns sorted immediate entry names without reading contents or
+descending into directories. `Nothing` means the directory is absent; an existing
+empty directory returns `Just []`. Other errors, including a file where a directory
+was expected, remain Failure. Names include files and links; the caller selects the
+entities it understands. This is enumeration, not a recursive snapshot or sandbox.
 
 `CreateUniqueDirectory` creates missing parents and reserves a persistent empty
 child using exclusive directory creation. It returns the child's single-component

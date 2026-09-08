@@ -296,7 +296,8 @@ branch does not make every commit valid by definition.
 
 Root export and Git commit/CAS primitives are implemented and tested together;
 authoritative FindAcceptance is implemented with real-Git history fixtures.
-this is not an implemented AcceptEvolution path. Full acceptance still requires
+Lifecycle reads and Ready/Draft transitions are implemented as specified in ADR 0010.
+This is not an implemented AcceptEvolution path. Full acceptance still requires
 Ready/captured-input checks, retained archive export
 and checkout synchronization specified above. Do not expose a bare-root commit
 helper as an alternative acceptance workflow while those pieces are absent.

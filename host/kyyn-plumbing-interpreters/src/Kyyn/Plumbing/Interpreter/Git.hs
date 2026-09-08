@@ -22,6 +22,24 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es) => FilePath -> Eff (Git : es) a -> Eff es a
 runGit executable = interpret $ \_ -> \case
   ResolveRevision repo name -> resolve repo name
+  ReadDirectoryAt repo revision location -> runExceptT $ do
+    _ <- ExceptT (resolve repo (revisionName revision))
+    selected <- case location of
+      WholeTree -> pure (Just (revisionName revision))
+      Subtree path -> do
+        found <- successful repo ["ls-tree", "-z", revisionName revision, "--", relativeName path]
+        if Bytes.null found then pure Nothing else case Char8.words (Char8.takeWhile (/= '\t') found) of
+          [_, "tree", objectId] -> pure (Just (Char8.unpack objectId))
+          _ -> rejected "git.unsupported-entry" "Expected a directory tree"
+    traverse (\objectId -> do
+      output <- successful repo ["ls-tree", "-z", objectId]
+      unless (Bytes.null output || Bytes.last output == 0) (ExceptT (broken "Unterminated Git directory response"))
+      let records = if Bytes.null output then [] else Char8.split '\0' (Bytes.init output)
+      forM records $ \record -> do
+        let (_,rest) = Char8.break (== '\t') record
+        whenEmpty rest
+        name <- either (rejected "git.unsupported-path" . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.tail rest))
+        either (rejected "git.unsupported-path") pure (relativePath name)) selected
   ReadFileAt repo revision path -> runExceptT $ do
     _ <- ExceptT (resolve repo (revisionName revision))
     found <- successful repo ["ls-tree", "-z", revisionName revision, "--", relativeName path]
@@ -129,6 +147,8 @@ runGit executable = interpret $ \_ -> \case
       if status == 0 then pure output else broken (unwords args ++ ": " ++ Char8.unpack diagnostics)
     rejected :: String -> String -> ExceptT [Diagnostic] (Eff es) b
     rejected code message = throwE [errorDiagnostic code message]
+    whenEmpty :: Bytes.ByteString -> ExceptT [Diagnostic] (Eff es) ()
+    whenEmpty bytes = unless (not (Bytes.null bytes)) (ExceptT (broken "Malformed Git directory entry"))
     broken :: String -> Eff es b
     broken = raiseFailure . GitUnavailable
     resolve :: Repository -> String -> Eff es (Either [Diagnostic] GitRevision)

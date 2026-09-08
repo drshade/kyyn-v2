@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Plumbing.Capability.Git (Git(..), resolveRevision, readTreeAt, readFileAt, readCommitParents, createCommit, compareAndSwapRef) where
+module Kyyn.Plumbing.Capability.Git (Git(..), resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents, createCommit, compareAndSwapRef) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -14,6 +14,7 @@ data Git :: Effect where
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
   ReadCommitParents :: Repository -> GitRevision -> Git m (Either [Diagnostic] [GitRevision])
+  ReadDirectoryAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] (Maybe [RelativePath]))
   CreateCommit :: Repository -> GitTree -> GitRevision -> CommitMetadata -> Git m GitRevision
   CompareAndSwapRef :: Repository -> LocalBranch -> GitRevision -> GitRevision -> Git m RefUpdate
 
@@ -30,6 +31,9 @@ readFileAt repo revision = send . ReadFileAt repo revision
 
 readCommitParents :: Git :> es => Repository -> GitRevision -> Eff es (Either [Diagnostic] [GitRevision])
 readCommitParents repo = send . ReadCommitParents repo
+
+readDirectoryAt :: Git :> es => Repository -> GitRevision -> TreePath -> Eff es (Either [Diagnostic] (Maybe [RelativePath]))
+readDirectoryAt repo revision = send . ReadDirectoryAt repo revision
 
 createCommit :: Git :> es => Repository -> GitTree -> GitRevision -> CommitMetadata -> Eff es GitRevision
 createCommit repo tree parent = send . CreateCommit repo tree parent
