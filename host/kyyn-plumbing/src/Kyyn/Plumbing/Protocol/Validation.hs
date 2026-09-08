@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Capability.GuestCompilation.Validation (decodeReport) where
+module Kyyn.Plumbing.Protocol.Validation (decodeReport) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, Object, eitherDecodeStrict, withObject, withArray, parseJSON, (.:))
@@ -38,8 +38,8 @@ decodeReport bytes = eitherDecodeStrict bytes >>= parseEither
     integer value = do
       source <- pureText value
       case reads source of
-        [(n, "")] | show (n :: Integer) == source -> pure n
-        _ -> fail "Expected canonical integer string"
+        [(n, "")] | n > 0 && show (n :: Integer) == source -> pure n
+        _ -> fail "Expected positive canonical source coordinate"
 
 optional :: (Value -> Parser a) -> Value -> Parser (Maybe a)
 optional parse = withObject "Optional" $ \o -> do

@@ -42,7 +42,7 @@ const domainModules = {
 };
 
 const plumbingModules = {
-  'Kyyn.Plumbing.Capability.GuestCompilation.Validation': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
+  'Kyyn.Plumbing.Protocol.Validation': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
     'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.Foldable', 'Data.List', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Plumbing.Capability.Git': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Git', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Diagnostic'],

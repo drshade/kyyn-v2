@@ -5,8 +5,12 @@ import Kyyn.Runtime.Json
 import Text.JSON.Types (JSValue(JSArray))
 
 encodeReport :: ValidationReport -> Either String String
-encodeReport (ValidationReport diagnostics) = printValue (JSArray (map encodeDiagnostic diagnostics))
+encodeReport (ValidationReport diagnostics)
+  | any invalidPosition diagnostics = Left "Expected positive source coordinates"
+  | otherwise = printValue (JSArray (map encodeDiagnostic diagnostics))
   where
+    invalidPosition (Diagnostic _ _ _ (Just (SourceLocation _ line column))) = line <= 0 || column <= 0
+    invalidPosition _ = False
     text = encodeWith stringCodec
     optionalText = encodeWith (optionalCodec stringCodec)
     encodeDiagnostic (Diagnostic level diagnosticCode diagnosticMessage diagnosticLocation) = record

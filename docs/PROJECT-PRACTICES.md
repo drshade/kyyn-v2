@@ -68,7 +68,10 @@ does not become another specification of the product's runtime workflows.
   named export through the fixed SDK codec, without running the full codec suite.
   It combines structural inspection and metadata evaluation from the same captured
   sources, then materializes/reopens runtime facts through RootStore and passes
-  the resulting value through a generated guest codec. It does not open a KB from Git.
+  the resulting value through a generated guest codec. It also compiles a small pure
+  guest validator and checks the SDK validation-report wire, including warnings,
+  errors and structured locations. This report fixture is not the RootExecution
+  handler or a complete root-validation gate. It does not open a KB from Git.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

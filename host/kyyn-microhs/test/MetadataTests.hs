@@ -17,7 +17,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
-import Kyyn.Plumbing.Capability.GuestCompilation.Validation (decodeReport)
+import Kyyn.Plumbing.Protocol.Validation (decodeReport)
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
 import Kyyn.Domain.Contract (metadataOf, rootType)
 import Kyyn.Plumbing.Capability.SchemaInspection

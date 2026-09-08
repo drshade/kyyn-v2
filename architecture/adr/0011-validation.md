@@ -45,6 +45,20 @@ data CheckResult a
 `DiagnosticLocation` identifies a fact/field, source span or example, rather than
 requiring callers to parse the message. `Passed` may contain warnings. These are
 pure values shared with the guest SDK; they do not contain native exceptions.
+The first shared representation uses `FactLocation collection factId field`,
+where the field is optional; `SourceLocation file line column`, a one-based source
+position; and `ExampleLocation name`. A compiler without a structured position
+leaves the diagnostic's location absent. `errorDiagnostic` constructs an error
+without a location for structural/compilation failures. `checkReport` classifies
+a supplied report and retains it on either result; it does not itself execute
+checks or turn the supplied value into a `Validated` value.
+
+The fixed SDK report codec carries a list of diagnostics over the JSON boundary.
+Severity and locations use tagged alternatives; optional locations/fields use
+the wire's None/Some form, and source coordinates use canonical integer strings.
+Malformed protocol data is a decoding failure, not a semantic error report or an
+empty successful report. The guest author returns `ValidationReport`; the runtime
+encoder and host protocol decoder own serialization.
 The optional location is deliberate: compiler messages without structured spans
 remain useful diagnostics with `Nothing`, as specified in ADR 0019. Neither a
 missing span nor a warning may be mistaken for a missing diagnostic.
