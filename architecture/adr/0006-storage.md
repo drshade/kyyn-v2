@@ -51,12 +51,15 @@ does not confer semantic validation, execute guest code or write files. Its
 porcelain interpreter requires only DhallHandling, with no IOE. Code and supporting
 files are preserved verbatim in a separate tree; code paths cannot overlap `facts/`.
 
-Fact-tree paths are relative to `root/`. `facts/root.dhall` retains non-collection
-root fields (an empty record when there are none). Each collection uses
-`facts/c-<hex-utf8-collection>/index.dhall` plus
-`f-<hex-utf8-id>.dhall` files. Lowercase bytewise hex avoids separators, case-folding,
-reserved filename and Unicode-normalization collisions without interpreting IDs
-as paths. Readable IDs remain in the envelopes and membership files. Membership
+Fact-tree paths are relative to `root/`. Reserved file `facts/root.dhall` retains
+non-collection root fields (an empty record when there are none). Each collection
+uses `facts/<collection>/index.dhall` plus `<id>.dhall` files. Nonempty names made
+only of lowercase ASCII letters, digits, hyphens and underscores pass through,
+except `index` and Windows device names. Every other name is encoded as `~` followed
+by its complete lowercase UTF-8 hex. The escape prefix cannot occur in a pass-through
+name, and uppercase is escaped to avoid case-folding collisions. This keeps common
+paths such as `facts/todos/todo-001.dhall` readable without interpreting arbitrary
+IDs as paths. Original IDs remain in the envelopes and membership files. Membership
 preserves the guest list order; no unordered-collection metadata is implemented.
 RootStore rejects duplicate IDs, missing/unlisted files, malformed UTF-8 and
 path/envelope mismatches. File trees reject duplicate paths and file/directory
