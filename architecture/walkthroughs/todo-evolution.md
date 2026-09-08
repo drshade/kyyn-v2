@@ -209,10 +209,9 @@ capture context and step report. A possible private cache layout is:
 
 ```text
 .kyyn/candidates/<private-result-directory>/
-  candidate.dhall          context and stored-result metadata, not Validated
+  candidate.json           context, contract descriptions and report, not Validated
   capture/                captured manifest inputs, before/, target/ and change/
   root/                   complete materialized proposed root
-  report.dhall            derived step changes and declared rationales
 .kyyn/candidates/latest/<evolution-id>    selects its most recent complete result
 ```
 

@@ -1,14 +1,23 @@
-module Kyyn.Porcelain.Capability.Validation (checkRoot, checkExample) where
+module Kyyn.Porcelain.Capability.Validation (checkRoot, checkCandidate, checkExample) where
 
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
+import Kyyn.Domain.Evolution (Candidate(..))
 import Kyyn.Domain.Query (QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Root (Root, CheckedValue(..))
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution, checkRootCode, discoverQueries, queryRoot, validateRoot)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readExamples)
 import Kyyn.Porcelain.Validation.Types (Validated(..))
+
+checkCandidate :: (RootExecution :> es, RootStore :> es)
+  => Candidate Root -> Eff es (CheckResult (Candidate (Validated Root)))
+checkCandidate (Candidate context report root) = do
+  result <- checkRoot root
+  pure $ case result of
+    Rejected diagnostics -> Rejected diagnostics
+    Passed checked diagnostics -> Passed (Candidate context report checked) diagnostics
 
 checkRoot :: (RootExecution :> es, RootStore :> es) => Root -> Eff es (CheckResult (Validated Root))
 checkRoot root = do

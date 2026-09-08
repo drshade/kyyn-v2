@@ -1,11 +1,12 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
-  ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs ) where
+  ( EvolutionStore(..), createEvolution, captureEvolution, matchesCapturedInputs, saveCandidate, loadCandidate ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evolution (EvolutionName, EvolutionWorkspace, EvolutionContext, CapturedEvolution)
+import Kyyn.Domain.Evolution (EvolutionName, EvolutionWorkspace, EvolutionContext, CapturedEvolution, Candidate)
+import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Git (GitRevision)
 
@@ -13,6 +14,8 @@ data EvolutionStore :: Effect where
   CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
   CaptureEvolution :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] CapturedEvolution)
   MatchesCapturedInputs :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
+  SaveCandidate :: Candidate Root -> EvolutionStore m ()
+  LoadCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
 
 type instance DispatchOf EvolutionStore = Dynamic
 
@@ -24,3 +27,9 @@ captureEvolution = send . CaptureEvolution
 
 matchesCapturedInputs :: EvolutionStore :> es => EvolutionContext -> Eff es (Either [Diagnostic] Bool)
 matchesCapturedInputs = send . MatchesCapturedInputs
+
+saveCandidate :: EvolutionStore :> es => Candidate Root -> Eff es ()
+saveCandidate = send . SaveCandidate
+
+loadCandidate :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
+loadCandidate = send . LoadCandidate

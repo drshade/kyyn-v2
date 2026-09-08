@@ -6,11 +6,13 @@ const allowed = {
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types'],
   'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionStore',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
     'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Data.ByteString.Char8', 'Kyyn.Plumbing.Protocol.Candidate',
     'Kyyn.Types.Evolution', 'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionReport',
     'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Plumbing.Protocol.Evolution',
     'Kyyn.Domain.Git', 'Kyyn.Domain.Workspace', 'Kyyn.Porcelain.Capability.WorkspaceStore',
@@ -51,6 +53,7 @@ const domainModules = {
   'Kyyn.Domain.Workspace': ['Data.List', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Diagnostic': ['Kyyn.Types.Diagnostic'],
   'Kyyn.Domain.Contract': ['Control.Monad', 'Data.Coerce', 'Crypto.Hash.SHA256', 'Numeric',
+    'Data.Aeson.Types',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Domain.Root': ['Kyyn.Domain.Contract', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Query', 'Kyyn.Domain.Value'],
@@ -62,6 +65,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Candidate': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.ByteString.Lazy',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport',
+    'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact'],
   'Kyyn.Plumbing.Protocol.Evolution': ['Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
     'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.Foldable',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Diagnostic', 'Kyyn.Plumbing.Protocol.Validation',

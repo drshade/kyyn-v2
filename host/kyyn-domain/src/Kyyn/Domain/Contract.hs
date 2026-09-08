@@ -1,12 +1,13 @@
 module Kyyn.Domain.Contract
   ( CheckedContract, ContractId, CollectionContract(..), checkContract
   , rootType, metadataOf, contractShape, contractId, contractFingerprint, collectionContracts
-  , RootContract, checkRootLayout, rootSchema ) where
+  , RootContract, checkRootLayout, rootSchema, describeRootContract, restoreRootContract ) where
 
 import Control.Monad (unless, forM_)
 import Data.Coerce (coerce)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson (Value, toJSON, encode)
+import Data.Aeson.Types (Parser, parseEither, parseJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub)
@@ -176,3 +177,60 @@ metadataValue (SchemaMetadata roles fields collections) = toJSON
     tag Title = "title" :: String
     tag Timeline = "timeline"
     tag Badge = "badge"
+
+describeRootContract :: RootContract -> Value
+describeRootContract root = let contract = rootSchema root in toJSON
+  (1 :: Int, contractFingerprint (contractId contract), typeValue (rootType contract), metadataValue (metadataOf contract))
+
+restoreRootContract :: Value -> Either String (Either [Diagnostic] RootContract)
+restoreRootContract = parseEither $ \value -> do
+  (version, fingerprint, structure, metadata) <- parseJSON value
+  if version /= (1 :: Int) then pure stale else do
+    t <- parseType structure
+    m <- parseMetadata metadata
+    pure $ case checkContract t m >>= checkRootLayout of
+      Right contract | contractFingerprint (contractId (rootSchema contract)) == fingerprint -> Right contract
+      _ -> stale
+  where
+    stale = Left [errorDiagnostic "candidate.stale" "Saved contract no longer matches this kernel; apply the evolution again"]
+
+parseType :: Value -> Parser DataType
+parseType value = do
+  parts <- parseJSON value
+  case parts of
+    [tagValue] -> do
+      tag <- parseJSON tagValue
+      case tag :: String of
+        "text" -> pure StringType
+        "integer" -> pure IntegerType
+        "bool" -> pure BoolType
+        _ -> fail "Unknown scalar contract type"
+    [tagValue, item] -> do
+      tag <- parseJSON tagValue
+      case tag :: String of
+        "list" -> ListType <$> parseType item
+        "optional" -> OptionalType <$> parseType item
+        _ -> fail "Unknown container contract type"
+    [tagValue, name, args, constructors] -> do
+      tag <- parseJSON tagValue
+      unless (tag == ("data" :: String)) (fail "Expected data contract type")
+      Algebraic <$> parseJSON name <*> (parseJSON args >>= traverse parseType)
+        <*> (parseJSON constructors >>= traverse parseConstructor)
+    _ -> fail "Invalid contract type description"
+  where
+    parseConstructor v = do
+      (name, fields) <- parseJSON v
+      Constructor name <$> traverse (\(field,t) -> (,) field <$> parseType t) fields
+
+parseMetadata :: Value -> Parser SchemaMetadata
+parseMetadata value = do
+  (roles, fields, collections) <- parseJSON value
+  SchemaMetadata <$> traverse role roles
+    <*> pure [FieldRole t f r | (t,f,r) <- fields]
+    <*> pure [CollectionDecl n f rs | (n,f,rs) <- collections]
+  where
+    role (name, description, tag) = RoleDecl name description <$> case tag :: String of
+      "title" -> pure Title
+      "timeline" -> pure Timeline
+      "badge" -> pure Badge
+      _ -> fail "Unknown role affordance"

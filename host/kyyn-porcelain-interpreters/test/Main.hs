@@ -14,6 +14,7 @@ import ValidationTests (validationTests)
 import RootExportTests (rootExportTests)
 import WorkspaceTests (workspaceTests)
 import EvolutionCaptureTests (evolutionCaptureTests)
+import CandidateTests (candidateTests)
 import EvolutionExecutionTests (evolutionExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
@@ -90,6 +91,7 @@ main = do
   executionTests contract snapshot
   queryExecutionTests contract snapshot
   validationTests contract snapshot
+  candidateTests contract snapshot
   rootExportTests root
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
 

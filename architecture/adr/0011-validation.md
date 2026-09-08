@@ -7,8 +7,8 @@ date: 2026-09-07
 # Validation checks a complete candidate, not reality
 
 Basis: complete-root checking and the distinction between Candidate and Validated
-follow owner direction. Saved examples and root checking are implemented; candidate,
-accepted-load and complete proposal integration remain outstanding.
+follow owner direction. Saved examples, root checking and candidate checking are
+implemented; accepted-load and complete proposal integration remain outstanding.
 
 ## Context
 
@@ -138,19 +138,16 @@ checked result. The application materializes that result before candidate checki
 RootExecution checks the selected snapshot; it does not invoke the evolution again.
 It delegates builds of checking/query/output adapters to
 [GuestCompilation](0002-runtime.md), then uses ProcessExecution for the resulting
-entry. Loading a saved candidate may require compiling its checking code if the
-build cache is empty; forbidding evolution re-execution does not forbid compilation.
+entry. Checking a loaded candidate compiles its checking code as needed;
+loading the saved value itself does not compile or execute code.
 Compiler flags and toolchain paths remain in the compilation interpreter.
 
-Treat the selected proposal as one build scope: before materializing a candidate,
-typecheck the evolution and every executable entry point to be published in the
-target root, including validation, query and evolution entries, with their captured local dependency
-closure. This includes entries the evolution does not call. Compile errors in any
-of them return `ProposedCodeRejected`, not a later validation report. It does not
-mean compiling unrelated drafts, accepted evolution archives, or source-root
-validators into the proposed program. Before contributes the schema/decoding
-definitions needed by the transformation. There is one proposal-level compilation
-gate and rejection channel; this does not prescribe a module-level build cache.
+EvolutionExecution compiles the evolution and its captured dependency closure
+before materialization. Independent target validators and queries compile during
+candidate checking through CheckRootCode, including entries the evolution never
+calls. Their compilation diagnostics reject checking without erasing the saved
+candidate. Before contributes schema/decoding definitions, not its unrelated
+validators. ADR 0010 owns the evaluation/materialization boundary.
 
 The current root checker calls CheckRootCode before semantic/example evaluation.
 It compiles the validator and every registered query entry using generated typed
@@ -233,7 +230,7 @@ checkRoot
   => Root -> Eff es (CheckResult (Validated Root))
 
 checkCandidate
-  :: (RootStore :> es, RootExecution :> es, Failure :> es)
+  :: (RootStore :> es, RootExecution :> es)
   => Candidate Root
   -> Eff es (CheckResult (Candidate (Validated Root)))
 
@@ -248,8 +245,9 @@ new effect or IO interpreter. It checks code, discovers query contracts, loads
 examples, runs the root validator and checks every example against that same root.
 Errors reject; warnings remain attached to a returned Validated value. Runtime
 Failure propagates unchanged. A root with no examples still requires code and
-semantic checking. The Candidate and accepted-load wrappers above are the later
-composition, not placeholder implementations in this slice.
+semantic checking. `checkCandidate` composes this checker, preserving context and
+report and wrapping only the returned Validated payload. Accepted-load composition
+remains unimplemented.
 
 `checkExample` uses `ExecuteQuery`, not another effect. That operation resolves
 the named query in the supplied root, checks arguments and checks the response
@@ -286,14 +284,14 @@ presentation-only compatibility rule. When a query contract changes, the author 
 rebuilds the example against the new descriptor, checks its values and reviews the
 change. A compatible assertion is carried forward in the target copy without
 re-entering it for every evolution; no automatic compatibility subsystem is needed.
-`checkCandidate` runs the candidate's semantic checks and examples using the
-captured, already typechecked code, and returns the same context and fixed
+`checkCandidate` compiles the candidate's checking code, runs semantic checks and
+examples, and returns the same context and fixed
 evolution report with its validated payload. It does not infer supporting evidence
 from validator reads or rewrite the author's rationale. A passing validator does
 not prove the declared explanation or evidence justified the change.
-Its `Rejected` result reports semantic/example failures, including
-incompatible example contracts, not proposed-source compilation errors. Editing
-the code requires a fresh capture and the compilation gate before checking again.
+Its `Rejected` result reports checking-code compilation, semantic and example
+failures, including incompatible example contracts. Editing the proposed code
+requires a fresh capture and evaluation before checking the new result.
 `loadAcceptedRoot` pins an explicit accepted revision
 at the call site and admits failure of an unknown ordinary Git commit. A failing
 validator therefore does not manufacture `Validated Root` or erase its report.
@@ -342,7 +340,7 @@ Fixtures cover dangling references, impossible durations, warning-only uncertain
 empty roots, changed validators and aggregate discrepancies. A deletion that
 passes structural checking can still fail an example. Loading a root for validated
 use runs its checks, including when an earlier report exists for that revision.
-Test that a compile error in an unused proposed validator, query or tool is caught
-before candidate materialization, while broken unrelated drafts/archives do not
+Test that a compile error in an unused proposed validator or query rejects candidate
+checking, while broken unrelated drafts/archives do not
 enter that build. Test source validation errors remaining visible during a
 successful repair, with candidate failures still blocking acceptance.

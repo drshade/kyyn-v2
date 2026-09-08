@@ -2,7 +2,7 @@
 module Kyyn.Domain.Evolution
   ( EvolutionId, evolutionId, evolutionIdName, EvolutionName(..), EvolutionWorkspace(..), Before(..)
   , EvolutionContext(..), CapturedEvolution(..)
-  , After(..), EvaluatedEvolution(..), PreviewRejection(..)
+  , After(..), EvaluatedEvolution(..), PreviewRejection(..), Candidate(..)
   ) where
 
 import Data.Coerce (coerce)
@@ -44,6 +44,10 @@ data EvolutionContext = EvolutionContext
   } deriving (Eq, Show)
 
 newtype CapturedEvolution = CapturedEvolution EvolutionContext deriving (Eq, Show)
+
+data Candidate a = Candidate
+  { context :: EvolutionContext, report :: EvolutionReport, value :: a }
+  deriving (Eq, Show, Functor)
 
 data After = After { schema :: RootContract } deriving (Eq, Show)
 data EvaluatedEvolution = EvaluatedEvolution

@@ -138,8 +138,9 @@ validation identity matters. Do not rely on wrapper names alone as enforcement.
 The implemented `checkRoot` in ADR 0011 is the constructor-owning path for
 Validated Root. `validatedValue :: Validated a -> a` exposes the checked payload
 without granting a constructor or mapping operation. Saved reports do not bypass
-checking. Candidate/evolution and accepted-load composition remain unimplemented;
-no placeholder wrappers are required to use this root checker.
+checking. Candidate is implemented as ordinary Functor data in the domain package;
+`checkCandidate` preserves its context and report while checking its Root payload.
+Accepted-load composition remains unimplemented.
 
 ## Alternatives and verification
 
