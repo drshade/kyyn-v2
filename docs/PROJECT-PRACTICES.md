@@ -20,7 +20,8 @@ does not become another specification of the product's runtime workflows.
 ## Verification
 
 - **Default PR check:** `bash tools/test.sh`: documentation/import checks, native
-  compilation and process/filesystem tests. Add targeted tests relevant to the change.
+  compilation, process/filesystem tests and pure metadata codec/adapter tests.
+  Add targeted tests relevant to the change.
 - **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
   compilation and codec tests. Run it before declaring an Issue complete, or when
   needed for a particular change or investigation; not for every PR or merge.
@@ -49,6 +50,10 @@ does not become another specification of the product's runtime workflows.
   Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
   cancellation; their reaping assertions currently require POSIX (Linux in CI).
   No complete KB workflow, plugin or Web build exists yet.
+  For the named metadata export boundary alone, after building the bundled tools,
+  run `KYYN_TEST_ROOT="$PWD" cabal test metadata --test-show-details=direct`.
+  This compiles the shared metadata declarations with MicroHs and evaluates the
+  named export through the fixed SDK codec, without running the full codec suite.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 

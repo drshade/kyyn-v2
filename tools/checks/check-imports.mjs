@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
+  'kyyn-types': [],
   'kyyn-domain': ['Data.List', 'Control.DeepSeq', 'GHC.Generics', 'System.FilePath'],
   'kyyn-plumbing': ['Data.List', 'Kyyn.Domain.DataType'],
   'kyyn-microhs': [
@@ -10,7 +11,7 @@ const allowed = {
     'MicroHs.Compile', 'MicroHs.CompileCache', 'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident',
     'MicroHs.SymTab', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
   ],
-  'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String'],
+  'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Runtime.Json'],
   'kyyn-plumbing-interpreters': [
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.Exception',
@@ -21,6 +22,11 @@ const allowed = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.SchemaInspection.Metadata': ['Control.Monad', 'Data.Aeson',
+    'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString', 'Data.List', 'Data.Char', 'Effectful',
+    'Kyyn.Types.SchemaMetadata', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure',
+    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.FileSystem',
+    'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Capability.Failure': ['Effectful', 'Effectful.Error.Static', 'Kyyn.Domain.Failure'],
   'Kyyn.Plumbing.Capability.ProcessExecution': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic'],
   'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path'],
@@ -70,7 +76,7 @@ function files(directory) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = process.argv[2] || process.cwd();
   const errors = Object.keys(allowed).flatMap(pkg =>
-    files(path.join(root, pkg === 'kyyn-runtime' ? 'guest' : 'host', pkg, 'src')).flatMap(file =>
+    files(path.join(root, pkg === 'kyyn-types' ? 'shared' : pkg === 'kyyn-runtime' ? 'guest' : 'host', pkg, 'src')).flatMap(file =>
       checkImports(pkg, fs.readFileSync(file, 'utf8')).map(name => `${file}: forbidden import ${name}`)));
   if (errors.length) {
     console.error(errors.join('\n'));

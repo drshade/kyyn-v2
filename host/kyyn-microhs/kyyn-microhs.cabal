@@ -35,3 +35,14 @@ test-suite codecs
   build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain, kyyn-plumbing,
     aeson ==2.2.5.0, bytestring, directory, filepath, text, temporary ==1.3,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0
+
+test-suite metadata
+  type: exitcode-stdio-1.0
+  main-is: MetadataTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-microhs, kyyn-domain,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    bytestring, text, filepath, temporary ==1.3
