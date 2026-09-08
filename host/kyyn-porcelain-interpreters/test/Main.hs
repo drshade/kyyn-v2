@@ -23,6 +23,12 @@ main = do
   checked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract value))))
   root@(Root _ snapshot savedCode) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code checked))))
   unless (savedCode == code) (fail "Code snapshot changed")
+  unless ("facts/todos/a.dhall" `elem` map (relativeName . fst) (files snapshot)) (fail "Ordinary ID path is not readable")
+  pathValue <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract
+    (rootValue [(name,"path test") | name <- ["todo-001", "A", "a", "index", "con", "com1", "~41", "", "../", "x.y", "🌍"]])))))
+  pathsRoot <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code pathValue))))
+  pathReloaded <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking pathsRoot))))
+  unless (pathReloaded == pathValue) (fail "Escaped names collided or changed IDs")
   let reopen r = runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking r)))
   reopenedFiles <- right (fileTree (files snapshot))
   reopened <- right (reopen (Root contract reopenedFiles code))
@@ -45,7 +51,7 @@ main = do
   forM_ ["[\"a\", \"a\"]", "[\"missing\"]", "[\"a\"]", "[\"../\"]", "[] : List Text"] $ \index -> do
     changed <- right (fileTree [(p, if "index.dhall" `isSuffixOf` relativeName p then index else b) | (p,b) <- files snapshot])
     rejected (reopen (Root contract changed code))
-  let damage replacement = fileTree [(p, if "f-61.dhall" `isSuffixOf` relativeName p then replacement else b) | (p,b) <- files snapshot]
+  let damage replacement = fileTree [(p, if relativeName p == "facts/todos/a.dhall" then replacement else b) | (p,b) <- files snapshot]
   forM_ ["{ id = \"wrong\", value = { title = \"one\" } }", Bytes.pack [255]] $ \bad -> do
     corrupt <- right (damage bad)
     rejected (reopen (Root contract corrupt code))

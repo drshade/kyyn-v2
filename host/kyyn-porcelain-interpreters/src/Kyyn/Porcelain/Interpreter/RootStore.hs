@@ -66,17 +66,23 @@ factShape :: Shape -> Shape
 factShape payload = Record [("id", Scalar TextScalar), ("value", payload)]
 
 collectionDirectory :: String -> String
-collectionDirectory name = "facts/c-" ++ encoded (Text.pack name)
+collectionDirectory name = "facts/" ++ encoded (Text.pack name)
 
 factName :: String -> Text -> String
-factName collection identity = collectionDirectory collection ++ "/f-" ++ encoded identity ++ ".dhall"
+factName collection identity = collectionDirectory collection ++ "/" ++ encoded identity ++ ".dhall"
 
 indexName :: String -> String
 indexName collection = collectionDirectory collection ++ "/index.dhall"
 
 encoded :: Text -> String
-encoded = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
-  . Bytes.unpack . Text.encodeUtf8
+encoded value
+  | not (Text.null value) && Text.all safe value && value `notElem` reserved = Text.unpack value
+  | otherwise = '~' : concatMap hex (Bytes.unpack (Text.encodeUtf8 value))
+  where
+    safe c = c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_'
+    reserved = ["index", "con", "prn", "aux", "nul"] ++
+      [prefix <> Text.pack (show n) | prefix <- ["com", "lpt"], n <- [1 :: Int .. 9]]
+    hex byte = let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits
 
 encodeFile :: Dhall.DhallHandling :> es => String -> Shape -> Value -> Result es (RelativePath, Bytes.ByteString)
 encodeFile name shape value = do
