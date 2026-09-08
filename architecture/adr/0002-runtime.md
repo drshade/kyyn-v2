@@ -97,6 +97,9 @@ combinators. No build-options type precedes a concrete second mode.
 The current locale selection is `C.UTF-8`, verified on Linux; the installed
 toolchain composition must establish the appropriate selection on other supported
 platforms before their release gates pass.
+Source-path collision checks currently compare names case-sensitively. Platforms
+with case-insensitive filesystems also need their filename collision behavior
+verified before the same source-tree contract can be claimed there.
 
 The returned artifact records its input identity:
 

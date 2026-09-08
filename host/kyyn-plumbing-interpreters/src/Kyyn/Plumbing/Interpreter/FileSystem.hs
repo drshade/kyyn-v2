@@ -27,8 +27,8 @@ runFileSystemIO parent = interpret $ \env -> \case
       (\path -> case directoryScope path of
         Right scope -> unlift (action scope)
         Left message -> raiseFailure (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.CreateTemporaryScope path message)))
-  ReadBytes scope path -> native Failure.ReadBytes (scopedPath scope path) $ Bytes.readFile (scopedPath scope path)
-  WriteBytes scope path bytes -> native Failure.WriteBytes (scopedPath scope path) $ do
+  ReadBytes scope path -> native Failure.ReadFile (scopedPath scope path) $ Bytes.readFile (scopedPath scope path)
+  WriteBytes scope path bytes -> native Failure.WriteFile (scopedPath scope path) $ do
     createDirectoryIfMissing True (takeDirectory (scopedPath scope path))
     Bytes.writeFile (scopedPath scope path) bytes
 

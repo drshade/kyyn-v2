@@ -29,6 +29,7 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest so
         output = checkedPath "program.comb"
         root = scopePath toolchain
         compilerEnvironment = [("MHSDIR", root), ("MHSCPPHS", root ++ "/bin/cpphs"), ("LC_ALL", "C.UTF-8"), ("PATH", "")]
+        -- Bare -a clears package search paths; bare -i clears source search paths.
         arguments = ["-a", "-i", "-i" ++ sourceDirectory, "-i" ++ root ++ "/lib"] ++
           [relativeName (sourcePath (selectedEntry sources)), "-o" ++ relativeName output]
     forM_ (sourceFiles sources) $ \(path, bytes) -> writeBytes scope (sourcePath path) bytes

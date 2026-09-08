@@ -60,7 +60,7 @@ testFileSystem = withSystemTempDirectory "kyyn-fs-tests" $ \temporary -> do
       absent scope
   missing <- execute parent $ FS.withTemporaryScope $ \scope -> FS.readBytes scope file
   case missing of
-    Left (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.ReadBytes _ _)) -> pure ()
+    Left (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.ReadFile _ _)) -> pure ()
     _ -> fail "missing file must be a storage failure"
   state <- execute parent $ runState (0 :: Int) $ FS.withTemporaryScope $ \_ -> modify @Int (+1)
   unless (state == Right ((), 1)) (fail "local state lost")

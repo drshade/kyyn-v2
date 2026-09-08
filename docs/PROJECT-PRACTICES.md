@@ -92,6 +92,8 @@ established by this PR; configure the `check` job as required where available.
 - **Published releases:** none. The repo contains design, process and initial codec implementation.
 - **Release runbook:** not yet applicable. Establish and verify one before publishing
   a build; ADRs 0020 and 0022 own distribution and licensing decisions.
+- **Dependency evidence:** [native runtime source inventory](dependency-sources.md)
+  records inspected archive licenses; it is not a complete distribution audit.
 
 ## Additional practices
 
