@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import CheckoutTests (checkoutTests)
 import Control.Monad (unless)
 import Control.Concurrent.Async (concurrently)
 import qualified Data.ByteString as Bytes
@@ -19,7 +20,10 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 main :: IO ()
-main = withSystemTempDirectory "kyyn-git" $ \directory -> do
+main = checkoutTests >> snapshotTests
+
+snapshotTests :: IO ()
+snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git is required for this test") pure
   scope <- either fail pure (directoryScope directory)
   let repo = Repository scope
@@ -128,6 +132,8 @@ main = withSystemTempDirectory "kyyn-git" $ \directory -> do
   case collision of Left _ -> pure (); _ -> fail "Replacement traversed an unrelated file"
   case gitRevision (replicate 40 '0') of Left _ -> pure (); _ -> fail "Zero ID could delete a ref"
   winner <- perform (compareAndSwapRef repo (LocalBranch "main") parent candidate)
+  observed <- perform (compareAndSwapRef repo (LocalBranch "main") parent candidate)
+  assert "Non-zero update exit hid the already-published desired revision" (observed == RefUpdated)
   loser <- perform (compareAndSwapRef repo (LocalBranch "main") parent removed)
   assert "Expected-head CAS did not have exactly one winner" (winner == RefUpdated && loser == RefNotUpdated (Just candidate))
   finalHead <- execute (resolveRevision repo "HEAD")

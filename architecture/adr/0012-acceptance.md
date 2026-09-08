@@ -41,7 +41,7 @@ type CheckedEvolution = Candidate (Validated Root)
 
 data RootPublication :: Effect where
   AcceptEvolution
-    :: LocalBranch -> CheckedEvolution
+    :: LocalBranch -> CommitMetadata -> CheckedEvolution
     -> RootPublication m AcceptanceResult
 
 runRootPublication
@@ -192,11 +192,20 @@ source into the old result. It specializes an overlapping workspace edit with
 that distinct repair, while `OverlappingEdits` covers other paths acceptance would
 overwrite. `CheckoutMismatch` includes detached HEAD. Unexpected
 pre-publication IO failures use [Failure](0019-failures.md). After a successful ref
-update, returned errors/cancellation must retain `AcceptedCommit` and its revision;
-they are not permission to retry acceptance as though nothing happened.
+update, normal returned outcomes must retain `AcceptedCommit` and its revision.
+A checkout synchronization failure is reported alongside that acceptance, not as
+a `Failure` that hides it. A non-zero Git update exit with the ref observed at
+the desired revision also counts as published; the exit status alone must not
+report that publication failed. `RefUpdated` means the desired publication is
+observed in the ref, not that this particular attempt performed the update.
+For the commit constructed for this publication, that is acceptance whichever
+attempt wrote it.
 
-A process can die after the ref update and before returning or synchronizing the
-workspace. On the next acceptance request, inspect the selected branch's Git
+Asynchronous cancellation or process death can interrupt an invocation after the
+ref update and before returning or synchronizing the workspace. Such an
+interruption yields no normal outcome; it does not guarantee delivery of an
+`AcceptedCommit` result and must not be interpreted as evidence of non-acceptance.
+On the next acceptance request, inspect the selected branch's Git
 history before loading/checking a candidate or diagnosing an old Before as a
 rebase request. The committed Accepted archive is authoritative for this lookup,
 not the possibly still-Ready local manifest:
@@ -268,6 +277,39 @@ actionable explanation. Recheck the selection before publication; this is not a
 new long-lived branch/session manager.
 Reading an explicitly selected snapshot remains separate from accepting it.
 
+The Git capability exposes checkout inspection and synchronization independently
+of commit construction and ref publication:
+
+```haskell
+checkedOutBranch :: Git :> es => Repository -> Eff es (Maybe LocalBranch)
+
+checkoutChanges
+  :: Git :> es
+  => Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
+
+synchronizeCheckout
+  :: Git :> es
+  => Repository -> LocalBranch -> GitRevision -> [RelativePath]
+  -> Eff es (Either [Diagnostic] ())
+```
+
+Paths are explicit repository-relative selections; an empty selection touches
+nothing. `checkoutChanges` returns the union of index differences against the
+given revision, working-file differences against the index, and untracked files
+(including ignored files). Staged and working edits that cancel each other must
+not disappear from this check. Publication checks the root selection; the selected
+workspace's authored changes are instead guarded by captured-input matching.
+
+`synchronizeCheckout` requires the selected branch to be checked out at the given
+revision. It uses path-limited `git restore --staged --worktree --no-overlay`, then
+checks the selected paths for remaining differences. It does not advance any ref
+or include other paths. Untracked files absent from the commit are retained and
+reported as incomplete synchronization, not deleted. Operational failures on this
+path become synchronization diagnostics; asynchronous interruption is governed by
+the recovery rule above. Normal acceptance can compose this operation after CAS;
+recovery can inspect Git and synchronize the current accepted checkout separately,
+without reevaluating an evolution or constructing another accepting commit.
+
 Draft workspaces are ordinary local files, not automatically committed or hidden
 in an ignored cache. Creating a draft does not move head. Users/agents can commit
 and share draft files through ordinary Git when desired; that commit advances
@@ -301,6 +343,9 @@ branch does not make every commit valid by definition.
 ## Implementation responsibilities and exclusions
 
 Root export and Git commit/CAS primitives are implemented and tested together;
+scoped checkout inspection/synchronization is implemented with real-Git tests for
+unrelated staged/working/untracked preservation, tracked and untracked drafts,
+deletions, branch/head refusal and retry after an index-lock failure.
 authoritative FindAcceptance is implemented with real-Git history fixtures.
 Lifecycle reads and Ready/Draft transitions are implemented as specified in ADR 0010.
 This is not an implemented AcceptEvolution path. Full acceptance still requires

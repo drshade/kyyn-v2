@@ -85,6 +85,11 @@ does not become another specification of the product's runtime workflows.
   capture, isolated commit construction and expected-head ref updates against Git
   in a temporary repository; it is included in the fast check
   and requires an installed Git executable (tested locally with Git 2.55.0).
+  Scoped checkout fixtures also check branch/head refusal, staged/working changes
+  that cancel each other, ignored root files, deletion, preservation of unrelated
+  staged/working/untracked files and another draft, tracked/untracked selected
+  workspaces, and synchronization retry after an index-lock failure. This is Git
+  plumbing evidence, not a complete acceptance workflow.
   `cabal test file-trees --test-show-details=direct` checks local directory capture
   without running the process cancellation or MicroHs suites; it is included in
   the fast check.
