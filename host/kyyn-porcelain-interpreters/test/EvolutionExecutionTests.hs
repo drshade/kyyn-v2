@@ -3,7 +3,8 @@ module EvolutionExecutionTests (evolutionExecutionTests) where
 
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
-import Effectful (Eff, runEff, (:>))
+import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
+import Effectful (Eff, IOE, liftIO, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -53,9 +54,18 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft declarations)
           before proposed (tree [("Evolution.hs","captured entry")]) (tree []))) root [path "Example.hs",path "Helper.hs"]
       entry = fixtureProgram
-      execute compilation source (CapturedEvolution context _ closure) = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock shell compilation . schemaMock contract . runDhallHandling
-        . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure)
+      execute compilation source (CapturedEvolution context@(EvolutionContext _ _ _
+          (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ declarations) _ _ _ _)) _ closure) = do
+        count <- newIORef 0
+        result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . compileMock shell compilation . schemaMock count contract . runDhallHandling
+          . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure)
+        inspections <- readIORef count
+        case result of
+          Right (Right _) -> unless (inspections == 1 + length declarations)
+            (fail "Execution repeated Before inspection or omitted a target/intermediate inspection")
+          _ -> pure ()
+        pure result
       identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")
       captured = capture target [IntermediateBinding "middleRoot" "Example.Root" "Example.metadata"]
   expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
@@ -100,9 +110,10 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   where
     manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
 
-schemaMock :: RootContract -> Eff (SchemaInspection : es) a -> Eff es a
-schemaMock contract = interpret $ \_ (InspectSchema source) -> pure $
-  if selectedType source == "Example.Root"
+schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
+schemaMock count contract = interpret $ \_ (InspectSchema source) -> do
+  liftIO (modifyIORef' count (+1))
+  pure $ if selectedType source == "Example.Root"
     then Right (InspectedSchema (rootSchema contract) [path "Example.hs",path "Helper.hs"])
     else Left [errorDiagnostic "schema.compiler-rejected" "Missing intermediate export"]
   where path = either error id . relativePath

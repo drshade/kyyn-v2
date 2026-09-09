@@ -72,6 +72,29 @@ evolution = pure . evaluateEvolution
     (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")])) )
 `);
   cli(kb, ['evolution', 'check', created.id]);
+  const validatorPath = path.join(target, 'src', 'Validate.hs');
+  const entryPath = path.join(created.path, 'change', 'Evolution.hs');
+  const validValidator = fs.readFileSync(validatorPath, 'utf8');
+  const updatedEntry = fs.readFileSync(entryPath, 'utf8').replace('First task', 'Updated task');
+  fs.writeFileSync(validatorPath, validValidator.replace('ValidationReport []',
+    'ValidationReport [Diagnostic Error "test.invalid" "Reject the new candidate" Nothing]'));
+  fs.writeFileSync(entryPath, updatedEntry);
+  const invalid = cli(kb, ['evolution', 'check', created.id], 1);
+  assert.equal(invalid.result.candidateSaved, true);
+  assert.equal(invalid.result.passed, false);
+  assert(invalid.diagnostics.some(d => d.code === 'test.invalid'));
+  const rejectedReport = cli(kb, ['evolution', 'show', created.id]).result.report;
+  assert(JSON.stringify(rejectedReport).includes('Updated task'));
+  const candidatePointer = path.join(kb, '.kyyn', 'candidates', 'latest', created.id);
+  const rejectedPointer = fs.readFileSync(candidatePointer, 'utf8');
+  fs.writeFileSync(entryPath, 'module Evolution where\nevolution = missing\n');
+  const broken = cli(kb, ['evolution', 'check', created.id], 1);
+  assert.equal(broken.result.candidateSaved, false);
+  assert.equal(fs.readFileSync(candidatePointer, 'utf8'), rejectedPointer);
+  assert.deepEqual(cli(kb, ['evolution', 'show', created.id]).result.report, rejectedReport);
+  fs.writeFileSync(entryPath, updatedEntry);
+  fs.writeFileSync(validatorPath, validValidator);
+  cli(kb, ['evolution', 'check', created.id]);
   assert.equal(git(kb, 'status', '--porcelain', '--untracked-files=all', '--', '.kyyn'), '');
   assert.equal(git(kb, 'check-ignore', '.kyyn/.gitignore'), '.kyyn/.gitignore');
   assert.equal(git(kb, 'rev-parse', 'HEAD'), initialized.revision);
@@ -79,7 +102,7 @@ evolution = pure . evaluateEvolution
   cli(kb, ['evolution', 'accept', created.id]);
   assert.equal(git(kb, 'rev-parse', 'HEAD^'), initialized.revision);
   assert.deepEqual(cli(kb, ['root', 'show']).result.value,
-    { todos: [{ id: 'todo-001', value: { title: 'First task' } }] });
+    { todos: [{ id: 'todo-001', value: { title: 'Updated task' } }] });
   console.log('Initialized empty KB -> first schema-changing evolution -> accepted collection passed.');
 
   const repo = path.join(temporary, "existing 'quoted' λ");

@@ -48,20 +48,23 @@ does not become another specification of the product's runtime workflows.
   forwarding. Workspace tests use real Dhall with pure projection/matching:
   malformed manifests/layout, input additions/edits/deletions, and exclusion of
   lifecycle state and notes. They neither compile drafts nor verify archives.
-  Evolution capture tests combine real filesystem/Dhall with recording RootOpening:
+  Evolution capture tests combine real filesystem/Dhall with recording Git/RootOpening:
   repository-root/nested KB paths, exact Before copies, revision changes, unfinished
   targets, live matching without source loading, and diagnostics versus operational
   failures. No new MicroHs or Git execution is involved in those capture tests.
   Evolution execution tests use real Dhall/filesystem/process handling and recording
-  RootOpening/schema/compiler handlers. They check exact nested-KB Before selection,
+  schema/compiler handlers. They check captured Before input reuse without RootOpening,
   contract/source mismatch, closure deduplication/collisions, intermediate declarations,
   generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
-  No real guest compilation is involved in these native tests.
+  Recording counts forbid repeated Before opening and require only target/intermediate
+  inspections during execution. No real guest compilation is involved in these native tests.
   Candidate tests in the roots suite check contract-description round trips,
   exact context/root/report persistence, immutable repeated saves, missing/stale/corrupt
   selections and failed publication preserving the last result. Application uses a
   recording evolution handler with real RootStore/Dhall; checking records RootExecution
-  calls. Reload has no source-opening/compiler path and does not restore Validated.
+  calls. Combined check tests cover capture/evaluation, saving before validation,
+  rejected-candidate retention, failed evaluation leaving the pointer unchanged and
+  passing warnings through. Reload has no source-opening/compiler path and does not restore Validated.
   Acceptance-history tests use real Git and Dhall: original introducing commit,
   inherited archive, revert/removal, reacceptance, all-parent merges, ambiguous and
   malformed histories. They forbid live-file/root-opening calls, check exact commit
@@ -210,7 +213,9 @@ recording-handler tests for publication races and absence of evolution replay.
 
 The installed check also runs `tools/test-initialization.mjs`: an empty KB is
 initialized through the CLI and evolved into its first collection. It checks
-new/existing/nested repositories, unrelated staged/working-file preservation,
+new/existing/nested repositories, edited entries/validators through the single check
+command, rejected candidate inspection and earlier-result retention after compilation
+failure, unrelated staged/working-file preservation,
 read-only refusals and explicit recovery after an index-lock synchronization
 failure. Run it independently with the installed executable path, or pass a
 runtime directory as its second argument when using a development executable.

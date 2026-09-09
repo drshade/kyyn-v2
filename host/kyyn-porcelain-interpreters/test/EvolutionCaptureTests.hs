@@ -4,7 +4,8 @@ module EvolutionCaptureTests (evolutionCaptureTests) where
 import Control.Monad (forM_, unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
-import Effectful (Eff, IOE, (:>), runEff)
+import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
+import Effectful (Eff, IOE, (:>), runEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -52,7 +53,8 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   sourceCode <- tree [("kb.dhall", "selected manifest"), ("src/Schema.hs", "selected source"),
     ("src/Helpers.hs", "selected helper"), ("examples/check.dhall", "selected example"),
     ("plugins/config/provider.dhall", "selected config")]
-  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] sourceTree) []
+  expectedClosure <- traverse (right . relativePath) ["Schema.hs", "Helpers.hs"]
+  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] sourceTree) expectedClosure
   forM_ [Nothing, Just "examples/sales"] $ \prefixName -> do
     prefix <- maybe (pure WholeTree) (fmap Subtree . right . relativePath) prefixName
     rootPath <- Subtree <$> right (relativePath (maybe "root" (++ "/root") prefixName))
@@ -65,9 +67,14 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
         execute :: GitRevision -> Either OperationalFailure (Either [Diagnostic] SourceRoot)
           -> Eff TestEffects a
           -> IO (Either OperationalFailure a)
-        execute selected answer = runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-          . runDhallHandling . runRootStore . runWorkspaceStore . selectedGit repo selected rootPath sourceCode . openingMock repo selected rootPath sourceCode answer
-          . runEvolutionStore . runEvolutionAuthoring
+        execute selected answer action = do
+          count <- newIORef 0
+          result <- runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
+            . runDhallHandling . runRootStore . runWorkspaceStore . selectedGit repo selected rootPath sourceCode . openingMock count repo selected rootPath sourceCode answer
+            . runEvolutionStore . runEvolutionAuthoring $ action
+          opens <- readIORef count
+          unless (opens <= 1) (fail "Capture reopened Before within one operation")
+          pure result
         success :: Eff TestEffects a -> IO (Either OperationalFailure a)
         success = execute revision (Right (Right source))
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
@@ -107,7 +114,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
     expectedTarget <- tree [("kb.dhall", "unfinished target manifest"), ("src/Schema.hs", "unfinished target source")]
     emptyFacts <- tree []
-    unless (input == Root contract emptyFacts sourceCode && null closure) (fail "Capture lost its input root or closure")
+    unless (input == Root contract emptyFacts sourceCode && closure == expectedClosure) (fail "Capture lost its input root or closure")
     unless (target == expectedTarget) (fail "Capture changed proposed target bytes")
     snapshot <- noOpening (readWorkspace location) >>= right >>= right
     unless (case context of EvolutionContext _ _ _ material -> snapshot == material)
@@ -158,8 +165,9 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       _ -> fail "Missing workspace did not remain an operational storage failure"
   let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
   rootPath <- Subtree <$> right (relativePath "root")
+  count <- newIORef 0
   failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
-    . openingMock repo revision rootPath sourceCode (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
+    . openingMock count repo revision rootPath sourceCode (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   putStrLn "Evolution capture verifies selected Before copies, KB paths and live input matching."
@@ -180,14 +188,16 @@ selectedGit expectedRepo expectedRevision expectedPath treeBytes = interpret $ \
   _ -> error "Capture read the wrong revision or performed another Git operation"
 
 openingMock
-  :: Failure :> es => Repository -> GitRevision -> TreePath -> FileTree
+  :: (Failure :> es, IOE :> es) => IORef Int -> Repository -> GitRevision -> TreePath -> FileTree
   -> Either OperationalFailure (Either [Diagnostic] SourceRoot)
   -> Eff (RootOpening : es) a -> Eff es a
-openingMock expectedRepo expectedRevision expectedPath expectedTree answer = interpret $ \_ -> \case
-  LoadSourceAt repo revision path
-    | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> either raiseFailure pure answer
-  OpenCapturedSource treeBytes | treeBytes == expectedTree -> either raiseFailure pure answer
-  _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
+openingMock count expectedRepo expectedRevision expectedPath expectedTree answer = interpret $ \_ operation -> do
+  liftIO (modifyIORef' count (+1))
+  case operation of
+    LoadSourceAt repo revision path
+      | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> either raiseFailure pure answer
+    OpenCapturedSource treeBytes | treeBytes == expectedTree -> either raiseFailure pure answer
+    _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
 
 manifest :: Char -> String -> Bytes.ByteString
 manifest digit state = Char8.pack ("{ before = { revision = " ++ show (replicate 40 digit) ++

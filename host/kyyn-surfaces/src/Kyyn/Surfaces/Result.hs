@@ -150,12 +150,12 @@ acceptanceResult result = case result of
   NotAccepted problem -> refusal (case problem of
     BaseMismatch expected actual -> [errorDiagnostic "acceptance.base-mismatch"
       ("Before is " ++ revisionName expected ++ "; current head is " ++ maybe "absent" revisionName actual ++
-       ". Update Before and evaluate/check the evolution again.")]
+       ". Update Before and check the evolution again.")]
     NotReady state -> [errorDiagnostic "acceptance.not-ready" ("Evolution is " ++ show state ++ "; mark it ready before accepting.")]
     CheckoutMismatch (LocalBranch selected) actual -> [errorDiagnostic "acceptance.checkout-mismatch"
       ("Expected checked-out branch " ++ selected ++ "; found " ++ maybe "detached HEAD" (\(LocalBranch name) -> name) actual)]
     WorkspaceChanged identity -> [errorDiagnostic "acceptance.workspace-changed"
-      ("Inputs changed for " ++ evolutionIdName identity ++ "; evaluate it again.")]
+      ("Inputs changed for " ++ evolutionIdName identity ++ "; check it again.")]
     OverlappingEdits paths -> [errorDiagnostic "acceptance.overlapping-edits"
       ("Resolve local edits before accepting: " ++ unwords (map relativeName paths))]
     InvalidMaterial diagnostics -> diagnostics)

@@ -140,7 +140,7 @@ runEvolutionStore = interpret $ \_ -> \case
         code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
         unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
         case decoded of
-          Left _ -> pure (Left [errorDiagnostic "candidate.stale" "Saved result no longer matches this kernel; apply the evolution again"])
+          Left _ -> pure (Left [errorDiagnostic "candidate.stale" "Saved result no longer matches this kernel; check the evolution again"])
           Right (owner,before,after,report) -> do
             unless (owner == identity) (storageFailure ReadFile "candidate.json" "Saved result belongs to another evolution")
             let root = Root after facts code

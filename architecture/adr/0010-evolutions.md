@@ -661,7 +661,7 @@ data EvaluatedEvolution = EvaluatedEvolution
   }
 
 runEvolutionExecution
-  :: (RootStore :> es, RootOpening :> es, PluginInvocation :> es, EvidenceStore :> es,
+  :: (RootStore :> es, PluginInvocation :> es, EvidenceStore :> es,
       GuestCompilation :> es, ProcessExecution :> es,
       FileSystem :> es, SchemaInspection :> es,
       Failure :> es)
