@@ -63,6 +63,12 @@ runFileSystemIO parent = interpret $ \env -> \case
       Left err | isDoesNotExistError err -> pure Nothing
                | otherwise -> ioError err
   CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
+  EntryExists scope path -> native Failure.InspectEntry (scopedPath scope path) $ do
+    result <- try (pathIsSymbolicLink (scopedPath scope path))
+    case result of
+      Right _ -> pure True
+      Left err | isDoesNotExistError err -> pure False
+               | otherwise -> ioError err
   EnsureDirectory scope -> native Failure.EnsureDirectory (scopePath scope) (createDirectoryIfMissing True (scopePath scope))
 
 allocateDirectory :: FilePath -> IO RelativePath

@@ -86,8 +86,9 @@ nearestDirectory scope = do
 
 requireNoGitMetadata :: FS.FileSystem :> es => DirectoryScope -> ExceptT [Diagnostic] (Eff es) ()
 requireNoGitMetadata scope = do
-  names <- liftEff (FS.listDirectory scope)
-  when (any ((== ".git") . relativeName) (maybe [] id names))
+  marker <- checkedPath (relativePath ".git")
+  exists <- liftEff (FS.entryExists scope marker)
+  when exists
     (reject "git.repository-unavailable" "Existing .git metadata could not be opened; repair the repository before initializing a KB.")
   let parent = takeDirectory (scopePath scope)
   unless (parent == scopePath scope) (checkedPath (directoryScope parent) >>= requireNoGitMetadata)

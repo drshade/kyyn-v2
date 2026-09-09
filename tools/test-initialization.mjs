@@ -28,7 +28,12 @@ try {
   git(temporary, 'config', '--global', 'user.email', 'initialization@example.invalid');
   git(temporary, 'config', '--global', 'init.defaultBranch', 'kb-test');
   const kb = path.join(temporary, 'new λ', 'kb');
+  fs.mkdirSync(path.dirname(kb));
+  const unrelatedAncestorEntry = path.join(temporary, 'unrelated:entry');
+  fs.writeFileSync(unrelatedAncestorEntry, 'preserve me');
   const initialized = cli(kb, ['kb', 'init']).result;
+  assert.equal(fs.readFileSync(unrelatedAncestorEntry, 'utf8'), 'preserve me');
+  fs.unlinkSync(unrelatedAncestorEntry);
   assert.equal(initialized.branch, 'kb-test');
   assert.equal(initialized.path, kb);
   assert.equal(git(kb, 'rev-list', '--count', 'HEAD'), '1');
@@ -131,7 +136,7 @@ evolution = pure . evaluateEvolution
     fs.mkdirSync(corrupted);
     if (kind !== 'gitfile') git(corrupted, 'init', '-q');
     const metadata = kind === 'gitfile' ? path.join(corrupted, '.git') : path.join(corrupted, '.git', kind);
-    const bytes = kind === 'gitfile' ? 'gitdir: /nonexistent-kyyn-test-repository\n' : 'broken';
+    const bytes = kind === 'gitfile' ? 'gitdir: /nonexistent-kyyn-test-repository\n' : kind === 'config' ? '[broken\n' : 'broken';
     write(metadata, bytes);
     const destination = path.join(corrupted, 'nested', 'kb');
     assert.equal(cli(destination, ['kb', 'init'], 1).diagnostics[0].code, 'git.repository-unavailable');

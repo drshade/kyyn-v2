@@ -292,6 +292,7 @@ failPublication failure = interpret $ \_ -> \case
   ListDirectory scope -> send (ListDirectory scope)
   CreateUniqueDirectory scope -> send (CreateUniqueDirectory scope)
   EnsureDirectory {} -> error "Candidate persistence must not initialize directories"
+  EntryExists {} -> error "Candidate persistence must not inspect entries"
 
 validationMock :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a
 validationMock expected report = interpret $ \_ -> \case
