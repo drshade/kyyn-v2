@@ -197,6 +197,16 @@ does not become another specification of the product's runtime workflows.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 
+`bash tools/test-installed.sh` stages the development CLI and bundled runtime in
+a disposable directory, then runs the `installed-journey` suite. It is included
+only in `--full`, not the default check. The fixture uses real Git, Dhall and
+MicroHs: a schema-changing evolution is evaluated and accepted in separate
+processes, its archived report survives cache removal, and an inherited required
+example rejects a later deletion until the author deliberately retires that
+assertion. Fixture setup uses the existing example encoder; it is not a second
+on-disk format or a schema-aware production kernel. This complements the native
+recording-handler tests for publication races and absence of evolution replay.
+
 The documentation check validates project-owned documentation, not third-party/vendor/cache trees.
 Historical evidence in neighbouring repositories is cited as source paths rather
 than required local links; a clean checkout is sufficient for this gate. External

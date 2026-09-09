@@ -65,3 +65,12 @@ After acceptance, `show` reads the report from Git. An already-accepted retry or
 incomplete checkout reports a nonzero outcome with the accepted revision. Inspect
 the diagnostics and use `evolution recover ID` when checkout synchronization is
 needed; do not create another evolution merely to retry publication.
+
+For a schema-changing authoring example, see the integration fixture's
+[migration](../host/kyyn/test/journey/Migrate.hs),
+[target schema](../host/kyyn/test/journey/TodoSchemaV2.hs) and
+[queries](../host/kyyn/test/journey/Queries.hs). The
+[journey test](../host/kyyn/test/Journey.hs) shows the CLI sequence and prepares
+saved examples using the host's existing encoder. Run it with
+`bash tools/test-installed.sh`; this is a slower integration check, not necessary
+for each edit to your own evolution.
