@@ -3,7 +3,7 @@ module Kyyn.Surfaces.Result
   ( Response(..), Outcome(..), exitStatus, responseJson, diagnosticText
   , success, refusal, operationalFailure, interruption, previewRefusal
   , rootResult, workspaceResult, summariesResult, inspectionResult, candidateResult
-  , validationResult, acceptanceResult, recoveryResult, stateResult
+  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult
   ) where
 
 import Data.Aeson (Value(..), object, (.=), encode)
@@ -20,6 +20,7 @@ import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root (Root(..), CheckedValue(..))
 import Kyyn.Domain.Workspace (EvolutionState)
+import Kyyn.Porcelain.Validated (Validated, validatedValue)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
@@ -67,10 +68,10 @@ rootResult revision (Root schema _ _) (CheckedValue _ value) = success
   (object ["revision" .= revisionName revision, "schema" .= describeRootContract schema, "value" .= value])
   ["Root at " ++ revisionName revision, jsonText value]
 
-workspaceResult :: EvolutionWorkspace -> FilePath -> Response
-workspaceResult (EvolutionWorkspace _ identity) path = success
-  (object ["id" .= evolutionIdName identity, "path" .= path, "state" .= ("Draft" :: String)])
-  ["Created draft " ++ evolutionIdName identity, path]
+workspaceResult :: EvolutionWorkspace -> GitRevision -> FilePath -> Response
+workspaceResult (EvolutionWorkspace _ identity) revision path = success
+  (object ["id" .= evolutionIdName identity, "path" .= path, "beforeRevision" .= revisionName revision, "state" .= ("Draft" :: String)])
+  ["Created draft " ++ evolutionIdName identity, "Before " ++ revisionName revision, path]
 
 summariesResult :: [EvolutionSummary] -> Response
 summariesResult summaries = success (object ["evolutions" .= map summaryJson summaries])
@@ -92,6 +93,17 @@ validationResult subject (ValidationReport diagnostics) passed = Response
   (if passed then Succeeded else Refused)
   (object ["subject" .= subject, "passed" .= passed])
   [subject ++ if passed then ": checks passed." else ": checks failed."] diagnostics
+
+checkResult :: String -> CheckResult a -> Response
+checkResult subject result = case result of
+  Rejected report -> validationResult subject report False
+  Passed _ report -> validationResult subject report True
+
+inspectionCheckResult :: GitRevision -> CheckResult (Validated Root, CheckedValue) -> Response
+inspectionCheckResult revision result = case result of
+  Rejected report -> validationResult ("Root at " ++ revisionName revision) report False
+  Passed (root,facts) (ValidationReport warnings) -> case rootResult revision (validatedValue root) facts of
+    Response outcome value text _ -> Response outcome value text warnings
 
 stateResult :: EvolutionId -> EvolutionState -> Response
 stateResult identity state = success
@@ -163,7 +175,11 @@ reportText (EvolutionReport steps) = concatMap step steps
 
 diagnosticText :: Diagnostic -> String
 diagnosticText (Diagnostic severity code message location) =
-  show severity ++ " [" ++ code ++ "] " ++ message ++ maybe "" (\value -> " (" ++ show value ++ ")") location
+  show severity ++ " [" ++ code ++ "] " ++ message ++ maybe "" (\value -> " (" ++ locationText value ++ ")") location
+  where
+    locationText (FactLocation collection identity field) = collection ++ "/" ++ identity ++ maybe "" ('.' :) field
+    locationText (SourceLocation path line column) = path ++ ":" ++ show line ++ ":" ++ show column
+    locationText (ExampleLocation name) = "example " ++ name
 
 diagnosticJson :: Diagnostic -> Value
 diagnosticJson (Diagnostic severity code message location) = object

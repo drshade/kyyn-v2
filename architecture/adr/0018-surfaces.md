@@ -173,11 +173,16 @@ another kernel function exists.
 
 For the first CLI, selection uses the checkout's HEAD, with the current local
 branch passed explicitly to acceptance/recovery. There is no branch override.
+Detached HEAD is a branch-selection refusal (`git.detached-head`) for these
+operations: there is no local branch to pass to publication. This is not a
+`CheckoutMismatch` with an invented branch. The kernel still checks for a branch
+change between selection and publication.
 Snapshot reads and creation receive a resolved commit ID; `evolution new --before`
 may select an explicit full commit ID. `root show` checks the selected root before
 returning its structural value; `root check` returns the check report without the
-browsing payload. Creation emits a stable evolution ID and workspace path, not a
-name-based selector. Ready/Draft operations do not implicitly evaluate or check.
+browsing payload. Creation emits a stable evolution ID, workspace path and selected
+Before revision in both human and JSON output, not a name-based selector.
+Ready/Draft operations do not implicitly evaluate or check.
 
 The CLI adapter renders domain values into one JSON envelope:
 
@@ -203,7 +208,9 @@ not an anonymous commit or an interactive prompt. Runtime paths come from the
 installed layout, with `--runtime` and `--git` development overrides. Listing,
 state changes, archived inspection, recovery and already-accepted diagnosis do
 not load the SDK. Host configuration/path resolution and interpretation live in
-`kyyn`; effectful request adapters and pure rendering live in `kyyn-surfaces`.
+`kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
+workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
+Surfaces do not compose root opening, validation or evolution execution themselves.
 
 ### MCP and Web
 

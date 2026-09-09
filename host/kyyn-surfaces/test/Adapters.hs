@@ -24,7 +24,8 @@ import Kyyn.Porcelain.Capability.EvolutionStore
 import Kyyn.Porcelain.Capability.RootOpening
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootStore
-import Kyyn.Surfaces.Actions
+import Kyyn.Porcelain.Capability.Root (inspectRootAt, checkRootAt)
+import Kyyn.Porcelain.Capability.Evolution (checkWorkspace)
 import Kyyn.Surfaces.Cli (RootCommand(..))
 import Kyyn.Surfaces.Result
 
@@ -49,10 +50,12 @@ main = do
       assert label condition = unless condition (fail label)
       runRoot :: RootCommand -> (Response, [String])
       runRoot request = runPureEff . runState ([] :: [String]) . storeRoot value . execution
-        . opening kb revision root $ inspectRoot kb revision request
+        . opening kb revision root $ case request of
+          ShowRoot -> inspectionCheckResult revision <$> inspectRootAt kb revision
+          CheckRoot -> checkResult "Root" <$> checkRootAt kb revision
       runCandidate :: Maybe (Candidate Root) -> (Response, [String])
       runCandidate selected = runPureEff . runState ([] :: [String]) . storeRoot value . execution
-        . candidates selected $ checkWorkspace workspace
+        . candidates selected $ checkResult "Candidate" <$> checkWorkspace workspace
       (shown, showCalls) = runRoot ShowRoot
       (checked, checkCalls) = runRoot CheckRoot
       (candidateChecked, candidateCalls) = runCandidate (Just candidate)
@@ -68,6 +71,20 @@ main = do
       assert "Unicode human output was corrupted" (any (isInfixOf "Unicode λ") messages)
       assert "Warning disappeared" (warnings == [warning])
   assert "Validation rejection exit" (exitStatus (validationResult "root" (ValidationReport []) False) == 1)
+  case workspaceResult workspace revision "/workspace" of
+    Response _ payload messages _ -> do
+      assert "Creation omitted its Before revision"
+        (any (isInfixOf (revisionName revision)) messages)
+      assert "Creation JSON omitted its Before revision"
+        (payload == object ["id" .= evolutionIdName identity, "path" .= ("/workspace" :: String),
+          "beforeRevision" .= revisionName revision, "state" .= ("Draft" :: String)])
+  assert "Human fact location leaked constructors"
+    (diagnosticText (Diagnostic Error "bad" "Invalid" (Just (FactLocation "todos" "001" (Just "title")))) ==
+      "Error [bad] Invalid (todos/001.title)")
+  assert "Human source location" (diagnosticText (Diagnostic Error "bad" "Invalid" (Just (SourceLocation "Schema.hs" 2 3))) ==
+    "Error [bad] Invalid (Schema.hs:2:3)")
+  assert "Human example location" (diagnosticText (Diagnostic Error "bad" "Invalid" (Just (ExampleLocation "receipt"))) ==
+    "Error [bad] Invalid (example receipt)")
   assert "Accepted-complete exit" (exitStatus (acceptanceResult (AcceptedCommit revision WorkingTreeUpdated)) == 0)
   let incomplete = acceptanceResult (AcceptedCommit revision (WorkingTreeUpdateIncomplete [errorDiagnostic "sync" "locked"]))
   assert "Accepted-but-incomplete was hidden" (exitStatus incomplete == 4)

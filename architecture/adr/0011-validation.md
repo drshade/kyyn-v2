@@ -2,13 +2,14 @@
 id: 0011
 title: 'Validation checks a complete candidate, not reality'
 status: accepted
-date: 2026-09-07
+date: 2026-09-09
 ---
 # Validation checks a complete candidate, not reality
 
 Basis: complete-root checking and the distinction between Candidate and Validated
 follow owner direction. Saved examples, root checking and candidate checking are
-implemented; accepted-load and complete proposal integration remain outstanding.
+implemented, including selected-revision loading. The complete installed
+schema-changing proposal journey remains an integration proof.
 
 ## Context
 
@@ -69,6 +70,23 @@ checks. Rules needing both before and after values belong in the evolution's
 fallible transformation; the root validator receives only its selected root.
 Do not replace arbitrary
 whole-root rules with a summary API that cannot express them.
+
+Selected-root application operations belong to porcelain, not a CLI adapter:
+
+```haskell
+checkRootAt
+  :: (RootOpening :> es, RootExecution :> es, RootStore :> es)
+  => KnowledgeBase -> GitRevision -> Eff es (CheckResult (Validated Root))
+
+inspectRootAt
+  :: (RootOpening :> es, RootExecution :> es, RootStore :> es)
+  => KnowledgeBase -> GitRevision
+  -> Eff es (CheckResult (Validated Root, CheckedValue))
+```
+
+Both open and check the explicitly selected revision. Inspection obtains the
+structural browsing value only after checking succeeds, retaining warnings.
+Surfaces render the returned values; they do not implement this checking order.
 
 The authored validator consumes the **guest's concrete root**, with no capability
 row. The native host's execution capability invokes that code on decoded data:

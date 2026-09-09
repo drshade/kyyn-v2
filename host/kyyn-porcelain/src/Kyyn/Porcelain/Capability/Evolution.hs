@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Capability.Evolution (applyEvolution, acceptStoredEvolution) where
+module Kyyn.Porcelain.Capability.Evolution (applyEvolution, evaluateWorkspace, checkWorkspace, acceptStoredEvolution) where
 
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Evolution
@@ -9,10 +9,28 @@ import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution, evaluateEvolution)
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, loadCandidate)
+import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring, captureEvolution)
 import Kyyn.Porcelain.Capability.RootPublication (RootPublication, findAcceptanceOnBranch, acceptEvolution, alreadyAccepted)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.Validation (checkCandidate)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, materializeRoot)
+import Kyyn.Porcelain.Validated (Validated)
+
+evaluateWorkspace :: (EvolutionAuthoring :> es, EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
+evaluateWorkspace workspace = do
+  captured <- captureEvolution workspace
+  either (pure . Left . ProposedCodeRejected) applyEvolution captured
+
+checkWorkspace :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))
+checkWorkspace workspace = do
+  loaded <- loadCandidate workspace
+  case loaded of
+    Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
+    Right Nothing -> pure (Rejected (ValidationReport [errorDiagnostic "evolution.no-candidate"
+      "Evaluate this evolution first; no saved candidate is available"]))
+    Right (Just candidate) -> checkCandidate candidate
 
 applyEvolution :: (EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
   => CapturedEvolution -> Eff es (Either PreviewRejection (Candidate Root))
@@ -38,13 +56,7 @@ acceptStoredEvolution branch metadata workspace = do
     Left diagnostics -> pure (NotAccepted (InvalidMaterial diagnostics))
     Right (Just revision) -> pure (alreadyAccepted revision)
     Right Nothing -> do
-      loaded <- loadCandidate workspace
-      case loaded of
-        Left diagnostics -> pure (NotAccepted (InvalidMaterial diagnostics))
-        Right Nothing -> pure (NotAccepted (InvalidMaterial [errorDiagnostic "evolution.no-candidate"
-          "Evaluate this evolution before accepting it; no saved candidate is available"]))
-        Right (Just candidate) -> do
-          checked <- checkCandidate candidate
-          case checked of
-            Rejected (ValidationReport diagnostics) -> pure (NotAccepted (InvalidMaterial diagnostics))
-            Passed value _ -> acceptEvolution branch metadata value
+      checked <- checkWorkspace workspace
+      case checked of
+        Rejected (ValidationReport diagnostics) -> pure (NotAccepted (InvalidMaterial diagnostics))
+        Passed value _ -> acceptEvolution branch metadata value

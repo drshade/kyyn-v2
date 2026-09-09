@@ -714,6 +714,24 @@ no replacement candidate. An earlier saved candidate is not a successful outcome
 of a later failed evaluation. Publication still requires unchanged captured inputs
 and fresh checking of the explicitly loaded result.
 
+Porcelain also owns the workspace-level application operations:
+
+```haskell
+evaluateWorkspace
+  :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
+      EvolutionStore :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
+
+checkWorkspace
+  :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))
+```
+
+Evaluation captures the workspace and applies that captured evolution. Checking
+loads its saved candidate and checks it without reopening or executing the
+evolution; a missing candidate is a diagnostic refusal. CLI, MCP and Web reuse
+these operations rather than maintaining their own workflow implementations.
+
 Each evolution workspace provides one conventional guest binding, `evolution`.
 Choose a reusable function and bind its arguments in ordinary source:
 

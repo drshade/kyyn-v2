@@ -4,10 +4,10 @@ module Kyyn.Composition (execute) where
 import Effectful (Eff, IOE, runEff)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
-import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
+import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Git (Repository(..))
+import Kyyn.Domain.Git (Repository(..), revisionName)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (directoryScope, scopedPath)
 import qualified Kyyn.Domain.Workspace as Workspace
@@ -26,7 +26,8 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Git (runGit)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
-import Kyyn.Porcelain.Capability.Evolution (acceptStoredEvolution)
+import Kyyn.Porcelain.Capability.Evolution (acceptStoredEvolution, evaluateWorkspace, checkWorkspace)
+import qualified Kyyn.Porcelain.Capability.Root as Root
 import qualified Kyyn.Porcelain.Capability.EvolutionAuthoring as Authoring
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
@@ -43,7 +44,6 @@ import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
-import qualified Kyyn.Surfaces.Actions as Actions
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
 import System.FilePath ((</>))
@@ -87,8 +87,9 @@ execute (Cli.Invocation selection _ command) = do
 dispatch :: Host -> Cli.Command -> SelectedKb -> IO Response
 dispatch host command (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case command of
   Cli.Root request -> withRuntime host $ \toolchain sdk -> finish $
-    runRuntime host toolchain . runRootOpening sdk . runRootExecution sdk $
-      Actions.inspectRoot kb revision request
+    runRuntime host toolchain . runRootOpening sdk . runRootExecution sdk $ case request of
+      Cli.ShowRoot -> inspectionCheckResult revision <$> Root.inspectRootAt kb revision
+      Cli.CheckRoot -> checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision
   Cli.Evolution request -> case request of
     Cli.ListEvolutions selection -> finish $ runMetadata host $
       either refusal summariesResult <$> Store.listEvolutions kb selection
@@ -104,11 +105,11 @@ dispatch host command (SelectedKb kb@(KnowledgeBase (Repository scope) _) revisi
         Left diagnostics -> refusal diagnostics
         Right value -> case Store.workspaceLocation value of
           Left message -> refusal [errorDiagnostic "kb.path" message]
-          Right path -> workspaceResult value (scopedPath scope path)
+          Right path -> workspaceResult value (maybe revision id before) (scopedPath scope path)
     Cli.EvaluateEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runEvaluation host toolchain sdk (Actions.evaluateWorkspace (workspace identity))
+      runEvaluation host toolchain sdk (either previewRefusal candidateResult <$> evaluateWorkspace (workspace identity))
     Cli.CheckEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runChecking host toolchain sdk (Actions.checkWorkspace (workspace identity))
+      runChecking host toolchain sdk (checkResult ("Candidate " ++ evolutionIdName identity) <$> checkWorkspace (workspace identity))
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached
       Just selected -> do
@@ -119,12 +120,17 @@ dispatch host command (SelectedKb kb@(KnowledgeBase (Repository scope) _) revisi
           Right (Left diagnostics) -> pure (refusal diagnostics)
           Right (Right (Just acceptedRevision)) -> pure (acceptanceResult (Publication.alreadyAccepted acceptedRevision))
           Right (Right Nothing) -> do
-            metadata <- commitMetadata ("Accept evolution " ++ evolutionIdName identity ++ "\n")
-            case metadata of
-              Left response -> pure response
-              Right commit -> withRuntime host $ \toolchain sdk -> finish $
-                runChecking host toolchain sdk . runRootPublication $
-                  acceptanceResult <$> acceptStoredEvolution selected commit (workspace identity)
+            summary <- runMetadata host (Store.readEvolutionSummary (workspace identity) revision)
+            case summary of
+              Left failure -> pure (operationalFailure failure)
+              Right (Left diagnostics) -> pure (refusal diagnostics)
+              Right (Right (EvolutionSummary _ (EvolutionName name) _ _)) -> do
+                metadata <- commitMetadata ("Accept evolution " ++ name ++ " (" ++ evolutionIdName identity ++ ")\n")
+                case metadata of
+                  Left response -> pure response
+                  Right commit -> withRuntime host $ \toolchain sdk -> finish $
+                    runChecking host toolchain sdk . runRootPublication $
+                      acceptanceResult <$> acceptStoredEvolution selected commit (workspace identity)
     Cli.RecoverEvolution identity -> case branch of
       Nothing -> pure detached
       Just selected -> finish $ runMetadata host . runRootPublication $
