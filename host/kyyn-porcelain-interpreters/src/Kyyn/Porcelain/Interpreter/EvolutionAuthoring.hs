@@ -37,9 +37,15 @@ runEvolutionAuthoring = interpret $ \_ -> \case
       (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft) sources code change empty))
     parentPath <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)
     parent <- checked (directoryScope (scopedPath scope parentPath))
-    allocated <- ExceptT (Right <$> FileSystem.createUniqueDirectory parent)
-    identity <- checked (evolutionId (relativeName allocated))
+    entries <- ExceptT (Right <$> FileSystem.listDirectory parent)
+    identity <- checked (nextEvolutionId
+      [known | path <- maybe [] id entries, Right known <- [evolutionId (relativeName path)]] (EvolutionName name))
+    allocated <- checked (relativePath (evolutionIdName identity))
     location <- checked (directoryScope (scopedPath parent allocated))
+    ExceptT (Right <$> FileSystem.ensureDirectory parent)
+    created <- ExceptT (Right <$> FileSystem.createDirectory location)
+    unless created (throwE [errorDiagnostic "evolution.exists"
+      (evolutionIdName identity ++ " already exists; create the evolution again with a new local sequence")])
     forM_ (files tree) $ \(path,bytes) -> ExceptT (Right <$> FileSystem.writeBytes location path bytes)
     pure (EvolutionWorkspace kb identity)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do

@@ -201,6 +201,8 @@ may select an explicit full commit ID. `root show` checks the selected root befo
 returning its structural value; `root check` returns the check report without the
 browsing payload. Creation emits a stable evolution ID, workspace path and selected
 Before revision in both human and JSON output, not a name-based selector.
+The generated ID follows [ADR 0010](0010-evolutions.md), for example
+`000001-add-review-status`; subsequent commands take that complete ID.
 Ready/Draft operations do not implicitly evaluate or check.
 
 The CLI adapter renders domain values into one JSON envelope:

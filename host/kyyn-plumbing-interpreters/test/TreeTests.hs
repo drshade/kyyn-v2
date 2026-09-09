@@ -54,6 +54,19 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   absent <- runEff (runFailure (runFileSystemIO scope (FS.readTree missing)))
   case absent of Left _ -> pure (); Right _ -> fail "Missing directory treated as empty"
   allocations <- either fail pure (directoryScope (base </> "allocations"))
+  named <- either fail pure (directoryScope (base </> "reserved"))
+  reservations <- mapConcurrently (\_ -> execute (FS.createDirectory named)) [1..20 :: Int]
+  unless (length (filter id reservations) == 1) (fail "Exclusive directory reservation did not have exactly one winner")
+  execute (FS.writeBytes named (path "retained") "preserved")
+  reservedAgain <- execute (FS.createDirectory named)
+  reservedContents <- execute (FS.readBytes named (path "retained"))
+  unless (not reservedAgain && reservedContents == "preserved") (fail "Named creation reused or modified an existing directory")
+  namedFile <- either fail pure (directoryScope (base </> "nested/value.dhall"))
+  occupied <- execute (FS.createDirectory namedFile)
+  unless (not occupied) (fail "Named creation accepted an existing file")
+  missingParent <- either fail pure (directoryScope (base </> "missing-parent/child"))
+  failedNamed <- runEff (runFailure (runFileSystemIO scope (FS.createDirectory missingParent)))
+  case failedNamed of Left _ -> pure (); Right _ -> fail "Exclusive creation silently created its parent"
   let seed = mkStdGen 42
       (firstNumber, _) = random seed :: (Word64, StdGen)
       collision = path (showHex firstNumber "")

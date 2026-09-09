@@ -125,7 +125,9 @@ does not become another specification of the product's runtime workflows.
   `cabal test file-trees --test-show-details=direct` checks local directory capture
   without running the process cancellation or MicroHs suites; it is included in
   the fast check.
-  It also checks exclusive hexadecimal directory allocation, a seeded collision
+  It also checks exclusive named directory reservation, one winner under concurrent
+  creation, existing-file/directory preservation and missing-parent errors.
+  Random private-directory allocation has a seeded collision
   retry with existing contents preserved, concurrent allocations and parent failure.
   Optional reads distinguish absence from failure. Atomic replacement tests cover
   initial creation, concurrent complete-value reads/writes, temporary cleanup and

@@ -45,6 +45,7 @@ try {
   assert.equal(git(kb, 'rev-list', '--count', 'HEAD'), '1');
 
   const created = cli(kb, ['evolution', 'new', 'first collection']).result;
+  assert.equal(created.id, '000001-first-collection');
   const target = path.join(created.path, 'target');
   fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
   write(path.join(target, 'src', 'RootV2.hs'), `module RootV2 where

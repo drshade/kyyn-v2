@@ -67,7 +67,9 @@ The new root has no fields or collections: `root/src/RootV1.hs` defines its empt
 schema, `root/src/Validate.hs` its validator, and `root/facts/root.dhall` its value.
 Your first evolution can introduce the schema and facts you need. It has no
 queries or saved examples yet. The returned evolution ID identifies a draft
-workspace. Edit its `change/Evolution.hs` and, when changing schema or validation,
+workspace, for example `000001-add-review-status`. Use that full ID in commands;
+the six-digit prefix orders local creation, not acceptance. Edit its
+`change/Evolution.hs` and, when changing schema or validation,
 its `target/` files. `before/` records the selected source. Use the returned ID
 in place of `ID` below:
 

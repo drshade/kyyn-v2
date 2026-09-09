@@ -72,6 +72,7 @@ main = do
     void (ok ["root","check"])
 
     (first,workspace) <- create "simplify-todos"
+    assert "First evolution did not use a numbered slug" (first == "000001-simplify-todos")
     void (git ["config","user.name",""])
     missingIdentity <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
     assert "Missing identity did not refuse before runtime loading"
@@ -119,6 +120,7 @@ main = do
     assert "Wrong accepted facts" (at ["result","value"] reopened == expectedFacts)
 
     (second,secondWorkspace) <- create "remove-report"
+    assert "Accepted workspace did not count toward the sequence" (second == "000002-remove-report")
     copyFile (fixture </> "Delete.hs") (secondWorkspace </> "change/Evolution.hs")
     void (cli (ExitFailure 1) ["evolution","check",second])
     void (ok ["evolution","ready",second])
