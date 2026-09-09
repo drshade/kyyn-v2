@@ -57,7 +57,7 @@ interruption :: Maybe EvolutionId -> Response
 interruption identity = Response Interrupted Null [] [errorDiagnostic "execution.interrupted"
   ("Operation interrupted." ++ maybe "" (\value ->
     " Acceptance may already have occurred. Inspect evolution " ++ evolutionIdName value ++
-    "; use kyyn --kb PATH evolution recover " ++ evolutionIdName value ++ " if accepted.") identity)]
+    "; use kyyn-v2 --kb PATH evolution recover " ++ evolutionIdName value ++ " if accepted.") identity)]
 
 previewRefusal :: PreviewRejection -> Response
 previewRefusal (ProposedCodeRejected diagnostics) = refusal diagnostics

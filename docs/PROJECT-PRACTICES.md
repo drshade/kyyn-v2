@@ -28,7 +28,7 @@ does not become another specification of the product's runtime workflows.
   to check explicit snapshot selection, validation before root browsing, candidate
   checking without root reopening/evolution execution, missing-candidate refusal,
   Unicode rendering, structured diagnostics and publication/interruption exit codes.
-  `node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn)"` exercises the
+  `node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"` exercises the
   actual executable against disposable Git repositories without a runtime or
   valid schema: nested/multiple KBs, cwd default, symlink resolution, missing
   selections and detached recovery. It does not compile guests.
@@ -197,8 +197,8 @@ does not become another specification of the product's runtime workflows.
 - **As implementation arrives:** keep the default check fast and extend full
   integration coverage separately. Do not silently skip failures in a selected check.
 
-`bash tools/test-installed.sh` stages the development CLI and bundled runtime in
-a disposable directory, compares native/self-hosted MicroHs bytecode for a
+`bash tools/test-installed.sh` locally installs the development CLI and bundled runtime in
+a disposable prefix, compares native/self-hosted MicroHs bytecode for a
 metadata entry, then runs the `installed-journey` suite. It is included
 only in `--full`, not the default check. The fixture uses real Git, Dhall and
 MicroHs: a schema-changing evolution is evaluated and accepted in separate

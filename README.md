@@ -17,7 +17,9 @@ failure and cancellation cleanup.
 See [the codec integration fixture](tests/integration/codecs/README.md) for scope
 and supported cases. The initial CLI now wires root inspection/checking and
 evolution authoring, evaluation, checking and acceptance into those handlers.
-See [trying the CLI](docs/cli-development.md) for developer staging and a fresh
+Install locally with `bash tools/install-cli.sh`, then invoke `kyyn-v2` (the
+existing `kyyn` command is left untouched).
+See [trying the CLI](docs/cli-development.md) for installation, developer staging and a fresh
 todo KB. The installed integration journey covers schema-changing acceptance
 and inherited examples; this is not a released distribution.
 
