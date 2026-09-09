@@ -21,6 +21,9 @@ does not become another specification of the product's runtime workflows.
 
 - **Available fast check:** `bash tools/test.sh`: documentation/import checks, native
   compilation, process/filesystem tests and pure metadata codec/adapter/contract tests.
+  `cabal test cli-arguments --test-show-details=direct` checks pure CLI parsing,
+  KB-selection defaults/overrides, command routing, help and invalid arguments.
+  It does not execute KB operations or prove the installed CLI journey.
   The native Dhall boundary has a focused `cabal test dhall-values --test-show-details=direct`
   check, also included in the fast check; it does not compile guest code.
   `cabal test roots --test-show-details=direct` checks RootStore materialization

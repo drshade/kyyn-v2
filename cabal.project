@@ -1,5 +1,6 @@
 packages: shared/kyyn-types host/kyyn-domain host/kyyn-plumbing host/kyyn-microhs host/kyyn-plumbing-interpreters
   host/kyyn-porcelain host/kyyn-porcelain-interpreters
+  host/kyyn-surfaces
   guest/kyyn-sdk vendor/json
 optimization: False
 tests: True

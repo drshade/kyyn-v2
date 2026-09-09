@@ -14,9 +14,10 @@ installer before the product is useful.
 
 An agent can bootstrap/install Kyyn, check readiness, locate or create a KB, and
 launch its Web interface for the human. Explain what was installed and any action
-still needed. ADR 0020 defines the platform and dependency requirements. All
-command spellings below are sketches, not commands already available in the
-prototype or a finalized CLI contract.
+still needed. ADR 0020 defines the platform and dependency requirements.
+CLI navigation and KB selection are owned by
+[ADR 0018](0018-surfaces.md#cli-navigation-and-kb-selection). Examples below
+illustrate the lifecycle, not commands already available in the prototype.
 
 Local secret setup targets the explicitly selected KB checkout's store under ADR 0016.
 An agent can help populate its required keys before invoking sources or sinks;
@@ -81,15 +82,16 @@ deletion and failure behavior. It is not a claim that slice 3 alone can accept.
 The initial automation requirement is a scriptable CLI, not a Kyyn runner or agent
 orchestrator. An external shell script creates an evolution workspace, invokes
 the user's chosen agent harness to populate/trial/refine it and mark it Ready,
-then asks Kyyn to accept it and update a declared output. Command spellings remain
-illustrative:
+then asks Kyyn to accept it and update a declared output. The script is illustrative;
+the helper and argument-file convention are not additional Kyyn interfaces:
 
 ```sh
 set -e
 kyyn evolution new monthly-import
-./prepare-with-agent monthly-import
-kyyn evolution accept monthly-import
-kyyn output update monthly-report --args report-arguments.json
+# ...extract the returned workspace ID into evolution_id...
+./prepare-with-agent "$evolution_id"
+kyyn evolution accept "$evolution_id"
+kyyn output publish monthly-report --args report-arguments.json
 ```
 
 `prepare-with-agent` stands for the user's own script calling an agent, not a

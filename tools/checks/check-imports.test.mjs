@@ -6,6 +6,13 @@ test('pure dependencies are permitted', () => {
   assert.deepEqual(checkImports('kyyn-domain', 'import Data.List (nub)'), []);
   assert.deepEqual(checkImports('kyyn-plumbing', 'import Kyyn.Domain.DataType'), []);
 });
+test('CLI adapters cannot acquire native IO or interpreter dependencies', () => {
+  assert.deepEqual(checkImports('kyyn-surfaces', 'import Options.Applicative'), []);
+  for (const name of ['System.IO', 'System.Directory', 'Kyyn.Plumbing.Capability.Git',
+    'Kyyn.Porcelain.Interpreter.EvolutionStore', 'Kyyn.MicroHs.Inspection']) {
+    assert.deepEqual(checkImports('kyyn-surfaces', `import ${name}`), [name]);
+  }
+});
 test('evolution SDK stays pure and independent of private transport and native host', () => {
   for (const name of ['System.IO', 'Kyyn.Runtime.Json', 'Effectful', 'Kyyn.Domain.Root']) {
     assert.deepEqual(checkImports('kyyn-sdk', `import ${name}`), [name]);

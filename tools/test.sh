@@ -24,6 +24,7 @@ node tools/checks/check-docs.mjs
 node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
+cabal test cli-arguments --test-show-details=direct
 cabal test processes --test-show-details=direct
 cabal test dhall-values --test-show-details=direct
 cabal test roots --test-show-details=direct
