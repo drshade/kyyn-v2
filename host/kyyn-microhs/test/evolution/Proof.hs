@@ -3,6 +3,8 @@ module Proof where
 import qualified EvolutionCore
 import qualified Evolution
 import qualified Identity
+import qualified Kyyn.Workspace.Metadata as Metadata
+import qualified Kyyn.Workspace.Unchanged as Unchanged
 import Kyyn.Evolution
 import Kyyn.Evolution.Internal (RecordedRoot(..), StepObservation(..), EvolutionOutput(..))
 import Kyyn.Types.Fact
@@ -20,6 +22,20 @@ main = do
   case evaluateEvolution Identity.evolution input of
     Right (EvolutionOutput value observations) -> assert (value == input && null observations)
     _ -> fail "Identity scaffold did not return the unchanged root with an empty log"
+  let reason = Rationale "Metadata only" []
+  case evaluateEvolution (Metadata.editBefore reason Right >=> Metadata.evolve reason Right >=> Metadata.editAfter reason Right) input of
+    Right (EvolutionOutput value
+      [StepObservation _ (RecordedRoot b _) (RecordedRoot b' _),
+       StepObservation _ (RecordedRoot b'' _) (RecordedRoot a _),
+       StepObservation _ (RecordedRoot a' _) (RecordedRoot a'' _)]) ->
+         assert (value == input && b == b' && b == b'' && a == a' && a == a'' && a /= b)
+    _ -> fail "Metadata-only steps lost their endpoint identities"
+  case evaluateEvolution (Unchanged.editBefore reason Right >=> Unchanged.editAfter reason Right) input of
+    Right (EvolutionOutput value
+      [StepObservation _ (RecordedRoot b _) (RecordedRoot b' _),
+       StepObservation _ (RecordedRoot a _) (RecordedRoot a' _)]) ->
+         assert (value == input && b == b' && b == a && b == a')
+    _ -> fail "Same-contract edits required an unnecessary transition"
   expectedOld <- either fail pure (parseValue "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"Review\"}}]}")
   expectedRenamed <- either fail pure (parseValue "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"Review λ\"}}]}")
   expectedAfter <- either fail pure (parseValue "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"Review λ\",\"done\":false}}]}")

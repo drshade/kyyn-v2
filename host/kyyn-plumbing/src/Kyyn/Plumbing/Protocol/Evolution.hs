@@ -23,19 +23,19 @@ import Kyyn.Plumbing.Protocol.Validation (parseReport)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
-identityEvolutionSource :: RootContract -> ByteString
-identityEvolutionSource contract = Text.encodeUtf8 (Text.pack (unlines
+identityEvolutionSource :: String -> ByteString
+identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
   [ "module Evolution where"
   , "import Kyyn.Workspace.Evolution"
-  , "import qualified " ++ definingModule selected ++ " as Before"
-  , "import qualified " ++ definingModule selected ++ " as After"
+  , "import qualified " ++ selectedModule ++ " as Before"
+  , "import qualified " ++ selectedModule ++ " as After"
   , ""
-  , "evolution :: Evolution Before." ++ name ++ " After." ++ name
+  , "evolution :: Evolution " ++ aliased "Before" ++ " " ++ aliased "After"
   , "evolution = identityEvolution"
   ]))
   where
-    selected = haskellType (rootType (rootSchema contract))
-    name = drop (length (definingModule selected) + 1) selected
+    selectedModule = definingModule selected
+    aliased name = name ++ "." ++ drop (length selectedModule + 1) selected
 
 evolutionSources :: RootContract -> RootContract -> FileTree -> Either String GuestSources
 evolutionSources before after authored = do

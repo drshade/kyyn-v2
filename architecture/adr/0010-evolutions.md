@@ -17,14 +17,12 @@ must not be disconnected workflows. Evaluation must be useful without acceptance
 
 ## Decision
 
-An evolution is one of the three KB entry-point kinds in ADR 0008. Its entry
-function may obtain evidence through declared host/plugin capabilities and returns
-the proposed after value with its annotated step observations; Kyyn materializes
-a candidate and derives its review report. It never calls `propose`
-internally or implicitly accepts its result. This replaces a separate proposal-
-authoring tool that first gathers inputs and then submits a pure evolution.
+An evolution is one of the three KB entry-point kinds in ADR 0008. The authored
+entry is an `Evolution Before.Root After.Root` value. The generated adapter applies
+it to Before and returns After with annotated step observations; Kyyn materializes
+a candidate and derives its review report. It never implicitly accepts its result.
 
-The reusable `Evolution before after` helper still describes a fallible pure
+The reusable `Evolution before after` value describes a fallible pure
 transformation plus human-readable intent. Same-schema changes use the same type. A workspace
 contains before and after specifications, proposed code, captured inputs and an
 explanation. Code/rule-only changes use an identity data transformation
@@ -43,12 +41,18 @@ data Rationale = Rationale
 
 data Evolution before after  -- pure transformation with annotated boundaries
 
-data RootBinding a  -- generated contract identity and encoding support
+-- Generated in Kyyn.Workspace.Evolution for this workspace:
+editBefore
+  :: Rationale -> (Before.Root -> Either EvolutionFailure Before.Root)
+  -> Evolution Before.Root Before.Root
 
 evolve
-  :: RootBinding before -> RootBinding after
-  -> Rationale -> (before -> Either EvolutionFailure after)
-  -> Evolution before after
+  :: Rationale -> (Before.Root -> Either EvolutionFailure After.Root)
+  -> Evolution Before.Root After.Root
+
+editAfter
+  :: Rationale -> (After.Root -> Either EvolutionFailure After.Root)
+  -> Evolution After.Root After.Root
 
 (>=>) :: Evolution a b -> Evolution b c -> Evolution a c
 
@@ -68,21 +72,34 @@ evaluateEvolution
 data EvolutionFailure = EvolutionFailure [Diagnostic]
 ```
 
-`EvolutionOutput` and `StepObservation` are abstract in the public SDK API; authors
-obtain a successful output through `evaluateEvolution`. The generated adapter uses
+`EvolutionOutput` and `StepObservation` are abstract in the public SDK API; the
+generated adapter calls `evaluateEvolution`, rather than authors wrapping their
+entry in `pure . evaluateEvolution`. Generated step constructors use
 `Kyyn.Evolution.Internal`, which an author can also import from the vendored source.
 Public exports guide construction; they do not enforce observation completeness.
 The host's contract/value and chain checks below are the actual boundary checks.
 
-`RootBinding` is also abstract. Generated `beforeRoot`, `afterRoot` and explicit
-intermediate bindings pair a checked whole contract identity with its typed
-encoder; authors supply those values, not codecs. A type-indexed class would
-conflate distinct metadata contracts on the same Haskell type, so bindings name
-contracts explicitly. For example, a metadata-only edge can use two bindings of
-type `RootBinding Schema.Root` with different identities:
+One workspace has exactly two endpoint contracts: Before and After. Optional
+Before edits precede a transition to After; After edits follow it. Same-contract
+evolutions need no transition step. Ordinary types and helper functions inside a
+step need no contract declaration or encoder; only the annotated boundaries are
+visible to Kyyn. Multiple distinct schema transitions require separate evolutions.
+
+`RootBinding` and the binding-taking step constructor live in
+`Kyyn.Evolution.Internal`. The generated workspace module supplies bindings
+internally, re-exports the public evolution, diagnostic and fact vocabulary, and
+does not export `beforeRoot` or `afterRoot`. For example:
 
 ```haskell
-changeMetadata = evolve beforeRoot afterRoot (Rationale "Revise display metadata" []) Right
+import Kyyn.Workspace.Evolution
+import qualified RootV1 as Before
+import qualified RootV2 as After
+
+evolution :: Evolution Before.Root After.Root
+evolution =
+  editBefore (Rationale "Correct the old title" []) correctTitle
+  >=> evolve (Rationale "Track review status" []) introduceReviewStatus
+  >=> editAfter (Rationale "Remove a cancelled task" []) removeCancelledTask
 ```
 
 The guest `kyyn-sdk` package owns the pure composition implementation and private
@@ -93,48 +110,31 @@ lives with the host plumbing protocol helpers, outside compiler-specific code.
 An SDK output is not yet a host EvolutionReport: execution must check its chain
 and derive changes as described below.
 
-The intermediate type must line up, including across a schema change. A failed
-step stops composition; `Diagnostic` is the shared value described in
-[validation](0011-validation.md). The `evaluateEvolution` function is pure guest
-evaluation; it is not the native host's compiler/process interpreter. No host
-capability appears in that pure helper. The enclosing entry point is different:
+Adjacent types must line up, including across a schema change. A failed step
+stops composition; `Diagnostic` is the shared value described in
+[validation](0011-validation.md). Different endpoint types reject out-of-order
+composition at compilation. When metadata changes without changing the Haskell
+type, the generated bindings still carry distinct contract identities; the host's
+continuity checks reject incorrect ordering. No extra phase type is introduced.
 
-```haskell
--- Guest entry; generated MicrosoftCalls is illustrated in ADR 0009.
-fromEmail
-  :: (EvidenceSnapshotRef, EvidenceRef, EmailId) -> Before.Root
-  -> Program MicrosoftCalls (Either EvolutionFailure (EvolutionOutput After.Root))
-
-fromEmail (snapshot, evidence, emailId) before = do
-  email <- Microsoft.readEmail snapshot emailId
-  pure (evaluateEvolution (changeFromEmail email) before)
-
-changeFromEmail :: Email -> Evolution Before.Root After.Root
-```
-
-The imported proxy returns a typed Email; the author writes matching/business
-logic in `changeFromEmail`. These are illustrative signatures, not implemented
-SDK functions. A purely local entry can simply return `Pure` with its result.
-The entry's request algebra states which work it needs; naming something an
-evolution does not install every host capability.
+The current guest execution is pure. Host/plugin requests, when implemented, belong
+inside the Evolution computation with an explicit request algebra, not in a second
+author-written Program entry surrounding it. The generated adapter owns the runtime
+handoff. Naming something an evolution does not install every host capability.
 
 `StepObservation` is SDK-produced data, not a closure or a second authored wire
 format. Generated bindings retain the contract identity and encoded root values
 on both sides of each `evolve` boundary. The host decodes those observations and
-derives the actual changes while both sides are available. This explicitly
-includes intermediate schemas: each annotated boundary must have a supported
-root contract and generated encoding. There is no introspection of arbitrary
-intermediate Haskell values. Ordinary helper functions within a step need no
-annotation or encoding instance.
-For a Before-to-Mid-to-After composition, Mid is an explicit schema in the
-workspace and goes through inspection/binding generation like Before and After.
-The intermediate contract is not inferred from an uninspected function body.
+derives the actual changes while both sides are available. Boundary values use
+only Before or After's contract. There is no registry of intermediate schemas
+and no introspection of arbitrary helper values inside a step.
 
 The host must check that observations form the evaluated chain from the selected
 Before to the returned result; an independently authored list of claimed changed
 IDs is not the diff. Compare contract identities and decoded values structurally:
 the first observed before must match the selected Before, adjacent endpoints
-must match, and the final observed after must match the returned result. An empty
+must match, and the final observed after must match the returned result. Once the
+chain enters a distinct After contract it cannot return to Before. An empty
 chain is valid only for an unchanged root value and contract, as with identity.
 A mismatch returns `ProposedCodeRejected` with a host diagnostic, not a successful
 candidate with an invented unannotated step or incomplete report.
@@ -223,7 +223,7 @@ Propose a complete target copy, not a patch overlay on the current root:
 
 ```text
 evolutions/<id>/
-  manifest.dhall      Before revision, state, name, explanation, intermediate bindings
+  manifest.dhall      Before revision, state, name, explanation
   before/            source schema/imports copied from the selected commit
   target/            complete proposed non-fact contents of root/
   change/            Evolution.hs and evolution-only helpers/input files
@@ -242,7 +242,7 @@ selected Git commit remains authoritative. Capture verifies those definitions
 against that commit; rebasing refreshes them. `change/` and `before/` are archived,
 not installed into the current root. The manifest's explanation covers the whole
 proposal, including source/config/example-only changes with no fact history entry.
-Its explanation, Before selection and intermediate declarations are captured; lifecycle state and separate
+Its explanation and Before selection are captured; lifecycle state and separate
 review notes are not evaluation inputs. Changing a note does not change a candidate.
 
 The manifest is a hermetic Dhall value with this shape:
@@ -252,16 +252,8 @@ The manifest is a hermetic Dhall value with this shape:
 , name : Text
 , explanation : Text
 , state : < Draft | Ready | Accepted >
-, intermediates : List { name : Text, schemaType : Text, schemaMetadata : Text }
 }
 ```
-
-Creation sets `intermediates` to an empty list. An author declares a named intermediate
-binding here, selecting its Haskell type and metadata export; the defining modules
-can live in `change/`. `beforeRoot` and `afterRoot` are generated from the selected
-Before and target, not repeated in this list. Names must be valid, unique binding
-identifiers and must not collide with those two generated names. Build preparation
-checks declarations and inspects their exports; capture still permits unfinished code.
 
 The revision is a full Git commit object ID, not a branch name or short prefix.
 `WorkspaceStore` decodes and projects an explicit file tree; it does not inspect
@@ -291,7 +283,7 @@ not another captured subtree. Projection rejects other files
 outside the layout and any `target/facts` tree. Incomplete draft source is
 capturable; projection does not promise that it compiles or matches the selected
 commit. Evolution capture performs that source-selection check separately.
-Input equality compares the parsed Before revision, name, explanation and intermediate declarations, and
+Input equality compares the parsed Before revision, name and explanation, and
 the exact before/target/change paths and bytes. Manifest formatting, lifecycle
 state and notes are excluded. A same-schema code/configuration edit still changes
 the inputs. This pure comparison is not the store's live-workspace read or its
@@ -525,7 +517,7 @@ Resolve uses this same existence/state derivation and never creates a workspace.
 
 MarkReady and MarkDraft pin HEAD once, refuse already-accepted and unknown workspaces,
 then atomically replace only the local manifest. They preserve Before, name,
-explanation and intermediate declarations; source, target, changes and notes are
+explanation; source, target, changes and notes are
 untouched. Manifest formatting may normalize through Dhall. Neither transition
 compiles, evaluates, validates or commits anything, and matchesCapturedInputs remains
 true across the transition. An explicit transition can correct an unverified local
@@ -630,17 +622,21 @@ for inspection/removal. Creation does not update Git and does not promise atomic
 multi-file persistence under crashes.
 
 Creation writes a real identity entry at `change/Evolution.hs`, with module name
-`Evolution` and binding `evolution`. Its generic signature is valid for the copied
-same-schema target and specializes to the selected root at build preparation:
+`Evolution` and binding `evolution`. The signature names the selected schema with
+qualified Before/After aliases; creation initially copies the same schema to both:
 
 ```haskell
-evolution :: root -> Program calls (Either EvolutionFailure (EvolutionOutput root))
-evolution = pure . evaluateEvolution identityEvolution
+import Kyyn.Workspace.Evolution
+import qualified RootV1 as Before
+import qualified RootV1 as After
+
+evolution :: Evolution Before.Root After.Root
+evolution = identityEvolution
 ```
 
-Authors refine that entry with their concrete Before/After types and declared
-capabilities when implementing a change. A pure entry stays polymorphic in its
-request algebra; it does not gain a host capability through the identity scaffold.
+Authors update the After import when changing its schema. Identity then fails to
+type-check until the author supplies the transformation. The generated workspace
+module is derived during preparation, not a second authored schema or codec.
 `EvolutionWorkspace` carries only its key and owning KB; its location is derived.
 
 The host loads the selected structurally readable source snapshot and evaluates the
@@ -693,7 +689,7 @@ EvolutionExecution consumes the input Root and dependency closure supplied by
 capture, rather than loading or inspecting Before again. A Root alone does not
 establish its origin: the capture operation derives it from the selected immutable
 Git subtree. Execution checks its contract and source against the context, then
-decodes its facts. It inspects the target and declared intermediates normally.
+decodes its facts. It inspects the target normally; there are no other contracts.
 The input need not pass semantic validation. An evolution can therefore
 repair invalid facts introduced by an ordinary Git edit or merge. Preview surfaces
 the source validation report separately, without treating its errors as rejection
@@ -759,14 +755,12 @@ Each evolution workspace provides one conventional guest binding, `evolution`.
 Choose a reusable function and bind its arguments in ordinary source:
 
 ```haskell
-evolution
-  :: Before.Root
-  -> Program SalesCalls (Either EvolutionFailure (EvolutionOutput After.Root))
+evolution :: Evolution Before.Root After.Root
 evolution = importSales September
 ```
 
-`SalesCalls` illustrates the helper's declared capabilities. `importSales` may be
-a reusable parameterized helper, but the workspace entry has already bound its
+`importSales` illustrates a reusable parameterized helper over supplied data; the
+workspace entry has already bound its
 business arguments. Its only remaining input is the root selected by Before.
 Capture includes this binding and the source/dependencies and supporting input
 files it uses. There is no separate selected-entry field, argument manifest or
@@ -870,14 +864,13 @@ descriptions supplied by the guest:
 ```haskell
 checkEvolutionReport
   :: RootStore :> es
-  => [RootContract]   -- explicitly inspected intermediate contracts
-  -> RootContract -> Value  -- selected Before and its decoded value
+  => RootContract -> Value  -- selected Before and its decoded value
   -> RootContract           -- inspected target
   -> EvolutionObservation   -- decoded guest After value and step observations
   -> Eff es (Either [Diagnostic] (CheckedValue, EvolutionReport))
 ```
 
-This capability function checks every source, intermediate and target value through
+This capability function checks every annotated boundary value through
 RootStore, checks the complete chain, then derives the report. It does not claim
 that an arbitrary supplied Before value came from Git: EvolutionExecution owns
 selecting that input as described above. Guest refusal is decoded separately from
@@ -1005,15 +998,13 @@ changes, additions/deletions, cancelling edits and position-independent matching
 The separate workspace execution proof uses the actual EvolutionExecution handler,
 RootOpening, schema inspection, MicroHs compilation/evaluation and Dhall stores.
 Its recording Git handler supplies only the context's exact Before subtree. The
-handler evaluates a value edit, metadata transition and schema migration, retaining
+handler evaluates a Before edit, schema migration and After edit, retaining
 the captured context; the test materializes and reopens exactly the checked After.
 Changed unrelated Before validators/metadata modules do not enter the compilation.
 Native recording-handler tests cover preparation/compilation errors, guest refusal,
-runtime/protocol failure, closure collisions and captured intermediate declarations.
+runtime/protocol failure, closure collisions and rejection of unknown contracts.
 
-The implemented execution path specializes the entry to `Program NoRequests`;
-no plugin handlers are installed until the plugin invocation slice exists. A
-concretely effectful entry is a type error on this path, not an ignored request.
-Successful evaluation returns `EvaluatedEvolution`, not a Candidate. Candidate
-materialization/persistence through `applyEvolution` remains unimplemented; no
-unsaved candidate bypasses the SaveCandidate-before-return rule above.
+The implemented execution adapter lifts pure Evolution evaluation into
+`Program NoRequests` for the runtime; no plugin handlers are installed yet.
+Successful execution returns `EvaluatedEvolution`, which `applyEvolution`
+materializes and saves before returning a Candidate.

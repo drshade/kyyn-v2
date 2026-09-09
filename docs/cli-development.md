@@ -99,6 +99,31 @@ Acceptance uses the repository's configured Git identity; existing
 global configuration also works, so those `git config` commands are unnecessary
 when your identity is already configured. `accept` freshly checks the saved
 result rather than executing the evolution again.
+
+An authored entry is the evolution itself, with a rationale for each step:
+
+```haskell
+module Evolution where
+import Kyyn.Workspace.Evolution
+import qualified RootV1 as Before
+import qualified RootV2 as After
+
+evolution :: Evolution Before.Root After.Root
+evolution =
+  editBefore (Rationale "Correct an old title" []) correctTitle
+  >=> evolve (Rationale "Add review status" []) addReviewStatus
+  >=> editAfter (Rationale "Remove the cancelled task" []) removeCancelledTask
+```
+
+The three helpers in this sketch are ordinary authored functions returning
+`Either EvolutionFailure` of the appropriate root. `Kyyn.Workspace.Evolution`
+is generated when checking: it supplies the endpoint-specific step constructors,
+composition, rationale/evidence, fact and diagnostic types. No generated bindings
+or execution wrapper need to be supplied. Each step produces its own diff.
+Same-schema changes can use only edits. For a schema change, give the new module
+a distinct name, update `target/kb.dhall` and the After import, and implement
+the transition with `evolve`. Temporary helper types need no declaration.
+
 Inspect the candidate and its rationale with `show` before
 acceptance. Use `evolution draft ID` to return unfinished work to Draft.
 

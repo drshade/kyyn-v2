@@ -122,10 +122,10 @@ compileMock shell result = interpret $ \_ -> \case
     let entries = [(relativeName p,b) | (p,b) <- sourceFiles sources]
     unless (lookup "Checks.hs" entries == Just "new checks" && lookup "Helper.hs" entries == Just "helper" &&
       lookup "Evolution.hs" entries == Just "captured entry" &&
-      maybe False (Bytes.isInfixOf "selected = Evolution.evolution") (lookup "KyynEvolutionEntry.hs" entries) &&
+      maybe False (Bytes.isInfixOf "selected = pure . evaluateEvolution Evolution.evolution") (lookup "KyynEvolutionEntry.hs" entries) &&
       maybe False (Bytes.isInfixOf "Program NoRequests") (lookup "KyynEvolutionEntry.hs" entries) &&
-      maybe False (Bytes.isInfixOf "middleRoot") (lookup "KyynEvolutionBindings.hs" entries))
-      (error "Execution sources did not preserve target/helpers/intermediate bindings or included old checks")
+      maybe False (Bytes.isInfixOf "editAfter = Internal.evolve afterRoot afterRoot") (lookup "Kyyn/Workspace/Evolution.hs" entries))
+      (error "Execution sources did not preserve target/helpers/generated steps or included old checks")
     pure result
 
 right :: Show e => Either e a -> IO a

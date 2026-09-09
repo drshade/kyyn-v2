@@ -14,7 +14,7 @@ import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
-import Kyyn.Domain.FileTree (FileTree, files)
+import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply)
@@ -45,7 +45,7 @@ main = do
     (fail "Generated bindings lost their whole contract identities")
   getArgs >>= \args -> case args of
     ["--pure"] -> pure ()
-    [] -> integration before after bindings
+    [] -> integration before renamed after bindings
     _ -> fail "usage: evolutions [--pure]"
 
 checked :: String -> [(Maybe String,DataType)] -> String -> IO RootContract
@@ -57,22 +57,24 @@ checked moduleName fields label = right $ checkContract root metadata >>= checkR
     root = Algebraic (moduleName ++ ".Root") [] [Constructor (moduleName ++ ".Root") [(Just "todos",ListType fact)]]
     metadata = SchemaMetadata [RoleDecl "title" label Title] [] [CollectionDecl "todos" "todos" []]
 
-integration :: RootContract -> RootContract -> FileTree -> IO ()
-integration before after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
+integration :: RootContract -> RootContract -> RootContract -> FileTree -> IO ()
+integration before renamed after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope (repo </> "vendor/MicroHs"))
   let path = either error id . relativePath
       load base name = (,) (path name) <$> Bytes.readFile (repo </> base </> name)
   authored <- mapM (load "host/kyyn-microhs/test/evolution") ["SchemaV1.hs","SchemaV2.hs","Evolution.hs","Proof.hs"]
+  metadataBindings <- renamedBindings "Metadata" before renamed
+  sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs"]] ++
      [load "guest/kyyn-sdk/test" "EvolutionCore.hs"] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
-  let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource before)))
-      captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings
+  let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource "SchemaV1.Root")))
+      captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings ++ files metadataBindings ++ files sameBindings
       compileGuestFiles entries = do
         sources <- right (guestSources (path "Proof.hs") entries)
         runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $ compileGuest sources
@@ -120,6 +122,17 @@ integration before after bindings = withSystemTempDirectory "kyyn-evolution-proo
       Right (Right _) -> fail (label ++ " compiled under MicroHs")
   putStr expected
   putStrLn "GHC and MicroHs agree; wrong binding types and private constructors are rejected."
+
+renamedBindings :: String -> RootContract -> RootContract -> IO FileTree
+renamedBindings name before after = do
+  generated <- right (evolutionBindings before after)
+  let rename = Text.replace "KyynEvolutionCodec" (Text.pack ("Kyyn" ++ name ++ "Codec")) .
+        Text.replace "Kyyn.Workspace.Evolution" (Text.pack ("Kyyn.Workspace." ++ name)) .
+        Text.replace "Kyyn/Workspace/Evolution" (Text.pack ("Kyyn/Workspace/" ++ name))
+  entries <- traverse (\(p,b) -> do
+    renamed <- right (relativePath (Text.unpack (rename (Text.pack (relativeName p)))))
+    pure (renamed,Text.encodeUtf8 (rename (Text.decodeUtf8 b)))) (files generated)
+  right (fileTree entries)
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

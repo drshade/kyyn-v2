@@ -54,9 +54,9 @@ does not become another specification of the product's runtime workflows.
   failures. No new MicroHs or Git execution is involved in those capture tests.
   Evolution execution tests use real Dhall/filesystem/process handling and recording
   schema/compiler handlers. They check captured Before input reuse without RootOpening,
-  contract/source mismatch, closure deduplication/collisions, intermediate declarations,
+  contract/source mismatch, closure deduplication/collisions, generated endpoint steps,
   generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
-  Recording counts forbid repeated Before opening and require only target/intermediate
+  Recording counts forbid repeated Before opening and require only target
   inspections during execution. No real guest compilation is involved in these native tests.
   Candidate tests in the roots suite check contract-description round trips,
   exact context/root/report persistence, immutable repeated saves, missing/stale/corrupt

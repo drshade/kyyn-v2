@@ -87,7 +87,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) _ _ <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
-    identityEntry <- tree [("Evolution.hs",identityEvolutionSource contract)]
+    identityEntry <- tree [("Evolution.hs",identityEvolutionSource "Schema.Root")]
     unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
       createdBefore == sourceTree && createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
       (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
