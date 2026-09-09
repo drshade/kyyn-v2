@@ -96,7 +96,7 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
         run :: Bool -> Maybe Bool -> (String -> IO ()) -> Eff Effects a -> IO a
         run opening validation hook action = do
           result <- runEff . runFailure . runFileSystemIO scope . runProcessExecutionIO
-            . runGit executable . gitHook hook . runDhallHandling . runRootStore
+            . runGit executable [] . gitHook hook . runDhallHandling . runRootStore
             . runWorkspaceStore . schemaMock contract
             . (if opening then runRootOpening (tree []) else noOpening)
             . runEvolutionStore . runEvolutionAuthoring . evaluationMock output . validationMock validation

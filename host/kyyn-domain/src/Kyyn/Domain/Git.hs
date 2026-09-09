@@ -1,6 +1,6 @@
 module Kyyn.Domain.Git
   ( Repository(..), GitRevision, gitRevision, revisionName, TreePath(..)
-  , LocalBranch(..), GitTree(..), CommitIdentity(..), CommitMetadata(..), RefUpdate(..)
+  , LocalBranch(..), GitTree(..), GitUser(..), CommitIdentity(..), CommitMetadata(..), RefUpdate(..)
   ) where
 
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
@@ -13,6 +13,7 @@ data TreePath = WholeTree | Subtree RelativePath deriving (Eq, Show)
 -- Short branch name, checked by Git before use beneath refs/heads/.
 newtype LocalBranch = LocalBranch String deriving (Eq, Show)
 newtype GitTree = GitTree [(TreePath, FileTree)] deriving (Eq, Show)
+data GitUser = GitUser String String deriving (Eq, Show)
 data CommitIdentity = CommitIdentity
   { name :: String, email :: String, date :: String } deriving (Eq, Show)
 data CommitMetadata = CommitMetadata

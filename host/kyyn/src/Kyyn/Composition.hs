@@ -56,8 +56,8 @@ type Evaluation = EvolutionExecution ': Authoring
 type Checking = RootExecution ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runBase :: Host -> Eff Base a -> IO (Either OperationalFailure a)
-runBase (Host executable temp _) = runEff . runFailure . runProcessExecutionIO
-  . runFileSystemIO temp . runGit executable . runDhallHandling . runRootStore
+runBase (Host executable environment temp _) = runEff . runFailure . runProcessExecutionIO
+  . runFileSystemIO temp . runGit executable environment . runDhallHandling . runRootStore
 
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
 runMetadata host = runBase host . runWorkspaceStore . runEvolutionStore
@@ -125,7 +125,7 @@ dispatch host command (SelectedKb kb@(KnowledgeBase (Repository scope) _) revisi
               Left failure -> pure (operationalFailure failure)
               Right (Left diagnostics) -> pure (refusal diagnostics)
               Right (Right (EvolutionSummary _ (EvolutionName name) _ _)) -> do
-                metadata <- commitMetadata ("Accept evolution " ++ name ++ " (" ++ evolutionIdName identity ++ ")\n")
+                metadata <- commitMetadata host (Repository scope) ("Accept evolution " ++ name ++ " (" ++ evolutionIdName identity ++ ")\n")
                 case metadata of
                   Left response -> pure response
                   Right commit -> withRuntime host $ \toolchain sdk -> finish $
@@ -143,7 +143,7 @@ finish :: IO (Either OperationalFailure Response) -> IO Response
 finish action = either operationalFailure id <$> action
 
 withRuntime :: Host -> (GuestToolchain -> FileTree -> IO Response) -> IO Response
-withRuntime (Host _ temp runtime) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
+withRuntime (Host _ _ temp runtime) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
   (Right toolchain,Right sdkScope) -> do
     loaded <- runEff . runFailure . runFileSystemIO temp $ readTree sdkScope
     case loaded of

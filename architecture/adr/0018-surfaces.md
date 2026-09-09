@@ -200,11 +200,23 @@ already-accepted retry), and 130 for user interruption. Code 4 must retain the
 accepting revision; it is not an invitation to reapply the evolution. These exits
 render [ADR 0019](0019-failures.md)'s outcomes rather than adding domain states.
 
-The host composition root obtains acceptance identities from `GIT_AUTHOR_NAME`
-and `GIT_AUTHOR_EMAIL`; optional `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL` override
-the committer, otherwise the author is used. It supplies the current clock time
-to explicit Git commit metadata. Missing identity is an actionable refusal,
-not an anonymous commit or an interactive prompt. Runtime paths come from the
+The host composition root obtains `user.name` and `user.email` through Git
+plumbing in the selected repository. Git resolves local, global and included
+configuration; the host supplies its HOME/XDG configuration locations explicitly.
+Both author and committer use that configured identity, with the host's current
+clock time in explicit commit metadata. There is no CLI or author/committer
+environment override path. Missing/blank identity is an actionable refusal before
+compilation or mutation; already-accepted diagnosis precedes identity lookup.
+Malformed configuration is an operational failure. The plumbing operation is:
+
+```haskell
+data GitUser = GitUser String String -- configured name and email
+
+readUserIdentity
+  :: Git :> es => Repository -> Eff es (Either [Diagnostic] GitUser)
+```
+
+Runtime paths come from the
 installed layout, with `--runtime` and `--git` development overrides. Listing,
 state changes, archived inspection, recovery and already-accepted diagnosis do
 not load the SDK. Host configuration/path resolution and interpretation live in

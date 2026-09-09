@@ -71,7 +71,7 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
         case result of Right (bytes,Process.ProcessExit 0 _) -> pure bytes; _ -> fail (show result)
       command args = () <$ process args
       git :: Eff [Git, Process.ProcessExecution, Failure, IOE] a -> IO a
-      git action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) pure
+      git action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= either (fail . show) pure
       readGit :: Eff [Git, Process.ProcessExecution, Failure, IOE] (Either [Diagnostic] a) -> IO a
       readGit action = git action >>= either (fail . show) pure
   command ["init","-q","--ref-format=files","-b","main"]
@@ -117,11 +117,11 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   recordBytes <- maybe (fail "Committed archive lacks result.json") pure (lookup (path "result.json") (files reopenedArchive))
   decodedRecord <- either fail pure (decodeEvolutionRecord recordBytes) >>= either (fail . show) pure
   unless (decodedRecord == (workspaceId,contract,contract,report)) (fail "Committed record changed contracts/report")
-  accepted <- runEff . runFailure . runProcessExecutionIO . runGit executable . runFileSystemIO scope
+  accepted <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . runFileSystemIO scope
     . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
       findAcceptance kb workspaceId revision
   unless (accepted == Right (Right (Just revision))) (fail "Combined commit did not introduce its Accepted archive")
-  opened <- runEff . runFailure . runProcessExecutionIO . runGit executable . schemaMock (rootSchema contract)
+  opened <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . schemaMock (rootSchema contract)
     . runDhallHandling . runRootStore . runRootOpening (tree []) $ openCapturedRoot reopened
   unless (opened == Right (Right (validatedValue checked))) (fail "Reopened Root differs from the validated input")
   contents <- process ["show",revisionName revision ++ ":outside"]

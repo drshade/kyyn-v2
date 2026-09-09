@@ -155,6 +155,7 @@ schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->
 
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case
+  Git.ReadUserIdentity _ -> error "Root opening must not read commit identity"
   Git.DiscoverRepository _ -> error "Root opening unexpectedly discovered a repository"
   Git.ResolveRevision _ _ -> error "RootOpening must not resolve the revision again"
   Git.ReadTreeAt _ revision (Subtree prefix)

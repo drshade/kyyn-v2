@@ -5,6 +5,7 @@ import Control.Monad (forM, foldM, unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
+import Data.Char (isSpace)
 import Data.List (groupBy, sortOn, isPrefixOf, tails, nub, sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -21,8 +22,10 @@ import Kyyn.Plumbing.Capability.Git
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 import System.FilePath (makeRelative)
 
-runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es) => FilePath -> Eff (Git : es) a -> Eff es a
-runGit executable = interpret $ \_ -> \case
+runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es)
+  => FilePath -> [(String, String)] -> Eff (Git : es) a -> Eff es a
+runGit executable configurationEnvironment = interpret $ \_ -> \case
+  ReadUserIdentity repo -> runExceptT $ GitUser <$> configured repo "user.name" <*> configured repo "user.email"
   DiscoverRepository scope -> do
     (output, Process.ProcessExit status diagnostics) <- command (Repository scope)
       ["rev-parse", "--path-format=absolute", "--show-toplevel"]
@@ -143,6 +146,17 @@ runGit executable = interpret $ \_ -> \case
       pure (path,bytes)
     either (rejected "git.invalid-tree") pure (fileTree entries)
   where
+    configured repo key = do
+      (output, Process.ProcessExit status diagnostics) <- liftChecked (command repo ["config", "--null", "--get", key])
+      case status of
+        0 -> do
+          unless (not (Bytes.null output) && Bytes.last output == 0)
+            (ExceptT (broken "Unterminated Git configuration value"))
+          value <- either (ExceptT . broken . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.init output))
+          if null value || all isSpace value then missing else pure value
+        1 -> missing
+        _ -> ExceptT (broken ("Cannot read Git configuration: " ++ Char8.unpack diagnostics))
+      where missing = rejected "git.identity" ("Configure " ++ key ++ " with git config (repository-local or --global).")
     liftChecked :: Eff es b -> ExceptT [Diagnostic] (Eff es) b
     liftChecked action = ExceptT (Right <$> action)
     currentBranch :: Repository -> Eff es (Maybe LocalBranch)
@@ -232,7 +246,7 @@ runGit executable = interpret $ \_ -> \case
     commandInput :: Repository -> [(String,String)] -> [String] -> Bytes.ByteString -> Eff es (Bytes.ByteString, Process.ProcessExit)
     commandInput (Repository scope) env args input = Process.withProcess
       (Process.ProcessSpec executable (["--no-replace-objects", "--literal-pathspecs", "-C", scopePath scope] ++ args)
-        (scopePath scope) (env ++ [("LC_ALL","C"),("PATH","")])) $ do
+        (scopePath scope) (env ++ configurationEnvironment ++ [("LC_ALL","C"),("PATH","")])) $ do
       unless (Bytes.null input) (Process.writeStdin input)
       Process.closeStdin
       output <- Process.collectStdout
