@@ -26,7 +26,7 @@ import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..))
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Root (inspectRootAt, checkRootAt)
-import Kyyn.Porcelain.Capability.Evolution (checkWorkspace)
+import Kyyn.Porcelain.Capability.Evolution (checkSavedCandidate)
 import Kyyn.Surfaces.Cli (RootCommand(..))
 import Kyyn.Surfaces.Result
 
@@ -56,7 +56,7 @@ main = do
           CheckRoot -> checkResult "Root" <$> checkRootAt kb revision
       runCandidate :: Maybe (Candidate Root) -> (Response, [String])
       runCandidate selected = runPureEff . runState ([] :: [String]) . storeRoot value . execution
-        . candidates selected $ checkResult "Candidate" <$> checkWorkspace workspace
+        . candidates selected $ checkResult "Candidate" <$> checkSavedCandidate workspace
       (shown, showCalls) = runRoot ShowRoot
       (checked, checkCalls) = runRoot CheckRoot
       (candidateChecked, candidateCalls) = runCandidate (Just candidate)

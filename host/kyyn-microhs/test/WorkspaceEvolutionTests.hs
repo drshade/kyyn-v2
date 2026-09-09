@@ -29,6 +29,7 @@ import Kyyn.MicroHs.Interpreter.GuestCompilation
 import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Porcelain.Capability.EvolutionExecution
 import Kyyn.Porcelain.Capability.RootStore
+import Kyyn.Porcelain.Capability.RootOpening (loadSourceAt)
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Porcelain.Interpreter.RootOpening
 import Kyyn.Porcelain.Interpreter.EvolutionExecution
@@ -81,13 +82,15 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft
         [IntermediateBinding "renamedRoot" "SchemaV1.Root" "Metadata.renamed"])
         before target (tree [entry]) (tree [])
-      captured = CapturedEvolution (EvolutionContext kb identifier (Before revision beforeContract) snapshot)
+      context = EvolutionContext kb identifier (Before revision beforeContract) snapshot
       acceptedTree = tree (files beforeCode ++ files factFiles)
   result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . gitMock repository revision acceptedTree
-    . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ evaluateEvolution captured
+    . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
+      SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
+      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles) closure)
   EvaluatedEvolution preserved (After afterContract) checked@(CheckedValue _ value) (EvolutionReport reports) <- right result >>= right
-  unless (preserved == captured && value == expected && length reports == 3 &&
+  unless ((case preserved of CapturedEvolution actual _ _ -> actual == context) && value == expected && length reports == 3 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
     (fail ("Unexpected evaluated workspace: " ++ show result))
   materialized <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot afterContract target checked))))

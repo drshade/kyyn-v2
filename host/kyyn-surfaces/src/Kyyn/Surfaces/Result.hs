@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Result
   ( Response(..), Outcome(..), exitStatus, responseJson, diagnosticText
-  , success, refusal, operationalFailure, interruption, previewRefusal
+  , success, refusal, operationalFailure, interruption, previewRefusal, evolutionCheckResult
   , rootResult, workspaceResult, summariesResult, inspectionResult, candidateResult
   , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult, initializationResult
   ) where
@@ -80,6 +80,23 @@ interruption identity = Response Interrupted Null [] [errorDiagnostic "execution
 previewRefusal :: PreviewRejection -> Response
 previewRefusal (ProposedCodeRejected diagnostics) = refusal diagnostics
 previewRefusal (EvolutionRejected (EvolutionFailure diagnostics)) = refusal diagnostics
+
+evolutionCheckResult :: EvolutionId
+  -> Either PreviewRejection (CheckResult (Candidate (Validated Root))) -> Response
+evolutionCheckResult identity result = case result of
+  Left rejected ->
+    let Response outcome _ messages diagnostics = previewRefusal rejected
+        notice = "No new candidate was produced for " ++ name ++
+          ". Any earlier saved candidate is unchanged; evolution show " ++ name ++ " will still show that earlier result."
+    in Response outcome (object ["id" .= name, "candidateSaved" .= False])
+      (notice : messages) diagnostics
+  Right (Rejected (ValidationReport diagnostics)) -> Response Refused
+    (object ["id" .= name, "candidateSaved" .= True, "passed" .= False])
+    ["Saved candidate " ++ name ++ ": checks failed. Inspect it with evolution show " ++ name ++ "."] diagnostics
+  Right (Passed checked (ValidationReport diagnostics)) ->
+    let Response outcome value messages _ = candidateResult (fmap validatedValue checked)
+    in Response outcome value (messages ++ ["Checks passed."]) diagnostics
+  where name = evolutionIdName identity
 
 rootResult :: GitRevision -> Root -> CheckedValue -> Response
 rootResult revision (Root schema _ _) (CheckedValue _ value) = success

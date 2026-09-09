@@ -29,7 +29,6 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.EvolutionExecution (evaluateEvolution)
-import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
 import Kyyn.Porcelain.Capability.RootStore (loadRootValueForChecking)
 import Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
@@ -52,11 +51,11 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       root = Root contract facts code
       capture proposed declarations = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft declarations)
-          before proposed (tree [("Evolution.hs","captured entry")]) (tree [])))
+          before proposed (tree [("Evolution.hs","captured entry")]) (tree []))) root [path "Example.hs",path "Helper.hs"]
       entry = fixtureProgram
-      execute compilation source selectedCapture = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock shell compilation . schemaMock contract . openingMock kb revision source . runDhallHandling
-        . runRootStore . runEvolutionExecution sdk $ evaluateEvolution selectedCapture
+      execute compilation source (CapturedEvolution context _ closure) = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+        . compileMock shell compilation . schemaMock contract . runDhallHandling
+        . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure)
       identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")
       captured = capture target [IntermediateBinding "middleRoot" "Example.Root" "Example.metadata"]
   expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
@@ -100,12 +99,6 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   putStrLn "Evolution execution selects exact Before, deduplicates its closure and preserves rejection/failure layers."
   where
     manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
-
-openingMock :: KnowledgeBase -> GitRevision -> Root -> Eff (RootOpening : es) a -> Eff es a
-openingMock (KnowledgeBase expected _) revision root = interpret $ \_ operation -> case operation of
-  LoadRootAt repository selected (Subtree path)
-    | repository == expected && selected == revision && relativeName path == "nested/root" -> pure (Right root)
-  _ -> error "Evolution did not load exactly its KB's selected Before revision"
 
 schemaMock :: RootContract -> Eff (SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ (InspectSchema source) -> pure $

@@ -69,7 +69,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       location = EvolutionWorkspace kb identity
       snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
-      captured = CapturedEvolution context
+      captured = CapturedEvolution context (Root schema facts code) []
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       report = EvolutionReport
@@ -152,7 +152,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         _ -> error "Expected record root value"
       migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft []) empty migratedCode empty empty
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
-      migratedCapture = CapturedEvolution migratedContext
+      migratedCapture = CapturedEvolution migratedContext (Root schema facts code) []
       migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
         [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue

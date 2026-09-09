@@ -12,6 +12,8 @@ import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot, EvolutionState)
 import Kyyn.Domain.Value (CheckedValue)
+import Kyyn.Domain.Root (Root)
+import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure)
@@ -50,7 +52,9 @@ data EvolutionContext = EvolutionContext
   , material :: WorkspaceSnapshot
   } deriving (Eq, Show)
 
-newtype CapturedEvolution = CapturedEvolution EvolutionContext deriving (Eq, Show)
+data CapturedEvolution = CapturedEvolution
+  { context :: EvolutionContext, input :: Root, sourceClosure :: [RelativePath] }
+  deriving (Eq, Show)
 
 data Candidate a = Candidate
   { context :: EvolutionContext, report :: EvolutionReport, value :: a }

@@ -27,7 +27,7 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Git (runGit)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
-import Kyyn.Porcelain.Capability.Evolution (acceptStoredEvolution, evaluateWorkspace, checkWorkspace)
+import Kyyn.Porcelain.Capability.Evolution (acceptStoredEvolution, checkEvolution)
 import qualified Kyyn.Porcelain.Capability.Root as Root
 import qualified Kyyn.Porcelain.Capability.KnowledgeBaseInitialization as Initialization
 import Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization (runKnowledgeBaseInitialization)
@@ -125,10 +125,9 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
         Right value -> case Store.workspaceLocation value of
           Left message -> refusal [errorDiagnostic "kb.path" message]
           Right path -> workspaceResult value (maybe revision id before) (scopedPath scope path)
-    Cli.EvaluateEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runEvaluation host toolchain sdk (either previewRefusal candidateResult <$> evaluateWorkspace (workspace identity))
     Cli.CheckEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runChecking host toolchain sdk (checkResult ("Candidate " ++ evolutionIdName identity) <$> checkWorkspace (workspace identity))
+      runEvaluation host toolchain sdk . runRootExecution sdk $
+        evolutionCheckResult identity <$> checkEvolution (workspace identity)
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached
       Just selected -> do

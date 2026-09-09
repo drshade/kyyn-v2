@@ -86,7 +86,7 @@ main = do
     writeUtf8 (target </> "kb.dhall") (manifest "TodoSchemaV2")
     saveExample target "report-done" "isDone" BoolType (String "todo-001") (Bool True)
     copyFile (fixture </> "Migrate.hs") (workspace </> "change/Evolution.hs")
-    evaluated <- ok ["evolution","evaluate",first]
+    evaluated <- ok ["evolution","check",first]
     let report = at ["result","report"] evaluated
     assert "Three composed steps were not reported" (length (array (at ["steps"] report)) == 3)
     unchanged <- git ["rev-parse","HEAD"]
@@ -120,7 +120,7 @@ main = do
 
     (second,secondWorkspace) <- create "remove-report"
     copyFile (fixture </> "Delete.hs") (secondWorkspace </> "change/Evolution.hs")
-    void (ok ["evolution","evaluate",second])
+    void (cli (ExitFailure 1) ["evolution","check",second])
     void (ok ["evolution","ready",second])
     rejected <- cli (ExitFailure 1) ["evolution","accept",second]
     assert "Inherited example did not explain rejection"
@@ -131,7 +131,7 @@ main = do
 
     -- Deliberately retire the assertion along with the fact; this is authored input.
     removeDirectoryRecursive (secondWorkspace </> "target/examples/report-done")
-    void (ok ["evolution","evaluate",second])
+    void (ok ["evolution","check",second])
     void (ok ["evolution","accept",second])
     removed <- doesFileExist (root </> "facts/todos/todo-001.dhall")
     removedExample <- doesDirectoryExist (root </> "examples/report-done")

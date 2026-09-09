@@ -122,7 +122,7 @@ openingTests contract factFiles = do
   unless (opened == Root contract factFiles authored) (fail "Opening changed the selected files")
   definition <- right (runPureEff (runDhallHandling (runRootStore (readRootDefinition authored))))
   source <- right (execute sdk (openCapturedSource captured))
-  unless (source == SourceRoot contract authored definition) (fail "Source opening changed schema/code/definition")
+  unless (source == SourceRoot contract authored definition []) (fail "Source opening changed schema/code/definition")
   sourceWithoutFacts <- right (execute sdk (openCapturedSource authored))
   unless (sourceWithoutFacts == source) (fail "Source opening depends on facts")
   corrupt <- tree [("facts/root.dhall", "not Dhall"), ("facts/unknown.bin", Bytes.pack [255,0])]

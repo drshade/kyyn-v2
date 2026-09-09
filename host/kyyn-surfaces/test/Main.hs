@@ -33,11 +33,11 @@ main = do
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing)))
   succeeds ["evolution","new","September","--before",replicate 40 'a']
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") (Just revision))))
-  forM_ [("show",ShowEvolution),("evaluate",EvaluateEvolution),("check",CheckEvolution),
+  forM_ [("show",ShowEvolution),("check",CheckEvolution),
     ("ready",ReadyEvolution),("draft",DraftEvolution),("accept",AcceptEvolution),("recover",RecoverEvolution)] $
     \(verb,constructor) -> succeeds ["evolution",verb,"abc123"]
       (Invocation selected Human (Evolution (constructor identity)))
-  forM_ [["root","delete"],["evolution","accept"],["evolution","accept","Monthly"],
+  forM_ [["evolution","evaluate","abc123"],["root","delete"],["evolution","accept"],["evolution","accept","Monthly"],
     ["evolution","new",""],["evolution","new","example","--before","HEAD"],
     ["--repository",".","root","show"],["plugin","list"],
     ["root","show","extra"]] refuses

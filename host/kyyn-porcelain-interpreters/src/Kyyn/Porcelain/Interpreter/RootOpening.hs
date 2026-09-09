@@ -32,7 +32,7 @@ openTree
   :: (Schema.SchemaInspection :> es, RootStore :> es)
   => FileTree -> FileTree -> Eff es (Either [Diagnostic] Root)
 openTree sdk tree = runExceptT $ do
-  SourceRoot contract code _ <- ExceptT (openSource sdk tree)
+  SourceRoot contract code _ _ <- ExceptT (openSource sdk tree)
   facts <- checked (fileTree [(p,b) | (p,b) <- files tree, "facts/" `isPrefixOf` relativeName p])
   let root = Root contract facts code
   _ <- ExceptT (loadRootValueForChecking root)
@@ -44,11 +44,11 @@ openSource
 openSource sdk tree = runExceptT $ do
   definition@(RootDefinition typeName metadataName _ _ authored) <- ExceptT (readRootDefinition tree)
   source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
-  Schema.InspectedSchema inspected _ <- ExceptT (Schema.inspectSchema source)
+  Schema.InspectedSchema inspected closure <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))
   let (_, codeEntries) = partition (\(p,_) -> "facts/" `isPrefixOf` relativeName p) (files tree)
   code <- checked (fileTree codeEntries)
-  pure (SourceRoot contract code definition)
+  pure (SourceRoot contract code definition closure)
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "root.opening") pure

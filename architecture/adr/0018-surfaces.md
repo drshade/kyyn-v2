@@ -91,7 +91,6 @@ kyyn
     new <name>
     list
     show <id>
-    evaluate <id>
     check <id>
     ready <id>
     draft <id>
@@ -165,12 +164,24 @@ prepare/check its candidate again; there is no per-KB HEAD exception. Separate
 repositories provide independent histories.
 
 Use consistent verbs: `list` returns a collection, `show` inspects one item,
-and `check` validates. `evolution evaluate` executes authored code and saves a
-candidate; `check` checks the saved candidate; `accept` freshly checks and
-publishes it without rerunning the evolution. `recover` repairs the checkout
+and `check` validates. `evolution check` captures and evaluates the current
+workspace, saves its candidate, then runs candidate validation and required
+examples. There is no separate public `evaluate` command. `accept` freshly checks
+and publishes the saved candidate without rerunning the evolution. `recover` repairs the checkout
 after acceptance as specified by ADR 0012. Inspection never implicitly fetches
 evidence, accepts a candidate or invokes a sink. Connector `fetch` is for source
 connectors; sink invocation belongs to explicit output publication under ADR 0017.
+
+| Result of evolution check | Saved result | CLI outcome |
+| --- | --- | --- |
+| Schema/entry compilation or transformation refusal before materialization | No new candidate; any earlier saved candidate remains unchanged | Refused, exit 1; explicitly says no new candidate was produced |
+| Candidate validator/query compilation, semantic validation or required example rejection | New candidate and diff retained for inspection | Refused, exit 1; explicitly identifies the saved candidate as failing checks |
+| Checks pass | New candidate and diff retained | Succeeded, exit 0, including warnings |
+
+Operational failures remain Failed/exit 3, not successful checks. `show` inspects
+the latest saved candidate; following a pre-candidate refusal that can still be
+an earlier result. The refusal says so rather than reporting that earlier result
+as freshly checked. Checking does not mark a workspace Ready or move HEAD.
 
 Shared options and human/JSON result conventions must behave consistently across
 groups. Commands support scripting without mandatory interactive prompts;

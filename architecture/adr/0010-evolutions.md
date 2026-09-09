@@ -201,13 +201,23 @@ data EvolutionContext = EvolutionContext
   , material      :: WorkspaceSnapshot
   }
 
-newtype CapturedEvolution = CapturedEvolution EvolutionContext
+data CapturedEvolution = CapturedEvolution
+  { context :: EvolutionContext
+  , input :: Root
+  , sourceClosure :: [RelativePath]
+  }
 ```
 
 Here a workspace is simply the evolution's folder inside the KB, containing its
 specifications, transformation source and supporting files. It is not a separate
 Git worktree, interactive session or service. Capture fixes those bytes for one
 evaluation; it does not introduce an invocation registry or a replay obligation.
+Capture reads the Before subtree at its explicit Git revision and inspects its
+source once. `SourceRoot` retains the inspection's loaded source paths. Capture
+checks the workspace's Before copy against that source and carries the input Root
+and closure into execution. These are invocation-local values, not new persisted
+candidate/archive fields or a cache. The existing context/file snapshots remain
+the durable authority.
 
 Propose a complete target copy, not a patch overlay on the current root:
 
@@ -679,10 +689,11 @@ retains validation and snapshot queries without acquiring plugin/acquisition
 handlers merely to check a root. Source, dependency and config bytes are fixed
 by capture; providers are not contacted during compilation.
 
-EvolutionExecution itself calls `LoadRootAt` for the captured context's KB and
-Before revision. It does not accept an independently supplied Root: that type
-alone cannot establish its origin. Compare the loaded contract and copied source
-with the captured Before before preparation; a mismatch requires a new capture.
+EvolutionExecution consumes the input Root and dependency closure supplied by
+capture, rather than loading or inspecting Before again. A Root alone does not
+establish its origin: the capture operation derives it from the selected immutable
+Git subtree. Execution checks its contract and source against the context, then
+decodes its facts. It inspects the target and declared intermediates normally.
 The input need not pass semantic validation. An evolution can therefore
 repair invalid facts introduced by an ordinary Git edit or merge. Preview surfaces
 the source validation report separately, without treating its errors as rejection
@@ -724,15 +735,25 @@ evaluateWorkspace
       EvolutionStore :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
 
-checkWorkspace
+checkEvolution
+  :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
+      EvolutionStore :> es, RootExecution :> es, RootStore :> es)
+  => EvolutionWorkspace
+  -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
+
+checkSavedCandidate
   :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))
 ```
 
-Evaluation captures the workspace and applies that captured evolution. Checking
-loads its saved candidate and checks it without reopening or executing the
-evolution; a missing candidate is a diagnostic refusal. CLI, MCP and Web reuse
-these operations rather than maintaining their own workflow implementations.
+`checkEvolution` is the author-facing workflow: capture and evaluate current
+workspace contents, materialize/save the candidate, then validate it. The helper
+`evaluateWorkspace` retains that first portion as an internal composition step.
+`checkSavedCandidate` loads and checks the saved result without reopening or
+executing the evolution; acceptance uses this operation, and a missing candidate
+is a diagnostic refusal. CLI, MCP and Web reuse these operations rather than
+maintaining their own workflow implementations. ADR 0018 defines the observable
+outcomes and the single public check command.
 
 Each evolution workspace provides one conventional guest binding, `evolution`.
 Choose a reusable function and bind its arguments in ordinary source:

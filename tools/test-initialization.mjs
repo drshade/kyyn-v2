@@ -71,7 +71,7 @@ evolution = pure . evaluateEvolution
   (evolve beforeRoot afterRoot (Rationale "Start tracking work." [])
     (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")])) )
 `);
-  cli(kb, ['evolution', 'evaluate', created.id]);
+  cli(kb, ['evolution', 'check', created.id]);
   assert.equal(git(kb, 'status', '--porcelain', '--untracked-files=all', '--', '.kyyn'), '');
   assert.equal(git(kb, 'check-ignore', '.kyyn/.gitignore'), '.kyyn/.gitignore');
   assert.equal(git(kb, 'rev-parse', 'HEAD'), initialized.revision);
