@@ -250,10 +250,10 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
       else pure accepted
     stale <- publication (acceptEvolution branch metadata otherChecked)
     assert "Parallel draft was not stale" (stale == NotAccepted (BaseMismatch base (Just rebaseHead)))
-    let EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ name explanation state intermediates) before target change notes) =
+    let EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ name explanation state) before target change notes) =
           case otherCandidate of Candidate otherContext _ _ -> otherContext
     rebasedFiles <- publication (encodeWorkspaceSnapshot (WorkspaceSnapshot
-      (WorkspaceManifest rebaseHead name explanation state intermediates) before target change notes)) >>= right
+      (WorkspaceManifest rebaseHead name explanation state) before target change notes)) >>= right
     writeTreeAt otherPath rebasedFiles
     rebasedCapture <- normal (captureEvolution other) >>= right
     _ <- normal (applyEvolution rebasedCapture) >>= right
@@ -275,10 +275,10 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     assert "Removed archive was still treated as accepted" (removedRecovery == Right Nothing)
     removedAcceptance <- publication accept
     case removedAcceptance of NotAccepted (InvalidMaterial _) -> pure (); _ -> fail "Removed acceptance bypassed absent candidate"
-    let WorkspaceSnapshot (WorkspaceManifest _ originalName originalExplanation _ originalIntermediates)
+    let WorkspaceSnapshot (WorkspaceManifest _ originalName originalExplanation _)
           originalBefore originalTarget originalChange originalNotes = case context of EvolutionContext _ _ _ snapshot -> snapshot
     reacceptFiles <- publication (encodeWorkspaceSnapshot (WorkspaceSnapshot
-      (WorkspaceManifest reverted originalName originalExplanation Ready originalIntermediates)
+      (WorkspaceManifest reverted originalName originalExplanation Ready)
       originalBefore originalTarget originalChange originalNotes)) >>= right
     writeTreeAt workspacePath reacceptFiles
     reacceptCapture <- normal (captureEvolution workspace) >>= right
@@ -318,7 +318,7 @@ evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvol
   let fingerprint = contractFingerprint (contractId (rootSchema contract))
       observation = EvolutionObservation output [StepObservation (Rationale "Clear completed work" [])
         (ObservedRoot fingerprint input) (ObservedRoot fingerprint output)]
-  checked <- checkEvolutionReport [] contract input contract observation
+  checked <- checkEvolutionReport contract input contract observation
   pure $ case checked of
     Left diagnostics -> Left (ProposedCodeRejected diagnostics)
     Right (value,report) -> Right (EvaluatedEvolution captured (After contract) value report)

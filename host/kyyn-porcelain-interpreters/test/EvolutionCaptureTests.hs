@@ -84,10 +84,10 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     unless (createdKb == kb && Right createdId == evolutionId (evolutionIdName createdId))
       (fail "Creation returned an invalid KB or directory ID")
     CapturedEvolution (EvolutionContext _ _ (Before createdBase _) (WorkspaceSnapshot
-      (WorkspaceManifest _ actualName explanation state []) createdBefore createdTarget createdChange createdNotes)) _ _ <-
+      (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) _ _ <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
-    identityEntry <- tree [("Evolution.hs",identityEvolutionSource)]
+    identityEntry <- tree [("Evolution.hs",identityEvolutionSource contract)]
     unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
       createdBefore == sourceTree && createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
       (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
@@ -108,7 +108,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "change/Evolution.hs" "unfinished entry"
     write "notes/review.md" "original note"
     captured@(CapturedEvolution context@(EvolutionContext actualKb actualId (Before base actualContract)
-      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _ _) before target _ _)) input closure) <-
+      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _) before target _ _)) input closure) <-
       success (captureEvolution location) >>= right >>= right
     unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision && actualContract == contract && before == sourceTree)
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
@@ -199,7 +199,7 @@ openingMock count expectedRepo expectedRevision expectedPath answer = interpret 
 manifest :: Char -> String -> Bytes.ByteString
 manifest digit state = Char8.pack ("{ before = { revision = " ++ show (replicate 40 digit) ++
   " }, name = \"Import\", explanation = \"Bring in sales\", state = < Draft | Ready | Accepted >." ++ state ++
-  ", intermediates = [] : List { name : Text, schemaType : Text, schemaMetadata : Text } }")
+  "}")
 
 tree :: [(FilePath, Bytes.ByteString)] -> IO FileTree
 tree entries = traverse (\(p,b) -> do path <- right (relativePath p); pure (path,b)) entries >>= right . fileTree

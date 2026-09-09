@@ -28,13 +28,13 @@ runEvolutionAuthoring
 runEvolutionAuthoring = interpret $ \_ -> \case
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
     rootPath <- checked (rootLocation kb)
-    SourceRoot _ code (RootDefinition _ _ _ _ sources) _ <-
+    SourceRoot contract code (RootDefinition _ _ _ _ sources) _ <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
     empty <- checked (fileTree [])
     entryPath <- checked (relativePath "Evolution.hs")
-    change <- checked (fileTree [(entryPath,identityEvolutionSource)])
+    change <- checked (fileTree [(entryPath,identityEvolutionSource contract)])
     tree <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
-      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft []) sources code change empty))
+      (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft) sources code change empty))
     parentPath <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)
     parent <- checked (directoryScope (scopedPath scope parentPath))
     allocated <- ExceptT (Right <$> FileSystem.createUniqueDirectory parent)
@@ -43,7 +43,7 @@ runEvolutionAuthoring = interpret $ \_ -> \case
     forM_ (files tree) $ \(path,bytes) -> ExceptT (Right <$> FileSystem.writeBytes location path bytes)
     pure (EvolutionWorkspace kb identity)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
-    snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _ _) beforeCopy _ _ _) <- ExceptT (EvolutionStore.readWorkspace location)
+    snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) beforeCopy _ _ _) <- ExceptT (EvolutionStore.readWorkspace location)
     rootPath <- checked (rootLocation kb)
     (input@(Root contract _ code),closure) <- ExceptT (RootOpening.loadRootInputAt repository revision (Subtree rootPath))
     RootDefinition _ _ _ _ sources <- ExceptT (readRootDefinition code)

@@ -50,24 +50,23 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks")]
       target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
       root = Root contract facts code
-      capture proposed declarations = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
-        (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft declarations)
+      capture proposed = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
+        (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft)
           before proposed (tree [("Evolution.hs","captured entry")]) (tree []))) root [path "Example.hs",path "Helper.hs"]
       entry = fixtureProgram
-      execute compilation source (CapturedEvolution context@(EvolutionContext _ _ _
-          (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ declarations) _ _ _ _)) _ closure) = do
+      execute compilation source (CapturedEvolution context _ closure) = do
         count <- newIORef 0
         result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
           . compileMock shell compilation . schemaMock count contract . runDhallHandling
           . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure)
         inspections <- readIORef count
         case result of
-          Right (Right _) -> unless (inspections == 1 + length declarations)
-            (fail "Execution repeated Before inspection or omitted a target/intermediate inspection")
+          Right (Right _) -> unless (inspections == 1)
+            (fail "Execution must inspect only the target contract")
           _ -> pure ()
         pure result
       identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")
-      captured = capture target [IntermediateBinding "middleRoot" "Example.Root" "Example.metadata"]
+      captured = capture target
   expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
   result <- execute identityEntry root captured
   unless (result == Right (Right (EvaluatedEvolution captured (After contract) expected (EvolutionReport []))))
@@ -87,12 +86,10 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       Left (RuntimeUnavailable (ProcessDiagnostic actual _)) | actual == operation -> pure ()
       _ -> fail ("Runtime failure became preview rejection: " ++ show failure)
   let unexpected = error "Invalid preparation reached compilation"
-  forM_ [capture (tree [("kb.dhall","True")]) [],
-    capture (tree [("kb.dhall",manifest),("src/Example.hs","different schema")]) [],
-    capture (tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Example.lhs","competing module")]) [],
-    capture (tree [("kb.dhall",manifest),("src/Example.hsc","competing module")]) [],
-    capture target [IntermediateBinding "beforeRoot" "Example.Root" "Example.metadata"],
-    capture target [IntermediateBinding "middleRoot" "Missing.Root" "Missing.metadata"]] $ \invalid -> do
+  forM_ [capture (tree [("kb.dhall","True")]),
+    capture (tree [("kb.dhall",manifest),("src/Example.hs","different schema")]),
+    capture (tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Example.lhs","competing module")]),
+    capture (tree [("kb.dhall",manifest),("src/Example.hsc","competing module")])] $ \invalid -> do
       rejected <- execute unexpected root invalid
       case rejected of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail (show rejected)
   let Root selected _ selectedCode = root

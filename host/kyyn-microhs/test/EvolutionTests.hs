@@ -37,16 +37,15 @@ main = do
   before <- checked "SchemaV1" [(Just "title",StringType)] "Title"
   renamed <- checked "SchemaV1" [(Just "title",StringType)] "New label"
   after <- checked "SchemaV2" [(Just "title",StringType),(Just "done",BoolType)] "Title"
-  bindings <- right (evolutionBindings [("beforeRoot",before),("renamedRoot",renamed),("afterRoot",after)])
-  forM_ [[],[("same",before),("same",after)],[("bad;name",before)]] $ \declarations ->
-    case evolutionBindings declarations of Left _ -> pure (); Right _ -> fail "Invalid binding declarations accepted"
+  bindings <- right (evolutionBindings before after)
+  metadataBindings <- right (evolutionBindings before renamed)
   let fingerprints = [contractFingerprint (contractId (rootSchema contract)) | contract <- [before,renamed,after]]
-      source = Bytes.concat (map snd (files bindings))
+      source = Bytes.concat (map snd (files bindings ++ files metadataBindings))
   unless (all (\fingerprint -> Text.encodeUtf8 (Text.pack fingerprint) `Bytes.isInfixOf` source) fingerprints)
     (fail "Generated bindings lost their whole contract identities")
   getArgs >>= \args -> case args of
     ["--pure"] -> pure ()
-    [] -> integration before renamed after bindings
+    [] -> integration before after bindings
     _ -> fail "usage: evolutions [--pure]"
 
 checked :: String -> [(Maybe String,DataType)] -> String -> IO RootContract
@@ -58,8 +57,8 @@ checked moduleName fields label = right $ checkContract root metadata >>= checkR
     root = Algebraic (moduleName ++ ".Root") [] [Constructor (moduleName ++ ".Root") [(Just "todos",ListType fact)]]
     metadata = SchemaMetadata [RoleDecl "title" label Title] [] [CollectionDecl "todos" "todos" []]
 
-integration :: RootContract -> RootContract -> RootContract -> FileTree -> IO ()
-integration before renamed after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
+integration :: RootContract -> RootContract -> FileTree -> IO ()
+integration before after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope (repo </> "vendor/MicroHs"))
@@ -72,7 +71,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
      [load "guest/kyyn-sdk/test" "EvolutionCore.hs"] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
-  let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 identityEvolutionSource))
+  let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource before)))
       captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings
       compileGuestFiles entries = do
         sources <- right (guestSources (path "Proof.hs") entries)
@@ -99,17 +98,19 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   case replies of
     [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _)), Left refusal] -> do
       (_,EvolutionReport reports) <- right (runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport [renamed] before input after observation)
+        checkEvolutionReport before input after observation)
       unless (length reports == 3 && all (\(StepReport _ changes) -> length changes == 1) reports)
         (fail "Guest observations did not derive the three real fact changes")
       unless (refusal == EvolutionFailure [Diagnostic Error "evolution.refused" "Cannot reconcile λ"
         (Just (FactLocation "todos" "todo-001" (Just "title")))]) (fail "Guest refusal lost its structured diagnostic")
     _ -> fail "Expected successful guest observations and a separate refusal"
   let badType = [(p,if relativeName p == "Evolution.hs"
-        then Text.encodeUtf8 (Text.replace "evolve beforeRoot beforeRoot" "evolve afterRoot beforeRoot" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
+        then Text.encodeUtf8 (Text.replace "editBefore" "editAfter" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
       badConstructor = [(p,if relativeName p == "Proof.hs" then
         "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [])\n" else b) | (p,b) <- captured]
-  forM_ [("wrong-type",badType),("private-constructor",badConstructor)] $ \(label,entries) -> do
+      badBinding = [(p,if relativeName p == "Proof.hs" then
+        "module Proof where\nimport Kyyn.Workspace.Evolution (beforeRoot)\nmain :: IO ()\nmain = pure ()\n" else b) | (p,b) <- captured]
+  forM_ [("wrong-type",badType),("private-constructor",badConstructor),("hidden-binding",badBinding)] $ \(label,entries) -> do
     (nativeRejected,_,_) <- native label entries
     unless (nativeRejected /= ExitSuccess) (fail (label ++ " compiled under GHC"))
     rejected <- compileGuestFiles entries

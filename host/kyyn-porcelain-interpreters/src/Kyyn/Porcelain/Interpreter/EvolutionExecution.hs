@@ -15,7 +15,7 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.Root (Root(..), RootDefinition(..), CheckedValue(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), IntermediateBinding(..))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, executeCompiledEntry)
@@ -31,7 +31,7 @@ runEvolutionExecution
   => FileTree -> Eff (EvolutionExecution : es) a -> Eff es a
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)
-      (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ declarations) before target change _)) source@(Root actual _ acceptedCode) closure)) -> runExceptT $ do
+      (WorkspaceSnapshot _ before target change _)) source@(Root actual _ acceptedCode) closure)) -> runExceptT $ do
   unless (actual == expected) (reject "evolution.before-contract" "Captured input does not match Before's contract")
   RootDefinition _ _ _ _ acceptedSources <- proposed (readRootDefinition acceptedCode)
   unless (before == acceptedSources) (reject "evolution.before-source" "Captured input does not match Before's source")
@@ -40,10 +40,7 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
   (after,_) <- inspect (files targetSources ++ files sdk) targetType targetMetadata
   old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` closure])
   combined <- checked "evolution.source-collision" (mergeSources [old,targetSources,change,sdk])
-  intermediates <- traverse (\(IntermediateBinding name selected metadata) -> do
-    (contract,_) <- inspect (files combined) selected metadata
-    pure (name,contract)) declarations
-  prepared <- checked "evolution.prepare" (evolutionSources expected after intermediates combined)
+  prepared <- checked "evolution.prepare" (evolutionSources expected after combined)
   compiled <- proposed (compileGuest prepared)
   output <- ExceptT (Right <$> executeCompiledEntry "Evolution.evolution" compiled (Bytes.toStrict (encode input)))
   reply <- case decodeEvolutionReply output of
@@ -51,7 +48,7 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
       ("Evolution.evolution: " ++ message))))
     Right (Left failure) -> throwE (EvolutionRejected failure)
     Right (Right result) -> pure result
-  result <- proposed (checkEvolutionReport (map snd intermediates) expected input after reply)
+  result <- proposed (checkEvolutionReport expected input after reply)
   let (value,report) = result
   pure (EvaluatedEvolution captured (After after) value report)
 

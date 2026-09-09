@@ -60,16 +60,13 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     fs.writeFileSync(filename, fs.readFileSync(filename, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
   write(path.join(created.path, 'change', 'Evolution.hs'), `module Evolution where
-import Kyyn.Evolution
-import Kyyn.Types.Fact
-import Kyyn.Types.Program (Program)
-import KyynEvolutionBindings
+import Kyyn.Workspace.Evolution
 import qualified RootV1 as Before
 import qualified RootV2 as After
-evolution :: Before.Root -> Program calls (Either EvolutionFailure (EvolutionOutput After.Root))
-evolution = pure . evaluateEvolution
-  (evolve beforeRoot afterRoot (Rationale "Start tracking work." [])
-    (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")])) )
+evolution :: Evolution Before.Root After.Root
+evolution =
+  evolve (Rationale "Start tracking work." [])
+    (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")]))
 `);
   cli(kb, ['evolution', 'check', created.id]);
   const validatorPath = path.join(target, 'src', 'Validate.hs');

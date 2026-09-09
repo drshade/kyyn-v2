@@ -16,9 +16,9 @@ import Kyyn.Types.Fact (FactId(..))
 import Kyyn.Porcelain.Capability.RootStore (RootStore, checkRootValue)
 
 checkEvolutionReport :: RootStore :> es
-  => [RootContract] -> RootContract -> Value -> RootContract -> EvolutionObservation
+  => RootContract -> Value -> RootContract -> EvolutionObservation
   -> Eff es (Either [Diagnostic] (CheckedValue, EvolutionReport))
-checkEvolutionReport intermediates source input target (EvolutionObservation output steps) =
+checkEvolutionReport source input target (EvolutionObservation output steps) =
   case resolveBoundaries of
     Left diagnostics -> pure (Left diagnostics)
     Right boundaries -> do
@@ -30,13 +30,22 @@ checkEvolutionReport intermediates source input target (EvolutionObservation out
             lastRoot = ObservedRoot (identity target) output
             starts = [before | StepObservation _ before _ <- steps] ++ [lastRoot]
             ends = first : [after | StepObservation _ _ after <- steps]
-        unless (ends == starts) (reject "Step boundaries do not form a continuous chain from Before to After")
+        mapM_ (\(index, expected, actual) -> unless (expected == actual)
+          (reject ("Boundary " ++ show index ++ " does not continue the preceding step: expected contract " ++
+            observedIdentity expected ++ ", received " ++ observedIdentity actual ++
+            "; both the contract and root value must match")))
+          (zip3 [1 :: Int ..] ends starts)
+        unless (identity source == identity target ||
+          all (\(StepObservation _ (ObservedRoot b _) (ObservedRoot a _)) ->
+            not (b == identity target && a == identity source)) steps)
+          (reject "An evolution cannot return to Before after entering After")
         reports <- stepReports steps (drop 1 factSets)
         case reverse values of
           final : _ -> Right (final, EvolutionReport reports)
           [] -> reject "Missing evolution boundaries"
   where
-    contracts = nub (source : target : intermediates)
+    contracts = nub [source, target]
+    observedIdentity (ObservedRoot name _) = name
     resolve (ObservedRoot selected value) = case filter ((== selected) . identity) contracts of
       [contract] -> Right (contract, value)
       _ -> reject ("Observation names an unknown or ambiguous contract: " ++ selected)

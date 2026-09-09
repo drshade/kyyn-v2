@@ -1,7 +1,7 @@
 module EvolutionCore (main) where
 
 import Kyyn.Evolution
-import Kyyn.Evolution.Internal (RootBinding(..), RecordedRoot(..), StepObservation(..), EvolutionOutput(..))
+import Kyyn.Evolution.Internal (RootBinding(..), RecordedRoot(..), StepObservation(..), EvolutionOutput(..), evolve)
 import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))
 import Text.JSON.Types (JSValue(..), toJSString)
 

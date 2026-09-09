@@ -57,20 +57,18 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
   beforeContract <- right (checkContract beforeType metadata >>= checkRootLayout)
   let oldMetadata = unlines ["module Metadata where", "import Kyyn.Types.SchemaMetadata",
         "metadata :: SchemaMetadata", "metadata = SchemaMetadata [RoleDecl \"title\" \"Title\" Title] [] [CollectionDecl \"todos\" \"todos\" []]"]
-      newMetadata = oldMetadata ++ unlines ["renamed :: SchemaMetadata",
-        "renamed = SchemaMetadata [RoleDecl \"title\" \"New label\" Title] [] [CollectionDecl \"todos\" \"todos\" []]"]
       checks namespace body = utf8 (unlines ["module Checks where", "import " ++ namespace, "import Kyyn.Types.Diagnostic",
         "validate :: Root -> ValidationReport", "validate _ = " ++ body])
       before = tree [oldSchema,(path "Metadata.hs",utf8 oldMetadata),
         (path "Checks.hs",checks "SchemaV1" "ValidationReport [Diagnostic Error \"old-rule\" \"Needs repair\" Nothing]")]
-      targetSources = tree [newSchema,(path "Metadata.hs",utf8 newMetadata),
+      targetSources = tree [newSchema,(path "Metadata.hs",utf8 oldMetadata),
         (path "Checks.hs",checks "SchemaV2" "ValidationReport []")]
       code namespace sources = tree ((path "kb.dhall",utf8 (manifest namespace)) :
         [(path ("src/" ++ relativeName p),bytes) | (p,bytes) <- files sources])
       beforeCode = code "SchemaV1" before
       target = code "SchemaV2" targetSources
       input = object ["todos" .= [object ["id" .= ("todo-001" :: String),"value" .= object ["title" .= ("Review" :: String)]]]]
-      expected = object ["todos" .= [object ["id" .= ("todo-001" :: String),"value" .= object ["title" .= ("Review λ" :: String),"done" .= False]]]]
+      expected = object ["todos" .= [object ["id" .= ("todo-001" :: String),"value" .= object ["title" .= ("Review λ" :: String),"done" .= True]]]]
       rootAction = do
         value <- checkRootValue beforeContract input
         either (pure . Left) (materializeRoot beforeContract beforeCode) value
@@ -79,8 +77,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
   identifier <- right (evolutionId "abc")
   let repository = Repository scope
       kb = KnowledgeBase repository (Subtree (path "nested"))
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft
-        [IntermediateBinding "renamedRoot" "SchemaV1.Root" "Metadata.renamed"])
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft)
         before target (tree [entry]) (tree [])
       context = EvolutionContext kb identifier (Before revision beforeContract) snapshot
       acceptedTree = tree (files beforeCode ++ files factFiles)

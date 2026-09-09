@@ -1,13 +1,10 @@
 module Evolution where
 
-import Kyyn.Evolution
-import Kyyn.Types.Fact
-import Kyyn.Types.Program (Program)
-import KyynEvolutionBindings
+import Kyyn.Workspace.Evolution
 import qualified TodoSchemaV2 as Schema
 
-evolution :: Schema.Root -> Program calls (Either EvolutionFailure (EvolutionOutput Schema.Root))
-evolution = pure . evaluateEvolution
-  (evolve beforeRoot afterRoot (Rationale "Retire the completed report." [])
+evolution :: Evolution Schema.Root Schema.Root
+evolution =
+  editAfter (Rationale "Retire the completed report." [])
     (\(Schema.Root facts) -> Right (Schema.Root
-      [fact | fact@(Fact identity _) <- facts, identity /= FactId "todo-001"])))
+      [fact | fact@(Fact identity _) <- facts, identity /= FactId "todo-001"]))

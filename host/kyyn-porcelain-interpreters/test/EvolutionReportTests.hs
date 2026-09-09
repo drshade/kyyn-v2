@@ -30,7 +30,7 @@ main = do
       observed c = ObservedRoot (contractFingerprint (contractId (rootSchema c)))
       step c a d b = StepObservation rationale (observed c a) (observed d b)
       check source value target steps output = runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport [renamed] source value target (EvolutionObservation output steps)
+        checkEvolutionReport source value target (EvolutionObservation output steps)
       changed before after identifier = FactChange "todos" (FactId identifier) before after
       recorded c value = Just (RecordedFact c value)
   (checked, report) <- right (check old input old [step old input old edited] edited)
@@ -60,6 +60,9 @@ main = do
   forM_
     [ check old input old [] edited
     , check old input renamed [] input
+    , check old input renamed [step old input renamed input, step renamed input old input,
+        step old input renamed input] input
+    , check old input renamed [step renamed input renamed input] input
     , check old input old [step old edited old input] input
     , check old input old [step old input old edited,step old input old input] input
     , check old input old [step old input renamed input,step old input old input] input

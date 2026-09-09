@@ -1,5 +1,5 @@
 module Kyyn.Domain.Workspace
-  ( EvolutionState(..), IntermediateBinding(..), WorkspaceManifest(..), WorkspaceSnapshot(..)
+  ( EvolutionState(..), WorkspaceManifest(..), WorkspaceSnapshot(..)
   , projectWorkspace, matchesCapturedInputs
   ) where
 
@@ -10,15 +10,11 @@ import Kyyn.Domain.Path (relativeName, relativePath)
 
 data EvolutionState = Draft | Ready | Accepted deriving (Eq, Show)
 
-data IntermediateBinding = IntermediateBinding
-  { bindingName :: String, schemaType :: String, schemaMetadata :: String } deriving (Eq, Show)
-
 data WorkspaceManifest = WorkspaceManifest
   { beforeRevision :: GitRevision
   , name :: String
   , explanation :: String
   , state :: EvolutionState
-  , intermediates :: [IntermediateBinding]
   } deriving (Eq, Show)
 
 data WorkspaceSnapshot = WorkspaceSnapshot
@@ -44,5 +40,5 @@ projectWorkspace manifest tree
 matchesCapturedInputs :: WorkspaceSnapshot -> WorkspaceSnapshot -> Bool
 matchesCapturedInputs left right = inputs left == inputs right
   where
-    inputs (WorkspaceSnapshot (WorkspaceManifest revision name explanation _ intermediates) before target change _) =
-      (revision, name, explanation, intermediates, before, target, change)
+    inputs (WorkspaceSnapshot (WorkspaceManifest revision name explanation _) before target change _) =
+      (revision, name, explanation, before, target, change)
