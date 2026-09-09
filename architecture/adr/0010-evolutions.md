@@ -364,6 +364,10 @@ independent of root compilation:
 
 ```haskell
 data EvolutionStore :: Effect where
+  ReadEvolutionSummary
+    :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionSummary)
+  ReadArchivedReport
+    :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] (Maybe EvolutionReport))
   ListEvolutions
     :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
   ResolveEvolution
@@ -408,6 +412,15 @@ These are selected constructors; review-note persistence is defined in
 [interaction](0023-interaction.md). Creation and capture belong to EvolutionAuthoring
 because they need source inspection; EvolutionStore's metadata, candidate and archive
 operations remain installable without RootOpening, the compiler or SDK.
+Inspection receives a resolved revision explicitly. `ReadEvolutionSummary` uses
+the same acceptance lookup as listing, at that revision; `ReadArchivedReport`
+decodes `result.json` from Git at that revision and checks the workspace identity.
+The effectful capability helper `inspectEvolution` combines them for an accepted
+workspace, or reads the saved candidate's report for an unaccepted workspace.
+It returns `(EvolutionSummary, Maybe EvolutionReport)` rather than printing or
+executing code. Accepted inspection needs neither a candidate cache nor a valid
+live manifest. Missing reports are distinguishable from malformed reports;
+unsupported durable encodings return diagnostics rather than being rerun.
 `ReadWorkspace` captures and decodes the local workspace without interpreting its
 Haskell; capture delegates this read to the store before checking the Before copy.
 RootOpening supplies the source commit's derived contract

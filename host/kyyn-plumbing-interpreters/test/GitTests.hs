@@ -9,6 +9,7 @@ import qualified Data.ByteString.Char8 as Char8
 import Effectful (runEff)
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Git
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.Git
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
@@ -20,7 +21,42 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 main :: IO ()
-main = checkoutTests >> snapshotTests
+main = discoveryTests >> checkoutTests >> snapshotTests
+
+discoveryTests :: IO ()
+discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
+  executable <- findExecutable "git" >>= maybe (fail "Git is required") pure
+  scope <- either fail pure (directoryScope directory)
+  let execute action = runEff . runFailure . runProcessExecutionIO . runGit executable $ action
+      command args = do
+        result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
+          (Process.ProcessSpec executable args directory [("PATH",""),("LC_ALL","C")]) $ do
+            Process.closeStdin
+            _ <- Process.collectStdout
+            Process.awaitExit
+        case result of Right (Process.ProcessExit 0 _) -> pure (); _ -> fail (show result)
+  absent <- execute (discoverRepository scope)
+  case absent of Right (Left [Diagnostic _ "git.no-working-tree" _ _]) -> pure (); _ -> fail ("Non-repo was not a diagnostic: " ++ show absent)
+  command ["init","-q","-b","main"]
+  top <- execute (discoverRepository scope)
+  unless (top == Right (Right (Repository scope, WholeTree))) (fail ("Top-level discovery: " ++ show top))
+  let nestedName = "knowledge/sales \955"
+  createDirectoryIfMissing True (directory </> nestedName)
+  nested <- either fail pure (directoryScope (directory </> nestedName))
+  expected <- either fail pure (relativePath nestedName)
+  found <- execute (discoverRepository nested)
+  unless (found == Right (Right (Repository scope, Subtree expected))) (fail ("Nested discovery: " ++ show found))
+  command ["init","--bare","-q","bare.git"]
+  bare <- either fail pure (directoryScope (directory </> "bare.git"))
+  bareResult <- execute (discoverRepository bare)
+  case bareResult of Right (Left [Diagnostic _ "git.no-working-tree" _ _]) -> pure (); _ -> fail ("Bare discovery: " ++ show bareResult)
+  unavailable <- either fail pure (directoryScope (directory </> "missing"))
+  missing <- execute (discoverRepository unavailable)
+  case missing of Left _ -> pure (); _ -> fail "Missing cwd was not an operational failure"
+  noExecutable <- runEff . runFailure . runProcessExecutionIO . runGit (directory </> "missing-git") $
+    discoverRepository scope
+  case noExecutable of Left _ -> pure (); _ -> fail "Missing executable was not an operational failure"
+  putStrLn "Repository discovery passed for root, nested, absent and bare repositories."
 
 snapshotTests :: IO ()
 snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do

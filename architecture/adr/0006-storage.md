@@ -239,7 +239,19 @@ to pass explicitly to loading, creation or rebasing. Source reads do not substit
 an ambient latest root. Publication still compares the live ref atomically; the
 earlier resolution is not a reservation or a substitute for that comparison.
 
-The initial Git plumbing supplies `ResolveRevision Repository String` and
+`DiscoverRepository DirectoryScope` resolves the explicitly selected KB directory
+to `Either [Diagnostic] (Repository, TreePath)` through Git's
+`rev-parse --path-format=absolute --show-toplevel`. The caller supplies an absolute,
+canonical directory. The result is `WholeTree` at the repository root and a
+repository-relative `Subtree` otherwise. Every nonzero process exit is
+`git.no-working-tree`, explaining that a Git working tree cannot be selected at
+that path and carrying Git's stderr explanation without parsing it or asserting
+that the directory is necessarily outside a repository. A bare repository is
+also unsuitable. Process launch failures remain operational failures, not this
+selection diagnostic. Discovery needs no commit, compiler or SDK. KB manifest
+recognition is above Git plumbing; Git does not know KB layouts.
+
+Snapshot reading uses `ResolveRevision Repository String` and
 `ReadTreeAt Repository GitRevision TreePath`. `WholeTree` selects the repository
 tree itself; `Subtree RelativePath` selects a directory beneath it. Both operations
 return Either [Diagnostic] for content conditions. Resolution returns a full commit
@@ -250,8 +262,8 @@ in file names; blob contents remain bytes. Symlinks, submodules and unsupported
 paths are explicit diagnostics. Regular and executable blobs are captured as byte
 files; FileTree does not retain mode bits. Missing selectors/subtrees are diagnostics,
 not empty snapshots. Nonzero infrastructure outcomes remain GitUnavailable; the
-interpreter does not classify errors by parsing human-readable stderr. Ref mutation
-and commit construction are not implemented by this reader.
+interpreter does not classify errors by parsing human-readable stderr. Commit
+construction and publication are described in [ADR 0012](0012-acceptance.md).
 
 `ReadFact` returns `Nothing` only for an absent ID in an existing collection.
 Unknown collections, corrupt data and inaccessible storage are explicit failures.
