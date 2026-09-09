@@ -19,6 +19,8 @@ pulling changes to update the installation; it replaces only its dedicated bundl
 and link, not KBs. A custom prefix is supported: `bash tools/install-cli.sh /path/to/prefix`.
 Both the bundle and link must be writable. If replacement fails after moving the
 old bundle, the installer prints where it retained that bundle for recovery.
+To uninstall, remove `~/.local/bin/kyyn-v2` and `~/.local/lib/kyyn-v2` (or those
+paths under your chosen prefix). KBs stored elsewhere are untouched.
 
 Plain `cabal install exe:kyyn-v2` installs only the host executable, not the
 MicroHs/runtime/SDK bundle it needs. Use the script for a usable local installation.
