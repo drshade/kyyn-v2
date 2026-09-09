@@ -15,12 +15,11 @@ import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, withTemporaryScope, writeBytes)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.SchemaInspection
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata (evaluateMetadata)
 
 runSchemaInspectionIO
-  :: (IOE :> es, FileSystem :> es, GuestCompilation :> es, ProcessExecution :> es, Failure :> es)
+  :: (IOE :> es, FileSystem :> es, GuestCompilation :> es, Failure :> es)
   => GuestToolchain -> Eff (SchemaInspection : es) a -> Eff es a
 runSchemaInspectionIO (GuestToolchain compiler) = interpret $ \_ (InspectSchema source) ->
   withTemporaryScope $ \scope -> do

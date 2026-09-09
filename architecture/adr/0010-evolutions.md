@@ -699,7 +699,7 @@ ordinary preview outcomes, with the captured context still available for review.
 A missing compiler or compiler crash is an operational
 [Failure](0019-failures.md), not an empty successful result.
 
-Independent target validators and queries compile in `CheckRootCode` during
+Independent target validators and queries compile in `PrepareRoot` during
 candidate checking, after materialization, not through an additional pre-evaluation
 gate. An evolution may therefore evaluate successfully and its candidate then fail
 because a target validator does not compile. Evaluation answers whether the change

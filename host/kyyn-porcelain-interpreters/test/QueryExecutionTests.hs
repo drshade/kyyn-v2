@@ -5,6 +5,7 @@ import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..))
 import Effectful (Eff, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Effectful.State.Static.Local (State, modify, runState)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic
@@ -75,6 +76,24 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   unless (unusedQuery == Right (Left rejected)) (fail "Unused registered query escaped compilation checking")
   checkedCode <- checkCode (Right (entry "exit 97"))
   unless (checkedCode == Right (Right [descriptor])) (fail "Code checking executed a validator/query or failed to check it")
+  (reused, calls) <- runEff . runState ([] :: [String]) . runFailure . runProcessExecutionIO . runFileSystemIO scope
+    . gateCompiler shell (entry "printf '[]'") (Right (entry "printf '{\"result\":true,\"trace\":[]}'"))
+    . recordCompiler . schemaMock input output . recordInspection
+    . runDhallHandling . runRootStore . runRootExecution sdk $ do
+      prepared <- prepareRoot root >>= either (error . show) pure
+      unless (preparedRoot prepared == root && preparedQueries prepared == [descriptor])
+        (error "Preparation changed the root or its descriptors")
+      forM_ [1 :: Int, 2] $ \_ -> do
+        report <- validateRoot prepared
+        unless (report == Right (ValidationReport [])) (error "Prepared validator changed its result")
+        result <- queryRoot prepared descriptor args
+        unless (result == Right (QueryResult (CheckedValue (contractId output) (Bool True)) []))
+          (error "Prepared query changed its result")
+      _ <- prepareRoot root >>= either (error . show) pure
+      pure ()
+  let preparation = ["compile:KyynValidationEntry.hs", "inspect:Queries.Input", "inspect:Queries.Result", "compile:KyynQueryEntry.hs"]
+  unless (reused == Right () && calls == preparation ++ replicate 4 "execute" ++ preparation)
+    (fail ("Prepared execution rebuilt code or a separate preparation reused hidden state: " ++ show calls))
   forM_ ["printf '{}'", "printf '{\"result\":\"wrong type\",\"trace\":[]}'"] $ \script -> do
     response <- execute (Right (entry script)) descriptor args
     case response of
@@ -112,3 +131,19 @@ gateCompiler shell validator query = interpret $ \_ -> \case
       else if lookup "KyynQueryEntry.hs" entries /= Nothing
         then pure query
         else error "Unexpected code-check entry"
+
+recordCompiler :: (State [String] :> es, GuestCompilation :> es)
+  => Eff (GuestCompilation : es) a -> Eff es a
+recordCompiler = interpret $ \_ -> \case
+  CompileGuest sources -> do
+    modify (++ ["compile:" ++ relativeName (selectedEntry sources)])
+    compileGuest sources
+  ExecuteCompiled program input -> do
+    modify (++ ["execute" :: String])
+    executeCompiled program input
+
+recordInspection :: (State [String] :> es, SchemaInspection :> es)
+  => Eff (SchemaInspection : es) a -> Eff es a
+recordInspection = interpret $ \_ (InspectSchema source) -> do
+  modify (++ ["inspect:" ++ selectedType source])
+  inspectSchema source
