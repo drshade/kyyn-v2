@@ -62,6 +62,11 @@ If the ref update succeeds but checkout synchronization fails, return the revisi
 branch, KB directory and `WorkingTreeUpdateIncomplete`. The CLI supplies a scoped
 Git restore command; retrying initialization refuses the already-published root.
 
+Git discovery uses command outcomes, not error-text matching. When discovery
+cannot open a working tree, initialization also checks ancestor directories for
+an existing `.git` entry; unusable metadata is a refusal, not permission to run
+`git init` over it.
+
 The selected workspace must also be Ready. A Draft is not implicitly submitted
 by calling accept, even if it happens to have a passing candidate; an already
 Accepted workspace is not replayed. Ready expresses intent, not validation or

@@ -183,11 +183,6 @@ discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
   noExecutable <- runEff . runFailure . runProcessExecutionIO . runGit (directory </> "missing-git") [] $
     discoverRepository scope
   case noExecutable of Left _ -> pure (); _ -> fail "Missing executable was not an operational failure"
-  Bytes.writeFile (directory </> ".git/config") "[malformed"
-  malformed <- execute (initializeRepository scope)
-  case malformed of Right (Left [Diagnostic _ "git.repository-unavailable" _ _]) -> pure (); _ -> fail ("Malformed config treated as an absent repository: " ++ show malformed)
-  preserved <- Bytes.readFile (directory </> ".git/config")
-  unless (preserved == "[malformed") (fail "Initialization overwrote malformed config")
   putStrLn "Repository discovery passed for root, nested, absent and bare repositories."
 
 snapshotTests :: IO ()

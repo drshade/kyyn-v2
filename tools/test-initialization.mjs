@@ -68,7 +68,7 @@ evolution = pure . evaluateEvolution
 `);
   cli(kb, ['evolution', 'evaluate', created.id]);
   assert.equal(git(kb, 'status', '--porcelain', '--untracked-files=all', '--', '.kyyn'), '');
-  assert.equal(git(kb, 'check-ignore', '.kyyn/candidates/.gitignore'), '.kyyn/candidates/.gitignore');
+  assert.equal(git(kb, 'check-ignore', '.kyyn/.gitignore'), '.kyyn/.gitignore');
   assert.equal(git(kb, 'rev-parse', 'HEAD'), initialized.revision);
   cli(kb, ['evolution', 'ready', created.id]);
   cli(kb, ['evolution', 'accept', created.id]);
@@ -77,7 +77,7 @@ evolution = pure . evaluateEvolution
     { todos: [{ id: 'todo-001', value: { title: 'First task' } }] });
   console.log('Initialized empty KB -> first schema-changing evolution -> accepted collection passed.');
 
-  const repo = path.join(temporary, 'existing');
+  const repo = path.join(temporary, "existing 'quoted' λ");
   fs.mkdirSync(repo);
   git(repo, 'init', '-q');
   write(path.join(repo, 'unrelated'), 'committed');
@@ -126,6 +126,18 @@ evolution = pure . evaluateEvolution
   const insideBare = path.join(bare, 'new-kb');
   assert.equal(cli(insideBare, ['kb', 'init'], 1).diagnostics[0].code, 'git.repository-unavailable');
   assert.equal(fs.existsSync(insideBare), false);
+  for (const kind of ['config', 'HEAD', 'gitfile']) {
+    const corrupted = path.join(temporary, `corrupted-${kind}`);
+    fs.mkdirSync(corrupted);
+    if (kind !== 'gitfile') git(corrupted, 'init', '-q');
+    const metadata = kind === 'gitfile' ? path.join(corrupted, '.git') : path.join(corrupted, '.git', kind);
+    const bytes = kind === 'gitfile' ? 'gitdir: /nonexistent-kyyn-test-repository\n' : 'broken';
+    write(metadata, bytes);
+    const destination = path.join(corrupted, 'nested', 'kb');
+    assert.equal(cli(destination, ['kb', 'init'], 1).diagnostics[0].code, 'git.repository-unavailable');
+    assert.equal(fs.existsSync(destination), false);
+    assert.equal(fs.readFileSync(metadata, 'utf8'), bytes);
+  }
   const repair = path.join(repo, 'repair');
   const lock = path.join(repo, '.git', 'index.lock');
   write(lock, 'held by fixture');
@@ -133,11 +145,13 @@ evolution = pure . evaluateEvolution
   assert.equal(incomplete.result.checkoutSynchronized, false);
   assert.equal(incomplete.result.revision, git(repo, 'rev-parse', 'HEAD'));
   const recovery = incomplete.diagnostics.find(d => d.code === 'kb.checkout-incomplete').message;
-  assert(recovery.includes(`git -C '${repo}' restore --source=${incomplete.result.revision}`));
+  assert(recovery.includes(`restore --source=${incomplete.result.revision}`));
   assert(recovery.includes("--staged --worktree -- 'repair/root'"));
   fs.unlinkSync(lock);
   cli(repair, ['kb', 'init'], 1);
-  git(repo, 'restore', '--source=HEAD', '--staged', '--worktree', '--', 'repair/root');
+  const restoreCommand = recovery.split('with: ')[1].split('\n')[0];
+  const restored = spawnSync('sh', ['-c', restoreCommand], { cwd: temporary, env, encoding: 'utf8' });
+  assert.equal(restored.status, 0, JSON.stringify(restored));
   assert.equal(fs.existsSync(path.join(repair, 'root', 'kb.dhall')), true);
   console.log('Existing/nested repositories, preservation, read-only refusals and post-publication recovery passed.');
 } finally {

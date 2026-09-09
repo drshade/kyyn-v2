@@ -71,6 +71,9 @@ workspace. Edit its `change/Evolution.hs` and, when changing schema or validatio
 its `target/` files. `before/` records the selected source. Use the returned ID
 in place of `ID` below:
 
+`.kyyn/` holds private candidate cache files and ignores itself in Git; no
+top-level `.gitignore` rule is needed. Accepted workspaces remain in `evolutions/`.
+
 If initialization reports a committed root but incomplete checkout,
 follow its scoped Git restore command rather than initializing again. A failure
 after setup starts may leave an empty directory or Git repository behind; inspect

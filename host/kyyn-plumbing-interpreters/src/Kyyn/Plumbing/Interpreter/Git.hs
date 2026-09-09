@@ -160,11 +160,12 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
           prefix <- if relative == "." then pure WholeTree
             else either (rejected "git.unsupported-path") (pure . Subtree) (relativePath relative)
           pure (Repository repositoryScope, prefix)
-        _ -> pure (Left [errorDiagnostic
-          (if status == 128 && "fatal: not a git repository (or " `Bytes.isPrefixOf` diagnostics
-            then "git.no-working-tree" else "git.repository-unavailable")
-          ("Cannot select a Git working tree at " ++ scopePath scope ++ "; select a KB with --kb PATH.\n"
-            ++ either (const (Char8.unpack diagnostics)) Text.unpack (Text.decodeUtf8' diagnostics))])
+        _ -> do
+          (_, Process.ProcessExit gitDirectoryStatus _) <- command (Repository scope) ["rev-parse", "--git-dir"]
+          pure (Left [errorDiagnostic
+            (if gitDirectoryStatus == 0 then "git.repository-unavailable" else "git.no-working-tree")
+            ("Cannot select a Git working tree at " ++ scopePath scope ++ "; select a KB with --kb PATH.\n"
+              ++ either (const (Char8.unpack diagnostics)) Text.unpack (Text.decodeUtf8' diagnostics))])
     configured repo key = do
       (output, Process.ProcessExit status diagnostics) <- liftChecked (command repo ["config", "--null", "--get", key])
       case status of

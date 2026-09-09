@@ -56,7 +56,7 @@ prepare scope = runExceptT $ do
   lookupScope <- nearestDirectory scope
   discovered <- liftEff (Git.discoverRepository lookupScope)
   selected <- case discovered of
-    Left [Diagnostic _ "git.no-working-tree" _ _] -> pure Nothing
+    Left [Diagnostic _ "git.no-working-tree" _ _] -> requireNoGitMetadata lookupScope >> pure Nothing
     Left diagnostics -> throwE diagnostics
     Right (repository@(Repository repositoryScope),_) -> do
       let relative = makeRelative (scopePath repositoryScope) (scopePath scope)
@@ -83,6 +83,14 @@ nearestDirectory scope = do
       let parent = takeDirectory (scopePath scope)
       when (parent == scopePath scope) (reject "kb.directory" "No existing parent directory.")
       checkedPath (directoryScope parent) >>= nearestDirectory
+
+requireNoGitMetadata :: FS.FileSystem :> es => DirectoryScope -> ExceptT [Diagnostic] (Eff es) ()
+requireNoGitMetadata scope = do
+  names <- liftEff (FS.listDirectory scope)
+  when (any ((== ".git") . relativeName) (maybe [] id names))
+    (reject "git.repository-unavailable" "Existing .git metadata could not be opened; repair the repository before initializing a KB.")
+  let parent = takeDirectory (scopePath scope)
+  unless (parent == scopePath scope) (checkedPath (directoryScope parent) >>= requireNoGitMetadata)
 
 rejectNested :: (FS.FileSystem :> es, Git.Git :> es)
   => DirectoryScope -> Maybe (KnowledgeBase, LocalBranch, Maybe GitRevision) -> ExceptT [Diagnostic] (Eff es) ()
