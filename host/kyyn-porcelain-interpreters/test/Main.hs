@@ -35,9 +35,11 @@ import qualified Kyyn.Plumbing.Capability.GuestCompilation.Types as Sources
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import PublicationTests (publicationTests)
+import InitializationTests (initializationTests)
 
 main :: IO ()
 main = do
+  initializationTests
   emptyContract <- right (checkContract
     (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
   emptyCode <- tree []
@@ -166,6 +168,8 @@ gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case
   Git.ReadUserIdentity _ -> error "Root opening must not read commit identity"
   Git.DiscoverRepository _ -> error "Root opening unexpectedly discovered a repository"
+  Git.InitializeRepository _ -> error "Root opening must not initialize a repository"
+  Git.IndexPaths {} -> error "Root opening must not inspect the index"
   Git.ResolveRevision _ _ -> error "RootOpening must not resolve the revision again"
   Git.ReadTreeAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root" -> pure (Right captured)

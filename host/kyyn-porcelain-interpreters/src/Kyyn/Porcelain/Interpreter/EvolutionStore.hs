@@ -103,6 +103,8 @@ runEvolutionStore = interpret $ \_ -> \case
     checkSavedReport WriteFile report
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
     tree <- stored WriteFile "root" (fileTree (files facts ++ files code))
+    ignore <- stored WriteFile ".gitignore" (relativePath ".gitignore")
+    FileSystem.writeBytes parent ignore "*\n"
     allocated <- FileSystem.createUniqueDirectory parent
     location <- stored WriteFile "candidate" (directoryScope (scopedPath parent allocated))
     writeTree location "capture/" capture

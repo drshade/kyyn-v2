@@ -22,6 +22,7 @@ main = do
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
+  succeeds ["kb","init"] (Invocation selected Human (Kb InitKb))
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
   succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
     "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]
@@ -48,7 +49,7 @@ main = do
         assert "Wrong help exit status"
           (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
-  forM_ [([], ["root", "evolution"]), (["root"], ["show", "check"]),
+  forM_ [([], ["kb", "root", "evolution"]), (["kb"], ["init"]), (["root"], ["show", "check"]),
     (["evolution"], ["new", "list", "accept"]),
     (["root", "unknown"], ["show", "check"])] $ \(args,commands) ->
     case parseArguments args of

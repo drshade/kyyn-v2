@@ -9,7 +9,8 @@ import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository(..), revisionName)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (directoryScope, scopedPath)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath)
+import Kyyn.Domain.Publication (InitializationTarget(..))
 import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
@@ -28,6 +29,8 @@ import Kyyn.Plumbing.Interpreter.Git (runGit)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.Evolution (acceptStoredEvolution, evaluateWorkspace, checkWorkspace)
 import qualified Kyyn.Porcelain.Capability.Root as Root
+import qualified Kyyn.Porcelain.Capability.KnowledgeBaseInitialization as Initialization
+import Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization (runKnowledgeBaseInitialization)
 import qualified Kyyn.Porcelain.Capability.EvolutionAuthoring as Authoring
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
@@ -81,16 +84,32 @@ execute (Cli.Invocation selection _ command) = do
   case configured of
     Left response -> pure response
     Right (host,scope) -> do
-      selected <- selectKnowledgeBase host scope
-      either pure (dispatch host command) selected
+      case command of
+        Cli.Kb Cli.InitKb -> executeInitialization host scope
+        Cli.Root request -> selectKnowledgeBase host scope >>= either pure (dispatchRoot host request)
+        Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)
 
-dispatch :: Host -> Cli.Command -> SelectedKb -> IO Response
-dispatch host command (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case command of
-  Cli.Root request -> withRuntime host $ \toolchain sdk -> finish $
+executeInitialization :: Host -> DirectoryScope -> IO Response
+executeInitialization host scope = do
+  prepared <- runBase host . runKnowledgeBaseInitialization $ Initialization.prepareKnowledgeBase scope
+  case prepared of
+    Left failure -> pure (operationalFailure failure)
+    Right (Left diagnostics) -> pure (refusal diagnostics)
+    Right (Right target@(InitializationTarget _ lookupScope _)) -> do
+      metadata <- commitMetadata host (Repository lookupScope) "Initialize knowledge base\n"
+      case metadata of
+        Left response -> pure response
+        Right commit -> withRuntime host $ \toolchain sdk -> finish $
+          runRuntime host toolchain . runRootOpening sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
+            initializationResult <$> Initialization.initializeKnowledgeBase target commit
+
+dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
+dispatchRoot host request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
     runRuntime host toolchain . runRootOpening sdk . runRootExecution sdk $ case request of
       Cli.ShowRoot -> inspectionCheckResult revision <$> Root.inspectRootAt kb revision
       Cli.CheckRoot -> checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision
-  Cli.Evolution request -> case request of
+dispatchEvolution :: Host -> Cli.EvolutionCommand -> SelectedKb -> IO Response
+dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case request of
     Cli.ListEvolutions selection -> finish $ runMetadata host $
       either refusal summariesResult <$> Store.listEvolutions kb selection
     Cli.ShowEvolution identity -> finish $ runMetadata host $

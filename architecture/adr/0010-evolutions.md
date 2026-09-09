@@ -558,8 +558,10 @@ Only after all files are written does `ReplaceBytes` atomically publish
 `latest/<evolution-id>`. Save failure leaves the previous selection intact; an
 unfinished private directory may remain. Loaded values and older result directories
 are never modified by a subsequent save. This provides atomic visibility, not
-power-loss durability. The KB template must ignore `.kyyn/`; the store does not
-edit a user's ignore rules. These files stay outside root and evolution exports.
+power-loss durability. Saving a candidate writes a self-ignoring `.gitignore`
+containing `*` inside `.kyyn/candidates/`; no template or change to the user's
+top-level ignore rules is required. Reads do not write ignore files. These files
+stay outside root and evolution exports.
 
 `MatchesCapturedInputs` compares the workspace's current evaluation inputs with its
 capture. `ExportAcceptedWorkspace` serializes the captured source/specifications,

@@ -32,8 +32,6 @@ data SelectedKb = SelectedKb
 configure :: Cli.Selection -> IO (Either Response (Host, DirectoryScope))
 configure (Cli.Selection path gitOverride runtimeOverride) = runExceptT $ do
   kbPath <- liftIO (canonicalizePath path)
-  exists <- liftIO (doesDirectoryExist kbPath)
-  if exists then pure () else invalid "kb.directory" ("No KB directory exists at " ++ kbPath)
   scope <- either (invalid "kb.path") pure (directoryScope kbPath)
   executable <- liftIO (findExecutable (maybe "git" id gitOverride))
     >>= maybe (invalid "setup.git" "Git was not found; install Git or supply --git EXECUTABLE") pure
@@ -51,6 +49,12 @@ runGitIO (Host executable environment _ _) = runEff . runFailure . runProcessExe
 
 selectKnowledgeBase :: Host -> DirectoryScope -> IO (Either Response SelectedKb)
 selectKnowledgeBase host scope = do
+  exists <- doesDirectoryExist (scopePath scope)
+  if exists then selectExistingKnowledgeBase host scope
+  else pure (Left (refusal [errorDiagnostic "kb.directory" ("No KB directory exists at " ++ scopePath scope)]))
+
+selectExistingKnowledgeBase :: Host -> DirectoryScope -> IO (Either Response SelectedKb)
+selectExistingKnowledgeBase host scope = do
   result <- runGitIO host $ runExceptT $ do
     (repository,prefix) <- ExceptT (Git.discoverRepository scope)
     revision <- ExceptT (Git.resolveRevision repository "HEAD")

@@ -8,6 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
+    Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization
     Kyyn.Porcelain.Interpreter.RootOpening
     Kyyn.Porcelain.Interpreter.RootPublication
     Kyyn.Porcelain.Interpreter.WorkspaceStore
@@ -19,7 +20,7 @@ library
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-plumbing,
-    effectful-core ==2.6.1.0, aeson, bytestring, text, transformers
+    effectful-core ==2.6.1.0, aeson, bytestring, text, transformers, filepath
 
 test-suite evolution-reports
   type: exitcode-stdio-1.0
@@ -34,7 +35,7 @@ test-suite evolution-reports
 test-suite roots
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: GuestFixture ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests PublicationTests
+  other-modules: GuestFixture ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests PublicationTests InitializationTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: OverloadedStrings

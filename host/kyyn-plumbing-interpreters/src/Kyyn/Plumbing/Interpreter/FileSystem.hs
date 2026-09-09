@@ -63,6 +63,7 @@ runFileSystemIO parent = interpret $ \env -> \case
       Left err | isDoesNotExistError err -> pure Nothing
                | otherwise -> ioError err
   CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
+  EnsureDirectory scope -> native Failure.EnsureDirectory (scopePath scope) (createDirectoryIfMissing True (scopePath scope))
 
 allocateDirectory :: FilePath -> IO RelativePath
 allocateDirectory parent = createDirectoryIfMissing True parent >> allocate

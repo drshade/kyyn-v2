@@ -72,7 +72,7 @@ The agreed navigation sketch is:
 ```text
 kyyn
   kb
-    new <name>
+    init
     show
   root
     show
@@ -124,12 +124,20 @@ kyyn
 
 This establishes navigation, not a comprehensive argument specification or a
 claim that these commands exist. The first evolution CLI slice implements
-`root show/check` and the evolution group. Other groups are designed in their
+`kb init`, `root show/check` and the evolution group. Other groups are designed in their
 own slices; do not install empty groups or placeholder handlers. `doctor` is
 a deliberate standalone readiness command. Collection selection for fact IDs,
 typed query arguments and secret input are details for their respective slices.
 `root schema list/show` exposes the selected root contract's types, definitions,
 fields and declared roles, not arbitrary compiler internals.
+
+`kyyn-v2 --kb PATH kb init` creates an empty Haskell-schema KB and commits its
+validated root; PATH may not exist yet. It returns the commit revision, branch,
+absolute KB path and checkout synchronization status. Human output points to
+`evolution new` as the next step. Initialization follows the ordinary exit table:
+success 0, refusal 1, operational failure 3, published-but-unsynchronized 4.
+Exit 4 includes a `git restore` command scoped to the initialized root, not a new
+initialization recovery registry. ADR 0012 owns preparation/publication ordering.
 
 All KB-scoped commands share `--kb PATH`, defaulting to `.`. Resolve relative
 paths against the invoking process's working directory. The path selects the KB

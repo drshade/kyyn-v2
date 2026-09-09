@@ -171,13 +171,23 @@ discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
   command ["init","--bare","-q","bare.git"]
   bare <- either fail pure (directoryScope (directory </> "bare.git"))
   bareResult <- execute (discoverRepository bare)
-  case bareResult of Right (Left [Diagnostic _ "git.no-working-tree" _ _]) -> pure (); _ -> fail ("Bare discovery: " ++ show bareResult)
+  case bareResult of Right (Left [Diagnostic _ "git.repository-unavailable" _ _]) -> pure (); _ -> fail ("Bare discovery: " ++ show bareResult)
+  bareConfig <- Bytes.readFile (directory </> "bare.git/config")
+  refusedBare <- execute (initializeRepository bare)
+  unless (refusedBare == bareResult) (fail "Initialization did not refuse the bare repository")
+  bareConfigAfter <- Bytes.readFile (directory </> "bare.git/config")
+  unless (bareConfigAfter == bareConfig) (fail "Initialization modified bare repository configuration")
   unavailable <- either fail pure (directoryScope (directory </> "missing"))
   missing <- execute (discoverRepository unavailable)
   case missing of Left _ -> pure (); _ -> fail "Missing cwd was not an operational failure"
   noExecutable <- runEff . runFailure . runProcessExecutionIO . runGit (directory </> "missing-git") [] $
     discoverRepository scope
   case noExecutable of Left _ -> pure (); _ -> fail "Missing executable was not an operational failure"
+  Bytes.writeFile (directory </> ".git/config") "[malformed"
+  malformed <- execute (initializeRepository scope)
+  case malformed of Right (Left [Diagnostic _ "git.repository-unavailable" _ _]) -> pure (); _ -> fail ("Malformed config treated as an absent repository: " ++ show malformed)
+  preserved <- Bytes.readFile (directory </> ".git/config")
+  unless (preserved == "[malformed") (fail "Initialization overwrote malformed config")
   putStrLn "Repository discovery passed for root, nested, absent and bare repositories."
 
 snapshotTests :: IO ()

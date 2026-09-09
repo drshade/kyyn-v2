@@ -25,6 +25,43 @@ The revision identifies the complete source root, not merely its schema version.
 KB initialization creates the first commit as a separate operation; evolution
 acceptance always advances an existing local head.
 
+Initialization uses `KnowledgeBaseInitialization`, not an evolution workspace or
+the evolution-history interpreter. Preparation is read-only and captures the
+requested directory, the nearest existing directory for Git/config lookup, and
+an optional existing KB location, checked-out branch and head. Identity is read
+before compilation; the pure empty scaffold then passes `OpenCapturedRoot` and
+the ordinary `checkRoot` path. Publication accepts only the resulting checked root:
+
+```haskell
+data KnowledgeBaseInitialization :: Effect where
+  PrepareKnowledgeBase :: DirectoryScope
+    -> KnowledgeBaseInitialization m (Either [Diagnostic] InitializationTarget)
+  PublishInitialRoot :: InitializationTarget -> CommitMetadata -> Validated Root
+    -> KnowledgeBaseInitialization m (Either [Diagnostic] InitializationResult)
+
+runKnowledgeBaseInitialization
+  :: (FileSystem :> es, Git :> es, RootStore :> es)
+  => Eff (KnowledgeBaseInitialization : es) a -> Eff es a
+```
+
+Only publication creates missing directories or initializes Git. It rechecks the
+prepared target, exports the validated root through RootStore, constructs a commit,
+conditionally publishes it, and synchronizes only `root/`. A new repository uses
+Git's configured default branch; an existing repository retains its checked-out
+branch and unrelated content, including staged and unstaged changes. An unborn
+branch has no parent; otherwise initialization adds one commit to the existing head.
+
+Refuse existing `root/` or `evolutions/` content at the target in HEAD, the index
+or the working directory, detached HEAD, and placement inside another KB's owned
+`root/` or `evolutions/` subtree. Unrelated content beside those subtrees is allowed.
+Ordinary preflight refusals, including missing identity and validation failures,
+precede filesystem writes. Concurrent target/head changes can still cause a
+publication-time refusal. Operational failure after directory/repository creation
+may leave that empty setup in place; initialization does not recursively roll it back.
+If the ref update succeeds but checkout synchronization fails, return the revision,
+branch, KB directory and `WorkingTreeUpdateIncomplete`. The CLI supplies a scoped
+Git restore command; retrying initialization refuses the already-published root.
+
 The selected workspace must also be Ready. A Draft is not implicitly submitted
 by calling accept, even if it happens to have a passing candidate; an already
 Accepted workspace is not replayed. Ready expresses intent, not validation or

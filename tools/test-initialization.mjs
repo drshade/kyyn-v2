@@ -1,0 +1,145 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+if (process.argv.length < 3 || process.argv.length > 4) throw new Error('Usage: node tools/test-initialization.mjs EXECUTABLE [RUNTIME]');
+const executable = path.resolve(process.argv[2]);
+const runtime = process.argv[3] ? ['--runtime', path.resolve(process.argv[3])] : [];
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-initialization-'));
+const home = path.join(temporary, 'home');
+fs.mkdirSync(home);
+const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(temporary, 'xdg'), GIT_CONFIG_NOSYSTEM: '1' };
+function git(cwd, ...args) {
+  const result = spawnSync('git', args, { cwd, env, encoding: 'utf8' });
+  assert.equal(result.status, 0, JSON.stringify(result));
+  return result.stdout.trim();
+}
+function cli(kb, args, expected = 0, options = runtime) {
+  const result = spawnSync(executable, ['--kb', kb, ...options, '--json', ...args],
+    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+  assert.equal(result.status, expected, JSON.stringify(result));
+  return JSON.parse(result.stdout);
+}
+function write(file, text) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); }
+try {
+  git(temporary, 'config', '--global', 'user.name', 'Initialization λ');
+  git(temporary, 'config', '--global', 'user.email', 'initialization@example.invalid');
+  git(temporary, 'config', '--global', 'init.defaultBranch', 'kb-test');
+  const kb = path.join(temporary, 'new λ', 'kb');
+  const initialized = cli(kb, ['kb', 'init']).result;
+  assert.equal(initialized.branch, 'kb-test');
+  assert.equal(initialized.path, kb);
+  assert.equal(git(kb, 'rev-list', '--count', 'HEAD'), '1');
+  assert.equal(git(kb, 'show', '-s', '--format=%an', 'HEAD'), 'Initialization λ');
+  assert.equal(initialized.revision, git(kb, 'rev-parse', 'HEAD'));
+  assert.deepEqual(cli(kb, ['root', 'show']).result.value, {});
+  cli(kb, ['root', 'check']);
+  assert.equal(cli(kb, ['kb', 'init'], 1).outcome, 'Refused');
+  assert.equal(git(kb, 'rev-list', '--count', 'HEAD'), '1');
+
+  const created = cli(kb, ['evolution', 'new', 'first collection']).result;
+  const target = path.join(created.path, 'target');
+  fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
+  write(path.join(target, 'src', 'RootV2.hs'), `module RootV2 where
+import Kyyn.Types.SchemaMetadata
+import Kyyn.Types.Fact
+data Todo = Todo { title :: String } deriving (Eq, Show)
+data Root = Root { todos :: [Fact Todo] } deriving (Eq, Show)
+metadata :: SchemaMetadata
+metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
+`);
+  for (const file of ['kb.dhall', 'src/Validate.hs']) {
+    const filename = path.join(target, file);
+    fs.writeFileSync(filename, fs.readFileSync(filename, 'utf8').replaceAll('RootV1', 'RootV2'));
+  }
+  write(path.join(created.path, 'change', 'Evolution.hs'), `module Evolution where
+import Kyyn.Evolution
+import Kyyn.Types.Fact
+import Kyyn.Types.Program (Program)
+import KyynEvolutionBindings
+import qualified RootV1 as Before
+import qualified RootV2 as After
+evolution :: Before.Root -> Program calls (Either EvolutionFailure (EvolutionOutput After.Root))
+evolution = pure . evaluateEvolution
+  (evolve beforeRoot afterRoot (Rationale "Start tracking work." [])
+    (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")])) )
+`);
+  cli(kb, ['evolution', 'evaluate', created.id]);
+  assert.equal(git(kb, 'status', '--porcelain', '--untracked-files=all', '--', '.kyyn'), '');
+  assert.equal(git(kb, 'check-ignore', '.kyyn/candidates/.gitignore'), '.kyyn/candidates/.gitignore');
+  assert.equal(git(kb, 'rev-parse', 'HEAD'), initialized.revision);
+  cli(kb, ['evolution', 'ready', created.id]);
+  cli(kb, ['evolution', 'accept', created.id]);
+  assert.equal(git(kb, 'rev-parse', 'HEAD^'), initialized.revision);
+  assert.deepEqual(cli(kb, ['root', 'show']).result.value,
+    { todos: [{ id: 'todo-001', value: { title: 'First task' } }] });
+  console.log('Initialized empty KB -> first schema-changing evolution -> accepted collection passed.');
+
+  const repo = path.join(temporary, 'existing');
+  fs.mkdirSync(repo);
+  git(repo, 'init', '-q');
+  write(path.join(repo, 'unrelated'), 'committed');
+  git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'Existing repository');
+  write(path.join(repo, 'unrelated'), 'staged'); git(repo, 'add', 'unrelated');
+  write(path.join(repo, 'unrelated'), 'working');
+  write(path.join(repo, 'untracked'), 'preserved');
+  for (const selected of [path.join(repo, 'nested', 'kb'), repo]) {
+    const parent = git(repo, 'rev-parse', 'HEAD');
+    cli(selected, ['kb', 'init']);
+    assert.equal(git(repo, 'rev-parse', 'HEAD^'), parent);
+    assert.equal(git(repo, 'show', 'HEAD:unrelated'), 'committed');
+    assert.equal(git(repo, 'show', ':unrelated'), 'staged');
+    assert.equal(fs.readFileSync(path.join(repo, 'unrelated'), 'utf8'), 'working');
+    assert.equal(fs.readFileSync(path.join(repo, 'untracked'), 'utf8'), 'preserved');
+  }
+  const nested = path.join(repo, 'root', 'nested-kb');
+  assert.equal(cli(nested, ['kb', 'init'], 1).diagnostics[0].code, 'kb.nested-ownership');
+  assert.equal(fs.existsSync(nested), false);
+  git(repo, 'checkout', '--detach', '-q', 'HEAD');
+  const detached = path.join(repo, 'detached');
+  assert.equal(cli(detached, ['kb', 'init'], 1).diagnostics[0].code, 'git.detached-head');
+  assert.equal(fs.existsSync(detached), false);
+  git(repo, 'checkout', '-q', 'kb-test');
+  const indexed = path.join(repo, 'indexed');
+  write(path.join(indexed, 'evolutions', 'residue'), 'staged residue');
+  git(repo, 'add', 'indexed');
+  fs.rmSync(indexed, { recursive: true });
+  assert.equal(cli(indexed, ['kb', 'init'], 1).diagnostics[0].code, 'kb.already-exists');
+  assert.equal(fs.existsSync(indexed), false);
+  const residue = path.join(temporary, 'residue');
+  write(path.join(residue, 'evolutions', 'draft'), 'keep');
+  cli(residue, ['kb', 'init'], 1);
+  assert.equal(fs.existsSync(path.join(residue, '.git')), false);
+  const failed = path.join(temporary, 'failed');
+  cli(failed, ['kb', 'init'], 3, ['--runtime', path.join(temporary, 'missing-runtime')]);
+  assert.equal(fs.existsSync(failed), false);
+  git(temporary, 'config', '--global', 'user.name', '');
+  const unidentified = path.join(temporary, 'no-identity');
+  assert.equal(cli(unidentified, ['kb', 'init'], 1).diagnostics[0].code, 'git.identity');
+  assert.equal(fs.existsSync(unidentified), false);
+  git(temporary, 'config', '--global', 'user.name', 'Initialization λ');
+
+  const bare = path.join(temporary, 'bare.git');
+  git(temporary, 'init', '--bare', '-q', bare);
+  const insideBare = path.join(bare, 'new-kb');
+  assert.equal(cli(insideBare, ['kb', 'init'], 1).diagnostics[0].code, 'git.repository-unavailable');
+  assert.equal(fs.existsSync(insideBare), false);
+  const repair = path.join(repo, 'repair');
+  const lock = path.join(repo, '.git', 'index.lock');
+  write(lock, 'held by fixture');
+  const incomplete = cli(repair, ['kb', 'init'], 4);
+  assert.equal(incomplete.result.checkoutSynchronized, false);
+  assert.equal(incomplete.result.revision, git(repo, 'rev-parse', 'HEAD'));
+  const recovery = incomplete.diagnostics.find(d => d.code === 'kb.checkout-incomplete').message;
+  assert(recovery.includes(`git -C '${repo}' restore --source=${incomplete.result.revision}`));
+  assert(recovery.includes("--staged --worktree -- 'repair/root'"));
+  fs.unlinkSync(lock);
+  cli(repair, ['kb', 'init'], 1);
+  git(repo, 'restore', '--source=HEAD', '--staged', '--worktree', '--', 'repair/root');
+  assert.equal(fs.existsSync(path.join(repair, 'root', 'kb.dhall')), true);
+  console.log('Existing/nested repositories, preservation, read-only refusals and post-publication recovery passed.');
+} finally {
+  fs.rmSync(temporary, { recursive: true, force: true });
+}
