@@ -117,12 +117,12 @@ the semantic publication boundary:
 ```haskell
 createCommit
   :: (Git :> es, Failure :> es)
-  => Repository -> GitTree -> GitRevision -> CommitMetadata
+  => Repository -> GitTree -> Maybe GitRevision -> CommitMetadata
   -> Eff es GitRevision
 
 compareAndSwapRef
   :: (Git :> es, Failure :> es)
-  => Repository -> LocalBranch -> GitRevision -> GitRevision
+  => Repository -> LocalBranch -> Maybe GitRevision -> GitRevision
   -> Eff es RefUpdate
 
 data RefUpdate
@@ -130,7 +130,9 @@ data RefUpdate
   | RefNotUpdated (Maybe GitRevision)
 ```
 
-`createCommit` takes one parent; publication supplies `Before.revision`.
+`createCommit` takes an optional parent; evolution publication supplies
+`Just Before.revision`. Initialization without an existing head supplies `Nothing`,
+constructing a parentless commit from an empty tree.
 `GitTree` supplies non-overlapping complete replacements, each located at a
 subtree prefix or the whole tree. Empty subtree replacements remove that subtree;
 an empty whole-tree replacement produces an empty root tree. Unrelated entries
@@ -144,7 +146,9 @@ each with a name, email and explicit Git-format date (Unix seconds and timezone
 offset). The caller supplies these; construction does not consult the clock or
 derive identity from user configuration.
 
-`compareAndSwapRef` takes expected-old then desired-new revision. Its comparison
+`compareAndSwapRef` takes expected-old then desired-new revision. `Nothing` requires
+an absent branch ref, for initial publication; evolution acceptance supplies
+`Just Before.revision`. Its comparison
 and update must be atomic in the interpreter. `Nothing` means the ref no longer
 exists. Failure of that comparison leaves the accepted ref unchanged, even if
 unreachable candidate Git objects were already written. These signatures do not

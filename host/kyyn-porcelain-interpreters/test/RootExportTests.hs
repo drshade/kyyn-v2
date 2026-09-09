@@ -106,10 +106,10 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   unless (reexported == exported) (fail "Export read live files after validation")
   let metadata = CommitMetadata (CommitIdentity "Author" "author@example.invalid" "1700000000 +0000")
         (CommitIdentity "Committer" "committer@example.invalid" "1700000001 +0000") "Export exact checked root"
-  revision <- git (createCommit repo (GitTree [(Subtree (path "kb/root"),exported),archiveReplacement]) parent metadata)
+  revision <- git (createCommit repo (GitTree [(Subtree (path "kb/root"),exported),archiveReplacement]) (Just parent) metadata)
   beforePublication <- readGit (resolveRevision repo "HEAD")
   unless (beforePublication == parent) (fail "Constructing exported-root commit moved head")
-  updated <- git (compareAndSwapRef repo (LocalBranch "main") parent revision)
+  updated <- git (compareAndSwapRef repo (LocalBranch "main") (Just parent) revision)
   unless (updated == RefUpdated) (fail "Expected-parent publication failed")
   reopened <- readGit (readTreeAt repo revision (Subtree (path "kb/root")))
   unless (reopened == exported) (fail "Committed files differ from the validated root export")

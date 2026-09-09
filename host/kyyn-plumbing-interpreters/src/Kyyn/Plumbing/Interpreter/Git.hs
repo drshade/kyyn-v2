@@ -98,26 +98,31 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
         prefixes = map (components . fst) replacements
     unless (and [not (a `isPrefixOf` b || b `isPrefixOf` a) | a:rest <- tails prefixes, b <- rest])
       (broken "Overlapping Git subtree replacements")
-    _ <- resolve repo (revisionName parent) >>= either (broken . show) pure
-    base <- checked repo [] ["rev-parse", revisionName parent ++ "^{tree}"] Bytes.empty
+    base <- case parent of
+      Nothing -> makeTree repo []
+      Just revision -> do
+        _ <- resolve repo (revisionName revision) >>= either (broken . show) pure
+        checked repo [] ["rev-parse", revisionName revision ++ "^{tree}"] Bytes.empty
     tree <- foldM (\old (location, replacement) -> do
       replacementTree <- build repo [(Char8.split '/' (utf8 (relativeName path)), bytes) | (path,bytes) <- files replacement]
       changed <- replace repo (Just (oid old)) (components location)
         (if null (files replacement) then Nothing else Just replacementTree)
       maybe (makeTree repo []) (pure . Char8.pack) changed) base replacements
     output <- checked repo (identity "AUTHOR" author ++ identity "COMMITTER" committer)
-      ["-c", "commit.gpgsign=false", "commit-tree", oid tree, "-p", revisionName parent]
+      (["-c", "commit.gpgsign=false", "commit-tree", oid tree]
+        ++ maybe [] (\revision -> ["-p", revisionName revision]) parent)
       (utf8 message)
     either broken pure (gitRevision (oid output))
   CompareAndSwapRef repo (LocalBranch branch) expected desired -> do
     let ref = "refs/heads/" ++ branch
     _ <- checked repo [] ["check-ref-format", ref] Bytes.empty
     (_, Process.ProcessExit status diagnostics) <- command repo
-      ["update-ref", "--no-deref", ref, revisionName desired, revisionName expected]
+      ["update-ref", "--no-deref", ref, revisionName desired,
+        maybe (replicate (length (revisionName desired)) '0') revisionName expected]
     if status == 0 then pure RefUpdated else do
       actual <- resolve repo ref >>= either (const (pure Nothing)) (pure . Just)
       if actual == Just desired then pure RefUpdated
-      else if actual /= Just expected then pure (RefNotUpdated actual)
+      else if actual /= expected then pure (RefNotUpdated actual)
         else broken ("Conditional ref update failed: " ++ Char8.unpack diagnostics)
   ReadTreeAt repo revision location -> runExceptT $ do
     _ <- ExceptT (resolve repo (revisionName revision))

@@ -85,7 +85,7 @@ checkoutTests = forM_ [False, True] $ \trackedDraft ->
     write "outside" "unstaged outside"
     let replacement = tree [("value", "new"), ("added", "new fact")]
         archive = tree [("manifest.dhall", "Accepted"), ("result.json", "fixed report")]
-    desired <- perform (createCommit repo (GitTree [(Subtree root,replacement), (Subtree workspace,archive)]) base metadata)
+    desired <- perform (createCommit repo (GitTree [(Subtree root,replacement), (Subtree workspace,archive)]) (Just base) metadata)
     wrongHead <- perform (synchronizeCheckout repo (LocalBranch "main") desired selected)
     case wrongHead of Left _ -> pure (); _ -> fail "Synchronization ignored mismatching HEAD"
     command ["update-ref", "--no-deref", "HEAD", revisionName base]
@@ -100,7 +100,7 @@ checkoutTests = forM_ [False, True] $ \trackedDraft ->
     ready <- readBytes "kb/evolutions/e001/manifest.dhall"
     assert "Refused synchronization changed workspace" (ready == "Ready")
     command ["symbolic-ref", "HEAD", "refs/heads/main"]
-    published <- perform (compareAndSwapRef repo (LocalBranch "main") base desired)
+    published <- perform (compareAndSwapRef repo (LocalBranch "main") (Just base) desired)
     assert "Publication failed" (published == RefUpdated)
     write ".git/index.lock" "held"
     locked <- perform (synchronizeCheckout repo (LocalBranch "main") desired selected)
