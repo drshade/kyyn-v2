@@ -1,12 +1,14 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
   ( EvolutionStore(..), readWorkspace, matchesCapturedInputs, saveCandidate, loadCandidate, findAcceptance
-  , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace, workspaceLocation ) where
+  , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace, workspaceLocation
+  , readEvolutionSummary, readArchivedReport, inspectEvolution ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evolution (EvolutionId, evolutionIdName, EvolutionWorkspace(..), EvolutionContext, Candidate, EvolutionFilter, EvolutionSummary)
+import Kyyn.Domain.Evolution (EvolutionId, evolutionIdName, EvolutionWorkspace(..), EvolutionContext, Candidate(..), EvolutionFilter, EvolutionSummary(..))
+import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Workspace (EvolutionState, WorkspaceSnapshot)
 import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBasePath)
@@ -20,6 +22,8 @@ workspaceLocation (EvolutionWorkspace kb identity) =
   relativePath ("evolutions/" ++ evolutionIdName identity) >>= knowledgeBasePath kb
 
 data EvolutionStore :: Effect where
+  ReadEvolutionSummary :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionSummary)
+  ReadArchivedReport :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] (Maybe EvolutionReport))
   ListEvolutions :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
   ResolveEvolution :: KnowledgeBase -> EvolutionId -> EvolutionStore m (Either [Diagnostic] EvolutionWorkspace)
   ReadEvolutionState :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] EvolutionState)
@@ -33,6 +37,24 @@ data EvolutionStore :: Effect where
   FindAcceptance :: KnowledgeBase -> EvolutionId -> GitRevision -> EvolutionStore m (Either [Diagnostic] (Maybe GitRevision))
 
 type instance DispatchOf EvolutionStore = Dynamic
+
+readEvolutionSummary :: EvolutionStore :> es => EvolutionWorkspace -> GitRevision -> Eff es (Either [Diagnostic] EvolutionSummary)
+readEvolutionSummary workspace = send . ReadEvolutionSummary workspace
+
+readArchivedReport :: EvolutionStore :> es => EvolutionWorkspace -> GitRevision -> Eff es (Either [Diagnostic] (Maybe EvolutionReport))
+readArchivedReport workspace = send . ReadArchivedReport workspace
+
+inspectEvolution :: EvolutionStore :> es => EvolutionWorkspace -> GitRevision
+  -> Eff es (Either [Diagnostic] (EvolutionSummary, Maybe EvolutionReport))
+inspectEvolution workspace revision = do
+  summary <- readEvolutionSummary workspace revision
+  case summary of
+    Left diagnostics -> pure (Left diagnostics)
+    Right value@(EvolutionSummary _ _ _ acceptance) -> do
+      report <- case acceptance of
+        Just _ -> readArchivedReport workspace revision
+        Nothing -> fmap (fmap (fmap (\(Candidate _ report _) -> report))) (loadCandidate workspace)
+      pure ((value,) <$> report)
 
 readWorkspace :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] WorkspaceSnapshot)
 readWorkspace = send . ReadWorkspace

@@ -1,7 +1,13 @@
-# 0020 — One installation supplies the execution toolchain
+---
+id: 0020
+title: 'One installation supplies the execution toolchain'
+status: proposed
+date: 2026-09-09
+---
+# One installation supplies the execution toolchain
 
-Status: Proposed. Owner-established scope: Linux, macOS and Windows; Windows via
-WSL is acceptable initially. Installation feasibility remains to be proved.
+Basis: owner-established scope: Linux, macOS and Windows; Windows via WSL is
+acceptable initially. Installation feasibility remains to be proved.
 
 ## Context
 
@@ -17,6 +23,11 @@ compiler and evaluator, `cpphs`, base/SDK libraries, chosen guest codecs, necess
 libraries, and web assets. Include dependency licenses/notices. Runtime package
 compilation uses these bundled tools and captured local source, not arbitrary
 system Cabal resolution or a network download during validation.
+
+The staged compiler is the GHC-built pinned MicroHs described in
+[ADR 0002](0002-runtime.md); GHC is needed to build it, not to execute KB code.
+The source selection is unchanged, but native library dependencies and notices
+still need distribution review; compiler parity is not a clean-machine proof.
 
 Installing Kyyn itself may download and verify pinned release artifacts and
 required dependencies. This trusted toolchain distribution is distinct from

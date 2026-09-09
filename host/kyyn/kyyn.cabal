@@ -1,0 +1,30 @@
+cabal-version: 3.0
+name: kyyn
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved.
+build-type: Simple
+
+executable kyyn
+  hs-source-dirs: app src
+  main-is: Main.hs
+  other-modules: Kyyn.Configuration Kyyn.Composition
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors OverloadedStrings
+  ghc-options: -Wall -Werror -threaded -rtsopts
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-porcelain, kyyn-porcelain-interpreters,
+    kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-microhs, kyyn-surfaces,
+    effectful-core ==2.6.1.0, directory, filepath, time, transformers, aeson, bytestring,
+    optparse-applicative ==0.19.0.0
+
+test-suite installed-journey
+  type: exitcode-stdio-1.0
+  main-is: Journey.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors OverloadedStrings
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
+    kyyn-porcelain-interpreters, kyyn-plumbing-interpreters,
+    effectful-core ==2.6.1.0, aeson, bytestring, text, directory, filepath,
+    process, temporary ==1.3

@@ -130,6 +130,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     assert "Unaccepted draft has a recovery" (noRecovery == Right Nothing)
     captured <- normal (captureEvolution workspace) >>= right
     candidate@(Candidate context report candidateRoot) <- normal (applyEvolution captured) >>= right
+    draftInspection <- normal (inspectEvolution workspace base) >>= right
+    assert "Draft inspection lost saved report" (snd draftInspection == Just report)
     checked <- normal (checkCandidate candidate) >>= \case
       Passed value _ -> pure value
       otherResult -> fail (show otherResult)
@@ -211,6 +213,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
         removeFile (directory </> ".git/index.lock")
     write (workspacePath ++ "/manifest.dhall") "malformed live manifest"
     already <- publication accept
+    acceptedInspection <- publication (inspectEvolution workspace accepted) >>= right
+    assert "Accepted inspection required cache or live manifest" (snd acceptedInspection == Just report)
     case already of AlreadyAccepted revision _ -> assert "Wrong accepting revision" (revision == accepted); _ -> fail (show already)
     retried <- publication (acceptEvolution branch metadata checked)
     case retried of AlreadyAccepted revision _ -> assert "Direct retry lost acceptance" (revision == accepted); _ -> fail (show retried)

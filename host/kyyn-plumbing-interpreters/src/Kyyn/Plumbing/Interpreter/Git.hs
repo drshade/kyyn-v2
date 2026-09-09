@@ -19,9 +19,26 @@ import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.Git
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
+import System.FilePath (makeRelative)
 
 runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es) => FilePath -> Eff (Git : es) a -> Eff es a
 runGit executable = interpret $ \_ -> \case
+  DiscoverRepository scope -> do
+    (output, Process.ProcessExit status diagnostics) <- command (Repository scope)
+      ["rev-parse", "--path-format=absolute", "--show-toplevel"]
+    case status of
+      0 -> runExceptT $ do
+        unless (not (Bytes.null output) && Bytes.last output == 10)
+          (ExceptT (broken "Unterminated Git repository path"))
+        name <- either (ExceptT . broken . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.init output))
+        repositoryScope <- either (ExceptT . broken) pure (directoryScope name)
+        let relative = makeRelative (scopePath repositoryScope) (scopePath scope)
+        prefix <- if relative == "." then pure WholeTree
+          else either (rejected "git.unsupported-path") (pure . Subtree) (relativePath relative)
+        pure (Repository repositoryScope, prefix)
+      _ -> pure (Left [errorDiagnostic "git.no-working-tree"
+        ("Cannot select a Git working tree at " ++ scopePath scope ++ "; select a KB with --kb PATH.\n"
+          ++ either (const (Char8.unpack diagnostics)) Text.unpack (Text.decodeUtf8' diagnostics))])
   ResolveRevision repo name -> resolve repo name
   CheckedOutBranch repo -> currentBranch repo
   CheckoutChanges repo revision paths -> changedPaths repo revision paths

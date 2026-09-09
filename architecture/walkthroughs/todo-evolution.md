@@ -1,11 +1,16 @@
 # A todo evolution, from accepted files to accepted files
 
-Status: Proposed review fixture. No new executable implementation accompanies it.
+Status: implemented by the [installed CLI journey](../../host/kyyn/test/Journey.hs),
+with publication edge cases covered by the native integration fixtures.
 
 This follows one change across the boundaries questioned in the
 [architecture review](../review-2026-09-07.md). The owning ADRs define the contracts;
-this document instantiates them with data and paths. Code is illustrative Haskell,
-not a claim that the proposed SDK already compiles. `A` and `B` below stand for real
+this document instantiates them with data and paths. Code and paths below are
+illustrative; the executable fixture uses `TodoSchemaV1`/`TodoSchemaV2`, String
+arguments and title results, generated workspace IDs, and each saved example's
+`example.dhall`, `arguments.dhall` and `expected.dhall` directory. Its title query
+returns an empty string for an absent fact rather than `Nothing`.
+`A` and `B` below stand for real
 Git commit IDs, not another root revision scheme.
 
 ## 1. What exists at A?

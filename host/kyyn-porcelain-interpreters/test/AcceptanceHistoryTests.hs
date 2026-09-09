@@ -71,6 +71,13 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
       lookupAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable . noFiles
         . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
           findAcceptance kb identity revision
+      readReportAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable . noFiles
+        . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
+          readArchivedReport (EvolutionWorkspace kb identity) revision
+      withUnverifiedReport contents = tree ((path "result.json", Bytes.pack "must not decode before checking acceptance") : files contents)
+      expectUnverifiedReport revision = readReportAt revision >>= right >>= \result -> case result of
+        Left [Diagnostic Error "evolution.unverified-report" _ _] -> pure ()
+        _ -> fail ("Unaccepted report was not refused before decoding: " ++ show result)
       expect revision result = do
         actual <- lookupAt revision >>= right >>= right
         unless (actual == result) (fail ("Wrong acceptance at " ++ show revision ++ ": " ++ show actual))
@@ -87,7 +94,13 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   absent <- git (readFileAt repo base manifestPath) >>= right
   unless (absent == Nothing) (fail "Absent Git file did not return Nothing")
   expect base Nothing
+  noReport <- readReportAt base >>= right >>= right
+  unless (noReport == Nothing) (fail "Absent report did not return Nothing")
+  orphanReport <- commit base (withUnverifiedReport empty) "Report without manifest"
+  expectUnverifiedReport orphanReport
   draftFiles <- archive base Draft
+  draftReport <- commit base (withUnverifiedReport draftFiles) "Hand-committed draft report"
+  expectUnverifiedReport draftReport
   draft <- commit base draftFiles "Draft"
   expect draft Nothing
   acceptedFiles <- archive draft Accepted
@@ -99,6 +112,8 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   expect later (Just accepted)
   reverted <- commit later draftFiles "Revert acceptance"
   expect reverted Nothing
+  halfReverted <- commit later (withUnverifiedReport draftFiles) "Revert manifest but retain report"
+  expectUnverifiedReport halfReverted
   againFiles <- archive reverted Accepted
   again <- commit reverted againFiles "Re-accept"
   expect again (Just again)

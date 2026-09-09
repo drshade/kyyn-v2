@@ -16,6 +16,8 @@ node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("
 
 bash -n tools/test.sh
 bash -n tools/test-guest.sh
+bash -n tools/stage-cli.sh
+bash -n tools/test-installed.sh
 node --check tools/checks/check-docs.mjs
 node --check tools/checks/check-docs.test.mjs
 node --check architecture/evidence/json-probe/check.mjs
@@ -24,6 +26,9 @@ node tools/checks/check-docs.mjs
 node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
+cabal test cli-arguments --test-show-details=direct
+cabal test cli-adapters --test-show-details=direct
+node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn)"
 cabal test processes --test-show-details=direct
 cabal test dhall-values --test-show-details=direct
 cabal test roots --test-show-details=direct
@@ -36,6 +41,7 @@ cabal test evolution-reports --test-show-details=direct
 cabal test evolutions --test-options=--pure --test-show-details=direct
 if [[ "${1:-}" == --full ]]; then
   bash tools/test-guest.sh
+  bash tools/test-installed.sh
   echo "Full check passed, including real MicroHs integration tests."
 else
   echo "Fast check passed: documentation, import boundaries, native build and process/filesystem tests."

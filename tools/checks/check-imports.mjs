@@ -3,9 +3,36 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
+  'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+    'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
+    'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
+    'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
+    'Kyyn.Porcelain.Validated'],
+  'kyyn': ['Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+    'Data.Time.Clock.POSIX', 'Effectful', 'Kyyn.Configuration', 'Kyyn.Domain.Diagnostic',
+    'Kyyn.Domain.Evolution', 'Kyyn.Domain.Failure', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
+    'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace',
+    'Kyyn.MicroHs.Toolchain', 'Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.MicroHs.Interpreter.SchemaInspection',
+    'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.Failure',
+    'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.Git',
+    'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.ProcessExecution',
+    'Kyyn.Plumbing.Capability.SchemaInspection', 'Kyyn.Plumbing.Interpreter.DhallHandling',
+    'Kyyn.Plumbing.Interpreter.Failure', 'Kyyn.Plumbing.Interpreter.FileSystem',
+    'Kyyn.Plumbing.Interpreter.Git', 'Kyyn.Plumbing.Interpreter.ProcessExecution',
+    'Kyyn.Porcelain.Capability.Root', 'Kyyn.Porcelain.Capability.Evolution', 'Kyyn.Porcelain.Capability.EvolutionAuthoring',
+    'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionStore',
+    'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootOpening',
+    'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.RootStore',
+    'Kyyn.Porcelain.Capability.WorkspaceStore', 'Kyyn.Porcelain.Interpreter.EvolutionAuthoring',
+    'Kyyn.Porcelain.Interpreter.EvolutionExecution', 'Kyyn.Porcelain.Interpreter.EvolutionStore',
+    'Kyyn.Porcelain.Interpreter.RootExecution', 'Kyyn.Porcelain.Interpreter.RootOpening',
+    'Kyyn.Porcelain.Interpreter.RootPublication', 'Kyyn.Porcelain.Interpreter.RootStore',
+    'Kyyn.Porcelain.Interpreter.WorkspaceStore', 'Kyyn.Surfaces.Cli',
+    'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types'],
   'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Porcelain.Capability.RootOpening',
     'Kyyn.Domain.Publication', 'Kyyn.Domain.Path', 'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.Validation',
     'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.EvolutionAuthoring',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
@@ -118,7 +145,7 @@ const interpreterModules = {
     'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Publication', 'Kyyn.Domain.Workspace',
     'Kyyn.Plumbing.Capability.Git', 'Kyyn.Porcelain.Capability.RootPublication',
     'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.RootStore'],
-  'Kyyn.Plumbing.Interpreter.Git': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.List', 'Data.ByteString', 'Data.ByteString.Char8',
+  'Kyyn.Plumbing.Interpreter.Git': ['System.FilePath', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.List', 'Data.ByteString', 'Data.ByteString.Char8',
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.ProcessExecution'],
@@ -161,7 +188,7 @@ export function checkImports(packageName, source) {
         line.trim() !== 'import Kyyn.Porcelain.Validation.Types (Validated, validatedValue)') {
       return ['Validated facade must import only the abstract type and accessor'];
     }
-    if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters'].includes(packageName) || ['Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.Plumbing.Interpreter.Git'].includes(moduleName)) && match[1] === 'Effectful') {
+    if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters', 'kyyn-surfaces'].includes(packageName) || ['Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.Plumbing.Interpreter.Git'].includes(moduleName)) && match[1] === 'Effectful') {
       const explicit = /^\s*import Effectful \((.*)\)\s*$/.exec(line);
       const names = explicit?.[1].split(',').map(name => name.trim());
       const pureNames = ['Effect', 'Eff', 'DispatchOf', 'Dispatch(..)', '(:>)'];

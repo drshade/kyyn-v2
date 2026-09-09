@@ -364,6 +364,10 @@ independent of root compilation:
 
 ```haskell
 data EvolutionStore :: Effect where
+  ReadEvolutionSummary
+    :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionSummary)
+  ReadArchivedReport
+    :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] (Maybe EvolutionReport))
   ListEvolutions
     :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
   ResolveEvolution
@@ -408,6 +412,19 @@ These are selected constructors; review-note persistence is defined in
 [interaction](0023-interaction.md). Creation and capture belong to EvolutionAuthoring
 because they need source inspection; EvolutionStore's metadata, candidate and archive
 operations remain installable without RootOpening, the compiler or SDK.
+Inspection receives a resolved revision explicitly. `ReadEvolutionSummary` uses
+the same `summaryAt` derivation as listing, at that revision. `ReadArchivedReport`
+reads `result.json` from Git at that revision, requires acceptance confirmed by
+the same history lookup as `FindAcceptance`, then decodes the report and checks
+the workspace identity. A report file without confirmed acceptance returns
+`evolution.unverified-report`; hand-committing a result or reverting only its
+manifest cannot make a report outrank the history rule.
+The effectful capability helper `inspectEvolution` combines them for an accepted
+workspace, or reads the saved candidate's report for an unaccepted workspace.
+It returns `(EvolutionSummary, Maybe EvolutionReport)` rather than printing or
+executing code. Accepted inspection needs neither a candidate cache nor a valid
+live manifest. Missing reports are distinguishable from malformed reports;
+unsupported durable encodings return diagnostics rather than being rerun.
 `ReadWorkspace` captures and decodes the local workspace without interpreting its
 Haskell; capture delegates this read to the store before checking the Before copy.
 RootOpening supplies the source commit's derived contract
@@ -696,6 +713,24 @@ result available for inspection; compilation or transformation rejection creates
 no replacement candidate. An earlier saved candidate is not a successful outcome
 of a later failed evaluation. Publication still requires unchanged captured inputs
 and fresh checking of the explicitly loaded result.
+
+Porcelain also owns the workspace-level application operations:
+
+```haskell
+evaluateWorkspace
+  :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
+      EvolutionStore :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
+
+checkWorkspace
+  :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))
+```
+
+Evaluation captures the workspace and applies that captured evolution. Checking
+loads its saved candidate and checks it without reopening or executing the
+evolution; a missing candidate is a diagnostic refusal. CLI, MCP and Web reuse
+these operations rather than maintaining their own workflow implementations.
 
 Each evolution workspace provides one conventional guest binding, `evolution`.
 Choose a reusable function and bind its arguments in ordinary source:

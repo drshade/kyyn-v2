@@ -1,6 +1,14 @@
-# 0018 — CLI, MCP and web share application operations
+---
+id: 0018
+title: 'CLI, MCP and web share application operations'
+status: proposed
+date: 2026-09-09
+---
 
-Status: Proposed. Basis: owner-established equal importance of Web and MCP.
+# CLI, MCP and web share application operations
+
+Basis: owner-established equal importance of Web and MCP, and owner-agreed CLI
+navigation and KB selection. Remaining transport mechanics are proposed.
 
 ## Context
 
@@ -49,6 +57,162 @@ Use `optparse-applicative` for a discoverable CLI with human and stable structur
 output modes, explicit KB selection, input/output file support and useful exit
 codes. Keep stdout results separate from progress/errors. CLI use needs no daemon.
 ADR 0025 describes agent-driven setup and per-KB Web/MCP/headless lifecycles.
+
+### CLI navigation and KB selection
+
+The CLI is a user interface, not an inventory of kernel functions. Use
+`kyyn <noun-path> <verb> [arguments]`: noun paths express useful containment,
+and verbs express the user's intention. Connectors belong beneath plugins;
+schema, facts and queries belong beneath the selected root. Do not reproduce
+internal module nesting or add duplicate top-level shortcuts. The KB is already
+selected, so ordinary commands do not need a redundant `kb` prefix.
+
+The agreed navigation sketch is:
+
+```text
+kyyn
+  kb
+    new <name>
+    show
+  root
+    show
+    check
+    schema
+      list
+      show <name>
+    fact
+      list
+      show <id>
+    query
+      list
+      show <name>
+      execute <name>
+  evolution
+    new <name>
+    list
+    show <id>
+    evaluate <id>
+    check <id>
+    ready <id>
+    draft <id>
+    accept <id>
+    recover <id>
+  plugin
+    install <source>
+    list
+    show <plugin>
+    update <plugin>
+    connector
+      list <plugin>
+      show <plugin> <connector>
+      fetch <plugin> <connector>
+  output
+    list
+    show <name>
+    prepare <name>
+    publish <name>
+  secret
+    list
+    set <name>
+    remove <name>
+  web
+    serve
+  mcp
+    serve
+  doctor
+```
+
+This establishes navigation, not a comprehensive argument specification or a
+claim that these commands exist. The first evolution CLI slice implements
+`root show/check` and the evolution group. Other groups are designed in their
+own slices; do not install empty groups or placeholder handlers. `doctor` is
+a deliberate standalone readiness command. Collection selection for fact IDs,
+typed query arguments and secret input are details for their respective slices.
+`root schema list/show` exposes the selected root contract's types, definitions,
+fields and declared roles, not arbitrary compiler internals.
+
+All KB-scoped commands share `--kb PATH`, defaulting to `.`. Resolve relative
+paths against the invoking process's working directory. The path selects the KB
+directory itself; discover its containing Git repository and derive the KB's
+repository-relative prefix internally. Ordinary use needs no separate
+`--repository` argument. If the selected directory is not a KB, return an
+actionable error rather than creating one or searching for another KB. Explicit
+`kb new` owns creation; installation-level operations do not require a KB.
+There is no remembered active KB or global selection state.
+
+```sh
+kyyn root schema list
+kyyn --kb knowledge/sales evolution list
+kyyn --kb knowledge/training root schema list
+kyyn --kb /path/to/kb plugin connector fetch microsoft sales-mail
+```
+
+A KB may occupy a repository root or a subdirectory; several KBs may share a
+repository. Each has its own root, evolutions, plugins and checkout-local secrets.
+They share repository history and branch HEAD. Under [ADR 0012](0012-acceptance.md),
+acceptance updates the selected KB's root/archive while preserving unrelated
+content. Advancing HEAD for one KB also makes another KB's older Before revision
+outdated, even if its files did not change. Update that evolution's Before and
+prepare/check its candidate again; there is no per-KB HEAD exception. Separate
+repositories provide independent histories.
+
+Use consistent verbs: `list` returns a collection, `show` inspects one item,
+and `check` validates. `evolution evaluate` executes authored code and saves a
+candidate; `check` checks the saved candidate; `accept` freshly checks and
+publishes it without rerunning the evolution. `recover` repairs the checkout
+after acceptance as specified by ADR 0012. Inspection never implicitly fetches
+evidence, accepts a candidate or invokes a sink. Connector `fetch` is for source
+connectors; sink invocation belongs to explicit output publication under ADR 0017.
+
+Shared options and human/JSON result conventions must behave consistently across
+groups. Commands support scripting without mandatory interactive prompts;
+results go to stdout, progress/errors to stderr, with meaningful exit codes.
+Human output explains the operation and next action, not internal interpreter or
+compiler stages. Add commands for demonstrated user tasks, not merely because
+another kernel function exists.
+
+For the first CLI, selection uses the checkout's HEAD, with the current local
+branch passed explicitly to acceptance/recovery. There is no branch override.
+Detached HEAD is a branch-selection refusal (`git.detached-head`) for these
+operations: there is no local branch to pass to publication. This is not a
+`CheckoutMismatch` with an invented branch. The kernel still checks for a branch
+change between selection and publication.
+Snapshot reads and creation receive a resolved commit ID; `evolution new --before`
+may select an explicit full commit ID. `root show` checks the selected root before
+returning its structural value; `root check` returns the check report without the
+browsing payload. Creation emits a stable evolution ID, workspace path and selected
+Before revision in both human and JSON output, not a name-based selector.
+Ready/Draft operations do not implicitly evaluate or check.
+
+The CLI adapter renders domain values into one JSON envelope:
+
+```json
+{"outcome":"Succeeded","result":{"evolutions":[]},"diagnostics":[]}
+```
+
+`--json` emits this structured command result on stdout, including diagnostic
+objects for refusals/failures. Human mode writes results to stdout and diagnostics
+to stderr. Parser help/usage retains optparse-applicative's standard presentation.
+Diagnostics preserve severity, code, message and structured location. Exit codes
+are 0 for success, 1 for domain refusal, 2 for invalid CLI usage, 3 for operational
+failure, 4 for acceptance requiring checkout inspection/recovery (including an
+already-accepted retry), and 130 for user interruption. Code 4 must retain the
+accepting revision; it is not an invitation to reapply the evolution. These exits
+render [ADR 0019](0019-failures.md)'s outcomes rather than adding domain states.
+
+The host composition root obtains acceptance identities from `GIT_AUTHOR_NAME`
+and `GIT_AUTHOR_EMAIL`; optional `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL` override
+the committer, otherwise the author is used. It supplies the current clock time
+to explicit Git commit metadata. Missing identity is an actionable refusal,
+not an anonymous commit or an interactive prompt. Runtime paths come from the
+installed layout, with `--runtime` and `--git` development overrides. Listing,
+state changes, archived inspection, recovery and already-accepted diagnosis do
+not load the SDK. Host configuration/path resolution and interpretation live in
+`kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
+workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
+Surfaces do not compose root opening, validation or evolution execution themselves.
+
+### MCP and Web
 
 MCP exports relevant named typed methods and selective discovery, using generated
 JSON Schema and structured results. Expose exact source contracts as resources
