@@ -137,6 +137,13 @@ openingTests contract factFiles = do
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
   sourceFromGit <- right (execute sdk (loadSourceAt repo revision (Subtree prefix)))
   unless (sourceFromGit == source) (fail "Source loading differs from captured source opening")
+  (input,closure) <- right (execute sdk (loadRootInputAt repo revision (Subtree prefix)))
+  unless (input == opened && null closure) (fail "Input capture changed root bytes or source closure")
+  let undecoded = runPureEff . runDhallHandling . schemaMock (rootSchema contract)
+        . gitMock withCorruptFacts . runRootStore . runRootOpening sdk $
+          loadRootInputAt repo revision (Subtree prefix)
+  (corruptInput,_) <- right undecoded
+  unless (corruptInput == Root contract corrupt authored) (fail "Input capture decoded or changed malformed facts")
   otherRevision <- right (gitRevision (replicate 40 'b'))
   rejected (execute sdk (loadSourceAt repo otherRevision (Subtree prefix)))
   rejected (execute sdk (loadSourceAt repo revision WholeTree))

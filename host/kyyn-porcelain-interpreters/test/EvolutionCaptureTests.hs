@@ -50,7 +50,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   identity <- right (evolutionId "e001")
   missing <- right (evolutionId "e002")
   sourceTree <- tree [("Schema.hs", "selected source"), ("Helpers.hs", "selected helper")]
-  sourceCode <- tree [("kb.dhall", "selected manifest"), ("src/Schema.hs", "selected source"),
+  sourceCode <- tree [("kb.dhall", "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"), ("src/Schema.hs", "selected source"),
     ("src/Helpers.hs", "selected helper"), ("examples/check.dhall", "selected example"),
     ("plugins/config/provider.dhall", "selected config")]
   expectedClosure <- traverse (right . relativePath) ["Schema.hs", "Helpers.hs"]
@@ -70,7 +70,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
         execute selected answer action = do
           count <- newIORef 0
           result <- runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-            . runDhallHandling . runRootStore . runWorkspaceStore . selectedGit repo selected rootPath sourceCode . openingMock count repo selected rootPath sourceCode answer
+            . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock count repo selected rootPath answer
             . runEvolutionStore . runEvolutionAuthoring $ action
           opens <- readIORef count
           unless (opens <= 1) (fail "Capture reopened Before within one operation")
@@ -167,7 +167,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   rootPath <- Subtree <$> right (relativePath "root")
   count <- newIORef 0
   failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
-    . openingMock count repo revision rootPath sourceCode (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
+    . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   putStrLn "Evolution capture verifies selected Before copies, KB paths and live input matching."
@@ -181,22 +181,19 @@ failingWrites failure = interpret $ \_ -> \case
 noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Capture bypassed RootOpening for Git"
 
-selectedGit :: Repository -> GitRevision -> TreePath -> FileTree -> Eff (Git.Git : es) a -> Eff es a
-selectedGit expectedRepo expectedRevision expectedPath treeBytes = interpret $ \_ -> \case
-  Git.ReadTreeAt repo revision path
-    | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> pure (Right treeBytes)
-  _ -> error "Capture read the wrong revision or performed another Git operation"
-
 openingMock
-  :: (Failure :> es, IOE :> es) => IORef Int -> Repository -> GitRevision -> TreePath -> FileTree
+  :: (Failure :> es, IOE :> es) => IORef Int -> Repository -> GitRevision -> TreePath
   -> Either OperationalFailure (Either [Diagnostic] SourceRoot)
   -> Eff (RootOpening : es) a -> Eff es a
-openingMock count expectedRepo expectedRevision expectedPath expectedTree answer = interpret $ \_ operation -> do
+openingMock count expectedRepo expectedRevision expectedPath answer = interpret $ \_ operation -> do
   liftIO (modifyIORef' count (+1))
   case operation of
     LoadSourceAt repo revision path
       | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> either raiseFailure pure answer
-    OpenCapturedSource treeBytes | treeBytes == expectedTree -> either raiseFailure pure answer
+    LoadRootInputAt repo revision path
+      | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
+        either raiseFailure (pure . fmap (\(SourceRoot schema code _ closure) ->
+          (Root schema (either error id (fileTree [])) code, closure))) answer
     _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
 
 manifest :: Char -> String -> Bytes.ByteString
