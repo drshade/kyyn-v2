@@ -69,10 +69,21 @@ identityTests = withSystemTempDirectory "kyyn-git-identity" $ \directory -> do
   command ["config","--global","--unset-all","user.name"]
   command ["config","--file",xdg </> "git/config","user.name","XDG λ"]
   expect "XDG λ" "conditional@example.invalid"
+  command ["commit","--allow-empty","-m","Identity fixture"]
+  command ["config","extensions.worktreeConfig","true"]
+  let worktree = directory </> "worktree"
+  command ["worktree","add","-b","secondary",worktree]
+  command ["-C",worktree,"config","--worktree","user.name","Worktree λ"]
+  command ["-C",worktree,"config","--worktree","user.email","worktree@example.invalid"]
+  worktreeScope <- either fail pure (directoryScope worktree)
+  worktreeIdentity <- runEff . runFailure . runProcessExecutionIO . runGit executable environment $
+    readUserIdentity (Repository worktreeScope)
+  unless (worktreeIdentity == Right (Right (GitUser "Worktree λ" "worktree@example.invalid")))
+    (fail (show worktreeIdentity))
   Bytes.writeFile (directory </> ".git/config") "[invalid"
   invalid <- inspect
   case invalid of Left _ -> pure (); _ -> fail "Malformed Git configuration was not an operational failure"
-  putStrLn "Configured Git identity: missing, global/XDG, local precedence, includes, Unicode and malformed config passed."
+  putStrLn "Configured Git identity: missing, global/XDG, local/worktree precedence, includes, Unicode and malformed config passed."
 
 discoveryTests :: IO ()
 discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
