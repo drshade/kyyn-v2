@@ -12,10 +12,10 @@ if [[ -e "$stage_prefix" || -L "$stage_prefix" ]]; then
   exit 1
 fi
 cd "$(dirname "$0")/.."
-cabal build exe:kyyn
+cabal build exe:kyyn-v2
 make -C vendor/MicroHs bin/gmhs bin/mhseval bin/cpphs
 mkdir -p "$stage_prefix/bin" "$stage_prefix/lib/kyyn/microhs/bin" "$stage_prefix/lib/kyyn/sdk/Text/JSON" "$stage_prefix/share/kyyn/licenses"
-cp "$(cabal list-bin exe:kyyn)" "$stage_prefix/bin/kyyn"
+cp "$(cabal list-bin exe:kyyn-v2)" "$stage_prefix/bin/kyyn-v2"
 cp vendor/MicroHs/bin/gmhs "$stage_prefix/lib/kyyn/microhs/bin/mhs"
 for executable in mhseval cpphs; do
   cp "vendor/MicroHs/bin/$executable" "$stage_prefix/lib/kyyn/microhs/bin/"
@@ -28,4 +28,4 @@ cp vendor/json/Text/JSON/Types.hs vendor/json/Text/JSON/String.hs "$stage_prefix
 cp vendor/MicroHs/LICENSE "$stage_prefix/share/kyyn/licenses/MicroHs"
 cp vendor/json/LICENSE "$stage_prefix/share/kyyn/licenses/json"
 cp docs/dependency-sources.md "$stage_prefix/share/kyyn/licenses/native-source-inventory.md"
-echo "Staged development executable: $stage_prefix/bin/kyyn"
+echo "Staged development executable: $stage_prefix/bin/kyyn-v2"

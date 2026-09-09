@@ -39,7 +39,7 @@ configure (Cli.Selection path gitOverride runtimeOverride) = runExceptT $ do
     >>= maybe (invalid "setup.git" "Git was not found; install Git or supply --git EXECUTABLE") pure
   git <- liftIO (canonicalizePath executable)
   temp <- liftIO getTemporaryDirectory >>= either (invalid "setup.temporary") pure . directoryScope
-  installed <- liftIO getExecutablePath
+  installed <- liftIO (getExecutablePath >>= canonicalizePath)
   runtime <- liftIO (canonicalizePath (maybe (takeDirectory (takeDirectory installed) </> "lib/kyyn") id runtimeOverride))
   let keys = ["HOME", "XDG_CONFIG_HOME"]
   values <- liftIO (mapM lookupEnv keys)

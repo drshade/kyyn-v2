@@ -29,6 +29,14 @@ The staged compiler is the GHC-built pinned MicroHs described in
 The source selection is unchanged, but native library dependencies and notices
 still need distribution review; compiler parity is not a clean-machine proof.
 
+The development executable is temporarily named `kyyn-v2` to coexist with
+kyyn-v1's `kyyn`. The local installer deploys the staged bundle under the selected
+prefix's `lib/kyyn-v2` and links `bin/kyyn-v2` to it. Runtime discovery resolves
+that link before locating the bundled assets. Cabal's executable installation alone
+does not provision these assets; the development script reuses the complete
+staging build. [Developer usage](../../docs/cli-development.md) owns the commands.
+This is a source-build convenience, not the cross-platform release installer.
+
 Installing Kyyn itself may download and verify pinned release artifacts and
 required dependencies. This trusted toolchain distribution is distinct from
 installing a tap plugin: under ADR 0015, plugin installation vendors source and

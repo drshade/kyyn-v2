@@ -1,11 +1,37 @@
 # Trying the first CLI
 
+The executable is named `kyyn-v2` while the original version owns `kyyn`.
 The current CLI supports root inspection/checking and the evolution commands in
 [ADR 0018](../architecture/adr/0018-surfaces.md#cli-navigation-and-kb-selection).
 The installed integration fixture covers schema-changing acceptance and inherited
 examples; this is not a released installation.
 
-From the development repository, assemble a new staging directory:
+To install locally from this development repository:
+
+```sh
+bash tools/install-cli.sh
+```
+
+This builds and installs the complete bundle under `~/.local/lib/kyyn-v2`, with
+`~/.local/bin/kyyn-v2` pointing to its executable. If needed, add `~/.local/bin`
+to PATH. The existing `kyyn` command is untouched. Run the same script after
+pulling changes to update the installation; it replaces only its dedicated bundle
+and link, not KBs. A custom prefix is supported: `bash tools/install-cli.sh /path/to/prefix`.
+Both the bundle and link must be writable. If replacement fails after moving the
+old bundle, the installer prints where it retained that bundle for recovery.
+To uninstall, remove `~/.local/bin/kyyn-v2` and `~/.local/lib/kyyn-v2` (or those
+paths under your chosen prefix). KBs stored elsewhere are untouched.
+
+Plain `cabal install exe:kyyn-v2` installs only the host executable, not the
+MicroHs/runtime/SDK bundle it needs. Use the script for a usable local installation.
+It reuses the staging helper and existing Cabal/Make build, without custom Cabal hooks.
+
+```sh
+kyyn-v2 --kb /path/to/kb root show
+kyyn-v2 --kb /path/to/kb evolution new my-change
+```
+
+Alternatively, assemble a new staging directory without installing:
 
 ```sh
 bash tools/stage-cli.sh /tmp/kyyn-development
@@ -32,8 +58,8 @@ git -C /tmp/my-todos init -b main
 git -C /tmp/my-todos add .
 git -C /tmp/my-todos commit -m 'Initial knowledge base'
 
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos root check
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution new my-change
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos root check
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution new my-change
 ```
 
 Git needs your normal identity configured for that setup commit. The example
@@ -44,14 +70,14 @@ its `target/` files. `before/` records the selected source. Use the returned ID
 in place of `ID` below:
 
 ```sh
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution evaluate ID
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution show ID
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution check ID
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution ready ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution evaluate ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution show ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution check ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution ready ID
 
 git -C /tmp/my-todos config user.name 'Your Name'
 git -C /tmp/my-todos config user.email 'you@example.com'
-/tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution accept ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution accept ID
 ```
 
 The generated scaffold is an identity evolution until edited. `evaluate` saves a

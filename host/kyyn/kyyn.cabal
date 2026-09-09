@@ -5,7 +5,7 @@ license: NONE
 copyright: All rights reserved.
 build-type: Simple
 
-executable kyyn
+executable kyyn-v2
   hs-source-dirs: app src
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition
