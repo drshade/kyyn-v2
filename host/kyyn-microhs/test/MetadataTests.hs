@@ -120,13 +120,8 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     compileGuest roundTripSources
   entry <- either (fail . show) (either (fail . show) pure) compiled
   let input = "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"A task\",\"owner\":\"todo-001\"}}],\"people\":[]}"
-      invoke bytes = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope $
-        withCompiledEntry entry $ do
-          writeStdin bytes
-          closeStdin
-          output <- collectStdout
-          status <- awaitExit
-          pure (output, status)
+      invoke bytes = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
+        executeCompiled entry bytes
   inputValue <- either fail pure (Aeson.eitherDecodeStrict input)
   code <- either fail pure (fileTree files)
   checkedInput <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract inputValue))))
@@ -165,7 +160,9 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode checkedFacts))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
-      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ validateRoot validationRoot
+      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ do
+        prepared <- prepareRoot validationRoot
+        either (pure . Left) validateRoot prepared
     report <- either (fail . show) (either (fail . show) pure) response
     unless (report == ValidationReport expectedDiagnostics)
       (fail ("RootExecution changed the report: " ++ show response))

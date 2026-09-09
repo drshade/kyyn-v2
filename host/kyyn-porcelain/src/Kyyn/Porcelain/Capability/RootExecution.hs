@@ -1,28 +1,32 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Porcelain.Capability.RootExecution (RootExecution(..), checkRootCode, validateRoot, discoverQueries, queryRoot) where
+module Kyyn.Porcelain.Capability.RootExecution
+  ( RootExecution(..), PreparedRoot, prepareRoot, preparedRoot, preparedQueries, validateRoot, queryRoot ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
 import Kyyn.Domain.Root (Root, CheckedValue)
 import Kyyn.Domain.Query (QueryDescriptor, QueryResult)
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 data RootExecution :: Effect where
-  CheckRootCode :: Root -> RootExecution m (Either [Diagnostic] ())
-  ValidateRoot :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
-  DiscoverQueries :: Root -> RootExecution m (Either [Diagnostic] [QueryDescriptor])
-  ExecuteQuery :: Root -> QueryDescriptor -> CheckedValue -> RootExecution m (Either [Diagnostic] QueryResult)
+  PrepareRoot :: Root -> RootExecution m (Either [Diagnostic] PreparedRoot)
+  ValidateRoot :: PreparedRoot -> RootExecution m (Either [Diagnostic] ValidationReport)
+  ExecuteQuery :: PreparedRoot -> QueryDescriptor -> CheckedValue -> RootExecution m (Either [Diagnostic] QueryResult)
 
 type instance DispatchOf RootExecution = Dynamic
 
-checkRootCode :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] ())
-checkRootCode = send . CheckRootCode
+prepareRoot :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] PreparedRoot)
+prepareRoot = send . PrepareRoot
 
-validateRoot :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] ValidationReport)
+validateRoot :: RootExecution :> es => PreparedRoot -> Eff es (Either [Diagnostic] ValidationReport)
 validateRoot = send . ValidateRoot
 
-discoverQueries :: RootExecution :> es => Root -> Eff es (Either [Diagnostic] [QueryDescriptor])
-discoverQueries = send . DiscoverQueries
+preparedRoot :: PreparedRoot -> Root
+preparedRoot (PreparedRoot root _ _ _) = root
 
-queryRoot :: RootExecution :> es => Root -> QueryDescriptor -> CheckedValue -> Eff es (Either [Diagnostic] QueryResult)
+preparedQueries :: PreparedRoot -> [QueryDescriptor]
+preparedQueries (PreparedRoot _ _ _ queries) = [descriptor | PreparedQuery descriptor _ _ <- queries]
+
+queryRoot :: RootExecution :> es => PreparedRoot -> QueryDescriptor -> CheckedValue -> Eff es (Either [Diagnostic] QueryResult)
 queryRoot root descriptor = send . ExecuteQuery root descriptor

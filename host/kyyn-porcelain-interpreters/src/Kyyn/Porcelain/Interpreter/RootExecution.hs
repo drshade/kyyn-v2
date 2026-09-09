@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution) where
 
-import Control.Monad (unless, forM_, void)
+import Control.Monad (unless, forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode, object, (.=))
 import qualified Data.ByteString as Strict
@@ -16,63 +16,50 @@ import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, executeCompiledEntry)
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Plumbing.Protocol.Query (queryBindings, querySources, decodeQueryReply)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
-  :: (RootStore :> es, GuestCompilation :> es, FileSystem :> es, ProcessExecution :> es, Failure :> es,
+  :: (RootStore :> es, GuestCompilation :> es, Failure :> es,
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
-  CheckRootCode (Root contract _ code) -> runExceptT $ do
+  PrepareRoot root@(Root contract _ code) -> runExceptT $ do
     RootDefinition _ _ validator declarations authored <- ExceptT (readRootDefinition code)
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"
       (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))
-    _ <- ExceptT (compileGuest validation)
-    forM_ declarations $ \declaration@(QueryDefinition _ _ selected _ _ _ _) -> do
-      QueryDescriptor _ _ input result <- inspectQuery (bindings : files authored ++ files sdk) declaration
+    validatorEntry <- ExceptT (compileGuest validation)
+    queries <- forM declarations $ \declaration@(QueryDefinition _ _ selected _ _ _ _) -> do
+      descriptor@(QueryDescriptor _ _ input result) <- inspectQuery (bindings : files authored ++ files sdk) declaration
       sources <- checked "query.source"
         (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
-      void (ExceptT (compileGuest sources))
-  ValidateRoot root@(Root contract _ code) -> runExceptT $ do
-    RootDefinition _ _ selected _ authored <- ExceptT (readRootDefinition code)
+      entry <- ExceptT (compileGuest sources)
+      pure (PreparedQuery descriptor selected entry)
+    pure (PreparedRoot root validator validatorEntry queries)
+  ValidateRoot (PreparedRoot root selected entry _) -> runExceptT $ do
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
-    bindings <- checked "query.bindings" (queryBindings contract)
-    sources <- checked "root.validation-source"
-      (validationSources (rootType (rootSchema contract)) selected (bindings : files authored ++ files sdk))
-    entry <- ExceptT (compileGuest sources)
     output <- ExceptT (Right <$> executeCompiledEntry selected entry (Bytes.toStrict (encode value)))
     case decodeReport output of
       Left message -> protocolFailure selected message
       Right report -> pure report
-  DiscoverQueries (Root contract _ code) -> runExceptT $ do
-    RootDefinition _ _ _ declarations authored <- ExceptT (readRootDefinition code)
-    bindings <- checked "query.bindings" (queryBindings contract)
-    traverse (inspectQuery (bindings : files authored ++ files sdk)) declarations
-  ExecuteQuery root@(Root contract _ code) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
-    RootDefinition _ _ _ declarations authored <- ExceptT (readRootDefinition code)
-    declaration@(QueryDefinition _ _ selected _ _ _ _) <- case
-      [d | d@(QueryDefinition n _ _ _ _ _ _) <- declarations, n == name] of
+  ExecuteQuery (PreparedRoot root _ _ queries) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
+    PreparedQuery (QueryDescriptor _ _ input result) selected entry <- case
+      [q | q@(PreparedQuery (QueryDescriptor n _ _ _) _ _) <- queries, n == name] of
         [d] -> pure d
         _ -> throwE [errorDiagnostic "query.unknown" ("No query named " ++ name)]
-    bindings <- checked "query.bindings" (queryBindings contract)
-    QueryDescriptor _ _ input result <- inspectQuery (bindings : files authored ++ files sdk) declaration
     unless (contractId input == contractId expectedInput && contractId result == contractId expectedResult)
       (throwE [errorDiagnostic "query.contract" (name ++ ": query contracts changed; discover the query again")])
     unless (identity == contractId input)
       (throwE [errorDiagnostic "query.arguments" (name ++ ": arguments belong to a different contract")])
     _ <- ExceptT (Dhall.encodeValue (contractShape input) arguments)
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
-    sources <- checked "query.source" (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
-    entry <- ExceptT (compileGuest sources)
     output <- ExceptT (Right <$> executeCompiledEntry selected entry
       (Bytes.toStrict (encode (object ["root" .= value, "arguments" .= arguments]))))
     (valueResult, trace) <- either (protocolFailure selected) pure (decodeQueryReply output)

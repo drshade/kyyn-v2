@@ -40,6 +40,7 @@ import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
 import Kyyn.Porcelain.Capability.EvolutionStore
 import Kyyn.Porcelain.Capability.EvolutionAuthoring
 import Kyyn.Porcelain.Capability.RootExecution
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..))
 import Kyyn.Porcelain.Capability.RootOpening
 import Kyyn.Porcelain.Capability.RootPublication
 import Kyyn.Porcelain.Capability.RootStore
@@ -300,8 +301,7 @@ validationMock :: Maybe Bool -> Eff (RootExecution : es) a -> Eff es a
 validationMock mode = interpret $ \_ operation -> case mode of
   Nothing -> error "Publication/recovery invoked validation"
   Just valid -> case operation of
-    CheckRootCode _ -> pure (Right ())
-    DiscoverQueries _ -> pure (Right [])
+    PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
     ValidateRoot _ -> pure (Right (ValidationReport (if valid then [] else [errorDiagnostic "test.invalid" "Invalid candidate"])))
     ExecuteQuery {} -> error "Unexpected query"
 

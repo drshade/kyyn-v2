@@ -90,11 +90,8 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   (status,expected,errors) <- readCreateProcessWithExitCode (proc (temporary </> "native/proof") []) ""
   unless (status == ExitSuccess) (fail errors)
   compiled <- compileGuestFiles captured >>= right >>= right
-  guest <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope $ withCompiledEntry compiled $ do
-    closeStdin
-    output <- collectStdout
-    exit <- awaitExit
-    pure (output,exit)
+  guest <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
+    executeCompiled compiled Bytes.empty
   actual <- right guest
   unless (actual == (Text.encodeUtf8 (Text.pack expected),ProcessExit 0 "")) (fail ("GHC/MicroHs evolution proof differed: " ++ show actual))
   replies <- traverse (right . decodeEvolutionReply . Text.encodeUtf8 . Text.pack)

@@ -23,6 +23,7 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Porcelain.Capability.EvolutionStore
 import Kyyn.Porcelain.Capability.RootOpening
 import Kyyn.Porcelain.Capability.RootExecution
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..))
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Root (inspectRootAt, checkRootAt)
 import Kyyn.Porcelain.Capability.Evolution (checkWorkspace)
@@ -61,10 +62,10 @@ main = do
       (candidateChecked, candidateCalls) = runCandidate (Just candidate)
       (missing, missingCalls) = runCandidate Nothing
   assert "Root show bypassed checks or used wrong selection"
-    (showCalls == ["open","code","queries","examples","validate","value"] && exitStatus shown == 0)
-  assert "Root check decoded a browsing value" (checkCalls == ["open","code","queries","examples","validate"] && exitStatus checked == 0)
+    (showCalls == ["open","prepare","examples","validate","value"] && exitStatus shown == 0)
+  assert "Root check decoded a browsing value" (checkCalls == ["open","prepare","examples","validate"] && exitStatus checked == 0)
   assert "Candidate check opened or evaluated an evolution"
-    (candidateCalls == ["candidate","code","queries","examples","validate"] && exitStatus candidateChecked == 0)
+    (candidateCalls == ["candidate","prepare","examples","validate"] && exitStatus candidateChecked == 0)
   assert "Missing candidate invoked validation" (missingCalls == ["candidate"] && exitStatus missing == 1)
   case shown of
     Response _ _ messages warnings -> do
@@ -112,8 +113,7 @@ opening kb@(KnowledgeBase repository _) revision root = interpret $ \_ -> \case
 
 execution :: State [String] :> es => Eff (RootExecution : es) a -> Eff es a
 execution = interpret $ \_ -> \case
-  CheckRootCode _ -> record "code" >> pure (Right ())
-  DiscoverQueries _ -> record "queries" >> pure (Right [])
+  PrepareRoot root -> record "prepare" >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
   ValidateRoot _ -> record "validate" >> pure (Right (ValidationReport [warning]))
   _ -> error "Unexpected query execution"
 

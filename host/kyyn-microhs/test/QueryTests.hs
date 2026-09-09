@@ -88,10 +88,10 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
       tree = either error id . fileTree
       utf8 = Text.encodeUtf8 . Text.pack
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
-  authored <- mapM (load "host/kyyn-microhs/test/query") ["Schema.hs","Queries.hs"]
+  authored <- mapM (load "host/kyyn-microhs/test/query") ["Schema.hs","Queries.hs","Validate.hs"]
   sdkFiles <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
-      name <- ["SchemaMetadata","Fact","Program","Query"]] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","SchemaMetadata","Query"]] ++
+      name <- ["SchemaMetadata","Fact","Program","Query","Diagnostic"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","SchemaMetadata","Query","Validation"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let sdk = tree sdkFiles
       registration = "{ name = \"owner\", description = \"Look up the task owner\", implementation = \"Queries.ownerOf\", inputType = \"Schema.Input\", inputMetadata = \"Schema.inputMetadata\", resultType = \"Schema.Result\", resultMetadata = \"Schema.resultMetadata\" }"
@@ -104,9 +104,10 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   root <- either (fail . show) pure (runPureEff . runDhallHandling . runRootStore $
     materializeRoot contract code (CheckedValue (contractId (rootSchema contract)) values))
   discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ discoverQueries root
-  descriptor@(QueryDescriptor _ _ input result) <- case discovery of
-    Right (Right [d]) -> pure d
+    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ prepareRoot root
+  prepared <- either (fail . show) (either (fail . show) pure) discovery
+  descriptor@(QueryDescriptor _ _ input result) <- case preparedQueries prepared of
+    [d] -> pure d
     _ -> fail ("Query discovery failed: " ++ show discovery)
   unless (rootType input == StringType && rootType result == OptionalType personType)
     (fail "Named query types were not inspected")
@@ -114,7 +115,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
     [FieldRole "Schema.Person" "name" "label"] []) (fail "Query result metadata lost or copied from Root")
   response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $
-      queryRoot root descriptor (CheckedValue (contractId input) (String "Review"))
+      queryRoot prepared descriptor (CheckedValue (contractId input) (String "Review"))
   let expected = QueryResult (CheckedValue (contractId result)
         (object ["tag" .= ("Some" :: String), "value" .= object ["name" .= ("Ada 🦋" :: String)]]))
         [CollectionRead "to-dos", FactRead "people" (FactId "person-001")]

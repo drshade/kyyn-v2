@@ -63,13 +63,8 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
     remaining <- listDirectory temporary
     unless (null remaining) (fail "compilation leaked its temporary sources")
     let invoke input = do
-          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope $
-            withCompiledEntry compiled $ do
-              writeStdin (B.toStrict (utf8 (input ++ "\n")))
-              closeStdin
-              actual <- collectStdout
-              status <- awaitExit
-              pure (actual, status)
+          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
+            executeCompiled compiled (B.toStrict (utf8 (input ++ "\n")))
           (actual, ProcessExit status diagnostics) <- either (fail . show) pure outcome
           unless (status == 0) (fail (show diagnostics))
           decoded <- either fail pure (A.eitherDecodeStrict actual)

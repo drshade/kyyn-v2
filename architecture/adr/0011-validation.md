@@ -102,26 +102,42 @@ evaluation distinct from persisting or publishing its output:
 
 ```haskell
 data RootExecution :: Effect where
-  CheckRootCode
-    :: Root -> RootExecution m (Either [Diagnostic] ())
+  PrepareRoot
+    :: Root -> RootExecution m (Either [Diagnostic] PreparedRoot)
   ValidateRoot
-    :: Root -> RootExecution m (Either [Diagnostic] ValidationReport)
+    :: PreparedRoot -> RootExecution m (Either [Diagnostic] ValidationReport)
   ExecuteQuery
-    :: Root -> QueryDescriptor -> CheckedValue
+    :: PreparedRoot -> QueryDescriptor -> CheckedValue
     -> RootExecution m (Either [Diagnostic] QueryResult)
-  DiscoverQueries
-    :: Root -> RootExecution m (Either [Diagnostic] [QueryDescriptor])
   PrepareOutput
     :: Root -> OutputDescriptor -> CheckedValue -> RootExecution m PreparedOutput
 
 runRootExecution
-  :: (RootStore :> es, GuestCompilation :> es, ProcessExecution :> es,
-      FileSystem :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
+  :: (RootStore :> es, GuestCompilation :> es,
+      SchemaInspection :> es, DhallHandling :> es, Failure :> es)
   => FileTree -- explicitly installed SDK/runtime sources
   -> Eff (RootExecution : es) a -> Eff es a
 ```
 
-`ValidateRoot` is the first implemented operation. RootStore's `ReadRootDefinition`
+`PreparedRoot` is an opaque capability value containing the selected Root, its
+compiled validator, and registered query descriptors with their compiled entries.
+Preparation reads the captured definition once, inspects query contracts and
+compiles every registered entry without executing validators or queries. It does
+not load examples or mint Validated. Constructor access belongs to the porcelain
+interpreter; the public capability exposes pure accessors:
+
+```haskell
+preparedRoot :: PreparedRoot -> Root
+preparedQueries :: PreparedRoot -> [QueryDescriptor]
+```
+
+Compiled programs are the domain values from [ADR 0002](0002-runtime.md), not
+callbacks, process handles or paths depending on a live build scope. Subsequent
+validation/query operations consume this same prepared snapshot without compiling
+or inspecting schemas again. Each independent root/candidate check prepares afresh;
+there is no retained interpreter state or persistent artifact cache.
+
+RootStore's `ReadRootDefinition`
 decodes the captured manifest and extracts captured authored sources; its
 `LoadRootValueForChecking` supplies the structurally checked whole-root value.
 The manifest-selected validator is compiled with a generated root codec and a
@@ -131,8 +147,8 @@ The contract already belongs to the supplied root; execution does not inspect
 a new schema or read current workspace files. SDK/runtime sources are explicit
 interpreter inputs, not acquired through the KB's manifest.
 
-The outer `Left` means the captured definition/facts are unreadable or the selected
-source cannot compile. `Right report` means the validator ran, including when the
+Preparation's `Left` means captured definition/schema/source rejection. Validation's
+`Left` means its selected facts cannot be loaded. `Right report` means the validator ran, including when the
 report contains semantic errors. Process failures and malformed protocol replies
 remain Failure, identifying the selected validator. This operation alone does not
 mint `Validated Root`: the checking function below owns that decision.
@@ -140,12 +156,13 @@ Query discovery/execution use the same captured-source boundary;
 PrepareOutput remains unimplemented.
 
 Query contracts are selected through the named declarations in ADR 0008.
-DiscoverQueries inspects input/result contracts without executing the query.
-ExecuteQuery resolves the root-local name in the supplied root, compares those
-contracts with the descriptor, checks the arguments and compiles the generated
+PrepareRoot inspects input/result contracts without executing the query;
+preparedQueries exposes those descriptors without effectful rediscovery.
+ExecuteQuery resolves the root-local name in the prepared snapshot, compares those
+contracts with the supplied descriptor, checks the arguments and invokes the retained
 entry. The result is checked against its declared contract and accompanied by
 the logical read trace from ADR 0009. Unknown names, changed contracts, invalid
-arguments and compile rejection return diagnostics; process failure, malformed
+arguments return diagnostics; compilation rejection belongs to preparation. Process failure, malformed
 replies and a returned value violating its contract remain operational Failure.
 Examples compare the checked result, not the trace.
 
@@ -154,20 +171,20 @@ not this snapshot-checking/query effect. It derives `After`, generates bindings,
 compiles the proposed program and returns the target contract with its structurally
 checked result. The application materializes that result before candidate checking.
 RootExecution checks the selected snapshot; it does not invoke the evolution again.
-It delegates builds of checking/query/output adapters to
-[GuestCompilation](0002-runtime.md), then uses ProcessExecution for the resulting
+It delegates builds and execution of checking/query/output adapters to
+[GuestCompilation](0002-runtime.md), which supplies ProcessExecution for the resulting
 entry. Checking a loaded candidate compiles its checking code as needed;
 loading the saved value itself does not compile or execute code.
 Compiler flags and toolchain paths remain in the compilation interpreter.
 
 EvolutionExecution compiles the evolution and its captured dependency closure
 before materialization. Independent target validators and queries compile during
-candidate checking through CheckRootCode, including entries the evolution never
+candidate checking through PrepareRoot, including entries the evolution never
 calls. Their compilation diagnostics reject checking without erasing the saved
 candidate. Before contributes schema/decoding definitions, not its unrelated
 validators. ADR 0010 owns the evaluation/materialization boundary.
 
-The current root checker calls CheckRootCode before semantic/example evaluation.
+The current root checker calls PrepareRoot before semantic/example evaluation.
 It compiles the validator and every registered query entry using generated typed
 adapters, including queries no example invokes, without executing those entries.
 Only entries selected by this root's declarations and their imports participate;
@@ -241,7 +258,7 @@ as a result of running it. Evaluation always receives the explicit target root:
 ```haskell
 checkExample
   :: RootExecution :> es
-  => Root -> Example -> Eff es ValidationReport
+  => PreparedRoot -> Example -> Eff es ValidationReport
 
 checkRoot
   :: (RootStore :> es, RootExecution :> es)
@@ -259,8 +276,9 @@ loadAcceptedRoot
 ```
 
 `checkRoot` is implemented as composition of RootStore and RootExecution, not a
-new effect or IO interpreter. It checks code, discovers query contracts, loads
-examples, runs the root validator and checks every example against that same root.
+new effect or IO interpreter. It prepares code and query contracts, loads examples
+using the prepared descriptors, runs the validator and checks every example against
+that same prepared root.
 Errors reject; warnings remain attached to a returned Validated value. Runtime
 Failure propagates unchanged. A root with no examples still requires code and
 semantic checking. `checkCandidate` composes this checker, preserving context and
@@ -269,7 +287,7 @@ remains unimplemented.
 
 `checkExample` uses `ExecuteQuery`, not another effect. That operation resolves
 the named query in the supplied root, checks arguments and checks the response
-contract. Its raw-root input admits candidate checking, not an implicit relaxation
+contract. Its prepared-root input admits candidate checking, not an implicit relaxation
 of ordinary query/browsing requirements. Required mismatches are errors;
 illustrative mismatches remain visible warnings. Compare values using their
 contract's exact structural/semantic equality, not floating-point coercion or

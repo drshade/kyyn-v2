@@ -20,6 +20,7 @@ library
     Kyyn.Porcelain.Capability.RootExecution
     Kyyn.Porcelain.Capability.Validation
     Kyyn.Porcelain.Validated
+    Kyyn.Porcelain.RootExecution.Types
   other-modules: Kyyn.Porcelain.Validation.Types
   default-language: GHC2021
   default-extensions: NoFieldSelectors

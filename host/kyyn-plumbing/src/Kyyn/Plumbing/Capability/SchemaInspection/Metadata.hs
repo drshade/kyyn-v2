@@ -13,7 +13,6 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
 import Kyyn.Plumbing.Capability.ProcessExecution
@@ -54,16 +53,14 @@ exact label expected parse = withObject label $ \o -> do
   parse o
 
 evaluateMetadata
-  :: (GuestCompilation :> es, FileSystem :> es, ProcessExecution :> es, Failure :> es)
+  :: (GuestCompilation :> es, Failure :> es)
   => GuestSources -> Eff es (Either [Diagnostic] SchemaMetadata)
 evaluateMetadata sources = do
   compiled <- compileGuest sources
   case compiled of
     Left diagnostics -> pure (Left diagnostics)
-    Right entry -> withCompiledEntry entry $ do
-      closeStdin
-      output <- collectStdout
-      ProcessExit status diagnostics <- awaitExit
+    Right entry -> do
+      (output, ProcessExit status diagnostics) <- executeCompiled entry Bytes.empty
       if status /= 0
         then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
           ("metadata entry exited " ++ show status ++ ": " ++ show diagnostics)))

@@ -87,6 +87,15 @@ test('indented imports are checked and unrecognized syntax fails closed', () => 
   }
 });
 
+test('prepared root constructors stay behind the capability', () => {
+  const internal = 'import Kyyn.Porcelain.RootExecution.Types';
+  for (const pkg of ['kyyn-porcelain', 'kyyn-surfaces', 'kyyn-domain', 'kyyn-plumbing']) {
+    assert.deepEqual(checkImports(pkg, 'module Other where\n' + internal), ['Kyyn.Porcelain.RootExecution.Types']);
+  }
+  assert.deepEqual(checkImports('kyyn-porcelain', 'module Kyyn.Porcelain.Capability.RootExecution where\n' + internal), []);
+  assert.deepEqual(checkImports('kyyn-porcelain-interpreters', 'module Kyyn.Porcelain.Interpreter.RootExecution where\n' + internal), []);
+});
+
 test('compiler internals stay native and guest transport stays private', () => {
   assert.deepEqual(checkImports('kyyn-microhs', 'import MicroHs.Expr'), []);
   assert.deepEqual(checkImports('kyyn-runtime', 'import Text.JSON.Types'), []);
