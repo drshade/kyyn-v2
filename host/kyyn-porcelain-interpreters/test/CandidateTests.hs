@@ -105,6 +105,16 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let latestPath = candidateDir </> Char8.unpack first
       metadataPath = latestPath </> "candidate.dhall"
   metadata <- Bytes.readFile metadataPath
+  let expectStale = execute (loadCandidate location) >>= \case
+        Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
+        other -> fail ("Unrecognised candidate layout was not stale: " ++ show other)
+      extraFile = latestPath </> "extra"
+  Bytes.writeFile extraFile "unrecognised layout"
+  expectStale
+  removeFile extraFile
+  removeFile metadataPath
+  expectStale
+  Bytes.writeFile metadataPath metadata
   let capturedManifest = latestPath </> "capture/manifest.dhall"
   currentManifest <- Bytes.readFile capturedManifest
   Bytes.writeFile capturedManifest ("(" <> currentManifest <> ") // { extra = [] : List Text }")

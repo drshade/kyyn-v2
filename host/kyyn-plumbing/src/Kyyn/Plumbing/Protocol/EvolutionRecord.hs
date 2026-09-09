@@ -30,15 +30,15 @@ decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
       Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
         "Stored evolution record format is not supported by this kernel"]))
   where
-   decodeContents contents = do
-    decoded <- decodeValue headerShape ("(" <> contents <> "\n).{version, identity, before, after}")
-    case decoded of
-      Left diagnostics -> pure (Left (show diagnostics))
-      Right value -> case decodeHeader value of
-        Right (Right (_,before,after)) -> do
-          checked <- decodeValue (recordShape before after) contents
-          pure $ case checked of
-            Left diagnostics -> Left (show diagnostics)
-            Right document -> decodeRecord document
-        Right (Left diagnostics) -> pure (Right (Left diagnostics))
-        Left message -> pure (Left message)
+    decodeContents contents = do
+      decoded <- decodeValue headerShape ("(" <> contents <> "\n).{version, identity, before, after}")
+      case decoded of
+        Left diagnostics -> pure (Left (show diagnostics))
+        Right value -> case decodeHeader value of
+          Right (Right (identity,before,after)) -> do
+            checked <- decodeValue (recordShape before after) contents
+            pure $ case checked of
+              Left diagnostics -> Left (show diagnostics)
+              Right document -> (\report -> Right (identity,before,after,report)) <$> decodeRecord before after document
+          Right (Left diagnostics) -> pure (Right (Left diagnostics))
+          Left message -> pure (Left message)

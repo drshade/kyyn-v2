@@ -46,7 +46,7 @@ snapshotValue contract = object ["fingerprint" .= contractFingerprint (contractI
     SchemaMetadata roles assignments collections = metadataOf schema
     metadata = object
       ["roles" .= [object ["name" .= name, "description" .= description,
-        "affordance" .= tagged (show affordance) Nothing] | RoleDecl name description affordance <- roles],
+        "affordance" .= tagged (affordanceName affordance) Nothing] | RoleDecl name description affordance <- roles],
        "fields" .= [object ["type" .= t,"field" .= field,"role" .= role] | FieldRole t field role <- assignments],
        "collections" .= [object ["name" .= name,"field" .= field,"references" .=
          [object ["field" .= f,"collection" .= c] | (f,c) <- references]]
@@ -124,6 +124,11 @@ optionalText = withObject "Optional field name" $ \record -> do
     "None" -> pure Nothing
     "Some" -> Just <$> record .: "value"
     _ -> fail "Expected Some or None"
+
+affordanceName :: Affordance -> String
+affordanceName Title = "Title"
+affordanceName Timeline = "Timeline"
+affordanceName Badge = "Badge"
 
 optional :: Maybe Value -> Value
 optional Nothing = tagged "None" Nothing

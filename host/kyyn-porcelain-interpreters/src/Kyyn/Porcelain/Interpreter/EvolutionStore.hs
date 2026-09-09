@@ -129,26 +129,28 @@ runEvolutionStore = interpret $ \_ -> \case
         path <- stored ReadFile "latest" (relativePath (evolutionIdName key))
         location <- stored ReadFile "candidate" (directoryScope (scopedPath parent path))
         tree <- FileSystem.readTree location
-        unless (all (\(p,_) -> let n = relativeName p in n == "candidate.dhall" ||
-            "capture/" `isPrefixOf` n || "root/" `isPrefixOf` n) (files tree))
-          (storageFailure ReadFile "candidate" "Unexpected saved-result file")
-        metadata <- stored ReadFile "candidate.dhall" $ maybe (Left ("Missing candidate metadata" :: String)) Right
-          (lookup "candidate.dhall" [(relativeName p,b) | (p,b) <- files tree])
-        decoded <- decodeEvolutionRecord metadata >>= stored ReadFile "candidate.dhall"
-        capture <- stored ReadFile "capture" (subtree "capture/" tree)
-        captured <- WorkspaceStore.readWorkspaceSnapshot capture
-        case (decoded,captured) of
-          (Right (owner,before,after,report), Right snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) _ target _ _)) -> do
-            rootFiles <- stored ReadFile "root" (subtree "root/" tree)
-            facts <- stored ReadFile "root/facts" (fileTree [(p,b) | (p,b) <- files rootFiles, "facts/" `isPrefixOf` relativeName p])
-            code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
-            unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
-            unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
-            let root = Root after facts code
-            _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
-            checkSavedReport ReadFile report
-            pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
-          _ -> pure (Left [errorDiagnostic "candidate.stale" "Saved result no longer matches this kernel; check the evolution again"])
+        let knownLayout = all (\(p,_) -> let n = relativeName p in n == "candidate.dhall" ||
+              "capture/" `isPrefixOf` n || "root/" `isPrefixOf` n) (files tree)
+            stale = pure (Left [errorDiagnostic "candidate.stale"
+              "Saved result no longer matches this kernel; check the evolution again"])
+        case lookup "candidate.dhall" [(relativeName p,b) | (p,b) <- files tree] of
+          Just metadata | knownLayout -> do
+            decoded <- decodeEvolutionRecord metadata >>= stored ReadFile "candidate.dhall"
+            capture <- stored ReadFile "capture" (subtree "capture/" tree)
+            captured <- WorkspaceStore.readWorkspaceSnapshot capture
+            case (decoded,captured) of
+              (Right (owner,before,after,report), Right snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) _ target _ _)) -> do
+                rootFiles <- stored ReadFile "root" (subtree "root/" tree)
+                facts <- stored ReadFile "root/facts" (fileTree [(p,b) | (p,b) <- files rootFiles, "facts/" `isPrefixOf` relativeName p])
+                code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
+                unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
+                unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
+                let root = Root after facts code
+                _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
+                checkSavedReport ReadFile report
+                pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
+              _ -> stale
+          _ -> stale
 
 lookupAcceptance :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
   => KnowledgeBase -> EvolutionId -> GitRevision -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)

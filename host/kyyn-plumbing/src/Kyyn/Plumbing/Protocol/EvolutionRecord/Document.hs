@@ -79,14 +79,10 @@ header = withObject "Evolution record" $ \record -> do
     after <- record .: "after" >>= restoreSnapshot
     pure ((identity,,) <$> before <*> after)
 
-decodeRecord :: Value -> Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract, EvolutionReport))
-decodeRecord = parseEither $ \value -> do
-  decoded <- header value
-  case decoded of
-    Right (identity,b,a) -> withObject "Evolution record" (\record -> do
-      steps <- record .: "steps" >>= traverse (step [("Before",b),("After",a)])
-      pure (Right (identity,b,a,EvolutionReport steps))) value
-    Left diagnostics -> pure (Left diagnostics)
+decodeRecord :: RootContract -> RootContract -> Value -> Either String EvolutionReport
+decodeRecord before after = parseEither $ withObject "Evolution record" $ \record -> do
+  steps <- record .: "steps" >>= traverse (step [("Before",before),("After",after)])
+  pure (EvolutionReport steps)
   where
     step :: [(String,RootContract)] -> Value -> Parser StepReport
     step endpoints = withObject "Step" $ \record -> do
