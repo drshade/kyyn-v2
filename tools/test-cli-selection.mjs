@@ -53,7 +53,7 @@ try {
     [['root', 'unknown'], ['show', 'check']],
   ]) {
     const result = spawnSync(executable, args, { cwd: temporary, env, encoding: 'utf8', timeout: 15000 });
-    assert.equal(result.status, 1, JSON.stringify(result));
+    assert.equal(result.status, 2, JSON.stringify(result));
     assert.match(result.stderr, /Available commands:/);
     for (const command of commands) assert.match(result.stderr, new RegExp(`^  ${command} +`, 'm'));
   }

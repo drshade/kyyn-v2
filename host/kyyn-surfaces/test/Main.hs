@@ -19,7 +19,7 @@ main = do
         _ -> fail ("Parse failed: " ++ show args)
       refuses args = case parseArguments args of
         Failure failure -> let (_,status) = renderFailure failure "kyyn"
-                           in assert ("Expected refusal: " ++ show args) (status /= ExitSuccess)
+                           in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
@@ -42,8 +42,11 @@ main = do
     ["root","show","extra"]] refuses
   forM_ [[],["root"],["evolution"],["--help"],["evolution","accept","--help"]] $ \args ->
     case parseArguments args of
-      Failure failure -> let (message,_) = renderFailure failure "kyyn"
-                         in assert "Help omitted usage" ("Usage:" `isInfixOf` message)
+      Failure failure -> do
+        let (message,status) = renderFailure failure "kyyn"
+        assert "Help omitted usage" ("Usage:" `isInfixOf` message)
+        assert "Wrong help exit status"
+          (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
   forM_ [([], ["root", "evolution"]), (["root"], ["show", "check"]),
     (["evolution"], ["new", "list", "accept"]),
@@ -51,7 +54,7 @@ main = do
     case parseArguments args of
       Failure failure -> do
         let (message,status) = renderFailure failure "kyyn-v2"
-        assert "Incomplete or invalid command should fail" (status /= ExitSuccess)
+        assert "Incomplete or invalid command should exit 2" (status == ExitFailure 2)
         assert "Help omitted command list" ("Available commands:" `isInfixOf` message)
         forM_ commands $ \command ->
           assert ("Help omitted " ++ command) (("  " ++ command ++ " ") `isInfixOf` message)

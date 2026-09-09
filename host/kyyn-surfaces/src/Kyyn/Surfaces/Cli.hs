@@ -38,7 +38,7 @@ data EvolutionCommand
 
 cliInfo :: ParserInfo Invocation
 cliInfo = info (invocation <**> helper)
-  (fullDesc <> progDesc "Inspect knowledge and prepare, check and accept evolutions")
+  (fullDesc <> failureCode 2 <> progDesc "Inspect knowledge and prepare, check and accept evolutions")
 
 parseArguments :: [String] -> ParserResult Invocation
 parseArguments = execParserPure cliPrefs cliInfo
