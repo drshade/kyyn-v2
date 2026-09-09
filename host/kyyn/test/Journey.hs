@@ -35,8 +35,8 @@ main = do
   repository <- getEnv "KYYN_TEST_ROOT"
   executable <- getEnv "KYYN_TEST_CLI"
   environment <- getEnvironment
-  let identity = [("GIT_AUTHOR_NAME","Kyyn fixture"),("GIT_AUTHOR_EMAIL","fixture@example.invalid"),
-        ("GIT_COMMITTER_NAME","Kyyn fixture"),("GIT_COMMITTER_EMAIL","fixture@example.invalid")]
+  let identity = [("GIT_AUTHOR_NAME","Ignored override"),("GIT_AUTHOR_EMAIL","ignored@example.invalid"),
+        ("GIT_COMMITTER_NAME","Ignored override"),("GIT_COMMITTER_EMAIL","ignored@example.invalid")]
       fixtureEnvironment = identity ++ filter (\(key,_) -> key `notElem` map fst identity) environment
   withSystemTempDirectory "kyyn-installed-journey" $ \kb -> do
     copyTree (repository </> "examples/todos") kb
@@ -47,6 +47,7 @@ main = do
             ((proc "git" arguments) {cwd = Just kb, env = Just fixtureEnvironment}) ""
           unless (status == ExitSuccess) (fail (show arguments ++ errors))
           pure (filter (/= '\n') output)
+        cli :: ExitCode -> [String] -> IO Value
         cli expected arguments = do
           putStrLn ("kyyn " ++ unwords arguments)
           (status,output,errors) <- readCreateProcessWithExitCode
@@ -63,12 +64,19 @@ main = do
     copyFile (fixture </> "Queries.hs") (root </> "src/Queries.hs")
     saveExample root "receipts-title" "titleFor" StringType (String "todo-002") (String "Check receipts")
     void (git ["init","-b","main"])
+    void (git ["config","user.name","Configured fixture λ"])
+    void (git ["config","user.email","fixture@example.invalid"])
     void (git ["add","."])
     void (git ["commit","-m","Initial todos with a required example"])
     before <- git ["rev-parse","HEAD"]
     void (ok ["root","check"])
 
     (first,workspace) <- create "simplify-todos"
+    void (git ["config","user.name",""])
+    missingIdentity <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    assert "Missing identity did not refuse before runtime loading"
+      (any (\diagnostic -> at ["code"] diagnostic == String "git.identity") (array (at ["diagnostics"] missingIdentity)))
+    void (git ["config","user.name","Configured fixture λ"])
     let target = workspace </> "target"
     removeFile (target </> "src/TodoSchemaV1.hs")
     copyFile (fixture </> "TodoSchemaV2.hs") (target </> "src/TodoSchemaV2.hs")
@@ -90,6 +98,14 @@ main = do
     assert "Acceptance did not create one step" (parent == before && after /= before)
     accepting <- textAt ["result","acceptingCommit"] accepted
     assert "Reported acceptance differs from Git" (accepting == after)
+    actualIdentity <- git ["log","-1","--format=%an <%ae>|%cn <%ce>"]
+    assert "Acceptance ignored configured Git identity or used environment overrides"
+      (actualIdentity == "Configured fixture λ <fixture@example.invalid>|Configured fixture λ <fixture@example.invalid>")
+    void (git ["config","user.name",""])
+    retried <- cli (ExitFailure 4) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    retryRevision <- textAt ["result","revision"] retried
+    assert "Accepted retry lost its original revision" (retryRevision == after)
+    void (git ["config","user.name","Configured fixture λ"])
     commitMessage <- git ["log","-1","--format=%s"]
     assert "Commit omitted the evolution name" ("simplify-todos" `isInfixOf` commitMessage)
     oldCurrent <- doesFileExist (root </> "src/TodoSchemaV1.hs")

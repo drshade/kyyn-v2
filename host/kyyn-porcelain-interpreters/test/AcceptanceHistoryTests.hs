@@ -51,7 +51,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
       archivePath = Subtree (path "nested/kb/evolutions/e001")
       manifestPath = path "nested/kb/evolutions/e001/manifest.dhall"
       git :: Eff '[Git, Process.ProcessExecution, Failure, IOE] a -> IO a
-      git action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= right
+      git action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= right
       process args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
           (Process.ProcessSpec executable (["-c","user.name=Fixture","-c","user.email=fixture@example.invalid"] ++ args)
@@ -68,10 +68,10 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
       archive before state = right $ runPureEff . runDhallHandling . runWorkspaceStore $
         encodeWorkspaceSnapshot (WorkspaceSnapshot (WorkspaceManifest before "Example" "Reason" state []) empty empty empty empty)
       commit parent contents message = git (createCommit repo (GitTree [(archivePath,contents)]) parent (metadata message))
-      lookupAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable . noFiles
+      lookupAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable [] . noFiles
         . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
           findAcceptance kb identity revision
-      readReportAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable . noFiles
+      readReportAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable [] . noFiles
         . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
           readArchivedReport (EvolutionWorkspace kb identity) revision
       withUnverifiedReport contents = tree ((path "result.json", Bytes.pack "must not decode before checking acceptance") : files contents)
@@ -149,7 +149,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   headAfter <- git (resolveRevision repo "HEAD") >>= right
   unless (headAfter == base) (fail "History inspection moved HEAD")
   let lifecycle :: Eff LifecycleEffects a -> IO (Either OperationalFailure a)
-      lifecycle action = runEff . runFailure . runProcessExecutionIO . runGit executable
+      lifecycle action = runEff . runFailure . runProcessExecutionIO . runGit executable []
         . runFileSystemIO scope . shallowFiles Nothing . runDhallHandling . runRootStore
         . runWorkspaceStore . runEvolutionStore $ action
       runLifecycle :: Eff LifecycleEffects a -> IO a
@@ -211,7 +211,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   runLifecycle (readEvolutionState workspace) >>= right >>= \s -> unless (s == Draft) (fail "MarkDraft failed")
   beforeFailedWrite <- Bytes.readFile livePath
   let writeFailure = StorageUnavailable (StorageDiagnostic ReplaceFile livePath "Injected transition failure")
-  failedTransition <- runEff . runFailure . runProcessExecutionIO . runGit executable
+  failedTransition <- runEff . runFailure . runProcessExecutionIO . runGit executable []
     . runFileSystemIO scope . shallowFiles (Just writeFailure) . runDhallHandling . runRootStore
     . runWorkspaceStore . runEvolutionStore $ markReady workspace
   afterFailedWrite <- Bytes.readFile livePath

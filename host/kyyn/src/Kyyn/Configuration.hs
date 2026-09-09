@@ -2,7 +2,6 @@
 module Kyyn.Configuration
   ( Host(..), SelectedKb(..), configure, selectKnowledgeBase, commitMetadata, runGitIO ) where
 
-import Control.Applicative ((<|>))
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.IO.Class (liftIO)
 import Data.Time.Clock.POSIX (getPOSIXTime)
@@ -25,7 +24,8 @@ import System.Environment (getExecutablePath, lookupEnv)
 import System.FilePath ((</>), takeDirectory)
 
 data Host = Host
-  { gitExecutable :: FilePath, temporary :: DirectoryScope, runtime :: FilePath }
+  { gitExecutable :: FilePath, gitConfigurationEnvironment :: [(String,String)]
+  , temporary :: DirectoryScope, runtime :: FilePath }
 data SelectedKb = SelectedKb
   { knowledgeBase :: KnowledgeBase, revision :: GitRevision, branch :: Maybe LocalBranch }
 
@@ -41,11 +41,13 @@ configure (Cli.Selection path gitOverride runtimeOverride) = runExceptT $ do
   temp <- liftIO getTemporaryDirectory >>= either (invalid "setup.temporary") pure . directoryScope
   installed <- liftIO getExecutablePath
   runtime <- liftIO (canonicalizePath (maybe (takeDirectory (takeDirectory installed) </> "lib/kyyn") id runtimeOverride))
-  pure (Host git temp runtime, scope)
+  let keys = ["HOME", "XDG_CONFIG_HOME"]
+  values <- liftIO (mapM lookupEnv keys)
+  pure (Host git [(key,value) | (key,Just value) <- zip keys values] temp runtime, scope)
   where invalid code = throwE . refusal . pure . errorDiagnostic code
 
 runGitIO :: Host -> Eff '[Git.Git, ProcessExecution, Failure, IOE] a -> IO (Either OperationalFailure a)
-runGitIO (Host executable _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable
+runGitIO (Host executable environment _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable environment
 
 selectKnowledgeBase :: Host -> DirectoryScope -> IO (Either Response SelectedKb)
 selectKnowledgeBase host scope = do
@@ -63,18 +65,13 @@ selectKnowledgeBase host scope = do
         pure (SelectedKb (KnowledgeBase repository prefix) revision branch)
   pure (either (Left . operationalFailure) (either (Left . refusal) Right) result)
 
-commitMetadata :: String -> IO (Either Response CommitMetadata)
-commitMetadata message = do
-  authorName <- lookupEnv "GIT_AUTHOR_NAME"
-  authorEmail <- lookupEnv "GIT_AUTHOR_EMAIL"
-  committerName <- lookupEnv "GIT_COMMITTER_NAME"
-  committerEmail <- lookupEnv "GIT_COMMITTER_EMAIL"
-  timestamp <- getPOSIXTime
-  let date = show (floor timestamp :: Integer) ++ " +0000"
-      present = maybe False (not . null)
-  pure $ case (authorName,authorEmail,committerName <|> authorName,committerEmail <|> authorEmail) of
-    (Just name,Just email,Just cName,Just cEmail)
-      | all present [Just name,Just email,Just cName,Just cEmail] ->
-        Right (CommitMetadata (CommitIdentity name email date) (CommitIdentity cName cEmail date) message)
-    _ -> Left (refusal [errorDiagnostic "acceptance.identity"
-      "Set GIT_AUTHOR_NAME and GIT_AUTHOR_EMAIL before accepting. GIT_COMMITTER_NAME and GIT_COMMITTER_EMAIL optionally override the committer."])
+commitMetadata :: Host -> Repository -> String -> IO (Either Response CommitMetadata)
+commitMetadata host repository message = do
+  result <- runGitIO host (Git.readUserIdentity repository)
+  case result of
+    Left failure -> pure (Left (operationalFailure failure))
+    Right (Left diagnostics) -> pure (Left (refusal diagnostics))
+    Right (Right (GitUser name email)) -> do
+      timestamp <- getPOSIXTime
+      let identity = CommitIdentity name email (show (floor timestamp :: Integer) ++ " +0000")
+      pure (Right (CommitMetadata identity identity message))

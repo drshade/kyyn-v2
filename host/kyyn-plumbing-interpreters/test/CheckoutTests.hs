@@ -24,7 +24,7 @@ checkoutTests = forM_ [False, True] $ \trackedDraft ->
     let repo = Repository scope
         path = either error id . relativePath
         tree entries = either error id (fileTree [(path name,bytes) | (name,bytes) <- entries])
-        perform action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) pure
+        perform action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= either (fail . show) pure
         inspect args = do
           result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
             (Process.ProcessSpec executable args directory [("PATH",""),("LC_ALL","C")]) $ do

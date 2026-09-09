@@ -21,13 +21,75 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 main :: IO ()
-main = discoveryTests >> checkoutTests >> snapshotTests
+main = identityTests >> discoveryTests >> checkoutTests >> snapshotTests
+
+identityTests :: IO ()
+identityTests = withSystemTempDirectory "kyyn-git-identity" $ \directory -> do
+  executable <- findExecutable "git" >>= maybe (fail "Git is required") pure
+  scope <- either fail pure (directoryScope directory)
+  let home = directory </> "home"
+      xdg = directory </> "xdg"
+      environment = [("HOME",home),("XDG_CONFIG_HOME",xdg),("GIT_CONFIG_NOSYSTEM","1")]
+      inspect = runEff . runFailure . runProcessExecutionIO . runGit executable environment $
+        readUserIdentity (Repository scope)
+      command args = do
+        result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
+          (Process.ProcessSpec executable args directory (environment ++ [("PATH",""),("LC_ALL","C")])) $ do
+            Process.closeStdin
+            _ <- Process.collectStdout
+            Process.awaitExit
+        case result of Right (Process.ProcessExit 0 _) -> pure (); _ -> fail (show result)
+      missing = do
+        result <- inspect
+        case result of Right (Left [Diagnostic _ "git.identity" _ _]) -> pure (); _ -> fail (show result)
+      expect name email = do
+        result <- inspect
+        unless (result == Right (Right (GitUser name email))) (fail (show result))
+  createDirectoryIfMissing True home
+  createDirectoryIfMissing True (xdg </> "git")
+  command ["init","-q","-b","main"]
+  missing
+  command ["config","--global","user.name","Global λ"]
+  missing
+  command ["config","--global","user.email","global@example.invalid"]
+  expect "Global λ" "global@example.invalid"
+  command ["config","--local","user.name","Repository λ"]
+  expect "Repository λ" "global@example.invalid"
+  let included = directory </> "included.config"
+  command ["config","--file",included,"user.email","included@example.invalid"]
+  command ["config","--global","include.path",included]
+  expect "Repository λ" "included@example.invalid"
+  let conditional = directory </> "conditional.config"
+  command ["config","--file",conditional,"user.email","conditional@example.invalid"]
+  command ["config","--global","includeIf.gitdir:" ++ directory ++ "/.git.path",conditional]
+  expect "Repository λ" "conditional@example.invalid"
+  command ["config","--local","user.name","   "]
+  missing
+  command ["config","--local","--unset","user.name"]
+  command ["config","--global","--unset-all","user.name"]
+  command ["config","--file",xdg </> "git/config","user.name","XDG λ"]
+  expect "XDG λ" "conditional@example.invalid"
+  command ["commit","--allow-empty","-m","Identity fixture"]
+  command ["config","extensions.worktreeConfig","true"]
+  let worktree = directory </> "worktree"
+  command ["worktree","add","-b","secondary",worktree]
+  command ["-C",worktree,"config","--worktree","user.name","Worktree λ"]
+  command ["-C",worktree,"config","--worktree","user.email","worktree@example.invalid"]
+  worktreeScope <- either fail pure (directoryScope worktree)
+  worktreeIdentity <- runEff . runFailure . runProcessExecutionIO . runGit executable environment $
+    readUserIdentity (Repository worktreeScope)
+  unless (worktreeIdentity == Right (Right (GitUser "Worktree λ" "worktree@example.invalid")))
+    (fail (show worktreeIdentity))
+  Bytes.writeFile (directory </> ".git/config") "[invalid"
+  invalid <- inspect
+  case invalid of Left _ -> pure (); _ -> fail "Malformed Git configuration was not an operational failure"
+  putStrLn "Configured Git identity: missing, global/XDG, local/worktree precedence, includes, Unicode and malformed config passed."
 
 discoveryTests :: IO ()
 discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git is required") pure
   scope <- either fail pure (directoryScope directory)
-  let execute action = runEff . runFailure . runProcessExecutionIO . runGit executable $ action
+  let execute action = runEff . runFailure . runProcessExecutionIO . runGit executable [] $ action
       command args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
           (Process.ProcessSpec executable args directory [("PATH",""),("LC_ALL","C")]) $ do
@@ -53,7 +115,7 @@ discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
   unavailable <- either fail pure (directoryScope (directory </> "missing"))
   missing <- execute (discoverRepository unavailable)
   case missing of Left _ -> pure (); _ -> fail "Missing cwd was not an operational failure"
-  noExecutable <- runEff . runFailure . runProcessExecutionIO . runGit (directory </> "missing-git") $
+  noExecutable <- runEff . runFailure . runProcessExecutionIO . runGit (directory </> "missing-git") [] $
     discoverRepository scope
   case noExecutable of Left _ -> pure (); _ -> fail "Missing executable was not an operational failure"
   putStrLn "Repository discovery passed for root, nested, absent and bare repositories."
@@ -64,7 +126,7 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   scope <- either fail pure (directoryScope directory)
   let repo = Repository scope
       path = either error id . relativePath
-      execute action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) (either (fail . show) pure)
+      execute action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= either (fail . show) (either (fail . show) pure)
       inspect args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
           (Process.ProcessSpec executable args directory
@@ -100,20 +162,20 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   current <- execute (readTreeAt repo second (Subtree (path "root")))
   unless (old == captured && lookup (path filename) (files current) == Just "changed")
     (fail "Fixed revision capture read live files")
-  missing <- runEff (runFailure (runProcessExecutionIO (runGit executable (readTreeAt repo first (Subtree (path "missing"))))))
+  missing <- runEff (runFailure (runProcessExecutionIO (runGit executable [] (readTreeAt repo first (Subtree (path "missing"))))))
   case missing of Right (Left _) -> pure (); _ -> fail "Missing subtree accepted"
-  invalid <- runEff (runFailure (runProcessExecutionIO (runGit executable (resolveRevision repo "--help"))))
+  invalid <- runEff (runFailure (runProcessExecutionIO (runGit executable [] (resolveRevision repo "--help"))))
   case invalid of Right (Left _) -> pure (); _ -> fail "Invalid revision accepted"
   absentRepo <- Repository <$> either fail pure (directoryScope (directory </> "missing-repository"))
-  unavailable <- runEff (runFailure (runProcessExecutionIO (runGit executable (resolveRevision absentRepo "HEAD"))))
+  unavailable <- runEff (runFailure (runProcessExecutionIO (runGit executable [] (resolveRevision absentRepo "HEAD"))))
   case unavailable of Left _ -> pure (); _ -> fail "Missing repository did not remain an infrastructure failure"
   createFileLink filename (directory </> "root/link")
   command ["add","root/link"]
   commit
   linked <- execute (resolveRevision repo "HEAD")
-  result <- runEff (runFailure (runProcessExecutionIO (runGit executable (readTreeAt repo linked (Subtree (path "root"))))))
+  result <- runEff (runFailure (runProcessExecutionIO (runGit executable [] (readTreeAt repo linked (Subtree (path "root"))))))
   case result of Right (Left _) -> pure (); _ -> fail "Symlink silently captured as a fact"
-  let perform action = runEff (runFailure (runProcessExecutionIO (runGit executable action))) >>= either (fail . show) pure
+  let perform action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= either (fail . show) pure
       tree entries = either error id (fileTree [(path name,content) | (name,content) <- entries])
       metadata = CommitMetadata
         (CommitIdentity "Author" "author@example.invalid" "1700000000 +0200")
@@ -160,10 +222,10 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   entire <- perform (createCommit repo (GitTree [(WholeTree, tree [])]) parent metadata)
   emptyRoot <- execute (readTreeAt repo entire WholeTree)
   assert "Empty whole-tree replacement failed" (null (files emptyRoot))
-  overlap <- runEff (runFailure (runProcessExecutionIO (runGit executable
+  overlap <- runEff (runFailure (runProcessExecutionIO (runGit executable []
     (createCommit repo (GitTree [(WholeTree,tree []), (Subtree (path "root"),tree [])]) parent metadata))))
   case overlap of Left _ -> pure (); _ -> fail "Overlapping replacements accepted"
-  collision <- runEff (runFailure (runProcessExecutionIO (runGit executable
+  collision <- runEff (runFailure (runProcessExecutionIO (runGit executable []
     (createCommit repo (GitTree [(Subtree (path "outside/nested"), replacement)]) parent metadata))))
   case collision of Left _ -> pure (); _ -> fail "Replacement traversed an unrelated file"
   case gitRevision (replicate 40 '0') of Left _ -> pure (); _ -> fail "Zero ID could delete a ref"
@@ -184,12 +246,12 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   assert "Concurrent CAS did not have exactly one winner"
     ((raceA == RefUpdated && raceB == RefNotUpdated (Just candidate)) ||
      (raceB == RefUpdated && raceA == RefNotUpdated (Just removed)))
-  invalidBranch <- runEff (runFailure (runProcessExecutionIO (runGit executable
+  invalidBranch <- runEff (runFailure (runProcessExecutionIO (runGit executable []
     (compareAndSwapRef repo (LocalBranch "../main") candidate removed))))
   case invalidBranch of Left _ -> pure (); _ -> fail "Invalid branch accepted"
   command ["branch", "locked", revisionName parent]
   Bytes.writeFile (directory </> ".git/refs/heads/locked.lock") "held"
-  locked <- runEff (runFailure (runProcessExecutionIO (runGit executable
+  locked <- runEff (runFailure (runProcessExecutionIO (runGit executable []
     (compareAndSwapRef repo (LocalBranch "locked") parent candidate))))
   case locked of Left _ -> pure (); _ -> fail "Ref lock failure misreported as base mismatch"
   unless (Char8.length (Char8.pack (revisionName first)) == 40 || length (revisionName first) == 64) (fail "Not a full revision")

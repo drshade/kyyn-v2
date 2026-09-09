@@ -49,14 +49,17 @@ in place of `ID` below:
 /tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution check ID
 /tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution ready ID
 
-export GIT_AUTHOR_NAME='Your Name'
-export GIT_AUTHOR_EMAIL='you@example.com'
+git -C /tmp/my-todos config user.name 'Your Name'
+git -C /tmp/my-todos config user.email 'you@example.com'
 /tmp/kyyn-development/bin/kyyn --kb /tmp/my-todos evolution accept ID
 ```
 
 The generated scaffold is an identity evolution until edited. `evaluate` saves a
-candidate; `check` and `accept` use that saved result rather than executing the
-evolution again. Inspect the candidate and its rationale with `show` before
+candidate. Acceptance uses the repository's configured Git identity; existing
+global configuration also works, so those `git config` commands are unnecessary
+when your identity is already configured. `check` and `accept` use the saved
+result rather than executing the evolution again.
+Inspect the candidate and its rationale with `show` before
 acceptance. Use `evolution draft ID` to return unfinished work to Draft.
 
 All these commands also accept shared `--json` before the noun path for structured

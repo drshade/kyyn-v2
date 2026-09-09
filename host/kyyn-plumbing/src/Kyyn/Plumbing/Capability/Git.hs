@@ -1,18 +1,19 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), discoverRepository, resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents
+  ( Git(..), readUserIdentity, discoverRepository, resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents
   , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Git (Repository, GitRevision, TreePath, GitTree, CommitMetadata, LocalBranch, RefUpdate)
+import Kyyn.Domain.Git (Repository, GitRevision, TreePath, GitTree, GitUser, CommitMetadata, LocalBranch, RefUpdate)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
 import Data.ByteString (ByteString)
 
 data Git :: Effect where
+  ReadUserIdentity :: Repository -> Git m (Either [Diagnostic] GitUser)
   DiscoverRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] FileTree)
@@ -26,6 +27,9 @@ data Git :: Effect where
   SynchronizeCheckout :: Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Git m (Either [Diagnostic] ())
 
 type instance DispatchOf Git = Dynamic
+
+readUserIdentity :: Git :> es => Repository -> Eff es (Either [Diagnostic] GitUser)
+readUserIdentity = send . ReadUserIdentity
 
 discoverRepository :: Git :> es => DirectoryScope -> Eff es (Either [Diagnostic] (Repository, TreePath))
 discoverRepository = send . DiscoverRepository
