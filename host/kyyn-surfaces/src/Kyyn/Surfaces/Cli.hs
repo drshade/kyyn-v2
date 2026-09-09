@@ -1,6 +1,6 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
-  , RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
+  , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -21,7 +21,8 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = Root RootCommand | Evolution EvolutionCommand deriving (Eq, Show)
+data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand deriving (Eq, Show)
+data KbCommand = InitKb deriving (Eq, Show)
 data RootCommand = ShowRoot | CheckRoot deriving (Eq, Show)
 
 data EvolutionCommand
@@ -48,6 +49,7 @@ cliPrefs = prefs (showHelpOnEmpty <> showHelpOnError)
 
 progressMessage :: Command -> Maybe String
 progressMessage request = case request of
+  Kb InitKb -> Just "Checking and initializing the knowledge base..."
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
   Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
@@ -60,7 +62,9 @@ invocation :: Parser Invocation
 invocation = Invocation <$> selectionParser
   <*> flag Human Json (long "json" <> help "Write structured JSON results")
   <*> hsubparser
-    (group "root" "Inspect and check the accepted root" (Root <$> rootParser)
+    (group "kb" "Create a knowledge base" (hsubparser
+      (group "init" "Initialize an empty knowledge base and commit its validated root" (pure (Kb InitKb))))
+    <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
 
 selectionParser :: Parser Selection

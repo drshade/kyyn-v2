@@ -208,6 +208,13 @@ assertion. Fixture setup uses the existing example encoder; it is not a second
 on-disk format or a schema-aware production kernel. This complements the native
 recording-handler tests for publication races and absence of evolution replay.
 
+The installed check also runs `tools/test-initialization.mjs`: an empty KB is
+initialized through the CLI and evolved into its first collection. It checks
+new/existing/nested repositories, unrelated staged/working-file preservation,
+read-only refusals and explicit recovery after an index-lock synchronization
+failure. Run it independently with the installed executable path, or pass a
+runtime directory as its second argument when using a development executable.
+
 The documentation check validates project-owned documentation, not third-party/vendor/cache trees.
 Historical evidence in neighbouring repositories is cited as source paths rather
 than required local links; a clean checkout is sufficient for this gate. External

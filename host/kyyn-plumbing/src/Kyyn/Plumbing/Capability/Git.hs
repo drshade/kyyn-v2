@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), readUserIdentity, discoverRepository, resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents
-  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout
+  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents
+  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout, indexPaths
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -15,6 +15,7 @@ import Data.ByteString (ByteString)
 data Git :: Effect where
   ReadUserIdentity :: Repository -> Git m (Either [Diagnostic] GitUser)
   DiscoverRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
+  InitializeRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
@@ -23,6 +24,7 @@ data Git :: Effect where
   CreateCommit :: Repository -> GitTree -> Maybe GitRevision -> CommitMetadata -> Git m GitRevision
   CompareAndSwapRef :: Repository -> LocalBranch -> Maybe GitRevision -> GitRevision -> Git m RefUpdate
   CheckedOutBranch :: Repository -> Git m (Maybe LocalBranch)
+  IndexPaths :: Repository -> [RelativePath] -> Git m [RelativePath]
   CheckoutChanges :: Repository -> GitRevision -> [RelativePath] -> Git m [RelativePath]
   SynchronizeCheckout :: Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Git m (Either [Diagnostic] ())
 
@@ -33,6 +35,9 @@ readUserIdentity = send . ReadUserIdentity
 
 discoverRepository :: Git :> es => DirectoryScope -> Eff es (Either [Diagnostic] (Repository, TreePath))
 discoverRepository = send . DiscoverRepository
+
+initializeRepository :: Git :> es => DirectoryScope -> Eff es (Either [Diagnostic] (Repository, TreePath))
+initializeRepository = send . InitializeRepository
 
 resolveRevision :: Git :> es => Repository -> String -> Eff es (Either [Diagnostic] GitRevision)
 resolveRevision repo = send . ResolveRevision repo
@@ -57,6 +62,9 @@ compareAndSwapRef repo branch expected = send . CompareAndSwapRef repo branch ex
 
 checkedOutBranch :: Git :> es => Repository -> Eff es (Maybe LocalBranch)
 checkedOutBranch = send . CheckedOutBranch
+
+indexPaths :: Git :> es => Repository -> [RelativePath] -> Eff es [RelativePath]
+indexPaths repo = send . IndexPaths repo
 
 checkoutChanges :: Git :> es => Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
 checkoutChanges repo revision = send . CheckoutChanges repo revision

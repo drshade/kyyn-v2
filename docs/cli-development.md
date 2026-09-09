@@ -49,35 +49,45 @@ The staged compiler uses MicroHs's upstream native build (`bin/gmhs`), exposed
 under the toolchain's existing `bin/mhs` name. GHC remains a build dependency;
 the installed compiler does not invoke it. ADR 0002 owns this build choice.
 
-Copy the example into a fresh directory and give it an initial Git commit:
+Create your own empty KB (the directory does not need to exist):
 
 ```sh
-mkdir /tmp/my-todos
-cp -R examples/todos/. /tmp/my-todos/
-git -C /tmp/my-todos init -b main
-git -C /tmp/my-todos add .
-git -C /tmp/my-todos commit -m 'Initial knowledge base'
-
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos root check
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution new my-change
+kyyn-v2 --kb /tmp/my-kb kb init
+kyyn-v2 --kb /tmp/my-kb root check
+kyyn-v2 --kb /tmp/my-kb evolution new my-change
 ```
 
-Git needs your normal identity configured for that setup commit. The example
-contains two todos, an authoritative Haskell schema and a blank-title validator.
-It has no queries or saved examples yet. The returned ID identifies a draft
+Git needs your normal identity configured. For a new repository this normally
+means global `user.name` and `user.email`; for an existing repository its local
+configuration applies too. Git chooses the initial branch using `init.defaultBranch`.
+Initialization works inside an existing repository and preserves unrelated files
+and staged changes. It refuses an existing root or evolution directory.
+
+The new root has no fields or collections: `root/src/RootV1.hs` defines its empty
+schema, `root/src/Validate.hs` its validator, and `root/facts/root.dhall` its value.
+Your first evolution can introduce the schema and facts you need. It has no
+queries or saved examples yet. The returned evolution ID identifies a draft
 workspace. Edit its `change/Evolution.hs` and, when changing schema or validation,
 its `target/` files. `before/` records the selected source. Use the returned ID
 in place of `ID` below:
 
-```sh
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution evaluate ID
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution show ID
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution check ID
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution ready ID
+`.kyyn/` holds private candidate cache files and ignores itself in Git; no
+top-level `.gitignore` rule is needed. Accepted workspaces remain in `evolutions/`.
 
-git -C /tmp/my-todos config user.name 'Your Name'
-git -C /tmp/my-todos config user.email 'you@example.com'
-/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-todos evolution accept ID
+If initialization reports a committed root but incomplete checkout,
+follow its scoped Git restore command rather than initializing again. A failure
+after setup starts may leave an empty directory or Git repository behind; inspect
+it before removing it. Ordinary identity/validation refusals do not create it.
+
+```sh
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-kb evolution evaluate ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-kb evolution show ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-kb evolution check ID
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-kb evolution ready ID
+
+git -C /tmp/my-kb config user.name 'Your Name'
+git -C /tmp/my-kb config user.email 'you@example.com'
+/tmp/kyyn-development/bin/kyyn-v2 --kb /tmp/my-kb evolution accept ID
 ```
 
 The generated scaffold is an identity evolution until edited. `evaluate` saves a

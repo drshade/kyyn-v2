@@ -7,6 +7,7 @@ node tools/test-local-install.mjs
 journey_stage=$(mktemp -d /tmp/kyyn-installed-stage.XXXXXXXX)
 trap 'rm -rf -- "$journey_stage"' EXIT
 bash tools/install-cli.sh "$journey_stage/install"
+node tools/test-initialization.mjs "$journey_stage/install/bin/kyyn-v2"
 make -C vendor/MicroHs bin/mhs
 export MHSDIR="$journey_stage/install/lib/kyyn-v2/lib/kyyn/microhs"
 export MHSCPPHS="$MHSDIR/bin/cpphs"

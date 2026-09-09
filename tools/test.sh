@@ -31,6 +31,7 @@ cabal build all
 cabal test cli-arguments --test-show-details=direct
 cabal test cli-adapters --test-show-details=direct
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"
+node --check tools/test-initialization.mjs
 cabal test processes --test-show-details=direct
 cabal test dhall-values --test-show-details=direct
 cabal test roots --test-show-details=direct

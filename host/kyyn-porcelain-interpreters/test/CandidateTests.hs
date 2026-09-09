@@ -47,7 +47,7 @@ import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Validated (validatedValue)
-import System.Directory (listDirectory, removeFile, createDirectoryIfMissing)
+import System.Directory (listDirectory, removeFile, createDirectoryIfMissing, doesDirectoryExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -82,12 +82,19 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       execute = runEff . runFailure . runFileSystemIO scope . runDhallHandling . runRootStore
         . runWorkspaceStore . noGit . runEvolutionStore
       candidateDir = directory </> "nested/kb/.kyyn/candidates"
+      cache = directory </> "nested/kb/.kyyn"
+      ignoreFile = cache </> ".gitignore"
       pointer = candidateDir </> "latest/e001"
   unless (fmap id candidate == candidate && fmap (const ()) candidate == Candidate context report ())
     (fail "Candidate mapping changed context/report")
   absent <- execute (loadCandidate location)
   unless (absent == Right (Right Nothing)) (fail "Absent selection did not return Nothing")
+  cacheExists <- doesDirectoryExist cache
+  unless (not cacheExists) (fail "Reading an absent candidate created its cache")
   execute (saveCandidate candidate) >>= right
+  ignoreRule <- Bytes.readFile ignoreFile
+  unless (ignoreRule == "*\n") (fail "Cache is not self-ignoring")
+  Bytes.writeFile ignoreFile "*\n# Preserve authored cache ignore rules\n"
   first <- Char8.readFile pointer
   loaded <- execute (loadCandidate location) >>= right >>= right
   unless (loaded == Just candidate) (fail "Candidate round trip changed context, root or report")
@@ -162,6 +169,8 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   unless (selected == Just applied) (fail "Application returned before saving its candidate")
   second <- Char8.readFile pointer
   unless (first /= second) (fail "Save reused a mutable result directory")
+  preservedIgnore <- Bytes.readFile ignoreFile
+  unless (preservedIgnore == "*\n# Preserve authored cache ignore rules\n") (fail "Saving rewrote an existing cache ignore rule")
   originalMetadata <- Bytes.readFile metadataPath
   unless (originalMetadata == metadata && loaded == Just candidate) (fail "Second save mutated the previous result")
   let rejection = ProposedCodeRejected [errorDiagnostic "test.rejected" "Do not save"]
@@ -282,6 +291,8 @@ failPublication failure = interpret $ \_ -> \case
   ReadTree scope -> send (ReadTree scope)
   ListDirectory scope -> send (ListDirectory scope)
   CreateUniqueDirectory scope -> send (CreateUniqueDirectory scope)
+  EnsureDirectory {} -> error "Candidate persistence must not initialize directories"
+  EntryExists {} -> error "Candidate persistence must not inspect entries"
 
 validationMock :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a
 validationMock expected report = interpret $ \_ -> \case

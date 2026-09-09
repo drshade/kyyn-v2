@@ -44,6 +44,13 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   unless (absentNames == Nothing) (fail "Absent directory listing was not missing")
   names <- execute (FS.listDirectory scope)
   unless (names == Just [path "empty",path "link",path "nested"]) (fail "Directory listing descended, lost entries or changed order")
+  createFileLink "absent-target" (base </> "dangling")
+  Bytes.writeFile (base </> "unrelated:entry") "preserved"
+  forM_ ["empty", "nested/value.dhall", "link", "dangling"] $ \name -> do
+    present <- execute (FS.entryExists scope (path name))
+    unless present (fail "Existing entry was treated as absent")
+  absentEntry <- execute (FS.entryExists scope (path ".git"))
+  unless (not absentEntry) (fail "Missing entry was treated as present")
   absent <- runEff (runFailure (runFileSystemIO scope (FS.readTree missing)))
   case absent of Left _ -> pure (); Right _ -> fail "Missing directory treated as empty"
   allocations <- either fail pure (directoryScope (base </> "allocations"))

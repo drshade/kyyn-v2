@@ -3,7 +3,7 @@ module Kyyn.Surfaces.Result
   ( Response(..), Outcome(..), exitStatus, responseJson, diagnosticText
   , success, refusal, operationalFailure, interruption, previewRefusal
   , rootResult, workspaceResult, summariesResult, inspectionResult, candidateResult
-  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult
+  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult, initializationResult
   ) where
 
 import Data.Aeson (Value(..), object, (.=), encode)
@@ -15,8 +15,9 @@ import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Domain.Failure
-import Kyyn.Domain.Git (GitRevision, revisionName, LocalBranch(..))
-import Kyyn.Domain.Path (relativeName)
+import Kyyn.Domain.Git (GitRevision, revisionName, LocalBranch(..), Repository(..), TreePath(..))
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
+import Kyyn.Domain.Path (relativeName, scopePath, scopedPath)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root (Root(..), CheckedValue(..))
 import Kyyn.Domain.Workspace (EvolutionState)
@@ -42,6 +43,23 @@ responseJson (Response outcome result _ diagnostics) = object
 
 success :: Value -> [String] -> Response
 success result text = Response Succeeded result text []
+
+initializationResult :: CheckResult InitializationResult -> Response
+initializationResult (Rejected report) = validationResult "Initialization" report False
+initializationResult (Passed (InitializedRoot revision (LocalBranch branch) (KnowledgeBase (Repository repository) prefix) checkout) (ValidationReport warnings)) =
+  let complete = checkout == WorkingTreeUpdated
+      diagnostics = case checkout of WorkingTreeUpdated -> []; WorkingTreeUpdateIncomplete values -> values
+      location = case prefix of WholeTree -> scopePath repository; Subtree path -> scopedPath repository path
+      rootPath = case prefix of WholeTree -> "root"; Subtree path -> relativeName path ++ "/root"
+      quote value = "'" ++ concatMap (\c -> if c == '\'' then "'\\''" else [c]) value ++ "'"
+  in Response (if complete then Succeeded else Incomplete)
+    (object ["revision" .= revisionName revision, "branch" .= branch, "path" .= location, "checkoutSynchronized" .= complete])
+    (["Initialized knowledge base at " ++ location, "Committed " ++ revisionName revision ++ " on " ++ branch] ++
+      if complete then ["Next, from the KB directory: kyyn-v2 evolution new NAME"] else [])
+    (warnings ++ diagnostics ++ if complete then [] else [errorDiagnostic "kb.checkout-incomplete"
+      ("The root is committed. Restore its checkout with: git -C " ++ quote (scopePath repository) ++
+       " restore --source=" ++ revisionName revision ++ " --staged --worktree -- " ++ quote rootPath ++
+       "\nRe-running kb init will refuse the existing root.")])
 
 refusal :: [Diagnostic] -> Response
 refusal = Response Refused Null []

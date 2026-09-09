@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, readTree, listDirectory, createUniqueDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, readTree, listDirectory, entryExists, createUniqueDirectory, ensureDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -16,7 +16,9 @@ data FileSystem :: Effect where
   ReplaceBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
   ReadTree :: DirectoryScope -> FileSystem m FileTree
   ListDirectory :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
+  EntryExists :: DirectoryScope -> RelativePath -> FileSystem m Bool
   CreateUniqueDirectory :: DirectoryScope -> FileSystem m RelativePath
+  EnsureDirectory :: DirectoryScope -> FileSystem m ()
 
 type instance DispatchOf FileSystem = Dynamic
 
@@ -41,5 +43,11 @@ readTree = send . ReadTree
 listDirectory :: FileSystem :> es => DirectoryScope -> Eff es (Maybe [RelativePath])
 listDirectory = send . ListDirectory
 
+entryExists :: FileSystem :> es => DirectoryScope -> RelativePath -> Eff es Bool
+entryExists scope = send . EntryExists scope
+
 createUniqueDirectory :: FileSystem :> es => DirectoryScope -> Eff es RelativePath
 createUniqueDirectory = send . CreateUniqueDirectory
+
+ensureDirectory :: FileSystem :> es => DirectoryScope -> Eff es ()
+ensureDirectory = send . EnsureDirectory

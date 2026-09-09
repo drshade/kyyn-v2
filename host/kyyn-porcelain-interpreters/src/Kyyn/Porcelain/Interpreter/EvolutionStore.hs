@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore) where
 
-import Control.Monad (unless, forM_)
+import Control.Monad (unless, forM_, when)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (parseEither)
@@ -103,6 +103,10 @@ runEvolutionStore = interpret $ \_ -> \case
     checkSavedReport WriteFile report
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
     tree <- stored WriteFile "root" (fileTree (files facts ++ files code))
+    let KnowledgeBase (Repository repositoryScope) _ = kb
+    ignore <- stored WriteFile ".kyyn/.gitignore" (relativePath ".kyyn/.gitignore" >>= knowledgeBasePath kb)
+    existingIgnore <- FileSystem.readOptionalBytes repositoryScope ignore
+    when (existingIgnore == Nothing) (FileSystem.writeBytes repositoryScope ignore "*\n")
     allocated <- FileSystem.createUniqueDirectory parent
     location <- stored WriteFile "candidate" (directoryScope (scopedPath parent allocated))
     writeTree location "capture/" capture
