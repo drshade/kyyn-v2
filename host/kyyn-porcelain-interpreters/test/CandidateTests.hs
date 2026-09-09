@@ -68,7 +68,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   capturedNotes <- right (fileTree [(either error id (relativePath "old.md"),"old review note")])
   let kb = KnowledgeBase (Repository scope) prefix
       location = EvolutionWorkspace kb identity
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) beforeFiles code changeFiles capturedNotes
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
       captured = CapturedEvolution context (Root schema facts code) []
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
@@ -102,6 +102,13 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let latestPath = candidateDir </> Char8.unpack first
       metadataPath = latestPath </> "candidate.json"
   metadata <- Bytes.readFile metadataPath
+  let capturedManifest = latestPath </> "capture/manifest.dhall"
+  currentManifest <- Bytes.readFile capturedManifest
+  Bytes.writeFile capturedManifest ("(" <> currentManifest <> ") // { extra = [] : List Text }")
+  execute (loadCandidate location) >>= \case
+    Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
+    other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)
+  Bytes.writeFile capturedManifest currentManifest
   let futureRecord = Lazy.toStrict (encode (2 :: Int, evolutionIdName identity,
         describeRootContract schema, describeRootContract schema, [] :: [Value]))
   case decodeEvolutionRecord futureRecord of
@@ -151,7 +158,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let migratedValue = case checked of
         CheckedValue _ (Object values) -> Object (KeyMap.insert "confirmed" (Bool True) values)
         _ -> error "Expected record root value"
-      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft []) empty migratedCode empty empty
+      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft) empty migratedCode empty empty
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
       migratedCapture = CapturedEvolution migratedContext (Root schema facts code) []
       migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
@@ -217,7 +224,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       archived <- runEff . runDhallHandling . runWorkspaceStore $ readWorkspaceSnapshot workspaceFiles
       currentNotes <- right (fileTree [(either error id (relativePath "new.md"),noteBytes)])
       unless (archived == Right (WorkspaceSnapshot
-          (WorkspaceManifest revision "Review λ" "Explain this" Accepted []) beforeFiles code changeFiles currentNotes))
+          (WorkspaceManifest revision "Review λ" "Explain this" Accepted) beforeFiles code changeFiles currentNotes))
         (fail "Archive substituted live source/manifest or failed to preserve current notes/deletions")
       liveManifest <- Bytes.readFile (liveWorkspace </> "manifest.dhall")
       unless (liveManifest == "invalid live manifest") (fail "Export modified the live lifecycle state")
@@ -227,7 +234,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         (fail "Export resurrected captured notes after deletion")
       let Candidate _ _ checkedRoot = checkedCandidate
           wrongContext = EvolutionContext kb identity (Before revision schema)
-            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) beforeFiles empty changeFiles capturedNotes)
+            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft) beforeFiles empty changeFiles capturedNotes)
       execute (exportAcceptedWorkspace (Candidate wrongContext report checkedRoot)) >>= right >>= \case
         Left [Diagnostic Error "evolution.archive-context" _ _] -> pure ()
         _ -> fail "Archive accepted code differing from the checked root"

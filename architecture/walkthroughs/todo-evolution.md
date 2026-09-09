@@ -97,7 +97,7 @@ After editing, the workspace looks like:
 
 ```text
 evolutions/simplify-todos/
-  manifest.dhall                     Before = A; state = Draft; name; explanation; intermediates = []
+  manifest.dhall                     Before = A; state = Draft; name; explanation
   before/src/SchemaV1.hs             definitions from A, plus necessary imports
   target/
     kb.dhall                        now selects SchemaV2.Root
@@ -121,26 +121,21 @@ The proposed schema has `data Status = Open | Done`. The transformation can impo
 both schemas without ambiguous module definitions:
 
 ```haskell
+import Kyyn.Workspace.Evolution
 import qualified SchemaV1 as Before
 import qualified SchemaV2 as After
 
-change :: Evolution Before.Root After.Root
-change = simplifyStatuses >=> completeReport >=> addReview
+evolution :: Evolution Before.Root After.Root
+evolution = simplifyStatuses >=> completeReport >=> addReview
 
 simplifyStatuses :: Evolution Before.Root After.Root
 completeReport   :: Evolution After.Root After.Root
 addReview        :: Evolution After.Root After.Root
 
-evolution
-  :: Before.Root
-  -> Program NoRequests (Either EvolutionFailure (EvolutionOutput After.Root))
-evolution before = pure (evaluateEvolution change before)
 ```
 
-Here `NoRequests` denotes the empty request algebra: this fixture has no host
-requests from authored code. The three helpers are ordinary `evolve` steps with
-generated typed bindings: `beforeRoot` to `afterRoot` for `simplifyStatuses`, then
-`afterRoot` on both sides of each same-contract step. They have these concrete
+The first helper uses generated `evolve`, and the remaining helpers use
+`editAfter`. The author supplies no bindings or runtime wrapper. They have these concrete
 transformations and declared explanations:
 
 | Step | Transformation | Rationale |

@@ -60,18 +60,30 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     fs.writeFileSync(filename, fs.readFileSync(filename, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
   write(path.join(created.path, 'change', 'Evolution.hs'), `module Evolution where
-import Kyyn.Evolution
-import Kyyn.Types.Fact
-import Kyyn.Types.Program (Program)
-import KyynEvolutionBindings
+import Kyyn.Workspace.Evolution
 import qualified RootV1 as Before
 import qualified RootV2 as After
-evolution :: Before.Root -> Program calls (Either EvolutionFailure (EvolutionOutput After.Root))
-evolution = pure . evaluateEvolution
-  (evolve beforeRoot afterRoot (Rationale "Start tracking work." [])
-    (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")])) )
+evolution :: Evolution Before.Root After.Root
+evolution =
+  evolve (Rationale "Start tracking work." [])
+    (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")]))
 `);
   cli(kb, ['evolution', 'check', created.id]);
+  const manifestPath = path.join(created.path, 'manifest.dhall');
+  const currentManifest = fs.readFileSync(manifestPath, 'utf8');
+  const latestCandidate = fs.readFileSync(path.join(kb, '.kyyn', 'candidates', 'latest', created.id), 'utf8');
+  const captureManifestPath = path.join(kb, '.kyyn', 'candidates', latestCandidate, 'capture', 'manifest.dhall');
+  const capturedManifest = fs.readFileSync(captureManifestPath, 'utf8');
+  const extraField = text => `(${text}) // { extra = [] : List Text }`;
+  fs.writeFileSync(captureManifestPath, extraField(capturedManifest));
+  const staleCandidate = cli(kb, ['evolution', 'show', created.id], 1);
+  assert(staleCandidate.diagnostics.some(d => d.code === 'candidate.stale' && d.message.includes('check')));
+  fs.writeFileSync(captureManifestPath, capturedManifest);
+  fs.writeFileSync(manifestPath, extraField(currentManifest));
+  const invalidManifest = cli(kb, ['evolution', 'check', created.id], 1);
+  assert(invalidManifest.diagnostics.some(d => d.code === 'workspace.manifest'));
+  assert(invalidManifest.diagnostics.some(d => d.message.includes('extra')));
+  fs.writeFileSync(manifestPath, currentManifest);
   const validatorPath = path.join(target, 'src', 'Validate.hs');
   const entryPath = path.join(created.path, 'change', 'Evolution.hs');
   const validValidator = fs.readFileSync(validatorPath, 'utf8');

@@ -14,7 +14,7 @@ import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
-import Kyyn.Domain.FileTree (FileTree, files)
+import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply)
@@ -37,11 +37,10 @@ main = do
   before <- checked "SchemaV1" [(Just "title",StringType)] "Title"
   renamed <- checked "SchemaV1" [(Just "title",StringType)] "New label"
   after <- checked "SchemaV2" [(Just "title",StringType),(Just "done",BoolType)] "Title"
-  bindings <- right (evolutionBindings [("beforeRoot",before),("renamedRoot",renamed),("afterRoot",after)])
-  forM_ [[],[("same",before),("same",after)],[("bad;name",before)]] $ \declarations ->
-    case evolutionBindings declarations of Left _ -> pure (); Right _ -> fail "Invalid binding declarations accepted"
+  bindings <- right (evolutionBindings before after)
+  metadataBindings <- right (evolutionBindings before renamed)
   let fingerprints = [contractFingerprint (contractId (rootSchema contract)) | contract <- [before,renamed,after]]
-      source = Bytes.concat (map snd (files bindings))
+      source = Bytes.concat (map snd (files bindings ++ files metadataBindings))
   unless (all (\fingerprint -> Text.encodeUtf8 (Text.pack fingerprint) `Bytes.isInfixOf` source) fingerprints)
     (fail "Generated bindings lost their whole contract identities")
   getArgs >>= \args -> case args of
@@ -66,14 +65,16 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   let path = either error id . relativePath
       load base name = (,) (path name) <$> Bytes.readFile (repo </> base </> name)
   authored <- mapM (load "host/kyyn-microhs/test/evolution") ["SchemaV1.hs","SchemaV2.hs","Evolution.hs","Proof.hs"]
+  metadataBindings <- renamedBindings "Metadata" before renamed
+  sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs"]] ++
      [load "guest/kyyn-sdk/test" "EvolutionCore.hs"] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
-  let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 identityEvolutionSource))
-      captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings
+  let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource "SchemaV1.Root")))
+      captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings ++ files metadataBindings ++ files sameBindings
       compileGuestFiles entries = do
         sources <- right (guestSources (path "Proof.hs") entries)
         runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $ compileGuest sources
@@ -99,17 +100,19 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   case replies of
     [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _)), Left refusal] -> do
       (_,EvolutionReport reports) <- right (runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport [renamed] before input after observation)
+        checkEvolutionReport before input after observation)
       unless (length reports == 3 && all (\(StepReport _ changes) -> length changes == 1) reports)
         (fail "Guest observations did not derive the three real fact changes")
       unless (refusal == EvolutionFailure [Diagnostic Error "evolution.refused" "Cannot reconcile λ"
         (Just (FactLocation "todos" "todo-001" (Just "title")))]) (fail "Guest refusal lost its structured diagnostic")
     _ -> fail "Expected successful guest observations and a separate refusal"
   let badType = [(p,if relativeName p == "Evolution.hs"
-        then Text.encodeUtf8 (Text.replace "evolve beforeRoot beforeRoot" "evolve afterRoot beforeRoot" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
+        then Text.encodeUtf8 (Text.replace "editBefore" "editAfter" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
       badConstructor = [(p,if relativeName p == "Proof.hs" then
         "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [])\n" else b) | (p,b) <- captured]
-  forM_ [("wrong-type",badType),("private-constructor",badConstructor)] $ \(label,entries) -> do
+      badBinding = [(p,if relativeName p == "Proof.hs" then
+        "module Proof where\nimport Kyyn.Workspace.Evolution (beforeRoot)\nmain :: IO ()\nmain = pure ()\n" else b) | (p,b) <- captured]
+  forM_ [("wrong-type",badType),("private-constructor",badConstructor),("hidden-binding",badBinding)] $ \(label,entries) -> do
     (nativeRejected,_,_) <- native label entries
     unless (nativeRejected /= ExitSuccess) (fail (label ++ " compiled under GHC"))
     rejected <- compileGuestFiles entries
@@ -119,6 +122,17 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
       Right (Right _) -> fail (label ++ " compiled under MicroHs")
   putStr expected
   putStrLn "GHC and MicroHs agree; wrong binding types and private constructors are rejected."
+
+renamedBindings :: String -> RootContract -> RootContract -> IO FileTree
+renamedBindings name before after = do
+  generated <- right (evolutionBindings before after)
+  let rename = Text.replace "KyynEvolutionCodec" (Text.pack ("Kyyn" ++ name ++ "Codec")) .
+        Text.replace "Kyyn.Workspace.Evolution" (Text.pack ("Kyyn.Workspace." ++ name)) .
+        Text.replace "Kyyn/Workspace/Evolution" (Text.pack ("Kyyn/Workspace/" ++ name))
+  entries <- traverse (\(p,b) -> do
+    renamed <- right (relativePath (Text.unpack (rename (Text.pack (relativeName p)))))
+    pure (renamed,Text.encodeUtf8 (rename (Text.decodeUtf8 b)))) (files generated)
+  right (fileTree entries)
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

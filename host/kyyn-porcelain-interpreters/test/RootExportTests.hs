@@ -88,7 +88,7 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   let kb = KnowledgeBase repo (Subtree (path "kb"))
       beforeSource = tree [(path "Schema.hs","captured before source")]
       changeSource = tree [(path "Evolution.hs","captured change source")]
-      captured = WorkspaceSnapshot (WorkspaceManifest parent "Export" "Fixed proposal" Ready []) beforeSource completeCode changeSource (tree [])
+      captured = WorkspaceSnapshot (WorkspaceManifest parent "Export" "Fixed proposal" Ready) beforeSource completeCode changeSource (tree [])
       report = EvolutionReport [StepReport (Rationale "Retain this explanation" []) []]
       candidate = Candidate (EvolutionContext kb workspaceId (Before parent contract) captured) report checked
   createDirectoryIfMissing True (directory </> "kb/evolutions/e001/notes")

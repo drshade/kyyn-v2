@@ -280,6 +280,11 @@ FindAcceptance
   -> EvolutionStore m (Either [Diagnostic] (Maybe GitRevision))
 ```
 
+Archived manifests are read by projecting the metadata needed for history
+(Before revision, name, explanation and state); active workspace manifests are
+read strictly as current execution inputs. Extra historical fields do not require
+rewriting accepted archives.
+
 Start by reading this workspace's archive in the input revision's tree. If absent
 or not Accepted, return `Nothing`: a Git revert can remove an acceptance. Otherwise
 take its recorded Before B and walk the input revision's ancestors through all

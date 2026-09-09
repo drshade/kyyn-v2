@@ -77,8 +77,8 @@ Web/MCP, capability, performance or distribution proofs below.
    Before/After types and their bindings AND the guest capability/continuation encoding within the
    product loop; neither proof waits for the connector slice. Keep the CLI useful
    for development and automation. Exercise setup/open/close under ADR 0025.
-   Include a composed Before-to-Mid-to-After migration: inspect/generate bindings
-   for the explicit intermediate schema and retain the two distinct step reports.
+   Include a composed Before edit, Before-to-After migration and After edit,
+   retaining each distinct step report with only the two endpoint contracts.
    Measure whole-root encoding, transfer, diffing and archive growth as fact volume
    and annotated step count increase. Reject a wrong initial observation, a gap
    between steps, a mismatched final result, and a changed root with no observations
