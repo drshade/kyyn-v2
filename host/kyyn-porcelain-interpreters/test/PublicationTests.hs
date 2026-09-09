@@ -168,7 +168,7 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     write "untracked-outside" "keep me"
     exported <- publication (exportRootFiles (case checked of Candidate _ _ value -> value)) >>= right
     archived <- publication (exportAcceptedWorkspace checked) >>= right
-    let competing message replacements = publication (Git.createCommit repo (GitTree replacements) base
+    let competing message replacements = publication (Git.createCommit repo (GitTree replacements) (Just base)
           (case metadata of CommitMetadata author committer _ -> CommitMetadata author committer message))
         winAtCreation revision "created" = command ["update-ref", "refs/heads/main", revisionName revision, revisionName base]
         winAtCreation _ _ = pure ()
@@ -242,8 +242,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     rebaseHead <- if interrupt then do
       otherScope <- either fail pure (directoryScope (directory </> otherPath))
       sharedFiles <- publication (FileSystem.readTree otherScope)
-      shared <- publication (Git.createCommit repo (GitTree [(Subtree (path otherPath),sharedFiles)]) accepted metadata)
-      advanced <- publication (Git.compareAndSwapRef repo branch accepted shared)
+      shared <- publication (Git.createCommit repo (GitTree [(Subtree (path otherPath),sharedFiles)]) (Just accepted) metadata)
+      advanced <- publication (Git.compareAndSwapRef repo branch (Just accepted) shared)
       assert "Could not share draft" (advanced == RefUpdated)
       publication (Git.synchronizeCheckout repo branch shared [path otherPath]) >>= right
       pure shared
@@ -268,8 +268,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     assert "Recovery touched another accepted archive" (laterArchive == laterArchiveAfter)
     finalHead <- headRevision
     assert "Recovery moved HEAD" (finalHead == later)
-    reverted <- publication (Git.createCommit repo (GitTree [(Subtree (path workspacePath),tree [])]) later metadata)
-    revertedUpdate <- publication (Git.compareAndSwapRef repo branch later reverted)
+    reverted <- publication (Git.createCommit repo (GitTree [(Subtree (path workspacePath),tree [])]) (Just later) metadata)
+    revertedUpdate <- publication (Git.compareAndSwapRef repo branch (Just later) reverted)
     assert "Fixture could not remove acceptance" (revertedUpdate == RefUpdated)
     removedRecovery <- publication (recoverAcceptedEvolution branch workspace)
     assert "Removed archive was still treated as accepted" (removedRecovery == Right Nothing)

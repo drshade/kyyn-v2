@@ -65,9 +65,9 @@ runRootPublication = interpret $ \_ -> \case
     archivePath <- case archiveLocation of
       Subtree path -> pure path
       WholeTree -> refuse (InvalidMaterial [errorDiagnostic "acceptance.archive-path" "Archive must occupy a subtree"])
-    revision <- liftEff (Git.createCommit repository (GitTree [(Subtree rootPath, rootFiles), archive]) expected metadata)
+    revision <- liftEff (Git.createCommit repository (GitTree [(Subtree rootPath, rootFiles), archive]) (Just expected) metadata)
     requireBranch repository branch
-    update <- liftEff (Git.compareAndSwapRef repository branch expected revision)
+    update <- liftEff (Git.compareAndSwapRef repository branch (Just expected) revision)
     case update of
       RefUpdated -> do
         result <- liftEff (Git.synchronizeCheckout repository branch revision [rootPath, archivePath])

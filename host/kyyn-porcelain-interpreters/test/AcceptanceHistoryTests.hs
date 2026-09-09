@@ -67,7 +67,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
         (CommitIdentity "Fixture" "fixture@example.invalid" "1700000000 +0000") message
       archive before state = right $ runPureEff . runDhallHandling . runWorkspaceStore $
         encodeWorkspaceSnapshot (WorkspaceSnapshot (WorkspaceManifest before "Example" "Reason" state []) empty empty empty empty)
-      commit parent contents message = git (createCommit repo (GitTree [(archivePath,contents)]) parent (metadata message))
+      commit parent contents message = git (createCommit repo (GitTree [(archivePath,contents)]) (Just parent) (metadata message))
       lookupAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable [] . noFiles
         . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
           findAcceptance kb identity revision
@@ -108,7 +108,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   expect accepted (Just accepted)
   acceptedParents <- git (readCommitParents repo accepted) >>= right
   unless (acceptedParents == [draft]) (fail "Commit parents were not exact")
-  later <- git (createCommit repo (GitTree []) accepted (metadata "Later unrelated commit"))
+  later <- git (createCommit repo (GitTree []) (Just accepted) (metadata "Later unrelated commit"))
   expect later (Just accepted)
   reverted <- commit later draftFiles "Revert acceptance"
   expect reverted Nothing
@@ -119,7 +119,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   expect again (Just again)
   removed <- commit again empty "Remove archive"
   expect removed Nothing
-  left <- git (createCommit repo (GitTree []) draft (metadata "Unrelated first parent"))
+  left <- git (createCommit repo (GitTree []) (Just draft) (metadata "Unrelated first parent"))
   merged <- merge left later later
   expect merged (Just accepted)
   mergeParents <- git (readCommitParents repo merged) >>= right
@@ -226,7 +226,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   expectDiagnostic (listEvolutions kb AllEvolutions)
   expectDiagnostic (markReady workspace)
   Bytes.writeFile livePath validLocal
-  update <- git (compareAndSwapRef repo (LocalBranch "main") base later)
+  update <- git (compareAndSwapRef repo (LocalBranch "main") (Just base) later)
   unless (update == RefUpdated) (fail "Could not install acceptance fixture")
   acceptedList <- runLifecycle (listEvolutions kb ExcludeDrafts) >>= right
   unless (acceptedList == [EvolutionSummary workspace (EvolutionName "Example") Accepted (Just accepted)])
@@ -240,8 +240,8 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   removeFile livePath
   resolvedArchive <- runLifecycle (resolveEvolution kb identity) >>= right
   unless (resolvedArchive == workspace) (fail "Missing live manifest hid accepted archive")
-  deletedDraftHead <- git (createCommit repo (GitTree [(Subtree (path "nested/kb/evolutions/e003"),draftFiles)]) later (metadata "Shared draft"))
-  _ <- git (compareAndSwapRef repo (LocalBranch "main") later deletedDraftHead)
+  deletedDraftHead <- git (createCommit repo (GitTree [(Subtree (path "nested/kb/evolutions/e003"),draftFiles)]) (Just later) (metadata "Shared draft"))
+  _ <- git (compareAndSwapRef repo (LocalBranch "main") (Just later) deletedDraftHead)
   afterSharedDraft <- runLifecycle (listEvolutions kb AllEvolutions) >>= right
   unless (length afterSharedDraft == 2) (fail "Listing resurrected an absent local unaccepted draft")
   finalHead <- git (resolveRevision repo "HEAD") >>= right

@@ -20,8 +20,8 @@ data Git :: Effect where
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
   ReadCommitParents :: Repository -> GitRevision -> Git m (Either [Diagnostic] [GitRevision])
   ReadDirectoryAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] (Maybe [RelativePath]))
-  CreateCommit :: Repository -> GitTree -> GitRevision -> CommitMetadata -> Git m GitRevision
-  CompareAndSwapRef :: Repository -> LocalBranch -> GitRevision -> GitRevision -> Git m RefUpdate
+  CreateCommit :: Repository -> GitTree -> Maybe GitRevision -> CommitMetadata -> Git m GitRevision
+  CompareAndSwapRef :: Repository -> LocalBranch -> Maybe GitRevision -> GitRevision -> Git m RefUpdate
   CheckedOutBranch :: Repository -> Git m (Maybe LocalBranch)
   CheckoutChanges :: Repository -> GitRevision -> [RelativePath] -> Git m [RelativePath]
   SynchronizeCheckout :: Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Git m (Either [Diagnostic] ())
@@ -49,10 +49,10 @@ readCommitParents repo = send . ReadCommitParents repo
 readDirectoryAt :: Git :> es => Repository -> GitRevision -> TreePath -> Eff es (Either [Diagnostic] (Maybe [RelativePath]))
 readDirectoryAt repo revision = send . ReadDirectoryAt repo revision
 
-createCommit :: Git :> es => Repository -> GitTree -> GitRevision -> CommitMetadata -> Eff es GitRevision
+createCommit :: Git :> es => Repository -> GitTree -> Maybe GitRevision -> CommitMetadata -> Eff es GitRevision
 createCommit repo tree parent = send . CreateCommit repo tree parent
 
-compareAndSwapRef :: Git :> es => Repository -> LocalBranch -> GitRevision -> GitRevision -> Eff es RefUpdate
+compareAndSwapRef :: Git :> es => Repository -> LocalBranch -> Maybe GitRevision -> GitRevision -> Eff es RefUpdate
 compareAndSwapRef repo branch expected = send . CompareAndSwapRef repo branch expected
 
 checkedOutBranch :: Git :> es => Repository -> Eff es (Maybe LocalBranch)

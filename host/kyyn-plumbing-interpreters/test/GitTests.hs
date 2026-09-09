@@ -21,7 +21,67 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 main :: IO ()
-main = identityTests >> discoveryTests >> checkoutTests >> snapshotTests
+main = identityTests >> discoveryTests >> checkoutTests >> snapshotTests >> initialCommitTests
+
+initialCommitTests :: IO ()
+initialCommitTests = withSystemTempDirectory "kyyn-git-initial" $ \directory -> do
+  executable <- findExecutable "git" >>= maybe (fail "Git is required") pure
+  scope <- either fail pure (directoryScope directory)
+  let repo = Repository scope
+      path = either error id . relativePath
+      tree = either error id (fileTree [(path "kb.dhall", "empty root")])
+      metadata = CommitMetadata
+        (CommitIdentity "Author" "author@example.invalid" "1700000000 +0000")
+        (CommitIdentity "Committer" "committer@example.invalid" "1700000000 +0000") "Initialize KB\n"
+      perform action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= either (fail . show) pure
+      command args = do
+        result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
+          (Process.ProcessSpec executable args directory [("PATH",""),("LC_ALL","C")]) $ do
+            Process.closeStdin
+            output <- Process.collectStdout
+            status <- Process.awaitExit
+            pure (output,status)
+        case result of
+          Right (output,Process.ProcessExit 0 _) -> pure output
+          _ -> fail (show result)
+      assert label condition = unless condition (fail label)
+  _ <- command ["init", "-q", "-b", "main"]
+  Bytes.writeFile (directory </> "unrelated") "staged"
+  _ <- command ["add", "unrelated"]
+  Bytes.writeFile (directory </> "unrelated") "working"
+  indexBefore <- Bytes.readFile (directory </> ".git/index")
+  first <- perform (createCommit repo (GitTree [(Subtree (path "nested/root"),tree)]) Nothing metadata)
+  parents <- perform (readCommitParents repo first)
+  assert "Initial commit has parents" (parents == Right [])
+  captured <- perform (readTreeAt repo first WholeTree)
+  assert "Initial commit captured live index files"
+    (captured == Right (either error id (fileTree [(path "nested/root/kb.dhall", "empty root")])))
+  unpublished <- perform (resolveRevision repo "HEAD")
+  case unpublished of Left _ -> pure (); _ -> fail "Construction published unborn HEAD"
+  published <- perform (compareAndSwapRef repo (LocalBranch "main") Nothing first)
+  assert "Could not publish unborn branch" (published == RefUpdated)
+  again <- perform (compareAndSwapRef repo (LocalBranch "main") Nothing first)
+  assert "Initial publication retry lost desired-head recognition" (again == RefUpdated)
+  alternative <- perform (createCommit repo (GitTree []) Nothing metadata)
+  refused <- perform (compareAndSwapRef repo (LocalBranch "main") Nothing alternative)
+  assert "Absent-ref expectation overwrote existing branch" (refused == RefNotUpdated (Just first))
+  indexAfter <- Bytes.readFile (directory </> ".git/index")
+  working <- Bytes.readFile (directory </> "unrelated")
+  assert "Initial construction/publication changed index/worktree" (indexBefore == indexAfter && working == "working")
+  restored <- perform (synchronizeCheckout repo (LocalBranch "main") first [path "nested/root"])
+  assert "Could not synchronize initial subtree" (restored == Right ())
+  staged <- command ["show", ":unrelated"]
+  workingAfter <- Bytes.readFile (directory </> "unrelated")
+  rootFile <- Bytes.readFile (directory </> "nested/root/kb.dhall")
+  assert "Initial synchronization changed unrelated staged/working files"
+    (staged == "staged" && workingAfter == "working" && rootFile == "empty root")
+  (a,b) <- concurrently
+    (perform (compareAndSwapRef repo (LocalBranch "race") Nothing first))
+    (perform (compareAndSwapRef repo (LocalBranch "race") Nothing alternative))
+  assert "Absent-ref race did not have exactly one winner"
+    ((a == RefUpdated && b == RefNotUpdated (Just first)) ||
+     (b == RefUpdated && a == RefNotUpdated (Just alternative)))
+  putStrLn "Parentless commit construction, unborn publication and scoped synchronization passed."
 
 identityTests :: IO ()
 identityTests = withSystemTempDirectory "kyyn-git-identity" $ \directory -> do
@@ -197,8 +257,8 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   outsideBefore <- inspect ["ls-tree", "-z", revisionName parent, "--", "outside", "outside-link", "kb/archive"]
   let replacement = tree [("nested/new\t\n\955.dhall", bytes), ("changed.dhall", "replacement")]
       changes = GitTree [(Subtree (path "root"), replacement), (Subtree (path "kb/new/root"), tree [("fact", "new")])]
-  candidate <- perform (createCommit repo changes parent metadata)
-  repeatCandidate <- perform (createCommit repo changes parent metadata)
+  candidate <- perform (createCommit repo changes (Just parent) metadata)
+  repeatCandidate <- perform (createCommit repo changes (Just parent) metadata)
   assert "Commit metadata or construction was nondeterministic" (repeatCandidate == candidate)
   unchangedHead <- execute (resolveRevision repo "HEAD")
   indexAfter <- Bytes.readFile (directory </> ".git/index")
@@ -216,43 +276,43 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   assert "Explicit identities/dates lost"
     ("author Author <author@example.invalid> 1700000000 +0200\n" `Bytes.isInfixOf` commitBytes &&
      "committer Committer <committer@example.invalid> 1700000001 -0300\n" `Bytes.isInfixOf` commitBytes)
-  removed <- perform (createCommit repo (GitTree [(Subtree (path "root"), tree [])]) parent metadata)
+  removed <- perform (createCommit repo (GitTree [(Subtree (path "root"), tree [])]) (Just parent) metadata)
   removedEntries <- inspect ["ls-tree", "-z", revisionName removed, "--", "root"]
   assert "Empty replacement did not delete subtree" (Bytes.null removedEntries)
-  entire <- perform (createCommit repo (GitTree [(WholeTree, tree [])]) parent metadata)
+  entire <- perform (createCommit repo (GitTree [(WholeTree, tree [])]) (Just parent) metadata)
   emptyRoot <- execute (readTreeAt repo entire WholeTree)
   assert "Empty whole-tree replacement failed" (null (files emptyRoot))
   overlap <- runEff (runFailure (runProcessExecutionIO (runGit executable []
-    (createCommit repo (GitTree [(WholeTree,tree []), (Subtree (path "root"),tree [])]) parent metadata))))
+    (createCommit repo (GitTree [(WholeTree,tree []), (Subtree (path "root"),tree [])]) (Just parent) metadata))))
   case overlap of Left _ -> pure (); _ -> fail "Overlapping replacements accepted"
   collision <- runEff (runFailure (runProcessExecutionIO (runGit executable []
-    (createCommit repo (GitTree [(Subtree (path "outside/nested"), replacement)]) parent metadata))))
+    (createCommit repo (GitTree [(Subtree (path "outside/nested"), replacement)]) (Just parent) metadata))))
   case collision of Left _ -> pure (); _ -> fail "Replacement traversed an unrelated file"
   case gitRevision (replicate 40 '0') of Left _ -> pure (); _ -> fail "Zero ID could delete a ref"
-  winner <- perform (compareAndSwapRef repo (LocalBranch "main") parent candidate)
-  observed <- perform (compareAndSwapRef repo (LocalBranch "main") parent candidate)
+  winner <- perform (compareAndSwapRef repo (LocalBranch "main") (Just parent) candidate)
+  observed <- perform (compareAndSwapRef repo (LocalBranch "main") (Just parent) candidate)
   assert "Non-zero update exit hid the already-published desired revision" (observed == RefUpdated)
-  loser <- perform (compareAndSwapRef repo (LocalBranch "main") parent removed)
+  loser <- perform (compareAndSwapRef repo (LocalBranch "main") (Just parent) removed)
   assert "Expected-head CAS did not have exactly one winner" (winner == RefUpdated && loser == RefNotUpdated (Just candidate))
   finalHead <- execute (resolveRevision repo "HEAD")
   finalIndex <- Bytes.readFile (directory </> ".git/index")
   assert "Raw CAS changed index or loser moved ref" (finalHead == candidate && finalIndex == indexBefore)
-  missingRef <- perform (compareAndSwapRef repo (LocalBranch "absent") parent candidate)
+  missingRef <- perform (compareAndSwapRef repo (LocalBranch "absent") (Just parent) candidate)
   assert "Missing expected ref was created" (missingRef == RefNotUpdated Nothing)
   command ["branch", "race", revisionName parent]
   (raceA,raceB) <- concurrently
-    (perform (compareAndSwapRef repo (LocalBranch "race") parent candidate))
-    (perform (compareAndSwapRef repo (LocalBranch "race") parent removed))
+    (perform (compareAndSwapRef repo (LocalBranch "race") (Just parent) candidate))
+    (perform (compareAndSwapRef repo (LocalBranch "race") (Just parent) removed))
   assert "Concurrent CAS did not have exactly one winner"
     ((raceA == RefUpdated && raceB == RefNotUpdated (Just candidate)) ||
      (raceB == RefUpdated && raceA == RefNotUpdated (Just removed)))
   invalidBranch <- runEff (runFailure (runProcessExecutionIO (runGit executable []
-    (compareAndSwapRef repo (LocalBranch "../main") candidate removed))))
+    (compareAndSwapRef repo (LocalBranch "../main") (Just candidate) removed))))
   case invalidBranch of Left _ -> pure (); _ -> fail "Invalid branch accepted"
   command ["branch", "locked", revisionName parent]
   Bytes.writeFile (directory </> ".git/refs/heads/locked.lock") "held"
   locked <- runEff (runFailure (runProcessExecutionIO (runGit executable []
-    (compareAndSwapRef repo (LocalBranch "locked") parent candidate))))
+    (compareAndSwapRef repo (LocalBranch "locked") (Just parent) candidate))))
   case locked of Left _ -> pure (); _ -> fail "Ref lock failure misreported as base mismatch"
   unless (Char8.length (Char8.pack (revisionName first)) == 40 || length (revisionName first) == 64) (fail "Not a full revision")
   putStrLn "Git capture, isolated commit construction, subtree replacement and conditional ref updates passed."
