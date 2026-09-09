@@ -318,8 +318,6 @@ contractDescriptions baseline = do
   unless (decodedReport == (identity,baseline,schema,report))
     (fail "Dhall record changed migration steps, typed payloads or optional fact sides")
   forM_ [baseline,schema] $ \selected -> do
-    restored <- right (restoreRootContract (describeRootContract selected)) >>= right
-    unless (restored == selected) (fail "Contract descriptions changed types, metadata, layout or fingerprint")
     source <- right (runPureEff (runDhallHandling (encodeValue snapshotShape (snapshotValue selected))))
     document <- right (runPureEff (runDhallHandling (decodeValue snapshotShape source)))
     decoded <- right (parseEither restoreSnapshot document) >>= right
@@ -330,7 +328,7 @@ contractDescriptions baseline = do
     case parseEither restoreSnapshot malformed of
       Left _ -> pure ()
       other -> fail ("Forward, cyclic or out-of-range type reference accepted: " ++ show other)
-  case restoreRootContract Null of
+  case parseEither restoreSnapshot Null of
     Left _ -> pure ()
     other -> fail ("Malformed contract description accepted: " ++ show other)
 

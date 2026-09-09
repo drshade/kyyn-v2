@@ -89,7 +89,6 @@ const domainModules = {
   'Kyyn.Domain.Workspace': ['Data.List', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Diagnostic': ['Kyyn.Types.Diagnostic'],
   'Kyyn.Domain.Contract': ['Control.Monad', 'Data.Coerce', 'Crypto.Hash.SHA256', 'Numeric',
-    'Data.Aeson.Types',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Domain.Root': ['Kyyn.Domain.Contract', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Query', 'Kyyn.Domain.Value', 'Kyyn.Domain.Path'],
