@@ -15,7 +15,11 @@ it with the vendored evaluator; guest compilation does not invoke a C compiler.
 Guest invocation uses a scoped native process interpreter, tested for pipe exchange,
 failure and cancellation cleanup.
 See [the codec integration fixture](tests/integration/codecs/README.md) for scope
-and supported cases. There is not yet a user-facing KB CLI.
+and supported cases. The initial CLI now wires root inspection/checking and
+evolution authoring, evaluation, checking and acceptance into those handlers.
+See [trying the CLI](docs/cli-development.md) for developer staging and a fresh
+todo KB. The full schema-changing installed journey remains under integration
+review; this is not a released distribution.
 
 Build prerequisites are in [project practices](docs/PROJECT-PRACTICES.md).
 Earlier experiments remain in the separate `kyyn-v2-experiment` repo.

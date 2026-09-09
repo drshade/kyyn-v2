@@ -24,6 +24,14 @@ does not become another specification of the product's runtime workflows.
   `cabal test cli-arguments --test-show-details=direct` checks pure CLI parsing,
   KB-selection defaults/overrides, command routing, help and invalid arguments.
   It does not execute KB operations or prove the installed CLI journey.
+  `cabal test cli-adapters --test-show-details=direct` uses pure recording handlers
+  to check explicit snapshot selection, validation before root browsing, candidate
+  checking without root reopening/evolution execution, missing-candidate refusal,
+  Unicode rendering, structured diagnostics and publication/interruption exit codes.
+  `node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn)"` exercises the
+  actual executable against disposable Git repositories without a runtime or
+  valid schema: nested/multiple KBs, cwd default, symlink resolution, missing
+  selections and detached recovery. It does not compile guests.
   Git discovery tests cover root/nested directories, non-repositories and bare
   repositories, with missing directories/executables remaining operational failures.
   Publication fixtures inspect a draft's saved report and an accepted archive
@@ -155,7 +163,7 @@ does not become another specification of the product's runtime workflows.
   emits bytecode consumed by the bundled evaluator, not C-compiled guest binaries.
   Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
   cancellation; their reaping assertions currently require POSIX (Linux in CI).
-  No complete KB workflow, plugin or Web build exists yet.
+  The first CLI is under development; plugin and Web builds do not exist yet.
   For the named metadata export boundary alone, after building the bundled tools,
   run `KYYN_TEST_ROOT="$PWD" cabal test metadata --test-show-details=direct`.
   This compiles the shared metadata declarations with MicroHs and evaluates the

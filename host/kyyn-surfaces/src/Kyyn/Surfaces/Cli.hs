@@ -1,10 +1,10 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
-  , RootCommand(..), EvolutionCommand(..), cliInfo, parseArguments
+  , RootCommand(..), EvolutionCommand(..), cliInfo, parseArguments, progressMessage
   ) where
 
-import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId)
-import Kyyn.Domain.Git (GitRevision, LocalBranch(..), gitRevision)
+import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
+import Kyyn.Domain.Git (GitRevision, gitRevision)
 import Options.Applicative
 
 data Invocation = Invocation
@@ -15,7 +15,6 @@ data Invocation = Invocation
 
 data Selection = Selection
   { kb :: FilePath
-  , branch :: Maybe LocalBranch
   , git :: Maybe FilePath
   , runtime :: Maybe FilePath
   } deriving (Eq, Show)
@@ -44,6 +43,16 @@ cliInfo = info (invocation <**> helper)
 parseArguments :: [String] -> ParserResult Invocation
 parseArguments = execParserPure (prefs showHelpOnEmpty) cliInfo
 
+progressMessage :: Command -> Maybe String
+progressMessage request = case request of
+  Root ShowRoot -> Just "Checking and reading the root..."
+  Root CheckRoot -> Just "Checking the root..."
+  Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
+  Evolution (EvaluateEvolution selectedId) -> Just ("Evaluating evolution " ++ evolutionIdName selectedId ++ "...")
+  Evolution (CheckEvolution selectedId) -> Just ("Checking candidate " ++ evolutionIdName selectedId ++ "...")
+  Evolution (AcceptEvolution selectedId) -> Just ("Checking and accepting evolution " ++ evolutionIdName selectedId ++ "...")
+  _ -> Nothing
+
 invocation :: Parser Invocation
 invocation = Invocation <$> selectionParser
   <*> flag Human Json (long "json" <> help "Write structured JSON results")
@@ -55,8 +64,6 @@ selectionParser :: Parser Selection
 selectionParser = Selection
   <$> strOption (long "kb" <> metavar "PATH" <> value "." <> showDefault
       <> help "KB directory (may be inside a larger Git repository)")
-  <*> optional (LocalBranch <$> strOption (long "branch" <> metavar "NAME"
-      <> help "Select a local branch (default: checked-out branch)"))
   <*> optional (strOption (long "git" <> metavar "EXECUTABLE"
       <> help "Git executable override (default: locate Git on PATH)"))
   <*> optional (strOption (long "runtime" <> metavar "DIRECTORY"

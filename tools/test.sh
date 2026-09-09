@@ -16,6 +16,7 @@ node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("
 
 bash -n tools/test.sh
 bash -n tools/test-guest.sh
+bash -n tools/stage-cli.sh
 node --check tools/checks/check-docs.mjs
 node --check tools/checks/check-docs.test.mjs
 node --check architecture/evidence/json-probe/check.mjs
@@ -25,6 +26,8 @@ node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
 cabal test cli-arguments --test-show-details=direct
+cabal test cli-adapters --test-show-details=direct
+node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn)"
 cabal test processes --test-show-details=direct
 cabal test dhall-values --test-show-details=direct
 cabal test roots --test-show-details=direct

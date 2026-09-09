@@ -12,6 +12,7 @@ test('CLI adapters cannot acquire native IO or interpreter dependencies', () => 
     'Kyyn.Porcelain.Interpreter.EvolutionStore', 'Kyyn.MicroHs.Inspection']) {
     assert.deepEqual(checkImports('kyyn-surfaces', `import ${name}`), [name]);
   }
+  assert.match(checkImports('kyyn-surfaces', 'import Effectful (Eff, IOE)').join(), /API-only/);
 });
 test('evolution SDK stays pure and independent of private transport and native host', () => {
   for (const name of ['System.IO', 'Kyyn.Runtime.Json', 'Effectful', 'Kyyn.Domain.Root']) {

@@ -3,14 +3,14 @@ module Main (main) where
 import Control.Monad (forM_, unless)
 import Data.List (isInfixOf)
 import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionId)
-import Kyyn.Domain.Git (LocalBranch(..), gitRevision)
+import Kyyn.Domain.Git (gitRevision)
 import Kyyn.Surfaces.Cli
 import Options.Applicative (ParserResult(..), renderFailure)
 import System.Exit (ExitCode(..))
 
 main :: IO ()
 main = do
-  let selected = Selection "." Nothing Nothing Nothing
+  let selected = Selection "." Nothing Nothing
       identity = either error id (evolutionId "abc123")
       revision = either error id (gitRevision (replicate 40 'a'))
       assert label condition = unless condition (fail label)
@@ -23,9 +23,9 @@ main = do
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
-  succeeds ["--kb","knowledge/sales","--json","--branch","topic","--git","/bin/git",
+  succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
     "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]
-    (Invocation (Selection "knowledge/sales" (Just (LocalBranch "topic"))
+    (Invocation (Selection "knowledge/sales"
       (Just "/bin/git") (Just "/opt/kyyn/lib/kyyn")) Json (Evolution (ListEvolutions ExcludeDrafts)))
   succeeds ["evolution","list"] (Invocation selected Human (Evolution (ListEvolutions AllEvolutions)))
   succeeds ["evolution","new","September"]

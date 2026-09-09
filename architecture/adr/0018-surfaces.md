@@ -1,6 +1,14 @@
-# 0018 — CLI, MCP and web share application operations
+---
+id: 0018
+title: 'CLI, MCP and web share application operations'
+status: proposed
+date: 2026-09-09
+---
 
-Status: Proposed. Basis: owner-established equal importance of Web and MCP.
+# CLI, MCP and web share application operations
+
+Basis: owner-established equal importance of Web and MCP, and owner-agreed CLI
+navigation and KB selection. Remaining transport mechanics are proposed.
 
 ## Context
 
@@ -162,6 +170,40 @@ results go to stdout, progress/errors to stderr, with meaningful exit codes.
 Human output explains the operation and next action, not internal interpreter or
 compiler stages. Add commands for demonstrated user tasks, not merely because
 another kernel function exists.
+
+For the first CLI, selection uses the checkout's HEAD, with the current local
+branch passed explicitly to acceptance/recovery. There is no branch override.
+Snapshot reads and creation receive a resolved commit ID; `evolution new --before`
+may select an explicit full commit ID. `root show` checks the selected root before
+returning its structural value; `root check` returns the check report without the
+browsing payload. Creation emits a stable evolution ID and workspace path, not a
+name-based selector. Ready/Draft operations do not implicitly evaluate or check.
+
+The CLI adapter renders domain values into one JSON envelope:
+
+```json
+{"outcome":"Succeeded","result":{"evolutions":[]},"diagnostics":[]}
+```
+
+`--json` emits this structured command result on stdout, including diagnostic
+objects for refusals/failures. Human mode writes results to stdout and diagnostics
+to stderr. Parser help/usage retains optparse-applicative's standard presentation.
+Diagnostics preserve severity, code, message and structured location. Exit codes
+are 0 for success, 1 for domain refusal, 2 for invalid CLI usage, 3 for operational
+failure, 4 for acceptance requiring checkout inspection/recovery (including an
+already-accepted retry), and 130 for user interruption. Code 4 must retain the
+accepting revision; it is not an invitation to reapply the evolution. These exits
+render [ADR 0019](0019-failures.md)'s outcomes rather than adding domain states.
+
+The host composition root obtains acceptance identities from `GIT_AUTHOR_NAME`
+and `GIT_AUTHOR_EMAIL`; optional `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL` override
+the committer, otherwise the author is used. It supplies the current clock time
+to explicit Git commit metadata. Missing identity is an actionable refusal,
+not an anonymous commit or an interactive prompt. Runtime paths come from the
+installed layout, with `--runtime` and `--git` development overrides. Listing,
+state changes, archived inspection, recovery and already-accepted diagnosis do
+not load the SDK. Host configuration/path resolution and interpretation live in
+`kyyn`; effectful request adapters and pure rendering live in `kyyn-surfaces`.
 
 ### MCP and Web
 
