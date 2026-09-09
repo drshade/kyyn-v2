@@ -2,8 +2,8 @@
 
 The current CLI supports root inspection/checking and the evolution commands in
 [ADR 0018](../architecture/adr/0018-surfaces.md#cli-navigation-and-kb-selection).
-The complete schema-changing journey with inherited examples remains under
-integration review in Issue #3; this is not a released installation.
+The installed integration fixture covers schema-changing acceptance and inherited
+examples; this is not a released installation.
 
 From the development repository, assemble a new staging directory:
 
@@ -18,6 +18,10 @@ or a completed distribution/license audit. Building needs the development tools
 in [project practices](PROJECT-PRACTICES.md); executing this staged CLI does not
 invoke GHC, Cabal, Node or a C compiler. Git must be available, or selected with
 `--git /absolute/path/to/git`.
+
+The staged compiler uses MicroHs's upstream native build (`bin/gmhs`), exposed
+under the toolchain's existing `bin/mhs` name. GHC remains a build dependency;
+the installed compiler does not invoke it. ADR 0002 owns this build choice.
 
 Copy the example into a fresh directory and give it an initial Git commit:
 

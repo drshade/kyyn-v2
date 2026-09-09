@@ -18,8 +18,8 @@ See [the codec integration fixture](tests/integration/codecs/README.md) for scop
 and supported cases. The initial CLI now wires root inspection/checking and
 evolution authoring, evaluation, checking and acceptance into those handlers.
 See [trying the CLI](docs/cli-development.md) for developer staging and a fresh
-todo KB. The full schema-changing installed journey remains under integration
-review; this is not a released distribution.
+todo KB. The installed integration journey covers schema-changing acceptance
+and inherited examples; this is not a released distribution.
 
 Build prerequisites are in [project practices](docs/PROJECT-PRACTICES.md).
 Earlier experiments remain in the separate `kyyn-v2-experiment` repo.

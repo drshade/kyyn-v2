@@ -13,10 +13,11 @@ if [[ -e "$stage_prefix" || -L "$stage_prefix" ]]; then
 fi
 cd "$(dirname "$0")/.."
 cabal build exe:kyyn
-make -C vendor/MicroHs bin/mhs bin/mhseval bin/cpphs
+make -C vendor/MicroHs bin/gmhs bin/mhseval bin/cpphs
 mkdir -p "$stage_prefix/bin" "$stage_prefix/lib/kyyn/microhs/bin" "$stage_prefix/lib/kyyn/sdk/Text/JSON" "$stage_prefix/share/kyyn/licenses"
 cp "$(cabal list-bin exe:kyyn)" "$stage_prefix/bin/kyyn"
-for executable in mhs mhseval cpphs; do
+cp vendor/MicroHs/bin/gmhs "$stage_prefix/lib/kyyn/microhs/bin/mhs"
+for executable in mhseval cpphs; do
   cp "vendor/MicroHs/bin/$executable" "$stage_prefix/lib/kyyn/microhs/bin/"
 done
 cp -R vendor/MicroHs/lib "$stage_prefix/lib/kyyn/microhs/"

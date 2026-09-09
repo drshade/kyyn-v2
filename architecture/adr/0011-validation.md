@@ -8,8 +8,8 @@ date: 2026-09-09
 
 Basis: complete-root checking and the distinction between Candidate and Validated
 follow owner direction. Saved examples, root checking and candidate checking are
-implemented, including selected-revision loading. The complete installed
-schema-changing proposal journey remains an integration proof.
+implemented, including selected-revision loading and the installed
+schema-changing proposal journey with inherited required examples.
 
 ## Context
 

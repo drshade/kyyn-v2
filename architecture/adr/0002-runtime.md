@@ -2,7 +2,7 @@
 id: 0002
 title: 'Native Haskell kernel and bundled MicroHs execution'
 status: proposed
-date: 2026-09-07
+date: 2026-09-09
 ---
 # Native Haskell kernel and bundled MicroHs execution
 
@@ -25,6 +25,14 @@ libraries and required preprocessing tools, including `cpphs`.
 Tap plugins arrive as vendored source under ADR 0015 and are compiled locally
 with this toolchain. The bundled compiler/evaluator are release executables;
 third-party plugin executables are not an additional distribution contract.
+
+Stage the pinned MicroHs compiler using its upstream GHC-built `bin/gmhs` target,
+installed at the existing `bin/mhs` path; the self-hosted `make bin/mhs` remains
+the bootstrap/reference build. The metadata-entry comparison measured 1.3 seconds
+versus 30.0 seconds with identical bytecode, without adding a cache or changing
+the guest interface. Full integration includes that bytecode parity fixture and
+the installed journey; existing guest suites also exercise the self-hosted build.
+This changes how the same compiler source is built, not its revision or language.
 
 Initially invoke a managed child process with a private typed protocol. A
 generated adapter retains the live continuation while requesting host effects.

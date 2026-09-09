@@ -198,7 +198,8 @@ does not become another specification of the product's runtime workflows.
   integration coverage separately. Do not silently skip failures in a selected check.
 
 `bash tools/test-installed.sh` stages the development CLI and bundled runtime in
-a disposable directory, then runs the `installed-journey` suite. It is included
+a disposable directory, compares native/self-hosted MicroHs bytecode for a
+metadata entry, then runs the `installed-journey` suite. It is included
 only in `--full`, not the default check. The fixture uses real Git, Dhall and
 MicroHs: a schema-changing evolution is evaluated and accepted in separate
 processes, its archived report survives cache removal, and an inherited required
