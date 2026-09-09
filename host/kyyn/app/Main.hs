@@ -9,13 +9,13 @@ import Kyyn.Composition (execute)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
-import Options.Applicative (execParser)
+import Options.Applicative (customExecParser)
 import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
 main = do
-  invocation@(Cli.Invocation _ output command) <- execParser Cli.cliInfo
+  invocation@(Cli.Invocation _ output command) <- customExecParser Cli.cliPrefs Cli.cliInfo
   mapM_ (hPutStrLn stderr) (Cli.progressMessage command)
   result <- tryJust (\exception -> case exception of UserInterrupt -> Just (); _ -> Nothing)
     (try @IOException (execute invocation))
