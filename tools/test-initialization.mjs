@@ -69,6 +69,20 @@ evolution =
     (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")]))
 `);
   cli(kb, ['evolution', 'check', created.id]);
+  const manifestPath = path.join(created.path, 'manifest.dhall');
+  const currentManifest = fs.readFileSync(manifestPath, 'utf8');
+  const latestCandidate = fs.readFileSync(path.join(kb, '.kyyn', 'candidates', 'latest', created.id), 'utf8');
+  const captureManifestPath = path.join(kb, '.kyyn', 'candidates', latestCandidate, 'capture', 'manifest.dhall');
+  const capturedManifest = fs.readFileSync(captureManifestPath, 'utf8');
+  const obsoleteManifest = text => `(${text}) // { intermediates = [] : List Text }`;
+  fs.writeFileSync(captureManifestPath, obsoleteManifest(capturedManifest));
+  const staleCandidate = cli(kb, ['evolution', 'show', created.id], 1);
+  assert(staleCandidate.diagnostics.some(d => d.code === 'candidate.stale' && d.message.includes('check')));
+  fs.writeFileSync(captureManifestPath, capturedManifest);
+  fs.writeFileSync(manifestPath, obsoleteManifest(currentManifest));
+  const oldDraft = cli(kb, ['evolution', 'check', created.id], 1);
+  assert(oldDraft.diagnostics.some(d => d.code === 'workspace.manifest' && d.message.includes('intermediates') && d.message.includes('remove')));
+  fs.writeFileSync(manifestPath, currentManifest);
   const validatorPath = path.join(target, 'src', 'Validate.hs');
   const entryPath = path.join(created.path, 'change', 'Evolution.hs');
   const validValidator = fs.readFileSync(validatorPath, 'utf8');

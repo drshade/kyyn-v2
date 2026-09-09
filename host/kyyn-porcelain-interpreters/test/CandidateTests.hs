@@ -102,6 +102,13 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let latestPath = candidateDir </> Char8.unpack first
       metadataPath = latestPath </> "candidate.json"
   metadata <- Bytes.readFile metadataPath
+  let capturedManifest = latestPath </> "capture/manifest.dhall"
+  currentManifest <- Bytes.readFile capturedManifest
+  Bytes.writeFile capturedManifest ("(" <> currentManifest <> ") // { intermediates = [] : List Text }")
+  execute (loadCandidate location) >>= \case
+    Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
+    other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)
+  Bytes.writeFile capturedManifest currentManifest
   let futureRecord = Lazy.toStrict (encode (2 :: Int, evolutionIdName identity,
         describeRootContract schema, describeRootContract schema, [] :: [Value]))
   case decodeEvolutionRecord futureRecord of
