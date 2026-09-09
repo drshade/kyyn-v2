@@ -120,8 +120,6 @@ The three helpers in this sketch are ordinary authored functions returning
 is generated when checking: it supplies the endpoint-specific step constructors,
 composition, rationale/evidence, fact and diagnostic types. No generated bindings
 or execution wrapper need to be supplied. Each step produces its own diff.
-For an older unaccepted draft, remove `intermediates` from `manifest.dhall`,
-update its entry to this form, and check again to replace its old saved candidate.
 Same-schema changes can use only edits. For a schema change, give the new module
 a distinct name, update `target/kb.dhall` and the After import, and implement
 the transition with `evolve`. Temporary helper types need no declaration.

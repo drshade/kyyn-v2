@@ -69,7 +69,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
         encoded <- right $ runPureEff . runDhallHandling . runWorkspaceStore $
           encodeWorkspaceSnapshot (WorkspaceSnapshot (WorkspaceManifest before "Example" "Reason" state) empty empty empty empty)
         pure (tree [(p, if relativeName p == "manifest.dhall" then
-          Bytes.concat ["(", bytes, ") // { intermediates = [] : List Text }"] else bytes) | (p,bytes) <- files encoded])
+          Bytes.concat ["(", bytes, ") // { extra = [] : List Text }"] else bytes) | (p,bytes) <- files encoded])
       commit parent contents message = git (createCommit repo (GitTree [(archivePath,contents)]) (Just parent) (metadata message))
       lookupAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable [] . noFiles
         . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $

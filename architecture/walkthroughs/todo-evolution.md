@@ -97,7 +97,7 @@ After editing, the workspace looks like:
 
 ```text
 evolutions/simplify-todos/
-  manifest.dhall                     Before = A; state = Draft; name; explanation; intermediates = []
+  manifest.dhall                     Before = A; state = Draft; name; explanation
   before/src/SchemaV1.hs             definitions from A, plus necessary imports
   target/
     kb.dhall                        now selects SchemaV2.Root

@@ -104,7 +104,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   metadata <- Bytes.readFile metadataPath
   let capturedManifest = latestPath </> "capture/manifest.dhall"
   currentManifest <- Bytes.readFile capturedManifest
-  Bytes.writeFile capturedManifest ("(" <> currentManifest <> ") // { intermediates = [] : List Text }")
+  Bytes.writeFile capturedManifest ("(" <> currentManifest <> ") // { extra = [] : List Text }")
   execute (loadCandidate location) >>= \case
     Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
     other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)

@@ -24,7 +24,7 @@ runWorkspaceStore = interpret $ \_ -> \case
     bytes <- checked (maybe (Left "Missing manifest.dhall") Right (lookup path (files tree)))
     source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
     decoded <- ExceptT (fmap (either (Left . (errorDiagnostic "workspace.manifest"
-      "Expected exactly before, name, explanation and state in manifest.dhall. If this draft has an intermediates field, remove it; only Before and After contracts are supported." :)) Right)
+      "manifest.dhall must contain exactly before, name, explanation and state." :)) Right)
       (Dhall.decodeValue manifestShape source))
     manifest <- checked (parseManifest decoded)
     checked (projectWorkspace manifest tree)

@@ -20,10 +20,10 @@ workspaceTests = do
   reopened <- right (readSnapshot encoded)
   unless (reopened == snapshot) (fail "Workspace encoding did not preserve projected data")
   stale <- tree [(name, if name == "manifest.dhall" then
-    "(" <> bytes <> ") // { intermediates = [] : List Text }" else bytes) | (name,bytes) <- entries]
+    "(" <> bytes <> ") // { extra = [] : List Text }" else bytes) | (name,bytes) <- entries]
   case readSnapshot stale of
     Left _ -> pure ()
-    Right _ -> fail "Active workspace accepted an obsolete intermediate declaration"
+    Right _ -> fail "Active workspace accepted an unsupported manifest field"
   revision <- right (gitRevision (replicate 40 'a'))
   before <- tree [("SchemaV1.hs", "before source")]
   target <- tree [("kb.dhall", "unfinished target manifest"), ("src/SchemaV2.hs", "unfinished target source")]
