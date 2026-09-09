@@ -40,10 +40,13 @@ runEvolutionStore
 runEvolutionStore = interpret $ \_ -> \case
   ReadEvolutionSummary (EvolutionWorkspace kb identity) revision ->
     runExceptT (summaryAt kb revision identity >>= requireWorkspace)
-  ReadArchivedReport workspace@(EvolutionWorkspace (KnowledgeBase repository _) identity) revision -> runExceptT $ do
+  ReadArchivedReport workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) revision -> runExceptT $ do
     path <- checked (workspaceLocation workspace >>= \p -> relativePath (relativeName p ++ "/result.json"))
     bytes <- ExceptT (Git.readFileAt repository revision path)
     traverse (\source -> do
+      accepted <- lookupAcceptance kb identity revision
+      unless (accepted /= Nothing) (throwE [errorDiagnostic "evolution.unverified-report"
+        "An archived report exists but this evolution has no confirmed acceptance at the selected revision"])
       decoded <- either (throwE . pure . errorDiagnostic "evolution.invalid-report") pure (decodeEvolutionRecord source)
       (owner,_,_,report) <- either throwE pure decoded
       unless (owner == identity) (throwE [errorDiagnostic "evolution.invalid-report" "Archived report belongs to another evolution"])

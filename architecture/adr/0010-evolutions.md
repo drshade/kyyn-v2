@@ -413,8 +413,12 @@ These are selected constructors; review-note persistence is defined in
 because they need source inspection; EvolutionStore's metadata, candidate and archive
 operations remain installable without RootOpening, the compiler or SDK.
 Inspection receives a resolved revision explicitly. `ReadEvolutionSummary` uses
-the same acceptance lookup as listing, at that revision; `ReadArchivedReport`
-decodes `result.json` from Git at that revision and checks the workspace identity.
+the same `summaryAt` derivation as listing, at that revision. `ReadArchivedReport`
+reads `result.json` from Git at that revision, requires acceptance confirmed by
+the same history lookup as `FindAcceptance`, then decodes the report and checks
+the workspace identity. A report file without confirmed acceptance returns
+`evolution.unverified-report`; hand-committing a result or reverting only its
+manifest cannot make a report outrank the history rule.
 The effectful capability helper `inspectEvolution` combines them for an accepted
 workspace, or reads the saved candidate's report for an unaccepted workspace.
 It returns `(EvolutionSummary, Maybe EvolutionReport)` rather than printing or
