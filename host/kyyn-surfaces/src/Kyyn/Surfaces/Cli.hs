@@ -1,6 +1,6 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
-  , RootCommand(..), EvolutionCommand(..), cliInfo, parseArguments, progressMessage
+  , RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -41,7 +41,10 @@ cliInfo = info (invocation <**> helper)
   (fullDesc <> progDesc "Inspect knowledge and prepare, check and accept evolutions")
 
 parseArguments :: [String] -> ParserResult Invocation
-parseArguments = execParserPure (prefs showHelpOnEmpty) cliInfo
+parseArguments = execParserPure cliPrefs cliInfo
+
+cliPrefs :: ParserPrefs
+cliPrefs = prefs (showHelpOnEmpty <> showHelpOnError)
 
 progressMessage :: Command -> Maybe String
 progressMessage request = case request of

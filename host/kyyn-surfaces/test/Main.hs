@@ -45,4 +45,15 @@ main = do
       Failure failure -> let (message,_) = renderFailure failure "kyyn"
                          in assert "Help omitted usage" ("Usage:" `isInfixOf` message)
       _ -> fail ("Expected help: " ++ show args)
+  forM_ [([], ["root", "evolution"]), (["root"], ["show", "check"]),
+    (["evolution"], ["new", "list", "accept"]),
+    (["root", "unknown"], ["show", "check"])] $ \(args,commands) ->
+    case parseArguments args of
+      Failure failure -> do
+        let (message,status) = renderFailure failure "kyyn-v2"
+        assert "Incomplete or invalid command should fail" (status /= ExitSuccess)
+        assert "Help omitted command list" ("Available commands:" `isInfixOf` message)
+        forM_ commands $ \command ->
+          assert ("Help omitted " ++ command) (("  " ++ command ++ " ") `isInfixOf` message)
+      _ -> fail ("Expected command help: " ++ show args)
   putStrLn "CLI selection, command routing, refusals and help passed."

@@ -46,6 +46,17 @@ try {
   const help = spawnSync(executable, ['--help'], { cwd: temporary, env, encoding: 'utf8' });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--kb PATH/);
+  for (const [args, commands] of [
+    [[], ['root', 'evolution']],
+    [['root'], ['show', 'check']],
+    [['evolution'], ['new', 'list', 'accept']],
+    [['root', 'unknown'], ['show', 'check']],
+  ]) {
+    const result = spawnSync(executable, args, { cwd: temporary, env, encoding: 'utf8', timeout: 15000 });
+    assert.equal(result.status, 1, JSON.stringify(result));
+    assert.match(result.stderr, /Available commands:/);
+    for (const command of commands) assert.match(result.stderr, new RegExp(`^  ${command} +`, 'm'));
+  }
   console.log('CLI selection passed: nested/multiple KBs, cwd default, symlink, missing runtime, selection diagnostics and detached recovery.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
