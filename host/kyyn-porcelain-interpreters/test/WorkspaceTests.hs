@@ -43,7 +43,7 @@ workspaceTests = do
   compareWith (filter ((/= "notes/review.md") . fst) entries) True
   compareWith (("notes/new.md", "another note") : entries) True
   forM_ ["archived record", "malformed or unsupported archived record"] $ \record ->
-    compareWith (("result.json", record) : entries) True
+    compareWith (("result.dhall", record) : entries) True
   forM_ [ manifest "b" "Draft" "September" "Import sales"
         , manifest "a" "Draft" "October" "Import sales"
         , manifest "a" "Draft" "September" "Correct sales"
@@ -53,7 +53,7 @@ workspaceTests = do
     compareWith (filter ((/= path) . fst) entries) False
   forM_ ["before/Helper.hs", "target/config/plugin.dhall", "change/new.csv"] $ \path ->
     compareWith ((path, "new input") : entries) False
-  forM_ ["target/facts/root.dhall", "target/facts", "random/file", "notes", "result.json/child"] $ \path ->
+  forM_ ["target/facts/root.dhall", "target/facts", "random/file", "notes", "result.dhall/child"] $ \path ->
     tree ((path, "unexpected") : filter ((/= "notes/review.md") . fst) entries) >>= rejected . readSnapshot
   forM_ ["True", "./other.dhall", Bytes.pack [255], manifest "0" "Draft" "September" "Import sales",
     manifest "a" "Unknown" "September" "Import sales"] $ \bad ->

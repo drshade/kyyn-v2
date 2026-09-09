@@ -84,7 +84,7 @@ checkoutTests = forM_ [False, True] $ \trackedDraft ->
     staged <- inspect ["rev-parse", ":outside"]
     write "outside" "unstaged outside"
     let replacement = tree [("value", "new"), ("added", "new fact")]
-        archive = tree [("manifest.dhall", "Accepted"), ("result.json", "fixed report")]
+        archive = tree [("manifest.dhall", "Accepted"), ("result.dhall", "fixed report")]
     desired <- perform (createCommit repo (GitTree [(Subtree root,replacement), (Subtree workspace,archive)]) (Just base) metadata)
     wrongHead <- perform (synchronizeCheckout repo (LocalBranch "main") desired selected)
     case wrongHead of Left _ -> pure (); _ -> fail "Synchronization ignored mismatching HEAD"
@@ -113,7 +113,7 @@ checkoutTests = forM_ [False, True] $ \trackedDraft ->
     changes <- perform (checkoutChanges repo desired selected)
     assert "Synchronized checkout differs from accepted commit" (null changes)
     forM_ [("kb/root/value", "new"), ("kb/root/added", "new fact"),
-      ("kb/evolutions/e001/manifest.dhall", "Accepted"), ("kb/evolutions/e001/result.json", "fixed report"),
+      ("kb/evolutions/e001/manifest.dhall", "Accepted"), ("kb/evolutions/e001/result.dhall", "fixed report"),
       ("outside", "unstaged outside"), ("untracked", "outside untracked"),
       ("kb/evolutions/e002/manifest.dhall", "Other draft")] $ \(name,expected) -> do
         actual <- readBytes name

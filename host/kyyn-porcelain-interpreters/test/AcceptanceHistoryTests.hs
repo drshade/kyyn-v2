@@ -77,7 +77,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
       readReportAt revision = runEff . runFailure . runProcessExecutionIO . runGit executable [] . noFiles
         . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
           readArchivedReport (EvolutionWorkspace kb identity) revision
-      withUnverifiedReport contents = tree ((path "result.json", Bytes.pack "must not decode before checking acceptance") : files contents)
+      withUnverifiedReport contents = tree ((path "result.dhall", Bytes.pack "must not decode before checking acceptance") : files contents)
       expectUnverifiedReport revision = readReportAt revision >>= right >>= \result -> case result of
         Left [Diagnostic Error "evolution.unverified-report" _ _] -> pure ()
         _ -> fail ("Unaccepted report was not refused before decoding: " ++ show result)

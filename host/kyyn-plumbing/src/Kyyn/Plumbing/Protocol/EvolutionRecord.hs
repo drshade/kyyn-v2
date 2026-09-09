@@ -1,54 +1,44 @@
 module Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord) where
 
-import Data.Aeson (Value, toJSON, encode, eitherDecodeStrict')
-import Data.Aeson.Types (Parser, parseEither, parseJSON)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy as Lazy
-import Kyyn.Domain.Contract
+import Data.Aeson (Value(String))
+import qualified Data.Text.Encoding as Text
+import Effectful (Eff, (:>))
+import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Evolution (EvolutionId, evolutionId, evolutionIdName)
-import Kyyn.Domain.EvolutionReport
-import Kyyn.Types.Evolution (Rationale(..))
-import Kyyn.Types.Evidence (EvidenceRef(..))
-import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Domain.DataType (Shape(Scalar), ScalarKind(IntegerScalar))
+import Kyyn.Domain.Evolution (EvolutionId)
+import Kyyn.Domain.EvolutionReport (EvolutionReport)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
+import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, recordShape, headerShape, decodeHeader, decodeRecord)
 
-encodeEvolutionRecord :: EvolutionId -> RootContract -> RootContract -> EvolutionReport -> ByteString
-encodeEvolutionRecord identity before after (EvolutionReport steps) = Lazy.toStrict $ encode
-  (1 :: Int, evolutionIdName identity, describeRootContract before, describeRootContract after, map step steps)
+encodeEvolutionRecord :: DhallHandling :> es => EvolutionId -> RootContract -> RootContract -> EvolutionReport
+  -> Eff es (Either [Diagnostic] ByteString)
+encodeEvolutionRecord identity before after report = case recordDocument identity before after report of
+  Left diagnostics -> pure (Left diagnostics)
+  Right (shape,value) -> fmap (fmap Text.encodeUtf8) (encodeValue shape value)
+
+decodeEvolutionRecord :: DhallHandling :> es => ByteString
+  -> Eff es (Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract, EvolutionReport)))
+decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
+  Left problem -> pure (Left (show problem))
+  Right contents -> do
+    version <- decodeValue (Scalar IntegerScalar) ("(" <> contents <> "\n).version")
+    case version of
+      Left diagnostics -> pure (Left (show diagnostics))
+      Right (String "1") -> decodeContents contents
+      Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
+        "Stored evolution record format is not supported by this kernel"]))
   where
-    step (StepReport (Rationale explanation evidence) changes) = toJSON
-      (explanation, [(p,c,s,rs) | EvidenceRef p c s rs <- evidence], map change changes)
-    change (FactChange collection (FactId identity') old new) = toJSON
-      (collection, identity', fmap fact old, fmap fact new)
-    fact (RecordedFact schema value) = (describeRootContract schema,value)
-
-decodeEvolutionRecord :: ByteString
-  -> Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract, EvolutionReport))
-decodeEvolutionRecord bytes = eitherDecodeStrict' bytes >>= parseEither metadata
-  where
-    metadata value = do
-      (version, name, before, after, steps) <- parseJSON value
-      identity <- either fail pure (evolutionId name)
-      if version /= (1 :: Int)
-        then pure (Left [errorDiagnostic "evolution.record-format" "Stored evolution record format is not supported by this kernel"])
-        else do
-          source <- contract before
-          target <- contract after
-          report <- traverse step steps
-          pure $ (\b a rs -> (identity,b,a,EvolutionReport rs)) <$> source <*> target <*> sequence report
-    step value = do
-      (explanation, evidence, changes) <- parseJSON value
-      restored <- traverse change changes
-      pure (StepReport (Rationale explanation [EvidenceRef p c s rs | (p,c,s,rs) <- evidence]) <$> sequence restored)
-    change value = do
-      (collection, identity, before, after) <- parseJSON value
-      old <- traverse fact before
-      new <- traverse fact after
-      pure (FactChange collection (FactId identity) <$> sequence old <*> sequence new)
-    fact value = do
-      (description, recorded) <- parseJSON value
-      restored <- contract description
-      pure (flip RecordedFact recorded <$> restored)
-
-contract :: Value -> Parser (Either [Diagnostic] RootContract)
-contract = either fail pure . restoreRootContract
+   decodeContents contents = do
+    decoded <- decodeValue headerShape ("(" <> contents <> "\n).{version, identity, before, after}")
+    case decoded of
+      Left diagnostics -> pure (Left (show diagnostics))
+      Right value -> case decodeHeader value of
+        Right (Right (_,before,after)) -> do
+          checked <- decodeValue (recordShape before after) contents
+          pure $ case checked of
+            Left diagnostics -> Left (show diagnostics)
+            Right document -> decodeRecord document
+        Right (Left diagnostics) -> pure (Right (Left diagnostics))
+        Left message -> pure (Left message)
