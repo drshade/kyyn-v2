@@ -1,12 +1,14 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evolution
-  ( EvolutionId, evolutionId, evolutionIdName, EvolutionName(..), EvolutionWorkspace(..), Before(..)
+  ( EvolutionId, evolutionId, evolutionIdName, nextEvolutionId, EvolutionName(..), EvolutionWorkspace(..), Before(..)
   , EvolutionContext(..), CapturedEvolution(..)
   , After(..), EvaluatedEvolution(..), PreviewRejection(..), Candidate(..)
   , EvolutionFilter(..), EvolutionSummary(..)
   ) where
 
 import Data.Coerce (coerce)
+import Data.Char (isAsciiLower, toLower)
+import Data.List (intercalate)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
@@ -29,11 +31,29 @@ data EvolutionSummary = EvolutionSummary
 
 evolutionId :: String -> Either String EvolutionId
 evolutionId value
-  | not (null value) && all (\c -> c >= '0' && c <= '9' || c >= 'a' && c <= 'f') value = Right (EvolutionId value)
-  | otherwise = Left "Evolution ID must be nonempty lowercase hexadecimal"
+  | first : rest <- value, alphaNumeric first, all (\c -> alphaNumeric c || c == '-') rest = Right (EvolutionId value)
+  | otherwise = Left "Evolution ID must start with a lowercase letter or digit and contain only lowercase letters, digits and hyphens"
 
 evolutionIdName :: EvolutionId -> String
 evolutionIdName = coerce
+
+nextEvolutionId :: [EvolutionId] -> EvolutionName -> Either String EvolutionId
+nextEvolutionId existing (EvolutionName name)
+  | null slug = Left ("Evolution name must contain an ASCII letter or digit: " ++ show name)
+  | next > 999999 = Left "Evolution sequence is exhausted at 999999"
+  | otherwise = evolutionId (replicate (6 - length number) '0' ++ number ++ "-" ++ slug)
+  where
+    slug = intercalate "-" (words [if alphaNumeric lowered then lowered else ' ' | c <- name, let lowered = toLower c])
+    next = 1 + maximum (0 : [read digits :: Integer |
+      identity <- existing, let (digits,suffix) = splitAt 6 (evolutionIdName identity),
+      length digits == 6, all asciiDigit digits, '-' : _ <- [suffix]])
+    number = show next
+
+alphaNumeric :: Char -> Bool
+alphaNumeric c = isAsciiLower c || asciiDigit c
+
+asciiDigit :: Char -> Bool
+asciiDigit c = c >= '0' && c <= '9'
 
 data EvolutionWorkspace = EvolutionWorkspace
   { knowledgeBase :: KnowledgeBase

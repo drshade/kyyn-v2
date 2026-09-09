@@ -15,7 +15,7 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
-import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectoryRecursive, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
+import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
 import qualified System.Directory as Directory
 import System.FilePath (takeDirectory, (</>))
 import System.IO (hClose, hSetBinaryMode)
@@ -63,6 +63,12 @@ runFileSystemIO parent = interpret $ \env -> \case
       Left err | isDoesNotExistError err -> pure Nothing
                | otherwise -> ioError err
   CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
+  CreateDirectory scope -> native Failure.CreateDirectory (scopePath scope) $ do
+    created <- try (Directory.createDirectory (scopePath scope))
+    case created of
+      Right () -> pure True
+      Left err | isAlreadyExistsError err -> pure False
+               | otherwise -> ioError err
   EntryExists scope path -> native Failure.InspectEntry (scopedPath scope path) $ do
     result <- try (pathIsSymbolicLink (scopedPath scope path))
     case result of
@@ -77,7 +83,7 @@ allocateDirectory parent = createDirectoryIfMissing True parent >> allocate
     allocate = do
       number <- randomIO :: IO Word64
       let name = showHex number ""
-      created <- try (createDirectory (parent </> name))
+      created <- try (Directory.createDirectory (parent </> name))
       case created of
         Right () -> either (ioError . userError) pure (relativePath name)
         Left err | isAlreadyExistsError err -> allocate

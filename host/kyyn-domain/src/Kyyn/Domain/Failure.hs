@@ -16,5 +16,5 @@ data ProcessOperation = StartProcess | StopProcess | WriteInput | CloseInput | R
   deriving (Eq, Show)
 
 data StorageDiagnostic = StorageDiagnostic StorageOperation FilePath String deriving (Eq, Show)
-data StorageOperation = CreateTemporaryScope | RemoveTemporaryScope | ReadFile | WriteFile | ReadDirectoryTree | ListDirectory | CreateUniqueDirectory | ReplaceFile | EnsureDirectory | InspectEntry
+data StorageOperation = CreateTemporaryScope | RemoveTemporaryScope | ReadFile | WriteFile | ReadDirectoryTree | ListDirectory | CreateUniqueDirectory | CreateDirectory | ReplaceFile | EnsureDirectory | InspectEntry
   deriving (Eq, Show)

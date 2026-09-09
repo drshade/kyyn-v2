@@ -461,9 +461,13 @@ operational Failure. Neither operation confers readiness or acceptance.
 Each `EvolutionSummary` includes its stable `EvolutionId`, human name and state.
 Names may repeat; IDs do not. Commands use the ID returned by creation/listing,
 and `ResolveEvolution` reports an unknown ID without creating a workspace.
-IDs use nonempty lowercase hexadecimal directory keys, distinct from author-chosen
-names. They are within the storage filename pass-through alphabet and need no
-escaping; generation belongs to workspace creation. The workspace's location is
+An ID is one safe directory component: lowercase ASCII letters, digits and hyphens,
+starting with a letter or digit. Creation generates `000001-add-review-status`:
+a six-digit local sequence followed by a slug of the supplied name. Lowercase the
+name, replace runs outside ASCII letters/digits with a hyphen, and trim separators.
+A name that produces no slug is refused; the display name otherwise stays exactly
+as supplied. The ID stays fixed when the display name changes. They are within the
+storage filename pass-through alphabet and need no escaping. The workspace's location is
 derived from its owning KB and ID, not stored as another path that can disagree.
 This also resolves a saved candidate's context to its owning workspace without
 publication reconstructing a private directory convention.
@@ -494,7 +498,7 @@ data EvolutionFilter = AllEvolutions | ExcludeDrafts
 ```
 
 Listing enumerates immediate names under the live and selected Git `evolutions/`
-directories, considers hexadecimal evolution IDs, then derives each summary once.
+directories, considers valid evolution IDs, then derives each summary once.
 Git's `ReadDirectoryAt Repository GitRevision TreePath` returns
 `Either [Diagnostic] (Maybe [RelativePath])`: immediate entry names, `Nothing`
 for an absent directory, and diagnostics for an invalid revision or non-directory
@@ -612,11 +616,18 @@ creation. The author edits `target/` for either same-schema or schema-changing w
 there is no separate schema-request mode or stale creation-time After descriptor.
 
 Source inspection and workspace encoding finish before directory allocation.
-FileSystem reserves a fresh hexadecimal child of the live `evolutions/` directory
-using exclusive creation, then the store writes the encoded files and returns its
-KB-scoped handle. Exclusivity is against that live directory, including archives
-that remain there, not a global ID registry or a scan of deleted Git history.
-Names can repeat and never choose filesystem paths. Write failure returns an
+Creation lists the live `evolutions/` directory, finds the maximum prefix consisting
+of exactly six digits followed by a hyphen, and adds one. Accepted workspaces still
+present count; deleted history is not scanned. No counter file, timestamp or random
+suffix is needed. Refuse at 999999 instead of wrapping or changing the width.
+The named directory is created exclusively through FileSystem. An existing entry
+returns an ordinary creation refusal without retrying or overwriting its contents.
+Other filesystem failures remain operational. The store then writes the encoded
+files and returns its KB-scoped handle. Independent checkouts can allocate the
+same number with different slugs; the whole ID distinguishes them. An identical
+name is an ordinary conflict to resolve, not a distributed coordination problem.
+Creation order is local; Git owns acceptance order. Names can repeat and never
+directly choose filesystem paths. Write failure returns an
 operational Failure, not a successful workspace; an unfinished directory can remain
 for inspection/removal. Creation does not update Git and does not promise atomic
 multi-file persistence under crashes.

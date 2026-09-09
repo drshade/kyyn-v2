@@ -35,8 +35,10 @@ main = do
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") (Just revision))))
   forM_ [("show",ShowEvolution),("check",CheckEvolution),
     ("ready",ReadyEvolution),("draft",DraftEvolution),("accept",AcceptEvolution),("recover",RecoverEvolution)] $
-    \(verb,constructor) -> succeeds ["evolution",verb,"abc123"]
-      (Invocation selected Human (Evolution (constructor identity)))
+    \(verb,constructor) -> do
+      succeeds ["evolution",verb,"abc123"] (Invocation selected Human (Evolution (constructor identity)))
+      let numbered = either error id (evolutionId "000001-add-review-status")
+      succeeds ["evolution",verb,"000001-add-review-status"] (Invocation selected Human (Evolution (constructor numbered)))
   forM_ [["evolution","evaluate","abc123"],["root","delete"],["evolution","accept"],["evolution","accept","Monthly"],
     ["evolution","new",""],["evolution","new","example","--before","HEAD"],
     ["--repository",".","root","show"],["plugin","list"],

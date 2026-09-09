@@ -8,7 +8,7 @@ import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
 import Effectful (Eff, IOE, (:>), runEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(Error), errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(WriteFile))
 import Kyyn.Domain.FileTree (FileTree, fileTree)
@@ -43,7 +43,18 @@ type TestEffects = '[EvolutionAuthoring, EvolutionStore, RootOpening, Git.Git, W
 
 evolutionCaptureTests :: RootContract -> IO ()
 evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture" $ \directory -> do
-  forM_ ["", "../a", "a/b", "ABC", "con", "a.b", "a b"] $ \bad -> rejected (evolutionId bad)
+  forM_ ["", "../a", "a/b", "a\\b", "ABC", "-name", ".name", "a.b", "a b"] $ \bad -> rejected (evolutionId bad)
+  forM_
+    [ ([], "Review λ", "000001-review")
+    , (["000001-start", "000009-finish", "000009-other", "notes", "abc123", "42-short"], " Add / Review STATUS! ", "000010-add-review-status")
+    , (["000098-a"], "Sales September", "000099-sales-september")
+    ] $ \(names,name,expected) -> do
+      identities <- traverse (right . evolutionId) names
+      allocated <- right (nextEvolutionId identities (EvolutionName name))
+      unless (evolutionIdName allocated == expected) (fail "Incorrect numbered slug allocation")
+  final <- right (evolutionId "999999-final")
+  rejected (nextEvolutionId [final] (EvolutionName "More"))
+  forM_ ["", "!!!", "λ"] $ \name -> rejected (nextEvolutionId [] (EvolutionName name))
   repo <- Repository <$> right (directoryScope directory)
   revision <- right (gitRevision (replicate 40 'a'))
   revisionB <- right (gitRevision (replicate 40 'b'))
@@ -81,7 +92,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
         noOpening = execute revision (error "Input matching/malformed capture unexpectedly opened a source root")
         displayName = "Sales / ../ \"September\" λ"
     created@(EvolutionWorkspace createdKb createdId) <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
-    unless (createdKb == kb && Right createdId == evolutionId (evolutionIdName createdId))
+    unless (createdKb == kb && evolutionIdName createdId == "000001-sales-september")
       (fail "Creation returned an invalid KB or directory ID")
     CapturedEvolution (EvolutionContext _ _ (Before createdBase _) (WorkspaceSnapshot
       (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) _ _ <-
@@ -91,8 +102,8 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
       createdBefore == sourceTree && createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
       (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
-    another <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
-    unless (another /= created) (fail "Repeated creation reused a workspace")
+    another@(EvolutionWorkspace _ anotherId) <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
+    unless (another /= created && evolutionIdName anotherId == "000002-sales-september") (fail "Repeated creation did not advance the local sequence")
     let evolutionDirectory = directory </> maybe "" id prefixName </> "evolutions"
         sourceError = [errorDiagnostic "test.source-rejected" "Source schema rejected"]
     beforeRejection <- listDirectory evolutionDirectory
@@ -166,15 +177,23 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
   rootPath <- Subtree <$> right (relativePath "root")
   count <- newIORef 0
-  failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
+  failedWrite <- runEff . runFailure . creationFiles True failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
     . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
+  collided <- runEff . runFailure . creationFiles False failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
+    . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
+      createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Collision") revision
+  case collided of
+    Right (Left [Diagnostic Error "evolution.exists" _ _]) -> pure ()
+    _ -> fail "Lost directory reservation wrote files or became a storage failure"
   putStrLn "Evolution capture verifies selected Before copies, KB paths and live input matching."
 
-failingWrites :: Failure :> es => OperationalFailure -> Eff (FileSystem : es) a -> Eff es a
-failingWrites failure = interpret $ \_ -> \case
-  FS.CreateUniqueDirectory _ -> pure (either error id (relativePath "e003"))
+creationFiles :: Failure :> es => Bool -> OperationalFailure -> Eff (FileSystem : es) a -> Eff es a
+creationFiles available failure = interpret $ \_ -> \case
+  FS.ListDirectory _ -> pure Nothing
+  FS.EnsureDirectory _ -> pure ()
+  FS.CreateDirectory _ -> pure available
   FS.WriteBytes {} -> raiseFailure failure
   _ -> error "Creation unexpectedly read files or used a temporary scope"
 

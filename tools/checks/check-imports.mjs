@@ -84,7 +84,7 @@ const domainModules = {
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.KnowledgeBase'],
   'Kyyn.Domain.EvolutionReport': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.KnowledgeBase': ['Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
-  'Kyyn.Domain.Evolution': ['Data.Coerce', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Workspace',
+  'Kyyn.Domain.Evolution': ['Data.Coerce', 'Data.Char', 'Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Workspace',
     'Kyyn.Domain.Value', 'Kyyn.Domain.Root', 'Kyyn.Domain.Path', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Evolution'],
   'Kyyn.Domain.Workspace': ['Data.List', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Diagnostic': ['Kyyn.Types.Diagnostic'],

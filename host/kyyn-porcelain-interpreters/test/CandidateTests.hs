@@ -324,6 +324,7 @@ failPublication failure = interpret $ \_ -> \case
   ReadTree scope -> send (ReadTree scope)
   ListDirectory scope -> send (ListDirectory scope)
   CreateUniqueDirectory scope -> send (CreateUniqueDirectory scope)
+  CreateDirectory {} -> error "Candidate persistence must not reserve named directories"
   EnsureDirectory {} -> error "Candidate persistence must not initialize directories"
   EntryExists {} -> error "Candidate persistence must not inspect entries"
 
