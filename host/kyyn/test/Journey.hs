@@ -47,6 +47,7 @@ main = do
             ((proc "git" arguments) {cwd = Just kb, env = Just fixtureEnvironment}) ""
           unless (status == ExitSuccess) (fail (show arguments ++ errors))
           pure (filter (/= '\n') output)
+        cli :: ExitCode -> [String] -> IO Value
         cli expected arguments = do
           putStrLn ("kyyn " ++ unwords arguments)
           (status,output,errors) <- readCreateProcessWithExitCode
@@ -101,7 +102,9 @@ main = do
     assert "Acceptance ignored configured Git identity or used environment overrides"
       (actualIdentity == "Configured fixture λ <fixture@example.invalid>|Configured fixture λ <fixture@example.invalid>")
     void (git ["config","user.name",""])
-    void (cli (ExitFailure 4) ["--runtime",kb </> "missing-runtime","evolution","accept",first])
+    retried <- cli (ExitFailure 4) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    retryRevision <- textAt ["result","revision"] retried
+    assert "Accepted retry lost its original revision" (retryRevision == after)
     void (git ["config","user.name","Configured fixture λ"])
     commitMessage <- git ["log","-1","--format=%s"]
     assert "Commit omitted the evolution name" ("simplify-todos" `isInfixOf` commitMessage)

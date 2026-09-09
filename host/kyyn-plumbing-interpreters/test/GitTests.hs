@@ -59,12 +59,16 @@ identityTests = withSystemTempDirectory "kyyn-git-identity" $ \directory -> do
   command ["config","--file",included,"user.email","included@example.invalid"]
   command ["config","--global","include.path",included]
   expect "Repository λ" "included@example.invalid"
+  let conditional = directory </> "conditional.config"
+  command ["config","--file",conditional,"user.email","conditional@example.invalid"]
+  command ["config","--global","includeIf.gitdir:" ++ directory ++ "/.git.path",conditional]
+  expect "Repository λ" "conditional@example.invalid"
   command ["config","--local","user.name","   "]
   missing
   command ["config","--local","--unset","user.name"]
   command ["config","--global","--unset-all","user.name"]
   command ["config","--file",xdg </> "git/config","user.name","XDG λ"]
-  expect "XDG λ" "included@example.invalid"
+  expect "XDG λ" "conditional@example.invalid"
   Bytes.writeFile (directory </> ".git/config") "[invalid"
   invalid <- inspect
   case invalid of Left _ -> pure (); _ -> fail "Malformed Git configuration was not an operational failure"
