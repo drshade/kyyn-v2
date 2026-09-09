@@ -216,6 +216,15 @@ readUserIdentity
   :: Git :> es => Repository -> Eff es (Either [Diagnostic] GitUser)
 ```
 
+HOME/XDG forwarding applies to every Git plumbing call, so global configuration
+is visible beyond identity lookup. Existing explicit options still govern the
+kernel's operations: `commit.gpgsign=false` for commit construction,
+`--no-ext-diff`, `--no-textconv` and `--no-renames` for comparisons,
+`--no-filters` when writing blobs, and `-z` for path records. Checkout restoration
+follows the user's conversion settings. Configured hooks, including a global
+`core.hooksPath`, remain enabled and receive the same explicit process environment
+(empty PATH); their failures follow the existing Git publication/recovery outcomes.
+
 Runtime paths come from the
 installed layout, with `--runtime` and `--git` development overrides. Listing,
 state changes, archived inspection, recovery and already-accepted diagnosis do
