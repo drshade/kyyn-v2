@@ -77,6 +77,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace'],
   'Kyyn.Domain.EvolutionReport': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.KnowledgeBase': ['Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
@@ -133,7 +134,7 @@ const plumbingModules = {
   'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
   'Kyyn.Plumbing.Capability.GuestCompilation': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Data.ByteString', 'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure',
-    'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.FileSystem',
+    'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.CompiledProgram',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Capability.GuestCompilation.Types': ['Crypto.Hash.SHA256', 'Data.Char', 'Data.ByteString',
     'Data.ByteString.Builder', 'Data.ByteString.Lazy', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Path'],
@@ -177,6 +178,12 @@ export function checkImports(packageName, source) {
   if (!allowed[packageName]) throw new Error(`No import policy for ${packageName}`);
   const moduleName = /^module\s+([\w.]+)/m.exec(source)?.[1];
   const permitted = (packageName === 'kyyn-domain' && domainModules[moduleName]) || (packageName === 'kyyn-plumbing' && plumbingModules[moduleName]) ||
+    (packageName === 'kyyn-porcelain' && moduleName === 'Kyyn.Porcelain.RootExecution.Types' &&
+      ['Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Query', 'Kyyn.Domain.Root']) ||
+    (packageName === 'kyyn-porcelain' && moduleName === 'Kyyn.Porcelain.Capability.RootExecution' &&
+      [...allowed['kyyn-porcelain'], 'Kyyn.Porcelain.RootExecution.Types']) ||
+    (packageName === 'kyyn-porcelain-interpreters' && moduleName === 'Kyyn.Porcelain.Interpreter.RootExecution' &&
+      [...allowed['kyyn-porcelain-interpreters'], 'Kyyn.Porcelain.RootExecution.Types']) ||
     (packageName === 'kyyn-porcelain' && ['Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Validated'].includes(moduleName) && [...allowed['kyyn-porcelain'], 'Kyyn.Porcelain.Validation.Types']) ||
     (packageName === 'kyyn-microhs' && compilerModules[moduleName]) ||
     (['kyyn-plumbing-interpreters', 'kyyn-porcelain-interpreters'].includes(packageName) && interpreterModules[moduleName]) || allowed[packageName];

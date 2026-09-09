@@ -1,9 +1,9 @@
-{-# LANGUAGE GADTs, OverloadedStrings #-}
+{-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module ExecutionTests (executionTests) where
 
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
-import Effectful (Eff, runEff)
+import Effectful (Eff, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
@@ -13,12 +13,15 @@ import Kyyn.Domain.Path (relativePath, relativeName, directoryScope)
 import Kyyn.Domain.Root (Root(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (CompiledEntry(..), BuildIdentity(..), sourceFiles)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
+import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
+import GuestFixture
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
-import Kyyn.Porcelain.Capability.RootExecution (validateRoot)
+import Kyyn.Porcelain.Capability.RootExecution (prepareRoot, validateRoot)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (findExecutable)
@@ -34,10 +37,11 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest)]
       sdk = tree [(path "Sdk.hs", "explicit SDK")]
       root = Root contract facts code
-      entry script = CompiledEntry (BuildIdentity "fixture" "fixture") (path "fixture.comb", "") shell
-        ["-c", "read -r input; " ++ script] []
+      entry = fixtureProgram
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock compilation . noInspection . runDhallHandling . runRootStore . runRootExecution sdkFiles $ validateRoot selected
+        . compileMock shell compilation . noInspection . runDhallHandling . runRootStore . runRootExecution sdkFiles $ do
+          prepared <- prepareRoot selected
+          either (pure . Left) validateRoot prepared
       unexpected = error "Invalid root reached compilation"
   success <- execute sdk (Right (entry "printf '[]'")) root
   unless (success == Right (Right (ValidationReport []))) (fail (show success))
@@ -58,22 +62,24 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }")]] $ \badCode -> do
     failure <- execute sdk unexpected (Root contract facts badCode)
     case failure of Right (Left _) -> pure (); _ -> fail "Invalid manifest reached execution"
-  noFacts <- execute sdk unexpected (Root contract (tree []) code)
+  noFacts <- execute sdk (Right (entry "exit 99")) (Root contract (tree []) code)
   case noFacts of Right (Left _) -> pure (); _ -> fail "Unreadable facts reached execution"
   collision <- execute (tree [(path "Checks.hs", "collision")]) unexpected root
   case collision of Right (Left _) -> pure (); _ -> fail "Source collision reached compilation"
   putStrLn "RootExecution manifest/source selection and structural/compiler/runtime failure distinctions passed."
 
-compileMock :: Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
-compileMock result = interpret $ \_ (CompileGuest captured) -> do
-  let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
-  unless (lookup "Checks.hs" entries == Just "captured validator" &&
-      lookup "Sdk.hs" entries == Just "explicit SDK" &&
-      lookup "KyynQueryBindings.hs" entries /= Nothing &&
-      maybe False (Bytes.isInfixOf "validate = Checks.validate") (lookup "KyynValidationEntry.hs" entries) &&
-      maybe False (Bytes.isInfixOf "rootCodec") (lookup "KyynValidationCodec.hs" entries))
-    (error "RootExecution did not compile captured sources with explicit SDK and adapter")
-  pure result
+compileMock :: ProcessExecution :> es => FilePath -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
+compileMock shell result = interpret $ \_ -> \case
+  ExecuteCompiled program input -> executeFixture shell program input
+  CompileGuest captured -> do
+    let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
+    unless (lookup "Checks.hs" entries == Just "captured validator" &&
+        lookup "Sdk.hs" entries == Just "explicit SDK" &&
+        lookup "KyynQueryBindings.hs" entries /= Nothing &&
+        maybe False (Bytes.isInfixOf "validate = Checks.validate") (lookup "KyynValidationEntry.hs" entries) &&
+        maybe False (Bytes.isInfixOf "rootCodec") (lookup "KyynValidationCodec.hs" entries))
+      (error "RootExecution did not compile captured sources with explicit SDK and adapter")
+    pure result
 
 noInspection :: Eff (SchemaInspection : es) a -> Eff es a
 noInspection = interpret $ \_ _ -> error "Validation unexpectedly inspected query contracts"

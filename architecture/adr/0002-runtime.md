@@ -47,16 +47,19 @@ capability whose inputs contain no KB/root layout or fact data:
 
 ```haskell
 data GuestSources  -- fixed module contents, generated adapters and selected entry
-data CompiledEntry  -- immutable bytecode, build identity and evaluator launch description
+data CompiledProgram  -- immutable bytecode and build identity; no launch configuration
 
 data GuestCompilation :: Effect where
   CompileGuest
     :: GuestSources
-    -> GuestCompilation m (Either [Diagnostic] CompiledEntry)
+    -> GuestCompilation m (Either [Diagnostic] CompiledProgram)
+  ExecuteCompiled
+    :: CompiledProgram -> Bytes
+    -> GuestCompilation m (Bytes, ProcessExit)
 
 compileGuest
   :: GuestCompilation :> es
-  => GuestSources -> Eff es (Either [Diagnostic] CompiledEntry)
+  => GuestSources -> Eff es (Either [Diagnostic] CompiledProgram)
 ```
 
 `GuestSources` is a fixed compilation input, not the host's `CodeSnapshot` or a
@@ -117,20 +120,32 @@ data BuildIdentity = BuildIdentity
   , sourcesDigest     :: Bytes
   }
 
-buildIdentity :: CompiledEntry -> BuildIdentity
+data CompiledProgram = CompiledProgram
+  { identity :: BuildIdentity
+  , artifact :: (RelativePath, Bytes)
+  }
 
-withCompiledEntry
-  :: (FileSystem :> es, ProcessExecution :> es)
-  => CompiledEntry -> Eff (ProcessPipes : es) a -> Eff es a
+executeCompiled
+  :: GuestCompilation :> es
+  => CompiledProgram -> Bytes -> Eff es (Bytes, ProcessExit)
+
+executeCompiledEntry
+  :: (GuestCompilation :> es, Failure :> es)
+  => String -> CompiledProgram -> Bytes -> Eff es Bytes
 ```
 
 The revision identifies the selected pinned MicroHs source; it is not an
 attestation of arbitrary installed binaries. There is no persistent artifact cache
-in this increment. Reuse the immutable `CompiledEntry` for multiple runtime inputs.
-`withCompiledEntry` is a capability-owned helper: it materializes the artifact in
-a fresh temporary scope and supplies its recorded launch description to
-ProcessExecution. Evaluator flags remain compiler-owned; callers do not reconstruct
-them. The build scope can disappear before any invocation, and the invocation
+in this increment. Reuse the immutable `CompiledProgram` for multiple runtime inputs.
+Its representation belongs to the domain package so porcelain can carry prepared
+code without depending on plumbing. ExecuteCompiled materializes the artifact in
+a fresh temporary scope; its interpreter supplies the evaluator and launch
+configuration from the explicitly installed toolchain. Callers do not reconstruct
+flags or carry process configuration in domain values. The operation writes the
+supplied bytes, closes stdin, drains stdout and returns output plus exit status/stderr.
+The selected-entry helper turns a nonzero exit into RuntimeUnavailable; metadata
+decoding retains its specific diagnostic context using the raw result.
+Process startup/transport failures remain Failure. The build scope can disappear before any invocation, and the invocation
 scope is removed after process cleanup. No live build path is returned as the
 artifact. This is one compiler capability, not a compiler-backend framework.
 

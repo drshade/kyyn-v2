@@ -1,9 +1,9 @@
-{-# LANGUAGE GADTs, OverloadedStrings #-}
+{-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module EvolutionExecutionTests (evolutionExecutionTests) where
 
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
-import Effectful (Eff, runEff)
+import Effectful (Eff, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -19,7 +19,10 @@ import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (EvolutionFailure(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..), RoleDecl(..), Affordance(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (CompiledEntry(..), BuildIdentity(..), sourceFiles)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
+import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
+import GuestFixture
 import Kyyn.Plumbing.Capability.SchemaInspection
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -50,10 +53,9 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       capture proposed declarations = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft declarations)
           before proposed (tree [("Evolution.hs","captured entry")]) (tree [])))
-      entry script = CompiledEntry (BuildIdentity "fixture" "fixture") (path "fixture.comb", "") shell
-        ["-c", "read -r input; " ++ script] []
+      entry = fixtureProgram
       execute compilation source selectedCapture = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock compilation . schemaMock contract . openingMock kb revision source . runDhallHandling
+        . compileMock shell compilation . schemaMock contract . openingMock kb revision source . runDhallHandling
         . runRootStore . runEvolutionExecution sdk $ evaluateEvolution selectedCapture
       identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")
       captured = capture target [IntermediateBinding "middleRoot" "Example.Root" "Example.metadata"]
@@ -112,16 +114,18 @@ schemaMock contract = interpret $ \_ (InspectSchema source) -> pure $
     else Left [errorDiagnostic "schema.compiler-rejected" "Missing intermediate export"]
   where path = either error id . relativePath
 
-compileMock :: Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
-compileMock result = interpret $ \_ (CompileGuest sources) -> do
-  let entries = [(relativeName p,b) | (p,b) <- sourceFiles sources]
-  unless (lookup "Checks.hs" entries == Just "new checks" && lookup "Helper.hs" entries == Just "helper" &&
-    lookup "Evolution.hs" entries == Just "captured entry" &&
-    maybe False (Bytes.isInfixOf "selected = Evolution.evolution") (lookup "KyynEvolutionEntry.hs" entries) &&
-    maybe False (Bytes.isInfixOf "Program NoRequests") (lookup "KyynEvolutionEntry.hs" entries) &&
-    maybe False (Bytes.isInfixOf "middleRoot") (lookup "KyynEvolutionBindings.hs" entries))
-    (error "Execution sources did not preserve target/helpers/intermediate bindings or included old checks")
-  pure result
+compileMock :: ProcessExecution :> es => FilePath -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
+compileMock shell result = interpret $ \_ -> \case
+  ExecuteCompiled program input -> executeFixture shell program input
+  CompileGuest sources -> do
+    let entries = [(relativeName p,b) | (p,b) <- sourceFiles sources]
+    unless (lookup "Checks.hs" entries == Just "new checks" && lookup "Helper.hs" entries == Just "helper" &&
+      lookup "Evolution.hs" entries == Just "captured entry" &&
+      maybe False (Bytes.isInfixOf "selected = Evolution.evolution") (lookup "KyynEvolutionEntry.hs" entries) &&
+      maybe False (Bytes.isInfixOf "Program NoRequests") (lookup "KyynEvolutionEntry.hs" entries) &&
+      maybe False (Bytes.isInfixOf "middleRoot") (lookup "KyynEvolutionBindings.hs" entries))
+      (error "Execution sources did not preserve target/helpers/intermediate bindings or included old checks")
+    pure result
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

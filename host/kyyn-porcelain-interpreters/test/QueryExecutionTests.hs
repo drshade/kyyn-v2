@@ -1,10 +1,9 @@
-{-# LANGUAGE GADTs, OverloadedStrings #-}
+{-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module QueryExecutionTests (queryExecutionTests) where
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..))
-import qualified Data.ByteString as Bytes
-import Effectful (Eff, runEff)
+import Effectful (Eff, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
@@ -17,7 +16,8 @@ import Kyyn.Domain.Root
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Query (ReadAccess(..))
 import Kyyn.Plumbing.Capability.GuestCompilation
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (CompiledEntry(..))
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
+import GuestFixture
 import Kyyn.Plumbing.Capability.SchemaInspection
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
@@ -45,15 +45,16 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
       output = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
       descriptor = QueryDescriptor "summary" "Summary" input output
       args = CheckedValue (contractId input) (String "hello")
-      entry script = CompiledEntry (BuildIdentity "fixture" "fixture") (path "fixture.comb", "") shell
-        ["-c", "read -r input; " ++ script] []
+      entry = fixtureProgram
       execute compilation queryDescriptor arguments = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock compilation . schemaMock input output . runDhallHandling . runRootStore . runRootExecution sdk $
-          queryRoot root queryDescriptor arguments
-      unused = error "Invalid query reached compilation"
-  discovered <- runEff . runFailure . schemaMock input output . compileMock unused . runProcessExecutionIO . runFileSystemIO scope
-    . runDhallHandling . runRootStore . runRootExecution sdk $ discoverQueries root
-  unless (discovered == Right (Right [descriptor])) (fail "Query discovery mismatch")
+        . gateCompiler shell (entry "printf '[]'") compilation . schemaMock input output . runDhallHandling . runRootStore . runRootExecution sdk $ do
+          prepared <- prepareRoot root
+          either (pure . Left) (\value -> queryRoot value queryDescriptor arguments) prepared
+      unused = Right (entry "exit 99")
+  discovered <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+    . gateCompiler shell (entry "exit 97") (Right (entry "exit 97")) . schemaMock input output
+    . runDhallHandling . runRootStore . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
+  unless (discovered == Right (Right [descriptor])) (fail "Prepared query discovery mismatch")
   success <- execute (Right (entry "printf '{\"result\":true,\"trace\":[{\"tag\":\"Collection\",\"collection\":\"todos\"}]}'")) descriptor args
   unless (success == Right (Right (QueryResult (CheckedValue (contractId output) (Bool True)) [CollectionRead "todos"])))
     (fail (show success))
@@ -68,12 +69,12 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   rejection <- execute (Left rejected) descriptor args
   unless (rejection == Right (Left rejected)) (fail "Compiler rejection lost diagnostics")
   let checkCode compilation = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . gateCompiler (entry "exit 97") compilation . schemaMock input output
-        . runDhallHandling . runRootStore . runRootExecution sdk $ checkRootCode root
+        . gateCompiler shell (entry "exit 97") compilation . schemaMock input output
+        . runDhallHandling . runRootStore . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
   unusedQuery <- checkCode (Left rejected)
   unless (unusedQuery == Right (Left rejected)) (fail "Unused registered query escaped compilation checking")
   checkedCode <- checkCode (Right (entry "exit 97"))
-  unless (checkedCode == Right (Right ())) (fail "Code checking executed a validator/query or failed to check it")
+  unless (checkedCode == Right (Right [descriptor])) (fail "Code checking executed a validator/query or failed to check it")
   forM_ ["printf '{}'", "printf '{\"result\":\"wrong type\",\"trace\":[]}'"] $ \script -> do
     response <- execute (Right (entry script)) descriptor args
     case response of
@@ -100,22 +101,14 @@ schemaMock input output = interpret $ \_ (InspectSchema source) -> do
     "Queries.Result" -> pure (Right (InspectedSchema output []))
     _ -> error "Unexpected selected query type"
 
-compileMock :: Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
-compileMock result = interpret $ \_ (CompileGuest captured) -> do
-  let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
-  unless (lookup "Queries.hs" entries == Just "captured query" &&
-      lookup "Sdk.hs" entries == Just "explicit SDK" &&
-      maybe False (Bytes.isInfixOf "selected = Queries.summary") (lookup "KyynQueryEntry.hs" entries) &&
-      all (\name -> lookup name entries /= Nothing) ["KyynQueryBindings.hs","KyynQueryRootCodec.hs","KyynQueryInputCodec.hs","KyynQueryResultCodec.hs"])
-    (error "Query compilation did not use captured sources and generated adapter")
-  pure result
-
-gateCompiler :: CompiledEntry -> Either [Diagnostic] CompiledEntry -> Eff (GuestCompilation : es) a -> Eff es a
-gateCompiler validator query = interpret $ \_ (CompileGuest captured) -> do
-  let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
-  unless (lookup "KyynQueryBindings.hs" entries /= Nothing) (error "Code-check entry lacks query bindings for shared helper imports")
-  if lookup "KyynValidationEntry.hs" entries /= Nothing
-    then pure (Right validator)
-    else if lookup "KyynQueryEntry.hs" entries /= Nothing
-      then pure query
-      else error "Unexpected code-check entry"
+gateCompiler :: ProcessExecution :> es => FilePath -> CompiledProgram -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
+gateCompiler shell validator query = interpret $ \_ -> \case
+  ExecuteCompiled program input -> executeFixture shell program input
+  CompileGuest captured -> do
+    let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
+    unless (lookup "KyynQueryBindings.hs" entries /= Nothing) (error "Code-check entry lacks query bindings for shared helper imports")
+    if lookup "KyynValidationEntry.hs" entries /= Nothing
+      then pure (Right validator)
+      else if lookup "KyynQueryEntry.hs" entries /= Nothing
+        then pure query
+        else error "Unexpected code-check entry"

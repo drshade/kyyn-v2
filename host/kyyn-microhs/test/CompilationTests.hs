@@ -26,12 +26,8 @@ testCompilation temporary toolchain = do
       compileWith selected sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation selected $
         compileGuest sources
       compile = compileWith toolchain
-      invoke entry = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary $
-        withCompiledEntry entry $ do
-          closeStdin
-          output <- collectStdout
-          status <- awaitExit
-          pure (output, status)
+      invoke entry = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation toolchain $
+        executeCompiled entry Bytes.empty
       assert label ok = unless ok (fail label)
       expectSourceFailure label input = case input of
         Left _ -> pure ()

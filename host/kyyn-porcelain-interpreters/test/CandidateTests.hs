@@ -38,7 +38,8 @@ import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution)
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionStore
-import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
+import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..), preparedRoot)
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..))
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Validation (checkCandidate)
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore, readWorkspaceSnapshot)
@@ -226,7 +227,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   unless (invalidResult == Rejected (ValidationReport [invalid])) (fail "Invalid candidate earned validation")
   let compileError = [errorDiagnostic "test.compile" "Broken validator"]
       compileRejected = interpret (\_ -> \case
-        CheckRootCode selectedRoot | selectedRoot == root -> pure (Left compileError)
+        PrepareRoot selectedRoot | selectedRoot == root -> pure (Left compileError)
         _ -> error "Compile-rejected candidate ran checking")
   compileResult <- runEff . runDhallHandling . runRootStore . compileRejected $ checkCandidate candidate
   unless (compileResult == Rejected (ValidationReport compileError)) (fail "Compile error did not reject candidate checking")
@@ -284,9 +285,8 @@ failPublication failure = interpret $ \_ -> \case
 
 validationMock :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a
 validationMock expected report = interpret $ \_ -> \case
-  CheckRootCode root | root == expected -> pure (Right ())
-  DiscoverQueries root | root == expected -> pure (Right [])
-  ValidateRoot root | root == expected -> pure (Right report)
+  PrepareRoot root | root == expected -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
+  ValidateRoot root | preparedRoot root == expected -> pure (Right report)
   _ -> error "Candidate checking changed roots or executed a query"
 
 right :: Show e => Either e a -> IO a

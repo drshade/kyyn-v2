@@ -20,6 +20,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.RootExecution
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Capability.Validation
 import Kyyn.Porcelain.Validated (validatedValue)
@@ -108,21 +109,20 @@ validationTests contract facts = do
 executionMock :: Root -> QueryDescriptor -> Either [Diagnostic] () -> ValidationReport -> Bool
   -> Eff (RootExecution : es) a -> Eff es a
 executionMock expectedRoot descriptor codeResult report actual = interpret $ \_ -> \case
-  CheckRootCode root -> same root >> pure codeResult
-  DiscoverQueries root -> same root >> pure (Right [descriptor])
-  ValidateRoot root -> same root >> pure (Right report)
+  PrepareRoot root -> same root >> pure (fmap (\() -> PreparedRoot root "validator" unused [PreparedQuery descriptor "query" unused]) codeResult)
+  ValidateRoot root -> same (preparedRoot root) >> pure (Right report)
   ExecuteQuery root query _ -> do
-    same root
+    same (preparedRoot root)
     unless (query == descriptor) (error "Example used an unexpected query descriptor")
     let QueryDescriptor _ _ _ result = descriptor
     pure (Right (QueryResult (CheckedValue (contractId result) (Bool actual)) []))
   where
+    unused = error "Recording handler must not execute bytecode"
     same :: Root -> Eff xs ()
     same root = unless (root == expectedRoot) (error "Checking switched root snapshots")
 
 failingExecution :: Failure :> es => OperationalFailure -> Eff (RootExecution : es) a -> Eff es a
 failingExecution failure = interpret $ \_ -> \case
-  CheckRootCode _ -> pure (Right ())
-  DiscoverQueries _ -> pure (Right [])
+  PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
   ValidateRoot _ -> raiseFailure failure
   ExecuteQuery _ _ _ -> error "Example ran after failed validation"

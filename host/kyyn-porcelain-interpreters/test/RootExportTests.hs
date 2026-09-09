@@ -29,6 +29,7 @@ import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.RootExecution
+import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..))
 import Kyyn.Porcelain.Capability.RootOpening (openCapturedRoot)
 import Kyyn.Porcelain.Capability.EvolutionStore (exportAcceptedWorkspace, findAcceptance)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
@@ -143,9 +144,8 @@ noGitExport = interpret $ \_ _ -> error "Archive export used Git"
 
 checkingMock :: Root -> Eff (RootExecution : es) a -> Eff es a
 checkingMock expected = interpret $ \_ -> \case
-  CheckRootCode root -> same root >> pure (Right ())
-  DiscoverQueries root -> same root >> pure (Right [])
-  ValidateRoot root -> same root >> pure (Right (ValidationReport []))
+  PrepareRoot root -> same root >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
+  ValidateRoot root -> same (preparedRoot root) >> pure (Right (ValidationReport []))
   ExecuteQuery _ _ _ -> error "Unexpected query in export fixture"
   where
     same :: Root -> Eff xs ()

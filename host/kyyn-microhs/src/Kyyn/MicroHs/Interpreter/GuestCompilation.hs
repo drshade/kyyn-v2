@@ -1,4 +1,4 @@
-{-# LANGUAGE GHC2021, DataKinds, GADTs #-}
+{-# LANGUAGE GHC2021, DataKinds, GADTs, LambdaCase #-}
 {-# OPTIONS_GHC -Werror #-}
 module Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation) where
 
@@ -16,14 +16,13 @@ import qualified Kyyn.MicroHs.Toolchain as Toolchain
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
 import Kyyn.Plumbing.Capability.GuestCompilation
-import qualified Kyyn.Plumbing.Capability.GuestCompilation.Types as Types
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 
 runGuestCompilation
   :: (FileSystem :> es, Process.ProcessExecution :> es, Failure :> es)
   => GuestToolchain -> Eff (GuestCompilation : es) a -> Eff es a
-runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest sources) ->
-  withTemporaryScope $ \scope -> do
+runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ -> \case
+  CompileGuest sources -> withTemporaryScope $ \scope -> do
     let sourceDirectory = "sources"
         sourcePath path = checkedPath (sourceDirectory ++ "/" ++ relativeName path)
         output = checkedPath "program.comb"
@@ -44,13 +43,24 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ (CompileGuest so
         bytes <- readBytes scope output
         if Bytes.null bytes
           then broken "compiler produced an empty artifact"
-          else pure (Right (Types.CompiledEntry
+          else pure (Right (CompiledProgram
             (BuildIdentity Toolchain.toolchainRevision (sourceIdentity sources))
-            (output, bytes) (root ++ "/bin/mhseval") ["+RTS", "-r" ++ relativeName output, "-RTS"] [("LC_ALL", "C.UTF-8"), ("PATH", "")]))
+            (output, bytes)))
       1 -> case Text.decodeUtf8' (stderr <> stdout) of
         Left _ -> broken "compiler emitted invalid UTF-8 diagnostics"
         Right message -> pure (Left [errorDiagnostic "guest.compiler-rejected" (Text.unpack message)])
       _ -> broken ("compiler terminated with exit status " ++ show status)
+  ExecuteCompiled (CompiledProgram _ (path, bytes)) input -> withTemporaryScope $ \scope -> do
+    writeBytes scope path bytes
+    let evaluator = scopePath toolchain ++ "/bin/mhseval"
+        arguments = ["+RTS", "-r" ++ relativeName path, "-RTS"]
+        environment = [("LC_ALL", "C.UTF-8"), ("PATH", "")]
+    Process.withProcess (Process.ProcessSpec evaluator arguments (scopePath scope) environment) $ do
+      Process.writeStdin input
+      Process.closeStdin
+      output <- Process.collectStdout
+      status <- Process.awaitExit
+      pure (output, status)
   where
     broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit message))
     -- Only fixed names and a fixed prefix joined to an already checked path enter here.
