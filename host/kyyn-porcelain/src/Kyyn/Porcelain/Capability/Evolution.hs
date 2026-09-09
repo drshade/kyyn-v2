@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Capability.Evolution (applyEvolution, evaluateWorkspace, checkWorkspace, acceptStoredEvolution) where
+module Kyyn.Porcelain.Capability.Evolution (applyEvolution, evaluateWorkspace, checkEvolution, checkSavedCandidate, acceptStoredEvolution) where
 
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Evolution
@@ -22,14 +22,21 @@ evaluateWorkspace workspace = do
   captured <- captureEvolution workspace
   either (pure . Left . ProposedCodeRejected) applyEvolution captured
 
-checkWorkspace :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
+checkEvolution :: (EvolutionAuthoring :> es, EvolutionExecution :> es, EvolutionStore :> es,
+    RootExecution :> es, RootStore :> es)
+  => EvolutionWorkspace -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
+checkEvolution workspace = do
+  evaluated <- evaluateWorkspace workspace
+  traverse checkCandidate evaluated
+
+checkSavedCandidate :: (EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (CheckResult (Candidate (Validated Root)))
-checkWorkspace workspace = do
+checkSavedCandidate workspace = do
   loaded <- loadCandidate workspace
   case loaded of
     Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
     Right Nothing -> pure (Rejected (ValidationReport [errorDiagnostic "evolution.no-candidate"
-      "Evaluate this evolution first; no saved candidate is available"]))
+      "Check this evolution first; no saved candidate is available"]))
     Right (Just candidate) -> checkCandidate candidate
 
 applyEvolution :: (EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
@@ -39,7 +46,7 @@ applyEvolution captured = do
   case evaluated of
     Left rejection -> pure (Left rejection)
     Right (EvaluatedEvolution (CapturedEvolution context@(EvolutionContext _ _ _
-        (WorkspaceSnapshot _ _ target _ _))) (After schema) value report) -> do
+        (WorkspaceSnapshot _ _ target _ _)) _ _) (After schema) value report) -> do
       materialized <- materializeRoot schema target value
       case materialized of
         Left diagnostics -> pure (Left (ProposedCodeRejected diagnostics))
@@ -56,7 +63,7 @@ acceptStoredEvolution branch metadata workspace = do
     Left diagnostics -> pure (NotAccepted (InvalidMaterial diagnostics))
     Right (Just revision) -> pure (alreadyAccepted revision)
     Right Nothing -> do
-      checked <- checkWorkspace workspace
+      checked <- checkSavedCandidate workspace
       case checked of
         Rejected (ValidationReport diagnostics) -> pure (NotAccepted (InvalidMaterial diagnostics))
         Passed value _ -> acceptEvolution branch metadata value

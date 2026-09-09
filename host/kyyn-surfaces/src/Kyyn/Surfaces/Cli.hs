@@ -29,7 +29,6 @@ data EvolutionCommand
   = NewEvolution EvolutionName (Maybe GitRevision)
   | ListEvolutions EvolutionFilter
   | ShowEvolution EvolutionId
-  | EvaluateEvolution EvolutionId
   | CheckEvolution EvolutionId
   | ReadyEvolution EvolutionId
   | DraftEvolution EvolutionId
@@ -53,8 +52,7 @@ progressMessage request = case request of
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
   Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
-  Evolution (EvaluateEvolution selectedId) -> Just ("Evaluating evolution " ++ evolutionIdName selectedId ++ "...")
-  Evolution (CheckEvolution selectedId) -> Just ("Checking candidate " ++ evolutionIdName selectedId ++ "...")
+  Evolution (CheckEvolution selectedId) -> Just ("Evaluating and checking evolution " ++ evolutionIdName selectedId ++ "...")
   Evolution (AcceptEvolution selectedId) -> Just ("Checking and accepting evolution " ++ evolutionIdName selectedId ++ "...")
   _ -> Nothing
 
@@ -91,8 +89,7 @@ evolutionParser = hsubparser
       (ListEvolutions <$> flag AllEvolutions ExcludeDrafts
         (long "exclude-drafts" <> help "Omit work-in-progress drafts"))
   <> group "show" "Inspect lifecycle state and the available evolution report" (ShowEvolution <$> identity)
-  <> group "evaluate" "Execute the evolution and save its candidate" (EvaluateEvolution <$> identity)
-  <> group "check" "Check the saved candidate without rerunning the evolution" (CheckEvolution <$> identity)
+  <> group "check" "Evaluate the current workspace, save its candidate and validate it" (CheckEvolution <$> identity)
   <> group "ready" "Mark a workspace ready for acceptance" (ReadyEvolution <$> identity)
   <> group "draft" "Return a workspace to draft" (DraftEvolution <$> identity)
   <> group "accept" "Check and accept the saved candidate against its Before revision" (AcceptEvolution <$> identity)

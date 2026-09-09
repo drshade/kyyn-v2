@@ -122,7 +122,7 @@ openingTests contract factFiles = do
   unless (opened == Root contract factFiles authored) (fail "Opening changed the selected files")
   definition <- right (runPureEff (runDhallHandling (runRootStore (readRootDefinition authored))))
   source <- right (execute sdk (openCapturedSource captured))
-  unless (source == SourceRoot contract authored definition) (fail "Source opening changed schema/code/definition")
+  unless (source == SourceRoot contract authored definition []) (fail "Source opening changed schema/code/definition")
   sourceWithoutFacts <- right (execute sdk (openCapturedSource authored))
   unless (sourceWithoutFacts == source) (fail "Source opening depends on facts")
   corrupt <- tree [("facts/root.dhall", "not Dhall"), ("facts/unknown.bin", Bytes.pack [255,0])]
@@ -137,6 +137,13 @@ openingTests contract factFiles = do
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
   sourceFromGit <- right (execute sdk (loadSourceAt repo revision (Subtree prefix)))
   unless (sourceFromGit == source) (fail "Source loading differs from captured source opening")
+  (input,closure) <- right (execute sdk (loadRootInputAt repo revision (Subtree prefix)))
+  unless (input == opened && null closure) (fail "Input capture changed root bytes or source closure")
+  let undecoded = runPureEff . runDhallHandling . schemaMock (rootSchema contract)
+        . gitMock withCorruptFacts . runRootStore . runRootOpening sdk $
+          loadRootInputAt repo revision (Subtree prefix)
+  (corruptInput,_) <- right undecoded
+  unless (corruptInput == Root contract corrupt authored) (fail "Input capture decoded or changed malformed facts")
   otherRevision <- right (gitRevision (replicate 40 'b'))
   rejected (execute sdk (loadSourceAt repo otherRevision (Subtree prefix)))
   rejected (execute sdk (loadSourceAt repo revision WholeTree))

@@ -127,6 +127,7 @@ data SourceRoot = SourceRoot
   { schema :: RootContract
   , code :: FileTree
   , definition :: RootDefinition
+  , loadedSources :: [RelativePath]
   }
 
 data RootOpening :: Effect where
@@ -136,12 +137,20 @@ data RootOpening :: Effect where
   OpenCapturedRoot :: FileTree -> RootOpening m (Either [Diagnostic] Root)
   LoadRootAt :: Repository -> GitRevision -> TreePath
              -> RootOpening m (Either [Diagnostic] Root)
+  LoadRootInputAt :: Repository -> GitRevision -> TreePath
+                 -> RootOpening m (Either [Diagnostic] (Root, [RelativePath]))
 
 runRootOpening
   :: (Git :> es, SchemaInspection :> es, RootStore :> es)
   => FileTree -- installed SDK sources, with compiler-relative paths
   -> Eff (RootOpening : es) a -> Eff es a
 ```
+
+`LoadRootInputAt` captures the selected Git subtree, inspects its schema once and
+returns a Root with undecoded fact bytes plus its source dependency paths. Evolution
+capture uses it to retain one immutable input without recompilation. It does not
+claim structural or semantic validation of the facts. Ordinary `LoadRootAt` shares
+that opening implementation and additionally checks structural fact decoding.
 
 The manifest is `kb.dhall` inside the selected root subtree. Its fields are
 `schemaType`, `schemaMetadata`, `validator` and the `queries` registration list

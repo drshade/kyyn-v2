@@ -35,7 +35,8 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
-import Kyyn.Porcelain.Capability.Evolution (applyEvolution)
+import Kyyn.Porcelain.Capability.Evolution (applyEvolution, checkEvolution)
+import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionStore
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..), preparedRoot)
@@ -69,7 +70,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       location = EvolutionWorkspace kb identity
       snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft []) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
-      captured = CapturedEvolution context
+      captured = CapturedEvolution context (Root schema facts code) []
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       report = EvolutionReport
@@ -152,7 +153,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         _ -> error "Expected record root value"
       migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft []) empty migratedCode empty empty
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
-      migratedCapture = CapturedEvolution migratedContext
+      migratedCapture = CapturedEvolution migratedContext (Root schema facts code) []
       migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
         [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
@@ -240,6 +241,26 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         _ -> error "Compile-rejected candidate ran checking")
   compileResult <- runEff . runDhallHandling . runRootStore . compileRejected $ checkCandidate candidate
   unless (compileResult == Rejected (ValidationReport compileError)) (fail "Compile error did not reject candidate checking")
+  previousPointer <- Char8.readFile pointer
+  combined <- execute . captureMock location captured . evaluationMock captured (Right evaluated)
+    . validationMock root (ValidationReport [invalid]) $ checkEvolution location
+  unless (combined == Right (Right (Rejected (ValidationReport [invalid]))))
+    (fail "Combined check lost semantic rejection")
+  invalidPointer <- Char8.readFile pointer
+  unless (invalidPointer /= previousPointer) (fail "Combined check did not save its rejected candidate")
+  retained <- execute (loadCandidate location) >>= right >>= right
+  unless (retained == Just candidate) (fail "Rejected candidate was unavailable for inspection")
+  preparation <- execute . captureMock location captured . evaluationMock captured (Left rejection)
+    . validationMock root (error "Preparation refusal reached validation") $ checkEvolution location
+  unless (preparation == Right (Left rejection)) (fail "Combined check lost preparation refusal")
+  unchangedPointer <- Char8.readFile pointer
+  unless (unchangedPointer == invalidPointer) (fail "Preparation refusal replaced the previous candidate")
+  passed <- execute . captureMock location captured . evaluationMock captured (Right evaluated)
+    . validationMock root (ValidationReport [warning]) $ checkEvolution location
+  case passed of
+    Right (Right (Passed result (ValidationReport ds))) ->
+      unless (fmap validatedValue result == candidate && ds == [warning]) (fail "Combined check lost candidate or warnings")
+    other -> fail (show other)
   forM_ ["../outside", "missing", ""] $ \bad -> do
     Char8.writeFile pointer bad
     execute (loadCandidate location) >>= storageRejected
@@ -275,6 +296,11 @@ contractDescriptions baseline = do
 
 noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Candidate operation read Git"
+
+captureMock :: EvolutionWorkspace -> CapturedEvolution -> Eff (EvolutionAuthoring : es) a -> Eff es a
+captureMock expected captured = interpret $ \_ -> \case
+  CaptureEvolution actual | actual == expected -> pure (Right captured)
+  _ -> error "Combined check selected a different workspace or created one"
 
 evaluationMock :: CapturedEvolution -> Either PreviewRejection EvaluatedEvolution
   -> Eff (EvolutionExecution : es) a -> Eff es a

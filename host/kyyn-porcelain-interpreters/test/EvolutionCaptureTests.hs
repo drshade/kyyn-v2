@@ -4,7 +4,8 @@ module EvolutionCaptureTests (evolutionCaptureTests) where
 import Control.Monad (forM_, unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
-import Effectful (Eff, IOE, (:>), runEff)
+import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
+import Effectful (Eff, IOE, (:>), runEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -14,7 +15,7 @@ import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (directoryScope, relativePath)
-import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -49,10 +50,11 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   identity <- right (evolutionId "e001")
   missing <- right (evolutionId "e002")
   sourceTree <- tree [("Schema.hs", "selected source"), ("Helpers.hs", "selected helper")]
-  sourceCode <- tree [("kb.dhall", "selected manifest"), ("src/Schema.hs", "selected source"),
+  sourceCode <- tree [("kb.dhall", "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"), ("src/Schema.hs", "selected source"),
     ("src/Helpers.hs", "selected helper"), ("examples/check.dhall", "selected example"),
     ("plugins/config/provider.dhall", "selected config")]
-  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] sourceTree)
+  expectedClosure <- traverse (right . relativePath) ["Schema.hs", "Helpers.hs"]
+  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] sourceTree) expectedClosure
   forM_ [Nothing, Just "examples/sales"] $ \prefixName -> do
     prefix <- maybe (pure WholeTree) (fmap Subtree . right . relativePath) prefixName
     rootPath <- Subtree <$> right (relativePath (maybe "root" (++ "/root") prefixName))
@@ -65,9 +67,14 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
         execute :: GitRevision -> Either OperationalFailure (Either [Diagnostic] SourceRoot)
           -> Eff TestEffects a
           -> IO (Either OperationalFailure a)
-        execute selected answer = runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-          . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock repo selected rootPath answer
-          . runEvolutionStore . runEvolutionAuthoring
+        execute selected answer action = do
+          count <- newIORef 0
+          result <- runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
+            . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock count repo selected rootPath answer
+            . runEvolutionStore . runEvolutionAuthoring $ action
+          opens <- readIORef count
+          unless (opens <= 1) (fail "Capture reopened Before within one operation")
+          pure result
         success :: Eff TestEffects a -> IO (Either OperationalFailure a)
         success = execute revision (Right (Right source))
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
@@ -77,7 +84,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     unless (createdKb == kb && Right createdId == evolutionId (evolutionIdName createdId))
       (fail "Creation returned an invalid KB or directory ID")
     CapturedEvolution (EvolutionContext _ _ (Before createdBase _) (WorkspaceSnapshot
-      (WorkspaceManifest _ actualName explanation state []) createdBefore createdTarget createdChange createdNotes)) <-
+      (WorkspaceManifest _ actualName explanation state []) createdBefore createdTarget createdChange createdNotes)) _ _ <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
     identityEntry <- tree [("Evolution.hs",identityEvolutionSource)]
@@ -101,11 +108,13 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "change/Evolution.hs" "unfinished entry"
     write "notes/review.md" "original note"
     captured@(CapturedEvolution context@(EvolutionContext actualKb actualId (Before base actualContract)
-      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _ _) before target _ _))) <-
+      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _ _) before target _ _)) input closure) <-
       success (captureEvolution location) >>= right >>= right
     unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision && actualContract == contract && before == sourceTree)
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
     expectedTarget <- tree [("kb.dhall", "unfinished target manifest"), ("src/Schema.hs", "unfinished target source")]
+    emptyFacts <- tree []
+    unless (input == Root contract emptyFacts sourceCode && closure == expectedClosure) (fail "Capture lost its input root or closure")
     unless (target == expectedTarget) (fail "Capture changed proposed target bytes")
     snapshot <- noOpening (readWorkspace location) >>= right >>= right
     unless (case context of EvolutionContext _ _ _ material -> snapshot == material)
@@ -121,7 +130,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     noOpening (matchesCapturedInputs context) >>= right >>= right >>= assertFalse
     rebased <- execute revisionB (Right (Right source)) (captureEvolution location) >>= right >>= right
     case rebased of
-      CapturedEvolution (EvolutionContext _ _ (Before selected _) _) ->
+      CapturedEvolution (EvolutionContext _ _ (Before selected _) _) _ _ ->
         unless (selected == revisionB) (fail "Capture reused the old Before revision")
     write "manifest.dhall" (manifest 'a' "Draft")
     write "before/Schema.hs" "edited copy, same schema type"
@@ -148,7 +157,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "manifest.dhall" (manifest 'a' "Draft")
     recaptured <- success (captureEvolution location) >>= right >>= right
     case (captured, recaptured) of
-      (CapturedEvolution (EvolutionContext _ _ _ original), CapturedEvolution (EvolutionContext _ _ _ current)) ->
+      (CapturedEvolution (EvolutionContext _ _ _ original) _ _, CapturedEvolution (EvolutionContext _ _ _ current) _ _) ->
         unless (original /= current) (fail "Later note unexpectedly changed the original snapshot")
     missingResult <- noOpening (captureEvolution (EvolutionWorkspace kb missing))
     case missingResult of
@@ -156,8 +165,9 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       _ -> fail "Missing workspace did not remain an operational storage failure"
   let failure = StorageUnavailable (StorageDiagnostic WriteFile "fixture" "write failed")
   rootPath <- Subtree <$> right (relativePath "root")
+  count <- newIORef 0
   failedWrite <- runEff . runFailure . failingWrites failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
-    . openingMock repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
+    . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   putStrLn "Evolution capture verifies selected Before copies, KB paths and live input matching."
@@ -172,13 +182,19 @@ noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Capture bypassed RootOpening for Git"
 
 openingMock
-  :: Failure :> es => Repository -> GitRevision -> TreePath
+  :: (Failure :> es, IOE :> es) => IORef Int -> Repository -> GitRevision -> TreePath
   -> Either OperationalFailure (Either [Diagnostic] SourceRoot)
   -> Eff (RootOpening : es) a -> Eff es a
-openingMock expectedRepo expectedRevision expectedPath answer = interpret $ \_ -> \case
-  LoadSourceAt repo revision path
-    | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> either raiseFailure pure answer
-  _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
+openingMock count expectedRepo expectedRevision expectedPath answer = interpret $ \_ operation -> do
+  liftIO (modifyIORef' count (+1))
+  case operation of
+    LoadSourceAt repo revision path
+      | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> either raiseFailure pure answer
+    LoadRootInputAt repo revision path
+      | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
+        either raiseFailure (pure . fmap (\(SourceRoot schema code _ closure) ->
+          (Root schema (either error id (fileTree [])) code, closure))) answer
+    _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
 
 manifest :: Char -> String -> Bytes.ByteString
 manifest digit state = Char8.pack ("{ before = { revision = " ++ show (replicate 40 digit) ++
