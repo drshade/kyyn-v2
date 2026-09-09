@@ -38,7 +38,7 @@ shapeOf t@(Algebraic "Kyyn.Types.Fact.Fact" _ _) = case sdkFactPayload t of
   Just p -> Record <$> sequence [(,) "id" <$> shapeOf sdkFactIdType, (,) "value" <$> shapeOf p]
   Nothing -> Left "unsupported SDK Fact representation"
 shapeOf (Algebraic _ _ [Constructor _ fs])
-  | not (null fs) && all named fs = Record <$> recordFields fs
+  | all named fs = Record <$> recordFields fs
 shapeOf (Algebraic _ _ cs) = Union <$> mapM arm cs
   where
     arm (Constructor name fs) = (,) (reverse (takeWhile (/= '.') (reverse name))) <$> payload name fs

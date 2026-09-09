@@ -33,6 +33,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
       guest = repo </> "guest/kyyn-runtime/src"
       json = repo </> "vendor/json"
   toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)
+  testEmptyRoot temporaryScope toolchain compiler fixtures guest json
   testCompilation temporaryScope toolchain
   let compile sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
         compileGuest sources
@@ -95,6 +96,29 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
       replace "123456789012345678901234567890" "01",
       replace "\"Some\"" "\"None\""] rejection
   putStrLn "Compiler-inspected ADT codecs: real MicroHs round trips and rejection cases passed."
+
+testEmptyRoot :: DirectoryScope -> GuestToolchain -> FilePath -> FilePath -> FilePath -> FilePath -> IO ()
+testEmptyRoot temporary toolchain compiler fixtures guest json = do
+  (inspected,_) <- inspectDataType compiler [fixtures] "Empty.Root" >>= either (fail . show) pure
+  generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
+  second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
+  captured <- mapM (\(base, path) -> (,) (checkedPath path) <$> Bytes.readFile (base </> path))
+    [(fixtures,"Empty.hs"), (fixtures,"RoundTrip.hs"), (guest,"Kyyn/Runtime/Json.hs"),
+     (json,"Text/JSON/Types.hs"), (json,"Text/JSON/String.hs")]
+  sources <- either fail pure (guestSources (checkedPath "RoundTrip.hs")
+    (captured ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),
+                    (checkedPath "KyynSecondCodec.hs", B.toStrict (utf8 second))]))
+  compiled <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO temporary
+    (runGuestCompilation toolchain (compileGuest sources))))) >>= either (fail . show) (either (fail . show) pure)
+  forM_ [("{}", A.object [], True), ("{\"extra\":true}", A.object ["error" A..= True], False),
+    ("{\"tag\":\"Root\"}", A.object ["error" A..= True], False)] $ \(input,expected,valid) -> do
+      result <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO temporary
+        (runGuestCompilation toolchain (executeCompiled compiled (B.toStrict (utf8 (input ++ "\n"))))))))
+      (output,ProcessExit status diagnostics) <- either (fail . show) pure result
+      actual <- either fail pure (A.eitherDecodeStrict output)
+      unless (status == 0 && actual == expected && Bytes.null diagnostics == valid)
+        (fail ("Empty root codec mismatch: " ++ show result))
+  putStrLn "Empty root: compiler-inspected MicroHs codecs round-trip {} and reject extra/tagged fields."
 
 tag :: String -> Maybe A.Value -> A.Value
 tag name value = A.object (["tag" A..= name] ++ maybe [] (\v -> ["value" A..= v]) value)

@@ -38,6 +38,15 @@ import PublicationTests (publicationTests)
 
 main :: IO ()
 main = do
+  emptyContract <- right (checkContract
+    (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
+  emptyCode <- tree []
+  emptyChecked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue emptyContract (object [])))))
+  emptyRoot@(Root _ emptySnapshot _) <- right
+    (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode emptyChecked))))
+  emptyReloaded <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking emptyRoot))))
+  unless (emptyReloaded == emptyChecked && map (relativeName . fst) (files emptySnapshot) == ["facts/root.dhall"])
+    (fail "Empty root did not round-trip through a single Dhall file")
   contract <- right (checkContract schema metadata >>= checkRootLayout)
   other <- right (checkContract schema (SchemaMetadata [RoleDecl "label" "Changed metadata" Title] [] declarations) >>= checkRootLayout)
   code <- tree [("src/Schema.hs", "authored code"), ("kb.dhall", "selected schema")]

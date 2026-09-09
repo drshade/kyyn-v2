@@ -9,6 +9,9 @@ import Kyyn.Types.SchemaMetadata
 
 contractTests :: IO ()
 contractTests = do
+  empty <- either (fail . show) pure (checkContract
+    (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
+  unless (contractShape (rootSchema empty) == Record []) (fail "Empty root is not an empty record")
   unless (shapeOf sdkFactIdType == Right (Scalar TextScalar)) (fail "SDK FactId must project to text")
   unless (shapeOf (Algebraic "Model.FactId" [] [Constructor "Model.FactId" [(Nothing,StringType)]])
     == Right (Union [("FactId", Just (Scalar TextScalar))])) (fail "author type must not gain SDK scalar semantics by short name")

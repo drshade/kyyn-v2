@@ -83,7 +83,7 @@ unique label xs = unless (length (nub xs) == length xs) (Left ("duplicate " ++ l
 
 recordFields :: DataType -> Either String [(String, DataType)]
 recordFields (Algebraic _ _ [Constructor _ fs])
-  | not (null fs) && all (\(name,_) -> name /= Nothing) fs =
+  | all (\(name,_) -> name /= Nothing) fs =
       Right [(n,t) | (Just n,t) <- fs]
 recordFields t = Left (haskellType t ++ ": expected a single record constructor")
 

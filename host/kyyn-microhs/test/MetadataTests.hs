@@ -20,6 +20,7 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Protocol.Validation (decodeReport)
+import Kyyn.Plumbing.Protocol.Query (queryBindings)
 import Kyyn.Plumbing.Capability.SchemaInspection.Metadata
 import Kyyn.Domain.Contract (metadataOf, rootType, checkRootLayout)
 import Kyyn.Plumbing.Capability.SchemaInspection
@@ -154,6 +155,32 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   validationCode <- either fail pure (fileTree
     [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])
   sdk <- either fail pure (fileTree (reportFiles ++ filter ((/= path "Authored.hs") . fst) files))
+  let emptySchema = "module Empty where\nimport Kyyn.Types.SchemaMetadata\ndata Root = Root deriving (Eq, Show)\nschemaMetadata :: SchemaMetadata\nschemaMetadata = SchemaMetadata [] [] []\n"
+      emptyValidator = "module Validate where\nimport qualified Empty\nimport Kyyn.Types.Diagnostic\nvalidate :: Empty.Root -> ValidationReport\nvalidate _ = ValidationReport []\n"
+      emptyManifest = Text.replace "ValidationEntry.validate" "Validate.validate"
+        (Text.replace "Authored" "Empty" (Text.pack manifest))
+  emptySource <- either fail pure (schemaSource
+    ((path "Empty.hs", utf8 emptySchema) : filter ((/= path "Authored.hs") . fst) files)
+    "Empty.Root" "Empty.schemaMetadata")
+  emptyInspected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+    . runGuestCompilation toolchain . runSchemaInspectionIO toolchain $ inspectSchema emptySource
+  InspectedSchema emptyChecked _ <- either (fail . show) (either (fail . show) pure) emptyInspected
+  emptyContract <- either (fail . show) pure (checkRootLayout emptyChecked)
+  _ <- either fail pure (queryBindings emptyContract)
+  emptyCode <- either fail pure (fileTree
+    [(path "src/Empty.hs", utf8 emptySchema), (path "src/Validate.hs", utf8 emptyValidator),
+     (path "kb.dhall", Text.encodeUtf8 emptyManifest)])
+  emptyValue <- either (fail . show) pure
+    (runPureEff (runDhallHandling (runRootStore (checkRootValue emptyContract (Aeson.object [])))))
+  emptyRoot <- either (fail . show) pure
+    (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode emptyValue))))
+  emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ do
+      prepared <- prepareRoot emptyRoot
+      either (pure . Left) validateRoot prepared
+  unless (emptyResponse == Right (Right (ValidationReport [])))
+    (fail ("Empty root validation failed: " ++ show emptyResponse))
+  putStrLn "Empty root: real schema metadata, zero-collection bindings, Dhall facts and guest validator passed."
   forM_ [(input, expectedWarnings),
          (Text.encodeUtf8 (Text.replace "A task" "" (Text.decodeUtf8 input)), expectedWarnings ++ [blankError])] $ \(inputBytes, expectedDiagnostics) -> do
     factValue <- either fail pure (Aeson.eitherDecodeStrict inputBytes)
