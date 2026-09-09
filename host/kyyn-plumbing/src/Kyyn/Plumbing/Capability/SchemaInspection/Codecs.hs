@@ -68,9 +68,5 @@ variables fs = ["v" ++ show i | i <- [0 .. length fs - 1]]
 allNamed :: [(Maybe String, a)] -> Bool
 allNamed = all (\(name,_) -> name /= Nothing)
 
-isRecord :: [Constructor] -> Bool
-isRecord [Constructor _ fs] = allNamed fs
-isRecord _ = False
-
 shortName :: String -> String
 shortName = reverse . takeWhile (/= '.') . reverse
