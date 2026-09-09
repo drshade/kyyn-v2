@@ -57,7 +57,7 @@ generateCodecs moduleName root = do
        " <$> at " ++ show (shortName name ++ ".value") ++ " (decodeWith " ++ ref t ++ " value)"]
     decodeArm _ = error "unsupported constructor passed validation"
     decodeRecord indent name fs value =
-      [indent ++ "values <- fields " ++ show [n | (Just n,_) <- fs] ++ " " ++ value] ++
+      [indent ++ (if null fs then "_" else "values") ++ " <- fields " ++ show [n | (Just n,_) <- fs] ++ " " ++ value] ++
       [indent ++ v ++ " <- field " ++ show n ++ " " ++ ref t ++ " values"
       | ((Just n,t),v) <- zip fs (variables fs)] ++
       [indent ++ "pure (" ++ unwords (name : variables fs) ++ ")"]
@@ -67,10 +67,6 @@ variables fs = ["v" ++ show i | i <- [0 .. length fs - 1]]
 
 allNamed :: [(Maybe String, a)] -> Bool
 allNamed = all (\(name,_) -> name /= Nothing)
-
-isRecord :: [Constructor] -> Bool
-isRecord [Constructor _ fs] = not (null fs) && allNamed fs
-isRecord _ = False
 
 shortName :: String -> String
 shortName = reverse . takeWhile (/= '.') . reverse

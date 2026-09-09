@@ -74,8 +74,18 @@ can still refer to reachable record types within those values. Declared collecti
 metadata is checked, but a query value containing a list of facts need not declare
 that list as a persistent collection.
 
-Persistent roots additionally pass `checkRootLayout`: a nonempty single record
+Persistent roots additionally pass `checkRootLayout`: a single record
 constructor, with every direct `[Fact a]` field declared as a collection.
+The zero-field case is included: its fields are vacuously both all named and all
+positional, and the convention chooses the record projection. `data Root = Root`
+and `data Root = Root {}` therefore have the same empty-record shape
+(`{}` in JSON, `{=}` in Dhall).
+This gives initialization an empty root without dummy fields or collections.
+The rule applies to all values, not only initialization; multi-constructor
+nullary enums remain tagged unions. Generated guest codecs use the same projection.
+Adding a second constructor to a single-nullary-constructor type changes its
+encoding from an empty record to a tagged union: it requires a schema migration,
+not merely adding a compatible case.
 `RootContract` refines the existing checked value without computing another
 identity or duplicating its schema. `rootSchema` returns that same checked value;
 the identity encoding is unchanged. RootOpening refines inspected contracts, and
