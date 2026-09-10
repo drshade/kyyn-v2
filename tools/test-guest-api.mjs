@@ -51,7 +51,10 @@ try {
   const fallback = json('guest', 'symbol', 'show', 'Kyyn.Edit.modify').symbols[0];
   assert.equal(fallback.declaration, null);
   assert.equal(fallback.documentation, null);
-  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.modify').stdout.includes('[checked]'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.modify').stdout.includes('-- [checked]'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact').stdout.includes('data Fact a = Fact FactId a'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.FactId').stdout.includes('newtype FactId = FactId String'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.Collection').stdout.includes('data Collection root a'));
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);
     assert.equal(response.status, 1);

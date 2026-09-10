@@ -52,6 +52,34 @@ main = do
   assert "type documentation" (documentationFor "Item" TypeNamespace == [Just "An abstract item. Its constructor stays private."])
   assert "private constructor still excluded" (null (documentationFor "PrivateItem" ValueNamespace))
   assert "alias documentation" (documentationFor "Alias" TypeNamespace == [Just "A documented alias."])
+  dataModules <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources)
+    ["Kyyn.DataFixture", "Kyyn.DataReexport"]
+  let declarationIn m n = case [d | ApiModule name symbols <- dataModules, name == m,
+          ApiSymbol name' TypeNamespace _ _ (Just d) _ <- symbols, name' == n] of
+        [d] -> d
+        _ -> error ("Missing data declaration: " ++ m ++ "." ++ n)
+      originalDeclaration = declarationIn "Kyyn.DataFixture"
+  assert "public record fields" (all (`isInfixOf` originalDeclaration "Record") ["title", "count", "String", "Int"])
+  assert "abstract data header" (words (originalDeclaration "Abstract") == ["data", "Abstract"])
+  assert "abstract newtype header" (words (originalDeclaration "AbstractNew") == ["newtype", "AbstractNew"])
+  assert "partial constructors" ("Visible" `isInfixOf` originalDeclaration "Partial"
+    && not ("Secret" `isInfixOf` originalDeclaration "Partial"))
+  assert "private record selectors" (not ("hidden" `isInfixOf` originalDeclaration "HiddenFields"))
+  assert "selective constructor reexport" ("Empty" `isInfixOf` declarationIn "Kyyn.DataReexport" "Choice"
+    && not ("Full" `isInfixOf` declarationIn "Kyyn.DataReexport" "Choice"))
+  assert "abstract record reexport" (words (declarationIn "Kyyn.DataReexport" "Record") == ["data", "Record"])
+  withSystemTempDirectory "kyyn-api-data-" $ \temporary -> do
+    mapM_ (putStrLn . originalDeclaration) ["Choice", "Record", "Wrapped", "Partial", "HiddenFields", "Expr"]
+    createDirectoryIfMissing True (temporary </> "Kyyn")
+    writeFile (temporary </> "Kyyn/PresentedData.hs") (unlines
+      (["{-# LANGUAGE GADTs, ExistentialQuantification #-}", "module Kyyn.PresentedData where"]
+      ++ map originalDeclaration ["Choice", "Record", "Wrapped", "Partial", "HiddenFields", "Expr"]))
+    presented <- inspect [temporary] ["Kyyn.PresentedData"]
+    let constructors name modules' = [(n,t) | ApiModule m symbols <- modules', m == name,
+          ApiSymbol n ValueNamespace _ t _ _ <- symbols,
+          n `elem` ["Empty", "Full", "Record", "Wrapped", "Visible", "HiddenFields", "Number", "Apply"]]
+    assert "presented constructors recompile with unchanged types"
+      (constructors "Kyyn.DataFixture" dataModules == constructors "Kyyn.PresentedData" presented)
   assert "upstream fallback must remain explicit" (case matches "Kyyn.Edit" "modify" ValueNamespace of
     [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" signature Nothing Nothing] -> "StateT" `isInfixOf` signature
     _ -> False)
@@ -60,7 +88,8 @@ main = do
     _ -> False)
   withSystemTempDirectory "kyyn-api-" $ \temporary -> do
     let unique = nubBy sameOrigin (concatMap symbolsIn public)
-        declarations = [(n,ns,origin,decl) | ApiSymbol n ns origin _ (Just decl) _ <- unique]
+        declarations = [(n,ns,origin,decl) | ApiSymbol n ns origin _ (Just decl) _ <- unique,
+          not ("data " `isPrefixOf` decl || "newtype " `isPrefixOf` decl)]
         owner = reverse . drop 1 . dropWhile (/= '.') . reverse
     mapM_ (\directory -> copyTree directory temporary) (take 2 sources)
     forM_ (nub [owner origin | (_,_,origin,_) <- declarations]) $ \m -> do

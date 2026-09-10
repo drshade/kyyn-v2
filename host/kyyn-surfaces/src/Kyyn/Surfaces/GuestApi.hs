@@ -31,7 +31,7 @@ namespaceName ValueNamespace = "value"
 symbolText :: ApiSymbol -> [String]
 symbolText (ApiSymbol name namespace origin signature declaration documentation) =
   [""] ++ maybe [] (map comment . lines) documentation
-  ++ maybe [namespaceName namespace ++ " " ++ name ++ " :: " ++ signature ++ "  [checked]"] lines declaration
+  ++ maybe [namespaceName namespace ++ " " ++ name ++ " :: " ++ signature ++ "  -- [checked]"] lines declaration
   ++ ["-- [Defined as " ++ origin ++ "]"]
   where
     comment "" = "--"
