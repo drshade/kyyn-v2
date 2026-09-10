@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
-    'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result',
+    'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List',
     'Kyyn.Domain.KnowledgeBase',
     'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',

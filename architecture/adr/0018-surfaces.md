@@ -149,8 +149,10 @@ Show data/newtype declarations projected to the exported constructors and
 selectors: abstract types have only a header, and constructors with private
 selectors use positional arguments. Do not include derived instances. GADTs may
 be presented in equivalent lowered existential/equality-constraint syntax with
-source-safe parameter names. Mark checked-signature fallbacks in a comment;
-all catalogue entries are compiler-checked.
+source-safe parameter names. Mark fallbacks with `-- [compiler signature]`;
+all catalogue entries are compiler-checked. Human function/constructor signatures
+have no `value` prefix; kind summaries retain `type`. Display generated accessor
+origins as module-qualified field names, preserving exact compiler identities in JSON.
 
 Documentation uses a small source convention: a `-- |` block immediately above
 a signature or type declaration, continued by adjacent `--` lines. Attach it to

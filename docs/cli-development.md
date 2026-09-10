@@ -191,10 +191,13 @@ and any public selectors remain separate entries. These are API summaries, not
 an instance inventory or a source-file dump; GADTs may use equivalent existential
 and equality-constraint syntax with renamed parameters.
 
-Entries marked `-- [checked]` use the compiler's expanded type or kind instead;
+Entries marked `-- [compiler signature]` use the compiler's expanded type or kind instead;
 all entries are compiler-checked. JSON distinguishes
 these with a null `declaration` and always includes `checkedSignature`.
 Re-exported transformer operations such as `modify` currently use this checked form.
+Functions and constructors always use `name :: signature`, without a `value`
+prefix; kind-only fallbacks use `type Name :: kind`. Human origins omit generated
+accessor machinery, while JSON's `definedAs` retains the exact compiler identity.
 
 Documentation appears as comments above the declaration and in JSON's `documentation` field.
 Write `-- |` immediately above a signature or type declaration, with further

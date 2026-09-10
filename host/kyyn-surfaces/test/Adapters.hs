@@ -14,6 +14,7 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Domain.Git
+import qualified Kyyn.Domain.GuestApi as Api
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Publication
@@ -29,9 +30,24 @@ import Kyyn.Porcelain.Capability.Root (inspectRootAt, checkRootAt)
 import Kyyn.Porcelain.Capability.Evolution (checkSavedCandidate)
 import Kyyn.Surfaces.Cli (RootCommand(..))
 import Kyyn.Surfaces.Result
+import qualified Kyyn.Surfaces.GuestApi as GuestApi
 
 main :: IO ()
 main = do
+  let render name namespace origin signature = case GuestApi.symbolResult
+        (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of
+        Response _ _ messages _ -> unlines messages
+  unless ("\n(>>=) :: " `isInfixOf` render ">>=" Api.ValueNamespace "Example.>>=" "a -> b")
+    (fail "Compiler operator signatures must be parenthesized")
+  unless ("\ntype Opaque :: Type  -- [compiler signature]" `isInfixOf`
+      render "Opaque" Api.TypeNamespace "Example.Opaque" "Type")
+    (fail "Kind fallback must retain type namespace")
+  unless ("Defined as Example.source" `isInfixOf`
+      render "source" Api.ValueNamespace "Example.get$.Record.source" "Record -> String")
+    (fail "Accessor origins must be readable")
+  unless ("Defined as Example.get$.Record.different" `isInfixOf`
+      render "source" Api.ValueNamespace "Example.get$.Record.different" "Record -> String")
+    (fail "Unrecognized compiler origins must be preserved")
   let right :: Show e => Either e a -> a
       right = either (error . show) id
       empty = right (fileTree [])
