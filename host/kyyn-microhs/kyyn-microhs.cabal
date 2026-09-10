@@ -8,7 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src ../../vendor/MicroHs/ghc ../../vendor/MicroHs/src
   exposed-modules: Kyyn.MicroHs.Inspection Kyyn.MicroHs.Toolchain Kyyn.MicroHs.Interpreter.GuestCompilation
-    Kyyn.MicroHs.Interpreter.SchemaInspection
+    Kyyn.MicroHs.Interpreter.SchemaInspection Kyyn.MicroHs.ApiInspection
   default-language: Haskell2010
   default-extensions: ScopedTypeVariables TypeSynonymInstances MultiParamTypeClasses FlexibleInstances FlexibleContexts
   ghc-options: -Wall -Wno-unrecognised-warning-flags -Wno-x-partial -Wno-deprecations
@@ -24,6 +24,22 @@ library
     MicroHs.TCMonad MicroHs.TypeCheck MicroHs.Version MHSPrelude Data.Integer
     System.IO.MD5 System.IO.Serialize System.IO.TimeMilli
     Text.ParserComb Text.PrettyPrint.HughesPJLite Text.PrettyPrint.HughesPJLiteClass
+
+executable kyyn-api-catalogue
+  main-is: ApiCatalogue.hs
+  hs-source-dirs: app
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-plumbing,
+    kyyn-plumbing-interpreters, bytestring, filepath, Cabal, effectful-core ==2.6.1.0
+
+test-suite guest-api
+  type: exitcode-stdio-1.0
+  main-is: ApiTests.hs
+  hs-source-dirs: test
+  default-language: Haskell2010
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain, filepath, directory, temporary ==1.3
 
 test-suite codecs
   type: exitcode-stdio-1.0

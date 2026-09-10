@@ -13,6 +13,7 @@ library
     Kyyn.Plumbing.Capability.GuestCompilation.Types
     Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Protocol.Query
+    Kyyn.Plumbing.Protocol.GuestApi
     Kyyn.Plumbing.Protocol.Evolution
     Kyyn.Plumbing.Protocol.EvolutionRecord
     Kyyn.Plumbing.Protocol.EvolutionRecord.Document

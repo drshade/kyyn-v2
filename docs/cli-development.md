@@ -1,7 +1,7 @@
 # Trying the first CLI
 
 The executable is named `kyyn-v2` while the original version owns `kyyn`.
-The current CLI supports root inspection/checking and the evolution commands in
+The current CLI supports guest SDK discovery, root inspection/checking and the evolution commands in
 [ADR 0018](../architecture/adr/0018-surfaces.md#cli-navigation-and-kb-selection).
 The installed integration fixture covers schema-changing acceptance and inherited
 examples; this is not a released installation.
@@ -42,7 +42,7 @@ and bundles MicroHs, its evaluator/preprocessor, libraries and Kyyn SDK beneath
 `lib/kyyn/`. It is a developer staging helper, not a portable release installer
 or a completed distribution/license audit. Building needs the development tools
 in [project practices](PROJECT-PRACTICES.md); executing this staged CLI does not
-invoke GHC, Cabal, Node or a C compiler. Git must be available, or selected with
+invoke GHC, Cabal, Node or a C compiler. For KB commands, Git must be available or selected with
 `--git /absolute/path/to/git`.
 
 The staged compiler uses MicroHs's upstream native build (`bin/gmhs`), exposed
@@ -167,3 +167,26 @@ For a schema-changing authoring example, see the integration fixture's
 saved examples using the host's existing encoder. Run it with
 `bash tools/test-installed.sh`; this is a slower integration check, not necessary
 for each edit to your own evolution.
+
+## Discover the guest SDK
+
+These commands work anywhere; no KB or source checkout is needed:
+
+```sh
+kyyn-v2 guest module list
+kyyn-v2 guest module show Kyyn.Edit
+kyyn-v2 guest symbol show Kyyn.Edit.update
+kyyn-v2 guest symbol show 'Kyyn.Evolution.>=>'
+kyyn-v2 --json guest symbol show Kyyn.Types.Fact.Fact
+```
+
+Module output lists exported types, constructors and functions. Symbol output
+includes its defining name, so reexports can be followed. A name such as `Fact`
+may identify both a type and its constructor; discovery returns both.
+Authored signatures preserve aliases such as `Edit` and `Lens'`. Entries marked
+`[checked]` use the compiler's expanded type or kind instead; JSON distinguishes
+these with a null `declaration` and always includes `checkedSignature`.
+
+The current catalogue covers the public Kyyn SDK and shared types, not every
+upstream library module or a workspace's generated Before/After bindings.
+If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.

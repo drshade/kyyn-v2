@@ -47,6 +47,8 @@ import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
+import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi)
+import Kyyn.Surfaces.GuestApi (executeGuest)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
 import System.FilePath ((</>))
@@ -79,6 +81,12 @@ runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Eithe
 runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
+execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest request)) = do
+  runtime <- runtimeDirectory runtimeOverride
+  case directoryScope runtime of
+    Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
+    Right scope -> finish $ runEff . runFailure . runFileSystemIO scope . runDhallHandling . runGuestApi scope $
+      executeGuest request
 execute (Cli.Invocation selection _ command) = do
   configured <- configure selection
   case configured of
