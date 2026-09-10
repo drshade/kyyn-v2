@@ -11,10 +11,13 @@ test('CLI adapters cannot acquire native IO or interpreter dependencies', () => 
   for (const name of ['System.IO', 'System.Directory', 'Kyyn.Plumbing.Capability.Git',
     'Kyyn.Porcelain.Interpreter.EvolutionStore', 'Kyyn.MicroHs.Inspection',
     'Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Capability.RootOpening',
-    'Kyyn.Porcelain.Capability.EvolutionExecution', 'Effectful']) {
+    'Kyyn.Porcelain.Capability.EvolutionExecution']) {
     assert.deepEqual(checkImports('kyyn-surfaces', `import ${name}`), [name]);
   }
-  assert.deepEqual(checkImports('kyyn-surfaces', 'import Effectful (Eff, IOE)'), ['Effectful']);
+  assert.deepEqual(checkImports('kyyn-surfaces', 'import Effectful (Eff, (:>))'), []);
+  for (const source of ['import Effectful', 'import Effectful (Eff, IOE)', 'import Effectful (liftIO)']) {
+    assert.deepEqual(checkImports('kyyn-surfaces', source), ['Effectful: explicit API-only imports required']);
+  }
 });
 test('evolution SDK stays pure and independent of private transport and native host', () => {
   for (const name of ['System.IO', 'Kyyn.Runtime.Json', 'Effectful', 'Kyyn.Domain.Root']) {
