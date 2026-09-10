@@ -181,7 +181,9 @@ kyyn-v2 --json guest symbol show Kyyn.Schema.Fact
 ```
 
 Module output lists exported types, constructors and functions. Symbol output
-includes its defining name, so reexports can be followed. A name such as `Fact`
+includes its defining name, so shared reexports can be recognized. Look symbols
+up through the listed public modules; their definitions may live in implementation
+modules outside the catalogue. A name such as `Fact`
 may identify both a type and its constructor; discovery returns both.
 Authored signatures preserve aliases such as `Edit` and `Lens'`. Data/newtype
 declarations show public constructors and record fields. Abstract types show only
