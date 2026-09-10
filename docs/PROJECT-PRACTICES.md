@@ -24,8 +24,11 @@ Guest API discovery has two focused checks: `cabal test guest-catalogue
 Dhall codec, and `KYYN_TEST_ROOT="$PWD" MHSCPPHS="$PWD/vendor/MicroHs/bin/cpphs"
 cabal test guest-api --test-show-details=direct` checks real MicroHs exports,
 reexports and abstraction. The latter recompiles copies of the SDK with all
-displayed declarations substituted and compares checked exports; it is in full
-integration, not the fast check. `node tools/test-guest-api.mjs INSTALLED_EXECUTABLE`
+displayed signatures/aliases substituted and compares checked exports; it is in full
+integration. Data/newtype fixtures additionally recompile projected public
+constructors and compare their types up to variable renaming, covering records,
+GADTs, abstract headers and selective reexports. These compiler checks are not in fast
+checks. `node tools/test-guest-api.mjs INSTALLED_EXECUTABLE`
 tests a copied executable/catalogue-only bundle with no KB, Git, SDK sources or
 compiler, including human/JSON results and refusals. It is included in the
 installed integration check.

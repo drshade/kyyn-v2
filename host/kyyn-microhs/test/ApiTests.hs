@@ -1,7 +1,7 @@
 module Main where
 
 import Control.Monad (unless, forM_)
-import Data.Char (isAlpha, isSpace)
+import Data.Char (isAlpha, isAlphaNum, isLower, isSpace)
 import Data.List (nubBy, isInfixOf, isPrefixOf, nub)
 import Kyyn.MicroHs.ApiInspection
 import Kyyn.Domain.GuestApi
@@ -69,13 +69,12 @@ main = do
     && not ("Full" `isInfixOf` declarationIn "Kyyn.DataReexport" "Choice"))
   assert "abstract record reexport" (words (declarationIn "Kyyn.DataReexport" "Record") == ["data", "Record"])
   withSystemTempDirectory "kyyn-api-data-" $ \temporary -> do
-    mapM_ (putStrLn . originalDeclaration) ["Choice", "Record", "Wrapped", "Partial", "HiddenFields", "Expr"]
     createDirectoryIfMissing True (temporary </> "Kyyn")
     writeFile (temporary </> "Kyyn/PresentedData.hs") (unlines
       (["{-# LANGUAGE GADTs, ExistentialQuantification #-}", "module Kyyn.PresentedData where"]
       ++ map originalDeclaration ["Choice", "Record", "Wrapped", "Partial", "HiddenFields", "Expr"]))
     presented <- inspect [temporary] ["Kyyn.PresentedData"]
-    let constructors name modules' = [(n,t) | ApiModule m symbols <- modules', m == name,
+    let constructors name modules' = [(n,alphaSignature t) | ApiModule m symbols <- modules', m == name,
           ApiSymbol n ValueNamespace _ t _ _ <- symbols,
           n `elem` ["Empty", "Full", "Record", "Wrapped", "Visible", "HiddenFields", "Number", "Apply"]]
     assert "presented constructors recompile with unchanged types"
@@ -114,6 +113,23 @@ main = do
 
 assert :: String -> Bool -> IO ()
 assert label ok = unless ok (fail label)
+
+-- These fixture signatures have no shadowed binders. Canonicalize variable
+-- tokens, including fresh kind variables, without changing constructors/operators.
+alphaSignature :: String -> [String]
+alphaSignature source = map canonical tokens
+  where
+    tokens = tokenize source
+    variable (c:_) = isLower c || c == '_'
+    variable [] = False
+    variables = nub [t | t <- tokens, variable t, t /= "forall"]
+    canonical t = maybe t (('v':) . show) (lookup t (zip variables [0 :: Int ..]))
+    tokenize [] = []
+    tokenize (c:cs) | isSpace c = tokenize cs
+    tokenize s@(c:cs)
+      | isAlpha c || c == '_' = let (name,rest) = span (\x -> isAlphaNum x || x `elem` "_'$") s
+                               in name : tokenize rest
+      | otherwise = [c] : tokenize cs
 
 copyTree :: FilePath -> FilePath -> IO ()
 copyTree source destination = do

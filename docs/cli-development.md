@@ -183,12 +183,20 @@ kyyn-v2 --json guest symbol show Kyyn.Types.Fact.Fact
 Module output lists exported types, constructors and functions. Symbol output
 includes its defining name, so reexports can be followed. A name such as `Fact`
 may identify both a type and its constructor; discovery returns both.
-Authored signatures preserve aliases such as `Edit` and `Lens'`. Entries marked
-`[checked]` use the compiler's expanded type or kind instead; JSON distinguishes
+Authored signatures preserve aliases such as `Edit` and `Lens'`. Data/newtype
+declarations show public constructors and record fields. Abstract types show only
+their header; selective reexports show only their exported constructors. If a
+constructor's record labels are not all exported, its arguments appear positionally
+and any public selectors remain separate entries. These are API summaries, not
+an instance inventory or a source-file dump; GADTs may use equivalent existential
+and equality-constraint syntax with renamed parameters.
+
+Entries marked `-- [checked]` use the compiler's expanded type or kind instead;
+all entries are compiler-checked. JSON distinguishes
 these with a null `declaration` and always includes `checkedSignature`.
 Re-exported transformer operations such as `modify` currently use this checked form.
 
-Documentation appears above the signature and in JSON's `documentation` field.
+Documentation appears as comments above the declaration and in JSON's `documentation` field.
 Write `-- |` immediately above a signature or type declaration, with further
 adjacent `--` lines for continuation. A physical blank line ends the association;
 use a bare `--` line for a paragraph break within the documentation. Reexports
