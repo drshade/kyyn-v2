@@ -10,6 +10,7 @@ library
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
     Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
     Kyyn.Porcelain.Capability.Root
+    Kyyn.Porcelain.Capability.GuestApi
     Kyyn.Porcelain.Capability.RootOpening
     Kyyn.Porcelain.Capability.RootPublication
     Kyyn.Porcelain.Capability.WorkspaceStore

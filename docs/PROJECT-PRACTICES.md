@@ -19,6 +19,17 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+Guest API discovery has two focused checks: `cabal test guest-catalogue
+--test-show-details=direct` exercises the read-only catalogue capability and real
+Dhall codec, and `KYYN_TEST_ROOT="$PWD" MHSCPPHS="$PWD/vendor/MicroHs/bin/cpphs"
+cabal test guest-api --test-show-details=direct` checks real MicroHs exports,
+reexports and abstraction. The latter recompiles copies of the SDK with all
+displayed declarations substituted and compares checked exports; it is in full
+integration, not the fast check. `node tools/test-guest-api.mjs INSTALLED_EXECUTABLE`
+tests a copied executable/catalogue-only bundle with no KB, Git, SDK sources or
+compiler, including human/JSON results and refusals. It is included in the
+installed integration check.
+
 - **Available fast check:** `bash tools/test.sh`: documentation/import checks, native
   compilation, process/filesystem tests and pure metadata codec/adapter/contract tests.
   `cabal test cli-arguments --test-show-details=direct` checks pure CLI parsing,

@@ -4,6 +4,7 @@ cd "$(dirname "$0")/.."
 export KYYN_TEST_ROOT="$PWD"
 export MHSDIR="$PWD/vendor/MicroHs"
 make -C vendor/MicroHs bin/mhs bin/mhseval bin/cpphs
+MHSCPPHS="$PWD/vendor/MicroHs/bin/cpphs" cabal test guest-api --test-show-details=direct
 cabal test codecs --test-show-details=direct
 cabal test metadata --test-show-details=direct
 cabal test queries --test-show-details=direct

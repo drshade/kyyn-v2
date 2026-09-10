@@ -4,12 +4,14 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+    'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result',
     'Kyyn.Domain.KnowledgeBase',
     'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+    'Kyyn.Porcelain.Capability.GuestApi', 'Kyyn.Porcelain.Interpreter.GuestApi', 'Kyyn.Surfaces.GuestApi',
     'Kyyn.Domain.Publication', 'Kyyn.Porcelain.Capability.KnowledgeBaseInitialization',
     'Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization',
     'Data.Time.Clock.POSIX', 'Effectful', 'Kyyn.Configuration', 'Kyyn.Domain.Diagnostic',
@@ -37,6 +39,7 @@ const allowed = {
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
   'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.GuestApi',
     'Kyyn.Porcelain.Capability.RootOpening',
     'Kyyn.Domain.Publication', 'Kyyn.Domain.Path', 'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.Validation',
     'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.EvolutionAuthoring',
@@ -102,6 +105,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.GuestApi': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
+    'Data.ByteString', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.DataType',
+    'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.GuestApi', 'Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Plumbing.Protocol.EvolutionRecord': ['Data.Aeson', 'Data.ByteString', 'Data.Text.Encoding', 'Effectful',
     'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Protocol.EvolutionRecord.Document',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport'],
@@ -151,6 +157,9 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Porcelain.Interpreter.GuestApi': ['Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.DhallHandling',
+    'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Protocol.GuestApi', 'Kyyn.Porcelain.Capability.GuestApi'],
   'Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization': ['Control.Monad', 'Control.Monad.Trans.Except',
     'Data.List', 'Data.Maybe', 'Effectful', 'Effectful.Dispatch.Dynamic', 'System.FilePath',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
@@ -174,6 +183,10 @@ const interpreterModules = {
 };
 
 const compilerModules = {
+  'Kyyn.MicroHs.ApiInspection': ['Control.DeepSeq', 'Control.Exception', 'Control.Monad',
+    'Data.Char', 'Data.List', 'Kyyn.Domain.GuestApi', 'MicroHs.Compile', 'MicroHs.CompileCache',
+    'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
+    'MicroHs.SymTab', 'MicroHs.Parse', 'MicroHs.Fixity', 'MicroHs.TCMonad', 'MicroHs.IdentMap'],
   'Kyyn.MicroHs.Interpreter.SchemaInspection': ['Control.Monad', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path',
     'Kyyn.MicroHs.Inspection', 'Kyyn.MicroHs.Toolchain', 'Kyyn.Plumbing.Capability.Failure',

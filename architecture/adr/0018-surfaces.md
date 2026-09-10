@@ -114,6 +114,12 @@ kyyn
     list
     set <name>
     remove <name>
+  guest
+    module
+      list
+      show <module>
+    symbol
+      show <module.symbol>
   web
     serve
   mcp
@@ -129,6 +135,27 @@ a deliberate standalone readiness command. Collection selection for fact IDs,
 typed query arguments and secret input are details for their respective slices.
 `root schema list/show` exposes the selected root contract's types, definitions,
 fields and declared roles, not arbitrary compiler internals.
+
+`guest module list/show` and `guest symbol show` describe the installed public SDK,
+independently of KB selection. Public modules come from the SDK packages' exposed
+module declarations; checked MicroHs exports determine symbol membership, including
+reexports and their defining module. Display authored signatures and type aliases
+when available, preserving useful names such as `Edit` and `Lens'`. Distinguish
+checked expanded signatures from source declarations rather than claiming they
+are the author's spelling. Private constructors are not exposed by reading their
+source declarations.
+
+Documentation uses a small source convention: a `-- |` block immediately above
+a signature or type declaration, continued by adjacent `--` lines. Attach it to
+the defining symbol and retain it through reexports. Store the text with the
+catalogue and expose it in human and JSON output; ordinary implementation comments
+are not documentation. This does not promise full Haddock parsing or rendering.
+
+Generate this fixed catalogue from the staged SDK during the build and ship it
+as Dhall in the runtime bundle. Discovery reads the catalogue through filesystem
+and Dhall plumbing; it does not select a KB, invoke Git or compile guest code.
+Human output supports selective exploration and `--json` returns the same symbols
+as structured data. A missing module or symbol is a refusal with a navigation hint.
 
 `kyyn-v2 --kb PATH kb init` creates an empty Haskell-schema KB and commits its
 validated root; PATH may not exist yet. It returns the commit revision, branch,

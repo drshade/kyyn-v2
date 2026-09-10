@@ -10,7 +10,7 @@ library
   exposed-modules: Kyyn.Domain.DataType Kyyn.Domain.Failure Kyyn.Domain.Path Kyyn.Domain.Diagnostic
     Kyyn.Domain.Contract Kyyn.Domain.Root Kyyn.Domain.Value Kyyn.Domain.Query Kyyn.Domain.Example
     Kyyn.Domain.FileTree Kyyn.Domain.Git Kyyn.Domain.Workspace
-    Kyyn.Domain.CompiledProgram
+    Kyyn.Domain.CompiledProgram Kyyn.Domain.GuestApi
     Kyyn.Domain.KnowledgeBase Kyyn.Domain.Evolution Kyyn.Domain.EvolutionReport Kyyn.Domain.Publication
   default-language: GHC2021
   default-extensions: NoFieldSelectors

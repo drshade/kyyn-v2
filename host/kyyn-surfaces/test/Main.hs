@@ -29,6 +29,10 @@ main = do
     (Invocation (Selection "knowledge/sales"
       (Just "/bin/git") (Just "/opt/kyyn/lib/kyyn")) Json (Evolution (ListEvolutions ExcludeDrafts)))
   succeeds ["evolution","list"] (Invocation selected Human (Evolution (ListEvolutions AllEvolutions)))
+  succeeds ["guest","module","list"] (Invocation selected Human (Guest ListGuestModules))
+  succeeds ["guest","module","show","Kyyn.Edit"] (Invocation selected Human (Guest (ShowGuestModule "Kyyn.Edit")))
+  succeeds ["guest","symbol","show","Kyyn.Evolution.>=>"]
+    (Invocation selected Human (Guest (ShowGuestSymbol "Kyyn.Evolution.>=>")))
   succeeds ["evolution","new","September"]
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing)))
   succeeds ["evolution","new","September","--before",replicate 40 'a']
@@ -51,7 +55,8 @@ main = do
         assert "Wrong help exit status"
           (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
-  forM_ [([], ["kb", "root", "evolution"]), (["kb"], ["init"]), (["root"], ["show", "check"]),
+  forM_ [([], ["kb", "root", "evolution", "guest"]), (["kb"], ["init"]), (["root"], ["show", "check"]),
+    (["guest"], ["module", "symbol"]), (["guest", "module"], ["list", "show"]),
     (["evolution"], ["new", "list", "accept"]),
     (["root", "unknown"], ["show", "check"])] $ \(args,commands) ->
     case parseArguments args of

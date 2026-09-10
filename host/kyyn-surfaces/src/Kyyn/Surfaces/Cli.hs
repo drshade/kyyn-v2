@@ -1,6 +1,7 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
+  , GuestCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -21,7 +22,8 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand deriving (Eq, Show)
+data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest GuestCommand deriving (Eq, Show)
+data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
 data RootCommand = ShowRoot | CheckRoot deriving (Eq, Show)
 
@@ -63,6 +65,7 @@ invocation = Invocation <$> selectionParser
     (group "kb" "Create a knowledge base" (hsubparser
       (group "init" "Initialize an empty knowledge base and commit its validated root" (pure (Kb InitKb))))
     <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
+    <> group "guest" "Explore the installed guest SDK" (Guest <$> guestParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
 
 selectionParser :: Parser Selection
@@ -78,6 +81,16 @@ rootParser :: Parser RootCommand
 rootParser = hsubparser
   (group "show" "Inspect the accepted root at the selected revision" (pure ShowRoot)
   <> group "check" "Check the accepted root, including required examples" (pure CheckRoot))
+
+guestParser :: Parser GuestCommand
+guestParser = hsubparser
+  (group "module" "Explore public guest modules" (hsubparser
+    (group "list" "List public modules" (pure ListGuestModules)
+    <> group "show" "Show a module's exported types and functions"
+      (ShowGuestModule <$> argument nonempty (metavar "MODULE"))))
+  <> group "symbol" "Inspect an exported type or function" (hsubparser
+    (group "show" "Show an exported symbol's signature and origin"
+      (ShowGuestSymbol <$> argument nonempty (metavar "MODULE.SYMBOL")))))
 
 evolutionParser :: Parser EvolutionCommand
 evolutionParser = hsubparser

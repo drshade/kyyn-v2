@@ -9,7 +9,9 @@ import Kyyn.Edit.Internal (execStateT)
 data RootBinding a = RootBinding String (a -> JSValue)
 data RecordedRoot = RecordedRoot String JSValue deriving (Eq, Show)
 data StepObservation = StepObservation Rationale RecordedRoot RecordedRoot deriving (Eq, Show)
+-- | The final root and ordered observations produced by a successful evolution.
 data EvolutionOutput a = EvolutionOutput a [StepObservation] deriving (Eq, Show)
+-- | A transformation between root types that records its steps or returns diagnostics.
 newtype Evolution a b = Evolution (a -> Either EvolutionFailure (EvolutionOutput b))
 
 edit :: RootBinding a -> Rationale -> Edit a () -> Evolution a a

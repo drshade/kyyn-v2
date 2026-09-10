@@ -22,6 +22,7 @@ bash -n tools/test-installed.sh
 node --check tools/checks/check-docs.mjs
 node --check tools/checks/check-docs.test.mjs
 node --check tools/test-local-install.mjs
+node --check tools/test-guest-api.mjs
 node --check architecture/evidence/json-probe/check.mjs
 node tools/checks/check-docs.test.mjs
 node tools/checks/check-docs.mjs
@@ -30,6 +31,7 @@ node tools/checks/check-imports.mjs
 cabal build all
 cabal test cli-arguments --test-show-details=direct
 cabal test cli-adapters --test-show-details=direct
+cabal test guest-catalogue --test-show-details=direct
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"
 node --check tools/test-initialization.mjs
 cabal test processes --test-show-details=direct

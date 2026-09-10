@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 module Kyyn.Configuration
-  ( Host(..), SelectedKb(..), configure, selectKnowledgeBase, commitMetadata, runGitIO ) where
+  ( Host(..), SelectedKb(..), configure, runtimeDirectory, selectKnowledgeBase, commitMetadata, runGitIO ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.IO.Class (liftIO)
@@ -37,12 +37,16 @@ configure (Cli.Selection path gitOverride runtimeOverride) = runExceptT $ do
     >>= maybe (invalid "setup.git" "Git was not found; install Git or supply --git EXECUTABLE") pure
   git <- liftIO (canonicalizePath executable)
   temp <- liftIO getTemporaryDirectory >>= either (invalid "setup.temporary") pure . directoryScope
-  installed <- liftIO (getExecutablePath >>= canonicalizePath)
-  runtime <- liftIO (canonicalizePath (maybe (takeDirectory (takeDirectory installed) </> "lib/kyyn") id runtimeOverride))
+  runtime <- liftIO (runtimeDirectory runtimeOverride)
   let keys = ["HOME", "XDG_CONFIG_HOME"]
   values <- liftIO (mapM lookupEnv keys)
   pure (Host git [(key,value) | (key,Just value) <- zip keys values] temp runtime, scope)
   where invalid code = throwE . refusal . pure . errorDiagnostic code
+
+runtimeDirectory :: Maybe FilePath -> IO FilePath
+runtimeDirectory override = do
+  installed <- getExecutablePath >>= canonicalizePath
+  canonicalizePath (maybe (takeDirectory (takeDirectory installed) </> "lib/kyyn") id override)
 
 runGitIO :: Host -> Eff '[Git.Git, ProcessExecution, Failure, IOE] a -> IO (Either OperationalFailure a)
 runGitIO (Host executable environment _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable environment
