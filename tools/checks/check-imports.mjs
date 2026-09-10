@@ -4,14 +4,14 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
-    'Effectful', 'Kyyn.Domain.GuestApi', 'Kyyn.Porcelain.Capability.GuestApi', 'Kyyn.Surfaces.Cli', 'Kyyn.Surfaces.Result',
+    'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result',
     'Kyyn.Domain.KnowledgeBase',
     'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
-    'Kyyn.Porcelain.Interpreter.GuestApi', 'Kyyn.Surfaces.GuestApi',
+    'Kyyn.Porcelain.Capability.GuestApi', 'Kyyn.Porcelain.Interpreter.GuestApi', 'Kyyn.Surfaces.GuestApi',
     'Kyyn.Domain.Publication', 'Kyyn.Porcelain.Capability.KnowledgeBaseInitialization',
     'Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization',
     'Data.Time.Clock.POSIX', 'Effectful', 'Kyyn.Configuration', 'Kyyn.Domain.Diagnostic',

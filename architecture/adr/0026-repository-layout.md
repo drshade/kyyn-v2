@@ -123,6 +123,9 @@ projections belong with their capability helpers outside this compiler-specific
 package, following ADR 0005. Purity alone is not a reason to expose a native package
 to callers otherwise forbidden to import it.
 
+The build-only `kyyn-api-catalogue` executable lives in `host/kyyn-microhs/app/`;
+it generates the installed guest discovery catalogue specified in [ADR 0018](0018-surfaces.md).
+
 The pinned upstream source lives at `vendor/MicroHs/` as an explicit build input.
 Native compiler integration and the bundled guest toolchain use that same selected
 revision. Its source and build integration must be available in a source build;

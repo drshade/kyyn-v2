@@ -48,7 +48,8 @@ import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi)
-import Kyyn.Surfaces.GuestApi (executeGuest)
+import qualified Kyyn.Porcelain.Capability.GuestApi as Api
+import qualified Kyyn.Surfaces.GuestApi as ApiResult
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
 import System.FilePath ((</>))
@@ -86,7 +87,10 @@ execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest request
   case directoryScope runtime of
     Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
     Right scope -> finish $ runEff . runFailure . runFileSystemIO scope . runDhallHandling . runGuestApi scope $
-      executeGuest request
+      case request of
+        Cli.ListGuestModules -> ApiResult.modulesResult <$> Api.listModules
+        Cli.ShowGuestModule name -> ApiResult.moduleResult <$> Api.findModule name
+        Cli.ShowGuestSymbol name -> ApiResult.symbolResult <$> Api.findSymbol name
 execute (Cli.Invocation selection _ command) = do
   configured <- configure selection
   case configured of

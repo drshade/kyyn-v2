@@ -12,7 +12,7 @@ library
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
-    aeson, bytestring, text, optparse-applicative ==0.19.0.0, effectful-core ==2.6.1.0
+    aeson, bytestring, text, optparse-applicative ==0.19.0.0
 
 test-suite cli-arguments
   type: exitcode-stdio-1.0

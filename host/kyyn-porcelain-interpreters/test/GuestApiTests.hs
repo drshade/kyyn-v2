@@ -31,7 +31,7 @@ main = do
   assert "missing catalogue" (refused (readApi Nothing Api.readCatalogue))
   assert "malformed catalogue" (refused (readApi (Just "not dhall") Api.readCatalogue))
   assert "wrong catalogue shape" (refused (readApi (Just "{ version = +1, modules = [1] }") Api.readCatalogue))
-  assert "unsupported version" (refused (readApi (Just "{ version = +2, modules = [] : List { name : Text, symbols : List { name : Text, namespace : Text, definedAs : Text, checkedSignature : Text, declaration : Optional Text } } }") Api.readCatalogue))
+  assert "unsupported version" (refused (readApi (Just "{ version = +2, modules = [] : List { name : Text, symbols : List { name : Text, namespace : < Type | Value >, definedAs : Text, checkedSignature : Text, declaration : Optional Text } } }") Api.readCatalogue))
   putStrLn "Guest catalogue Dhall round trips, read-only discovery and refusal tests passed."
 
 onlyCatalogue :: DirectoryScope -> Maybe Bytes.ByteString -> Eff (FileSystem : es) a -> Eff es a

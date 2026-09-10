@@ -186,6 +186,7 @@ may identify both a type and its constructor; discovery returns both.
 Authored signatures preserve aliases such as `Edit` and `Lens'`. Entries marked
 `[checked]` use the compiler's expanded type or kind instead; JSON distinguishes
 these with a null `declaration` and always includes `checkedSignature`.
+Re-exported transformer operations such as `modify` currently use this checked form.
 
 The current catalogue covers the public Kyyn SDK and shared types, not every
 upstream library module or a workspace's generated Before/After bindings.
