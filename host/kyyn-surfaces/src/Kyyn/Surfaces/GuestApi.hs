@@ -33,8 +33,8 @@ namespaceName ValueNamespace = "value"
 symbolText :: ApiSymbol -> [String]
 symbolText (ApiSymbol name namespace origin signature declaration documentation) =
   [""] ++ maybe [] (map comment . lines) documentation
-  ++ maybe [prefix ++ signatureName name ++ " :: " ++ signature ++ "  -- [compiler signature]"] lines declaration
   ++ ["-- [Defined as " ++ displayOrigin name origin ++ "]"]
+  ++ maybe [prefix ++ signatureName name ++ " :: " ++ signature ++ "  -- [compiler signature]"] lines declaration
   where
     prefix = case namespace of TypeNamespace -> "type "; ValueNamespace -> ""
     comment "" = "--"
