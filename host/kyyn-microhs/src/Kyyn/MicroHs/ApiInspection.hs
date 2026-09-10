@@ -61,7 +61,7 @@ readDeclarations flags (name,path) = do
   original <- readFile path
   source <- if hasCpp original then do
     executable <- maybe "cpphs" id <$> lookupEnv "MHSCPPHS"
-    readProcess executable (["--strip", "-D__MHS__", "-I" ++ (mhsdir flags </> "src/runtime")]
+    readProcess executable (["--strip", "--noline", "-D__MHS__", "-I" ++ (mhsdir flags </> "src/runtime")]
       ++ cppArgs flags ++ [path]) ""
     else pure original
   pure $ case parse pTop path source of
@@ -179,12 +179,12 @@ arrow = eAppI2 (mkIdent "->")
 constructorType :: LHS -> Constr -> EType
 constructorType lhs (Constr _ constraints _ _ fields) =
   let parameters = map idKindIdent (snd lhs)
-      solve (substitutions,remaining) constraint = case subst substitutions constraint of
+      solve (known,pending) constraint = case subst known constraint of
         EApp (EApp (EVar equal) (EVar variable)) rhs
           | unIdent equal == "~", variable `elem` parameters,
             variable `notElem` allVarsExpr rhs ->
-              ((variable,rhs) : [(v,subst [(variable,rhs)] t) | (v,t) <- substitutions], remaining)
-        other -> (substitutions,remaining ++ [other])
+              ((variable,rhs) : [(v,subst [(variable,rhs)] t) | (v,t) <- known], pending)
+        other -> (known,pending ++ [other])
       (substitutions,remaining) = foldl solve ([],[]) constraints
       arguments = map snd (either id (map snd) fields)
       body = subst substitutions (foldr arrow (lhsToType lhs) arguments)
