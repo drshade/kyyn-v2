@@ -25,6 +25,11 @@ main = do
   let implicitNames = [n | ApiModule _ symbols <- implicit, ApiSymbol n _ _ _ _ _ <- symbols]
   assert "implicit exports hide instance machinery" (all (\n -> not ("inst$" `isInfixOf` n || "@" `isInfixOf` n)) implicitNames)
   assert "source operators and apostrophes remain discoverable" (all (`elem` implicitNames) ["$", "named'", "Public"])
+  cpp <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.CppFixture"]
+  assert "CPP signature and documentation use compiler branch" (case cpp of
+    [ApiModule _ [ApiSymbol "selected" ValueNamespace _ _ (Just "selected :: String")
+      (Just "The MicroHs branch, including its source documentation.")]] -> True
+    _ -> False)
   assert "private function leaked" (null (matches "Kyyn.Edit" "unique" ValueNamespace))
   assert "abstract constructor leaked" (null (matches "Kyyn.Edit" "Collection" ValueNamespace))
   assert "abstract type missing" (length (matches "Kyyn.Edit" "Collection" TypeNamespace) == 1)
@@ -40,8 +45,8 @@ main = do
     [ApiSymbol _ _ _ _ _ (Just docs)] -> "Fails if the ID is missing or ambiguous." `isInfixOf` docs
     _ -> False)
   forM_ public $ \m ->
-    forM_ [s | s@(ApiSymbol _ ns _ _ declaration _) <- symbolsIn m,
-              ns == TypeNamespace || declaration /= Nothing] $ \s ->
+    forM_ [s | s@(ApiSymbol n ns origin _ declaration _) <- symbolsIn m,
+              ns == TypeNamespace || (declaration /= Nothing && authoredFunction n origin)] $ \s ->
       assert ("Missing documentation on authored SDK declaration: " ++ show s)
         (case s of ApiSymbol _ _ _ _ _ (Just text) -> not (null text); _ -> False)
   docs <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DocFixture","Kyyn.DocReexport"]
@@ -83,16 +88,42 @@ main = do
           n `elem` ["Empty", "Full", "Record", "Wrapped", "Visible", "HiddenFields", "Number", "Apply"]]
     assert "presented constructors recompile with unchanged types"
       (constructors "Kyyn.DataFixture" dataModules == constructors "Kyyn.PresentedData" presented)
-  assert "upstream fallback must remain explicit" (case matches "Kyyn.Edit" "modify" ValueNamespace of
-    [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" signature Nothing Nothing] -> "StateT" `isInfixOf` signature
+  assert "CPP-backed upstream signature" (case matches "Kyyn.Edit" "modify" ValueNamespace of
+    [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" _ (Just signature) _] ->
+      signature == "modify :: Monad m => (s -> s) -> StateT s m ()"
     _ -> False)
   assert "operator declaration must parse" (case matches "Kyyn.Evolution" ">=>" ValueNamespace of
     [ApiSymbol _ _ _ _ (Just declaration) _] -> "(>=>) ::" `isInfixOf` declaration
     _ -> False)
+  let signature m n = case matches m n ValueNamespace of
+        [ApiSymbol _ _ _ _ (Just text) _] -> text
+        _ -> error ("Missing source signature: " ++ m ++ "." ++ n)
+  assert "constructor keeps String alias" (signature "Kyyn.Types.Fact" "FactId" == "FactId :: String -> FactId")
+  assert "selector keeps String alias" (signature "Kyyn.Types.Evidence" "source" == "source :: EvidenceRef -> String")
+  assert "constructor eliminates trivial GADT equalities"
+    (signature "Kyyn.Types.Query" "ReadCollection" == "ReadCollection :: CollectionBinding root fact -> SnapshotRead root [Fact fact]")
+  assert "constructor restores GADT parameters"
+    (signature "Kyyn.Types.Program" "Pure" == "Pure :: a -> Program request a")
+  withSystemTempDirectory "kyyn-api-values-" $ \temporary -> do
+    createDirectoryIfMissing True (temporary </> "Kyyn")
+    let symbols = nubBy sameOrigin (concatMap symbolsIn public)
+        signatures = [(n,d) | ApiSymbol n ValueNamespace origin _ (Just d) _ <- symbols,
+          not (authoredFunction n origin)]
+        valueName n@(c:_) | isAlpha c || c == '_' = n
+        valueName n = "(" ++ n ++ ")"
+        witness (i,(n,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
+          "proof" ++ show i ++ " = " ++ valueName n]
+    writeFile (temporary </> "Kyyn/ValueProof.hs") (unlines
+      (["{-# LANGUAGE GADTs, RankNTypes #-}", "module Kyyn.ValueProof where",
+        "import Control.Monad.Trans.State.Strict (StateT)"]
+      ++ map ("import " ++) public ++ concatMap witness (zip [1 :: Int ..] signatures)))
+    _ <- inspect (temporary:sources) ["Kyyn.ValueProof"]
+    pure ()
   withSystemTempDirectory "kyyn-api-" $ \temporary -> do
     let unique = nubBy sameOrigin (concatMap symbolsIn public)
         declarations = [(n,ns,origin,decl) | ApiSymbol n ns origin _ (Just decl) _ <- unique,
-          not ("data " `isPrefixOf` decl || "newtype " `isPrefixOf` decl)]
+          not ("data " `isPrefixOf` decl || "newtype " `isPrefixOf` decl),
+          ns == TypeNamespace || authoredFunction n origin]
         owner = reverse . drop 1 . dropWhile (/= '.') . reverse
     mapM_ (\directory -> copyTree directory temporary) (take 2 sources)
     forM_ (nub [owner origin | (_,_,origin,_) <- declarations]) $ \m -> do
@@ -114,6 +145,10 @@ main = do
   assert "missing module must be a compiler error" (case missing of Left (ApiCompilerError _) -> True; _ -> False)
   putStrLn "Guest API exports, reexports, abstraction, aliases and signature round trips passed."
   where sameOrigin (ApiSymbol _ ns a _ _ _) (ApiSymbol _ ns' b _ _ _) = (ns,a) == (ns',b)
+
+authoredFunction :: String -> String -> Bool
+authoredFunction name origin = "Kyyn." `isPrefixOf` origin && not (".get$." `isInfixOf` origin)
+  && case name of c:_ -> isLower c || (not (isAlpha c) && c /= ':'); [] -> False
 
 assert :: String -> Bool -> IO ()
 assert label ok = unless ok (fail label)

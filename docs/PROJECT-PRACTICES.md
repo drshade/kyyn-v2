@@ -28,7 +28,9 @@ displayed signatures/aliases substituted and compares checked exports; it is in 
 integration. Data/newtype fixtures additionally recompile projected public
 constructors and compare their types up to variable renaming, covering records,
 GADTs, abstract headers and selective reexports. These compiler checks are not in fast
-checks. `node tools/test-guest-api.mjs INSTALLED_EXECUTABLE`
+checks. Constructor/accessor and upstream transformer signatures are compiled as
+annotation witnesses; a CPP fixture checks branch selection and documentation.
+`node tools/test-guest-api.mjs INSTALLED_EXECUTABLE`
 tests a copied executable/catalogue-only bundle with no KB, Git, SDK sources or
 compiler, including human/JSON results and refusals. It is included in the
 installed integration check.
