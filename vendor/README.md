@@ -8,11 +8,23 @@ notices; Kyyn's proprietary policy does not replace them.
 | --- | --- | --- | --- |
 | MicroHs | [455782164e75998b140d869c1b7cdde0c8a21508](https://github.com/augustss/MicroHs/archive/455782164e75998b140d869c1b7cdde0c8a21508.tar.gz), version 0.16.6.0 | `562149892c559ab8376683b2eacd242ed421842c5f5f73905392056e72c1fb2e` | Apache-2.0; retain included notices |
 | json | [json-0.11](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz) | `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690` | BSD-3-Clause |
+| transformers | [transformers-0.6.1.1](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) | `81d2548e0f100a174fba36b332c0efd7c960e79d3c21ad6e1ff5f538b992d725` | BSD-3-Clause |
 
 No upstream source patches. MicroHs's normal build generates ignored `mhs.conf`
 and binaries. Native frontend integration compiles its `ghc/` and `src/` modules;
 guest builds use the compiler built from the same source revision. The guest
 runtime imports only json's `Text.JSON.Types` and `Text.JSON.String` modules.
+
+The transformers copy contains only `Control.Monad.Signatures`,
+`Control.Monad.Trans.Class`, `Control.Monad.Trans.Reader` and
+`Control.Monad.Trans.State.Strict`, with the upstream LICENSE. Native SDK builds
+use the same package version through Cabal; the bundled guest receives these
+unmodified sources. Their CPP tests ask about base versions up to 4.13; the
+GuestCompilation interpreter supplies `MIN_VERSION_base(x,y,z)=1` to select the
+modern APIs supported by MicroHs. This is not a claim that MicroHs implements
+every API of every base version. Reassess this definition when adding dependencies
+or updating these sources. The dual-compiler evolution proof compiles this source
+subset under both GHC and MicroHs; other transformers modules are not covered.
 
 To update a source copy, replace it from the explicitly selected upstream archive,
 retain its notices, update this provenance and rerun the complete gate. Source

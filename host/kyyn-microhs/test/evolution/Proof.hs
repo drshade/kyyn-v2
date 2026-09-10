@@ -23,14 +23,14 @@ main = do
     Right (EvolutionOutput value observations) -> assert (value == input && null observations)
     _ -> fail "Identity scaffold did not return the unchanged root with an empty log"
   let reason = Rationale "Metadata only" []
-  case evaluateEvolution (Metadata.editBefore reason Right >=> Metadata.evolve reason Right >=> Metadata.editAfter reason Right) input of
+  case evaluateEvolution (Metadata.editBefore reason (pure ()) >=> Metadata.evolve reason Right >=> Metadata.edit reason (pure ())) input of
     Right (EvolutionOutput value
       [StepObservation _ (RecordedRoot b _) (RecordedRoot b' _),
        StepObservation _ (RecordedRoot b'' _) (RecordedRoot a _),
        StepObservation _ (RecordedRoot a' _) (RecordedRoot a'' _)]) ->
          assert (value == input && b == b' && b == b'' && a == a' && a == a'' && a /= b)
     _ -> fail "Metadata-only steps lost their endpoint identities"
-  case evaluateEvolution (Unchanged.editBefore reason Right >=> Unchanged.editAfter reason Right) input of
+  case evaluateEvolution (Unchanged.editBefore reason (pure ()) >=> Unchanged.edit reason (pure ())) input of
     Right (EvolutionOutput value
       [StepObservation _ (RecordedRoot b _) (RecordedRoot b' _),
        StepObservation _ (RecordedRoot a _) (RecordedRoot a' _)]) ->

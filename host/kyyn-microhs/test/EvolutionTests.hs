@@ -43,6 +43,14 @@ main = do
       source = Bytes.concat (map snd (files bindings ++ files metadataBindings))
   unless (all (\fingerprint -> Text.encodeUtf8 (Text.pack fingerprint) `Bytes.isInfixOf` source) fingerprints)
     (fail "Generated bindings lost their whole contract identities")
+  named <- right (checkContract (rootType (rootSchema before))
+    (SchemaMetadata [] [] [CollectionDecl "work items" "todos" []]) >>= checkRootLayout)
+  namedBindings <- right (evolutionBindings named named)
+  let generated = [(relativeName p,b) | (p,b) <- files namedBindings]
+  forM_ ["Before","After"] $ \endpoint ->
+    unless (maybe False (Bytes.isInfixOf "todos = Internal.Collection \"work items\"")
+      (lookup ("Kyyn/Workspace/" ++ endpoint ++ ".hs") generated))
+      (fail "Collection binding confused the logical name with the root field")
   getArgs >>= \args -> case args of
     ["--pure"] -> pure ()
     [] -> integration before renamed after bindings
@@ -69,9 +77,10 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program"]] ++
-     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs"]] ++
-     [load "guest/kyyn-sdk/test" "EvolutionCore.hs"] ++
+     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
+     [load "guest/kyyn-sdk/test" name | name <- ["EvolutionCore.hs","EditTests.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
+     [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource "SchemaV1.Root")))
       captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings ++ files metadataBindings ++ files sameBindings
@@ -107,12 +116,17 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
         (Just (FactLocation "todos" "todo-001" (Just "title")))]) (fail "Guest refusal lost its structured diagnostic")
     _ -> fail "Expected successful guest observations and a separate refusal"
   let badType = [(p,if relativeName p == "Evolution.hs"
-        then Text.encodeUtf8 (Text.replace "editBefore" "editAfter" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
+        then Text.encodeUtf8 (Text.replace "editBefore" "edit" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
       badConstructor = [(p,if relativeName p == "Proof.hs" then
         "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [])\n" else b) | (p,b) <- captured]
       badBinding = [(p,if relativeName p == "Proof.hs" then
         "module Proof where\nimport Kyyn.Workspace.Evolution (beforeRoot)\nmain :: IO ()\nmain = pure ()\n" else b) | (p,b) <- captured]
-  forM_ [("wrong-type",badType),("private-constructor",badConstructor),("hidden-binding",badBinding)] $ \(label,entries) -> do
+      hiddenCollection = [(p,if relativeName p == "Proof.hs" then
+        "module Proof where\nimport Kyyn.Edit\nmain :: IO ()\nmain = let c = Collection \"fake\" (lens id (\\_ v -> v)) in c `seq` pure ()\n" else b) | (p,b) <- captured]
+      hiddenExecutor = [(p,if relativeName p == "Proof.hs" then
+        "module Proof where\nimport Kyyn.Edit (execStateT)\nmain :: IO ()\nmain = pure ()\n" else b) | (p,b) <- captured]
+  forM_ [("wrong-type",badType),("private-constructor",badConstructor),("hidden-binding",badBinding),
+    ("hidden-collection",hiddenCollection),("hidden-executor",hiddenExecutor)] $ \(label,entries) -> do
     (nativeRejected,_,_) <- native label entries
     unless (nativeRejected /= ExitSuccess) (fail (label ++ " compiled under GHC"))
     rejected <- compileGuestFiles entries
@@ -131,7 +145,8 @@ renamedBindings name before after = do
         Text.replace "Kyyn/Workspace/Evolution" (Text.pack ("Kyyn/Workspace/" ++ name))
   entries <- traverse (\(p,b) -> do
     renamed <- right (relativePath (Text.unpack (rename (Text.pack (relativeName p)))))
-    pure (renamed,Text.encodeUtf8 (rename (Text.decodeUtf8 b)))) (files generated)
+    pure (renamed,Text.encodeUtf8 (rename (Text.decodeUtf8 b))))
+    [(p,b) | (p,b) <- files generated, relativeName p `notElem` ["Kyyn/Workspace/Before.hs","Kyyn/Workspace/After.hs"]]
   right (fileTree entries)
 
 right :: Show e => Either e a -> IO a

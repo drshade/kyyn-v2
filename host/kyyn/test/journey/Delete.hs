@@ -2,9 +2,9 @@ module Evolution where
 
 import Kyyn.Workspace.Evolution
 import qualified TodoSchemaV2 as Schema
+import qualified Kyyn.Workspace.After as AfterCollections
 
 evolution :: Evolution Schema.Root Schema.Root
 evolution =
-  editAfter (Rationale "Retire the completed report." [])
-    (\(Schema.Root facts) -> Right (Schema.Root
-      [fact | fact@(Fact identity _) <- facts, identity /= FactId "todo-001"]))
+  edit (Rationale "Retire the completed report." [])
+    (within AfterCollections.todos $ remove (FactId "todo-001"))

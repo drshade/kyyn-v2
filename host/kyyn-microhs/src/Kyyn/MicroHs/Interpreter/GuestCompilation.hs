@@ -29,7 +29,8 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ -> \case
         root = scopePath toolchain
         compilerEnvironment = [("MHSDIR", root), ("MHSCPPHS", root ++ "/bin/cpphs"), ("LC_ALL", "C.UTF-8"), ("PATH", "")]
         -- Bare -a clears package search paths; bare -i clears source search paths.
-        arguments = ["-a", "-i", "-i" ++ sourceDirectory, "-i" ++ root ++ "/lib"] ++
+        arguments = ["-a", "-i", "-i" ++ sourceDirectory, "-i" ++ root ++ "/lib",
+          "-DMIN_VERSION_base(x,y,z)=1"] ++
           [relativeName (sourcePath (selectedEntry sources)), "-o" ++ relativeName output]
     forM_ (sourceFiles sources) $ \(path, bytes) -> writeBytes scope (sourcePath path) bytes
     (stdout, Process.ProcessExit status stderr) <- Process.withProcess

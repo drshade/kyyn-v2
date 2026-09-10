@@ -1,11 +1,13 @@
 module Kyyn.Evolution
   ( Evolution, EvolutionOutput, Rationale(..), EvolutionFailure(..)
   , EvidenceRef(..), (>=>), identityEvolution, evaluateEvolution
+  , module Kyyn.Edit
   ) where
 
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Evolution.Internal
+import Kyyn.Edit
 
 infixr 1 >=>
 

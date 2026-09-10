@@ -124,7 +124,7 @@ compileMock shell result = interpret $ \_ -> \case
       lookup "Evolution.hs" entries == Just "captured entry" &&
       maybe False (Bytes.isInfixOf "selected = pure . evaluateEvolution Evolution.evolution") (lookup "KyynEvolutionEntry.hs" entries) &&
       maybe False (Bytes.isInfixOf "Program NoRequests") (lookup "KyynEvolutionEntry.hs" entries) &&
-      maybe False (Bytes.isInfixOf "editAfter = Internal.evolve afterRoot afterRoot") (lookup "Kyyn/Workspace/Evolution.hs" entries))
+      maybe False (Bytes.isInfixOf "edit = Internal.edit afterRoot") (lookup "Kyyn/Workspace/Evolution.hs" entries))
       (error "Execution sources did not preserve target/helpers/generated steps or included old checks")
     pure result
 

@@ -135,7 +135,7 @@ addReview        :: Evolution After.Root After.Root
 ```
 
 The first helper uses generated `evolve`, and the remaining helpers use
-`editAfter`. The author supplies no bindings or runtime wrapper. They have these concrete
+`edit` with State actions. The author supplies no bindings or runtime wrapper. They have these concrete
 transformations and declared explanations:
 
 | Step | Transformation | Rationale |

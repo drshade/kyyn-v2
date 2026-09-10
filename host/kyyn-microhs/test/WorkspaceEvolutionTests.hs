@@ -48,8 +48,9 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       tree = either error id . fileTree
   sdk <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program","SchemaMetadata"]] ++
-     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs"]] ++
+     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation","SchemaMetadata"]] ++
+     [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]]) >>= right . fileTree
   oldSchema <- load "host/kyyn-microhs/test/evolution" "SchemaV1.hs"
   newSchema <- load "host/kyyn-microhs/test/evolution" "SchemaV2.hs"

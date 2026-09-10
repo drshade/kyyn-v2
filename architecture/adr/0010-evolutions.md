@@ -43,15 +43,15 @@ data Evolution before after  -- pure transformation with annotated boundaries
 
 -- Generated in Kyyn.Workspace.Evolution for this workspace:
 editBefore
-  :: Rationale -> (Before.Root -> Either EvolutionFailure Before.Root)
+  :: Rationale -> Edit Before.Root ()
   -> Evolution Before.Root Before.Root
 
 evolve
   :: Rationale -> (Before.Root -> Either EvolutionFailure After.Root)
   -> Evolution Before.Root After.Root
 
-editAfter
-  :: Rationale -> (After.Root -> Either EvolutionFailure After.Root)
+edit
+  :: Rationale -> Edit After.Root ()
   -> Evolution After.Root After.Root
 
 (>=>) :: Evolution a b -> Evolution b c -> Evolution a c
@@ -94,13 +94,59 @@ does not export `beforeRoot` or `afterRoot`. For example:
 import Kyyn.Workspace.Evolution
 import qualified RootV1 as Before
 import qualified RootV2 as After
+import qualified Kyyn.Workspace.Before as BeforeCollections
+import qualified Kyyn.Workspace.After as AfterCollections
 
 evolution :: Evolution Before.Root After.Root
 evolution =
   editBefore (Rationale "Correct the old title" []) correctTitle
   >=> evolve (Rationale "Track review status" []) introduceReviewStatus
-  >=> editAfter (Rationale "Remove a cancelled task" []) removeCancelledTask
+  >=> edit (Rationale "Remove a cancelled task" [])
+    (within AfterCollections.todos $ remove (FactId "todo-002"))
 ```
+
+Same-schema edits use standard strict StateT over Either. A refusal returns no
+partially modified root. One `edit` has one rationale and one observed boundary,
+even when its state action edits several facts or collections:
+
+```haskell
+type Edit root = StateT root (Either EvolutionFailure)
+type CollectionEdit a = ReaderT String (Edit [Fact a])
+data Collection root a -- abstract publicly; generated name and collection lens
+
+within :: Collection root a -> CollectionEdit a r -> Edit root r
+current :: FactId -> CollectionEdit a a
+update :: FactId -> Edit a r -> CollectionEdit a r
+remove :: FactId -> CollectionEdit a ()
+append :: Fact a -> CollectionEdit a ()
+refuse :: [Diagnostic] -> Edit root a
+
+zoom :: Lens' root a -> Edit a r -> Edit root r
+modifying :: Lens' root a -> (a -> a) -> Edit root ()
+assigning :: Lens' root a -> a -> Edit root ()
+```
+
+The endpoint collection modules expose one handle per declared collection, named
+after its root field; the handle's diagnostic name comes from CollectionDecl.
+This preserves distinct logical collection names and Haskell field names. Schema
+modules retain their ordinary selectors; collection modules do not re-export or
+replace them. The constructor and state executor remain Internal conveniences for
+generation, not public author vocabulary. As elsewhere, this is a construction
+convention, not a sandbox against authors importing Internal source.
+
+`current`, `update` and `remove` require exactly one matching FactId; `append`
+rejects an existing ID. Errors locate the collection and fact using the generated
+handle. `update` gives the action the payload, preserving its ID and list position;
+missing or ambiguous IDs fail before invoking that action. `current` leaves state
+unchanged. Standard `get`, `gets`, `put` and `modify` work on the focused state.
+
+The SDK owns a small standard van Laarhoven optics surface (`lens`, `view`, `set`,
+`over`, composition with `(.)`). Authors can write nested field lenses; only
+collection handles are generated. Pure set/over can change types; state zoom
+preserves its focused type. Full microlens requires MicroHs-unsupported machinery
+not needed for these operations. The small optics implementation and fact-aware
+combinators avoid that dependency; StateT/ReaderT use maintained transformers
+sources rather than a second custom monad implementation.
 
 The guest `kyyn-sdk` package owns the pure composition implementation and private
 observation constructors. Its public `Kyyn.Evolution` module exposes no JSON types.

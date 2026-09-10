@@ -3,6 +3,7 @@ module Evolution where
 import Kyyn.Workspace.Evolution
 import qualified TodoSchemaV1 as Before
 import qualified TodoSchemaV2 as After
+import qualified Kyyn.Workspace.After as AfterCollections
 
 evolution :: Evolution Before.Root After.Root
 evolution =
@@ -10,14 +11,9 @@ evolution =
     (\(Before.Root facts) -> Right (After.Root
       [Fact identity (After.Todo title (case status of Before.Done -> After.Done; _ -> After.Open))
       | Fact identity (Before.Todo title status) <- facts]))
-  >=> editAfter (Rationale "The sales report is complete; make its title specific." [])
-    (\(After.Root facts) -> if not (any (\(Fact identity _) -> identity == FactId "todo-001") facts)
-      then Left (EvolutionFailure [errorDiagnostic "todo.missing" "Cannot complete the missing report."])
-      else Right (After.Root
-      [if identity == FactId "todo-001" then Fact identity (After.Todo "Write sales report λ" After.Done)
-       else fact | fact@(Fact identity _) <- facts]))
-  >=> editAfter (Rationale "Review the completed report before sharing it." [])
-    (\(After.Root facts) -> if any (\(Fact identity _) -> identity == FactId "todo-003") facts
-      then Left (EvolutionFailure [errorDiagnostic "todo.duplicate" "The review already exists."])
-      else Right (After.Root (facts ++
-      [Fact (FactId "todo-003") (After.Todo "Review sales report" After.Open)])))
+  >=> edit (Rationale "The sales report is complete; make its title specific." [])
+    (within AfterCollections.todos $ update (FactId "todo-001") $
+      put (After.Todo "Write sales report λ" After.Done))
+  >=> edit (Rationale "Review the completed report before sharing it." [])
+    (within AfterCollections.todos $
+      append (Fact (FactId "todo-003") (After.Todo "Review sales report" After.Open)))
