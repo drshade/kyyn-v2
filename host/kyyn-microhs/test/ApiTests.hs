@@ -72,7 +72,10 @@ main = do
         [d] -> d
         _ -> error ("Missing data declaration: " ++ m ++ "." ++ n)
       originalDeclaration = declarationIn "Kyyn.DataFixture"
-  assert "public record fields" (all (`isInfixOf` originalDeclaration "Record") ["title", "count", "String", "Int"])
+  assert "public record fields" (originalDeclaration "Record" ==
+    "data Record = Record { title :: String, count :: Int, note :: Maybe String, total :: !(Maybe Int) }")
+  assert ("GADT header preserves authored variable: " ++ show (originalDeclaration "Expr")) (originalDeclaration "Expr" ==
+    "data Expr a where\n  Number :: Int -> Expr Int\n  Apply :: (a -> rootParam1) -> Expr a -> Expr rootParam1")
   assert "abstract data header" (words (originalDeclaration "Abstract") == ["data", "Abstract"])
   assert "abstract newtype header" (words (originalDeclaration "AbstractNew") == ["newtype", "AbstractNew"])
   assert "partial constructors" ("Visible" `isInfixOf` originalDeclaration "Partial"
