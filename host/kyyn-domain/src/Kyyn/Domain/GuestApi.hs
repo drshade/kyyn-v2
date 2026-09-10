@@ -17,4 +17,5 @@ data ApiSymbol = ApiSymbol
   , definedAs :: String
   , checkedSignature :: String
   , declaration :: Maybe String
+  , documentation :: Maybe String
   } deriving (Eq, Show, Generic, NFData)

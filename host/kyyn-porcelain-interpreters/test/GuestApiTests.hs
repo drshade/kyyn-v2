@@ -15,9 +15,10 @@ import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi)
 
 main :: IO ()
 main = do
-  let symbols = [ApiSymbol "Item" TypeNamespace "Example.Item" "Type" Nothing,
-        ApiSymbol "Item" ValueNamespace "Example.Item" "String -> Item" Nothing,
-        ApiSymbol "make" ValueNamespace "Original.make" "String -> Item" (Just "make :: String -> Item -- café")]
+  let symbols = [ApiSymbol "Item" TypeNamespace "Example.Item" "Type" Nothing Nothing,
+        ApiSymbol "Item" ValueNamespace "Example.Item" "String -> Item" Nothing Nothing,
+        ApiSymbol "make" ValueNamespace "Original.make" "String -> Item" (Just "make :: String -> Item")
+          (Just "Create an item: café.\n  Example indentation.")]
       catalogue = [ApiModule "Example" symbols]
       scope = either error id (directoryScope "/test/runtime")
       bytes = either (error . show) id (runPureEff (runDhallHandling (encodeCatalogue catalogue)))
@@ -31,7 +32,7 @@ main = do
   assert "missing catalogue" (refused (readApi Nothing Api.readCatalogue))
   assert "malformed catalogue" (refused (readApi (Just "not dhall") Api.readCatalogue))
   assert "wrong catalogue shape" (refused (readApi (Just "{ version = +1, modules = [1] }") Api.readCatalogue))
-  assert "unsupported version" (refused (readApi (Just "{ version = +2, modules = [] : List { name : Text, symbols : List { name : Text, namespace : < Type | Value >, definedAs : Text, checkedSignature : Text, declaration : Optional Text } } }") Api.readCatalogue))
+  assert "unsupported version" (refused (readApi (Just "{ version = +2, modules = [] : List { name : Text, symbols : List { name : Text, namespace : < Type | Value >, definedAs : Text, checkedSignature : Text, declaration : Optional Text, documentation : Optional Text } } }") Api.readCatalogue))
   putStrLn "Guest catalogue Dhall round trips, read-only discovery and refusal tests passed."
 
 onlyCatalogue :: DirectoryScope -> Maybe Bytes.ByteString -> Eff (FileSystem : es) a -> Eff es a

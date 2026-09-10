@@ -31,7 +31,7 @@ executable kyyn-api-catalogue
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-plumbing,
-    kyyn-plumbing-interpreters, bytestring, filepath, Cabal, effectful-core ==2.6.1.0
+    kyyn-plumbing-interpreters, bytestring, filepath, directory, Cabal, effectful-core ==2.6.1.0
 
 test-suite guest-api
   type: exitcode-stdio-1.0

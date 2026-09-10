@@ -20,18 +20,18 @@ result name symbols = success (object ["module" .= name, "symbols" .= map symbol
   (("module " ++ name) : concatMap symbolText symbols)
 
 symbolJson :: ApiSymbol -> Value
-symbolJson (ApiSymbol name namespace origin signature declaration) = object
+symbolJson (ApiSymbol name namespace origin signature declaration documentation) = object
   [ "name" .= name, "namespace" .= namespaceName namespace, "definedAs" .= origin
-  , "checkedSignature" .= signature, "declaration" .= declaration ]
+  , "checkedSignature" .= signature, "declaration" .= declaration, "documentation" .= documentation ]
 
 namespaceName :: Namespace -> String
 namespaceName TypeNamespace = "type"
 namespaceName ValueNamespace = "value"
 
 symbolText :: ApiSymbol -> [String]
-symbolText (ApiSymbol name namespace origin signature declaration) =
+symbolText (ApiSymbol name namespace origin signature declaration documentation) =
   [ ""
   , maybe (namespaceName namespace ++ " " ++ name ++ " :: " ++ signature ++ "  [checked]")
       id declaration
   , "  Defined as " ++ origin
-  ]
+  ] ++ maybe [] (map ("  " ++) . lines) documentation

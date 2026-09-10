@@ -28,18 +28,21 @@ catalogueShape :: Shape
 catalogueShape = Record [("version",Scalar IntegerScalar), ("modules",List (Record
   [("name",text), ("symbols",List (Record
     [("name",text), ("namespace",Union [("Type",Nothing),("Value",Nothing)]), ("definedAs",text), ("checkedSignature",text),
-     ("declaration",Optional text)]))]))]
+     ("declaration",Optional text), ("documentation",Optional text)]))]))]
   where text = Scalar TextScalar
 
 moduleValue :: ApiModule -> Value
 moduleValue (ApiModule name symbols) = object ["name" .= name, "symbols" .= map symbolValue symbols]
 
 symbolValue :: ApiSymbol -> Value
-symbolValue (ApiSymbol name namespace origin signature declaration) = object
+symbolValue (ApiSymbol name namespace origin signature declaration documentation) = object
   [ "name" .= name, "namespace" .= object ["tag" .= namespaceName namespace], "definedAs" .= origin
-  , "checkedSignature" .= signature, "declaration" .= maybe
-      (object ["tag" .= ("None" :: String)])
-      (\value -> object ["tag" .= ("Some" :: String), "value" .= value]) declaration ]
+  , "checkedSignature" .= signature, "declaration" .= optionalText declaration
+  , "documentation" .= optionalText documentation ]
+
+optionalText :: Maybe String -> Value
+optionalText = maybe (object ["tag" .= ("None" :: String)])
+  (\value -> object ["tag" .= ("Some" :: String), "value" .= value])
 
 namespaceName :: Namespace -> String
 namespaceName TypeNamespace = "Type"
@@ -61,9 +64,13 @@ parseSymbol = withObject "symbol" $ \fields -> do
       "Value" -> pure ValueNamespace
       _ -> fail "Unknown guest API namespace")
   ApiSymbol <$> fields .: "name" <*> pure namespace <*> fields .: "definedAs"
-    <*> fields .: "checkedSignature" <*> (fields .: "declaration" >>= withObject "declaration" (\value -> do
-      tag <- value .: "tag"
-      case tag :: String of
-        "None" -> pure Nothing
-        "Some" -> Just <$> value .: "value"
-        _ -> fail "Unknown optional declaration"))
+    <*> fields .: "checkedSignature" <*> (fields .: "declaration" >>= parseOptionalText)
+    <*> (fields .: "documentation" >>= parseOptionalText)
+
+parseOptionalText :: Value -> Parser (Maybe String)
+parseOptionalText = withObject "optional text" $ \value -> do
+  tag <- value .: "tag"
+  case tag :: String of
+    "None" -> pure Nothing
+    "Some" -> Just <$> value .: "value"
+    _ -> fail "Unknown optional text"

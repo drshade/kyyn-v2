@@ -4,8 +4,8 @@ module Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..)) where
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (foldM)
-import Data.Char (isAlpha)
-import Data.List (nub, nubBy, sortOn, isPrefixOf)
+import Data.Char (isAlpha, isSpace)
+import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate)
 import Kyyn.Domain.GuestApi
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
@@ -47,21 +47,21 @@ inspectApi compiler sources selected = inspect `catch` failure
       _ <- evaluate (force checked)
       pure (modules ++ [(selectedModule, checked, IdentMap.toList (fixTable tc))],next)
 
-readDeclarations :: (String, FilePath) -> IO (Either String (String, [EDef]))
+readDeclarations :: (String, FilePath) -> IO (Either String (String, ([EDef],[String])))
 readDeclarations (name,path) = do
   source <- readFile path
   pure $ case parse pTop path source of
     Left message -> Left message
-    Right (EModule _ _ declarations) -> Right (name,declarations)
+    Right (EModule _ _ declarations) -> Right (name,(declarations,lines source))
 
-project :: [(String,[EDef])] -> (String,TModule a,[(Ident,Fixity)]) -> Either String ApiModule
+project :: [(String,([EDef],[String]))] -> (String,TModule a,[(Ident,Fixity)]) -> Either String ApiModule
 project declarations (selected,checked,fixities) = do
   types <- mapM typeSymbol (tTypeExps checked)
   values <- mapM valueSymbol (tValueExps checked ++ concat
     [associated | TypeExport _ _ associated <- tTypeExps checked])
   pure (ApiModule selected (sortOn key (nubBy (\a b -> key a == key b) (types ++ values))))
   where
-    key (ApiSymbol n ns origin _ _) = (n,ns,origin)
+    key (ApiSymbol n ns origin _ _ _) = (n,ns,origin)
     typeSymbol (TypeExport n entry _) = symbol TypeNamespace n entry
     valueSymbol (ValueExport n entry) = symbol ValueNamespace n entry
     symbol ns visible (Entry expression checkedType) = do
@@ -70,7 +70,16 @@ project declarations (selected,checked,fixities) = do
         ECon constructor -> Right (conIdent constructor)
         _ -> Left ("Unsupported exported entry: " ++ unIdent visible)
       let defining = unIdent (qualOf origin)
-          defs = maybe [] id (lookup defining declarations)
+          (defs,sourceLines) = maybe ([],[]) id (lookup defining declarations)
+          names = concatMap (\definition -> case (ns,definition) of
+            (ValueNamespace,Sign identifiers _) -> identifiers
+            (TypeNamespace,Type (n,_) _) -> [n]
+            (TypeNamespace,Data (n,_) _ _) -> [n]
+            (TypeNamespace,Newtype (n,_) _ _) -> [n]
+            _ -> []) defs
+          docs = case [n | n <- names, n == unQualIdent origin] of
+            [n] -> documentationBefore (slocIdent n) sourceLines
+            _ -> Nothing
           matches = case ns of
             ValueNamespace -> [Sign [visible] t | Sign names t <- defs, unQualIdent origin `elem` names]
             TypeNamespace -> [Type (visible,args) t | Type (n,args) t <- defs, n == unQualIdent origin]
@@ -85,7 +94,19 @@ project declarations (selected,checked,fixities) = do
           pure (Just (printedName ++ " :: " ++ showEType resolved))
         [Type lhs t] -> Just . showEDefs . (:[]) . Type lhs <$> resolveType defining fixities t
         _ -> Left ("Ambiguous declaration for " ++ unIdent origin)
-      pure (ApiSymbol (unIdent visible) ns (unIdent origin) (showEType checkedType) declared)
+      pure (ApiSymbol (unIdent visible) ns (unIdent origin) (showEType checkedType) declared docs)
+
+documentationBefore :: SLoc -> [String] -> Maybe String
+documentationBefore (SLoc _ line _) source = collect [] (reverse (take (line - 1) source))
+  where
+    collect following (previous:rest) = case stripPrefix "--" (dropWhile isSpace previous) of
+      Just comment -> case stripPrefix " |" comment of
+        Just first -> Just (intercalate "\n" (unspace first : following))
+        Nothing -> collect (unspace comment : following) rest
+      Nothing -> Nothing
+    collect _ [] = Nothing
+    unspace (' ':text) = text
+    unspace text = text
 
 -- The parser leaves operator precedence unresolved. Use the checker's resolver
 -- and fixities before asking its printer for a type.

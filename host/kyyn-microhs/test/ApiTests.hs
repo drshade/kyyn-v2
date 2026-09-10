@@ -19,7 +19,7 @@ main = do
       inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
   modules <- inspect sources public
   let symbolsIn m = concat [symbols | ApiModule name symbols <- modules, name == m]
-      matches m n ns = [s | s@(ApiSymbol name space _ _ _) <- symbolsIn m, name == n, space == ns]
+      matches m n ns = [s | s@(ApiSymbol name space _ _ _ _) <- symbolsIn m, name == n, space == ns]
   assert "SDK module inventory" (map (\(ApiModule name _) -> name) modules == public)
   assert "private function leaked" (null (matches "Kyyn.Edit" "unique" ValueNamespace))
   assert "abstract constructor leaked" (null (matches "Kyyn.Edit" "Collection" ValueNamespace))
@@ -29,18 +29,33 @@ main = do
   assert "record selector missing" (not (null (matches "Kyyn.Types.Evolution" "explanation" ValueNamespace)))
   let update = matches "Kyyn.Edit" "update" ValueNamespace
   assert "signature precedence/aliases" (case update of
-    [ApiSymbol _ _ "Kyyn.Edit.update" _ (Just "update :: FactId -> Edit a r -> CollectionEdit a r")] -> True
+    [ApiSymbol _ _ "Kyyn.Edit.update" _ (Just "update :: FactId -> Edit a r -> CollectionEdit a r") _] -> True
     _ -> False)
   assert "reexport origin/signature" (matches "Kyyn.Evolution" "update" ValueNamespace == update)
+  assert "SDK documentation is attached to the signature" (case update of
+    [ApiSymbol _ _ _ _ _ (Just docs)] -> "Fails if the ID is missing or ambiguous." `isInfixOf` docs
+    _ -> False)
+  docs <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DocFixture","Kyyn.DocReexport"]
+  let docsIn m = [(n,ns,d) | ApiModule moduleName symbols <- docs, moduleName == m,
+                            ApiSymbol n ns _ _ _ d <- symbols]
+      documentationFor n ns = [d | (name,namespace,d) <- docsIn "Kyyn.DocFixture", name == n, namespace == ns]
+  assert "reexport documentation" (docsIn "Kyyn.DocFixture" == docsIn "Kyyn.DocReexport")
+  assert "multiline, Unicode and indentation" (documentationFor "documented" ValueNamespace ==
+    [Just "Return the supplied text: café.\n\n  An indented example."])
+  assert "ordinary comments excluded" (documentationFor "ordinary" ValueNamespace == [Nothing])
+  assert "blank line detaches documentation" (documentationFor "detached" ValueNamespace == [Nothing])
+  assert "type documentation" (documentationFor "Item" TypeNamespace == [Just "An abstract item. Its constructor stays private."])
+  assert "private constructor still excluded" (null (documentationFor "PrivateItem" ValueNamespace))
+  assert "alias documentation" (documentationFor "Alias" TypeNamespace == [Just "A documented alias."])
   assert "upstream fallback must remain explicit" (case matches "Kyyn.Edit" "modify" ValueNamespace of
-    [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" signature Nothing] -> "StateT" `isInfixOf` signature
+    [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" signature Nothing Nothing] -> "StateT" `isInfixOf` signature
     _ -> False)
   assert "operator declaration must parse" (case matches "Kyyn.Evolution" ">=>" ValueNamespace of
-    [ApiSymbol _ _ _ _ (Just declaration)] -> "(>=>) ::" `isInfixOf` declaration
+    [ApiSymbol _ _ _ _ (Just declaration) _] -> "(>=>) ::" `isInfixOf` declaration
     _ -> False)
   withSystemTempDirectory "kyyn-api-" $ \temporary -> do
     let unique = nubBy sameOrigin (concatMap symbolsIn public)
-        declarations = [(n,ns,origin,decl) | ApiSymbol n ns origin _ (Just decl) <- unique]
+        declarations = [(n,ns,origin,decl) | ApiSymbol n ns origin _ (Just decl) _ <- unique]
         owner = reverse . drop 1 . dropWhile (/= '.') . reverse
     mapM_ (\directory -> copyTree directory temporary) (take 2 sources)
     forM_ (nub [owner origin | (_,_,origin,_) <- declarations]) $ \m -> do
@@ -51,7 +66,7 @@ main = do
       length rewritten `seq` writeFile path (unlines rewritten)
     roundTrip <- inspect (temporary:sources) public
     forM_ (zip modules roundTrip) $ \(ApiModule m before, ApiModule _ after) -> do
-      let signatures symbols = [(n,ns,origin,t) | ApiSymbol n ns origin t _ <- symbols]
+      let signatures symbols = [(n,ns,origin,t) | ApiSymbol n ns origin t _ _ <- symbols]
       assert ("Displayed declarations changed checked exports of " ++ m)
         (signatures before == signatures after)
     putStrLn ("Recompiled the SDK with all " ++ show (length declarations)
@@ -59,7 +74,7 @@ main = do
   missing <- inspectApi (repo </> "vendor/MicroHs") sources ["Kyyn.Missing"]
   assert "missing module must be a compiler error" (case missing of Left (ApiCompilerError _) -> True; _ -> False)
   putStrLn "Guest API exports, reexports, abstraction, aliases and signature round trips passed."
-  where sameOrigin (ApiSymbol _ ns a _ _) (ApiSymbol _ ns' b _ _) = (ns,a) == (ns',b)
+  where sameOrigin (ApiSymbol _ ns a _ _ _) (ApiSymbol _ ns' b _ _ _) = (ns,a) == (ns',b)
 
 assert :: String -> Bool -> IO ()
 assert label ok = unless ok (fail label)

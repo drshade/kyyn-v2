@@ -36,15 +36,18 @@ try {
   assert.equal(update.length, 1);
   assert.equal(update[0].definedAs, 'Kyyn.Edit.update');
   assert.equal(update[0].declaration, 'update :: FactId -> Edit a r -> CollectionEdit a r');
+  assert.equal(update[0].documentation, "Modify one fact's payload by its ID, keeping the ID unchanged.\nFails if the ID is missing or ambiguous.");
   const human = call('guest', 'symbol', 'show', 'Kyyn.Edit.update');
   assert.equal(human.status, 0, human.stderr);
   assert.ok(human.stdout.includes(update[0].declaration));
+  assert.ok(human.stdout.includes('Fails if the ID is missing or ambiguous.'));
   assert.equal(human.stderr, '');
   const fact = json('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact');
   assert.deepEqual(fact.symbols.map(s => s.namespace).sort(), ['type', 'value']);
   assert.ok(json('guest', 'symbol', 'show', 'Kyyn.Evolution.>=>').symbols[0].declaration.startsWith('(>=>) ::'));
   const fallback = json('guest', 'symbol', 'show', 'Kyyn.Edit.modify').symbols[0];
   assert.equal(fallback.declaration, null);
+  assert.equal(fallback.documentation, null);
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.modify').stdout.includes('[checked]'));
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);

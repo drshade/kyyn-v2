@@ -4,7 +4,9 @@ module Kyyn.Optics (Lens, Lens', lens, view, set, over) where
 import Data.Functor.Const (Const(..))
 import Data.Functor.Identity (Identity(..))
 
+-- | Focus on part of a structure, allowing both the part and the structure to change type.
 type Lens s t a b = forall f. Functor f => (a -> f b) -> s -> f t
+-- | An optic that preserves the types of the structure and its focused part.
 type Lens' s a = Lens s s a a
 
 lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b

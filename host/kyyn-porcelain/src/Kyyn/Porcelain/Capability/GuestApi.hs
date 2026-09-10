@@ -28,7 +28,7 @@ findModule selected = fmap (>>= find) readCatalogue
 findSymbol :: GuestApi :> es => String -> Eff es (Either [Diagnostic] (String,[ApiSymbol]))
 findSymbol selected = fmap (>>= find) readCatalogue
   where
-    find modules = case [(m,s) | ApiModule m symbols <- modules, s@(ApiSymbol n _ _ _ _) <- symbols,
+    find modules = case [(m,s) | ApiModule m symbols <- modules, s@(ApiSymbol n _ _ _ _ _) <- symbols,
                                m ++ "." ++ n == selected] of
       [] -> Left [errorDiagnostic "guest.symbol-not-found"
         ("Unknown guest symbol " ++ selected ++ "; use guest module show MODULE")]

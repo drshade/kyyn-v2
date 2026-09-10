@@ -145,6 +145,12 @@ checked expanded signatures from source declarations rather than claiming they
 are the author's spelling. Private constructors are not exposed by reading their
 source declarations.
 
+Documentation uses a small source convention: a `-- |` block immediately above
+a signature or type declaration, continued by adjacent `--` lines. Attach it to
+the defining symbol and retain it through reexports. Store the text with the
+catalogue and expose it in human and JSON output; ordinary implementation comments
+are not documentation. This does not promise full Haddock parsing or rendering.
+
 Generate this fixed catalogue from the staged SDK during the build and ship it
 as Dhall in the runtime bundle. Discovery reads the catalogue through filesystem
 and Dhall plumbing; it does not select a KB, invoke Git or compile guest code.
