@@ -1,9 +1,8 @@
 module Queries where
 
 import KyynQueryBindings
-import Kyyn.Types.Query (readFact)
-import Kyyn.Types.Fact
-import Kyyn.Types.SchemaMetadata
+import Kyyn.Query (readFact)
+import Kyyn.Schema
 import qualified TodoSchemaV1 as Schema
 
 type Input = String

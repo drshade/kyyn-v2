@@ -27,7 +27,7 @@ cp -R guest/kyyn-runtime/src/. "$stage_prefix/lib/kyyn/sdk/"
 cp -R vendor/transformers/Control "$stage_prefix/lib/kyyn/sdk/"
 cp vendor/json/Text/JSON/Types.hs vendor/json/Text/JSON/String.hs "$stage_prefix/lib/kyyn/sdk/Text/JSON/"
 MHSCPPHS="./microhs/bin/cpphs" "$(cabal list-bin exe:kyyn-api-catalogue)" \
-  "$stage_prefix/lib/kyyn" guest/kyyn-sdk/kyyn-sdk.cabal shared/kyyn-types/kyyn-types.cabal
+  "$stage_prefix/lib/kyyn" guest/kyyn-sdk/kyyn-sdk.cabal
 cp vendor/MicroHs/LICENSE "$stage_prefix/share/kyyn/licenses/MicroHs"
 cp vendor/json/LICENSE "$stage_prefix/share/kyyn/licenses/json"
 cp vendor/transformers/LICENSE "$stage_prefix/share/kyyn/licenses/transformers"

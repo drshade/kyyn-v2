@@ -26,7 +26,7 @@ try {
     return JSON.parse(result.stdout).result;
   };
   const modules = json('guest', 'module', 'list').modules;
-  assert.equal(modules.length, 10);
+  assert.deepEqual(modules, ['Kyyn.Edit', 'Kyyn.Evolution', 'Kyyn.Optics', 'Kyyn.Query', 'Kyyn.Schema', 'Kyyn.Validation']);
   assert.ok(modules.includes('Kyyn.Edit'));
   assert.ok(modules.every(name => !name.includes('Internal') && !name.includes('Runtime')));
   for (const name of modules) {
@@ -52,7 +52,7 @@ try {
   assert.ok(human.stdout.indexOf('Fails if the ID') < human.stdout.indexOf('-- [Defined as'));
   assert.ok(human.stdout.indexOf('Fails if the ID') < human.stdout.indexOf(update[0].declaration));
   assert.equal(human.stderr, '');
-  const fact = json('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact');
+  const fact = json('guest', 'symbol', 'show', 'Kyyn.Schema.Fact');
   assert.deepEqual(fact.symbols.map(s => s.namespace).sort(), ['type', 'value']);
   assert.ok(json('guest', 'symbol', 'show', 'Kyyn.Evolution.>=>').symbols[0].declaration.startsWith('(>=>) ::'));
   const fallback = json('guest', 'symbol', 'show', 'Kyyn.Edit.modify').symbols[0];
@@ -71,16 +71,20 @@ try {
   assert.equal(sourceJson.namespace, 'value');
   assert.equal(sourceJson.definedAs, 'Kyyn.Types.Evidence.get$.EvidenceRef.source');
   assert.equal(sourceJson.checkedSignature, 'EvidenceRef -> [Char]');
-  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact').stdout.includes('\nFact :: '));
-  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact').stdout.includes('data Fact a = Fact FactId a'));
-  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.FactId').stdout.includes('newtype FactId = FactId String'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.Fact').stdout.includes('\nFact :: '));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.Fact').stdout.includes('data Fact a = Fact FactId a'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.FactId').stdout.includes('newtype FactId = FactId String'));
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.Collection').stdout.includes('data Collection root a'));
-  const program = json('guest', 'symbol', 'show', 'Kyyn.Types.Program.Program').symbols.find(s => s.namespace === 'type');
-  const metadata = json('guest', 'module', 'show', 'Kyyn.Types.SchemaMetadata');
+  const metadata = json('guest', 'module', 'show', 'Kyyn.Schema');
   assert.ok(metadata.symbols.every(s => !s.name.includes('inst$') && !s.name.includes('@')));
   assert.deepEqual(metadata.symbols.filter(s => s.namespace === 'type').map(s => s.name).sort(),
-    ['Affordance', 'CollectionDecl', 'FieldRole', 'RoleDecl', 'SchemaMetadata']);
-  assert.equal(program.declaration, 'data Program request a = Pure a | forall x. Request (request x) (x -> Program request a)');
+    ['Affordance', 'CollectionDecl', 'Fact', 'FactId', 'FieldRole', 'RoleDecl', 'SchemaMetadata']);
+  const query = json('guest', 'module', 'show', 'Kyyn.Query');
+  assert.ok(!query.symbols.some(s => s.name === 'CollectionBinding' && s.namespace === 'value'));
+  const forbidden = ['Program', 'request', 'interpretProgram', 'SnapshotRead', 'ReadAccess', 'runLocally',
+    'CheckResult', 'checkReport', 'EvolutionOutput', 'evaluateEvolution'];
+  for (const name of modules) assert.ok(json('guest', 'module', 'show', name).symbols.every(s => !forbidden.includes(s.name)));
+  assert.equal(call('guest', 'module', 'show', 'Kyyn.Types.Fact').status, 1);
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);
     assert.equal(response.status, 1);

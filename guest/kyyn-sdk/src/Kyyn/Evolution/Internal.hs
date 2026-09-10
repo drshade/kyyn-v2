@@ -1,5 +1,5 @@
 module Kyyn.Evolution.Internal
-  ( RootBinding(..), RecordedRoot(..), StepObservation(..), EvolutionOutput(..), Evolution(..), evolve, edit ) where
+  ( RootBinding(..), RecordedRoot(..), StepObservation(..), EvolutionOutput(..), Evolution(..), evolve, edit, evaluateEvolution ) where
 
 import Kyyn.Types.Evolution (Rationale, EvolutionFailure)
 import Text.JSON.Types (JSValue)
@@ -13,6 +13,9 @@ data StepObservation = StepObservation Rationale RecordedRoot RecordedRoot deriv
 data EvolutionOutput a = EvolutionOutput a [StepObservation] deriving (Eq, Show)
 -- | A transformation between root types that records its steps or returns diagnostics.
 newtype Evolution a b = Evolution (a -> Either EvolutionFailure (EvolutionOutput b))
+
+evaluateEvolution :: Evolution a b -> a -> Either EvolutionFailure (EvolutionOutput b)
+evaluateEvolution (Evolution transform) = transform
 
 edit :: RootBinding a -> Rationale -> Edit a () -> Evolution a a
 edit binding rationale action = evolve binding binding rationale (execStateT action)

@@ -1,8 +1,8 @@
 module Queries where
 
 import KyynQueryBindings
-import Kyyn.Types.Query (readCollection, readFact)
-import Kyyn.Types.Fact
+import Kyyn.Query (readCollection, readFact)
+import Kyyn.Schema
 import qualified Schema
 
 ownerOf :: Schema.Input -> Query Schema.Result

@@ -91,6 +91,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   authored <- mapM (load "host/kyyn-microhs/test/query") ["Schema.hs","Queries.hs","Validate.hs"]
   sdkFiles <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["SchemaMetadata","Fact","Program","Query","Diagnostic"]] ++
+    [load "guest/kyyn-sdk/src" ("Kyyn/" ++ name ++ ".hs") | name <- ["Schema","Query","Validation"]] ++
     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","SchemaMetadata","Query","Validation"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let sdk = tree sdkFiles
@@ -122,8 +123,8 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   unless (response == Right (Right expected)) (fail ("Query execution failed: " ++ show response))
   badSources <- either fail pure (querySources contract StringType (OptionalType personType) "Queries.ownerOf"
     ([(p, if relativeName p == "Queries.hs" then utf8 (unlines
-      ["module Queries where", "import KyynQueryBindings", "import Kyyn.Types.Query (readCollection)",
-       "import Kyyn.Types.Fact", "import qualified Schema", "ownerOf :: String -> Query [Fact Schema.Person]",
+      ["module Queries where", "import KyynQueryBindings", "import Kyyn.Query (readCollection)",
+       "import Kyyn.Schema", "import qualified Schema", "ownerOf :: String -> Query [Fact Schema.Person]",
        "ownerOf _ = readCollection tasks"]) else b) | (p,b) <- authored] ++ files sdk))
   rejected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $ compileGuest badSources
   case rejected of

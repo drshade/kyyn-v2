@@ -1,8 +1,8 @@
 module Validate where
 
 import qualified TodoSchemaV1 as Schema
-import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.Diagnostic
+import Kyyn.Schema (Fact(..), FactId(..))
+import Kyyn.Validation
 
 validate :: Schema.Root -> ValidationReport
 validate (Schema.Root facts) = ValidationReport

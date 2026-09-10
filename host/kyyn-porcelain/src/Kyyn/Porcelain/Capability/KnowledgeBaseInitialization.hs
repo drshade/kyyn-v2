@@ -48,7 +48,7 @@ initializeKnowledgeBase target metadata = do
 initialRootFiles :: Either String FileTree
 initialRootFiles = traverse (\(name,bytes) -> (,) <$> relativePath name <*> pure bytes)
   [ ("kb.dhall", "{ schemaType = \"RootV1.Root\", schemaMetadata = \"RootV1.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }\n")
-  , ("src/RootV1.hs", "module RootV1 where\n\nimport Kyyn.Types.SchemaMetadata\n\ndata Root = Root deriving (Eq, Show)\n\nmetadata :: SchemaMetadata\nmetadata = SchemaMetadata [] [] []\n")
-  , ("src/Validate.hs", "module Validate where\n\nimport qualified RootV1 as Schema\nimport Kyyn.Types.Diagnostic\n\nvalidate :: Schema.Root -> ValidationReport\nvalidate _ = ValidationReport []\n")
+  , ("src/RootV1.hs", "module RootV1 where\n\nimport Kyyn.Schema\n\ndata Root = Root deriving (Eq, Show)\n\nmetadata :: SchemaMetadata\nmetadata = SchemaMetadata [] [] []\n")
+  , ("src/Validate.hs", "module Validate where\n\nimport qualified RootV1 as Schema\nimport Kyyn.Validation\n\nvalidate :: Schema.Root -> ValidationReport\nvalidate _ = ValidationReport []\n")
   , ("facts/root.dhall", "{=}\n")
   ] >>= fileTree

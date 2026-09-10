@@ -48,7 +48,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       tree = either error id . fileTree
   sdk <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program","SchemaMetadata"]] ++
-     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
+     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation","SchemaMetadata"]] ++
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]]) >>= right . fileTree
@@ -56,9 +56,9 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
   newSchema <- load "host/kyyn-microhs/test/evolution" "SchemaV2.hs"
   entry <- load "host/kyyn-microhs/test/evolution" "Evolution.hs"
   beforeContract <- right (checkContract beforeType metadata >>= checkRootLayout)
-  let oldMetadata = unlines ["module Metadata where", "import Kyyn.Types.SchemaMetadata",
+  let oldMetadata = unlines ["module Metadata where", "import Kyyn.Schema",
         "metadata :: SchemaMetadata", "metadata = SchemaMetadata [RoleDecl \"title\" \"Title\" Title] [] [CollectionDecl \"todos\" \"todos\" []]"]
-      checks namespace body = utf8 (unlines ["module Checks where", "import " ++ namespace, "import Kyyn.Types.Diagnostic",
+      checks namespace body = utf8 (unlines ["module Checks where", "import " ++ namespace, "import Kyyn.Validation",
         "validate :: Root -> ValidationReport", "validate _ = " ++ body])
       before = tree [oldSchema,(path "Metadata.hs",utf8 oldMetadata),
         (path "Checks.hs",checks "SchemaV1" "ValidationReport [Diagnostic Error \"old-rule\" \"Needs repair\" Nothing]")]

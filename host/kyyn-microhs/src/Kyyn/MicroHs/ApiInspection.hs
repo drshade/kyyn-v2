@@ -143,7 +143,10 @@ project declarations (selected,checked,fixities) = do
           fields = [unIdent n | TypeExport _ (Entry (EVar origin) _) xs <- tTypeExps checked,
             origin == mkIdent (defining ++ "." ++ unIdent (fst lhs)), ValueExport n _ <- xs]
       constructors <- mapM (resolveConstructor defining fields) (filter public cs)
-      let dataHeader = unwords (words (showEDefs [Data lhs [] []]))
+      let headerLhs = if any refinesRoot constructors then
+            (fst originalLhs, [IdKind (mkIdent (takeWhile (/= '$') (unIdent n))) k | IdKind n k <- snd originalLhs])
+            else lhs
+          dataHeader = unwords (words (showEDefs [Data headerLhs [] []]))
           header = if isNewtype then "newtype" ++ drop 4 dataHeader else dataHeader
           refinesRoot (Constr _ ctx _ _ _) = any (\constraint -> case constraint of
             EApp (EApp (EVar equal) (EVar variable)) _ ->
@@ -169,7 +172,8 @@ project declarations (selected,checked,fixities) = do
       fields' <- case fields of
         Left ts -> Left <$> mapM argument ts
         Right fs | all (\(label,_) -> unIdent label `elem` publicFields) fs ->
-          Right <$> mapM (\(label,t) -> (,) label <$> argument t) fs
+          Right <$> mapM (\(label,t@(strict,fieldType)) -> (,) label <$>
+            if strict then argument t else (,) False <$> resolve fieldType) fs
         Right fs -> Left <$> mapM (argument . snd) fs
       pure (Constr vs' ctx' n inf fields')
 

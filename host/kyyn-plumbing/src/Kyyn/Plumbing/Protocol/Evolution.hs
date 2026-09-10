@@ -50,7 +50,8 @@ evolutionSources before after authored = do
         ["import qualified " ++ name | name <- nub [definingModule name |
           t <- [beforeType,afterType], Algebraic name _ _ <- reachableTypes t]] ++
         ["import qualified KyynEvolutionCodec0 as BeforeCodec", "import qualified KyynEvolutionCodec1 as AfterCodec",
-         "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure, EvolutionOutput, evaluateEvolution)",
+         "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure)",
+         "import Kyyn.Evolution.Internal (EvolutionOutput, evaluateEvolution)",
          "import Kyyn.Types.Program (Program)",
          "selected :: " ++ haskellType beforeType ++ " -> Program NoRequests (Either EvolutionFailure (EvolutionOutput " ++ haskellType afterType ++ "))",
          "selected = pure . evaluateEvolution Evolution.evolution", "main :: IO ()", "main = do", "  input <- getContents",
@@ -67,8 +68,8 @@ evolutionBindings before after = do
     pure (path,utf8 source) | (index,(_,contract)) <- zip [0..] declarations]
   path <- relativePath "Kyyn/Workspace/Evolution.hs"
   let source = unlines $
-        ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, module Kyyn.Types.Diagnostic, module Kyyn.Types.Fact, editBefore, evolve, edit) where",
-         "import Kyyn.Evolution", "import Kyyn.Types.Diagnostic", "import Kyyn.Types.Fact",
+        ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
+         "import Kyyn.Evolution",
          "import Kyyn.Evolution.Internal (RootBinding(..))",
          "import qualified Kyyn.Evolution.Internal as Internal", "import Kyyn.Runtime.Json (encodeWith)"] ++
         ["import qualified " ++ name | name <- nub [definingModule name |

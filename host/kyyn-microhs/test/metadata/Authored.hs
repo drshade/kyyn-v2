@@ -1,7 +1,6 @@
 module Authored where
 
-import Kyyn.Types.SchemaMetadata
-import Kyyn.Types.Fact
+import Kyyn.Schema
 
 data Root = Root { todos :: [Fact Todo], people :: [Fact Todo] }
 data Todo = Todo { title :: String, owner :: FactId }
