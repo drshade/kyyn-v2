@@ -55,6 +55,8 @@ try {
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact').stdout.includes('data Fact a = Fact FactId a'));
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.FactId').stdout.includes('newtype FactId = FactId String'));
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.Collection').stdout.includes('data Collection root a'));
+  const program = json('guest', 'symbol', 'show', 'Kyyn.Types.Program.Program').symbols.find(s => s.namespace === 'type');
+  assert.equal(program.declaration, 'data Program rootParam1 rootParam2 = Pure rootParam2 | forall x. Request (rootParam1 x) (x -> Program rootParam1 rootParam2)');
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);
     assert.equal(response.status, 1);
