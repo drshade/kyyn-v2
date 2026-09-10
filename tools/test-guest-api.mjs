@@ -43,6 +43,8 @@ try {
   assert.ok(human.stdout.includes('Fails if the ID is missing or ambiguous.'));
   assert.ok(human.stdout.includes("-- Modify one fact's payload by its ID, keeping the ID unchanged.\n-- Fails if the ID is missing or ambiguous.\n"));
   assert.ok(human.stdout.includes('-- [Defined as Kyyn.Edit.update]'));
+  assert.ok(human.stdout.includes('-- [Defined as Kyyn.Edit.update]\n' + update[0].declaration));
+  assert.ok(human.stdout.indexOf('Fails if the ID') < human.stdout.indexOf('-- [Defined as'));
   assert.ok(human.stdout.indexOf('Fails if the ID') < human.stdout.indexOf(update[0].declaration));
   assert.equal(human.stderr, '');
   const fact = json('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact');
@@ -58,6 +60,7 @@ try {
   const source = call('guest', 'symbol', 'show', 'Kyyn.Evolution.source').stdout;
   assert.ok(source.includes('\nsource :: EvidenceRef -> [Char]  -- [compiler signature]'));
   assert.ok(source.includes('-- [Defined as Kyyn.Types.Evidence.source]'));
+  assert.ok(source.includes('-- [Defined as Kyyn.Types.Evidence.source]\nsource ::'));
   assert.ok(!source.includes('get$'));
   const sourceJson = json('guest', 'symbol', 'show', 'Kyyn.Evolution.source').symbols[0];
   assert.equal(sourceJson.namespace, 'value');
