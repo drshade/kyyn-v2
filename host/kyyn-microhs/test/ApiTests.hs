@@ -21,6 +21,10 @@ main = do
   let symbolsIn m = concat [symbols | ApiModule name symbols <- modules, name == m]
       matches m n ns = [s | s@(ApiSymbol name space _ _ _ _) <- symbolsIn m, name == n, space == ns]
   assert "SDK module inventory" (map (\(ApiModule name _) -> name) modules == public)
+  implicit <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.ImplicitExports"]
+  let implicitNames = [n | ApiModule _ symbols <- implicit, ApiSymbol n _ _ _ _ _ <- symbols]
+  assert "implicit exports hide instance machinery" (all (\n -> not ("inst$" `isInfixOf` n || "@" `isInfixOf` n)) implicitNames)
+  assert "source operators and apostrophes remain discoverable" (all (`elem` implicitNames) ["$", "named'", "Public"])
   assert "private function leaked" (null (matches "Kyyn.Edit" "unique" ValueNamespace))
   assert "abstract constructor leaked" (null (matches "Kyyn.Edit" "Collection" ValueNamespace))
   assert "abstract type missing" (length (matches "Kyyn.Edit" "Collection" TypeNamespace) == 1)

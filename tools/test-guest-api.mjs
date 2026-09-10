@@ -71,6 +71,10 @@ try {
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Types.Fact.FactId').stdout.includes('newtype FactId = FactId String'));
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.Collection').stdout.includes('data Collection root a'));
   const program = json('guest', 'symbol', 'show', 'Kyyn.Types.Program.Program').symbols.find(s => s.namespace === 'type');
+  const metadata = json('guest', 'module', 'show', 'Kyyn.Types.SchemaMetadata');
+  assert.ok(metadata.symbols.every(s => !s.name.includes('inst$') && !s.name.includes('@')));
+  assert.deepEqual(metadata.symbols.filter(s => s.namespace === 'type').map(s => s.name).sort(),
+    ['Affordance', 'CollectionDecl', 'FieldRole', 'RoleDecl', 'SchemaMetadata']);
   assert.equal(program.declaration, 'data Program rootParam1 rootParam2 = Pure rootParam2 | forall x. Request (rootParam1 x) (x -> Program rootParam1 rootParam2)');
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);
