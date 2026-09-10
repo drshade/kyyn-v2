@@ -125,6 +125,8 @@ to callers otherwise forbidden to import it.
 
 The build-only `kyyn-api-catalogue` executable lives in `host/kyyn-microhs/app/`;
 it generates the installed guest discovery catalogue specified in [ADR 0018](0018-surfaces.md).
+It inspects from the staged runtime directory using relative paths, avoiding the
+native compiler's shell-based CPP invocation splitting installation paths containing spaces.
 
 The pinned upstream source lives at `vendor/MicroHs/` as an explicit build input.
 Native compiler integration and the bundled guest toolchain use that same selected

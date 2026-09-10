@@ -71,13 +71,13 @@ project declarations (selected,checked,fixities) = do
         _ -> Left ("Unsupported exported entry: " ++ unIdent visible)
       let defining = unIdent (qualOf origin)
           (defs,sourceLines) = maybe ([],[]) id (lookup defining declarations)
-          names = concatMap (\definition -> case (ns,definition) of
+          declarationNames = concatMap (\definition -> case (ns,definition) of
             (ValueNamespace,Sign identifiers _) -> identifiers
             (TypeNamespace,Type (n,_) _) -> [n]
             (TypeNamespace,Data (n,_) _ _) -> [n]
             (TypeNamespace,Newtype (n,_) _ _) -> [n]
             _ -> []) defs
-          docs = case [n | n <- names, n == unQualIdent origin] of
+          docs = case [n | n <- declarationNames, n == unQualIdent origin] of
             [n] -> documentationBefore (slocIdent n) sourceLines
             _ -> Nothing
           matches = case ns of

@@ -22,5 +22,7 @@ Evolution first >=> Evolution second = Evolution $ \before -> do
 identityEvolution :: Evolution a a
 identityEvolution = Evolution (\value -> Right (EvolutionOutput value []))
 
+-- | Apply an evolution to its input root, returning the final root and recorded steps.
+-- A failed step returns diagnostics instead of a partial output.
 evaluateEvolution :: Evolution a b -> a -> Either EvolutionFailure (EvolutionOutput b)
 evaluateEvolution (Evolution transform) = transform

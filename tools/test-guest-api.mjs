@@ -41,6 +41,7 @@ try {
   assert.equal(human.status, 0, human.stderr);
   assert.ok(human.stdout.includes(update[0].declaration));
   assert.ok(human.stdout.includes('Fails if the ID is missing or ambiguous.'));
+  assert.ok(human.stdout.indexOf('Fails if the ID') < human.stdout.indexOf(update[0].declaration));
   assert.equal(human.stderr, '');
   const fact = json('guest', 'symbol', 'show', 'Kyyn.Types.Fact.Fact');
   assert.deepEqual(fact.symbols.map(s => s.namespace).sort(), ['type', 'value']);

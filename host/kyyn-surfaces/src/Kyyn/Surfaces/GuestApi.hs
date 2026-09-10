@@ -30,8 +30,6 @@ namespaceName ValueNamespace = "value"
 
 symbolText :: ApiSymbol -> [String]
 symbolText (ApiSymbol name namespace origin signature declaration documentation) =
-  [ ""
-  , maybe (namespaceName namespace ++ " " ++ name ++ " :: " ++ signature ++ "  [checked]")
-      id declaration
-  , "  Defined as " ++ origin
-  ] ++ maybe [] (map ("  " ++) . lines) documentation
+  [""] ++ maybe [] (map ("  " ++) . lines) documentation
+  ++ maybe [namespaceName namespace ++ " " ++ name ++ " :: " ++ signature ++ "  [checked]"] lines declaration
+  ++ ["  Defined as " ++ origin]

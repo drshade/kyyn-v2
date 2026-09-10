@@ -188,7 +188,7 @@ Authored signatures preserve aliases such as `Edit` and `Lens'`. Entries marked
 these with a null `declaration` and always includes `checkedSignature`.
 Re-exported transformer operations such as `modify` currently use this checked form.
 
-Documentation appears beneath the signature and in JSON's `documentation` field.
+Documentation appears above the signature and in JSON's `documentation` field.
 Write `-- |` immediately above a signature or type declaration, with further
 adjacent `--` lines for continuation. A physical blank line ends the association;
 use a bare `--` line for a paragraph break within the documentation. Reexports

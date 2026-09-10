@@ -35,6 +35,11 @@ main = do
   assert "SDK documentation is attached to the signature" (case update of
     [ApiSymbol _ _ _ _ _ (Just docs)] -> "Fails if the ID is missing or ambiguous." `isInfixOf` docs
     _ -> False)
+  forM_ ["Kyyn.Edit","Kyyn.Evolution","Kyyn.Optics"] $ \m ->
+    forM_ [s | s@(ApiSymbol _ _ origin _ (Just _) _) <- symbolsIn m,
+              (reverse . drop 1 . dropWhile (/= '.') . reverse) origin == m] $ \s ->
+      assert ("Missing documentation on authored SDK declaration: " ++ show s)
+        (case s of ApiSymbol _ _ _ _ _ (Just text) -> not (null text); _ -> False)
   docs <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DocFixture","Kyyn.DocReexport"]
   let docsIn m = [(n,ns,d) | ApiModule moduleName symbols <- docs, moduleName == m,
                             ApiSymbol n ns _ _ _ d <- symbols]
@@ -69,6 +74,8 @@ main = do
       let signatures symbols = [(n,ns,origin,t) | ApiSymbol n ns origin t _ _ <- symbols]
       assert ("Displayed declarations changed checked exports of " ++ m)
         (signatures before == signatures after)
+      assert ("Signature substitution displaced documentation in " ++ m)
+        ([(n,ns,d) | ApiSymbol n ns _ _ _ d <- before] == [(n,ns,d) | ApiSymbol n ns _ _ _ d <- after])
     putStrLn ("Recompiled the SDK with all " ++ show (length declarations)
       ++ " displayed signatures/aliases substituted; all checked exports unchanged.")
   missing <- inspectApi (repo </> "vendor/MicroHs") sources ["Kyyn.Missing"]
