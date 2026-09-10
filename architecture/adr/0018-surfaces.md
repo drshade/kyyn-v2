@@ -194,6 +194,11 @@ handles depend on their types and collection declarations. An invalid endpoint
 produces an actionable diagnostic, not a stale catalogue or placeholder types.
 The author can still inspect the installed SDK by omitting `--evolution`.
 
+Workspace-scoped discovery is a runtime command: it loads the installed SDK source
+tree and native compiler integration, honours `--runtime`, and uses an
+ApiInspection interpreter in `kyyn-microhs`, alongside SchemaInspection.
+Unscoped discovery remains catalogue-only.
+
 Keep the two capabilities separate so fixed discovery does not acquire compiler
 or repository dependencies. Proposed host contracts are:
 
@@ -215,10 +220,13 @@ data ApiInspection :: Effect where
     -> ApiInspection m (Either [Diagnostic] [ApiModule])
 ```
 
-`WorkspaceApi` is porcelain. Its interpreter reads a workspace snapshot through
-EvolutionStore, opens the declared Before revision through RootOpening's
-source-only operation, and checks that the copied Before source agrees with that
-revision. It opens the target source separately. It neither reads accepted facts
+`WorkspaceApi` is porcelain. Factor endpoint preparation into one shared porcelain
+function used by discovery and evolution capture/evaluation, rather than copying
+their snapshot-loading or Before-copy checks. The common source-only preparation
+reads the workspace snapshot through EvolutionStore, opens the declared Before
+revision through RootOpening, verifies the copied Before source, and opens the
+target source. Evolution capture additionally loads the required fact input;
+discovery stops at the source endpoints. Discovery neither reads accepted facts
 nor requires Before to equal current HEAD: discovery is useful while repairing an
 outdated workspace too. Source inspection includes the existing pure schema-metadata
 evaluation; it must not execute the evolution, validator or queries.
@@ -232,6 +240,14 @@ MicroHs export inspection; its handler manages temporary compilation files.
 Only the three selected public generated modules enter the workspace catalogue;
 codecs, entry adapters and private root bindings remain absent.
 
+The binding generator emits `-- |` documentation alongside its public declarations.
+Document `evolve`, `editBefore` and `edit` with their concrete endpoint types and
+the rule that each supplied rationale describes one recorded step and its diff.
+Document each collection handle with its logical collection name, root field and
+fact type. Derive these details from the checked endpoint contracts and metadata
+already used to generate the bindings, not a separate documentation manifest.
+Extend documentation coverage tests to these generated declarations.
+
 The composition root supplies the installed SDK catalogue and workspace catalogue
 to the same navigation functions. It installs WorkspaceApi and its source/compiler
 handlers only for workspace-scoped discovery. Inspection creates no durable cache,
@@ -239,6 +255,9 @@ does not write the workspace or Git refs, and does not save or check a candidate
 Each invocation describes its captured inputs, not a snapshot promised to remain
 current after the command returns. Use the normal source-collision and diagnostic
 rules rather than silently selecting one of two differing same-named modules.
+In workspace-scoped human output, show declarations defined in each generated
+module before its reexports: the workspace-specific operations are why the author
+selected this context. JSON retains a flat symbol list with exact origins.
 
 Before implementation is considered complete, prove discovery in a newly created
 workspace with an intentionally invalid evolution body; same-schema and changed-schema
@@ -367,7 +386,9 @@ follows the user's conversion settings. Configured hooks, including a global
 (empty PATH); their failures follow the existing Git publication/recovery outcomes.
 
 Runtime paths come from the
-installed layout, with `--runtime` and `--git` development overrides. Listing,
+installed layout, with `--runtime` and `--git` development overrides.
+Workspace-scoped guest discovery loads the SDK and compiler integration; unscoped
+guest discovery reads only the installed catalogue. Evolution listing,
 state changes, archived inspection, recovery and already-accepted diagnosis do
 not load the SDK. Host configuration/path resolution and interpretation live in
 `kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
