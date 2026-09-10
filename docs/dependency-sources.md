@@ -18,8 +18,10 @@ own provenance and retained notices.
 | dhall | 1.42.3 | BSD-3-Clause | [source](https://hackage.haskell.org/package/dhall-1.42.3/dhall-1.42.3.tar.gz) |
 | prettyprinter | 1.7.2 | BSD-2-Clause | [source](https://hackage.haskell.org/package/prettyprinter-1.7.2/prettyprinter-1.7.2.tar.gz) |
 | optparse-applicative | 0.19.0.0 | BSD3 | [source](https://hackage.haskell.org/package/optparse-applicative-0.19.0.0/optparse-applicative-0.19.0.0.tar.gz) |
+| transformers | 0.6.1.1 | BSD-3-Clause | [source](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) |
 
 Each archive contains `LICENSE` (`LICENSE.md` for prettyprinter); its Cabal declaration and that file were inspected.
-These are native Cabal dependencies, not copied into guest source. The table does
+These are native Cabal dependencies. Transformers also supplies the vendored
+guest subset documented in [vendored inputs](../vendor/README.md). The table does
 not pin the solver: Cabal files govern dependency constraints, and the resolved
 build plan must be reviewed for any distribution.

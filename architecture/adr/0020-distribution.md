@@ -24,6 +24,11 @@ libraries, and web assets. Include dependency licenses/notices. Runtime package
 compilation uses these bundled tools and captured local source, not arbitrary
 system Cabal resolution or a network download during validation.
 
+The SDK's fact-editing dependencies ship as the small unmodified transformers
+source subset recorded in [vendored inputs](../../vendor/README.md), with its
+license. The guest compiler adapter selects its supported CPP branches; users
+do not install another package manager or fetch libraries to edit a fact.
+
 The staged compiler is the GHC-built pinned MicroHs described in
 [ADR 0002](0002-runtime.md); GHC is needed to build it, not to execute KB code.
 The source selection is unchanged, but native library dependencies and notices

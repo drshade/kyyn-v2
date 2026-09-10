@@ -11,7 +11,7 @@ import Data.Foldable (toList)
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Kyyn.Domain.Contract (RootContract, rootSchema, rootType, contractId, contractFingerprint)
+import Kyyn.Domain.Contract (RootContract, rootSchema, rootType, contractId, contractFingerprint, collectionContracts, CollectionContract(..))
 import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, reachableTypes)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
@@ -29,6 +29,8 @@ identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
   , "import Kyyn.Workspace.Evolution"
   , "import qualified " ++ selectedModule ++ " as Before"
   , "import qualified " ++ selectedModule ++ " as After"
+  , "import qualified Kyyn.Workspace.Before as BeforeCollections"
+  , "import qualified Kyyn.Workspace.After as AfterCollections"
   , ""
   , "evolution :: Evolution " ++ aliased "Before" ++ " " ++ aliased "After"
   , "evolution = identityEvolution"
@@ -58,13 +60,14 @@ evolutionSources before after authored = do
 
 evolutionBindings :: RootContract -> RootContract -> Either String FileTree
 evolutionBindings before after = do
+  collections <- sequence [collectionBindings "Before" before, collectionBindings "After" after]
   codecs <- sequence [do
     source <- generateCodecs (codecName index) (rootType (rootSchema contract))
     path <- relativePath (codecName index ++ ".hs")
     pure (path,utf8 source) | (index,(_,contract)) <- zip [0..] declarations]
   path <- relativePath "Kyyn/Workspace/Evolution.hs"
   let source = unlines $
-        ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, module Kyyn.Types.Diagnostic, module Kyyn.Types.Fact, editBefore, evolve, editAfter) where",
+        ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, module Kyyn.Types.Diagnostic, module Kyyn.Types.Fact, editBefore, evolve, edit) where",
          "import Kyyn.Evolution", "import Kyyn.Types.Diagnostic", "import Kyyn.Types.Fact",
          "import Kyyn.Evolution.Internal (RootBinding(..))",
          "import qualified Kyyn.Evolution.Internal as Internal", "import Kyyn.Runtime.Json (encodeWith)"] ++
@@ -74,14 +77,12 @@ evolutionBindings before after = do
         concat [[name ++ " :: RootBinding " ++ haskellType (rootType (rootSchema contract)),
           name ++ " = RootBinding " ++ show (contractFingerprint (contractId (rootSchema contract))) ++
           " (encodeWith " ++ codecName index ++ ".rootCodec)"] | (index,(name,contract)) <- zip [0..] declarations] ++
-        concat [
-          [name ++ " :: Rationale -> (" ++ input ++ " -> Either EvolutionFailure " ++ output ++ ") -> Evolution " ++ input ++ " " ++ output,
-           name ++ " = Internal.evolve " ++ left ++ " " ++ right] |
-          (name,left,right,input,output) <-
-            [("editBefore","beforeRoot","beforeRoot",beforeType,beforeType),
-             ("evolve","beforeRoot","afterRoot",beforeType,afterType),
-             ("editAfter","afterRoot","afterRoot",afterType,afterType)]]
-  fileTree ((path,utf8 source):codecs)
+        ["evolve :: Rationale -> (" ++ beforeType ++ " -> Either EvolutionFailure " ++ afterType ++ ") -> Evolution " ++ beforeType ++ " " ++ afterType,
+         "evolve = Internal.evolve beforeRoot afterRoot"] ++
+        concat [[name ++ " :: Rationale -> Edit " ++ endpoint ++ " () -> Evolution " ++ endpoint ++ " " ++ endpoint,
+                 name ++ " = Internal.edit " ++ binding] |
+          (name,binding,endpoint) <- [("editBefore","beforeRoot",beforeType),("edit","afterRoot",afterType)]]
+  fileTree ((path,utf8 source):codecs ++ concatMap files collections)
   where
     declarations = [("beforeRoot",before),("afterRoot",after)]
     beforeType = haskellType (rootType (rootSchema before))
@@ -89,6 +90,26 @@ evolutionBindings before after = do
     codecName :: Int -> String
     codecName index = "KyynEvolutionCodec" ++ show index
     utf8 = Text.encodeUtf8 . Text.pack
+
+collectionBindings :: String -> RootContract -> Either String FileTree
+collectionBindings endpoint contract = do
+  path <- relativePath ("Kyyn/Workspace/" ++ endpoint ++ ".hs")
+  let root = rootType (rootSchema contract)
+      declarations = collectionContracts (rootSchema contract)
+      rootModule = case root of Algebraic name _ _ -> definingModule name; _ -> error "Checked root is not a record"
+      source = unlines $
+        ["module Kyyn.Workspace." ++ endpoint ++ " (" ++ comma [field | CollectionContract _ field _ _ <- declarations] ++ ") where",
+         "import qualified Kyyn.Edit.Internal as Internal", "import qualified Kyyn.Optics as Optics"] ++
+        ["import qualified " ++ name | name <- nub [definingModule name | Algebraic name _ _ <- reachableTypes root]] ++
+        concat [[field ++ " :: Internal.Collection " ++ haskellType root ++ " (" ++ haskellType payload ++ ")",
+                 field ++ " = Internal.Collection " ++ show name ++ " (Optics.lens " ++ rootModule ++ "." ++ field ++
+                   " (\\root value -> root { " ++ rootModule ++ "." ++ field ++ " = value }))"] |
+          CollectionContract name field payload _ <- declarations]
+  fileTree [(path,Text.encodeUtf8 (Text.pack source))]
+  where
+    comma [] = ""
+    comma [x] = x
+    comma (x:xs) = x ++ ", " ++ comma xs
 
 decodeEvolutionReply :: ByteString -> Either String (Either EvolutionFailure EvolutionObservation)
 decodeEvolutionReply bytes = eitherDecodeStrict bytes >>= parseEither

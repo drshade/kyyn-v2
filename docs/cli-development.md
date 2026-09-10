@@ -109,22 +109,41 @@ module Evolution where
 import Kyyn.Workspace.Evolution
 import qualified RootV1 as Before
 import qualified RootV2 as After
+import qualified Kyyn.Workspace.Before as BeforeCollections
+import qualified Kyyn.Workspace.After as AfterCollections
 
 evolution :: Evolution Before.Root After.Root
 evolution =
-  editBefore (Rationale "Correct an old title" []) correctTitle
-  >=> evolve (Rationale "Add review status" []) addReviewStatus
-  >=> editAfter (Rationale "Remove the cancelled task" []) removeCancelledTask
+  evolve (Rationale "Add review status" []) addReviewStatus
+  >=> edit (Rationale "Complete the report" [])
+    (within AfterCollections.todos $ update (FactId "todo-001") $
+      modify (\todo -> todo { After.status = After.Done }))
+  >=> edit (Rationale "Remove the cancelled task" [])
+    (within AfterCollections.todos $ remove (FactId "todo-002"))
 ```
 
-The three helpers in this sketch are ordinary authored functions returning
-`Either EvolutionFailure` of the appropriate root. `Kyyn.Workspace.Evolution`
+`addReviewStatus` is an authored `Before.Root -> Either EvolutionFailure After.Root`
+function. `edit` takes a State action: use `get`, `gets`, `put` and `modify`, or
+`within` a generated collection handle to `current`, `update`, `remove` or `append`
+facts by ID. `update` focuses on a payload without changing its FactId. Missing or
+duplicate IDs report a located error. For nested updates, define a `Lens'` with
+`lens getter (\record value -> record { field = value })`, then use
+`zoom details (modifying priority (+ 1))`; lenses compose with `(.)`.
+`refuse diagnostics` rejects an edit without producing partial state.
+
+Collection bindings use the schema's root field names, independently of their
+logical collection names. They are in `Kyyn.Workspace.Before` and
+`Kyyn.Workspace.After`, not on disk in the authored sources. Schema selectors
+remain under the ordinary Before/After schema imports. `Kyyn.Workspace.Evolution`
 is generated when checking: it supplies the endpoint-specific step constructors,
 composition, rationale/evidence, fact and diagnostic types. No generated bindings
 or execution wrapper need to be supplied. Each step produces its own diff.
 Same-schema changes can use only edits. For a schema change, give the new module
 a distinct name, update `target/kb.dhall` and the After import, and implement
 the transition with `evolve`. Temporary helper types need no declaration.
+Use `editBefore` for a State edit before that transition. Each edit has one
+rationale/diff even if it touches several facts; compose separate edits to give
+them separate explanations.
 
 Inspect the candidate and its rationale with `show` before
 acceptance. Use `evolution draft ID` to return unfinished work to Draft.
