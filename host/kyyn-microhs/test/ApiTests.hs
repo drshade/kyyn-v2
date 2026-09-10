@@ -35,9 +35,9 @@ main = do
   assert "SDK documentation is attached to the signature" (case update of
     [ApiSymbol _ _ _ _ _ (Just docs)] -> "Fails if the ID is missing or ambiguous." `isInfixOf` docs
     _ -> False)
-  forM_ ["Kyyn.Edit","Kyyn.Evolution","Kyyn.Optics"] $ \m ->
-    forM_ [s | s@(ApiSymbol _ _ origin _ (Just _) _) <- symbolsIn m,
-              (reverse . drop 1 . dropWhile (/= '.') . reverse) origin == m] $ \s ->
+  forM_ public $ \m ->
+    forM_ [s | s@(ApiSymbol _ ns _ _ declaration _) <- symbolsIn m,
+              ns == TypeNamespace || declaration /= Nothing] $ \s ->
       assert ("Missing documentation on authored SDK declaration: " ++ show s)
         (case s of ApiSymbol _ _ _ _ _ (Just text) -> not (null text); _ -> False)
   docs <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DocFixture","Kyyn.DocReexport"]
