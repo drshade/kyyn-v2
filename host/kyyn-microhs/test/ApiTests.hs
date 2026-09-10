@@ -74,8 +74,8 @@ main = do
       originalDeclaration = declarationIn "Kyyn.DataFixture"
   assert "public record fields" (originalDeclaration "Record" ==
     "data Record = Record { title :: String, count :: Int, note :: Maybe String, total :: !(Maybe Int) }")
-  assert ("GADT header preserves authored variable: " ++ show (originalDeclaration "Expr")) (originalDeclaration "Expr" ==
-    "data Expr a where\n  Number :: Int -> Expr Int\n  Apply :: (a -> rootParam1) -> Expr a -> Expr rootParam1")
+  assert ("GADT header preserved; lowered result variable gets a fresh readable name: " ++ show (originalDeclaration "Expr")) (originalDeclaration "Expr" ==
+    "data Expr a where\n  Number :: Int -> Expr Int\n  Apply :: (a -> b) -> Expr a -> Expr b")
   assert "abstract data header" (words (originalDeclaration "Abstract") == ["data", "Abstract"])
   assert "abstract newtype header" (words (originalDeclaration "AbstractNew") == ["newtype", "AbstractNew"])
   assert "partial constructors" ("Visible" `isInfixOf` originalDeclaration "Partial"

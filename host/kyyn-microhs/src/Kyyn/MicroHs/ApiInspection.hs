@@ -216,7 +216,8 @@ presentationVariables (name,args) constructors = ((name,map variable args),map c
     allocate _ [] = []
     allocate used (v:rest) =
       let authored = takeWhile (/= '$') (unIdent v)
-          candidate = head [n | n <- authored : ["rootParam" ++ show i | i <- [1 :: Int ..]], n `notElem` used]
+          candidate = head [n | n <- authored : map (:[]) ['a'..'z']
+                ++ [letter : show i | i <- [1 :: Int ..], letter <- ['a'..'z']], n `notElem` used]
       in (v,EVar (mkIdent candidate)) : allocate (candidate:used) rest
     substitutions = allocate occupied generated
     rename v = case lookup v substitutions of Just (EVar n) -> n; _ -> v
