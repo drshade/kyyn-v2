@@ -41,13 +41,14 @@ runEvolutionStore = interpret $ \_ -> \case
   ReadEvolutionSummary (EvolutionWorkspace kb identity) revision ->
     runExceptT (summaryAt kb revision identity >>= requireWorkspace)
   ReadArchivedReport workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) revision -> runExceptT $ do
-    path <- checked (workspaceLocation workspace >>= \p -> relativePath (relativeName p ++ "/result.json"))
+    path <- checked (workspaceLocation workspace >>= \p -> relativePath (relativeName p ++ "/result.dhall"))
     bytes <- ExceptT (Git.readFileAt repository revision path)
     traverse (\source -> do
       accepted <- lookupAcceptance kb identity revision
       unless (accepted /= Nothing) (throwE [errorDiagnostic "evolution.unverified-report"
         "An archived report exists but this evolution has no confirmed acceptance at the selected revision"])
-      decoded <- either (throwE . pure . errorDiagnostic "evolution.invalid-report") pure (decodeEvolutionRecord source)
+      decoded <- ExceptT (decodeEvolutionRecord source >>= pure . either
+        (Left . pure . errorDiagnostic "evolution.invalid-report") Right)
       (owner,_,_,report) <- either throwE pure decoded
       unless (owner == identity) (throwE [errorDiagnostic "evolution.invalid-report" "Archived report belongs to another evolution"])
       pure report) bytes
@@ -86,8 +87,9 @@ runEvolutionStore = interpret $ \_ -> \case
       Just _ -> ExceptT (Right <$> FileSystem.readTree notesScope)
     encoded <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
       (WorkspaceSnapshot (WorkspaceManifest revision name explanation Accepted) source target change notes))
-    resultPath <- checked (relativePath "result.json")
-    archive <- checked (fileTree ((resultPath,encodeEvolutionRecord identity before after report) : files encoded))
+    resultPath <- checked (relativePath "result.dhall")
+    document <- ExceptT (encodeEvolutionRecord identity before after report)
+    archive <- checked (fileTree ((resultPath,document) : files encoded))
     destination <- checked (workspaceLocation (EvolutionWorkspace kb identity))
     pure (Subtree destination, archive)
   ReadWorkspace location -> runExceptT (readWorkspace location)
@@ -98,7 +100,7 @@ runEvolutionStore = interpret $ \_ -> \case
       snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _) _ target _ _)) report root@(Root after facts code)) -> do
     parent <- candidateScope kb
     unless (revision == selected && code == target)
-      (storageFailure WriteFile "candidate.json" "Candidate disagrees with its captured Before or target")
+      (storageFailure WriteFile "candidate.dhall" "Candidate disagrees with its captured Before or target")
     _ <- RootStore.loadRootValueForChecking root >>= stored WriteFile "root"
     checkSavedReport WriteFile report
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
@@ -111,8 +113,9 @@ runEvolutionStore = interpret $ \_ -> \case
     location <- stored WriteFile "candidate" (directoryScope (scopedPath parent allocated))
     writeTree location "capture/" capture
     writeTree location "root/" tree
-    metadata <- stored WriteFile "candidate.json" (relativePath "candidate.json")
-    FileSystem.writeBytes location metadata (encodeEvolutionRecord identity before after report)
+    metadata <- stored WriteFile "candidate.dhall" (relativePath "candidate.dhall")
+    document <- encodeEvolutionRecord identity before after report >>= stored WriteFile "candidate.dhall"
+    FileSystem.writeBytes location metadata document
     pointer <- stored WriteFile "latest" (relativePath ("latest/" ++ evolutionIdName identity))
     FileSystem.replaceBytes parent pointer (Bytes.pack (relativeName allocated))
   LoadCandidate (EvolutionWorkspace kb identity) -> do
@@ -126,26 +129,28 @@ runEvolutionStore = interpret $ \_ -> \case
         path <- stored ReadFile "latest" (relativePath (evolutionIdName key))
         location <- stored ReadFile "candidate" (directoryScope (scopedPath parent path))
         tree <- FileSystem.readTree location
-        unless (all (\(p,_) -> let n = relativeName p in n == "candidate.json" ||
-            "capture/" `isPrefixOf` n || "root/" `isPrefixOf` n) (files tree))
-          (storageFailure ReadFile "candidate" "Unexpected saved-result file")
-        metadata <- stored ReadFile "candidate.json" $ maybe (Left ("Missing candidate metadata" :: String)) Right
-          (lookup "candidate.json" [(relativeName p,b) | (p,b) <- files tree])
-        decoded <- stored ReadFile "candidate.json" (decodeEvolutionRecord metadata)
-        capture <- stored ReadFile "capture" (subtree "capture/" tree)
-        captured <- WorkspaceStore.readWorkspaceSnapshot capture
-        case (decoded,captured) of
-          (Right (owner,before,after,report), Right snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) _ target _ _)) -> do
-            rootFiles <- stored ReadFile "root" (subtree "root/" tree)
-            facts <- stored ReadFile "root/facts" (fileTree [(p,b) | (p,b) <- files rootFiles, "facts/" `isPrefixOf` relativeName p])
-            code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
-            unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
-            unless (owner == identity) (storageFailure ReadFile "candidate.json" "Saved result belongs to another evolution")
-            let root = Root after facts code
-            _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
-            checkSavedReport ReadFile report
-            pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
-          _ -> pure (Left [errorDiagnostic "candidate.stale" "Saved result no longer matches this kernel; check the evolution again"])
+        let knownLayout = all (\(p,_) -> let n = relativeName p in n == "candidate.dhall" ||
+              "capture/" `isPrefixOf` n || "root/" `isPrefixOf` n) (files tree)
+            stale = pure (Left [errorDiagnostic "candidate.stale"
+              "Saved result no longer matches this kernel; check the evolution again"])
+        case lookup "candidate.dhall" [(relativeName p,b) | (p,b) <- files tree] of
+          Just metadata | knownLayout -> do
+            decoded <- decodeEvolutionRecord metadata >>= stored ReadFile "candidate.dhall"
+            capture <- stored ReadFile "capture" (subtree "capture/" tree)
+            captured <- WorkspaceStore.readWorkspaceSnapshot capture
+            case (decoded,captured) of
+              (Right (owner,before,after,report), Right snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) _ target _ _)) -> do
+                rootFiles <- stored ReadFile "root" (subtree "root/" tree)
+                facts <- stored ReadFile "root/facts" (fileTree [(p,b) | (p,b) <- files rootFiles, "facts/" `isPrefixOf` relativeName p])
+                code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
+                unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
+                unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
+                let root = Root after facts code
+                _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
+                checkSavedReport ReadFile report
+                pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
+              _ -> stale
+          _ -> stale
 
 lookupAcceptance :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
   => KnowledgeBase -> EvolutionId -> GitRevision -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)
@@ -254,14 +259,14 @@ checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => Storag
 checkSavedReport operation (EvolutionReport steps) = forM_ steps $ \(StepReport _ changes) ->
   forM_ changes $ \(FactChange collection (FactId identity) before after) -> do
     unless (before /= Nothing || after /= Nothing)
-      (storageFailure operation "candidate.json" "Fact change has neither a before nor an after value")
+      (storageFailure operation "candidate.dhall" "Fact change has neither a before nor an after value")
     forM_ [fact | Just fact <- [before,after]] $ \(RecordedFact schema value) -> do
       shape <- case [shape | CollectionContract name _ _ shape <- collectionContracts (rootSchema schema), name == collection] of
         [shape] -> pure (Record [("id", Scalar TextScalar), ("value", shape)])
-        _ -> storageFailure operation "candidate.json" "Recorded fact names an unknown collection"
-      _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.json"
-      recordedId <- stored operation "candidate.json" (parseEither (withObject "Fact" (.: "id")) value)
-      unless (recordedId == identity) (storageFailure operation "candidate.json" "Recorded fact ID disagrees with the change")
+        _ -> storageFailure operation "candidate.dhall" "Recorded fact names an unknown collection"
+      _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.dhall"
+      recordedId <- stored operation "candidate.dhall" (parseEither (withObject "Fact" (.: "id")) value)
+      unless (recordedId == identity) (storageFailure operation "candidate.dhall" "Recorded fact ID disagrees with the change")
 
 candidateScope :: Failure :> es => KnowledgeBase -> Eff es DirectoryScope
 candidateScope kb@(KnowledgeBase (Repository scope) _) = stored ReadDirectoryTree ".kyyn/candidates" $ do

@@ -115,8 +115,8 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   unless (reopened == exported) (fail "Committed files differ from the validated root export")
   reopenedArchive <- readGit (readTreeAt repo revision archivePrefix)
   unless (reopenedArchive == archiveFiles) (fail "Committed archive differed from exported capture/report/notes")
-  recordBytes <- maybe (fail "Committed archive lacks result.json") pure (lookup (path "result.json") (files reopenedArchive))
-  decodedRecord <- either fail pure (decodeEvolutionRecord recordBytes) >>= either (fail . show) pure
+  recordBytes <- maybe (fail "Committed archive lacks result.dhall") pure (lookup (path "result.dhall") (files reopenedArchive))
+  decodedRecord <- either fail pure (runPureEff (runDhallHandling (decodeEvolutionRecord recordBytes))) >>= either (fail . show) pure
   unless (decodedRecord == (workspaceId,contract,contract,report)) (fail "Committed record changed contracts/report")
   accepted <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . runFileSystemIO scope
     . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $

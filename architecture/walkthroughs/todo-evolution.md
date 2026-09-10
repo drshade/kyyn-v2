@@ -209,7 +209,7 @@ capture context and step report. A possible private cache layout is:
 
 ```text
 .kyyn/candidates/<private-result-directory>/
-  candidate.json           context, contract descriptions and report, not Validated
+  candidate.dhall           context, contract descriptions and report, not Validated
   capture/                captured manifest inputs, before/, target/ and change/
   root/                   complete materialized proposed root
 .kyyn/candidates/latest/<evolution-id>    selects its most recent complete result
@@ -266,7 +266,7 @@ evolutions/simplify-todos/
   before/src/SchemaV1.hs
   target/                           proposed source/config/examples, retained
   change/Evolution.hs
-  result.json                       contracts and fixed report, readable without guest code
+  result.dhall                       contracts and fixed report, readable without guest code
 ```
 
 The archive does not embed B's own hash. Git records B and its parent. The live

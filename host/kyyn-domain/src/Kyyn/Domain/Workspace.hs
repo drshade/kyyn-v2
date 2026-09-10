@@ -33,7 +33,7 @@ projectWorkspace manifest tree
   | otherwise = WorkspaceSnapshot manifest <$> subtree "before/" <*> subtree "target/" <*>
       subtree "change/" <*> subtree "notes/"
   where
-    allowed p = p `elem` ["manifest.dhall", "result.json"] || any (`isPrefixOf` p) ["before/", "target/", "change/", "notes/"]
+    allowed p = p `elem` ["manifest.dhall", "result.dhall"] || any (`isPrefixOf` p) ["before/", "target/", "change/", "notes/"]
     subtree prefix = traverse (\(p,b) -> (,b) <$> relativePath p)
       [(p,b) | (path,b) <- files tree, Just p <- [stripPrefix prefix (relativeName path)]] >>= fileTree
 

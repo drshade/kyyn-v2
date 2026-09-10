@@ -22,7 +22,11 @@ Keep one current materialized fact tree, readable without replay. Use
 data-only Dhall files per identified fact, parsed and structurally checked by
 the host's library. Encoding and normalizing fact files is host plumbing. Guest
 functions receive decoded typed values through ADR 0007, never Dhall source.
-Workspace manifests use Dhall as well. DhallHandling supplies the real host
+Use Dhall consistently for persisted structured data, including workspace
+manifests, candidate records and accepted reports. Disposable storage is not a
+format exception. JSON remains the guest protocol representation where the guest
+cannot practically handle Dhall; CLI/MCP JSON responses are interface projections,
+not a second persistence format. DhallHandling supplies the real host
 library for these files and ADR 0016's plugin configuration; it is not a guest
 parser or another schema authority. The runtime wire remains a separate decision.
 

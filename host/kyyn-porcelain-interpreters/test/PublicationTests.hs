@@ -7,7 +7,7 @@ import Data.Aeson (Value, object, (.=))
 import Data.Coerce (coerce)
 import Data.IORef (newIORef, atomicModifyIORef')
 import qualified Data.ByteString as Bytes
-import Effectful (Eff, IOE, (:>), runEff, liftIO)
+import Effectful (Eff, IOE, (:>), runEff, runPureEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Diagnostic
@@ -226,8 +226,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     reopened <- normal (loadRootAt repo accepted (Subtree rootPath)) >>= right
     assert "Published root is not the checked candidate" (reopened == candidateRoot && validatedValueRoot checked == candidateRoot)
     archive <- publication (Git.readTreeAt repo accepted (Subtree (path workspacePath))) >>= right
-    recordBytes <- maybe (fail "Missing archive report") pure (lookup (path "result.json") (files archive))
-    record <- either fail pure (decodeEvolutionRecord recordBytes) >>= right
+    recordBytes <- maybe (fail "Missing archive report") pure (lookup (path "result.dhall") (files archive))
+    record <- either fail pure (runPureEff (runDhallHandling (decodeEvolutionRecord recordBytes))) >>= right
     assert "Archive lost fixed report/contracts" (record == (identity,contract,contract,report))
     forM_ (files facts) $ \(p,_) -> when (relativeName p == "facts/todos/a.dhall") $ do
       exists <- doesPathExist (directory </> relativeName rootPath </> relativeName p)

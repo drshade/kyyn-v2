@@ -58,7 +58,9 @@ does not become another specification of the product's runtime workflows.
   generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
   Recording counts forbid repeated Before opening and require only target
   inspections during execution. No real guest compilation is involved in these native tests.
-  Candidate tests in the roots suite check contract-description round trips,
+  Candidate tests in the roots suite check Dhall contract-description round trips
+  (all type constructors and metadata), refusal of forward/cyclic/out-of-range
+  type references,
   exact context/root/report persistence, immutable repeated saves, missing/stale/corrupt
   selections and failed publication preserving the last result. Application uses a
   recording evolution handler with real RootStore/Dhall; checking records RootExecution
