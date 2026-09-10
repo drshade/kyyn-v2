@@ -145,6 +145,15 @@ checked expanded signatures from source declarations rather than claiming they
 are the author's spelling. Private constructors are not exposed by reading their
 source declarations.
 
+Show data/newtype declarations projected to the exported constructors and
+selectors: abstract types have only a header, and constructors with private
+selectors use positional arguments. Do not include derived instances. GADTs may
+be presented in equivalent lowered existential/equality-constraint syntax with
+source-safe parameter names. Mark fallbacks with `-- [compiler signature]`;
+all catalogue entries are compiler-checked. Human function/constructor signatures
+have no `value` prefix; kind summaries retain `type`. Display generated accessor
+origins as module-qualified field names, preserving exact compiler identities in JSON.
+
 Documentation uses a small source convention: a `-- |` block immediately above
 a signature or type declaration, continued by adjacent `--` lines. Attach it to
 the defining symbol and retain it through reexports. Store the text with the

@@ -62,6 +62,8 @@ project declarations (selected,checked,fixities) = do
   pure (ApiModule selected (sortOn key (nubBy (\a b -> key a == key b) (types ++ values))))
   where
     key (ApiSymbol n ns origin _ _ _) = (n,ns,origin)
+    exportedConstructors = [conIdent c | ValueExport _ (Entry (ECon c) _) <-
+      tValueExps checked ++ concat [xs | TypeExport _ _ xs <- tTypeExps checked]]
     typeSymbol (TypeExport n entry _) = symbol TypeNamespace n entry
     valueSymbol (ValueExport n entry) = symbol ValueNamespace n entry
     symbol ns visible (Entry expression checkedType) = do
@@ -82,7 +84,11 @@ project declarations (selected,checked,fixities) = do
             _ -> Nothing
           matches = case ns of
             ValueNamespace -> [Sign [visible] t | Sign names t <- defs, unQualIdent origin `elem` names]
-            TypeNamespace -> [Type (visible,args) t | Type (n,args) t <- defs, n == unQualIdent origin]
+            TypeNamespace -> concatMap (\d -> case d of
+              Type (n,args) t | n == unQualIdent origin -> [Type (visible,args) t]
+              Data (n,args) cs ds | n == unQualIdent origin -> [Data (visible,args) cs ds]
+              Newtype (n,args) c ds | n == unQualIdent origin -> [Newtype (visible,args) c ds]
+              _ -> []) defs
       declared <- case matches of
         [] -> Right Nothing
         [Sign _ t] -> do
@@ -93,8 +99,68 @@ project declarations (selected,checked,fixities) = do
                 _ -> "(" ++ spelling ++ ")"
           pure (Just (printedName ++ " :: " ++ showEType resolved))
         [Type lhs t] -> Just . showEDefs . (:[]) . Type lhs <$> resolveType defining fixities t
+        [Data lhs cs _] -> Just <$> presentData defining lhs cs False
+        [Newtype lhs c _] -> Just <$> presentData defining lhs [c] True
         _ -> Left ("Ambiguous declaration for " ++ unIdent origin)
       pure (ApiSymbol (unIdent visible) ns (unIdent origin) (showEType checkedType) declared docs)
+    presentData defining originalLhs originalCs isNewtype = do
+      let (lhs,cs) = presentationVariables originalLhs originalCs
+      let public (Constr _ _ n _ _) = mkIdent (defining ++ "." ++ unIdent n) `elem` exportedConstructors
+          fields = [unIdent n | TypeExport _ (Entry (EVar origin) _) xs <- tTypeExps checked,
+            origin == mkIdent (defining ++ "." ++ unIdent (fst lhs)), ValueExport n _ <- xs]
+      constructors <- mapM (resolveConstructor defining fields) (filter public cs)
+      let dataHeader = unwords (words (showEDefs [Data lhs [] []]))
+          header = if isNewtype then "newtype" ++ drop 4 dataHeader else dataHeader
+      pure (header ++ if null constructors then "" else " = " ++ intercalate " | " (map presentConstructor constructors))
+    resolveConstructor defining publicFields (Constr vs ctx n inf fields) = do
+      let resolve = resolveType defining fixities
+          argument (strict,t) = do
+            resolved <- resolve t
+            pure (strict, case resolved of EVar _ -> resolved; _ -> EParen resolved)
+      vs' <- mapM (\(IdKind v k) -> IdKind v <$> resolve k) vs
+      ctx' <- mapM resolve ctx
+      fields' <- case fields of
+        Left ts -> Left <$> mapM argument ts
+        Right fs | all (\(label,_) -> unIdent label `elem` publicFields) fs ->
+          Right <$> mapM (\(label,t) -> (,) label <$> argument t) fs
+        Right fs -> Left <$> mapM (argument . snd) fs
+      pure (Constr vs' ctx' n inf fields')
+
+-- Parsing a GADT introduces dollar-suffixed root parameters. Give those
+-- parameters fresh source identifiers before printing their lowered form.
+presentationVariables :: LHS -> [Constr] -> (LHS, [Constr])
+presentationVariables (name,args) constructors = ((name,map variable args),map constructor constructors)
+  where
+    expressions = [t | Constr _ ctx _ _ fs <- constructors,
+      t <- ctx ++ map snd (either id (map snd) fs)]
+    occupied = map unIdent (concatMap allVarsExpr expressions
+      ++ [v | Constr vs _ _ _ _ <- constructors, IdKind v _ <- vs])
+    generated = [v | IdKind v _ <- args, '$' `elem` unIdent v]
+    fresh = [mkIdent candidate | i <- [1 :: Int ..], let candidate = "rootParam" ++ show i,
+      candidate `notElem` occupied]
+    substitutions = zip generated (map EVar fresh)
+    rename v = case lookup v substitutions of Just (EVar n) -> n; _ -> v
+    variable (IdKind v k) = IdKind (rename v) (subst substitutions k)
+    field (strict,t) = (strict,subst substitutions t)
+    constructor (Constr vs ctx n inf fs) = Constr (map variable vs)
+      (map (subst substitutions) ctx) n inf
+      (either (Left . map field) (Right . map (\(label,t) -> (label,field t))) fs)
+
+presentConstructor :: Constr -> String
+presentConstructor (Constr vs ctx n _ fields) = quantifier ++ context ++ name ++ arguments
+  where
+    name = case unIdent n of
+      s@(c:_) | isAlpha c || c == '_' -> s
+      s -> "(" ++ s ++ ")"
+    quantifier = if null vs then "" else "forall " ++ unwords (map variable vs) ++ ". "
+    variable (IdKind v (EVar k)) | isDummyIdent k = unIdent v
+    variable (IdKind v k) = "(" ++ unIdent v ++ " :: " ++ showEType k ++ ")"
+    context = if null ctx then "" else showEType (ETuple ctx) ++ " => "
+    fieldType (strict,t) = (if strict then "!" else "") ++ showEType t
+    arguments = case fields of
+      Left [] -> ""
+      Left ts -> " " ++ unwords (map fieldType ts)
+      Right fs -> " { " ++ intercalate ", " [unIdent label ++ " :: " ++ fieldType t | (label,t) <- fs] ++ " }"
 
 documentationBefore :: SLoc -> [String] -> Maybe String
 documentationBefore (SLoc _ line _) source = collect [] (reverse (take (line - 1) source))
