@@ -1,4 +1,6 @@
-module Kyyn.Types.SchemaMetadata where
+module Kyyn.Types.SchemaMetadata
+  ( Affordance(..), RoleDecl(..), FieldRole(..), CollectionDecl(..), SchemaMetadata(..)
+  ) where
 
 -- | A host-understood presentation role: a title, timeline value or badge.
 data Affordance = Title | Timeline | Badge deriving (Eq, Show)

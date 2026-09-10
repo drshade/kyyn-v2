@@ -4,7 +4,7 @@ module Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..)) where
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (foldM)
-import Data.Char (isAlpha, isSpace)
+import Data.Char (isAlpha, isAlphaNum, isSpace, isSymbol, isPunctuation)
 import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate)
 import Kyyn.Domain.GuestApi
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
@@ -57,8 +57,8 @@ readDeclarations (name,path) = do
 project :: [(String,([EDef],[String]))] -> (String,TModule a,[(Ident,Fixity)]) -> Either String ApiModule
 project declarations (selected,checked,fixities) = do
   types <- mapM typeSymbol (tTypeExps checked)
-  values <- mapM valueSymbol (tValueExps checked ++ concat
-    [associated | TypeExport _ _ associated <- tTypeExps checked])
+  values <- mapM valueSymbol [v | v@(ValueExport name _) <- tValueExps checked ++ concat
+    [associated | TypeExport _ _ associated <- tTypeExps checked], sourceName (unIdent name)]
   pure (ApiModule selected (sortOn key (nubBy (\a b -> key a == key b) (types ++ values))))
   where
     key (ApiSymbol n ns origin _ _ _) = (n,ns,origin)
@@ -125,6 +125,14 @@ project declarations (selected,checked,fixities) = do
           Right <$> mapM (\(label,t) -> (,) label <$> argument t) fs
         Right fs -> Left <$> mapM (argument . snd) fs
       pure (Constr vs' ctx' n inf fields')
+
+sourceName :: String -> Bool
+sourceName [] = False
+sourceName name@(first:rest)
+  | isAlpha first || first == '_' = all (\c -> isAlphaNum c || c `elem` "_'") rest
+  | otherwise = all operator name && name `notElem` ["..", ":", "::", "=", "\\", "|", "<-", "->", "@", "~", "=>"]
+  where
+    operator c = (isSymbol c || isPunctuation c) && c `notElem` "_\"'`()[]{},;"
 
 -- Parsing a GADT introduces dollar-suffixed root parameters. Give those
 -- parameters fresh source identifiers before printing their lowered form.
