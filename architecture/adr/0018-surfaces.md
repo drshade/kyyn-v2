@@ -147,9 +147,12 @@ source declarations.
 
 Show data/newtype declarations projected to the exported constructors and
 selectors: abstract types have only a header, and constructors with private
-selectors use positional arguments. Do not include derived instances. GADTs may
-be presented in equivalent lowered existential/equality-constraint syntax with
-source-safe parameter names. Mark fallbacks with `-- [compiler signature]`;
+selectors use positional arguments. Do not include derived instances or generated
+instance dictionaries. Derive constructor and selector signatures from those
+declarations; specialize trivial root-parameter equalities in GADTs and retain
+authored parameter names where unambiguous. Refined constructor results use GADT
+syntax. Preprocess CPP-enabled defining sources with the compiler's macros before
+extracting signatures. Mark fallbacks with `-- [compiler signature]`;
 all catalogue entries are compiler-checked. Human function/constructor signatures
 have no `value` prefix; kind summaries retain `type`. Display generated accessor
 origins as module-qualified field names, preserving exact compiler identities in JSON.

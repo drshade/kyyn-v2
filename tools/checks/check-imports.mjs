@@ -184,6 +184,7 @@ const interpreterModules = {
 
 const compilerModules = {
   'Kyyn.MicroHs.ApiInspection': ['Control.DeepSeq', 'Control.Exception', 'Control.Monad',
+    'System.Environment', 'System.FilePath', 'System.Process',
     'Data.Char', 'Data.List', 'Kyyn.Domain.GuestApi', 'MicroHs.Compile', 'MicroHs.CompileCache',
     'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
     'MicroHs.SymTab', 'MicroHs.Parse', 'MicroHs.Fixity', 'MicroHs.TCMonad', 'MicroHs.IdentMap'],

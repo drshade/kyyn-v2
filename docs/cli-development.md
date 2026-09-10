@@ -188,13 +188,17 @@ declarations show public constructors and record fields. Abstract types show onl
 their header; selective reexports show only their exported constructors. If a
 constructor's record labels are not all exported, its arguments appear positionally
 and any public selectors remain separate entries. These are API summaries, not
-an instance inventory or a source-file dump; GADTs may use equivalent existential
-and equality-constraint syntax with renamed parameters.
+an instance inventory or a source-file dump. Constructor and record-accessor
+signatures are derived from these declarations, retaining aliases such as `String`.
+GADT signatures specialize root-parameter equalities; parameter names follow the
+source where unambiguous. Constructors with refined result types use `where`
+syntax; existential-only constructors may use equivalent `forall` syntax.
 
 Entries marked `-- [compiler signature]` use the compiler's expanded type or kind instead;
 all entries are compiler-checked. JSON distinguishes
 these with a null `declaration` and always includes `checkedSignature`.
-Re-exported transformer operations such as `modify` currently use this checked form.
+Re-exported transformer operations such as `modify` use their authored signatures;
+CPP-enabled modules are preprocessed with the compiler's macro configuration first.
 Functions and constructors always use `name :: signature`, without a `value`
 prefix; kind-only fallbacks use `type Name :: kind`. Human origins omit generated
 accessor machinery, while JSON's `definedAs` retains the exact compiler identity.

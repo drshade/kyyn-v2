@@ -5,7 +5,10 @@ import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (foldM)
 import Data.Char (isAlpha, isAlphaNum, isSpace, isSymbol, isPunctuation)
-import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate)
+import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate, find)
+import System.Environment (lookupEnv)
+import System.FilePath ((</>))
+import System.Process (readProcess)
 import Kyyn.Domain.GuestApi
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
@@ -34,9 +37,15 @@ inspectApi compiler sources selected = inspect `catch` failure
       cppArgs = ["-DMIN_VERSION_base(x,y,z)=1"] }
     inspect = do
       (modules,cache) <- foldM compile ([],emptyCache) (nub selected)
-      declarations <- mapM readDeclarations
+      let cached = cachedModules cache
+          names = reverse (sortOn length [unIdent (tModuleName m) | m <- cached])
+          origins = [unIdent origin | (_,m,_) <- modules,
+            ValueExport _ (Entry expression _) <- tValueExps m ++ concat [xs | TypeExport _ _ xs <- tTypeExps m],
+            origin <- case expression of EVar n -> [n]; ECon c -> [conIdent c]; _ -> []]
+          owners = [owner | origin <- origins, Just owner <- [find (\n -> (n ++ ".") `isPrefixOf` origin) names]]
+      declarations <- mapM (readDeclarations flags)
         [(unIdent (tModuleName m), slocFile (slocIdent (tModuleName m)))
-        | m <- cachedModules cache, "Kyyn." `isPrefixOf` unIdent (tModuleName m)]
+        | m <- cached, "Kyyn." `isPrefixOf` unIdent (tModuleName m) || unIdent (tModuleName m) `elem` owners]
       result <- evaluate (force (sequence declarations >>= \table -> mapM (project table) modules))
       pure (either (Left . ApiSourceError) Right result)
     compile (modules,cache) selectedModule = do
@@ -47,12 +56,24 @@ inspectApi compiler sources selected = inspect `catch` failure
       _ <- evaluate (force checked)
       pure (modules ++ [(selectedModule, checked, IdentMap.toList (fixTable tc))],next)
 
-readDeclarations :: (String, FilePath) -> IO (Either String (String, ([EDef],[String])))
-readDeclarations (name,path) = do
-  source <- readFile path
+readDeclarations :: Flags -> (String, FilePath) -> IO (Either String (String, ([EDef],[String])))
+readDeclarations flags (name,path) = do
+  original <- readFile path
+  source <- if hasCpp original then do
+    executable <- maybe "cpphs" id <$> lookupEnv "MHSCPPHS"
+    readProcess executable (["--strip", "--noline", "-D__MHS__", "-I" ++ (mhsdir flags </> "src/runtime")]
+      ++ cppArgs flags ++ [path]) ""
+    else pure original
   pure $ case parse pTop path source of
     Left message -> Left message
     Right (EModule _ _ declarations) -> Right (name,(declarations,lines source))
+
+hasCpp :: String -> Bool
+hasCpp [] = False
+hasCpp ('{':'-':'#':rest) =
+  let (pragma,following) = span (/= '#') rest
+  in "CPP" `elem` words (map (\c -> if c == ',' then ' ' else c) pragma) || hasCpp following
+hasCpp (_:rest) = hasCpp rest
 
 project :: [(String,([EDef],[String]))] -> (String,TModule a,[(Ident,Fixity)]) -> Either String ApiModule
 project declarations (selected,checked,fixities) = do
@@ -71,8 +92,14 @@ project declarations (selected,checked,fixities) = do
         EVar ident -> Right ident
         ECon constructor -> Right (conIdent constructor)
         _ -> Left ("Unsupported exported entry: " ++ unIdent visible)
-      let defining = unIdent (qualOf origin)
+      let defining = case [owner | (owner,_) <- declarations, (owner ++ ".get$.") `isPrefixOf` unIdent origin] of
+            [owner] -> owner
+            _ -> unIdent (qualOf origin)
           (defs,sourceLines) = maybe ([],[]) id (lookup defining declarations)
+          algebraic = concatMap (\d -> case d of
+            Data lhs cs _ -> [presentationVariables lhs cs]
+            Newtype lhs c _ -> [presentationVariables lhs [c]]
+            _ -> []) defs
           declarationNames = concatMap (\definition -> case (ns,definition) of
             (ValueNamespace,Sign identifiers _) -> identifiers
             (TypeNamespace,Type (n,_) _) -> [n]
@@ -84,12 +111,17 @@ project declarations (selected,checked,fixities) = do
             _ -> Nothing
           matches = case ns of
             ValueNamespace -> [Sign [visible] t | Sign names t <- defs, unQualIdent origin `elem` names]
+              ++ [Sign [visible] (constructorType lhs c) | (lhs,cs) <- algebraic,
+                  c@(Constr _ _ n _ _) <- cs, n == unQualIdent origin]
+              ++ [Sign [visible] (arrow (lhsToType lhs) fieldType) | (lhs,cs) <- algebraic,
+                  Constr _ _ _ _ (Right fs) <- cs, (field,(_,fieldType)) <- fs,
+                  unIdent origin == defining ++ ".get$." ++ unIdent (fst lhs) ++ "." ++ unIdent field]
             TypeNamespace -> concatMap (\d -> case d of
               Type (n,args) t | n == unQualIdent origin -> [Type (visible,args) t]
               Data (n,args) cs ds | n == unQualIdent origin -> [Data (visible,args) cs ds]
               Newtype (n,args) c ds | n == unQualIdent origin -> [Newtype (visible,args) c ds]
               _ -> []) defs
-      declared <- case matches of
+      declared <- case nubBy sameSignature matches of
         [] -> Right Nothing
         [Sign _ t] -> do
           resolved <- resolveType defining fixities t
@@ -103,6 +135,8 @@ project declarations (selected,checked,fixities) = do
         [Newtype lhs c _] -> Just <$> presentData defining lhs [c] True
         _ -> Left ("Ambiguous declaration for " ++ unIdent origin)
       pure (ApiSymbol (unIdent visible) ns (unIdent origin) (showEType checkedType) declared docs)
+    sameSignature (Sign ns a) (Sign ns' b) = ns == ns' && eqEType a b
+    sameSignature _ _ = False
     presentData defining originalLhs originalCs isNewtype = do
       let (lhs,cs) = presentationVariables originalLhs originalCs
       let public (Constr _ _ n _ _) = mkIdent (defining ++ "." ++ unIdent n) `elem` exportedConstructors
@@ -111,12 +145,25 @@ project declarations (selected,checked,fixities) = do
       constructors <- mapM (resolveConstructor defining fields) (filter public cs)
       let dataHeader = unwords (words (showEDefs [Data lhs [] []]))
           header = if isNewtype then "newtype" ++ drop 4 dataHeader else dataHeader
-      pure (header ++ if null constructors then "" else " = " ++ intercalate " | " (map presentConstructor constructors))
+          refinesRoot (Constr _ ctx _ _ _) = any (\constraint -> case constraint of
+            EApp (EApp (EVar equal) (EVar variable)) _ ->
+              unIdent equal == "~" && variable `elem` map idKindIdent (snd lhs)
+            _ -> False) ctx
+      if any refinesRoot constructors then do
+        signatures <- mapM (\c@(Constr _ _ n _ _) -> do
+          t <- resolveType defining fixities (constructorType lhs c)
+          pure ("  " ++ unIdent n ++ " :: " ++ showEType t)) constructors
+        pure (header ++ " where\n" ++ intercalate "\n" signatures)
+      else pure (header ++ if null constructors then "" else " = " ++ intercalate " | " (map presentConstructor constructors))
     resolveConstructor defining publicFields (Constr vs ctx n inf fields) = do
       let resolve = resolveType defining fixities
           argument (strict,t) = do
             resolved <- resolve t
-            pure (strict, case resolved of EVar _ -> resolved; _ -> EParen resolved)
+            pure (strict, case resolved of
+              EVar _ -> resolved
+              ETuple _ -> resolved
+              EListish _ -> resolved
+              _ -> EParen resolved)
       vs' <- mapM (\(IdKind v k) -> IdKind v <$> resolve k) vs
       ctx' <- mapM resolve ctx
       fields' <- case fields of
@@ -125,6 +172,24 @@ project declarations (selected,checked,fixities) = do
           Right <$> mapM (\(label,t) -> (,) label <$> argument t) fs
         Right fs -> Left <$> mapM (argument . snd) fs
       pure (Constr vs' ctx' n inf fields')
+
+arrow :: EType -> EType -> EType
+arrow = eAppI2 (mkIdent "->")
+
+constructorType :: LHS -> Constr -> EType
+constructorType lhs (Constr _ constraints _ _ fields) =
+  let parameters = map idKindIdent (snd lhs)
+      solve (known,pending) constraint = case subst known constraint of
+        EApp (EApp (EVar equal) (EVar variable)) rhs
+          | unIdent equal == "~", variable `elem` parameters,
+            variable `notElem` allVarsExpr rhs ->
+              ((variable,rhs) : [(v,subst [(variable,rhs)] t) | (v,t) <- known], pending)
+        other -> (known,pending ++ [other])
+      (substitutions,remaining) = foldl solve ([],[]) constraints
+      arguments = map snd (either id (map snd) fields)
+      body = subst substitutions (foldr arrow (lhsToType lhs) arguments)
+      context = map (subst substitutions) remaining
+  in if null context then body else eAppI2 (mkIdent "=>") (ETuple context) body
 
 sourceName :: String -> Bool
 sourceName [] = False
@@ -144,9 +209,12 @@ presentationVariables (name,args) constructors = ((name,map variable args),map c
     occupied = map unIdent (concatMap allVarsExpr expressions
       ++ [v | Constr vs _ _ _ _ <- constructors, IdKind v _ <- vs])
     generated = [v | IdKind v _ <- args, '$' `elem` unIdent v]
-    fresh = [mkIdent candidate | i <- [1 :: Int ..], let candidate = "rootParam" ++ show i,
-      candidate `notElem` occupied]
-    substitutions = zip generated (map EVar fresh)
+    allocate _ [] = []
+    allocate used (v:rest) =
+      let authored = takeWhile (/= '$') (unIdent v)
+          candidate = head [n | n <- authored : ["rootParam" ++ show i | i <- [1 :: Int ..]], n `notElem` used]
+      in (v,EVar (mkIdent candidate)) : allocate (candidate:used) rest
+    substitutions = allocate occupied generated
     rename v = case lookup v substitutions of Just (EVar n) -> n; _ -> v
     variable (IdKind v k) = IdKind (rename v) (subst substitutions k)
     field (strict,t) = (strict,subst substitutions t)

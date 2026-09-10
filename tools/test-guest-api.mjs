@@ -29,6 +29,11 @@ try {
   assert.equal(modules.length, 10);
   assert.ok(modules.includes('Kyyn.Edit'));
   assert.ok(modules.every(name => !name.includes('Internal') && !name.includes('Runtime')));
+  for (const name of modules) {
+    const rendered = call('guest', 'module', 'show', name);
+    assert.equal(rendered.status, 0, rendered.stderr);
+    assert.ok(!/inst\$|get\$|_a\d+|[a-z]\$/.test(rendered.stdout), name + ' leaks compiler machinery');
+  }
   const edit = json('guest', 'module', 'show', 'Kyyn.Edit');
   assert.ok(edit.symbols.some(s => s.name === 'Collection' && s.namespace === 'type'));
   assert.ok(!edit.symbols.some(s => s.name === 'Collection' && s.namespace === 'value'));
@@ -51,14 +56,14 @@ try {
   assert.deepEqual(fact.symbols.map(s => s.namespace).sort(), ['type', 'value']);
   assert.ok(json('guest', 'symbol', 'show', 'Kyyn.Evolution.>=>').symbols[0].declaration.startsWith('(>=>) ::'));
   const fallback = json('guest', 'symbol', 'show', 'Kyyn.Edit.modify').symbols[0];
-  assert.equal(fallback.declaration, null);
-  assert.equal(fallback.documentation, null);
+  assert.equal(fallback.declaration, 'modify :: Monad m => (s -> s) -> StateT s m ()');
   const modify = call('guest', 'symbol', 'show', 'Kyyn.Edit.modify').stdout;
   assert.ok(modify.includes('\nmodify :: '));
-  assert.ok(modify.includes('-- [compiler signature]'));
+  assert.ok(!modify.includes('-- [compiler signature]'));
   assert.ok(!modify.includes('value modify'));
   const source = call('guest', 'symbol', 'show', 'Kyyn.Evolution.source').stdout;
-  assert.ok(source.includes('\nsource :: EvidenceRef -> [Char]  -- [compiler signature]'));
+  assert.ok(source.includes('\nsource :: EvidenceRef -> String'));
+  assert.ok(!source.includes('-- [compiler signature]'));
   assert.ok(source.includes('-- [Defined as Kyyn.Types.Evidence.source]'));
   assert.ok(source.includes('-- [Defined as Kyyn.Types.Evidence.source]\nsource ::'));
   assert.ok(!source.includes('get$'));
@@ -75,7 +80,7 @@ try {
   assert.ok(metadata.symbols.every(s => !s.name.includes('inst$') && !s.name.includes('@')));
   assert.deepEqual(metadata.symbols.filter(s => s.namespace === 'type').map(s => s.name).sort(),
     ['Affordance', 'CollectionDecl', 'FieldRole', 'RoleDecl', 'SchemaMetadata']);
-  assert.equal(program.declaration, 'data Program rootParam1 rootParam2 = Pure rootParam2 | forall x. Request (rootParam1 x) (x -> Program rootParam1 rootParam2)');
+  assert.equal(program.declaration, 'data Program request a = Pure a | forall x. Request (request x) (x -> Program request a)');
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);
     assert.equal(response.status, 1);
