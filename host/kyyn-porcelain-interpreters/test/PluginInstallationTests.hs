@@ -24,7 +24,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Protocol.Plugin (decodeOrigin)
 import Kyyn.Porcelain.Capability.PluginInstallation
 import Kyyn.Porcelain.Interpreter.PluginInstallation
-import System.Directory (createDirectory, createDirectoryIfMissing, createFileLink, findExecutable)
+import System.Directory (createDirectory, createDirectoryIfMissing, createFileLink, createDirectoryLink, findExecutable)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -58,6 +58,7 @@ refusalTests = do
       withoutEntry = either error id (fileTree (filter ((/= path "src/LocalFile/Plugin.hs") . fst) (files (fixture "local-file"))))
       invalid = either error id (fileTree [(path "kyyn-plugin.dhall", "./import.dhall")])
       cases = [(empty, [], False, "plugin.manifest-missing"),
+               (empty, [], False, "plugin.source-unavailable"),
                (invalid, [], False, "plugin.manifest-invalid"),
                (withoutEntry, [], False, "plugin.entry-missing"),
                (fixture "local-file", [path "package/src/LocalFile/Plugin.hs"], False, "plugin.source-uncommitted"),
@@ -68,25 +69,32 @@ refusalTests = do
   forM_ cases $ \(tree, changed, exists, expected) -> do
     let gitHandler :: Eff (Git : es) a -> Eff es a
         gitHandler = interpret $ \_ -> \case
-          DiscoverRepository _ -> pure (Right (repository, Subtree (path "package")))
+          DiscoverRepository _ | expected /= "plugin.source-unavailable" -> pure (Right (repository, Subtree (path "package")))
           ResolveRevision _ "HEAD" -> pure (Right revision)
           SourceChanges _ _ _ _ -> pure changed
           ReadTreeAt _ _ _ _ -> pure (Right tree)
           _ -> error "Installation attempted a Git mutation or unexpected read"
         noWrites :: Eff (FS.FileSystem : es) a -> Eff es a
         noWrites = interpret $ \_ -> \case
+          FS.DirectoryExists directory | directory == scope "/source/package" ->
+            pure (expected /= "plugin.source-unavailable")
           FS.EntryExists _ _ -> pure exists
           _ -> error "Refused installation performed a filesystem write"
         result = runPureEff (gitHandler (noWrites (runDhallHandling (runPluginInstallation
           (installPlugin kb (LocalPackage (scope "/source/package") WholeTree))))))
     case result of
-      Left [Diagnostic _ code _ _] -> assert "wrong refusal" (code == expected)
+      Left [Diagnostic _ code message _] -> do
+        assert "wrong refusal" (code == expected)
+        if code == "plugin.source-uncommitted"
+          then assert "unreadable changed-path diagnostic"
+            (message == "Commit plugin source changes first:\npackage/src/LocalFile/Plugin.hs")
+          else pure ()
       other -> fail (show other)
 
 integrationTests :: IO ()
 integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git required") pure
-  let sourceDirectory = directory </> "source"
+  let sourceDirectory = directory </> "source:checkout"
       kbDirectory = directory </> "destination"
       gitAction :: Eff '[Git, ProcessExecution, Failure, IOE] a -> IO a
       gitAction action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= right
@@ -110,6 +118,11 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
       install selected = runEff (runFailure (runProcessExecutionIO (runGit executable []
         (runFileSystemIO (scope directory) (runDhallHandling (runPluginInstallation (installPlugin kb selected))))))) >>= right
   url <- right (gitUrl ("file://" ++ sourceDirectory))
+  Bytes.writeFile (directory </> "not-a-directory") "file"
+  createFileLink (directory </> "absent") (directory </> "dangling")
+  forM_ [sourceDirectory </> "absent", sourceDirectory </> "absent/", directory </> "not-a-directory", directory </> "dangling"] $ \missing -> do
+    refused <- install (LocalPackage (scope missing) WholeTree)
+    case refused of Left [Diagnostic _ "plugin.source-unavailable" _ _] -> pure (); other -> fail (show other)
   forM_ [(LocalPackage (scope (sourceDirectory </> "packages")) (Subtree (path "local")), "local-file", LocalRepository (scope sourceDirectory), "packages/local"),
          (GitPackage url (Subtree (path "packages/remote")), "remote-file", RemoteRepository url, "packages/remote")] $ \(selection,name,originRepository,selected) -> do
     InstalledPlugin installed target origin <- install selection >>= right
@@ -126,6 +139,11 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
     case refused of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
     after <- runEff (runFailure (runFileSystemIO (scope directory) (FS.readTree (scope kbDirectory)))) >>= right
     assert "duplicate changed existing KB" (before == after)
+  colonSource <- install (LocalPackage (scope sourceDirectory) (Subtree (path "packages/local")))
+  case colonSource of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
+  createDirectoryLink sourceDirectory (directory </> "linked-source")
+  linkedSource <- install (LocalPackage (scope (directory </> "linked-source")) (Subtree (path "packages/local")))
+  case linkedSource of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
   forM_ ["empty", "linked"] $ \name -> do
     let destination = kbDirectory </> "work/kb/root/plugins/packages" </> name
     if name == "empty" then createDirectory destination else createFileLink "/missing/plugin" destination

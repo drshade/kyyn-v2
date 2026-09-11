@@ -17,7 +17,7 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.ProcessExecution
-import System.Directory (findExecutable, createDirectoryIfMissing, createFileLink, renameFile)
+import System.Directory (findExecutable, createDirectoryIfMissing, createFileLink, createDirectoryLink, renameFile)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -169,6 +169,11 @@ discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
   expected <- either fail pure (relativePath nestedName)
   found <- execute (discoverRepository nested)
   unless (found == Right (Right (Repository scope, Subtree expected))) (fail ("Nested discovery: " ++ show found))
+  createDirectoryLink (directory </> nestedName) (directory </> "linked-subtree")
+  linked <- either fail pure (directoryScope (directory </> "linked-subtree"))
+  linkedResult <- execute (discoverRepository linked)
+  unless (linkedResult == Right (Right (Repository scope, Subtree expected)))
+    (fail ("Symlinked scope discovery: " ++ show linkedResult))
   command ["init","--bare","-q","bare.git"]
   bare <- either fail pure (directoryScope (directory </> "bare.git"))
   bareResult <- execute (discoverRepository bare)
@@ -184,7 +189,7 @@ discoveryTests = withSystemTempDirectory "kyyn-discovery" $ \directory -> do
   noExecutable <- runEff . runFailure . runProcessExecutionIO . runGit (directory </> "missing-git") [] $
     discoverRepository scope
   case noExecutable of Left _ -> pure (); _ -> fail "Missing executable was not an operational failure"
-  putStrLn "Repository discovery passed for root, nested, absent and bare repositories."
+  putStrLn "Repository discovery passed for root, nested, symlinked, absent and bare repositories."
 
 snapshotTests :: IO ()
 snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do

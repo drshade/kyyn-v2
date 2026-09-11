@@ -360,6 +360,7 @@ failPublication failure = interpret $ \_ -> \case
   CreateDirectory {} -> error "Candidate persistence must not reserve named directories"
   EnsureDirectory {} -> error "Candidate persistence must not initialize directories"
   EntryExists {} -> error "Candidate persistence must not inspect entries"
+  DirectoryExists {} -> error "Candidate persistence must not inspect directories"
 
 validationMock :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a
 validationMock expected report = interpret $ \_ -> \case
