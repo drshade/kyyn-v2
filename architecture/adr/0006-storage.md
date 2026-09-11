@@ -169,7 +169,7 @@ layout. Each caller appends the explicit SDK
 source tree. Duplicate compiler paths fail. The SDK is supplied by the installed
 runtime, not loaded from a KB-selected location, and participates in compilation
 identity under ADR 0002. ADR 0005 owns schema capture and inspection.
-`kb.dhall`, `src/`, `facts/` and `examples/` are distinct reserved layout locations; the manifest
+`kb.dhall`, `src/`, `facts/`, `examples/` and `plugins/` are distinct reserved layout locations; the manifest
 is retained verbatim in the supporting-code snapshot alongside source and other
 supporting files. FileTree rejects overlapping file/directory paths.
 

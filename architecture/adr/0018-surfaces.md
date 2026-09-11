@@ -136,6 +136,12 @@ typed query arguments and secret input are details for their respective slices.
 `root schema list/show` exposes the selected root contract's types, definitions,
 fields and declared roles, not arbitrary compiler internals.
 
+The plugin-install slice adds `plugin install --from SOURCE [--path SUBDIRECTORY]`
+under the common `--kb PATH` selection. It prepares a copied source package and
+returns its installed name, location and origin in human/JSON output; it does not
+compile or invoke the plugin, configure connectors, fetch evidence or commit the
+root. ADR 0015 owns source selection, manifest, storage and refusal contracts.
+
 `guest module list/show` and `guest symbol show` describe the installed public SDK,
 independently of KB selection. Public modules come from kyyn-sdk's exposed
 facade declarations under [ADR 0008](0008-authoring.md), not the shared wire-profile
@@ -400,7 +406,7 @@ unpatched compiler's `MHSCPPHS` environment variable once from the resolved runt
 Kyyn's declaration reader uses that toolchain's preprocessor path directly.
 Workspace-scoped guest discovery loads the SDK and compiler integration; unscoped
 guest discovery reads only the installed catalogue. Evolution listing,
-state changes, archived inspection, recovery and already-accepted diagnosis do
+state changes, archived inspection, recovery, plugin installation and already-accepted diagnosis do
 not load the SDK. Host configuration/path resolution and interpretation live in
 `kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
 workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
