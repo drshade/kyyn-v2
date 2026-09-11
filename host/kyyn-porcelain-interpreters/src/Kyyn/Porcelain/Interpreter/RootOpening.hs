@@ -2,14 +2,14 @@
 module Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (isPrefixOf, partition)
+import Data.List (partition)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (checkRootLayout)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.Path (RelativePath, relativeName, relativePath)
+import Kyyn.Domain.Path (RelativePath)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
@@ -21,7 +21,7 @@ runRootOpening
 runRootOpening sdk = interpret $ \_ -> \case
   OpenCapturedSource tree -> openSource sdk tree
   LoadSourceAt repository revision prefix -> do
-    captured <- Git.readTreeExcluding repository revision prefix [either error id (relativePath "facts")]
+    captured <- Git.readTreeExcluding repository revision prefix [factsLocation]
     either (pure . Left) (openSource sdk) captured
   OpenCapturedRoot tree -> openTree sdk tree
   LoadRootAt repository revision prefix -> do
@@ -44,7 +44,7 @@ openInput
   => FileTree -> FileTree -> Eff es (Either [Diagnostic] (Root, [RelativePath]))
 openInput sdk tree = runExceptT $ do
   SourceRoot contract code _ closure <- ExceptT (openSource sdk tree)
-  facts <- checked (fileTree [(p,b) | (p,b) <- files tree, "facts/" `isPrefixOf` relativeName p])
+  facts <- checked (fileTree [(p,b) | (p,b) <- files tree, isFactPath p])
   pure (Root contract facts code, closure)
 
 openSource
@@ -55,7 +55,7 @@ openSource sdk tree = runExceptT $ do
   source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
   Schema.InspectedSchema inspected closure <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))
-  let (_, codeEntries) = partition (\(p,_) -> "facts/" `isPrefixOf` relativeName p) (files tree)
+  let (_, codeEntries) = partition (isFactPath . fst) (files tree)
   code <- checked (fileTree codeEntries)
   pure (SourceRoot contract code definition closure)
 

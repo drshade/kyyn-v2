@@ -19,7 +19,7 @@ import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), Stora
 import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, scopedPath, directoryScope)
-import Kyyn.Domain.Root (Root(..))
+import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
@@ -141,8 +141,8 @@ runEvolutionStore = interpret $ \_ -> \case
             case (decoded,captured) of
               (Right (owner,before,after,report), Right snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) _ target _ _)) -> do
                 rootFiles <- stored ReadFile "root" (subtree "root/" tree)
-                facts <- stored ReadFile "root/facts" (fileTree [(p,b) | (p,b) <- files rootFiles, "facts/" `isPrefixOf` relativeName p])
-                code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not ("facts/" `isPrefixOf` relativeName p)])
+                facts <- stored ReadFile ("root/" ++ relativeName factsLocation) (fileTree [(p,b) | (p,b) <- files rootFiles, isFactPath p])
+                code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not (isFactPath p)])
                 unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
                 unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
                 let root = Root after facts code

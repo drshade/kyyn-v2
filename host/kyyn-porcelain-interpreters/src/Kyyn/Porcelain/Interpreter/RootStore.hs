@@ -97,7 +97,7 @@ factShape :: Shape -> Shape
 factShape payload = Record [("id", Scalar TextScalar), ("value", payload)]
 
 collectionDirectory :: String -> String
-collectionDirectory name = "facts/" ++ encoded (Text.pack name)
+collectionDirectory name = relativeName factsLocation ++ "/" ++ encoded (Text.pack name)
 
 factName :: String -> Text -> String
 factName collection identity = collectionDirectory collection ++ "/" ++ encoded identity ++ ".dhall"
@@ -125,7 +125,7 @@ materialize :: Dhall.DhallHandling :> es => RootContract -> FileTree -> CheckedV
 materialize selected code (CheckedValue identity value) = do
   let contract = rootSchema selected
   ensure (identity == contractId contract) "Checked value belongs to a different contract"
-  ensure (all (\(p,_) -> let name = relativeName p in name /= "facts" && not ("facts/" `isPrefixOf` name)) (files code))
+  ensure (all (not . isFactPath . fst) (files code))
     "Code snapshot overlaps the facts subtree"
   fields <- rootFields contract
   values <- record value
@@ -134,7 +134,7 @@ materialize selected code (CheckedValue identity value) = do
       collectionFields = [f | CollectionContract _ f _ _ <- collections]
       residualFields = [(n,s) | (n,s) <- fields, n `notElem` collectionFields]
       residual = object [Key.fromString n .= v | (n,_) <- residualFields, Just v <- [Keys.lookup (Key.fromString n) values]]
-  rootFile <- encodeFile "facts/root.dhall" (Record residualFields) residual
+  rootFile <- encodeFile (relativeName factsLocation ++ "/root.dhall") (Record residualFields) residual
   entries <- fmap concat $ forM collections $ \(CollectionContract name rootField _ payload) -> do
     members <- field rootField values >>= list
     identities <- forM members $ \member -> record member >>= field "id" >>= text
@@ -159,7 +159,7 @@ loadValue (Root selected snapshot _) = do
   let collections = collectionContracts contract
       collectionFields = [f | CollectionContract _ f _ _ <- collections]
       residualFields = [(n,s) | (n,s) <- fields, n `notElem` collectionFields]
-  residual <- decodeFile snapshot "facts/root.dhall" (Record residualFields) >>= record
+  residual <- decodeFile snapshot (relativeName factsLocation ++ "/root.dhall") (Record residualFields) >>= record
   loaded <- forM collections $ \(CollectionContract name rootField _ payload) -> do
     identities <- decodeFile snapshot (indexName name) (List (Scalar TextScalar)) >>= list >>= traverse text
     ensure (length identities == length (nub identities)) (name ++ ": duplicate membership IDs")
@@ -169,7 +169,7 @@ loadValue (Root selected snapshot _) = do
       ensure (storedId == identity) (name ++ ": fact path/envelope identity mismatch")
       pure member
     pure (rootField, toJSON members, indexName name : map (factName name) identities)
-  let expected = "facts/root.dhall" : concat [paths | (_,_,paths) <- loaded]
+  let expected = (relativeName factsLocation ++ "/root.dhall") : concat [paths | (_,_,paths) <- loaded]
   ensure (sort expected == sort [relativeName path | (path,_) <- files snapshot]) "Unlisted fact files in snapshot"
   let values = foldr (\(name,value,_) -> Keys.insert (Key.fromString name) value) residual loaded
   pure (CheckedValue (contractId contract) (Object values))

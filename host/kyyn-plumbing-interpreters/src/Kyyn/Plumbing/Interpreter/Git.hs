@@ -120,8 +120,7 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
       if actual == Just desired then pure RefUpdated
       else if actual /= expected then pure (RefNotUpdated actual)
         else broken ("Conditional ref update failed: " ++ Char8.unpack diagnostics)
-  ReadTreeAt repo revision location -> captureTree repo revision location []
-  ReadTreeExcluding repo revision location excluded -> captureTree repo revision location excluded
+  ReadTreeAt repo revision location excluded -> captureTree repo revision location excluded
   where
     captureTree repo revision location excluded = runExceptT $ do
       _ <- ExceptT (resolve repo (revisionName revision))
