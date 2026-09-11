@@ -23,10 +23,11 @@ import System.IO.Temp (withSystemTempDirectory)
 main :: IO ()
 main = do
   repo <- getEnv "KYYN_TEST_ROOT"
-  setEnv "MHSCPPHS" (repo </> "vendor/MicroHs/bin/cpphs")
+  compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
+  setEnv "MHSCPPHS" (compiler </> "bin/cpphs")
   let sources = map (repo </>) ["guest/kyyn-sdk/src","shared/kyyn-types/src","vendor/transformers","vendor/json"]
       public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
-      inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
+      inspect paths names = inspectApi compiler paths names >>= either (fail . show) pure
   modules <- inspect sources public
   qualified <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.QualifiedFixture"]
   let qualifiedDeclarations = [(n,d) | ApiModule _ symbols <- qualified, ApiSymbol n _ _ _ (Just d) _ <- symbols]
@@ -97,7 +98,7 @@ main = do
     path <- either fail pure (relativePath name)
     pure (path,bytes)) ["Kyyn/DataFixture.hs", "Kyyn/DataReexport.hs", "Kyyn/CppFixture.hs"]
   fixtureTree <- either fail pure (fileTree fixtureFiles)
-  compilerScope <- either fail pure (directoryScope (repo </> "vendor/MicroHs"))
+  compilerScope <- either fail pure (directoryScope compiler)
   let throughCapability selected = withSystemTempDirectory "kyyn-api-capability-" $ \temporary -> do
         temporaryScope <- either fail pure (directoryScope temporary)
         result <- runEff . runFailure . runFileSystemIO temporaryScope
@@ -190,7 +191,7 @@ main = do
         ([(n,ns,d) | ApiSymbol n ns _ _ _ d <- before] == [(n,ns,d) | ApiSymbol n ns _ _ _ d <- after])
     putStrLn ("Recompiled the SDK with all " ++ show (length declarations)
       ++ " displayed signatures/aliases substituted; all checked exports unchanged.")
-  missing <- inspectApi (repo </> "vendor/MicroHs") sources ["Kyyn.Missing"]
+  missing <- inspectApi compiler sources ["Kyyn.Missing"]
   assert "missing module must be a compiler error" (case missing of Left (ApiCompilerError _) -> True; _ -> False)
   putStrLn "Guest API exports, reexports, abstraction, aliases and signature round trips passed."
   where sameOrigin (ApiSymbol _ ns a _ _ _) (ApiSymbol _ ns' b _ _ _) = (ns,a) == (ns',b)

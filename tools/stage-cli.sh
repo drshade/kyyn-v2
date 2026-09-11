@@ -13,14 +13,9 @@ if [[ -e "$stage_prefix" || -L "$stage_prefix" ]]; then
 fi
 cd "$(dirname "$0")/.."
 cabal build exe:kyyn-v2 exe:kyyn-api-catalogue
-make -C vendor/MicroHs bin/gmhs bin/mhseval bin/cpphs
-mkdir -p "$stage_prefix/bin" "$stage_prefix/lib/kyyn/microhs/bin" "$stage_prefix/lib/kyyn/sdk/Text/JSON" "$stage_prefix/share/kyyn/licenses"
+bash tools/stage-microhs.sh "$stage_prefix/lib/kyyn/microhs"
+mkdir -p "$stage_prefix/bin" "$stage_prefix/lib/kyyn/sdk/Text/JSON" "$stage_prefix/share/kyyn/licenses"
 cp "$(cabal list-bin exe:kyyn-v2)" "$stage_prefix/bin/kyyn-v2"
-cp vendor/MicroHs/bin/gmhs "$stage_prefix/lib/kyyn/microhs/bin/mhs"
-for executable in mhseval cpphs; do
-  cp "vendor/MicroHs/bin/$executable" "$stage_prefix/lib/kyyn/microhs/bin/"
-done
-cp -R vendor/MicroHs/lib "$stage_prefix/lib/kyyn/microhs/"
 cp -R shared/kyyn-types/src/. "$stage_prefix/lib/kyyn/sdk/"
 cp -R guest/kyyn-sdk/src/. "$stage_prefix/lib/kyyn/sdk/"
 cp -R guest/kyyn-runtime/src/. "$stage_prefix/lib/kyyn/sdk/"

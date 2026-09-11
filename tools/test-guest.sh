@@ -2,8 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export KYYN_TEST_ROOT="$PWD"
-export MHSDIR="$PWD/vendor/MicroHs"
-make -C vendor/MicroHs bin/mhs bin/mhseval bin/cpphs
+guest_test_stage=$(mktemp -d "${TMPDIR:-/tmp}/kyyn-guest-tests.XXXXXXXX")
+trap 'rm -rf -- "$guest_test_stage"' EXIT
+export KYYN_TEST_TOOLCHAIN="$guest_test_stage/microhs"
+bash tools/stage-microhs.sh "$KYYN_TEST_TOOLCHAIN"
+export MHSDIR="$KYYN_TEST_TOOLCHAIN"
+export MHSCPPHS="$KYYN_TEST_TOOLCHAIN/bin/cpphs"
 cabal test guest-api --test-show-details=direct
 cabal test codecs --test-show-details=direct
 cabal test metadata --test-show-details=direct

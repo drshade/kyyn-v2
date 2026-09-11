@@ -25,6 +25,9 @@ try {
   install();
   assert.equal(fs.readlinkSync(executable), path.join(bundle, 'bin/kyyn-v2'));
   assert.match(invoke(executable, ['--help']), /kyyn-v2/);
+  assert.deepEqual(fs.readFileSync(path.join(bundle, 'lib/kyyn/microhs/bin/mhs')),
+    fs.readFileSync(path.join(repository, 'vendor/MicroHs/bin/gmhs')),
+    'Installed compiler differs from the native toolchain');
   for (const entry of ['microhs/bin/mhs', 'microhs/bin/mhseval', 'microhs/bin/cpphs', 'sdk/Kyyn/Types/Fact.hs']) {
     assert.ok(fs.existsSync(path.join(bundle, 'lib/kyyn', entry)), entry);
   }

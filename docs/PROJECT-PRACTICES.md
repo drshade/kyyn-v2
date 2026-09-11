@@ -19,6 +19,29 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+Broad guest integration tests use the shipped native MicroHs compiler, not the
+self-hosted compiler. `tools/stage-microhs.sh` is shared by CLI packaging and
+`tools/test-guest.sh`: it builds `gmhs`, `mhseval` and `cpphs`, and stages `gmhs`
+as `bin/mhs` alongside the evaluator, preprocessor and libraries. The guest-test
+script selects that temporary toolchain through `KYYN_TEST_TOOLCHAIN` and removes
+it when finished. Compiler-library inspection still runs in process.
+Only the focused native/self-hosted parity step in `tools/test-installed.sh`
+builds and invokes the self-hosted `bin/mhs`.
+
+For the direct real-guest commands below, first stage and select a toolchain
+(choose a destination that does not already exist):
+
+```sh
+bash tools/stage-microhs.sh /tmp/kyyn-test-toolchain
+export KYYN_TEST_ROOT="$PWD"
+export KYYN_TEST_TOOLCHAIN=/tmp/kyyn-test-toolchain
+export MHSDIR="$KYYN_TEST_TOOLCHAIN"
+export MHSCPPHS="$KYYN_TEST_TOOLCHAIN/bin/cpphs"
+```
+
+Pure/codec-only test modes do not need this setup. `bash tools/test.sh --full`
+performs it automatically.
+
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow
 no-checkout acquisition from a local Git remote. It uses real Dhall
@@ -208,7 +231,7 @@ installed integration check.
   results are not cached, and the selected check runs on cache hits and misses.
 - **Current scope:** documentation/ADR checks, checker regressions, explicit pure-module
   import allowlists, native package builds, scoped process lifetime tests and actual MicroHs generated-codec tests.
-  `tools/test-guest.sh` builds the vendored compiler/evaluator/preprocessor and the
+  `tools/test-guest.sh` stages the native compiler/evaluator/preprocessor and the
   native test suite inspects authored types, generates codecs, compiles them and
   exchanges runtime values with the resulting guest. It does not substitute GHC
   for guest execution. Captured source compilation uses GuestCompilation and

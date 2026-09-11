@@ -82,8 +82,9 @@ checked moduleName fields label = right $ checkContract root metadata >>= checkR
 integration :: RootContract -> RootContract -> RootContract -> FileTree -> IO ()
 integration before renamed after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
+  compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
   scope <- right (directoryScope temporary)
-  toolchain <- GuestToolchain <$> right (directoryScope (repo </> "vendor/MicroHs"))
+  toolchain <- GuestToolchain <$> right (directoryScope compiler)
   let path = either error id . relativePath
       load base name = (,) (path name) <$> Bytes.readFile (repo </> base </> name)
   authored <- mapM (load "host/kyyn-microhs/test/evolution") ["SchemaV1.hs","SchemaV2.hs","Evolution.hs","Proof.hs"]
