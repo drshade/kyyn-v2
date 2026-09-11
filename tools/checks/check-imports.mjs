@@ -176,10 +176,10 @@ const plumbingModules = {
 
 const interpreterModules = {
   'Kyyn.Plumbing.Interpreter.EvidenceStore': ['Control.Exception', 'Control.Monad', 'Control.Monad.Trans.Except',
-    'Data.ByteString', 'Data.ByteString.Char8', 'Data.Text', 'Data.Text.Encoding', 'Data.Time.Clock', 'Data.Time.Format.ISO8601', 'Data.Word', 'Numeric',
+    'Data.ByteString', 'Data.Text', 'Data.Text.Encoding', 'Data.Time.Clock', 'Data.Time.Format.ISO8601', 'Data.Word', 'Numeric',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence',
-    'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value',
-    'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.EvidenceStore', 'Kyyn.Plumbing.Capability.Failure',
+    'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Domain.KnowledgeBase',
+    'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.EvidenceStore', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.FileSystem',
     'Kyyn.Plumbing.Protocol.Evidence', 'System.Directory', 'System.FileLock', 'System.FilePath', 'System.IO',
     'System.IO.Error', 'System.IO.Temp', 'System.Random'],
   'Kyyn.Porcelain.Interpreter.PluginInstallation': ['Control.Monad', 'Control.Monad.Trans.Except',

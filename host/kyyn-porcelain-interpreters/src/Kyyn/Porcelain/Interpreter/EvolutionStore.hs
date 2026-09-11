@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore) where
 
-import Control.Monad (unless, forM_, when)
+import Control.Monad (unless, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (parseEither)
@@ -17,7 +17,7 @@ import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), FactCha
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(..))
 import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath, cacheLocation)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, scopedPath, directoryScope)
 import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
@@ -106,9 +106,8 @@ runEvolutionStore = interpret $ \_ -> \case
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
     tree <- stored WriteFile "root" (fileTree (files facts ++ files code))
     let KnowledgeBase (Repository repositoryScope) _ = kb
-    ignore <- stored WriteFile ".kyyn/.gitignore" (relativePath ".kyyn/.gitignore" >>= knowledgeBasePath kb)
-    existingIgnore <- FileSystem.readOptionalBytes repositoryScope ignore
-    when (existingIgnore == Nothing) (FileSystem.writeBytes repositoryScope ignore "*\n")
+    cache <- stored WriteFile (relativeName cacheLocation) (knowledgeBasePath kb cacheLocation)
+    FileSystem.ensureIgnoredDirectory repositoryScope cache
     allocated <- FileSystem.createUniqueDirectory parent
     location <- stored WriteFile "candidate" (directoryScope (scopedPath parent allocated))
     writeTree location "capture/" capture
@@ -270,7 +269,7 @@ checkSavedReport operation (EvolutionReport steps) = forM_ steps $ \(StepReport 
 
 candidateScope :: Failure :> es => KnowledgeBase -> Eff es DirectoryScope
 candidateScope kb@(KnowledgeBase (Repository scope) _) = stored ReadDirectoryTree ".kyyn/candidates" $ do
-  path <- relativePath ".kyyn/candidates" >>= knowledgeBasePath kb
+  path <- relativePath (relativeName cacheLocation ++ "/candidates") >>= knowledgeBasePath kb
   directoryScope (scopedPath scope path)
 
 writeTree :: (FileSystem.FileSystem :> es, Failure :> es) => DirectoryScope -> String -> FileTree -> Eff es ()

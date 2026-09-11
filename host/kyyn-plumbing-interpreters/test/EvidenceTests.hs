@@ -21,9 +21,11 @@ import Kyyn.Types.Evidence (EvidenceRef(EvidenceRef))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
 import Kyyn.Plumbing.Capability.EvidenceStore
+import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
+import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Protocol.Evidence
 import System.Directory (listDirectory, createDirectory, removeDirectory, doesFileExist)
@@ -53,8 +55,8 @@ itemB = EvidenceId "b.txt"
 value :: String -> Evidence CheckedValue
 value name = Evidence ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack name)))
 
-execute :: DirectoryScope -> Eff '[EvidenceStore, DhallHandling, Failure, IOE] a -> IO a
-execute scope action = runEff (runFailure (runDhallHandling (runEvidenceStoreIO scope action))) >>= right
+execute :: DirectoryScope -> Eff '[EvidenceStore, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runEvidenceStoreIO scope action)))) >>= right
 
 key :: EvidenceSnapshotRef -> FetchId
 key (EvidenceSnapshotRef _ _ identity) = identity
@@ -93,7 +95,7 @@ main = do
     (runPureEff (headerOnly (decodeState wrongProducer contract bytes)) == Left ProducerContractChanged)
   withSystemTempDirectory "kyyn-evidence-" $ \directory -> do
     scope <- right (directoryScope directory)
-    let run :: Eff '[EvidenceStore, DhallHandling, Failure, IOE] a -> IO a
+    let run :: Eff '[EvidenceStore, DhallHandling, FileSystem, Failure, IOE] a -> IO a
         run = execute scope
     empty <- run (evidenceHead instanceA) >>= right
     assert "new store has a head" (empty == Nothing)
@@ -194,7 +196,7 @@ main = do
     assert "clear left archived payloads" (null remaining)
     let statePath = directory </> ".kyyn/evidence/folder-73616c6573/state.dhall"
     createDirectory statePath
-    failedRead <- runEff (runFailure (runDhallHandling (runEvidenceStoreIO scope (evidenceHead instanceA))))
+    failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runEvidenceStoreIO scope (evidenceHead instanceA)))))
     assert "storage error became absent history" (isLeft failedRead)
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right

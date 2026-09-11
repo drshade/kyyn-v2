@@ -5,7 +5,6 @@ import Control.Exception (IOException, displayException, try)
 import Control.Monad (unless, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.ByteString as Bytes
-import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Time.Clock (getCurrentTime)
@@ -17,12 +16,14 @@ import Effectful.Dispatch.Dynamic (interpret)
 import qualified Effectful.Exception as Exception
 import Kyyn.Domain.Contract (CheckedContract, contractFingerprint)
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.KnowledgeBase (cacheLocation)
 import qualified Kyyn.Domain.Failure as Failure
-import Kyyn.Domain.Path (DirectoryScope, scopePath)
+import Kyyn.Domain.Path (DirectoryScope, scopePath, relativeName)
 import Kyyn.Domain.Plugin (pluginNameText)
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.EvidenceStore
+import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Protocol.Evidence
 import System.Directory (createDirectoryIfMissing, listDirectory, removeFile, renameFile)
@@ -33,7 +34,7 @@ import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp (withTempFile)
 import System.Random (randomIO)
 
-runEvidenceStoreIO :: forall es a. (IOE :> es, Failure :> es, DhallHandling :> es)
+runEvidenceStoreIO :: forall es a. (IOE :> es, Failure :> es, DhallHandling :> es, FileSystem.FileSystem :> es)
   => DirectoryScope -> Eff (EvidenceStore : es) a -> Eff es a
 runEvidenceStoreIO kb = interpret $ \_ -> \case
   EvidenceHead instanceRef -> locked instanceRef $ \directory -> runExceptT $ do
@@ -58,7 +59,7 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
     at <- ExceptT $ Right . iso8601Show <$> liftIO getCurrentTime
     let updated = EvidenceState baseline initial (Just identity) next (history ++ [Fetch identity previous at changes])
     encoded <- ExceptT (encodeState producer contract updated)
-    ExceptT $ Right <$> native Failure.WriteFile (scopePath kb </> ".kyyn/.gitignore") (ensureIgnore kb)
+    ExceptT $ Right <$> FileSystem.ensureIgnoredDirectory kb cacheLocation
     case (same,bytes) of
       (False,Just old) -> ExceptT $ Right <$> native Failure.WriteFile directory (archive directory old)
       _ -> pure ()
@@ -96,7 +97,7 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
   where
     locked :: ConnectorInstanceRef -> (FilePath -> Eff es b) -> Eff es b
     locked instanceRef action = do
-      let root = scopePath kb </> ".kyyn" </> "evidence"
+      let root = scopePath kb </> relativeName cacheLocation </> "evidence"
           directory = root </> instancePath instanceRef
       native Failure.EnsureDirectory directory (createDirectoryIfMissing True directory)
       Exception.bracket
@@ -171,15 +172,6 @@ removeOptional path = do
     Left err | isDoesNotExistError err -> pure ()
              | otherwise -> ioError err
     Right () -> pure ()
-
-ensureIgnore :: DirectoryScope -> IO ()
-ensureIgnore kb = do
-  let path = scopePath kb </> ".kyyn" </> ".gitignore"
-  result <- try (Bytes.readFile path)
-  case result of
-    Left err | isDoesNotExistError err -> Bytes.writeFile path (Char8.pack "*\n")
-             | otherwise -> ioError err
-    Right _ -> pure ()
 
 native :: (IOE :> es, Failure :> es) => Failure.StorageOperation -> FilePath -> IO a -> Eff es a
 native operation path action = liftIO action `Exception.catch` \(err :: IOException) ->
