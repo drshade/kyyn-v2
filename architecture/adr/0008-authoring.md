@@ -1,6 +1,13 @@
-# 0008 — Domain authors write typed functions, not adapters
+---
+id: 0008
+title: 'Domain authors write typed functions, not adapters'
+status: accepted
+date: 2026-09-11
+---
+# Domain authors write typed functions, not adapters
 
-Status: Accepted. Full authoring surfaces remain under implementation.
+Basis: typed authoring is accepted; the KB-tool entry-point addition is under
+design review. Full authoring surfaces remain under implementation.
 
 ## Context
 
@@ -42,23 +49,23 @@ workspace-specific combinators, not a mixed collection of schema/runtime modules
 The installed catalogue derives its module inventory only from kyyn-sdk's public
 facade list; shared-profile package exports are not a second author inventory.
 
-KB-authored code has three entry-point kinds:
+KB-authored code has these entry-point kinds:
 
 | Entry point | Result and boundary |
 | --- | --- |
 | Query | Answer or view over the selected snapshot, without proposing a change |
 | Evolution | Use declared capabilities to obtain inputs and produce a candidate, never implicitly accept it |
 | Validation | Pure checks of supplied root/config values, returning diagnostics |
+| KB tool (proposed addition) | Compose declared selected-root and captured-evidence reads for investigation, without acquisition, sink calls or root mutation |
 
-A report is a query result. Agent-facing tools expose queries and operations on
-evolution workspaces; evaluating a prepared workspace is not a fourth KB execution
-model or a separate proposal-authoring program.
-Plugin methods remain callable integration operations, not additional KB entry-point
-kinds. Acquisition need not itself propose knowledge. ADR 0010 defines the
+A report is a query result. Agent-facing operations expose queries, KB tools,
+plugin methods and evolution workspaces. A KB tool is an authored function, not a
+second proposal-authoring workflow. Plugin methods remain integration operations;
+acquisition need not propose knowledge. ADR 0010 defines the
 effectful evolution entry and the pure transformation helpers usable inside it.
 An output declaration binds an ordinary renderer function to a typed plugin sink,
 as defined in [outputs](0017-outputs.md). Renderer execution is selected-snapshot
-computation, like a query, not a fourth effectful KB workflow. It can compose
+computation, like a query, not an effectful KB tool. It can compose
 multiple queries. Generated output adapters prepare values; a separate host
 operation invokes the sink. Queries remain independently discoverable/callable.
 Each evolution workspace has a single `evolution` binding; reusable helper
@@ -172,13 +179,54 @@ example checks; query execution alone cannot mint that wrapper. The eventual
 CLI/Web/MCP browsing operations use that validated boundary, not the raw checking
 operation directly. Those surface wrappers are not implemented yet.
 
-KB helpers call generated bindings such as a configured provider's occurrence
-query, receiving typed pages. Provider JSON interpretation belongs inside the
+KB helpers call generated bindings for registered plugin methods. Provider interpretation belongs inside the
 plugin or its generated provider client, not in the KB. A tool evaluating a
 prepared evolution invokes its fixed entry point. Kyyn turns its returned root into a candidate;
 the authored function does not call a nested `propose` operation or silently update
 accepted fact files. Generated plugin proxies expose concrete input/output types
 while routing calls through the host and the plugin's own capability context.
+
+### Proposed addition: composed KB investigation tools
+
+For investigation, a KB author can compose plugin methods as ordinary functions:
+
+```haskell
+import qualified Kyyn.Connectors as Connectors
+import qualified Microsoft.Mail as Mail
+import qualified Microsoft.Calendar as Calendar
+
+emailWithAttachments mailbox emailId = do
+  email <- Mail.viewEmail mailbox emailId
+  attachments <- Mail.getAttachments mailbox emailId
+  pure (EmailWithAttachments email attachments)
+
+getActivity day = do
+  emails <- Mail.emailsOn Connectors.salesMail day
+  meetings <- Calendar.meetingsOn Connectors.teamCalendar day
+  pure (Activity emails meetings)
+```
+
+These are illustrative authored modules and result types, not installed SDK exports.
+[ADR 0016](0016-connections.md) owns generated instance values; [ADR 0014](0014-evidence.md)
+owns selection of their captured evidence. The same composition can cross plugin
+packages. Register `getActivity` as a KB tool to expose its checked input/result
+contracts and documentation to agents; unregistered helpers remain ordinary private
+functions. Use the typed `Method`/`registerMethod` boundary above with KB-owned method
+identity and the read-only capabilities in ADR 0009, not another registry of structural
+schemas or an author-written MCP wrapper. Discovery checks exports and contracts
+without invoking the tool. A KB tool is not a snapshot `Query`: adding this entry
+point must not give queries, validators or renderers access to plugin calls.
+
+These tools may also declare `SnapshotRead root` to compare captured evidence with
+the explicitly selected root. Query remains the snapshot-only entry point; a tool
+does not extend Query's algebra or give renderers plugin access.
+Initially plugin calls from these tools read captured evidence only. Fresh acquisition is a separate
+explicit operation, and external writes use the sink path in ADR 0017. The agent
+can investigate, then write literal fact edits with rationale in an evolution;
+that evolution need not replay the agent's investigation. An evolution can reuse
+the same helpers when the transformation itself should calculate from evidence.
+
+### Shared authoring vocabulary
 
 Pure calculations are reusable from validation, queries and views. Provide a
 small SDK for identified facts, diagnostics, selected existing exact-value library

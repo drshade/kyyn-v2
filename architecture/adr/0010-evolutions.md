@@ -411,9 +411,9 @@ workspace contents to archive. Together with the evaluated root it is sufficient
 to construct acceptance without rereading live source and substituting different
 bytes. The [candidate wrapper](0004-knowledge-base.md) retains this context and
 the report subsequently produced by evaluation while
-its result is checked. Temporary input evidence need survive only as long as
-needed for evaluation/checking; the archive policy need not preserve all evidence
-bytes forever. No registry of approved snapshots is introduced.
+its result is checked. Evidence retention belongs to [ADR 0014](0014-evidence.md),
+not candidate or archive lifetime; the archive need not duplicate evidence bytes.
+No registry of approved snapshots is introduced.
 
 Workspace operations return entities rather than printing, and listing remains
 independent of root compilation:

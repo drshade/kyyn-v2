@@ -120,7 +120,7 @@ before the first slice. Avoid combining unrelated methods solely to shorten rows
 | RootExecution | Validate selected roots/configs, execute snapshot queries/examples, prepare typed output inputs through renderers | Live acquisition, effectful evolution entries, sink invocation, publication |
 | EvolutionExecution | Compile/evaluate evolution entries, dispatch declared snapshot/plugin calls, derive step reports from annotated before/after values | Accepted-ref publication, inferred evidence provenance, implicit delivery or nested proposals |
 | RootPublication | Commit a checked evolution and conditionally advance from its Before revision | Conflict resolution, remote coordination, delivery |
-| EvidenceStore | Cached snapshots, pages, source references and acquisition checkpoints | Domain classification, accepted facts, external source history or change detection |
+| EvidenceStore | Retained fetch deltas/payloads, selected snapshots and source references (ADR 0014) | Domain classification, accepted curation progress or inferred provider changes |
 | PluginInvocation | Invoke locally built source-plugin methods with declared typed capabilities | Raw `call bytes`, separate connection-plugin runtime |
 | ArtifactStore | Immutable byte-artifact creation and lookup when needed by typed payloads | Universal output representation or external writes |
 | Delivery | Invoke typed input on its configured plugin sink; retain dispatch/outcome state | Query/render evaluation, preview custody or accepted-ref updates |
@@ -240,10 +240,11 @@ pure typed composition and named-entry arguments; and
 [validation](adr/0011-validation.md) for the pure validator.
 
 The authored program has no JSON/Dhall transport parsing, method-string dispatch
-or native IO entry point. A tool exposes a query or evolution, not another KB
-execution category. An evolution entry can request evidence and return a proposed
+or native IO entry point. Registered KB tools compose captured-evidence plugin reads
+under ADR 0008; queries retain their snapshot-only boundary. An evolution entry can
+request evidence and return a proposed
 root; checking consumes its materialized candidate and cannot fetch a different
-report or rerun acquisition. Validation is the third, pure KB entry point.
+report or rerun acquisition. Validation remains a pure KB entry point.
 A guest method descriptor is not itself a serialized function.
 
 ## Review questions this map deliberately leaves visible

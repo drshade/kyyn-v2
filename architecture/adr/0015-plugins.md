@@ -1,6 +1,12 @@
-# 0015 — Locally built plugins group source and sink connectors
+---
+id: 0015
+title: 'Locally built plugins group source and sink connectors'
+status: proposed
+date: 2026-09-11
+---
+# Locally built plugins group source and sink connectors
 
-Status: Proposed implementation details. **Owner-established direction: uniform
+Basis: **owner-established direction: uniform
 MicroHs runtime, source vendoring and local compilation, with related connectors
 and account setup in one plugin. One KB has many plugins; each plugin can have
 many named connector instances, including multiple instances of the same type.
@@ -242,6 +248,15 @@ that plugin's advertised types and configuration checked against that type. Repe
 types are normal: sales-inbox and support-inbox are independent Mail configurations.
 Across plugins, instance references use both plugin and instance name. A configured
 acquisition source is such a connector instance, not another source registry.
+Each instance also declares its generated guest binding under ADR 0016; the binding
+is an authoring name, not another identity or installed plugin.
+
+A source's acquisition method returns plugin-declared evidence changes under
+[ADR 0014](0014-evidence.md). Its plugin-specific captured-evidence methods, such as
+`viewEmail` or `getAttachments`, are separately discoverable typed methods; the host
+does not prescribe a generic evidence view. Agents invoke them directly or through
+composed KB tools under ADR 0008. Acquisition and captured reads have distinct
+capability requirements under ADR 0009, even when they share a connector type.
 
 Mail and Meetings instances may name the same local secret key without duplicating
 the secret. Shared account settings/authentication functions are ordinary plugin
@@ -274,6 +289,7 @@ data ConnectorType = ConnectorType
 
 data ConnectorInstance = ConnectorInstance
   { name          :: ConnectorName
+  , binding       :: BindingName
   , connectorType :: ConnectorTypeName
   , configuration :: CheckedValue
   }
