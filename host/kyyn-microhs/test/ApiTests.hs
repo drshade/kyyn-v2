@@ -14,8 +14,7 @@ main :: IO ()
 main = do
   repo <- getEnv "KYYN_TEST_ROOT"
   let sources = map (repo </>) ["guest/kyyn-sdk/src","shared/kyyn-types/src","vendor/transformers","vendor/json"]
-      public = ["Kyyn.Edit", "Kyyn.Evolution", "Kyyn.Optics", "Kyyn.Types.SchemaMetadata", "Kyyn.Types.Fact",
-        "Kyyn.Types.Diagnostic", "Kyyn.Types.Program", "Kyyn.Types.Query", "Kyyn.Types.Evidence", "Kyyn.Types.Evolution"]
+      public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
       inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
   modules <- inspect sources public
   let symbolsIn m = concat [symbols | ApiModule name symbols <- modules, name == m]
@@ -33,9 +32,14 @@ main = do
   assert "private function leaked" (null (matches "Kyyn.Edit" "unique" ValueNamespace))
   assert "abstract constructor leaked" (null (matches "Kyyn.Edit" "Collection" ValueNamespace))
   assert "abstract type missing" (length (matches "Kyyn.Edit" "Collection" TypeNamespace) == 1)
-  assert "constructor namespace lost" (length (matches "Kyyn.Types.Fact" "Fact" ValueNamespace) == 1
-    && length (matches "Kyyn.Types.Fact" "Fact" TypeNamespace) == 1)
-  assert "record selector missing" (not (null (matches "Kyyn.Types.Evolution" "explanation" ValueNamespace)))
+  assert "constructor namespace lost" (length (matches "Kyyn.Schema" "Fact" ValueNamespace) == 1
+    && length (matches "Kyyn.Schema" "Fact" TypeNamespace) == 1)
+  assert "record selector missing" (not (null (matches "Kyyn.Evolution" "explanation" ValueNamespace)))
+  assert "runtime exports hidden" (null [n | ApiModule _ symbols <- modules,
+    ApiSymbol n _ _ _ _ _ <- symbols, n `elem`
+      ["Program", "SnapshotRead", "ReadAccess", "CheckResult", "checkReport", "runLocally",
+       "request", "interpretProgram", "evaluateEvolution", "EvolutionOutput"]])
+  assert "query binding constructor stays private" (null (matches "Kyyn.Query" "CollectionBinding" ValueNamespace))
   let update = matches "Kyyn.Edit" "update" ValueNamespace
   assert "signature precedence/aliases" (case update of
     [ApiSymbol _ _ "Kyyn.Edit.update" _ (Just "update :: FactId -> Edit a r -> CollectionEdit a r") _] -> True
@@ -68,7 +72,10 @@ main = do
         [d] -> d
         _ -> error ("Missing data declaration: " ++ m ++ "." ++ n)
       originalDeclaration = declarationIn "Kyyn.DataFixture"
-  assert "public record fields" (all (`isInfixOf` originalDeclaration "Record") ["title", "count", "String", "Int"])
+  assert "public record fields" (originalDeclaration "Record" ==
+    "data Record = Record { title :: String, count :: Int, note :: Maybe String, total :: !(Maybe Int) }")
+  assert ("GADT header preserved; lowered result variable gets a fresh readable name: " ++ show (originalDeclaration "Expr")) (originalDeclaration "Expr" ==
+    "data Expr a where\n  Number :: Int -> Expr Int\n  Apply :: (a -> b) -> Expr a -> Expr b")
   assert "abstract data header" (words (originalDeclaration "Abstract") == ["data", "Abstract"])
   assert "abstract newtype header" (words (originalDeclaration "AbstractNew") == ["newtype", "AbstractNew"])
   assert "partial constructors" ("Visible" `isInfixOf` originalDeclaration "Partial"
@@ -98,12 +105,8 @@ main = do
   let signature m n = case matches m n ValueNamespace of
         [ApiSymbol _ _ _ _ (Just text) _] -> text
         _ -> error ("Missing source signature: " ++ m ++ "." ++ n)
-  assert "constructor keeps String alias" (signature "Kyyn.Types.Fact" "FactId" == "FactId :: String -> FactId")
-  assert "selector keeps String alias" (signature "Kyyn.Types.Evidence" "source" == "source :: EvidenceRef -> String")
-  assert "constructor eliminates trivial GADT equalities"
-    (signature "Kyyn.Types.Query" "ReadCollection" == "ReadCollection :: CollectionBinding root fact -> SnapshotRead root [Fact fact]")
-  assert "constructor restores GADT parameters"
-    (signature "Kyyn.Types.Program" "Pure" == "Pure :: a -> Program request a")
+  assert "constructor keeps String alias" (signature "Kyyn.Schema" "FactId" == "FactId :: String -> FactId")
+  assert "selector keeps String alias" (signature "Kyyn.Evolution" "source" == "source :: EvidenceRef -> String")
   withSystemTempDirectory "kyyn-api-values-" $ \temporary -> do
     createDirectoryIfMissing True (temporary </> "Kyyn")
     let symbols = nubBy sameOrigin (concatMap symbolsIn public)

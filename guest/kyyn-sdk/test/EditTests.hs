@@ -75,11 +75,11 @@ main = do
   let binding = Internal.RootBinding "test" (const JSNull)
       step = Internal.edit binding (Rationale "Prepare review" []) action
       stop = Internal.edit binding (Rationale "Refuse" []) (refuse refusal)
-  case evaluateEvolution step input of
+  case Internal.evaluateEvolution step input of
     Right (Internal.EvolutionOutput value observations) ->
       assert "one observation for multiple within blocks" (value == expected && length observations == 1)
     Left err -> fail (show err)
-  assert "evolution refusal drops earlier observations" (evaluateEvolution (step >=> stop) input == Left (EvolutionFailure refusal))
+  assert "evolution refusal drops earlier observations" (Internal.evaluateEvolution (step >=> stop) input == Left (EvolutionFailure refusal))
   putStrLn "Fact-aware State edits and composable optics passed."
 
 pairFirst :: Lens (a,c) (b,c) a b

@@ -5,7 +5,7 @@ module Kyyn.DataFixture
   ) where
 
 data Choice a = Empty | Full a
-data Record = Record { title :: String, count :: Int }
+data Record = Record { title :: String, count :: Int, note :: Maybe String, total :: !(Maybe Int) }
 newtype Wrapped a = Wrapped [a]
 data Abstract = Private
 newtype AbstractNew = PrivateNew String

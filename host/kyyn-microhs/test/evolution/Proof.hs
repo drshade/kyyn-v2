@@ -6,7 +6,7 @@ import qualified Identity
 import qualified Kyyn.Workspace.Metadata as Metadata
 import qualified Kyyn.Workspace.Unchanged as Unchanged
 import Kyyn.Evolution
-import Kyyn.Evolution.Internal (RecordedRoot(..), StepObservation(..), EvolutionOutput(..))
+import Kyyn.Evolution.Internal (RecordedRoot(..), StepObservation(..), EvolutionOutput(..), evaluateEvolution)
 import Kyyn.Types.Fact
 import Kyyn.Runtime.Json (parseValue)
 import Kyyn.Runtime.Evolution (encodeEvolutionReply)

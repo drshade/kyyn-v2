@@ -1,6 +1,7 @@
 module Evolution where
 
 import Kyyn.Workspace.Evolution
+import Kyyn.Schema
 import qualified SchemaV1 as Before
 import qualified SchemaV2 as After
 import qualified Kyyn.Workspace.Before as BeforeCollections

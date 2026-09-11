@@ -1,7 +1,6 @@
 module TodoSchemaV1 where
 
-import Kyyn.Types.Fact (Fact)
-import Kyyn.Types.SchemaMetadata
+import Kyyn.Schema
 
 data Status = Open | InProgress | Done deriving (Eq, Show)
 data Todo = Todo { title :: String, status :: Status } deriving (Eq, Show)

@@ -137,8 +137,9 @@ typed query arguments and secret input are details for their respective slices.
 fields and declared roles, not arbitrary compiler internals.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK,
-independently of KB selection. Public modules come from the SDK packages' exposed
-module declarations; checked MicroHs exports determine symbol membership, including
+independently of KB selection. Public modules come from kyyn-sdk's exposed
+facade declarations under [ADR 0008](0008-authoring.md), not the shared wire-profile
+package's exports; checked MicroHs exports determine symbol membership, including
 reexports and their defining module. Display authored signatures and type aliases
 when available, preserving useful names such as `Edit` and `Lens'`. Distinguish
 checked expanded signatures from source declarations rather than claiming they

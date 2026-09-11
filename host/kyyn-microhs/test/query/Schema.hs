@@ -1,7 +1,6 @@
 module Schema where
 
-import Kyyn.Types.Fact
-import Kyyn.Types.SchemaMetadata
+import Kyyn.Schema
 
 data Root = Root { tasks :: [Fact Todo], people :: [Fact Person] }
 data Todo = Todo { title :: String, owner :: FactId }

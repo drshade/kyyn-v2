@@ -177,11 +177,13 @@ kyyn-v2 guest module list
 kyyn-v2 guest module show Kyyn.Edit
 kyyn-v2 guest symbol show Kyyn.Edit.update
 kyyn-v2 guest symbol show 'Kyyn.Evolution.>=>'
-kyyn-v2 --json guest symbol show Kyyn.Types.Fact.Fact
+kyyn-v2 --json guest symbol show Kyyn.Schema.Fact
 ```
 
 Module output lists exported types, constructors and functions. Symbol output
-includes its defining name, so reexports can be followed. A name such as `Fact`
+includes its defining name, so shared reexports can be recognized. Look symbols
+up through the listed public modules; their definitions may live in implementation
+modules outside the catalogue. A name such as `Fact`
 may identify both a type and its constructor; discovery returns both.
 Authored signatures preserve aliases such as `Edit` and `Lens'`. Data/newtype
 declarations show public constructors and record fields. Abstract types show only
@@ -210,6 +212,9 @@ use a bare `--` line for a paragraph break within the documentation. Reexports
 retain the defining declaration's documentation. Other Haddock forms and ordinary
 implementation comments are not collected.
 
-The current catalogue covers the public Kyyn SDK and shared types, not every
-upstream library module or a workspace's generated Before/After bindings.
+The catalogue covers six author-facing modules: `Kyyn.Schema`, `Kyyn.Validation`,
+`Kyyn.Query`, `Kyyn.Evolution`, `Kyyn.Edit` and `Kyyn.Optics`. Shared `Kyyn.Types.*`
+modules and runtime operations are implementation APIs, not catalogue entries.
+Reexports retain their real defining identities. Workspace-generated Before/After
+bindings are not yet discoverable here.
 If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.
