@@ -427,9 +427,13 @@ or proposal-submission effect is needed. Plugin acquisition methods may be expos
 directly without implying a change to accepted knowledge.
 
 For evidence investigation, expose configured instance discovery, fetch history
-and changes between selected fetches, alongside each plugin's own documented read
+and the payload-free change index between selected fetches, alongside each plugin's own documented read
 methods. Registered KB helpers have the same typed discovery/invocation experience;
 agents need not read the Kyyn repository or write MCP adapters to compose them.
+Change entries identify fetch/predecessor, change kind, evidence ID and citation;
+payload interpretation goes through plugin methods, not generic content dumped by
+the history endpoint. Per-instance historical fetch selections are explicit
+invocation inputs carried through generated adapters, not guest-source edits.
 Historical selection and unavailable-history diagnostics follow ADR 0014. Distinguish
 fetching, reading captured evidence and accepting a curation evolution in the UI;
 reading or fetching does not imply progress in an accepted curation workflow.

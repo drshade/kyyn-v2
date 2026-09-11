@@ -107,7 +107,7 @@ selectEvidence
   => ConnectorInstanceRef -> EvidenceSelection
   -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
 
-changesBetween
+readFetchesBetween
   :: (EvidenceStore :> es, Failure :> es)
   => EvidenceSnapshotRef -> Maybe FetchId
   -> Eff es (Either EvidenceProblem [Fetch CheckedValue])
@@ -129,12 +129,42 @@ agent-facing view. `Right Nothing` means that item is absent at an available
 snapshot; unavailable history is a different result. The invocation supplies the
 selected package/contract context against which selections are checked.
 
+`readFetchesBetween` is the payload-bearing storage operation for host adapters,
+not the agent-facing change index. Investigation exposes only change identities
+and citations through the application boundary:
+
+```haskell
+data ChangeKind = Added | Updated | Removed
+data EvidenceChangeSummary = EvidenceChangeSummary
+  { fetch :: FetchId
+  , previous :: Maybe FetchId
+  , kind :: ChangeKind
+  , item :: EvidenceId
+  , citation :: EvidenceRef
+  }
+
+listEvidenceChanges
+  :: (EvidenceStore :> es, Failure :> es)
+  => EvidenceSnapshotRef -> Maybe FetchId
+  -> Eff es (Either EvidenceProblem [EvidenceChangeSummary])
+```
+
+The summary has no opaque payload or generic rendered content. Plugin methods
+interpret selected payloads. The host assembles the shared `EvidenceRef` from
+producer/instance identity, plugin-supplied item ID and `Evidence.references`;
+those references are source links/paths, not a second citation type. A removal
+uses the removed item's preceding references. This lets rationale reuse the SDK
+citation without requiring acquisition code to repeat host-owned identity fields.
+
 Retain every successful fetch and its actual delta payloads until explicit deletion;
 no automatic pruning. Reads at an earlier fetch return the payloads at that fetch,
 not the current versions of the same IDs. Reconstructing snapshots from retained
-deltas is sufficient; a second archival service is not required. Deleting needed
-history makes the affected selections explicitly unavailable, including any current
-snapshot that can no longer be reconstructed. Refetching does not restore lost history.
+deltas is sufficient; a second archival service is not required. The materialized
+latest snapshot is independently readable. Explicitly deleting history preserves
+that current snapshot, but makes historical selections and change spans requiring
+deleted deltas unavailable. Clearing the entire evidence store also clears current
+evidence. Refetching does not restore lost history; reconstruction from deltas is
+possible only while the required history remains available.
 
 Named connector bindings (ADR 0016) select current evidence by default. Resolve and
 hold the selected fetch for each instance for the duration of an invocation; later
@@ -144,6 +174,17 @@ its configured source instances, so a later conditional read cannot accidentally
 pick up a concurrent refresh. This fixes local captured inputs, not a simultaneous
 external-world transaction across providers. An unavailable selection reports a
 useful error when read; an unused connector need not have fetched successfully.
+
+Historical choices are explicit per-instance invocation inputs, not edits to the
+generated connector value. The caller supplies an instance-to-fetch selection to
+the application operation (CLI/MCP arguments or an evolution's captured invocation
+inputs); omitted instances use current evidence. Generated adapters carry the
+resolved snapshot context through nested plugin calls. Ordinary helper source stays
+selection-agnostic: `Mail.viewEmail Connectors.salesMail id` works for either choice.
+Capture explicit selections with an evaluated evolution's inputs; do not introduce
+a second manifest selecting its entry function or business arguments. An evolution
+that explicitly acquires evidence can explicitly select the returned fetch for a
+subsequent call; acquisition never mutates an existing selection implicitly.
 
 ### Investigation and curation
 

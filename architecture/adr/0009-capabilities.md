@@ -1,7 +1,7 @@
 ---
 id: 0009
 title: 'Typed capability rows describe program effects'
-status: proposed
+status: accepted
 date: 2026-09-11
 ---
 # Typed capability rows describe program effects
@@ -26,7 +26,7 @@ separate product permission taxonomy. Retain these explicit boundaries:
   while producing a candidate; they do not accept it or start a nested proposal.
 - Snapshot queries and output renderers may read their selected immutable snapshot,
   not live providers. A renderer can compose multiple queries in that context.
-- KB tools compose captured-evidence plugin reads; they do not fetch from providers,
+- The proposed KB tools compose selected-root and captured-evidence plugin reads; they do not fetch from providers,
   invoke sinks or propose/accept roots.
 - Accepted-root publication is not a guest capability.
 - Delivery invokes a configured plugin sink with its prepared typed input under
@@ -39,7 +39,7 @@ Illustrative capability sets, not a closed list of mandatory roles:
 | Validator / pure transformation helper | Pure input-to-result calculation | Host calls, current time, provider access |
 | Snapshot query/output renderer | Typed reads of one selected immutable snapshot; pure computation and query composition | Proposal writes, live providers, sink invocation |
 | Evolution entry point | Selected snapshot/evidence reads and declared plugin acquisition/read calls | Accepted-root publication, nested proposal authoring, delivery |
-| KB tool | Typed plugin reads against selected captured evidence; pure composition | Live acquisition, sinks, proposal/accepted-root writes |
+| KB tool (proposed addition) | Declared SnapshotRead root and typed plugin reads against selected captured evidence; pure composition | Live acquisition, sinks, proposal/accepted-root writes |
 | Source acquisition method | HTTP/filesystem acquisition, secret lookup, prior evidence snapshot reads | KB acceptance, sink invocation |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
 | Sink connector method | Prepared typed input and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
@@ -138,14 +138,18 @@ ADR 0014. The plugin reads that captured evidence through its own host capabilit
 Another registered method can explicitly acquire fresh evidence. The generated
 proxy carries a method identity and checked types, not arbitrary code over JSON.
 
+### Proposed addition: KB-tool read composition
+
 Acquisition and captured reads have distinct request algebras. A KB tool may compose
-`MailReads :+: CalendarReads`, but its interpreter supplies neither acquisition nor
+`SnapshotRead root :+: (MailReads :+: CalendarReads)`, but its interpreter supplies neither acquisition nor
 sink handlers. Plugin read implementations likewise receive captured-store reads,
 not HTTP/Secrets. Calling a read method therefore does not hide a fresh fetch in
 browsing. Pure helpers can be shared by both kinds of plugin implementation.
 An evolution may declare acquisition separately; selecting its returned fetch is
 explicit and does not silently replace an already selected snapshot. Role labels
 do not enforce this: the generated signatures and installed handler rows must agree.
+
+### Typed dispatch
 
 Generated ergonomic helpers perform the sum injections, so KB authors need not
 write `InLeft` or `InRight` at each call. Adding a row-membership library is an

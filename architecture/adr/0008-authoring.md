@@ -1,7 +1,7 @@
 ---
 id: 0008
 title: 'Domain authors write typed functions, not adapters'
-status: proposed
+status: accepted
 date: 2026-09-11
 ---
 # Domain authors write typed functions, not adapters
@@ -56,7 +56,7 @@ KB-authored code has these entry-point kinds:
 | Query | Answer or view over the selected snapshot, without proposing a change |
 | Evolution | Use declared capabilities to obtain inputs and produce a candidate, never implicitly accept it |
 | Validation | Pure checks of supplied root/config values, returning diagnostics |
-| KB tool | Compose typed captured-evidence reads for investigation, without acquisition, sink calls or root mutation |
+| KB tool (proposed addition) | Compose declared selected-root and captured-evidence reads for investigation, without acquisition, sink calls or root mutation |
 
 A report is a query result. Agent-facing operations expose queries, KB tools,
 plugin methods and evolution workspaces. A KB tool is an authored function, not a
@@ -186,6 +186,8 @@ the authored function does not call a nested `propose` operation or silently upd
 accepted fact files. Generated plugin proxies expose concrete input/output types
 while routing calls through the host and the plugin's own capability context.
 
+### Proposed addition: composed KB investigation tools
+
 For investigation, a KB author can compose plugin methods as ordinary functions:
 
 ```haskell
@@ -215,11 +217,16 @@ schemas or an author-written MCP wrapper. Discovery checks exports and contracts
 without invoking the tool. A KB tool is not a snapshot `Query`: adding this entry
 point must not give queries, validators or renderers access to plugin calls.
 
-Initially these tools read captured evidence only. Fresh acquisition is a separate
+These tools may also declare `SnapshotRead root` to compare captured evidence with
+the explicitly selected root. Query remains the snapshot-only entry point; a tool
+does not extend Query's algebra or give renderers plugin access.
+Initially plugin calls from these tools read captured evidence only. Fresh acquisition is a separate
 explicit operation, and external writes use the sink path in ADR 0017. The agent
 can investigate, then write literal fact edits with rationale in an evolution;
 that evolution need not replay the agent's investigation. An evolution can reuse
 the same helpers when the transformation itself should calculate from evidence.
+
+### Shared authoring vocabulary
 
 Pure calculations are reusable from validation, queries and views. Provide a
 small SDK for identified facts, diagnostics, selected existing exact-value library
