@@ -84,6 +84,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
       utf8 = Text.encodeUtf8 . Text.pack
   files <- mapM (\(base, file) -> (,) (path file) <$> Bytes.readFile (repo </> base </> file))
     [("host/kyyn-microhs/test/metadata", "Authored.hs"),
+     ("guest/kyyn-sdk/src", "Kyyn/Schema.hs"),
      ("shared/kyyn-types/src", "Kyyn/Types/SchemaMetadata.hs"),
      ("shared/kyyn-types/src", "Kyyn/Types/Fact.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/SchemaMetadata.hs"),
@@ -140,9 +141,10 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   putStrLn "Named Haskell metadata evaluated through real MicroHs and fixed JSON codec."
   reportFiles <- mapM (\(base,file) -> (,) (path file) <$> Bytes.readFile (repo </> base </> file))
     [("shared/kyyn-types/src", "Kyyn/Types/Diagnostic.hs"),
+     ("guest/kyyn-sdk/src", "Kyyn/Validation.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/Validation.hs")]
   let reportSource = unlines
-        ["module ValidationEntry where", "import Kyyn.Types.Diagnostic", "import qualified Authored", "import Kyyn.Types.Fact",
+        ["module ValidationEntry where", "import Kyyn.Validation", "import qualified Authored", "import Kyyn.Schema",
          "validate :: Authored.Root -> ValidationReport",
          "validate (Authored.Root todos _) = ValidationReport ([Diagnostic Warning \"uncertain\" \"München 🦋\" Nothing,",
          "  Diagnostic Warning \"fact\" \"Review name\" (Just (FactLocation \"todos\" \"todo-001\" (Just \"name\"))),",
@@ -155,8 +157,8 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   validationCode <- either fail pure (fileTree
     [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])
   sdk <- either fail pure (fileTree (reportFiles ++ filter ((/= path "Authored.hs") . fst) files))
-  let emptySchema = "module Empty where\nimport Kyyn.Types.SchemaMetadata\ndata Root = Root deriving (Eq, Show)\nschemaMetadata :: SchemaMetadata\nschemaMetadata = SchemaMetadata [] [] []\n"
-      emptyValidator = "module Validate where\nimport qualified Empty\nimport Kyyn.Types.Diagnostic\nvalidate :: Empty.Root -> ValidationReport\nvalidate _ = ValidationReport []\n"
+  let emptySchema = "module Empty where\nimport Kyyn.Schema\ndata Root = Root deriving (Eq, Show)\nschemaMetadata :: SchemaMetadata\nschemaMetadata = SchemaMetadata [] [] []\n"
+      emptyValidator = "module Validate where\nimport qualified Empty\nimport Kyyn.Validation\nvalidate :: Empty.Root -> ValidationReport\nvalidate _ = ValidationReport []\n"
       emptyManifest = Text.replace "ValidationEntry.validate" "Validate.validate"
         (Text.replace "Authored" "Empty" (Text.pack manifest))
   emptySource <- either fail pure (schemaSource

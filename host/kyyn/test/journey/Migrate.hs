@@ -1,6 +1,7 @@
 module Evolution where
 
 import Kyyn.Workspace.Evolution
+import Kyyn.Schema
 import qualified TodoSchemaV1 as Before
 import qualified TodoSchemaV2 as After
 import qualified Kyyn.Workspace.After as AfterCollections

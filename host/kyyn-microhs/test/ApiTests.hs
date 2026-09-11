@@ -14,8 +14,7 @@ main :: IO ()
 main = do
   repo <- getEnv "KYYN_TEST_ROOT"
   let sources = map (repo </>) ["guest/kyyn-sdk/src","shared/kyyn-types/src","vendor/transformers","vendor/json"]
-      public = ["Kyyn.Edit", "Kyyn.Evolution", "Kyyn.Optics", "Kyyn.Types.SchemaMetadata", "Kyyn.Types.Fact",
-        "Kyyn.Types.Diagnostic", "Kyyn.Types.Program", "Kyyn.Types.Query", "Kyyn.Types.Evidence", "Kyyn.Types.Evolution"]
+      public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
       inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
   modules <- inspect sources public
   let symbolsIn m = concat [symbols | ApiModule name symbols <- modules, name == m]
@@ -25,12 +24,22 @@ main = do
   let implicitNames = [n | ApiModule _ symbols <- implicit, ApiSymbol n _ _ _ _ _ <- symbols]
   assert "implicit exports hide instance machinery" (all (\n -> not ("inst$" `isInfixOf` n || "@" `isInfixOf` n)) implicitNames)
   assert "source operators and apostrophes remain discoverable" (all (`elem` implicitNames) ["$", "named'", "Public"])
+  cpp <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.CppFixture"]
+  assert "CPP signature and documentation use compiler branch" (case cpp of
+    [ApiModule _ [ApiSymbol "selected" ValueNamespace _ _ (Just "selected :: String")
+      (Just "The MicroHs branch, including its source documentation.")]] -> True
+    _ -> False)
   assert "private function leaked" (null (matches "Kyyn.Edit" "unique" ValueNamespace))
   assert "abstract constructor leaked" (null (matches "Kyyn.Edit" "Collection" ValueNamespace))
   assert "abstract type missing" (length (matches "Kyyn.Edit" "Collection" TypeNamespace) == 1)
-  assert "constructor namespace lost" (length (matches "Kyyn.Types.Fact" "Fact" ValueNamespace) == 1
-    && length (matches "Kyyn.Types.Fact" "Fact" TypeNamespace) == 1)
-  assert "record selector missing" (not (null (matches "Kyyn.Types.Evolution" "explanation" ValueNamespace)))
+  assert "constructor namespace lost" (length (matches "Kyyn.Schema" "Fact" ValueNamespace) == 1
+    && length (matches "Kyyn.Schema" "Fact" TypeNamespace) == 1)
+  assert "record selector missing" (not (null (matches "Kyyn.Evolution" "explanation" ValueNamespace)))
+  assert "runtime exports hidden" (null [n | ApiModule _ symbols <- modules,
+    ApiSymbol n _ _ _ _ _ <- symbols, n `elem`
+      ["Program", "SnapshotRead", "ReadAccess", "CheckResult", "checkReport", "runLocally",
+       "request", "interpretProgram", "evaluateEvolution", "EvolutionOutput"]])
+  assert "query binding constructor stays private" (null (matches "Kyyn.Query" "CollectionBinding" ValueNamespace))
   let update = matches "Kyyn.Edit" "update" ValueNamespace
   assert "signature precedence/aliases" (case update of
     [ApiSymbol _ _ "Kyyn.Edit.update" _ (Just "update :: FactId -> Edit a r -> CollectionEdit a r") _] -> True
@@ -40,8 +49,8 @@ main = do
     [ApiSymbol _ _ _ _ _ (Just docs)] -> "Fails if the ID is missing or ambiguous." `isInfixOf` docs
     _ -> False)
   forM_ public $ \m ->
-    forM_ [s | s@(ApiSymbol _ ns _ _ declaration _) <- symbolsIn m,
-              ns == TypeNamespace || declaration /= Nothing] $ \s ->
+    forM_ [s | s@(ApiSymbol n ns origin _ declaration _) <- symbolsIn m,
+              ns == TypeNamespace || (declaration /= Nothing && authoredFunction n origin)] $ \s ->
       assert ("Missing documentation on authored SDK declaration: " ++ show s)
         (case s of ApiSymbol _ _ _ _ _ (Just text) -> not (null text); _ -> False)
   docs <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DocFixture","Kyyn.DocReexport"]
@@ -63,7 +72,10 @@ main = do
         [d] -> d
         _ -> error ("Missing data declaration: " ++ m ++ "." ++ n)
       originalDeclaration = declarationIn "Kyyn.DataFixture"
-  assert "public record fields" (all (`isInfixOf` originalDeclaration "Record") ["title", "count", "String", "Int"])
+  assert "public record fields" (originalDeclaration "Record" ==
+    "data Record = Record { title :: String, count :: Int, note :: Maybe String, total :: !(Maybe Int) }")
+  assert ("GADT header preserved; lowered result variable gets a fresh readable name: " ++ show (originalDeclaration "Expr")) (originalDeclaration "Expr" ==
+    "data Expr a where\n  Number :: Int -> Expr Int\n  Apply :: (a -> b) -> Expr a -> Expr b")
   assert "abstract data header" (words (originalDeclaration "Abstract") == ["data", "Abstract"])
   assert "abstract newtype header" (words (originalDeclaration "AbstractNew") == ["newtype", "AbstractNew"])
   assert "partial constructors" ("Visible" `isInfixOf` originalDeclaration "Partial"
@@ -83,16 +95,38 @@ main = do
           n `elem` ["Empty", "Full", "Record", "Wrapped", "Visible", "HiddenFields", "Number", "Apply"]]
     assert "presented constructors recompile with unchanged types"
       (constructors "Kyyn.DataFixture" dataModules == constructors "Kyyn.PresentedData" presented)
-  assert "upstream fallback must remain explicit" (case matches "Kyyn.Edit" "modify" ValueNamespace of
-    [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" signature Nothing Nothing] -> "StateT" `isInfixOf` signature
+  assert "CPP-backed upstream signature" (case matches "Kyyn.Edit" "modify" ValueNamespace of
+    [ApiSymbol _ _ "Control.Monad.Trans.State.Strict.modify" _ (Just signature) _] ->
+      signature == "modify :: Monad m => (s -> s) -> StateT s m ()"
     _ -> False)
   assert "operator declaration must parse" (case matches "Kyyn.Evolution" ">=>" ValueNamespace of
     [ApiSymbol _ _ _ _ (Just declaration) _] -> "(>=>) ::" `isInfixOf` declaration
     _ -> False)
+  let signature m n = case matches m n ValueNamespace of
+        [ApiSymbol _ _ _ _ (Just text) _] -> text
+        _ -> error ("Missing source signature: " ++ m ++ "." ++ n)
+  assert "constructor keeps String alias" (signature "Kyyn.Schema" "FactId" == "FactId :: String -> FactId")
+  assert "selector keeps String alias" (signature "Kyyn.Evolution" "source" == "source :: EvidenceRef -> String")
+  withSystemTempDirectory "kyyn-api-values-" $ \temporary -> do
+    createDirectoryIfMissing True (temporary </> "Kyyn")
+    let symbols = nubBy sameOrigin (concatMap symbolsIn public)
+        signatures = [(n,d) | ApiSymbol n ValueNamespace origin _ (Just d) _ <- symbols,
+          not (authoredFunction n origin)]
+        valueName n@(c:_) | isAlpha c || c == '_' = n
+        valueName n = "(" ++ n ++ ")"
+        witness (i,(n,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
+          "proof" ++ show i ++ " = " ++ valueName n]
+    writeFile (temporary </> "Kyyn/ValueProof.hs") (unlines
+      (["{-# LANGUAGE GADTs, RankNTypes #-}", "module Kyyn.ValueProof where",
+        "import Control.Monad.Trans.State.Strict (StateT)"]
+      ++ map ("import " ++) public ++ concatMap witness (zip [1 :: Int ..] signatures)))
+    _ <- inspect (temporary:sources) ["Kyyn.ValueProof"]
+    pure ()
   withSystemTempDirectory "kyyn-api-" $ \temporary -> do
     let unique = nubBy sameOrigin (concatMap symbolsIn public)
         declarations = [(n,ns,origin,decl) | ApiSymbol n ns origin _ (Just decl) _ <- unique,
-          not ("data " `isPrefixOf` decl || "newtype " `isPrefixOf` decl)]
+          not ("data " `isPrefixOf` decl || "newtype " `isPrefixOf` decl),
+          ns == TypeNamespace || authoredFunction n origin]
         owner = reverse . drop 1 . dropWhile (/= '.') . reverse
     mapM_ (\directory -> copyTree directory temporary) (take 2 sources)
     forM_ (nub [owner origin | (_,_,origin,_) <- declarations]) $ \m -> do
@@ -114,6 +148,10 @@ main = do
   assert "missing module must be a compiler error" (case missing of Left (ApiCompilerError _) -> True; _ -> False)
   putStrLn "Guest API exports, reexports, abstraction, aliases and signature round trips passed."
   where sameOrigin (ApiSymbol _ ns a _ _ _) (ApiSymbol _ ns' b _ _ _) = (ns,a) == (ns',b)
+
+authoredFunction :: String -> String -> Bool
+authoredFunction name origin = "Kyyn." `isPrefixOf` origin && not (".get$." `isInfixOf` origin)
+  && case name of c:_ -> isLower c || (not (isAlpha c) && c /= ':'); [] -> False
 
 assert :: String -> Bool -> IO ()
 assert label ok = unless ok (fail label)

@@ -49,8 +49,7 @@ try {
   const target = path.join(created.path, 'target');
   fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
   write(path.join(target, 'src', 'RootV2.hs'), `module RootV2 where
-import Kyyn.Types.SchemaMetadata
-import Kyyn.Types.Fact
+import Kyyn.Schema
 data Todo = Todo { title :: String } deriving (Eq, Show)
 data Root = Root { todos :: [Fact Todo] } deriving (Eq, Show)
 metadata :: SchemaMetadata
@@ -62,6 +61,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   }
   write(path.join(created.path, 'change', 'Evolution.hs'), `module Evolution where
 import Kyyn.Workspace.Evolution
+import Kyyn.Schema
 import qualified RootV1 as Before
 import qualified RootV2 as After
 evolution :: Evolution Before.Root After.Root

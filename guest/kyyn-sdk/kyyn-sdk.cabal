@@ -7,7 +7,7 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Evolution Kyyn.Edit Kyyn.Optics
+  exposed-modules: Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
   other-modules: Kyyn.Evolution.Internal Kyyn.Edit.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror

@@ -19,6 +19,29 @@ Kyyn generates entry adapters, codecs, transport calls and typed registration
 wrappers. No authored `main :: IO ()`, manual JSON/Dhall decoding, response IDs,
 paths to runtime artifacts or printer callbacks for ordinary KB tools.
 
+Group the installed author API by concept, with six public SDK modules:
+
+- `Kyyn.Schema`: identified facts and schema metadata/roles.
+- `Kyyn.Validation`: diagnostics, locations, severities and validation reports.
+- `Kyyn.Query`: the abstract Query and CollectionBinding types plus collection/fact reads.
+- `Kyyn.Evolution`: evolution composition, rationale and evidence, reexporting editing vocabulary.
+- `Kyyn.Edit` and `Kyyn.Optics`: focused editing and optics sub-vocabularies.
+
+These are facades over the existing definitions, not new nominal types. Keep the
+shared `Kyyn.Types.*` wire profile available to host/runtime code but outside the
+author catalogue. Execution adapters, Program interpretation, CheckResult and
+checkReport, query read instructions/local handlers, CollectionBinding's constructor,
+EvolutionOutput and evaluateEvolution are implementation APIs, not facade exports.
+Existing internal modules and the shared profile remain their home; do not add
+duplicate wrapper types merely to hide them from discovery.
+
+Schema sources import Kyyn.Schema, validators import Kyyn.Validation, and queries
+import Kyyn.Query. Authors import Kyyn.Schema separately when constructing facts.
+Generated Kyyn.Workspace.Evolution reexports only Kyyn.Evolution alongside its own
+workspace-specific combinators, not a mixed collection of schema/runtime modules.
+The installed catalogue derives its module inventory only from kyyn-sdk's public
+facade list; shared-profile package exports are not a second author inventory.
+
 KB-authored code has three entry-point kinds:
 
 | Entry point | Result and boundary |

@@ -36,6 +36,7 @@ const allowed = {
     'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
+    'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
   'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
@@ -184,6 +185,7 @@ const interpreterModules = {
 
 const compilerModules = {
   'Kyyn.MicroHs.ApiInspection': ['Control.DeepSeq', 'Control.Exception', 'Control.Monad',
+    'System.Environment', 'System.FilePath', 'System.Process',
     'Data.Char', 'Data.List', 'Kyyn.Domain.GuestApi', 'MicroHs.Compile', 'MicroHs.CompileCache',
     'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
     'MicroHs.SymTab', 'MicroHs.Parse', 'MicroHs.Fixity', 'MicroHs.TCMonad', 'MicroHs.IdentMap'],

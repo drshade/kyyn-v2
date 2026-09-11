@@ -137,8 +137,9 @@ typed query arguments and secret input are details for their respective slices.
 fields and declared roles, not arbitrary compiler internals.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK,
-independently of KB selection. Public modules come from the SDK packages' exposed
-module declarations; checked MicroHs exports determine symbol membership, including
+independently of KB selection. Public modules come from kyyn-sdk's exposed
+facade declarations under [ADR 0008](0008-authoring.md), not the shared wire-profile
+package's exports; checked MicroHs exports determine symbol membership, including
 reexports and their defining module. Display authored signatures and type aliases
 when available, preserving useful names such as `Edit` and `Lens'`. Distinguish
 checked expanded signatures from source declarations rather than claiming they
@@ -147,9 +148,12 @@ source declarations.
 
 Show data/newtype declarations projected to the exported constructors and
 selectors: abstract types have only a header, and constructors with private
-selectors use positional arguments. Do not include derived instances. GADTs may
-be presented in equivalent lowered existential/equality-constraint syntax with
-source-safe parameter names. Mark fallbacks with `-- [compiler signature]`;
+selectors use positional arguments. Do not include derived instances or generated
+instance dictionaries. Derive constructor and selector signatures from those
+declarations; specialize trivial root-parameter equalities in GADTs and retain
+authored parameter names where unambiguous. Refined constructor results use GADT
+syntax. Preprocess CPP-enabled defining sources with the compiler's macros before
+extracting signatures. Mark fallbacks with `-- [compiler signature]`;
 all catalogue entries are compiler-checked. Human function/constructor signatures
 have no `value` prefix; kind summaries retain `type`. Display generated accessor
 origins as module-qualified field names, preserving exact compiler identities in JSON.

@@ -177,24 +177,30 @@ kyyn-v2 guest module list
 kyyn-v2 guest module show Kyyn.Edit
 kyyn-v2 guest symbol show Kyyn.Edit.update
 kyyn-v2 guest symbol show 'Kyyn.Evolution.>=>'
-kyyn-v2 --json guest symbol show Kyyn.Types.Fact.Fact
+kyyn-v2 --json guest symbol show Kyyn.Schema.Fact
 ```
 
 Module output lists exported types, constructors and functions. Symbol output
-includes its defining name, so reexports can be followed. A name such as `Fact`
+includes its defining name, so shared reexports can be recognized. Look symbols
+up through the listed public modules; their definitions may live in implementation
+modules outside the catalogue. A name such as `Fact`
 may identify both a type and its constructor; discovery returns both.
 Authored signatures preserve aliases such as `Edit` and `Lens'`. Data/newtype
 declarations show public constructors and record fields. Abstract types show only
 their header; selective reexports show only their exported constructors. If a
 constructor's record labels are not all exported, its arguments appear positionally
 and any public selectors remain separate entries. These are API summaries, not
-an instance inventory or a source-file dump; GADTs may use equivalent existential
-and equality-constraint syntax with renamed parameters.
+an instance inventory or a source-file dump. Constructor and record-accessor
+signatures are derived from these declarations, retaining aliases such as `String`.
+GADT signatures specialize root-parameter equalities; parameter names follow the
+source where unambiguous. Constructors with refined result types use `where`
+syntax; existential-only constructors may use equivalent `forall` syntax.
 
 Entries marked `-- [compiler signature]` use the compiler's expanded type or kind instead;
 all entries are compiler-checked. JSON distinguishes
 these with a null `declaration` and always includes `checkedSignature`.
-Re-exported transformer operations such as `modify` currently use this checked form.
+Re-exported transformer operations such as `modify` use their authored signatures;
+CPP-enabled modules are preprocessed with the compiler's macro configuration first.
 Functions and constructors always use `name :: signature`, without a `value`
 prefix; kind-only fallbacks use `type Name :: kind`. Human origins omit generated
 accessor machinery, while JSON's `definedAs` retains the exact compiler identity.
@@ -206,6 +212,9 @@ use a bare `--` line for a paragraph break within the documentation. Reexports
 retain the defining declaration's documentation. Other Haddock forms and ordinary
 implementation comments are not collected.
 
-The current catalogue covers the public Kyyn SDK and shared types, not every
-upstream library module or a workspace's generated Before/After bindings.
+The catalogue covers six author-facing modules: `Kyyn.Schema`, `Kyyn.Validation`,
+`Kyyn.Query`, `Kyyn.Evolution`, `Kyyn.Edit` and `Kyyn.Optics`. Shared `Kyyn.Types.*`
+modules and runtime operations are implementation APIs, not catalogue entries.
+Reexports retain their real defining identities. Workspace-generated Before/After
+bindings are not yet discoverable here.
 If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.
