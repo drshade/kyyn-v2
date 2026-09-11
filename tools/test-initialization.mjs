@@ -57,6 +57,10 @@ try {
   const catalogue = discover('module', 'list');
   assert.deepEqual(catalogue.modules.slice(-3),
     ['Kyyn.Workspace.Evolution', 'Kyyn.Workspace.Before', 'Kyyn.Workspace.After']);
+  git(kb, 'switch', '-c', 'discovery-other-head');
+  git(kb, 'commit', '--allow-empty', '-m', 'Unrelated head advance');
+  assert.equal(discover('module', 'list').context.beforeRevision, initialized.revision);
+  git(kb, 'switch', 'kb-test');
   const target = path.join(created.path, 'target');
   fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
   write(path.join(target, 'src', 'RootV2.hs'), `module RootV2 where
@@ -70,6 +74,12 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     const filename = path.join(target, file);
     fs.writeFileSync(filename, fs.readFileSync(filename, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
+  const schemaPath = path.join(target, 'src', 'RootV2.hs');
+  const validSchema = fs.readFileSync(schemaPath, 'utf8');
+  fs.writeFileSync(schemaPath, 'module RootV2 where\nthis is invalid\n');
+  const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id], 1);
+  assert.equal(badSchema.outcome, 'Refused');
+  fs.writeFileSync(schemaPath, validSchema);
   const bindings = discover('module', 'show', 'Kyyn.Workspace.Evolution').symbols;
   for (const name of ['edit', 'evolve', 'editBefore']) {
     const symbol = bindings.find(s => s.name === name);
