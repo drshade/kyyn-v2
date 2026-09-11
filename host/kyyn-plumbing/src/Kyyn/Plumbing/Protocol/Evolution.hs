@@ -78,9 +78,13 @@ evolutionBindings before after = do
         concat [[name ++ " :: RootBinding " ++ haskellType (rootType (rootSchema contract)),
           name ++ " = RootBinding " ++ show (contractFingerprint (contractId (rootSchema contract))) ++
           " (encodeWith " ++ codecName index ++ ".rootCodec)"] | (index,(name,contract)) <- zip [0..] declarations] ++
-        ["evolve :: Rationale -> (" ++ beforeType ++ " -> Either EvolutionFailure " ++ afterType ++ ") -> Evolution " ++ beforeType ++ " " ++ afterType,
+        ["-- | Transform " ++ beforeType ++ " into " ++ afterType ++ ".",
+         "-- The supplied rationale describes one recorded step and its diff.",
+         "evolve :: Rationale -> (" ++ beforeType ++ " -> Either EvolutionFailure " ++ afterType ++ ") -> Evolution " ++ beforeType ++ " " ++ afterType,
          "evolve = Internal.evolve beforeRoot afterRoot"] ++
-        concat [[name ++ " :: Rationale -> Edit " ++ endpoint ++ " () -> Evolution " ++ endpoint ++ " " ++ endpoint,
+        concat [["-- | Edit " ++ endpoint ++ ".",
+                 "-- The supplied rationale describes one recorded step and its diff.",
+                 name ++ " :: Rationale -> Edit " ++ endpoint ++ " () -> Evolution " ++ endpoint ++ " " ++ endpoint,
                  name ++ " = Internal.edit " ++ binding] |
           (name,binding,endpoint) <- [("editBefore","beforeRoot",beforeType),("edit","afterRoot",afterType)]]
   fileTree ((path,utf8 source):codecs ++ concatMap files collections)
@@ -100,9 +104,12 @@ collectionBindings endpoint contract = do
       rootModule = case root of Algebraic name _ _ -> definingModule name; _ -> error "Checked root is not a record"
       source = unlines $
         ["module Kyyn.Workspace." ++ endpoint ++ " (" ++ comma [field | CollectionContract _ field _ _ <- declarations] ++ ") where",
+         "import Kyyn.Edit (Collection)",
          "import qualified Kyyn.Edit.Internal as Internal", "import qualified Kyyn.Optics as Optics"] ++
         ["import qualified " ++ name | name <- nub [definingModule name | Algebraic name _ _ <- reachableTypes root]] ++
-        concat [[field ++ " :: Internal.Collection " ++ haskellType root ++ " (" ++ haskellType payload ++ ")",
+        concat [["-- | Collection " ++ show name ++ " in " ++ haskellType root ++ ".",
+                 "-- Root field: " ++ field ++ "; fact type: " ++ haskellType payload ++ ".",
+                 field ++ " :: Collection " ++ haskellType root ++ " (" ++ haskellType payload ++ ")",
                  field ++ " = Internal.Collection " ++ show name ++ " (Optics.lens " ++ rootModule ++ "." ++ field ++
                    " (\\root value -> root { " ++ rootModule ++ "." ++ field ++ " = value }))"] |
           CollectionContract name field payload _ <- declarations]

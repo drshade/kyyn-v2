@@ -47,10 +47,18 @@ main = do
     (SchemaMetadata [] [] [CollectionDecl "work items" "todos" []]) >>= checkRootLayout)
   namedBindings <- right (evolutionBindings named named)
   let generated = [(relativeName p,b) | (p,b) <- files namedBindings]
-  forM_ ["Before","After"] $ \endpoint ->
-    unless (maybe False (Bytes.isInfixOf "todos = Internal.Collection \"work items\"")
-      (lookup ("Kyyn/Workspace/" ++ endpoint ++ ".hs") generated))
-      (fail "Collection binding confused the logical name with the root field")
+  forM_ ["Before","After"] $ \endpoint -> do
+    let endpointSource = lookup ("Kyyn/Workspace/" ++ endpoint ++ ".hs") generated
+    forM_ ["todos = Internal.Collection \"work items\"",
+           "import Kyyn.Edit (Collection)",
+           "-- | Collection \"work items\" in SchemaV1.Root.\n-- Root field: todos; fact type: SchemaV1.Todo.\ntodos :: Collection SchemaV1.Root (SchemaV1.Todo)"] $ \expected ->
+      unless (maybe False (Bytes.isInfixOf expected) endpointSource)
+        (fail "Collection binding lost its public signature, documentation or logical name")
+  forM_ ["-- | Transform SchemaV1.Root into SchemaV2.Root.",
+         "-- | Edit SchemaV1.Root.", "-- | Edit SchemaV2.Root.",
+         "-- The supplied rationale describes one recorded step and its diff."] $ \expected ->
+    unless (expected `Bytes.isInfixOf` source)
+      (fail "Generated evolution documentation lost endpoint or rationale details")
   getArgs >>= \args -> case args of
     ["--pure"] -> pure ()
     [] -> integration before renamed after bindings
