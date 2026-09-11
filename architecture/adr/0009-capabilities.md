@@ -149,7 +149,6 @@ not live filesystem acquisition or EvidenceStore publication.
 Caller-to-plugin composition remains a separate integration boundary:
 
 ```haskell
-
 -- Illustrative generated proxy for a registered Microsoft method.
 data MicrosoftCalls a where
   ReadEmail :: Mail.Instance -> EmailId -> MicrosoftCalls Email
