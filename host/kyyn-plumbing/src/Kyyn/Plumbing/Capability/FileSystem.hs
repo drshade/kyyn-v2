@@ -1,11 +1,11 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, readTree, listDirectory, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, readTree, listDirectory, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Path (DirectoryScope, RelativePath)
+import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName)
 import Kyyn.Domain.FileTree (FileTree)
 
 data FileSystem :: Effect where
@@ -59,3 +59,11 @@ createDirectory = send . CreateDirectory
 
 ensureDirectory :: FileSystem :> es => DirectoryScope -> Eff es ()
 ensureDirectory = send . EnsureDirectory
+
+ensureIgnoredDirectory :: FileSystem :> es => DirectoryScope -> RelativePath -> Eff es ()
+ensureIgnoredDirectory scope directory = do
+  let ignore = either error id (relativePath (relativeName directory ++ "/.gitignore"))
+  existing <- readOptionalBytes scope ignore
+  case existing of
+    Nothing -> writeBytes scope ignore "*\n"
+    Just _ -> pure ()

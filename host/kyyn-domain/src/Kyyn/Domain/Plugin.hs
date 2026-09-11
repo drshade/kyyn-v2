@@ -1,5 +1,5 @@
 module Kyyn.Domain.Plugin
-  ( PluginName, pluginName, pluginNameText
+  ( PluginName, pluginName, pluginNameText, PackageIdentity(..)
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
   ) where
@@ -11,6 +11,7 @@ import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath)
 import System.FilePath (isAbsolute, (</>))
 
 newtype PluginName = PluginName String deriving (Eq, Show)
+newtype PackageIdentity = PackageIdentity String deriving (Eq, Show)
 data PluginSource = LocalPackage DirectoryScope TreePath | GitPackage GitUrl TreePath deriving (Eq, Show)
 data PluginManifest = PluginManifest PluginName String deriving (Eq, Show)
 data PluginRepository = LocalRepository DirectoryScope | RemoteRepository GitUrl deriving (Eq, Show)

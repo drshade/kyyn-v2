@@ -24,6 +24,8 @@ library
     Kyyn.Plumbing.Capability.ApiInspection
     Kyyn.Plumbing.Capability.Git
     Kyyn.Plumbing.Capability.DhallHandling
+    Kyyn.Plumbing.Capability.EvidenceStore
+    Kyyn.Plumbing.Protocol.Evidence
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
