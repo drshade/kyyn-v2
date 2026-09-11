@@ -42,6 +42,7 @@ const allowed = {
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
   'kyyn-porcelain': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Data.ByteString', 'Kyyn.Domain.Plugin',
     'Kyyn.Domain.GuestApi',
     'Kyyn.Porcelain.Capability.RootOpening',
     'Kyyn.Domain.Publication', 'Kyyn.Domain.Path', 'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.Validation',
@@ -169,6 +170,11 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Porcelain.Interpreter.PluginInstallation': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree',
+    'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Path', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Root',
+    'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.Git',
+    'Kyyn.Plumbing.Protocol.Plugin', 'Kyyn.Porcelain.Capability.PluginInstallation'],
   'Kyyn.Porcelain.Interpreter.GuestApi': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.GuestApi',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.DhallHandling',

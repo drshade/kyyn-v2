@@ -8,6 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
+    Kyyn.Porcelain.Capability.PluginInstallation
     Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
     Kyyn.Porcelain.Capability.Root
     Kyyn.Porcelain.Capability.GuestApi
@@ -29,4 +30,4 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson, transformers, effectful-core ==2.6.1.0
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson, bytestring, transformers, effectful-core ==2.6.1.0
