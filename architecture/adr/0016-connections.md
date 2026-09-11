@@ -1,6 +1,12 @@
-# 0016 — Local secrets and plugin-owned authentication
+---
+id: 0016
+title: 'Local secrets, typed configuration and named connector bindings'
+status: proposed
+date: 2026-09-11
+---
+# Local secrets, typed configuration and named connector bindings
 
-Status: Proposed implementation details. **Owner-established decision: a
+Basis: **owner-established decision: a
 plugin-independent, checkout-local per-KB key/value secret store, readable through a host
 capability. Trusted plugins receive secret values and own authentication logic.
 No kernel Connection entity or automatic credential injection.**
@@ -96,7 +102,7 @@ Dhall is the config-file format, not a second schema authority. One file can hol
 heterogeneous instances using a generated union of advertised connector types:
 
 ```text
-List { name : Text, connector : < Mail : MailConfig | Meetings : MeetingsConfig | ... > }
+List { name : Text, binding : Text, connector : < Mail : MailConfig | Meetings : MeetingsConfig | ... > }
 ```
 
 This is the structural shape sketch; Kyyn generates the concrete Dhall type rather
@@ -106,6 +112,33 @@ host decodes it into `ConnectorInstance`. No string containing nested Dhall or
 generic unchecked config blob. Generated bindings supply the selected instance's
 concrete config to the method, not the complete list. Use files from the selected
 snapshot or captured evolution workspace, not changing ambient files during a call.
+
+Each instance declares an author-facing `binding`, for example:
+
+```dhall
+{ name = "sales-inbox"
+, binding = "salesMail"
+, connector = Mail { mailbox = "sales@example.com", secretKey = "microsoft" }
+}
+```
+
+Here `Mail` illustrates the generated union constructor. Kyyn generates a module
+such as `Kyyn.Connectors` from the selected configuration:
+
+```haskell
+salesMail :: Mail.Instance
+```
+
+Authors use `Mail.viewEmail Connectors.salesMail emailId` without repeating plugin
+names, config lookup or instance construction. The generated value identifies the
+instance and its connector type; it does not contain a fetched payload or a secret.
+Bindings must be valid unqualified Haskell value identifiers, not reserved words,
+and unique across this KB's generated connector module. Report collisions rather
+than silently renaming exports. Instance identity remains plugin plus instance name;
+changing only `binding` changes the authoring API, not the instance or its evidence
+history. [ADR 0014](0014-evidence.md) defines current/default and historical evidence
+selection separately from this config binding. Installation creates no instances.
+
 Malformed or structurally incompatible plugin configuration fails loading the
 whole root, with a diagnostic locating the offending configuration. Do not skip
 the broken instance, substitute defaults or return a partially usable root.

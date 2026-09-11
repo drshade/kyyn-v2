@@ -292,7 +292,7 @@ silently weaken the validation requirement on ordinary fact browsing.
 Evolution execution uses this path for its source too: domain-invalid facts may
 be transformed into a valid candidate without first earning `Validated`.
 
-Browsing facts and consuming connector evidence need manageable result pages.
+Browsing facts needs manageable result pages.
 Paging here is that user-facing operation, not a paged storage engine or an
 incremental evaluator. The initial fact interpreter can slice an already loaded
 collection. A cursor is opaque and tied to its selected snapshot and query; it
@@ -308,8 +308,8 @@ data PageRequest = FirstPage | ContinuePage PageCursor
 ```
 
 Batch size is an implementation/operation policy, not a per-field contract bound.
-A mismatched cursor is an error. The [evidence](0014-evidence.md) store uses the
-same envelope but binds its cursors to evidence snapshots, not root snapshots.
+A mismatched cursor is an error. [Evidence](0014-evidence.md) owns fetch batches
+and retained evidence history separately; this does not require paged acquisition.
 
 On the guest side, identity remains outside the typed payload so migration can
 change payload shape without accidentally replacing record identity:

@@ -23,6 +23,10 @@ from assumptions about JSON libraries. Each ADR records a concrete recommendatio
 alternatives, consequences, and evidence required before implementation relies on it.
 An unresolved gate is not permission to quietly invent a fallback.
 
+The [evidence curation walkthrough](walkthroughs/evidence-curation.md) illustrates
+the proposed fetch, investigation and authored-curation journey. Plugin installation
+exists; this walkthrough does not claim acquisition or KB tools are implemented.
+
 The ADRs are written literately: types and signatures appear where they explain
 the decision, not in a detached interface appendix. Each definition has one owning
 ADR; [boundaries](boundaries.md) links them and shows composition rather than a
@@ -84,7 +88,7 @@ unresolved choice or proof, not a second lifecycle to administer.
 | [0011](adr/0011-validation.md) | Full-root validity, explicit diagnostics and examples | Whole-root performance |
 | [0012](adr/0012-acceptance.md) | One conditional acceptance step from local head | Expected-base equality and complete result |
 | [0013](adr/0013-collaboration.md) | User/agent resolution of upstream Git conflicts | Local acceptance versus remote publication |
-| [0014](adr/0014-evidence.md) | Replaceable evidence; domain-owned interpretation | Pagination and refresh semantics |
+| [0014](adr/0014-evidence.md) | Retained fetch changes; domain-owned interpretation and curation | Snapshot selection, typed reads and explicit history loss |
 | [0015](adr/0015-plugins.md) | Vendored source plugins group connectors and methods | Local builds and shared-account plugin example |
 | [0016](adr/0016-connections.md) | Checkout-local KB secrets; plugin-owned authentication | Local storage details and real integration flows |
 | [0017](adr/0017-outputs.md) | Multi-query renderers bound to typed plugin sinks | Pure preparation, explicit external updates and honest outcomes |

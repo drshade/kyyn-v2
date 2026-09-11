@@ -1,6 +1,13 @@
-# 0014 — Evidence is replaceable input; interpretation belongs to the KB
+---
+id: 0014
+title: 'Fetch history preserves evidence changes; interpretation belongs to the KB'
+status: proposed
+date: 2026-09-11
+---
+# Fetch history preserves evidence changes; interpretation belongs to the KB
 
-Status: Proposed. Basis: owner-established operational/refetch semantics.
+Basis: owner-agreed plugin-declared deltas, retained local fetch history and
+KB-owned curation progress. Acquisition and invocation remain unimplemented.
 
 ## Context
 
@@ -11,10 +18,13 @@ schema custody in the kernel.
 
 ## Decision
 
-Plugin source connectors acquire and normalize provider evidence into typed views. KB functions
-interpret those views into candidate knowledge. Keep source identity,
-fetch time, plugin/contract identity and useful references
-with evidence. Evidence is an ignored local cache, replaceable on refresh.
+### A fetch changes an evidence snapshot
+
+Plugin source connectors acquire typed evidence. Agents and KB functions interpret
+it into candidate knowledge. Keep source identity, fetch time, plugin/contract
+identity and useful references with evidence. Store evidence as Dhall in an ignored
+checkout-local store, not Git. Keep successful fetch deltas and a materialized latest
+snapshot: refreshing does not erase the changes an agent has yet to curate.
 Identify the producing plugin and named connector instance as well as its
 configuration and method. Two instances of Mail must not share evidence merely
 because their package and connector type match. Secret names may occur in config;
@@ -22,49 +32,144 @@ secret values are not evidence identity or metadata.
 The source/sink distinction belongs to ADR 0015. Sink connectors update external
 outputs through ADR 0017; they are not evidence acquisition or KB browsing.
 
-A source selection is a snapshot, not an instruction to ask the provider for
-"latest" every time a page is read. On the host the contract is structural:
+The plugin decides which items are new, updated or removed compared with its prior
+snapshot. An update supplies a replacement payload, not a generic field patch.
+Unchanged items are omitted; absence from a returned batch does not mean removal.
+Illustrative **guest** types make this boundary explicit:
 
 ```haskell
-data EvidenceSnapshot  -- fixed query + producer/contract identity + stored pages
+data Evidence a = Evidence
+  { references :: [String]
+  , payload :: a
+  }
 
-data EvidenceProblem
-  = EvidenceReplaced
-  | EvidenceIncomplete
-  | ProducerContractChanged
+data EvidenceChange a
+  = NewEvidence EvidenceId (Evidence a)
+  | UpdatedEvidence EvidenceId (Evidence a)
+  | RemovedEvidence EvidenceId
 
-readEvidencePage
-  :: (EvidenceStore :> es, Failure :> es)
-  => EvidenceSnapshot -> PageRequest
-  -> Eff es (Either EvidenceProblem (Page CheckedValue))
+fetch
+  :: Config -> EvidenceSnapshot Payload
+  -> Program calls (Either FetchError [EvidenceChange Payload])
 ```
 
-The snapshot remembers the [package identity](0015-plugins.md), not just the
-shape of its result. Its [Page](0006-storage.md) cursor is interpreted only in
-that snapshot/query. Expected staleness or incompleteness is data with a repair
-path, distinct from storage failure. Generated guest bindings decode these values
-into the method's typed page; they do not hand `CheckedValue` to KB authors.
+`Config` and `Payload` are plugin-authored Haskell types. The snapshot is a typed
+read handle; this signature need not copy all previous payloads into guest memory.
+The first invocation reads an empty snapshot. Host capabilities implement snapshot
+reads and external acquisition; authors do not implement storage or transport IO.
+The host checks the declared payload contract and delta consistency (new IDs absent,
+updated/removed IDs present, applying changes in order). It does not compare payloads
+to invent changes or determine business equivalence. Provider grouping, identity,
+comparison and the meaning of configuration changes belong to the plugin.
 
-Expose snapshot-scoped typed pages with opaque cursors. A cursor is bound to a
-query and evidence snapshot. Replacement invalidates it explicitly rather than
-silently mixing cached snapshots. This fixes locally acquired data for reading;
-it does not promise a historical version or transactionally consistent snapshot
-of the external system. Provider-specific grouping and pagination belong to
-the plugin; KB-specific grouping/classification belongs to the KB. Completing a
-page is not equivalent to completing a logical meeting occurrence.
+For example, a folder connector starts with only:
 
-Acquisition checkpoints advance only after fetched data is persisted; incomplete
-runs remain distinguishable from complete snapshots. This tracks acquisition,
-not a kernel-enforced queue of evidence awaiting review, dismissal or acceptance.
-A fetch checkpoint is not proof that evidence became accepted knowledge.
-Interrupted or rejected curation must remain repeatable; stable domain
-IDs and explicit deduplication prevent accidental duplicate facts.
-If a KB needs to prove every source item was considered, it can model that rule
-with ordinary facts, queries and validation. It is not mandatory connector machinery.
+```haskell
+data FolderConfig = FolderConfig
+  { directory :: FilePath
+  , recursive :: Bool
+  }
+```
+
+No patterns/globs initially. It reads all files in the selected directory,
+optionally recursively. The plugin chooses its IDs and comparison strategy. It
+must complete enumeration successfully before interpreting missing paths as
+removals; an unreadable directory is an error, not an empty successful fetch.
+Switching directories has the plugin-defined consequences of that identity policy;
+the kernel does not impose a new instance or provider-specific reset rule.
+
+Start with one complete returned batch. A successful fetch publishes its changes
+together; a failed fetch leaves the preceding snapshot available and publishes no
+successful fetch record. Publication checks the base snapshot still matches the
+instance's latest fetch, otherwise reports a conflict for retry. This prevents
+concurrent batches being applied against a different base; it is not an approval
+workflow. Provider pagination can happen inside acquisition, but no host partial-run,
+checkpoint or resumable acquisition lifecycle is required for this first boundary.
+
+### Retained fetches and explicit selection
+
+The host records the instance, producing package/contract, selected configuration
+and fetch metadata. Plugins do not manufacture those host identities. The core
+history relationship is:
+
+```haskell
+data Fetch a = Fetch
+  { id :: FetchId
+  , previous :: Maybe FetchId
+  , changes :: [EvidenceChange a]
+  }
+
+data EvidenceSelection = CurrentEvidence | AtFetch FetchId
+data EvidenceProblem = HistoryUnavailable | ProducerContractChanged
+
+selectEvidence
+  :: (EvidenceStore :> es, Failure :> es)
+  => ConnectorInstanceRef -> EvidenceSelection
+  -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+
+changesBetween
+  :: (EvidenceStore :> es, Failure :> es)
+  => EvidenceSnapshotRef -> Maybe FetchId
+  -> Eff es (Either EvidenceProblem [Fetch CheckedValue])
+
+readEvidence
+  :: (EvidenceStore :> es, Failure :> es)
+  => EvidenceSnapshotRef -> EvidenceId
+  -> Eff es (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
+```
+
+These are **host** operations over checked structural payloads. `Nothing` requests
+history from the beginning; `Just f` requests changes after `f` through the selected
+snapshot. An unrelated, deleted or unavailable base is an error, never an empty
+successful result. Generated guest adapters restore plugin-native payload types.
+`EvidenceSnapshotRef` binds instance, fetch and producing package/contract; an ID
+from another instance cannot silently select its evidence.
+`readEvidence` is storage access used by plugin interpretation, not a generic
+agent-facing view. `Right Nothing` means that item is absent at an available
+snapshot; unavailable history is a different result. The invocation supplies the
+selected package/contract context against which selections are checked.
+
+Retain every successful fetch and its actual delta payloads until explicit deletion;
+no automatic pruning. Reads at an earlier fetch return the payloads at that fetch,
+not the current versions of the same IDs. Reconstructing snapshots from retained
+deltas is sufficient; a second archival service is not required. Deleting needed
+history makes the affected selections explicitly unavailable, including any current
+snapshot that can no longer be reconstructed. Refetching does not restore lost history.
+
+Named connector bindings (ADR 0016) select current evidence by default. Resolve and
+hold the selected fetch for each instance for the duration of an invocation; later
+reads do not chase a refreshed latest pointer. Callers may explicitly select a
+historical fetch instead. Fix the selections when beginning the invocation, using
+its configured source instances, so a later conditional read cannot accidentally
+pick up a concurrent refresh. This fixes local captured inputs, not a simultaneous
+external-world transaction across providers. An unavailable selection reports a
+useful error when read; an unused connector need not have fetched successfully.
+
+### Investigation and curation
+
+Kyyn exposes fetch history, changes and item identities. There is no required
+generic `viewEvidence` method. Plugins advertise typed, documented methods such as
+`viewEmail`, `hasAttachments` and `getAttachments` which interpret captured payloads
+appropriately for callers. Viewing does not silently fetch fresh provider state.
+[KB tools](0008-authoring.md) compose these methods, including across plugins.
+
+An agent normally investigates through these tools, reasons about the result and
+authors an evolution containing its proposed fact changes, rationale and citations.
+It need not express its investigation as evolution code. For repeatable processing,
+an evolution can instead read evidence programmatically.
+
+Curation progress is ordinary KB-authored data, for example a workflow-specific
+last-curated fetch. There is no global kernel "curated" flag or mandatory per-item
+review/dismissal queue. Independent workflows can hold independent cursors. An
+evolution updates its facts and chosen cursor together; only acceptance changes
+the accepted cursor. Failed, abandoned or rejected work does not advance it.
+A cursor means the author claims to have accounted for changes through that fetch,
+not that Kyyn proved every item was read or understood. Domain rules and validators
+can express stronger requirements when useful.
 
 An evolution entry may invoke a plugin to read an existing evidence snapshot or
 explicitly acquire new evidence. Generated typed proxies carry an `EvidenceSnapshotRef`
-identifying the selected host snapshot; subsequent pages must not silently switch
+identifying the selected host snapshot; subsequent reads must not silently switch
 to refreshed contents. This is snapshot read semantics, not a mandatory separate
 capture/proposal-authoring phase.
 
@@ -77,6 +182,8 @@ every candidate. Accepted knowledge keeps useful references and explanation;
 an archived evolution may consequently be non-runnable later. Re-evaluation can
 acquire changed evidence and produces a new result for inspection. Acquisition
 and reads do not change accepted facts or mark curation as accepted.
+
+### Declared provenance
 
 Supporting provenance is declared through each evolution step's `Rationale`:
 an explanation and a list of `EvidenceRef`s, paired with the actual changes
@@ -138,16 +245,26 @@ changes and declared rationale, not the history of the external system.
 
 ## Updates and alternatives
 
-When a plugin changes, invalidate affected cached evidence/bindings, refresh its
+When a plugin changes, invalidate affected evidence selections/bindings, refresh its
 contract, repair consumers and refetch. Compare package identity as well as schema:
-same type does not mean same behavior. No per-run schema migration/negotiation.
+same type does not mean same behavior. Retained old fetch bytes are not automatically
+deleted, but the new plugin cannot reinterpret them under its contract. A refetch
+under the new producer starts from an empty compatible snapshot; old curation
+cursors cannot cross that boundary as if no changes occurred. Report the unavailable
+comparison and let the agent reconcile against freshly fetched evidence. No old
+plugin restoration, per-run schema migration or compatibility negotiation is required.
 Do not delete accepted facts because evidence expired. Reconsidering them is an
 explicit KB evolution. Preserve uncertainty when a provider cannot refetch old data.
 
 ## Verification
 
-Duplicate/corrected input, grouping over page boundaries, refresh during paging,
-failed partial fetch, rejected curation and changed same-schema plugin behavior.
+New/updated/removed/unchanged inputs, duplicate IDs, refresh during investigation,
+failed acquisition, stale-base publication, rejected curation and changed same-schema
+plugin behavior. Two instances retain independent histories; historical reads return
+the saved payload, and missing history never means no changes. Verify a KB helper
+composes plugin reads with fixed selections and no live acquisition or sink calls.
+The [curation walkthrough](../walkthroughs/evidence-curation.md) is the integration
+journey, not an assertion that these operations are already implemented.
 No scenario silently marks unaccepted work processed or loses accepted knowledge.
 After deleting a fixture's evidence cache, its archived citation still exposes
 the source URI, scoped provider ID or file path supplied by the plugin. A plugin

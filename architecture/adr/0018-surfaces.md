@@ -2,7 +2,7 @@
 id: 0018
 title: 'CLI, MCP and web share application operations'
 status: proposed
-date: 2026-09-09
+date: 2026-09-11
 ---
 
 # CLI, MCP and web share application operations
@@ -418,12 +418,24 @@ MCP exports relevant named typed methods and selective discovery, using generate
 JSON Schema and structured results. Expose exact source contracts as resources
 or files for agent adoption too. The MCP tool specification supports input and
 output schemas; do not reduce everything to one untyped command-string tool.
-KB tools expose queries and operations on prepared evolution workspaces under
-ADR 0008; validation is also an entry point, ordinarily invoked by Kyyn.
+Expose snapshot queries, registered KB investigation tools, plugin methods and
+operations on prepared evolution workspaces under ADR 0008; validation is also
+an entry point, ordinarily invoked by Kyyn.
 Output discovery/preparation and explicit sink invocation follow ADR 0017.
 No separate generic KB-tool lifecycle
 or proposal-submission effect is needed. Plugin acquisition methods may be exposed
 directly without implying a change to accepted knowledge.
+
+For evidence investigation, expose configured instance discovery, fetch history
+and changes between selected fetches, alongside each plugin's own documented read
+methods. Registered KB helpers have the same typed discovery/invocation experience;
+agents need not read the Kyyn repository or write MCP adapters to compose them.
+Historical selection and unavailable-history diagnostics follow ADR 0014. Distinguish
+fetching, reading captured evidence and accepting a curation evolution in the UI;
+reading or fetching does not imply progress in an accepted curation workflow.
+The [curation walkthrough](../walkthroughs/evidence-curation.md) supplies the next
+journey. Final CLI spellings belong to its implementation slice, following the
+noun-path convention above, not a second generic command-string API.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
 Web is designed for human understanding, high-level design, exploration and
