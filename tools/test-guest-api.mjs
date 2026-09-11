@@ -26,7 +26,7 @@ try {
     return JSON.parse(result.stdout).result;
   };
   const modules = json('guest', 'module', 'list').modules;
-  assert.deepEqual(modules, ['Kyyn.Edit', 'Kyyn.Evolution', 'Kyyn.Optics', 'Kyyn.Query', 'Kyyn.Schema', 'Kyyn.Validation']);
+  assert.deepEqual(modules, ['Kyyn.Edit', 'Kyyn.Evolution', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Query', 'Kyyn.Schema', 'Kyyn.Validation']);
   assert.ok(modules.includes('Kyyn.Edit'));
   assert.ok(modules.every(name => !name.includes('Internal') && !name.includes('Runtime')));
   for (const name of modules) {
@@ -81,7 +81,7 @@ try {
     ['Affordance', 'CollectionDecl', 'Fact', 'FactId', 'FieldRole', 'RoleDecl', 'SchemaMetadata']);
   const query = json('guest', 'module', 'show', 'Kyyn.Query');
   assert.ok(!query.symbols.some(s => s.name === 'CollectionBinding' && s.namespace === 'value'));
-  const forbidden = ['Program', 'request', 'interpretProgram', 'SnapshotRead', 'ReadAccess', 'runLocally',
+  const forbidden = ['Pure', 'Request', 'EvidenceRead', 'FileRead', 'request', 'interpretProgram', 'SnapshotRead', 'ReadAccess', 'runLocally',
     'CheckResult', 'checkReport', 'EvolutionOutput', 'evaluateEvolution'];
   for (const name of modules) assert.ok(json('guest', 'module', 'show', name).symbols.every(s => !forbidden.includes(s.name)));
   assert.equal(call('guest', 'module', 'show', 'Kyyn.Types.Fact').status, 1);

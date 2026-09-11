@@ -242,8 +242,8 @@ use a bare `--` line for a paragraph break within the documentation. Reexports
 retain the defining declaration's documentation. Other Haddock forms and ordinary
 implementation comments are not collected.
 
-The catalogue covers six author-facing modules: `Kyyn.Schema`, `Kyyn.Validation`,
-`Kyyn.Query`, `Kyyn.Evolution`, `Kyyn.Edit` and `Kyyn.Optics`. Shared `Kyyn.Types.*`
+The catalogue covers seven author-facing modules: `Kyyn.Schema`, `Kyyn.Validation`,
+`Kyyn.Query`, `Kyyn.Evolution`, `Kyyn.Edit`, `Kyyn.Optics` and `Kyyn.Plugin`. Shared `Kyyn.Types.*`
 modules and runtime operations are implementation APIs, not catalogue entries.
 Reexports retain their real defining identities.
 

@@ -10,15 +10,11 @@ import Control.Monad (foldM, unless)
 import Data.List (nub)
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
-import Kyyn.Types.Evidence (EvidenceRef(..))
+import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..), Evidence(..), EvidenceChange(..))
 
-newtype EvidenceId = EvidenceId String deriving (Eq, Show)
 newtype FetchId = FetchId String deriving (Eq, Show)
 data ConnectorInstanceRef = ConnectorInstanceRef PluginName String deriving (Eq, Show)
 data EvidenceProducer = EvidenceProducer PackageIdentity ContractId deriving (Eq, Show)
-data Evidence a = Evidence [String] a deriving (Eq, Show)
-data EvidenceChange a = NewEvidence EvidenceId (Evidence a)
-  | UpdatedEvidence EvidenceId (Evidence a) | RemovedEvidence EvidenceId deriving (Eq, Show)
 data Fetch a = Fetch
   { identity :: FetchId, previous :: Maybe FetchId, fetchedAt :: String
   , changes :: [EvidenceChange a]

@@ -26,7 +26,7 @@ main = do
   compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
   setEnv "MHSCPPHS" (compiler </> "bin/cpphs")
   let sources = map (repo </>) ["guest/kyyn-sdk/src","shared/kyyn-types/src","vendor/transformers","vendor/json"]
-      public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
+      public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics", "Kyyn.Plugin"]
       inspect paths names = inspectApi compiler paths names >>= either (fail . show) pure
   modules <- inspect sources public
   qualified <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.QualifiedFixture"]
@@ -63,9 +63,11 @@ main = do
   assert "record selector missing" (not (null (matches "Kyyn.Evolution" "explanation" ValueNamespace)))
   assert "runtime exports hidden" (null [n | ApiModule _ symbols <- modules,
     ApiSymbol n _ _ _ _ _ <- symbols, n `elem`
-      ["Program", "SnapshotRead", "ReadAccess", "CheckResult", "checkReport", "runLocally",
+      ["Pure", "Request", "EvidenceRead", "FileRead", "SnapshotRead", "ReadAccess", "CheckResult", "checkReport", "runLocally",
        "request", "interpretProgram", "evaluateEvolution", "EvolutionOutput"]])
   assert "query binding constructor stays private" (null (matches "Kyyn.Query" "CollectionBinding" ValueNamespace))
+  assert "plugin program is abstract" (length (matches "Kyyn.Plugin" "Program" TypeNamespace) == 1)
+  assert "plugin snapshot constructor stays private" (null (matches "Kyyn.Plugin" "EvidenceSnapshot" ValueNamespace))
   let update = matches "Kyyn.Edit" "update" ValueNamespace
   assert "signature precedence/aliases" (case update of
     [ApiSymbol _ _ "Kyyn.Edit.update" _ (Just "update :: FactId -> Edit a r -> CollectionEdit a r") _] -> True

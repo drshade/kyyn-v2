@@ -90,6 +90,16 @@ test-suite evolutions
     bytestring, text, filepath, directory, process, temporary ==1.3,
     kyyn-porcelain, kyyn-porcelain-interpreters
 
+test-suite plugin-fetch
+  type: exitcode-stdio-1.0
+  main-is: PluginFetchTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    bytestring, text, filepath, directory, temporary ==1.3, aeson, process
+
 test-suite queries
   type: exitcode-stdio-1.0
   main-is: QueryTests.hs

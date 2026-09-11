@@ -1,5 +1,7 @@
-{-# LANGUAGE GADTs, RankNTypes #-}
-module Kyyn.Types.Program (Program(..), request, interpretProgram) where
+{-# LANGUAGE GADTs, RankNTypes, TypeOperators #-}
+module Kyyn.Types.Program (Program(..), (:+:)(..), request, interpretProgram) where
+
+data (left :+: right) a = InLeft (left a) | InRight (right a)
 
 -- | A result or a capability request with a continuation. Compose requests using do notation.
 data Program request a where

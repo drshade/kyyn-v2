@@ -42,6 +42,14 @@ export MHSCPPHS="$KYYN_TEST_TOOLCHAIN/bin/cpphs"
 Pure/codec-only test modes do not need this setup. `bash tools/test.sh --full`
 performs it automatically.
 
+`cabal test plugin-fetch --test-show-details=direct` uses that toolchain plus the
+matching versioned GHC executable to compile the same folder acquisition and
+captured-read fixtures under both compilers. A recording host exchanges real JSON
+pipe frames: typed config/prior evidence, new/updated/removed changes, Unicode,
+enumeration/read failures and malformed replies. Both compilers reject filesystem
+calls from the captured-read entry. This full-only proof does not fetch real files,
+publish evidence or exercise a CLI command.
+
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow
 no-checkout acquisition from a local Git remote. It uses real Dhall

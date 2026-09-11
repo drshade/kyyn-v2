@@ -10,6 +10,7 @@ library
   exposed-modules: Kyyn.Types.SchemaMetadata Kyyn.Types.Fact Kyyn.Types.Diagnostic
     Kyyn.Types.Program Kyyn.Types.Query
     Kyyn.Types.Evidence Kyyn.Types.Evolution
+    Kyyn.Types.Plugin
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21
