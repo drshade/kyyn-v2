@@ -1,12 +1,12 @@
 module Kyyn.Domain.Plugin
   ( PluginName, pluginName, pluginNameText, GitUrl, gitUrl, gitUrlText
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
-  , InstalledPlugin(..)
+  , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
   ) where
 
 import Data.Char (isAlphaNum, isUpper)
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
-import Kyyn.Domain.Git (TreePath)
+import Kyyn.Domain.Git (TreePath, GitRevision)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath)
 import System.FilePath (isAbsolute, (</>))
 
@@ -14,7 +14,9 @@ newtype PluginName = PluginName String deriving (Eq, Show)
 newtype GitUrl = GitUrl String deriving (Eq, Show)
 data PluginSource = LocalPackage DirectoryScope TreePath | GitPackage GitUrl TreePath deriving (Eq, Show)
 data PluginManifest = PluginManifest PluginName String deriving (Eq, Show)
-data InstalledPlugin = InstalledPlugin PluginName DirectoryScope PluginSource deriving (Eq, Show)
+data PluginRepository = LocalRepository DirectoryScope | RemoteRepository GitUrl deriving (Eq, Show)
+data PluginOrigin = PluginOrigin PluginRepository TreePath GitRevision deriving (Eq, Show)
+data InstalledPlugin = InstalledPlugin PluginName DirectoryScope PluginOrigin deriving (Eq, Show)
 
 pluginNameText :: PluginName -> String
 pluginNameText (PluginName value) = value

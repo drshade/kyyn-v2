@@ -78,7 +78,6 @@ const allowed = {
   'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
     'Kyyn.Evolution.Internal', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Program', 'Kyyn.Runtime.Validation'],
   'kyyn-plumbing-interpreters': [
-    'Control.Monad.Trans.Except', 'Control.Monad.IO.Class', 'Kyyn.Domain.Diagnostic',
     'Data.Word', 'Numeric', 'System.IO.Error', 'System.Random',
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.Exception',
@@ -161,7 +160,7 @@ const plumbingModules = {
     'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Capability.Failure': ['Effectful', 'Effectful.Error.Static', 'Kyyn.Domain.Failure'],
   'Kyyn.Plumbing.Capability.ProcessExecution': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic'],
-  'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Diagnostic'],
+  'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
   'Kyyn.Plumbing.Capability.GuestCompilation': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Data.ByteString', 'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.CompiledProgram',

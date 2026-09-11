@@ -48,6 +48,13 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
     output <- checked repo [] (["ls-files", "--cached", "-z", "--"] ++ map relativeName paths) Bytes.empty
     parsePaths output
   CheckoutChanges repo revision paths -> changedPaths repo revision paths
+  SourceChanges repo revision location excluded -> do
+    let (prefix, paths) = case location of
+          WholeTree -> ("", [])
+          Subtree path -> (relativeName path ++ "/", [path])
+        excludedNames = map ((prefix ++) . relativeName) excluded
+        included path = not (any (\name -> relativeName path == name || (name ++ "/") `isPrefixOf` relativeName path) excludedNames)
+    filter included <$> collectChanges repo revision paths ["--exclude-standard"]
   SynchronizeCheckout repo branch revision paths ->
     catchError @OperationalFailure (runExceptT $ do
       actualBranch <- liftChecked (currentBranch repo)
@@ -202,12 +209,13 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
         _ -> broken ("Cannot inspect checked-out branch: " ++ Char8.unpack diagnostics)
     changedPaths :: Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
     changedPaths _ _ [] = pure []
-    changedPaths repo revision paths = do
+    changedPaths repo revision paths = collectChanges repo revision paths []
+    collectChanges repo revision paths untrackedOptions = do
       let selection = "--" : map relativeName paths
           diffOptions = ["--no-ext-diff", "--no-textconv", "--no-renames", "--name-only", "-z"]
       staged <- checked repo [] (["diff", "--cached"] ++ diffOptions ++ [revisionName revision] ++ selection) Bytes.empty
       working <- checked repo [] (["diff"] ++ diffOptions ++ selection) Bytes.empty
-      untracked <- checked repo [] (["ls-files", "--others", "-z"] ++ selection) Bytes.empty
+      untracked <- checked repo [] (["ls-files", "--others", "-z"] ++ untrackedOptions ++ selection) Bytes.empty
       sort . nub . concat <$> traverse parsePaths [staged, working, untracked]
     parsePaths :: Bytes.ByteString -> Eff es [RelativePath]
     parsePaths output = do

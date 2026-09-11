@@ -3,19 +3,16 @@ module Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO) where
 
 import Control.Exception (IOException, displayException, try)
 import Control.Monad (forM)
-import Control.Monad.Trans.Except (runExceptT, throwE)
-import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString as Bytes
-import Data.List (sort, isPrefixOf)
+import Data.List (sort)
 import Data.Word (Word64)
 import Numeric (showHex)
-import Effectful (Eff, IOE, (:>))
+import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
 import qualified Effectful.Exception as Exception
 import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Path
 import Kyyn.Domain.FileTree (FileTree, fileTree)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
 import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
@@ -58,11 +55,7 @@ runFileSystemIO parent = interpret $ \env -> \case
       Bytes.hPut handle bytes
       hClose handle
       renameFile temporary target
-  ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) $ do
-    captured <- captureTree (scopePath scope) []
-    either (ioError . userError . show) pure captured
-  ReadSourceTree scope excluded -> native Failure.ReadDirectoryTree (scopePath scope)
-    (captureTree (scopePath scope) excluded)
+  ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
   ListDirectory scope -> native Failure.ListDirectory (scopePath scope) $ do
     result <- try (Directory.listDirectory (scopePath scope))
     case result of
@@ -96,30 +89,27 @@ allocateDirectory parent = createDirectoryIfMissing True parent >> allocate
         Left err | isAlreadyExistsError err -> allocate
                  | otherwise -> ioError err
 
-captureTree :: FilePath -> [RelativePath] -> IO (Either [Diagnostic] FileTree)
-captureTree base excluded = runExceptT $ do
-  linked <- liftIO (pathIsSymbolicLink base)
-  if linked then unsupported "." else pure ()
+captureTree :: FilePath -> IO FileTree
+captureTree base = do
+  linked <- pathIsSymbolicLink base
+  if linked then ioError (userError "Directory scope must not be a symlink") else pure ()
   entries <- walk ""
-  either (throwE . pure . errorDiagnostic "filesystem.unsupported-entry") pure (fileTree entries)
+  either (ioError . userError) pure (fileTree entries)
   where
-    unsupported path = throwE [errorDiagnostic "filesystem.unsupported-entry" ("Expected a regular file or directory: " ++ path)]
-    omitted path = any (\p -> let name = relativeName p in path == name || (name ++ "/") `isPrefixOf` path) excluded
     walk prefix = do
-      names <- liftIO (sort <$> Directory.listDirectory (base </> prefix))
+      names <- sort <$> Directory.listDirectory (base </> prefix)
       fmap concat $ forM names $ \name -> do
         let relative = if null prefix then name else prefix ++ "/" ++ name
             absolute = base </> relative
-        if omitted relative then pure [] else do
-          linked <- liftIO (pathIsSymbolicLink absolute)
-          if linked then unsupported relative else pure ()
-          directory <- liftIO (doesDirectoryExist absolute)
-          if directory then walk relative else do
-            regular <- liftIO (doesFileExist absolute)
-            if regular then pure () else unsupported relative
-            path <- either (throwE . pure . errorDiagnostic "filesystem.unsupported-entry") pure (relativePath relative)
-            contents <- liftIO (Bytes.readFile absolute)
-            pure [(path,contents)]
+        linked <- pathIsSymbolicLink absolute
+        if linked then ioError (userError ("Symlinks are unsupported: " ++ relative)) else pure ()
+        directory <- doesDirectoryExist absolute
+        if directory then walk relative else do
+          regular <- doesFileExist absolute
+          if regular then pure () else ioError (userError ("Expected a regular file: " ++ relative))
+          path <- either (ioError . userError) pure (relativePath relative)
+          contents <- Bytes.readFile absolute
+          pure [(path,contents)]
 
 native :: (IOE :> es, Failure :> es) => Failure.StorageOperation -> FilePath -> IO a -> Eff es a
 native operation path action = liftIO action `Exception.catch` \(err :: IOException) ->

@@ -3,7 +3,6 @@ module Main (main) where
 
 import Control.Monad (forM_, unless)
 import Data.Either (isLeft)
-import Data.List (isInfixOf)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import Effectful (runEff, runPureEff)
@@ -13,16 +12,15 @@ import Kyyn.Domain.Git
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Root (pluginPackageExclusions)
-import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Capability.Git
 import Kyyn.Plumbing.Protocol.Plugin
 import Kyyn.Plumbing.Interpreter.DhallHandling
-import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.ProcessExecution
-import System.Directory (createDirectory, createDirectoryIfMissing, createFileLink, doesFileExist, findExecutable)
+import System.Directory (createDirectory, createDirectoryIfMissing, doesFileExist, findExecutable)
 import System.FilePath ((</>))
+import System.Process (callProcess)
 import System.IO.Temp (withSystemTempDirectory)
 
 assert :: String -> Bool -> IO ()
@@ -56,35 +54,15 @@ main = do
       Left [Diagnostic _ "plugin.manifest-invalid" _ _] -> pure ()
       other -> fail (show other)
   url <- right (gitUrl "https://example.org/plugins.git")
-  forM_ [LocalPackage cwd WholeTree, LocalPackage cwd (Subtree (path "nested/package")), GitPackage url WholeTree, GitPackage url (Subtree (path "p"))] $ \origin -> do
+  revision <- right (gitRevision (replicate 40 'a'))
+  forM_ [PluginOrigin repository selected revision | repository <- [LocalRepository cwd, RemoteRepository url], selected <- [WholeTree, Subtree (path "nested/package")]] $ \origin -> do
     bytes <- right (runPureEff (runDhallHandling (encodeOrigin origin)))
     decoded <- right (runPureEff (runDhallHandling (decodeOrigin bytes)))
     assert "origin round trip" (origin == decoded)
-  filesystemTests
+  assert "invalid origin revision accepted" (isLeft (runPureEff (runDhallHandling
+    (decodeOrigin "{ repository = < Local : Text | Git : Text >.Local \"/work\", path = None Text, revision = \"HEAD\" }"))))
   gitTests
-  putStrLn "Plugin source classification, Dhall codecs, filesystem exclusions and Git acquisition passed."
-
-filesystemTests :: IO ()
-filesystemTests = withSystemTempDirectory "kyyn-plugin-fs-" $ \directory -> do
-  let package = scope directory
-      perform action = runEff (runFailure (runFileSystemIO package action))
-  createDirectory (directory </> "src")
-  Bytes.writeFile (directory </> "src/Local.hs") "uncommitted source"
-  createFileLink "/missing/excluded" (directory </> ".git")
-  createDirectory (directory </> "dist-newstyle")
-  createFileLink "/missing/excluded" (directory </> "dist-newstyle/cache")
-  Bytes.writeFile (directory </> "dist-newstyle-extra") "keep"
-  tree <- perform (FS.readSourceTree package pluginPackageExclusions) >>= right >>= right
-  assert "exclusions lost source/sibling" (map (relativeName . fst) (files tree) == ["dist-newstyle-extra", "src/Local.hs"])
-  createFileLink "/missing/included" (directory </> "src/linked.hs")
-  refused <- perform (FS.readSourceTree package pluginPackageExclusions)
-  case refused of
-    Right (Left [Diagnostic _ "filesystem.unsupported-entry" message _]) -> assert "entry diagnostic omits name" ("src/linked.hs" `isInfixOf` message)
-    other -> fail (show other)
-  strict <- perform (FS.readTree package)
-  assert "owned tree changed error mode" (isLeft strict)
-  missing <- perform (FS.readSourceTree (scope (directory </> "absent")) [])
-  assert "missing directory silently treated as empty" (isLeft missing)
+  putStrLn "Plugin source classification, Dhall codecs, Git source changes and acquisition passed."
 
 gitTests :: IO ()
 gitTests = withSystemTempDirectory "kyyn-plugin-git-" $ \directory -> do
@@ -99,11 +77,45 @@ gitTests = withSystemTempDirectory "kyyn-plugin-git-" $ \directory -> do
   (repository,_) <- perform (initializeRepository (scope originPath)) >>= right
   Just branch <- perform (checkedOutBranch repository)
   tree <- right (fileTree [(path "packages/local-file/src/Local.hs", "committed"),
+    (path "packages/local-file/.gitignore", "scratch/\ntracked-ignored\n"),
+    (path "packages/local-file/tracked-ignored", "tracked"),
     (path "packages/local-file/dist-newstyle/cache", "ignored"), (path "unrelated", "outside")])
   first <- perform (createCommit repository (GitTree [(WholeTree, tree)]) Nothing metadata)
   second <- perform (createCommit repository (GitTree []) (Just first) metadata)
   _ <- perform (compareAndSwapRef repository branch Nothing second)
-  createDirectoryIfMissing True (originPath </> "packages/local-file/src")
+  _ <- perform (synchronizeCheckout repository branch second [path "packages", path "unrelated"]) >>= right
+  (discovered,prefix) <- perform (discoverRepository (scope (originPath </> "packages"))) >>= right
+  assert "local repository discovery" (discovered == repository && prefix == Subtree (path "packages"))
+  let selectedPath = case prefix of
+        WholeTree -> Subtree (path "local-file")
+        Subtree p -> Subtree (path (relativeName p ++ "/local-file"))
+      changes = perform (sourceChanges repository second selectedPath pluginPackageExclusions)
+      package = originPath </> "packages/local-file"
+  assert "prefix/subdirectory combination" (selectedPath == Subtree (path "packages/local-file"))
+  clean <- changes
+  assert "clean source reported dirty" (null clean)
+  createDirectoryIfMissing True (package </> "scratch")
+  Bytes.writeFile (package </> "scratch/cache") "ignored"
+  Bytes.writeFile (package </> "dist-newstyle/cache") "excluded tracked edit"
+  Bytes.writeFile (package </> "dist-newstyle/new") "excluded untracked"
+  Bytes.writeFile (originPath </> "unrelated") "outside edit"
+  ignored <- changes
+  assert "ignored/excluded/unrelated source reported dirty" (null ignored)
+  residue <- perform (checkoutChanges repository second [path "packages/local-file"])
+  assert "checkout synchronization stopped seeing ignored residue" (path "packages/local-file/scratch/cache" `elem` residue)
+  Bytes.writeFile (package </> "dist-newstyle-extra") "untracked sibling"
+  Bytes.writeFile (package </> "tracked-ignored") "tracked edit despite ignore"
+  Bytes.writeFile (package </> "src/Local.hs") "staged"
+  callProcess executable ["-C", originPath, "add", "--", "packages/local-file/src/Local.hs"]
+  Bytes.writeFile (package </> "src/Local.hs") "committed"
+  dirty <- changes
+  assert "staged/unstaged cancellation or exclusions hid source changes"
+    (dirty == map path ["packages/local-file/dist-newstyle-extra", "packages/local-file/src/Local.hs", "packages/local-file/tracked-ignored"])
+  localOriginBytes <- right (runPureEff (runDhallHandling (encodeOrigin
+    (PluginOrigin (LocalRepository (scope originPath)) selectedPath second))))
+  localOrigin <- right (runPureEff (runDhallHandling (decodeOrigin localOriginBytes)))
+  assert "local origin lost repository/path/revision"
+    (localOrigin == PluginOrigin (LocalRepository (scope originPath)) selectedPath second)
   Bytes.writeFile (originPath </> "packages/local-file/src/Local.hs") "uncommitted"
   url <- right (gitUrl ("file://" ++ originPath))
   cloned <- perform (cloneRepository url (scope clonePath)) >>= right
@@ -114,7 +126,13 @@ gitTests = withSystemTempDirectory "kyyn-plugin-git-" $ \directory -> do
   checkedOut <- doesFileExist (clonePath </> "unrelated")
   assert "clone checked out source" (not checkedOut)
   selected <- perform (readTreeExcluding cloned revision (Subtree (path "packages/local-file")) pluginPackageExclusions) >>= right
-  assert "Git source included working edits or exclusions" (files selected == [(path "src/Local.hs", "committed")])
+  assert "Git source included working edits or exclusions" (files selected ==
+    [(path ".gitignore", "scratch/\ntracked-ignored\n"), (path "src/Local.hs", "committed"), (path "tracked-ignored", "tracked")])
+  originBytes <- right (runPureEff (runDhallHandling (encodeOrigin
+    (PluginOrigin (RemoteRepository url) selectedPath revision))))
+  fetchedOrigin <- right (runPureEff (runDhallHandling (decodeOrigin originBytes)))
+  assert "remote origin lost exact fetched revision"
+    (fetchedOrigin == PluginOrigin (RemoteRepository url) selectedPath second)
   repeatClone <- perform (cloneRepository url (scope clonePath))
   case repeatClone of Left [Diagnostic _ "git.clone-failed" _ _] -> pure (); other -> fail (show other)
   unchanged <- perform (resolveRevision cloned "HEAD") >>= right

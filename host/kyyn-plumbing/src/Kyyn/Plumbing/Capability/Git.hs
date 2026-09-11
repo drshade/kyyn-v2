@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
   ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
-  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout, indexPaths
+  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, sourceChanges, synchronizeCheckout, indexPaths
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -28,6 +28,7 @@ data Git :: Effect where
   CheckedOutBranch :: Repository -> Git m (Maybe LocalBranch)
   IndexPaths :: Repository -> [RelativePath] -> Git m [RelativePath]
   CheckoutChanges :: Repository -> GitRevision -> [RelativePath] -> Git m [RelativePath]
+  SourceChanges :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m [RelativePath]
   SynchronizeCheckout :: Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Git m (Either [Diagnostic] ())
 
 type instance DispatchOf Git = Dynamic
@@ -79,6 +80,11 @@ indexPaths repo = send . IndexPaths repo
 
 checkoutChanges :: Git :> es => Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
 checkoutChanges repo revision = send . CheckoutChanges repo revision
+
+-- Repository-relative changed paths; exclusions are relative to the selected tree.
+-- Unlike checkout synchronization, ignored untracked files are omitted.
+sourceChanges :: Git :> es => Repository -> GitRevision -> TreePath -> [RelativePath] -> Eff es [RelativePath]
+sourceChanges repo revision location = send . SourceChanges repo revision location
 
 synchronizeCheckout :: Git :> es => Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Eff es (Either [Diagnostic] ())
 synchronizeCheckout repo branch revision = send . SynchronizeCheckout repo branch revision

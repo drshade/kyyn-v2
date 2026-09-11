@@ -177,6 +177,7 @@ schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case
   Git.CloneRepository {} -> error "Root opening must not acquire remote packages"
+  Git.SourceChanges {} -> error "Root opening must not inspect plugin source changes"
   Git.ReadUserIdentity _ -> error "Root opening must not read commit identity"
   Git.DiscoverRepository _ -> error "Root opening unexpectedly discovered a repository"
   Git.InitializeRepository _ -> error "Root opening must not initialize a repository"

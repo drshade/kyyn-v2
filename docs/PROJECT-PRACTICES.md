@@ -20,8 +20,8 @@ does not become another specification of the product's runtime workflows.
 ## Verification
 
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
-hermetic plugin manifest/origin codecs, local source capture/exclusions and shallow
-no-checkout acquisition from a local Git remote. It uses real Dhall, filesystem
+hermetic plugin manifest/origin codecs, scoped Git source changes and shallow
+no-checkout acquisition from a local Git remote. It uses real Dhall
 and Git handlers, without network access, a guest compiler or plugin invocation.
 It is included in the fast check.
 
