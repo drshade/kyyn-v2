@@ -1,12 +1,12 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
-  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout, indexPaths
+  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
+  , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, sourceChanges, synchronizeCheckout, indexPaths
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Git (Repository, GitRevision, TreePath, GitTree, GitUser, CommitMetadata, LocalBranch, RefUpdate)
+import Kyyn.Domain.Git (Repository, GitRevision, GitUrl, TreePath, GitTree, GitUser, CommitMetadata, LocalBranch, RefUpdate)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
@@ -16,6 +16,7 @@ data Git :: Effect where
   ReadUserIdentity :: Repository -> Git m (Either [Diagnostic] GitUser)
   DiscoverRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   InitializeRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
+  CloneRepository :: GitUrl -> DirectoryScope -> Git m (Either [Diagnostic] Repository)
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
@@ -26,6 +27,7 @@ data Git :: Effect where
   CheckedOutBranch :: Repository -> Git m (Maybe LocalBranch)
   IndexPaths :: Repository -> [RelativePath] -> Git m [RelativePath]
   CheckoutChanges :: Repository -> GitRevision -> [RelativePath] -> Git m [RelativePath]
+  SourceChanges :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m [RelativePath]
   SynchronizeCheckout :: Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Git m (Either [Diagnostic] ())
 
 type instance DispatchOf Git = Dynamic
@@ -38,6 +40,9 @@ discoverRepository = send . DiscoverRepository
 
 initializeRepository :: Git :> es => DirectoryScope -> Eff es (Either [Diagnostic] (Repository, TreePath))
 initializeRepository = send . InitializeRepository
+
+cloneRepository :: Git :> es => GitUrl -> DirectoryScope -> Eff es (Either [Diagnostic] Repository)
+cloneRepository url = send . CloneRepository url
 
 resolveRevision :: Git :> es => Repository -> String -> Eff es (Either [Diagnostic] GitRevision)
 resolveRevision repo = send . ResolveRevision repo
@@ -74,6 +79,11 @@ indexPaths repo = send . IndexPaths repo
 
 checkoutChanges :: Git :> es => Repository -> GitRevision -> [RelativePath] -> Eff es [RelativePath]
 checkoutChanges repo revision = send . CheckoutChanges repo revision
+
+-- Repository-relative changed paths; exclusions are relative to the selected tree.
+-- Unlike checkout synchronization, ignored untracked files are omitted.
+sourceChanges :: Git :> es => Repository -> GitRevision -> TreePath -> [RelativePath] -> Eff es [RelativePath]
+sourceChanges repo revision location = send . SourceChanges repo revision location
 
 synchronizeCheckout :: Git :> es => Repository -> LocalBranch -> GitRevision -> [RelativePath] -> Eff es (Either [Diagnostic] ())
 synchronizeCheckout repo branch revision = send . SynchronizeCheckout repo branch revision

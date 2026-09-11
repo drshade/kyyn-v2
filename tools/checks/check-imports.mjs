@@ -90,6 +90,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.KnowledgeBase'],
@@ -107,10 +108,13 @@ const domainModules = {
   'Kyyn.Domain.Query': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Value', 'Kyyn.Types.Query'],
   'Kyyn.Domain.Example': ['Kyyn.Domain.Query', 'Kyyn.Domain.Value'],
   'Kyyn.Domain.FileTree': ['Data.ByteString', 'Data.List', 'Kyyn.Domain.Path'],
-  'Kyyn.Domain.Git': ['Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
+  'Kyyn.Domain.Git': ['Data.List', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Plugin': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding',
+    'Effectful', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path',
+    'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Plumbing.Protocol.GuestApi': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
     'Data.ByteString', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.DataType',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.GuestApi', 'Kyyn.Plumbing.Capability.DhallHandling'],

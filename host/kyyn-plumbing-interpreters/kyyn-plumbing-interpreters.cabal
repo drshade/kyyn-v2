@@ -19,6 +19,15 @@ library
     directory, filepath, temporary ==1.3, dhall ==1.42.3, aeson ==2.2.5.0, text,
     containers, prettyprinter, transformers, random ==1.3.1
 
+test-suite plugin-packages
+  type: exitcode-stdio-1.0
+  main-is: PluginTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, directory, filepath, temporary ==1.3, process
+
 test-suite file-trees
   type: exitcode-stdio-1.0
   main-is: TreeTests.hs
