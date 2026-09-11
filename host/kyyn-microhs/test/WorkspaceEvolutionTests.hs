@@ -98,7 +98,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
 
 gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
-  ReadTreeAt selected selectedRevision (Subtree path)
+  ReadTreeAt selected selectedRevision (Subtree path) []
     | selected == repository && selectedRevision == revision && relativeName path == "nested/root" -> pure (Right tree)
   _ -> error "Evolution attempted Git operations other than its exact Before read"
 

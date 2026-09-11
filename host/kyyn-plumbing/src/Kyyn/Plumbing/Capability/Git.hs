@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, resolveRevision, readTreeAt, readFileAt, readDirectoryAt, readCommitParents
+  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
   , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout, indexPaths
   ) where
 
@@ -17,7 +17,7 @@ data Git :: Effect where
   DiscoverRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   InitializeRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
-  ReadTreeAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] FileTree)
+  ReadTreeAt :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
   ReadCommitParents :: Repository -> GitRevision -> Git m (Either [Diagnostic] [GitRevision])
   ReadDirectoryAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] (Maybe [RelativePath]))
@@ -43,7 +43,13 @@ resolveRevision :: Git :> es => Repository -> String -> Eff es (Either [Diagnost
 resolveRevision repo = send . ResolveRevision repo
 
 readTreeAt :: Git :> es => Repository -> GitRevision -> TreePath -> Eff es (Either [Diagnostic] FileTree)
-readTreeAt repo revision = send . ReadTreeAt repo revision
+readTreeAt repo revision location = readTreeExcluding repo revision location []
+
+-- Exclusions are relative to the selected tree and include descendants.
+-- Excluded blobs are not loaded.
+readTreeExcluding :: Git :> es => Repository -> GitRevision -> TreePath -> [RelativePath]
+  -> Eff es (Either [Diagnostic] FileTree)
+readTreeExcluding repo revision location = send . ReadTreeAt repo revision location
 
 readFileAt :: Git :> es => Repository -> GitRevision -> RelativePath -> Eff es (Either [Diagnostic] (Maybe ByteString))
 readFileAt repo revision = send . ReadFileAt repo revision

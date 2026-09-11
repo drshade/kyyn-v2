@@ -60,6 +60,10 @@ installed integration check.
   The same suite exercises manifest-driven RootOpening with the real Dhall and
   RootStore handlers and recording schema/Git test handlers. It checks source/SDK
   capture and revision forwarding, not a second real-compiler execution.
+  Source-only Git capture excludes fact blobs before loading bytes, retaining
+  examples and other non-fact files. Git tests temporarily make an excluded blob
+  unavailable: filtered capture succeeds, unfiltered capture fails, and the blob
+  is restored. Exclusion matching preserves similarly prefixed sibling paths.
   Source-only opening is checked with absent/corrupt facts and explicit revision
   forwarding. Workspace tests use real Dhall with pure projection/matching:
   malformed manifests/layout, input additions/edits/deletions, and exclusion of

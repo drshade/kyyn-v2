@@ -176,9 +176,11 @@ Drafts can use FileSystem.ReadTree followed by OpenCapturedRoot, without atomici
 under concurrent editing. Accepted roots open only from a fixed Git revision.
 Source-only opening follows the same manifest and schema-inspection path but
 returns the contract, non-fact code snapshot and parsed definition without
-decoding facts. `LoadSourceAt` uses the same full Git subtree capture; captured
-fact bytes are ignored. Missing or corrupt facts therefore do not prevent source
-inspection. This supports evolution scaffolding without running root validation.
+decoding facts. `LoadSourceAt` excludes the facts location before loading bytes;
+excluded entries are not inspected. Missing, corrupt or unreadable facts therefore
+do not prevent source inspection. All non-fact root material is retained, including
+examples and auxiliary files used to seed evolution workspaces. This supports
+evolution scaffolding without running root validation.
 LoadRootAt captures the selected tree then follows the same manifest path; it does
 not resolve a newer head. Missing/malformed manifests, rejected schemas and bad fact
 files return diagnostics. Compiler/Git infrastructure failures remain Failure.

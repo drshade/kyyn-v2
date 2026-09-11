@@ -4,6 +4,7 @@ module Main (main) where
 import CheckoutTests (checkoutTests)
 import Control.Monad (unless)
 import Control.Concurrent.Async (concurrently)
+import Control.Exception (bracket_)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import Effectful (runEff)
@@ -16,7 +17,7 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.ProcessExecution
-import System.Directory (findExecutable, createDirectoryIfMissing, createFileLink)
+import System.Directory (findExecutable, createDirectoryIfMissing, createFileLink, renameFile)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -210,6 +211,10 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   let bytes = Bytes.pack [0..255]
       filename = "nested/spaces\tand\nlines.bin"
   Bytes.writeFile (directory </> "root" </> filename) bytes
+  createDirectoryIfMissing True (directory </> "root/facts")
+  createDirectoryIfMissing True (directory </> "root/facts-extra")
+  Bytes.writeFile (directory </> "root/facts/item") "excluded fact blob"
+  Bytes.writeFile (directory </> "root/facts-extra/item") "retained neighbour"
   command ["add","root"]
   commit
   first <- execute (resolveRevision repo "HEAD")
@@ -217,6 +222,18 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   unless (lookup (path ("root/" ++ filename)) (files whole) == Just bytes) (fail "Repository-root capture")
   captured <- execute (readTreeAt repo first (Subtree (path "root")))
   unless (lookup (path filename) (files captured) == Just bytes) (fail "Git capture changed bytes or paths")
+  factObject <- Char8.unpack . Char8.takeWhile (/= '\n') <$> inspect ["rev-parse", "HEAD:root/facts/item"]
+  let objectPath = directory </> ".git/objects" </> take 2 factObject </> drop 2 factObject
+      savedObject = objectPath ++ ".saved"
+  bracket_ (renameFile objectPath savedObject) (renameFile savedObject objectPath) $ do
+    source <- execute (readTreeExcluding repo first (Subtree (path "root")) [path "facts"])
+    unless (files source == filter ((/= path "facts/item") . fst) (files captured))
+      (fail "Exclusion read the missing fact blob or dropped a neighbouring path")
+    unfiltered <- runEff . runFailure . runProcessExecutionIO . runGit executable [] $
+      readTreeAt repo first (Subtree (path "root"))
+    case unfiltered of
+      Right (Right _) -> fail "Missing-blob proof did not fail without the exclusion"
+      _ -> pure ()
   Bytes.writeFile (directory </> "root" </> filename) "changed"
   command ["add","root"]
   commit
