@@ -140,8 +140,11 @@ CLI result exposes the installed name, location and origin in human/JSON forms.
 Both acquisition routes resolve to a `Repository`, one captured HEAD revision and
 a repository-relative `TreePath`. Remote acquisition adds one Git operation for a
 shallow, no-checkout clone into a temporary scope. Local acquisition uses existing
-`DiscoverRepository`, combining its directory prefix with `--path`, and
-`CheckoutChanges` for the scoped dirty-source check, including untracked entries.
+`DiscoverRepository`, combining its directory prefix with `--path`.
+The dirty-source check reports staged and unstaged differences from HEAD within
+the selected package, plus untracked entries that are not ignored, minus the fixed
+package exclusions; use a distinct scoped Git query, not `CheckoutChanges`, whose
+checkout-synchronization semantics deliberately include ignored residue.
 Both use the existing exclusion-carrying `ReadTreeAt` to produce the same `FileTree`;
 existing Git entry checks refuse symlinks and submodules. No filesystem source-tree
 reader or second package-entry error mode is needed. Filesystem access failures
