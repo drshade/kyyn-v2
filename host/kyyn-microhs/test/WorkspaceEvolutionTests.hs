@@ -29,7 +29,7 @@ import Kyyn.MicroHs.Interpreter.GuestCompilation
 import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Porcelain.Capability.EvolutionExecution
 import Kyyn.Porcelain.Capability.RootStore
-import Kyyn.Porcelain.Capability.RootOpening (loadSourceAt)
+import Kyyn.Porcelain.Capability.RootOpening (loadSourceAt, openCapturedSource)
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Porcelain.Interpreter.RootOpening
 import Kyyn.Porcelain.Interpreter.EvolutionExecution
@@ -86,9 +86,10 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
     . runSchemaInspectionIO toolchain . gitMock repository revision acceptedTree
     . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
-      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles) closure)
+      prepared <- openCapturedSource target >>= either (error . show) pure
+      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles) closure prepared)
   EvaluatedEvolution preserved (After afterContract) checked@(CheckedValue _ value) (EvolutionReport reports) <- right result >>= right
-  unless ((case preserved of CapturedEvolution actual _ _ -> actual == context) && value == expected && length reports == 3 &&
+  unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 3 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
     (fail ("Unexpected evaluated workspace: " ++ show result))
   materialized <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot afterContract target checked))))
@@ -98,8 +99,9 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
 
 gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
-  ReadTreeAt selected selectedRevision (Subtree path) []
-    | selected == repository && selectedRevision == revision && relativeName path == "nested/root" -> pure (Right tree)
+  ReadTreeAt selected selectedRevision (Subtree path) excluded
+    | selected == repository && selectedRevision == revision && relativeName path == "nested/root"
+      && excluded == [factsLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isFactPath p)])))
   _ -> error "Evolution attempted Git operations other than its exact Before read"
 
 beforeType :: DataType

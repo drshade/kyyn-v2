@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.Evolution
-  ( evolutionBindings, identityEvolutionSource, decodeEvolutionReply, evolutionSources ) where
+  ( evolutionBindings, identityEvolutionSource, decodeEvolutionReply, evolutionSources, mergeEvolutionSources ) where
 
 import Control.Monad (unless)
 import Data.List (nub, sort)
@@ -38,6 +38,11 @@ identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
   where
     selectedModule = definingModule selected
     aliased name = name ++ "." ++ drop (length selectedModule + 1) selected
+
+mergeEvolutionSources :: [FileTree] -> Either String FileTree
+mergeEvolutionSources trees = case fileTree (nub (concatMap files trees)) of
+  Left message -> Left (message ++ "; give changed schema modules distinct names (for example SchemaV1 and SchemaV2), with qualified imports for readability")
+  Right tree -> Right tree
 
 evolutionSources :: RootContract -> RootContract -> FileTree -> Either String GuestSources
 evolutionSources before after authored = do

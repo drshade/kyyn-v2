@@ -11,19 +11,20 @@ import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path (relativePath, relativeName, scopedPath, directoryScope)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
+import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring(..))
+import Kyyn.Porcelain.Capability.EvolutionPreparation (prepareEvolution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as EvolutionStore
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
-import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, readRootDefinition)
+import Kyyn.Porcelain.Capability.RootStore (rootLocation)
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 
 runEvolutionAuthoring
   :: (EvolutionStore.EvolutionStore :> es, RootOpening.RootOpening :> es,
-      WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es, RootStore :> es)
+      WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
   => Eff (EvolutionAuthoring : es) a -> Eff es a
 runEvolutionAuthoring = interpret $ \_ -> \case
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
@@ -48,15 +49,12 @@ runEvolutionAuthoring = interpret $ \_ -> \case
       (evolutionIdName identity ++ " already exists; create the evolution again with a new local sequence")])
     forM_ (files tree) $ \(path,bytes) -> ExceptT (Right <$> FileSystem.writeBytes location path bytes)
     pure (EvolutionWorkspace kb identity)
-  CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
-    snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) beforeCopy _ _ _) <- ExceptT (EvolutionStore.readWorkspace location)
+  CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) -> runExceptT $ do
+    PreparedEvolution context@(EvolutionContext _ _ (Before revision _) _) before@(SourceRoot _ _ _ closure) after <-
+      ExceptT (prepareEvolution location)
     rootPath <- checked (rootLocation kb)
-    (input@(Root contract _ code),closure) <- ExceptT (RootOpening.loadRootInputAt repository revision (Subtree rootPath))
-    RootDefinition _ _ _ _ sources <- ExceptT (readRootDefinition code)
-    unless (beforeCopy == sources) (throwE [errorDiagnostic "evolution.before-mismatch"
-      "before/ must match the selected revision's src/ tree; refresh it from that revision"])
-    pure (CapturedEvolution (EvolutionContext kb identity (Before revision contract) snapshot)
-      input closure)
+    input <- ExceptT (RootOpening.loadRootFactsAt repository revision (Subtree rootPath) before)
+    pure (CapturedEvolution context input closure after)
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "evolution.capture") pure

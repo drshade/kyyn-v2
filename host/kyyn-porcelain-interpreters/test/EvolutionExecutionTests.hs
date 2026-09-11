@@ -50,19 +50,21 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks")]
       target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
       root = Root contract facts code
+      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" []
+        (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")])) []
       capture proposed = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft)
-          before proposed (tree [("Evolution.hs","captured entry")]) (tree []))) root [path "Example.hs",path "Helper.hs"]
+          before proposed (tree [("Evolution.hs","captured entry")]) (tree []))) root [path "Example.hs",path "Helper.hs"] prepared
       entry = fixtureProgram
-      execute compilation source (CapturedEvolution context _ closure) = do
+      execute compilation source (CapturedEvolution context _ closure after) = do
         count <- newIORef 0
         result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
           . compileMock shell compilation . schemaMock count contract . runDhallHandling
-          . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure)
+          . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure after)
         inspections <- readIORef count
         case result of
-          Right (Right _) -> unless (inspections == 1)
-            (fail "Execution must inspect only the target contract")
+          Right (Right _) -> unless (inspections == 0)
+            (fail "Execution must consume the prepared target without inspecting again")
           _ -> pure ()
         pure result
       identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")

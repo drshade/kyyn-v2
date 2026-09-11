@@ -39,7 +39,7 @@ const allowed = {
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
-  'kyyn-porcelain': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+  'kyyn-porcelain': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.GuestApi',
     'Kyyn.Porcelain.Capability.RootOpening',
     'Kyyn.Domain.Publication', 'Kyyn.Domain.Path', 'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.Validation',
@@ -49,6 +49,8 @@ const allowed = {
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Kyyn.Domain.GuestApi', 'Kyyn.Plumbing.Capability.ApiInspection',
+    'Kyyn.Porcelain.Capability.EvolutionPreparation', 'Kyyn.Porcelain.Capability.WorkspaceApi',
     'Kyyn.Porcelain.Capability.EvolutionAuthoring',
     'Kyyn.Domain.Publication', 'Kyyn.Porcelain.Capability.RootPublication',
     'Data.Aeson.Types', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
@@ -86,6 +88,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.KnowledgeBase'],
   'Kyyn.Domain.EvolutionReport': ['Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],

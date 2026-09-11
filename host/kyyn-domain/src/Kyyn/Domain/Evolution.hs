@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evolution
   ( EvolutionId, evolutionId, evolutionIdName, nextEvolutionId, EvolutionName(..), EvolutionWorkspace(..), Before(..)
-  , EvolutionContext(..), CapturedEvolution(..)
+  , EvolutionContext(..), PreparedEvolution(..), CapturedEvolution(..)
   , After(..), EvaluatedEvolution(..), PreviewRejection(..), Candidate(..)
   , EvolutionFilter(..), EvolutionSummary(..)
   ) where
@@ -14,7 +14,7 @@ import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot, EvolutionState)
 import Kyyn.Domain.Value (CheckedValue)
-import Kyyn.Domain.Root (Root)
+import Kyyn.Domain.Root (Root, SourceRoot)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -72,8 +72,12 @@ data EvolutionContext = EvolutionContext
   , material :: WorkspaceSnapshot
   } deriving (Eq, Show)
 
+data PreparedEvolution = PreparedEvolution
+  { context :: EvolutionContext, beforeSource :: SourceRoot, afterSource :: SourceRoot }
+  deriving (Eq, Show)
+
 data CapturedEvolution = CapturedEvolution
-  { context :: EvolutionContext, input :: Root, sourceClosure :: [RelativePath] }
+  { context :: EvolutionContext, input :: Root, sourceClosure :: [RelativePath], preparedAfter :: SourceRoot }
   deriving (Eq, Show)
 
 data Candidate a = Candidate
