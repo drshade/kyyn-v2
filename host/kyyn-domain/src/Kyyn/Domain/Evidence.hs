@@ -8,14 +8,14 @@ module Kyyn.Domain.Evidence
 
 import Control.Monad (foldM, unless)
 import Data.List (nub)
-import Kyyn.Domain.Plugin (PluginName, pluginNameText)
+import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Types.Evidence (EvidenceRef(..))
 
 newtype EvidenceId = EvidenceId String deriving (Eq, Show)
 newtype FetchId = FetchId String deriving (Eq, Show)
 data ConnectorInstanceRef = ConnectorInstanceRef PluginName String deriving (Eq, Show)
-data EvidenceProducer = EvidenceProducer String ContractId deriving (Eq, Show)
+data EvidenceProducer = EvidenceProducer PackageIdentity ContractId deriving (Eq, Show)
 data Evidence a = Evidence [String] a deriving (Eq, Show)
 data EvidenceChange a = NewEvidence EvidenceId (Evidence a)
   | UpdatedEvidence EvidenceId (Evidence a) | RemovedEvidence EvidenceId deriving (Eq, Show)
@@ -57,6 +57,7 @@ applyChanges = foldM step
 snapshotAt :: EvidenceState a -> FetchId -> Either EvidenceProblem [(EvidenceId, Evidence a)]
 snapshotAt (EvidenceState baseline initial current values history) target
   | current == Just target = Right values
+  | baseline == Just target = Right initial
   | otherwise = do
       selected <- through baseline history target
       foldM apply initial selected
@@ -77,7 +78,7 @@ fetchesBetween (EvidenceState baseline _ _ _ history) target base = case base of
   Nothing | baseline == Nothing -> through Nothing history target
           | otherwise -> Left HistoryUnavailable
   Just start -> do
-    rest <- after start history
+    rest <- if Just start == baseline then Right history else after start history
     if start == target then Right [] else untilTarget (Just start) rest
   where
     after _ [] = Left HistoryUnavailable

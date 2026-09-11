@@ -11,16 +11,17 @@ import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract (CheckedContract, contractShape, contractId, contractFingerprint)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.Plugin (PackageIdentity(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 
-data EvidenceHeader = EvidenceHeader String String (Maybe FetchId) [FetchId] deriving (Eq, Show)
+data EvidenceHeader = EvidenceHeader PackageIdentity String (Maybe FetchId) (Maybe FetchId) [FetchId] deriving (Eq, Show)
 
 headerShape :: Shape
-headerShape = Record [("producer",text),("contract",text),("current",Optional text),("fetches",List text)]
+headerShape = Record [("producer",text),("contract",text),("current",Optional text),("baseline",Optional text),("fetches",List text)]
 
 stateShape :: Shape -> Shape
-stateShape payload = Record [("header",headerShape),("baseline",Optional text),
+stateShape payload = Record [("header",headerShape),
   ("initial",members),("values",members),("history",List fetch)]
   where
     evidence = Record [("references",List text),("payload",payload)]
@@ -46,8 +47,9 @@ parseOptional = withObject "fetch selection" $ \fields -> do
 
 parseHeader :: Value -> Parser EvidenceHeader
 parseHeader = withObject "evidence header" $ \fields -> EvidenceHeader
-  <$> fields .: "producer" <*> fields .: "contract"
+  <$> (PackageIdentity <$> fields .: "producer") <*> fields .: "contract"
   <*> (fields .: "current" >>= parseOptional)
+  <*> (fields .: "baseline" >>= parseOptional)
   <*> (map FetchId <$> fields .: "fetches")
 
 decodeHeader :: DhallHandling :> es => ByteString -> Eff es (Either EvidenceProblem EvidenceHeader)
@@ -57,7 +59,7 @@ decodeHeader bytes = case Text.decodeUtf8' bytes of
 
 encodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> EvidenceState CheckedValue
   -> Eff es (Either EvidenceProblem ByteString)
-encodeState (EvidenceProducer producer identity) contract state@(EvidenceState baseline initial current values history)
+encodeState (EvidenceProducer (PackageIdentity producer) identity) contract state@(EvidenceState baseline initial current values history)
   | identity /= contractId contract = pure (Left ProducerContractChanged)
   | otherwise = case encodedValue of
       Left problem -> pure (Left problem)
@@ -71,9 +73,9 @@ encodeState (EvidenceProducer producer identity) contract state@(EvidenceState b
       currentValues <- traverse member values
       fetchValues <- traverse fetch history
       pure (object ["header" .= object ["producer" .= producer,
-        "contract" .= contractFingerprint identity,"current" .= optional current,
+        "contract" .= contractFingerprint identity,"current" .= optional current,"baseline" .= optional baseline,
         "fetches" .= [key | Fetch (FetchId key) _ _ _ <- history]],
-        "baseline" .= optional baseline,"initial" .= initialValues,"values" .= currentValues,"history" .= fetchValues])
+        "initial" .= initialValues,"values" .= currentValues,"history" .= fetchValues])
     evidence (Evidence refs (CheckedValue actual value))
       | actual == identity = Right (object ["references" .= refs,"payload" .= value])
       | otherwise = Left ProducerContractChanged
@@ -94,7 +96,7 @@ decodeState (EvidenceProducer producer identity) contract bytes
       header <- decodeHeader bytes
       case header of
         Left problem -> pure (Left problem)
-        Right (EvidenceHeader selected fingerprint _ _) | selected /= producer || fingerprint /= contractFingerprint identity ->
+        Right (EvidenceHeader selected fingerprint _ _ _) | selected /= producer || fingerprint /= contractFingerprint identity ->
           pure (Left ProducerContractChanged)
         Right _ -> case Text.decodeUtf8' bytes of
           Left problem -> pure (Left (InvalidEvidence (show problem)))
@@ -115,8 +117,7 @@ decodeState (EvidenceProducer producer identity) contract bytes
       <*> (fields .: "previous" >>= parseOptional) <*> fields .: "fetchedAt"
       <*> (fields .: "changes" >>= traverse change)
     parseState = withObject "evidence state" $ \fields -> do
-      EvidenceHeader _ _ current keys <- fields .: "header" >>= parseHeader
-      baseline <- fields .: "baseline" >>= parseOptional
+      EvidenceHeader _ _ current baseline keys <- fields .: "header" >>= parseHeader
       initial <- fields .: "initial" >>= traverse member
       values <- fields .: "values" >>= traverse member
       history <- fields .: "history" >>= traverse fetch

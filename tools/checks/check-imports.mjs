@@ -117,7 +117,7 @@ const domainModules = {
 
 const plumbingModules = {
   'Kyyn.Plumbing.Capability.EvidenceStore': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value'],
-  'Kyyn.Plumbing.Protocol.Evidence': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.DhallHandling'],
+  'Kyyn.Plumbing.Protocol.Evidence': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Plumbing.Protocol.Plugin': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding',
     'Effectful', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling'],
@@ -176,7 +176,7 @@ const plumbingModules = {
 
 const interpreterModules = {
   'Kyyn.Plumbing.Interpreter.EvidenceStore': ['Control.Exception', 'Control.Monad', 'Control.Monad.Trans.Except',
-    'Data.ByteString', 'Data.ByteString.Char8', 'Data.Text', 'Data.Text.Encoding', 'Data.Time.Clock', 'Data.Word', 'Numeric',
+    'Data.ByteString', 'Data.ByteString.Char8', 'Data.Text', 'Data.Text.Encoding', 'Data.Time.Clock', 'Data.Time.Format.ISO8601', 'Data.Word', 'Numeric',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence',
     'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value',
     'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.EvidenceStore', 'Kyyn.Plumbing.Capability.Failure',

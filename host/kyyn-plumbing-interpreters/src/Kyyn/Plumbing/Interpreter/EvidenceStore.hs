@@ -9,6 +9,7 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Time.Clock (getCurrentTime)
+import Data.Time.Format.ISO8601 (iso8601Show)
 import Data.Word (Word64)
 import Numeric (showHex)
 import Effectful (Eff, IOE, (:>), liftIO)
@@ -40,12 +41,12 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
     case bytes of
       Nothing -> pure Nothing
       Just contents -> do
-        EvidenceHeader _ _ current _ <- ExceptT (decodeHeader contents)
+        EvidenceHeader _ _ current _ _ <- ExceptT (decodeHeader contents)
         pure current
   PublishFetch instanceRef producer contract expected changes -> locked instanceRef $ \directory -> runExceptT $ do
     bytes <- readCurrent directory
     header <- traverse (ExceptT . decodeHeader) bytes
-    let current = case header of Just (EvidenceHeader _ _ key _) -> key; Nothing -> Nothing
+    let current = case header of Just (EvidenceHeader _ _ key _ _) -> key; Nothing -> Nothing
     unless (current == expected) (throwE BaseSnapshotConflict)
     let same = maybe False (matches producer) header
     state <- case (same,bytes) of
@@ -54,9 +55,10 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
     let EvidenceState baseline initial previous values history = state
     next <- liftEither (applyChanges values changes)
     identity <- ExceptT $ Right <$> native Failure.CreateUniqueDirectory directory freshId
-    at <- ExceptT $ Right . show <$> liftIO getCurrentTime
+    at <- ExceptT $ Right . iso8601Show <$> liftIO getCurrentTime
     let updated = EvidenceState baseline initial (Just identity) next (history ++ [Fetch identity previous at changes])
     encoded <- ExceptT (encodeState producer contract updated)
+    ExceptT $ Right <$> native Failure.WriteFile (scopePath kb </> ".kyyn/.gitignore") (ensureIgnore kb)
     case (same,bytes) of
       (False,Just old) -> ExceptT $ Right <$> native Failure.WriteFile directory (archive directory old)
       _ -> pure ()
@@ -64,11 +66,11 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
     pure (EvidenceSnapshotRef instanceRef producer identity)
   SelectEvidence instanceRef producer selection -> locked instanceRef $ \directory -> runExceptT $ do
     contents <- requireCurrent directory
-    header@(EvidenceHeader _ _ current history) <- ExceptT (decodeHeader contents)
+    header@(EvidenceHeader _ _ current baseline history) <- ExceptT (decodeHeader contents)
     unless (matches producer header) (throwE ProducerContractChanged)
     identity <- case selection of
       CurrentEvidence -> maybe (throwE HistoryUnavailable) pure current
-      AtFetch identity | identity `elem` history -> pure identity
+      AtFetch identity | Just identity == baseline || identity `elem` history -> pure identity
                        | otherwise -> throwE HistoryUnavailable
     pure (EvidenceSnapshotRef instanceRef producer identity)
   ReadEvidence snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract key -> locked instanceRef $ \directory -> runExceptT $ do
@@ -96,9 +98,7 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
     locked instanceRef action = do
       let root = scopePath kb </> ".kyyn" </> "evidence"
           directory = root </> instancePath instanceRef
-      native Failure.EnsureDirectory directory $ do
-        createDirectoryIfMissing True directory
-        Bytes.writeFile (root </> ".gitignore") (Char8.pack "*\n")
+      native Failure.EnsureDirectory directory (createDirectoryIfMissing True directory)
       Exception.bracket
         (native Failure.InspectEntry directory (lockFile (directory </> "store.lock") Exclusive))
         (native Failure.InspectEntry directory . unlockFile)
@@ -110,7 +110,7 @@ liftEither :: Either EvidenceProblem a -> Result es a
 liftEither = either throwE pure
 
 matches :: EvidenceProducer -> EvidenceHeader -> Bool
-matches (EvidenceProducer producer contract) (EvidenceHeader stored fingerprint _ _) =
+matches (EvidenceProducer producer contract) (EvidenceHeader stored fingerprint _ _ _) =
   stored == producer && fingerprint == contractFingerprint contract
 
 load :: (IOE :> es, Failure :> es, DhallHandling :> es)
@@ -171,6 +171,15 @@ removeOptional path = do
     Left err | isDoesNotExistError err -> pure ()
              | otherwise -> ioError err
     Right () -> pure ()
+
+ensureIgnore :: DirectoryScope -> IO ()
+ensureIgnore kb = do
+  let path = scopePath kb </> ".kyyn" </> ".gitignore"
+  result <- try (Bytes.readFile path)
+  case result of
+    Left err | isDoesNotExistError err -> Bytes.writeFile path (Char8.pack "*\n")
+             | otherwise -> ioError err
+    Right _ -> pure ()
 
 native :: (IOE :> es, Failure :> es) => Failure.StorageOperation -> FilePath -> IO a -> Eff es a
 native operation path action = liftIO action `Exception.catch` \(err :: IOException) ->

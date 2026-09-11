@@ -28,7 +28,7 @@ test-suite evidence-store
   ghc-options: -Wall -Werror -threaded
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, kyyn-types, effectful-core ==2.6.1.0,
-    aeson, bytestring, text, directory, filepath, temporary ==1.3, async
+    aeson, bytestring, text, time, directory, filepath, temporary ==1.3, async
 
 test-suite plugin-packages
   type: exitcode-stdio-1.0

@@ -52,10 +52,8 @@ It is included in the fast check.
 real Dhall persistence, instance isolation, historical payloads and payload-free change
 summaries, concurrent expected-base publication, history deletion with current-value
 retention, whole-store clear and producer-change refusal. It requires no guest compiler,
-plugin invocation or external provider. The initial store uses one atomic Dhall document
-per instance under the selected checkout's ignored `.kyyn/evidence/` directory, with
-native file locking around storage operations. It rewrites the retained instance history;
-this slice does not claim paging or large-history performance.
+plugin invocation or external provider. [ADR 0014](../architecture/adr/0014-evidence.md)
+owns the store layout and persistence contract.
 
 `cabal test plugin-installation --test-show-details=direct` checks the installation
 handler with write-forbidding refusal handlers and real Git/filesystem/Dhall

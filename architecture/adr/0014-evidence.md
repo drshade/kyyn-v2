@@ -7,7 +7,8 @@ date: 2026-09-11
 # Fetch history preserves evidence changes; interpretation belongs to the KB
 
 Basis: owner-agreed plugin-declared deltas, retained local fetch history and
-KB-owned curation progress. Acquisition and invocation remain unimplemented.
+KB-owned curation progress. The first native store implements the persistence/read
+boundary below; acquisition and plugin invocation remain unimplemented.
 
 ## Context
 
@@ -162,9 +163,28 @@ not the current versions of the same IDs. Reconstructing snapshots from retained
 deltas is sufficient; a second archival service is not required. The materialized
 latest snapshot is independently readable. Explicitly deleting history preserves
 that current snapshot, but makes historical selections and change spans requiring
-deleted deltas unavailable. Clearing the entire evidence store also clears current
+deleted deltas unavailable. Retain its fetch identity as a readable baseline: later
+changes can be listed after that baseline, and its self-span is empty. Neither
+operation requires the deleted fetch record or earlier deltas. Unknown/deleted
+identities without a retained snapshot are still unavailable, even for self-spans.
+Clearing the entire evidence store also clears current
 evidence. Refetching does not restore lost history; reconstruction from deltas is
 possible only while the required history remains available.
+
+The first interpreter stores one typed document at
+`.kyyn/evidence/<plugin>-<hex instance>/state.dhall`, relative to the explicitly
+selected KB directory. Encode the instance name as lowercase hexadecimal UTF-8 bytes;
+plugin names already follow the package-name grammar. `.kyyn/.gitignore` owns the
+checkout-local ignore rule; store reads do not rewrite it. First publication creates
+that shared ignore file if absent, preserving any existing content, as candidate
+persistence already does. The state document records
+the producer's `PackageIdentity`, payload contract fingerprint, current and baseline
+fetch IDs, baseline/current values and retained deltas. Fetch timestamps use ISO 8601
+UTC. Native file locking plus atomic document replacement serializes the base check
+and publication. Producer changes retain the old document under the instance's
+`archives/` directory until explicit history deletion or whole-store clearing.
+The initial interpreter rewrites that retained per-instance history; paging and
+large-history performance are not established by this implementation.
 
 Named connector bindings (ADR 0016) select current evidence by default. Resolve and
 hold the selected fetch for each instance for the duration of an invocation; later
