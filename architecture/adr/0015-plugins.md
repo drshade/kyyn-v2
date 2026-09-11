@@ -24,14 +24,24 @@ kyyn-v2 --kb ../my-kb plugin install --from ./plugins/local-file
 kyyn-v2 --kb ../my-kb plugin install --from https://example.org/team/plugins.git --path plugins/local-file
 ```
 
-An existing local directory selects its current working contents, including
-uncommitted and untracked source; it does not require Git. `--path`, when supplied,
-selects a relative package subdirectory within either the local directory or the
-fetched repository. It cannot escape that source root. Local paths resolve against
+Every source is a Git repository. A local directory may select a package inside
+that repository; installation reads committed HEAD, not working-tree bytes.
+`--path`, when supplied, selects a relative package subdirectory within either the
+local directory or the fetched repository. It cannot escape that source root.
+Local paths resolve against
 the invoking working directory, independently of `--kb`. An explicit Git URL
 selects the repository's fetched default HEAD, captured once for installation;
 local Git repositories can also be acquired as Git using a `file://` URL. A missing
 local path is a local-source error, not an instruction to try a network fetch.
+A directory outside Git receives the existing repository-discovery refusal.
+
+For local checkouts, refuse staged, unstaged or untracked changes within the selected
+package, excluding the package exclusions below. Report the affected paths as
+`plugin.source-uncommitted` and ask the author to commit first. Unrelated changes
+elsewhere in the repository do not prevent installation. Ignored, untracked build
+products are not package inputs. This avoids silently installing an older committed
+package than the one the author is inspecting; the recorded revision describes the
+copied bytes without capturing local edits into an implicit source commit.
 
 Source classification is a pure domain rule: a value containing `://` denotes a
 Git URL; otherwise it denotes a local path. Refuse scp-style Git addresses rather
@@ -59,25 +69,28 @@ a successfully executable connector.
 
 Install a captured copy under `root/plugins/packages/<name>/source/`, and write
 Kyyn-owned `origin.dhall` beside `source/`, not inside the package. Record the
-absolute local source directory or supplied Git URL, plus the selected relative
-subdirectory. This remembers where an explicit future update should look; it is
+absolute discovered local repository root or supplied Git URL, the repository-relative
+package path, and the exact captured Git revision. This remembers where an explicit
+future update should look and which commit supplied the copy; it is
 not a version pin, compatibility promise or live source link. Connector configuration
 remains separate under ADR 0016. Copy the package's source and supporting files,
 excluding `.git`, `.kyyn`, `dist-newstyle` and `.stack-work` directories/entries
-before traversing them. Package authors keep other generated build products outside
-the distributed package. Symlinks and special files in the captured package are
-unsupported and receive a diagnostic rather than becoming links into the source
-checkout. Git acquisition does not recursively initialize submodules.
+before loading their contents. Package authors keep other generated build products
+outside the distributed package. Git tree entry checks refuse symlinks rather than
+creating links into the source checkout. Git acquisition does not recursively initialize submodules.
 A selected tree containing a submodule entry is refused.
 
-Origin is encoded as this Dhall shape, with `None Text` for the whole source root:
+Origin is encoded as this Dhall shape, with `None Text` for the whole repository:
 
 ```dhall
-{ source : < Local : Text | Git : Text >, path : Optional Text }
+{ repository : < Local : Text | Git : Text >
+, path : Optional Text
+, revision : Text
+}
 ```
 
-No fetched revision field is required: the installed source itself is the concrete
-copy, and KB Git history records its adoption. Layout constants for
+The revision identifies the source commit; KB Git history separately records its
+adoption. It is not a dependency-version constraint. Layout constants for
 `plugins/packages`, `source`, `origin.dhall`, `kyyn-plugin.dhall` and the exclusion
 list belong in `Kyyn.Domain.Root` alongside `factsLocation`, shared by installation
 and later root consumers.
@@ -105,8 +118,13 @@ data PluginSource
 data PluginManifest = PluginManifest
   { name :: PluginName, entryModule :: ModuleName }
 
+data PluginRepository = LocalRepository DirectoryScope | RemoteRepository GitUrl
+
+data PluginOrigin = PluginOrigin
+  { repository :: PluginRepository, path :: TreePath, revision :: GitRevision }
+
 data InstalledPlugin = InstalledPlugin
-  { name :: PluginName, location :: DirectoryScope, origin :: PluginSource }
+  { name :: PluginName, location :: DirectoryScope, origin :: PluginOrigin }
 
 data PluginInstallation :: Effect where
   InstallPlugin
@@ -119,15 +137,18 @@ uses filesystem, Git acquisition and Dhall capabilities; it has no `IOE`, compil
 root-publication, plugin-invocation or secret-store requirement. The successful
 CLI result exposes the installed name, location and origin in human/JSON forms.
 
-Both acquisition routes produce the same `FileTree`. Git acquisition adds one Git
-operation for a shallow, no-checkout clone into a temporary scope, resolves its
-HEAD once, then uses the existing exclusion-carrying `ReadTreeAt` at the selected
-`TreePath`; existing Git entry checks refuse symlinks and submodules. Local acquisition
-uses a filesystem tree-read operation with exclusions applied before descending.
-Share its traversal with the existing `ReadTree`, but distinguish malformed authored
-package entries (diagnostics naming the entry) from unsupported entries in
-Kyyn-owned trees (the existing operational failure). Genuine filesystem access errors
-remain operational failures in both modes.
+Both acquisition routes resolve to a `Repository`, one captured HEAD revision and
+a repository-relative `TreePath`. Remote acquisition adds one Git operation for a
+shallow, no-checkout clone into a temporary scope. Local acquisition uses existing
+`DiscoverRepository`, combining its directory prefix with `--path`.
+The dirty-source check reports staged and unstaged differences from HEAD within
+the selected package, plus untracked entries that are not ignored, minus the fixed
+package exclusions; use a distinct scoped Git query, not `CheckoutChanges`, whose
+checkout-synchronization semantics deliberately include ignored residue.
+Both use the existing exclusion-carrying `ReadTreeAt` to produce the same `FileTree`;
+existing Git entry checks refuse symlinks and submodules. No filesystem source-tree
+reader or second package-entry error mode is needed. Filesystem access failures
+remain operational failures.
 After acquisition, hermetic manifest decoding and pure package preparation are
 shared: validate the name and module, require its source, and construct the same
 destination payload and origin encoding. Neither route gets a second installer.
@@ -142,7 +163,7 @@ Use stable refusal codes at these boundaries:
 | `plugin.manifest-missing` | Selected package root has no manifest |
 | `plugin.manifest-invalid` | Manifest is malformed or its name/module is invalid |
 | `plugin.entry-missing` | Declared entry module has no source under `src/` |
-| `plugin.unsupported-entry` | Local package contains a symlink or special file |
+| `plugin.source-uncommitted` | Selected local package has staged, unstaged or untracked changes |
 | `plugin.already-installed` | Destination already exists |
 
 Git acquisition/entry diagnostics retain their Git codes (including
@@ -150,8 +171,9 @@ Git acquisition/entry diagnostics retain their Git codes (including
 misreported as manifest errors. CLI option syntax errors retain the normal usage
 exit; semantic refusals use these codes, and operational failures remain distinct.
 
-Before this slice is complete, test local directories outside Git, packages nested
-inside local and remote repositories, uncommitted local edits, copy independence,
+Before this slice is complete, test refusal of directories outside Git, packages nested
+inside local and remote repositories, scoped dirty-source refusals, copy independence,
+exact source revision and repository-relative origin paths,
 exclusion of repository/build metadata, and duplicate/malformed/unsupported package
 refusals with existing KB files and HEAD preserved. Use a local Git remote for the
 acquisition integration test, avoiding network-dependent tests. The first-party
