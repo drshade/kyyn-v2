@@ -19,12 +19,12 @@ import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring(..))
 import Kyyn.Porcelain.Capability.EvolutionPreparation (prepareEvolution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as EvolutionStore
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
-import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation)
+import Kyyn.Porcelain.Capability.RootStore (rootLocation)
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 
 runEvolutionAuthoring
   :: (EvolutionStore.EvolutionStore :> es, RootOpening.RootOpening :> es,
-      WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es, RootStore :> es)
+      WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
   => Eff (EvolutionAuthoring : es) a -> Eff es a
 runEvolutionAuthoring = interpret $ \_ -> \case
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
