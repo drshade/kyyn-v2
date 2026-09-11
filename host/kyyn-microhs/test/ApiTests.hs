@@ -15,7 +15,7 @@ import Kyyn.MicroHs.Interpreter.ApiInspection (runApiInspectionIO)
 import Kyyn.Plumbing.Capability.ApiInspection (inspectApiModules)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
-import System.Environment (getEnv)
+import System.Environment (getEnv, setEnv)
 import System.Directory (createDirectoryIfMissing, listDirectory, doesDirectoryExist, copyFile)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -23,6 +23,7 @@ import System.IO.Temp (withSystemTempDirectory)
 main :: IO ()
 main = do
   repo <- getEnv "KYYN_TEST_ROOT"
+  setEnv "MHSCPPHS" (repo </> "vendor/MicroHs/bin/cpphs")
   let sources = map (repo </>) ["guest/kyyn-sdk/src","shared/kyyn-types/src","vendor/transformers","vendor/json"]
       public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
       inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
@@ -80,7 +81,7 @@ main = do
   fixtureFiles <- mapM (\name -> do
     bytes <- Bytes.readFile (repo </> "host/kyyn-microhs/test/api-docs" </> name)
     path <- either fail pure (relativePath name)
-    pure (path,bytes)) ["Kyyn/DataFixture.hs", "Kyyn/DataReexport.hs"]
+    pure (path,bytes)) ["Kyyn/DataFixture.hs", "Kyyn/DataReexport.hs", "Kyyn/CppFixture.hs"]
   fixtureTree <- either fail pure (fileTree fixtureFiles)
   compilerScope <- either fail pure (directoryScope (repo </> "vendor/MicroHs"))
   let throughCapability selected = withSystemTempDirectory "kyyn-api-capability-" $ \temporary -> do
@@ -92,6 +93,8 @@ main = do
         pure result
   capabilityResult <- throughCapability ["Kyyn.DataFixture", "Kyyn.DataReexport"]
   assert "captured API capability agrees with direct inspection" (capabilityResult == Right (Right dataModules))
+  cppCapability <- throughCapability ["Kyyn.CppFixture"]
+  assert "captured CPP API uses configured toolchain" (cppCapability == Right (Right cpp))
   missingResult <- throughCapability ["Kyyn.Missing"]
   assert "missing module is a compiler diagnostic" (case missingResult of
     Right (Left [Diagnostic _ "guest.api-compiler-rejected" _ _]) -> True

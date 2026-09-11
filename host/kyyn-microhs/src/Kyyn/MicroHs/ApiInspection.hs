@@ -6,7 +6,6 @@ import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, e
 import Control.Monad (foldM)
 import Data.Char (isAlpha, isAlphaNum, isSpace, isSymbol, isPunctuation)
 import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate, find)
-import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 import System.Process (readProcess)
 import Kyyn.Domain.GuestApi
@@ -60,7 +59,7 @@ readDeclarations :: Flags -> (String, FilePath) -> IO (Either String (String, ([
 readDeclarations flags (name,path) = do
   original <- readFile path
   source <- if hasCpp original then do
-    executable <- maybe "cpphs" id <$> lookupEnv "MHSCPPHS"
+    let executable = mhsdir flags </> "bin/cpphs"
     readProcess executable (["--strip", "--noline", "-D__MHS__", "-I" ++ (mhsdir flags </> "src/runtime")]
       ++ cppArgs flags ++ [path]) ""
     else pure original

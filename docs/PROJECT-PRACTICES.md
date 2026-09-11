@@ -21,7 +21,7 @@ does not become another specification of the product's runtime workflows.
 
 Guest API discovery has two focused checks: `cabal test guest-catalogue
 --test-show-details=direct` exercises the read-only catalogue capability and real
-Dhall codec, and `KYYN_TEST_ROOT="$PWD" MHSCPPHS="$PWD/vendor/MicroHs/bin/cpphs"
+Dhall codec, and `KYYN_TEST_ROOT="$PWD"
 cabal test guest-api --test-show-details=direct` checks real MicroHs exports,
 reexports and abstraction. The latter recompiles copies of the SDK with all
 displayed signatures/aliases substituted and compares checked exports; it is in full
