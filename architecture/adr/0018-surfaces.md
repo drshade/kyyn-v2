@@ -251,6 +251,9 @@ Document each collection handle with its logical collection name, root field and
 fact type. Derive these details from the checked endpoint contracts and metadata
 already used to generate the bindings, not a separate documentation manifest.
 Extend documentation coverage tests to these generated declarations.
+Generated public declarations spell their types in the facade vocabulary already
+presented by `guest module show` (`Collection`, `Edit`, `Evolution`, `Rationale`),
+using full schema module names and importing internals only for constructors.
 
 The composition root supplies the installed SDK catalogue and workspace catalogue
 to the same navigation functions. It installs WorkspaceApi and its source/compiler
@@ -267,7 +270,8 @@ Before implementation is considered complete, prove discovery in a newly created
 workspace with an intentionally invalid evolution body; same-schema and changed-schema
 targets; empty and populated collections; repair after an invalid target schema;
 stale Before without a HEAD restriction; mismatched Before copies; and absence of
-private generated exports. Recording handlers must show no fact reads, candidate
+private generated exports. Assert that workspace-scoped declarations expose no
+internal module qualifiers. Recording handlers must show no fact reads, candidate
 operations, semantic validator calls or evolution execution. An installed CLI
 journey must discover `edit`, `evolve` and an After collection handle, then use
 those signatures to author and check a real evolution. Existing unscoped discovery
