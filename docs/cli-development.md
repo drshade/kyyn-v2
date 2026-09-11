@@ -1,7 +1,7 @@
 # Trying the first CLI
 
 The executable is named `kyyn-v2` while the original version owns `kyyn`.
-The current CLI supports guest SDK discovery, root inspection/checking and the evolution commands in
+The current CLI supports plugin source installation, guest SDK discovery, root inspection/checking and the evolution commands in
 [ADR 0018](../architecture/adr/0018-surfaces.md#cli-navigation-and-kb-selection).
 The installed integration fixture covers schema-changing acceptance and inherited
 examples; this is not a released installation.
@@ -167,6 +167,36 @@ For a schema-changing authoring example, see the integration fixture's
 saved examples using the host's existing encoder. Run it with
 `bash tools/test-installed.sh`; this is a slower integration check, not necessary
 for each edit to your own evolution.
+
+## Install plugin source
+
+From a committed Kyyn checkout, copy the first-party package into an existing KB:
+
+```sh
+kyyn-v2 --kb /path/to/kb plugin install --from ./plugins/local-file
+kyyn-v2 --kb /path/to/kb --json plugin install --from /path/to/another/repo --path plugins/example
+```
+
+`--from` accepts a local directory inside a Git checkout or a `file://` / unauthenticated
+`https://` Git repository URL. `--path` selects a package below that directory or
+repository. Local paths are relative to your current working directory, not `--kb`.
+Commit source changes before installing: Kyyn copies the selected HEAD tree, not
+uncommitted or untracked source. Ignored untracked files and the package exclusions
+do not block installation. SSH/scp-style addresses are not supported; use HTTPS or
+a local checkout. Prefix a local relative path containing a colon with `./`.
+
+The package has `kyyn-plugin.dhall` with `name` and `entryModule`, and the entry's
+source under `src/`. Installed files go into `root/plugins/packages/NAME/source/`;
+the adjacent `origin.dhall` records the repository, package path and exact Git revision.
+The command reports those details in both human and JSON output. It refuses an
+existing destination rather than updating or merging into it.
+
+Installation needs Git but no guest runtime. It validates package structure, not
+guest compilation or connector behavior. The current `local-file` package demonstrates
+installation only; its source/sink operations are not implemented yet.
+Installation leaves HEAD unchanged. Review the copied files and adopt them through
+your ordinary root-change workflow. If a filesystem write fails after destination
+creation, inspect the reported directory before removing the partial copy and retrying.
 
 ## Discover the guest SDK
 

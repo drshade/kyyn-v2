@@ -23,6 +23,10 @@ main = do
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
   succeeds ["kb","init"] (Invocation selected Human (Kb InitKb))
+  succeeds ["plugin","install","--from","./plugins/local-file"]
+    (Invocation selected Human (Plugin (InstallPlugin "./plugins/local-file" Nothing)))
+  succeeds ["--kb","nested/kb","--json","plugin","install","--from","file:///repo","--path","plugins/local-file"]
+    (Invocation (Selection "nested/kb" Nothing Nothing) Json (Plugin (InstallPlugin "file:///repo" (Just "plugins/local-file"))))
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
   succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
     "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]
@@ -52,7 +56,7 @@ main = do
   forM_ [["evolution","evaluate","abc123"],["root","delete"],["evolution","accept"],["evolution","accept","Monthly"],
     ["evolution","new",""],["evolution","new","example","--before","HEAD"],
     ["--repository",".","root","show"],["plugin","list"],
-    ["root","show","extra"]] refuses
+    ["plugin","install"], ["plugin","install","--from"], ["root","show","extra"]] refuses
   forM_ [[],["root"],["evolution"],["--help"],["evolution","accept","--help"]] $ \args ->
     case parseArguments args of
       Failure failure -> do
@@ -61,7 +65,7 @@ main = do
         assert "Wrong help exit status"
           (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
-  forM_ [([], ["kb", "root", "evolution", "guest"]), (["kb"], ["init"]), (["root"], ["show", "check"]),
+  forM_ [([], ["kb", "root", "evolution", "guest", "plugin"]), (["plugin"], ["install"]), (["kb"], ["init"]), (["root"], ["show", "check"]),
     (["guest"], ["module", "symbol"]), (["guest", "module"], ["list", "show"]),
     (["evolution"], ["new", "list", "accept"]),
     (["root", "unknown"], ["show", "check"])] $ \(args,commands) ->

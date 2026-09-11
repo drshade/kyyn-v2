@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+    'Kyyn.Domain.Plugin',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
     'Kyyn.Domain.KnowledgeBase',
     'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
@@ -11,6 +12,7 @@ const allowed = {
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+    'Kyyn.Domain.Plugin', 'Kyyn.Porcelain.Capability.PluginInstallation', 'Kyyn.Porcelain.Interpreter.PluginInstallation',
     'Kyyn.Domain.GuestApi', 'Kyyn.MicroHs.Interpreter.ApiInspection', 'Kyyn.Plumbing.Capability.ApiInspection',
     'Kyyn.Porcelain.Interpreter.WorkspaceApi', 'Kyyn.Porcelain.Capability.WorkspaceApi',
     'Kyyn.Porcelain.Capability.GuestApi', 'Kyyn.Porcelain.Interpreter.GuestApi', 'Kyyn.Surfaces.GuestApi',

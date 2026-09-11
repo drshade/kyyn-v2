@@ -3,7 +3,7 @@ module Kyyn.Surfaces.Result
   ( Response(..), Outcome(..), exitStatus, responseJson, diagnosticText
   , success, refusal, operationalFailure, interruption, previewRefusal, evolutionCheckResult
   , rootResult, workspaceResult, summariesResult, inspectionResult, candidateResult
-  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult, initializationResult
+  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult, initializationResult, pluginResult
   ) where
 
 import Data.Aeson (Value(..), object, (.=), encode)
@@ -15,7 +15,8 @@ import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Domain.Failure
-import Kyyn.Domain.Git (GitRevision, revisionName, LocalBranch(..), Repository(..), TreePath(..))
+import Kyyn.Domain.Git (GitRevision, revisionName, LocalBranch(..), Repository(..), TreePath(..), gitUrlText)
+import Kyyn.Domain.Plugin (InstalledPlugin(..), PluginOrigin(..), PluginRepository(..), pluginNameText)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (relativeName, scopePath, scopedPath)
 import Kyyn.Domain.Publication
@@ -43,6 +44,20 @@ responseJson (Response outcome result _ diagnostics) = object
 
 success :: Value -> [String] -> Response
 success result text = Response Succeeded result text []
+
+pluginResult :: InstalledPlugin -> Response
+pluginResult (InstalledPlugin name location (PluginOrigin repository path revision)) =
+  let (kind, source) = case repository of
+        LocalRepository scope -> ("Local" :: String, scopePath scope)
+        RemoteRepository url -> ("Git", gitUrlText url)
+      subdirectory = case path of WholeTree -> Nothing; Subtree selected -> Just (relativeName selected)
+  in success
+    (object ["name" .= pluginNameText name, "location" .= scopePath location,
+      "origin" .= object ["repository" .= object ["kind" .= kind, "location" .= source],
+        "path" .= subdirectory, "revision" .= revisionName revision]])
+    ["Installed plugin " ++ pluginNameText name, "Location: " ++ scopePath location,
+      "Source: " ++ source ++ maybe "" (\selected -> " (" ++ selected ++ ")") subdirectory,
+      "Revision: " ++ revisionName revision]
 
 initializationResult :: CheckResult InitializationResult -> Response
 initializationResult (Rejected report) = validationResult "Initialization" report False
