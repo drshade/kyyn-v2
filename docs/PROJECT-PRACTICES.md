@@ -25,6 +25,12 @@ no-checkout acquisition from a local Git remote. It uses real Dhall
 and Git handlers, without network access, a guest compiler or plugin invocation.
 It is included in the fast check.
 
+`cabal test plugin-installation --test-show-details=direct` checks the installation
+handler with write-forbidding refusal handlers and real Git/filesystem/Dhall
+integration: local and file-URL sources, nested KBs, persisted origins, independent
+copies, existing destinations (including empty directories and symlinks), and
+unchanged KB HEAD. It is included in the fast check and does not compile or invoke guests.
+
 Guest API discovery has two focused checks: `cabal test guest-catalogue
 --test-show-details=direct` exercises the read-only catalogue capability and real
 Dhall codec, and `KYYN_TEST_ROOT="$PWD"

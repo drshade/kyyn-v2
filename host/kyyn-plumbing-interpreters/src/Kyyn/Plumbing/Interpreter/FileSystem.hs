@@ -75,6 +75,7 @@ runFileSystemIO parent = interpret $ \env -> \case
       Right _ -> pure True
       Left err | isDoesNotExistError err -> pure False
                | otherwise -> ioError err
+  DirectoryExists scope -> native Failure.InspectEntry (scopePath scope) (doesDirectoryExist (scopePath scope))
   EnsureDirectory scope -> native Failure.EnsureDirectory (scopePath scope) (createDirectoryIfMissing True (scopePath scope))
 
 allocateDirectory :: FilePath -> IO RelativePath

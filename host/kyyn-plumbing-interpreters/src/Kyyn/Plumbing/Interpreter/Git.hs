@@ -20,7 +20,6 @@ import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.Git
 import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
-import System.FilePath (makeRelative)
 
 runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es)
   => FilePath -> [(String, String)] -> Eff (Git : es) a -> Eff es a
@@ -173,9 +172,14 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
             (ExceptT (broken "Unterminated Git repository path"))
           name <- either (ExceptT . broken . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.init output))
           repositoryScope <- either (ExceptT . broken) pure (directoryScope name)
-          let relative = makeRelative (scopePath repositoryScope) (scopePath scope)
-          prefix <- if relative == "." then pure WholeTree
-            else either (rejected "git.unsupported-path") (pure . Subtree) (relativePath relative)
+          prefixOutput <- successful (Repository scope) ["rev-parse", "--show-prefix"]
+          unless (not (Bytes.null prefixOutput) && Bytes.last prefixOutput == 10)
+            (ExceptT (broken "Unterminated Git repository prefix"))
+          relative <- either (ExceptT . broken . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.init prefixOutput))
+          prefix <- case reverse relative of
+            [] -> pure WholeTree
+            '/':rest -> either (rejected "git.unsupported-path") (pure . Subtree) (relativePath (reverse rest))
+            _ -> ExceptT (broken "Git directory prefix has no trailing separator")
           pure (Repository repositoryScope, prefix)
         _ -> do
           (_, Process.ProcessExit gitDirectoryStatus _) <- command (Repository scope) ["rev-parse", "--git-dir"]
