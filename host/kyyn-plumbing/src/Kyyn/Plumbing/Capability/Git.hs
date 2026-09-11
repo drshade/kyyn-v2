@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
+  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
   , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, synchronizeCheckout, indexPaths
   ) where
 
@@ -10,12 +10,14 @@ import Kyyn.Domain.Git (Repository, GitRevision, TreePath, GitTree, GitUser, Com
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
+import Kyyn.Domain.Plugin (GitUrl)
 import Data.ByteString (ByteString)
 
 data Git :: Effect where
   ReadUserIdentity :: Repository -> Git m (Either [Diagnostic] GitUser)
   DiscoverRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   InitializeRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
+  CloneRepository :: GitUrl -> DirectoryScope -> Git m (Either [Diagnostic] Repository)
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
@@ -38,6 +40,9 @@ discoverRepository = send . DiscoverRepository
 
 initializeRepository :: Git :> es => DirectoryScope -> Eff es (Either [Diagnostic] (Repository, TreePath))
 initializeRepository = send . InitializeRepository
+
+cloneRepository :: Git :> es => GitUrl -> DirectoryScope -> Eff es (Either [Diagnostic] Repository)
+cloneRepository url = send . CloneRepository url
 
 resolveRevision :: Git :> es => Repository -> String -> Eff es (Either [Diagnostic] GitRevision)
 resolveRevision repo = send . ResolveRevision repo

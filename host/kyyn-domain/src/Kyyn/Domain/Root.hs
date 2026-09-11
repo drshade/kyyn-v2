@@ -1,5 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), factsLocation, isFactPath) where
+module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), factsLocation, isFactPath
+  , pluginPackagesLocation, pluginSourceLocation, pluginOriginLocation, pluginManifestLocation, pluginPackageExclusions) where
 
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.FileTree (FileTree)
@@ -11,6 +12,15 @@ import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 -- Root-owned files outside this location are code, examples or auxiliary material.
 factsLocation :: RelativePath
 factsLocation = either error id (relativePath "facts")
+
+pluginPackagesLocation, pluginSourceLocation, pluginOriginLocation, pluginManifestLocation :: RelativePath
+pluginPackagesLocation = either error id (relativePath "plugins/packages")
+pluginSourceLocation = either error id (relativePath "source")
+pluginOriginLocation = either error id (relativePath "origin.dhall")
+pluginManifestLocation = either error id (relativePath "kyyn-plugin.dhall")
+
+pluginPackageExclusions :: [RelativePath]
+pluginPackageExclusions = map (either error id . relativePath) [".git", ".kyyn", "dist-newstyle", ".stack-work"]
 
 isFactPath :: RelativePath -> Bool
 isFactPath path = relativeName path == relativeName factsLocation

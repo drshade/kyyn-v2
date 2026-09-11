@@ -78,6 +78,7 @@ const allowed = {
   'kyyn-runtime': ['Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
     'Kyyn.Evolution.Internal', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Program', 'Kyyn.Runtime.Validation'],
   'kyyn-plumbing-interpreters': [
+    'Control.Monad.Trans.Except', 'Control.Monad.IO.Class', 'Kyyn.Domain.Diagnostic',
     'Data.Word', 'Numeric', 'System.IO.Error', 'System.Random',
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.Exception',
@@ -90,6 +91,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.KnowledgeBase'],
@@ -111,6 +113,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Plugin': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding',
+    'Effectful', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path',
+    'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Plumbing.Protocol.GuestApi': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
     'Data.ByteString', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.DataType',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.GuestApi', 'Kyyn.Plumbing.Capability.DhallHandling'],
@@ -137,6 +142,7 @@ const plumbingModules = {
     'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Capability.Git': ['Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Plugin',
     'Data.ByteString', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Git', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Plumbing.Capability.SchemaInspection': ['Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
@@ -155,7 +161,7 @@ const plumbingModules = {
     'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Capability.Failure': ['Effectful', 'Effectful.Error.Static', 'Kyyn.Domain.Failure'],
   'Kyyn.Plumbing.Capability.ProcessExecution': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic'],
-  'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
+  'Kyyn.Plumbing.Capability.FileSystem': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Plumbing.Capability.GuestCompilation': ['Effectful', 'Effectful.Dispatch.Dynamic',
     'Data.ByteString', 'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.CompiledProgram',
@@ -180,6 +186,7 @@ const interpreterModules = {
     'Kyyn.Plumbing.Capability.Git', 'Kyyn.Porcelain.Capability.RootPublication',
     'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.RootStore'],
   'Kyyn.Plumbing.Interpreter.Git': ['System.FilePath', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Char', 'Data.List', 'Data.ByteString', 'Data.ByteString.Char8',
+    'Kyyn.Domain.Plugin',
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.ProcessExecution'],

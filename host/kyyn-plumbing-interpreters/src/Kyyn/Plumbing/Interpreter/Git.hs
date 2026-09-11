@@ -15,6 +15,7 @@ import Effectful.Error.Static (catchError)
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git
 import Kyyn.Domain.Path
+import Kyyn.Domain.Plugin (gitUrlText)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -27,6 +28,12 @@ runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es)
 runGit executable configurationEnvironment = interpret $ \_ -> \case
   ReadUserIdentity repo -> runExceptT $ GitUser <$> configured repo "user.name" <*> configured repo "user.email"
   DiscoverRepository scope -> discover scope
+  CloneRepository url scope -> do
+    let repository = Repository scope
+    (_, Process.ProcessExit status message) <- commandInput repository [("GIT_TERMINAL_PROMPT","0")]
+      ["clone", "--depth=1", "--no-checkout", "--", gitUrlText url, scopePath scope] Bytes.empty
+    pure $ if status == 0 then Right repository
+      else Left [errorDiagnostic "git.clone-failed" (Char8.unpack message)]
   InitializeRepository scope -> do
     existing <- discover scope
     case existing of

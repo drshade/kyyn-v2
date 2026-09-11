@@ -1,12 +1,13 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, readTree, listDirectory, entryExists, createUniqueDirectory, createDirectory, ensureDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, readTree, readSourceTree, listDirectory, entryExists, createUniqueDirectory, createDirectory, ensureDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
 import Kyyn.Domain.FileTree (FileTree)
+import Kyyn.Domain.Diagnostic (Diagnostic)
 
 data FileSystem :: Effect where
   WithTemporaryScope :: (DirectoryScope -> m a) -> FileSystem m a
@@ -15,6 +16,7 @@ data FileSystem :: Effect where
   WriteBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
   ReplaceBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
   ReadTree :: DirectoryScope -> FileSystem m FileTree
+  ReadSourceTree :: DirectoryScope -> [RelativePath] -> FileSystem m (Either [Diagnostic] FileTree)
   ListDirectory :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
   EntryExists :: DirectoryScope -> RelativePath -> FileSystem m Bool
   CreateUniqueDirectory :: DirectoryScope -> FileSystem m RelativePath
@@ -40,6 +42,9 @@ replaceBytes scope path = send . ReplaceBytes scope path
 
 readTree :: FileSystem :> es => DirectoryScope -> Eff es FileTree
 readTree = send . ReadTree
+
+readSourceTree :: FileSystem :> es => DirectoryScope -> [RelativePath] -> Eff es (Either [Diagnostic] FileTree)
+readSourceTree scope = send . ReadSourceTree scope
 
 listDirectory :: FileSystem :> es => DirectoryScope -> Eff es (Maybe [RelativePath])
 listDirectory = send . ListDirectory

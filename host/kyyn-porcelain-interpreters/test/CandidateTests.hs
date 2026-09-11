@@ -355,6 +355,7 @@ failPublication failure = interpret $ \_ -> \case
   ReadOptionalBytes scope path -> send (ReadOptionalBytes scope path)
   WriteBytes scope path bytes -> send (WriteBytes scope path bytes)
   ReadTree scope -> send (ReadTree scope)
+  ReadSourceTree {} -> error "Candidate persistence must not acquire external source packages"
   ListDirectory scope -> send (ListDirectory scope)
   CreateUniqueDirectory scope -> send (CreateUniqueDirectory scope)
   CreateDirectory {} -> error "Candidate persistence must not reserve named directories"
