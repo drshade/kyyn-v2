@@ -78,8 +78,9 @@ codecTests = do
 integration :: IO ()
 integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
+  compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
   scope <- either fail pure (directoryScope temporary)
-  toolchain <- GuestToolchain <$> either fail pure (directoryScope (repo </> "vendor/MicroHs"))
+  toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)
   let path = either error id . relativePath
       utf8 = Text.encodeUtf8 . Text.pack
   files <- mapM (\(base, file) -> (,) (path file) <$> Bytes.readFile (repo </> base </> file))

@@ -27,9 +27,9 @@ import CompilationTests (testCompilation)
 main :: IO ()
 main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
+  compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
   temporaryScope <- either fail pure (directoryScope temporary)
-  let compiler = repo </> "vendor/MicroHs"
-      fixtures = repo </> "tests/integration/codecs"
+  let fixtures = repo </> "tests/integration/codecs"
       guest = repo </> "guest/kyyn-runtime/src"
       json = repo </> "vendor/json"
   toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)

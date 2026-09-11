@@ -82,8 +82,9 @@ rootMetadata = SchemaMetadata [] []
 integration :: IO ()
 integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
+  compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
   scope <- either fail pure (directoryScope temporary)
-  toolchain <- GuestToolchain <$> either fail pure (directoryScope (repo </> "vendor/MicroHs"))
+  toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)
   let path = either error id . relativePath
       tree = either error id . fileTree
       utf8 = Text.encodeUtf8 . Text.pack

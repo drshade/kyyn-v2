@@ -40,8 +40,9 @@ import System.IO.Temp (withSystemTempDirectory)
 main :: IO ()
 main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
+  compiler <- getEnv "KYYN_TEST_TOOLCHAIN"
   scope <- right (directoryScope temporary)
-  toolchain <- GuestToolchain <$> right (directoryScope (repo </> "vendor/MicroHs"))
+  toolchain <- GuestToolchain <$> right (directoryScope compiler)
   let path = either error id . relativePath
       load base name = (,) (path name) <$> Bytes.readFile (repo </> base </> name)
       utf8 = Text.encodeUtf8 . Text.pack
