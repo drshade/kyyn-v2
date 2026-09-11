@@ -19,6 +19,7 @@ own provenance and retained notices.
 | prettyprinter | 1.7.2 | BSD-2-Clause | [source](https://hackage.haskell.org/package/prettyprinter-1.7.2/prettyprinter-1.7.2.tar.gz) |
 | optparse-applicative | 0.19.0.0 | BSD3 | [source](https://hackage.haskell.org/package/optparse-applicative-0.19.0.0/optparse-applicative-0.19.0.0.tar.gz) |
 | transformers | 0.6.1.1 | BSD-3-Clause | [source](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) |
+| filelock | 0.1.1.8 | PublicDomain (Cabal declaration); LICENSE is CC0-1.0 | [source](https://hackage.haskell.org/package/filelock-0.1.1.8/filelock-0.1.1.8.tar.gz) |
 
 Each archive contains `LICENSE` (`LICENSE.md` for prettyprinter); its Cabal declaration and that file were inspected.
 These are native Cabal dependencies. Transformers also supplies the vendored

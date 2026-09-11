@@ -134,7 +134,7 @@ not the agent-facing change index. Investigation exposes only change identities
 and citations through the application boundary:
 
 ```haskell
-data ChangeKind = Added | Updated | Removed
+data ChangeKind = New | Updated | Removed
 data EvidenceChangeSummary = EvidenceChangeSummary
   { fetch :: FetchId
   , previous :: Maybe FetchId

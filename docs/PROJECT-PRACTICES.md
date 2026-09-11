@@ -48,6 +48,15 @@ no-checkout acquisition from a local Git remote. It uses real Dhall
 and Git handlers, without network access, a guest compiler or plugin invocation.
 It is included in the fast check.
 
+`cabal test evidence-store --test-show-details=direct` checks ordered delta application,
+real Dhall persistence, instance isolation, historical payloads and payload-free change
+summaries, concurrent expected-base publication, history deletion with current-value
+retention, whole-store clear and producer-change refusal. It requires no guest compiler,
+plugin invocation or external provider. The initial store uses one atomic Dhall document
+per instance under the selected checkout's ignored `.kyyn/evidence/` directory, with
+native file locking around storage operations. It rewrites the retained instance history;
+this slice does not claim paging or large-history performance.
+
 `cabal test plugin-installation --test-show-details=direct` checks the installation
 handler with write-forbidding refusal handlers and real Git/filesystem/Dhall
 integration: local and file-URL sources, nested KBs, persisted origins, independent
