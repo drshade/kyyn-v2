@@ -33,6 +33,15 @@ selects the repository's fetched default HEAD, captured once for installation;
 local Git repositories can also be acquired as Git using a `file://` URL. A missing
 local path is a local-source error, not an instruction to try a network fetch.
 
+Source classification is a pure domain rule: a value containing `://` denotes a
+Git URL; otherwise it denotes a local path. Refuse scp-style Git addresses rather
+than mistaking them for local paths. This slice supports `file://` and unauthenticated
+`https://` Git URLs; other schemes receive an unsupported-source diagnostic. The
+current Git subprocess environment does not provide `ssh` on PATH, so a refusal
+must recommend HTTPS or a local checkout, not suggest an unsupported SSH retry.
+Reuse `TreePath`: omitted `--path` is `WholeTree`, and a supplied relative directory
+is `Subtree RelativePath`. No second package-relative path type is needed.
+
 The package manifest is a hermetic Dhall value with this initial shape:
 
 ```dhall
@@ -59,6 +68,19 @@ before traversing them. Package authors keep other generated build products outs
 the distributed package. Symlinks and special files in the captured package are
 unsupported and receive a diagnostic rather than becoming links into the source
 checkout. Git acquisition does not recursively initialize submodules.
+A selected tree containing a submodule entry is refused.
+
+Origin is encoded as this Dhall shape, with `None Text` for the whole source root:
+
+```dhall
+{ source : < Local : Text | Git : Text >, path : Optional Text }
+```
+
+No fetched revision field is required: the installed source itself is the concrete
+copy, and KB Git history records its adoption. Layout constants for
+`plugins/packages`, `source`, `origin.dhall`, `kyyn-plugin.dhall` and the exclusion
+list belong in `Kyyn.Domain.Root` alongside `factsLocation`, shared by installation
+and later root consumers.
 
 Prepare and validate the complete captured package before installing it. Refuse an
 existing destination (including an empty directory or symlink); do not merge into
@@ -77,8 +99,8 @@ plumbing. Illustrative contracts for this slice are:
 
 ```haskell
 data PluginSource
-  = LocalPackage DirectoryScope RelativePackagePath
-  | GitPackage GitUrl RelativePackagePath
+  = LocalPackage DirectoryScope TreePath
+  | GitPackage GitUrl TreePath
 
 data PluginManifest = PluginManifest
   { name :: PluginName, entryModule :: ModuleName }
@@ -96,6 +118,37 @@ CLI composition resolves the KB and source selection. The installation interpret
 uses filesystem, Git acquisition and Dhall capabilities; it has no `IOE`, compiler,
 root-publication, plugin-invocation or secret-store requirement. The successful
 CLI result exposes the installed name, location and origin in human/JSON forms.
+
+Both acquisition routes produce the same `FileTree`. Git acquisition adds one Git
+operation for a shallow, no-checkout clone into a temporary scope, resolves its
+HEAD once, then uses the existing exclusion-carrying `ReadTreeAt` at the selected
+`TreePath`; existing Git entry checks refuse symlinks and submodules. Local acquisition
+uses a filesystem tree-read operation with exclusions applied before descending.
+Share its traversal with the existing `ReadTree`, but distinguish malformed authored
+package entries (diagnostics naming the entry) from unsupported entries in
+Kyyn-owned trees (the existing operational failure). Genuine filesystem access errors
+remain operational failures in both modes.
+After acquisition, hermetic manifest decoding and pure package preparation are
+shared: validate the name and module, require its source, and construct the same
+destination payload and origin encoding. Neither route gets a second installer.
+
+Use stable refusal codes at these boundaries:
+
+| Code | Meaning |
+| --- | --- |
+| `plugin.source-invalid` | Unsupported URL scheme or ambiguous scp-style source |
+| `plugin.source-unavailable` | Selected local package directory is absent |
+| `plugin.path-invalid` | Package subdirectory is not a valid relative path |
+| `plugin.manifest-missing` | Selected package root has no manifest |
+| `plugin.manifest-invalid` | Manifest is malformed or its name/module is invalid |
+| `plugin.entry-missing` | Declared entry module has no source under `src/` |
+| `plugin.unsupported-entry` | Local package contains a symlink or special file |
+| `plugin.already-installed` | Destination already exists |
+
+Git acquisition/entry diagnostics retain their Git codes (including
+`git.clone-failed` and the existing `git.unsupported-entry`) rather than being
+misreported as manifest errors. CLI option syntax errors retain the normal usage
+exit; semantic refusals use these codes, and operational failures remain distinct.
 
 Before this slice is complete, test local directories outside Git, packages nested
 inside local and remote repositories, uncommitted local edits, copy independence,
