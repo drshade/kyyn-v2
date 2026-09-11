@@ -109,7 +109,7 @@ collectionBindings endpoint contract = do
         ["import qualified " ++ name | name <- nub [definingModule name | Algebraic name _ _ <- reachableTypes root]] ++
         concat [["-- | Collection " ++ show name ++ " in " ++ haskellType root ++ ".",
                  "-- Root field: " ++ field ++ "; fact type: " ++ haskellType payload ++ ".",
-                 field ++ " :: Collection " ++ haskellType root ++ " (" ++ haskellType payload ++ ")",
+                 field ++ " :: Collection " ++ haskellType root ++ " " ++ haskellType payload,
                  field ++ " = Internal.Collection " ++ show name ++ " (Optics.lens " ++ rootModule ++ "." ++ field ++
                    " (\\root value -> root { " ++ rootModule ++ "." ++ field ++ " = value }))"] |
           CollectionContract name field payload _ <- declarations]

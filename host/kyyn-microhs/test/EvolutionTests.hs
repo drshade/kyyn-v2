@@ -56,7 +56,7 @@ main = do
     let endpointSource = lookup ("Kyyn/Workspace/" ++ endpoint ++ ".hs") generated
     forM_ ["todos = Internal.Collection \"work items\"",
            "import Kyyn.Edit (Collection)",
-           "-- | Collection \"work items\" in SchemaV1.Root.\n-- Root field: todos; fact type: SchemaV1.Todo.\ntodos :: Collection SchemaV1.Root (SchemaV1.Todo)"] $ \expected ->
+           "-- | Collection \"work items\" in SchemaV1.Root.\n-- Root field: todos; fact type: SchemaV1.Todo.\ntodos :: Collection SchemaV1.Root SchemaV1.Todo"] $ \expected ->
       unless (maybe False (Bytes.isInfixOf expected) endpointSource)
         (fail "Collection binding lost its public signature, documentation or logical name")
   forM_ ["-- | Transform the Before root, SchemaV1.Root, into the After root, SchemaV2.Root.",
