@@ -250,6 +250,8 @@ read-only refusals and explicit recovery after an index-lock synchronization
 failure. Run it independently with the installed executable path, or pass a
 runtime directory as its second argument when using a development executable.
 
+On hosts where a sandbox creates transient ancestor `/tmp/.git` metadata, initialization-test refusals are environmental; run the installed journey with `TMPDIR` elsewhere, for example `TMPDIR=/var/tmp bash tools/test-installed.sh`.
+
 The documentation check validates project-owned documentation, not third-party/vendor/cache trees.
 Historical evidence in neighbouring repositories is cited as source paths rather
 than required local links; a clean checkout is sufficient for this gate. External
