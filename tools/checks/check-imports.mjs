@@ -138,6 +138,8 @@ const plumbingModules = {
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
     'Kyyn.Plumbing.Capability.SchemaInspection.Metadata'],
+  'Kyyn.Plumbing.Capability.ApiInspection': ['Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.GuestApi'],
   'Kyyn.Plumbing.Capability.DhallHandling': ['Data.Aeson', 'Data.Text',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.DataType'],
@@ -184,6 +186,10 @@ const interpreterModules = {
 };
 
 const compilerModules = {
+  'Kyyn.MicroHs.Interpreter.ApiInspection': ['Control.Monad', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
+    'Kyyn.MicroHs.ApiInspection', 'Kyyn.MicroHs.Toolchain', 'Kyyn.Plumbing.Capability.ApiInspection',
+    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.FileSystem'],
   'Kyyn.MicroHs.ApiInspection': ['Control.DeepSeq', 'Control.Exception', 'Control.Monad',
     'System.Environment', 'System.FilePath', 'System.Process',
     'Data.Char', 'Data.List', 'Kyyn.Domain.GuestApi', 'MicroHs.Compile', 'MicroHs.CompileCache',
