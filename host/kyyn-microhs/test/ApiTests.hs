@@ -28,6 +28,20 @@ main = do
       public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
       inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
   modules <- inspect sources public
+  qualified <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.QualifiedFixture"]
+  let qualifiedDeclarations = [(n,d) | ApiModule _ symbols <- qualified, ApiSymbol n _ _ _ (Just d) _ <- symbols]
+  forM_ [("before", "before :: Edit Before.Root ()"), ("after", "after :: Edit After.Root ()"),
+    ("convert", "convert :: Before.Root -> After.Root"), ("Both", "type Both = (Before.Root, [After.Root])")] $ \(name,expected) ->
+      assert ("Authored qualification lost: " ++ name ++ " " ++ show qualifiedDeclarations) (lookup name qualifiedDeclarations == Just expected)
+  withSystemTempDirectory "kyyn-api-qualified-" $ \temporary -> do
+    createDirectoryIfMissing True (temporary </> "Kyyn")
+    writeFile (temporary </> "Kyyn/QualifiedWitness.hs") (unlines
+      (["module Kyyn.QualifiedWitness where", "import Kyyn.Edit (Edit)",
+        "import qualified Kyyn.EndpointBefore as Before", "import qualified Kyyn.EndpointAfter as After"]
+        ++ map snd qualifiedDeclarations ++ ["before = pure ()", "after = pure ()", "convert Before.Root = After.Root"]))
+    presented <- inspect (temporary : (repo </> "host/kyyn-microhs/test/api-docs") : sources) ["Kyyn.QualifiedWitness"]
+    let checkedSignatures ms = [(n,ns,alphaSignature t) | ApiModule _ symbols <- ms, ApiSymbol n ns _ t _ _ <- symbols]
+    assert "qualified declarations recompile without changing types" (checkedSignatures qualified == checkedSignatures presented)
   let symbolsIn m = concat [symbols | ApiModule name symbols <- modules, name == m]
       matches m n ns = [s | s@(ApiSymbol name space _ _ _ _) <- symbolsIn m, name == n, space == ns]
   assert "SDK module inventory" (map (\(ApiModule name _) -> name) modules == public)

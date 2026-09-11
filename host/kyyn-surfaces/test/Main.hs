@@ -29,10 +29,16 @@ main = do
     (Invocation (Selection "knowledge/sales"
       (Just "/bin/git") (Just "/opt/kyyn/lib/kyyn")) Json (Evolution (ListEvolutions ExcludeDrafts)))
   succeeds ["evolution","list"] (Invocation selected Human (Evolution (ListEvolutions AllEvolutions)))
-  succeeds ["guest","module","list"] (Invocation selected Human (Guest ListGuestModules))
-  succeeds ["guest","module","show","Kyyn.Edit"] (Invocation selected Human (Guest (ShowGuestModule "Kyyn.Edit")))
+  succeeds ["guest","module","list"] (Invocation selected Human (Guest Nothing ListGuestModules))
+  succeeds ["guest","module","show","Kyyn.Edit"] (Invocation selected Human (Guest Nothing (ShowGuestModule "Kyyn.Edit")))
   succeeds ["guest","symbol","show","Kyyn.Evolution.>=>"]
-    (Invocation selected Human (Guest (ShowGuestSymbol "Kyyn.Evolution.>=>")))
+    (Invocation selected Human (Guest Nothing (ShowGuestSymbol "Kyyn.Evolution.>=>")))
+  forM_ [(["module","list"],ListGuestModules),
+    (["module","show","Kyyn.Workspace.Evolution"],ShowGuestModule "Kyyn.Workspace.Evolution"),
+    (["symbol","show","Kyyn.Workspace.After.todos"],ShowGuestSymbol "Kyyn.Workspace.After.todos")] $ \(args,request) -> do
+      succeeds (["--kb","nested/kb","--runtime","/runtime","--json","guest"] ++ args ++ ["--evolution","abc123"])
+        (Invocation (Selection "nested/kb" Nothing (Just "/runtime")) Json (Guest (Just identity) request))
+      refuses (["guest"] ++ args ++ ["--evolution","../invalid"])
   succeeds ["evolution","new","September"]
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing)))
   succeeds ["evolution","new","September","--before",replicate 40 'a']

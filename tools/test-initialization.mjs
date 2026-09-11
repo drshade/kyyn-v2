@@ -46,6 +46,21 @@ try {
 
   const created = cli(kb, ['evolution', 'new', 'first collection']).result;
   assert.equal(created.id, '000001-first-collection');
+  const discover = (...args) => cli(kb, ['guest', ...args, '--evolution', created.id]).result;
+  const draftEntry = path.join(created.path, 'change', 'Evolution.hs');
+  fs.writeFileSync(draftEntry, 'module Evolution where\nevolution = missing\n');
+  const emptyApi = discover('module', 'show', 'Kyyn.Workspace.After');
+  assert.deepEqual(emptyApi.symbols, []);
+  assert.equal(emptyApi.context.beforeRevision, initialized.revision);
+  assert.equal(emptyApi.context.evolution, created.id);
+  assert.equal(emptyApi.context.kb, kb);
+  const catalogue = discover('module', 'list');
+  assert.deepEqual(catalogue.modules.slice(-3),
+    ['Kyyn.Workspace.Evolution', 'Kyyn.Workspace.Before', 'Kyyn.Workspace.After']);
+  git(kb, 'switch', '-c', 'discovery-other-head');
+  git(kb, 'commit', '--allow-empty', '-m', 'Unrelated head advance');
+  assert.equal(discover('module', 'list').context.beforeRevision, initialized.revision);
+  git(kb, 'switch', 'kb-test');
   const target = path.join(created.path, 'target');
   fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
   write(path.join(target, 'src', 'RootV2.hs'), `module RootV2 where
@@ -59,15 +74,40 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     const filename = path.join(target, file);
     fs.writeFileSync(filename, fs.readFileSync(filename, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
+  const schemaPath = path.join(target, 'src', 'RootV2.hs');
+  const validSchema = fs.readFileSync(schemaPath, 'utf8');
+  fs.writeFileSync(schemaPath, 'module RootV2 where\nthis is invalid\n');
+  const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id], 1);
+  assert.equal(badSchema.outcome, 'Refused');
+  fs.writeFileSync(schemaPath, validSchema);
+  const bindings = discover('module', 'show', 'Kyyn.Workspace.Evolution').symbols;
+  for (const name of ['edit', 'evolve', 'editBefore']) {
+    const symbol = bindings.find(s => s.name === name);
+    assert(symbol, name);
+    assert(symbol.documentation.includes('recorded step'), JSON.stringify(symbol));
+    assert(symbol.declaration.includes('RootV'), JSON.stringify(symbol));
+  }
+  assert(!bindings.some(s => ['beforeRoot', 'afterRoot', 'evaluateEvolution'].includes(s.name)));
+  const handle = discover('symbol', 'show', 'Kyyn.Workspace.After.todos').symbols[0];
+  assert.match(handle.declaration, /Collection RootV2.Root RootV2.Todo/);
+  assert(handle.documentation.includes('todos'));
+  for (const symbol of [...bindings, handle]) {
+    assert(!symbol.declaration?.includes('.Internal.'), JSON.stringify(symbol));
+  }
+  fs.unlinkSync(draftEntry);
+  discover('symbol', 'show', 'Kyyn.Workspace.Evolution.edit');
   write(path.join(created.path, 'change', 'Evolution.hs'), `module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified RootV1 as Before
 import qualified RootV2 as After
+import qualified Kyyn.Workspace.After as Collections
 evolution :: Evolution Before.Root After.Root
 evolution =
   evolve (Rationale "Start tracking work." [])
-    (\\Before.Root -> Right (After.Root [Fact (FactId "todo-001") (After.Todo "First task")]))
+    (\\Before.Root -> Right (After.Root []))
+  >=> edit (Rationale "Record the first task." [])
+    (within Collections.todos (append (Fact (FactId "todo-001") (After.Todo "First task"))))
 `);
   cli(kb, ['evolution', 'check', created.id]);
   const manifestPath = path.join(created.path, 'manifest.dhall');

@@ -128,8 +128,10 @@ project declarations (selected,checked,fixities) = do
               printedName = case spelling of
                 c:_ | isAlpha c || c == '_' -> spelling
                 _ -> "(" ++ spelling ++ ")"
-          pure (Just (printedName ++ " :: " ++ showEType resolved))
-        [Type lhs t] -> Just . showEDefs . (:[]) . Type lhs <$> resolveType defining fixities t
+          pure (Just (printedName ++ " :: " ++ presentType resolved))
+        [Type (n,args) t] -> do
+          resolved <- resolveType defining fixities t
+          pure (Just ("type " ++ unIdent n ++ concatMap ((" " ++) . presentVariable) args ++ " = " ++ presentType resolved))
         [Data lhs cs _] -> Just <$> presentData defining lhs cs False
         [Newtype lhs c _] -> Just <$> presentData defining lhs [c] True
         _ -> Left ("Ambiguous declaration for " ++ unIdent origin)
@@ -154,18 +156,12 @@ project declarations (selected,checked,fixities) = do
       if any refinesRoot constructors then do
         signatures <- mapM (\c@(Constr _ _ n _ _) -> do
           t <- resolveType defining fixities (constructorType lhs c)
-          pure ("  " ++ unIdent n ++ " :: " ++ showEType t)) constructors
+          pure ("  " ++ unIdent n ++ " :: " ++ presentType t)) constructors
         pure (header ++ " where\n" ++ intercalate "\n" signatures)
       else pure (header ++ if null constructors then "" else " = " ++ intercalate " | " (map presentConstructor constructors))
     resolveConstructor defining publicFields (Constr vs ctx n inf fields) = do
       let resolve = resolveType defining fixities
-          argument (strict,t) = do
-            resolved <- resolve t
-            pure (strict, case resolved of
-              EVar _ -> resolved
-              ETuple _ -> resolved
-              EListish _ -> resolved
-              _ -> EParen resolved)
+          argument (strict,t) = (,) strict <$> resolve t
       vs' <- mapM (\(IdKind v k) -> IdKind v <$> resolve k) vs
       ctx' <- mapM resolve ctx
       fields' <- case fields of
@@ -175,6 +171,42 @@ project declarations (selected,checked,fixities) = do
             if strict then argument t else (,) False <$> resolve fieldType) fs
         Right fs -> Left <$> mapM (argument . snd) fs
       pure (Constr vs' ctx' n inf fields')
+
+-- MicroHs's normal printer removes qualifications; source declarations must
+-- distinguish, for example, Before.Root from After.Root. This presents only
+-- the type forms admitted by resolveType.
+presentType :: EType -> String
+presentType = presentTypeAt 0
+
+presentTypeAt :: Int -> EType -> String
+presentTypeAt = at
+  where
+    parens required text = if required then "(" ++ text ++ ")" else text
+    at :: Int -> EType -> String
+    at precedence expression = case expression of
+      EVar n -> let spelling = unIdent n in
+        parens (case unIdent (unQualIdent n) of c:_ -> isOperChar c; _ -> False) spelling
+      EApp (EApp (EVar n) a) b | unIdent n == "=>" ->
+        parens (precedence > 0) (at 1 a ++ " => " ++ at 0 b)
+      EApp (EApp (EVar n) a) b | unIdent n == "->" ->
+        parens (precedence > 1) (at 2 a ++ " -> " ++ at 1 b)
+      EApp (EApp (EVar n) a) b | case unIdent (unQualIdent n) of c:_ -> isOperChar c; _ -> False ->
+        parens (precedence > 2) (at 3 a ++ " " ++ unIdent n ++ " " ++ at 3 b)
+      EApp (EVar n) a | unIdent n == "[]" -> "[" ++ at 0 a ++ "]"
+      EApp a b -> parens (precedence > 3) (at 3 a ++ " " ++ at 4 b)
+      EParen a -> "(" ++ at 0 a ++ ")"
+      ETuple ts -> "(" ++ intercalate ", " (map (at 0) ts) ++ ")"
+      EListish (LList ts) -> "[" ++ intercalate ", " (map (at 0) ts) ++ "]"
+      ESign a k -> parens (precedence > 0) (at 1 a ++ " :: " ++ at 0 k)
+      EForall _ [] a -> at precedence a
+      EForall q vs a -> parens (precedence > 0)
+        ("forall " ++ unwords (map presentVariable vs) ++
+          (case q of QReqd -> " -> "; _ -> " . ") ++ at 0 a)
+      _ -> error "presentType requires a resolved source type"
+
+presentVariable :: IdKind -> String
+presentVariable (IdKind n (EVar k)) | isDummyIdent k = unIdent n
+presentVariable (IdKind n k) = "(" ++ unIdent n ++ " :: " ++ presentType k ++ ")"
 
 arrow :: EType -> EType -> EType
 arrow = eAppI2 (mkIdent "->")
@@ -234,13 +266,13 @@ presentConstructor (Constr vs ctx n _ fields) = quantifier ++ context ++ name ++
       s -> "(" ++ s ++ ")"
     quantifier = if null vs then "" else "forall " ++ unwords (map variable vs) ++ ". "
     variable (IdKind v (EVar k)) | isDummyIdent k = unIdent v
-    variable (IdKind v k) = "(" ++ unIdent v ++ " :: " ++ showEType k ++ ")"
-    context = if null ctx then "" else showEType (ETuple ctx) ++ " => "
-    fieldType (strict,t) = (if strict then "!" else "") ++ showEType t
+    variable (IdKind v k) = "(" ++ unIdent v ++ " :: " ++ presentType k ++ ")"
+    context = if null ctx then "" else presentType (ETuple ctx) ++ " => "
+    fieldType precedence (strict,t) = (if strict then "!" else "") ++ presentTypeAt (if strict then 4 else precedence) t
     arguments = case fields of
       Left [] -> ""
-      Left ts -> " " ++ unwords (map fieldType ts)
-      Right fs -> " { " ++ intercalate ", " [unIdent label ++ " :: " ++ fieldType t | (label,t) <- fs] ++ " }"
+      Left ts -> " " ++ unwords (map (fieldType 4) ts)
+      Right fs -> " { " ++ intercalate ", " [unIdent label ++ " :: " ++ fieldType 0 t | (label,t) <- fs] ++ " }"
 
 documentationBefore :: SLoc -> [String] -> Maybe String
 documentationBefore (SLoc _ line _) source = collect [] (reverse (take (line - 1) source))
