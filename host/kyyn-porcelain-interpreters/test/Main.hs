@@ -36,10 +36,12 @@ import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import PublicationTests (publicationTests)
 import InitializationTests (initializationTests)
+import WorkspaceApiTests (workspaceApiTests)
 
 main :: IO ()
 main = do
   initializationTests
+  workspaceApiTests
   emptyContract <- right (checkContract
     (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
   emptyCode <- tree []
@@ -138,12 +140,12 @@ openingTests contract factFiles = do
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
   sourceFromGit <- right (execute sdk (loadSourceAt repo revision (Subtree prefix)))
   unless (sourceFromGit == source) (fail "Source loading differs from captured source opening")
-  (input,closure) <- right (execute sdk (loadRootInputAt repo revision (Subtree prefix)))
-  unless (input == opened && null closure) (fail "Input capture changed root bytes or source closure")
+  input <- right (execute sdk (loadRootFactsAt repo revision (Subtree prefix) sourceFromGit))
+  unless (input == opened) (fail "Input capture changed prepared source or root bytes")
   let undecoded = runPureEff . runDhallHandling . schemaMock (rootSchema contract)
         . gitMock withCorruptFacts . runRootStore . runRootOpening sdk $
-          loadRootInputAt repo revision (Subtree prefix)
-  (corruptInput,_) <- right undecoded
+          loadRootFactsAt repo revision (Subtree prefix) sourceFromGit
+  corruptInput <- right undecoded
   unless (corruptInput == Root contract corrupt authored) (fail "Input capture decoded or changed malformed facts")
   otherRevision <- right (gitRevision (replicate 40 'b'))
   rejected (execute sdk (loadSourceAt repo otherRevision (Subtree prefix)))
@@ -181,6 +183,9 @@ gitMock captured = interpret $ \_ -> \case
   Git.ResolveRevision _ _ -> error "RootOpening must not resolve the revision again"
   Git.ReadTreeAt _ revision (Subtree prefix) []
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root" -> pure (Right captured)
+    | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root/facts" ->
+        pure (Right (either error id (fileTree [(either error id (relativePath (drop 6 (relativeName p))),b)
+          | (p,b) <- files captured, "facts/" `isPrefixOf` relativeName p])))
   Git.ReadTreeAt _ revision (Subtree prefix) excluded
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root"
       && map relativeName excluded == ["facts"] ->
@@ -191,7 +196,9 @@ gitMock captured = interpret $ \_ -> \case
   Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
   Git.ReadFileAt {} -> error "RootOpening must read the selected complete tree"
   Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
-  Git.ReadDirectoryAt {} -> error "RootOpening must read the selected complete tree"
+  Git.ReadDirectoryAt _ revision (Subtree prefix)
+    | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root/facts" -> pure (Right (Just []))
+  Git.ReadDirectoryAt {} -> error "RootOpening listed an unexpected directory"
   Git.CheckedOutBranch {} -> error "RootOpening must not inspect the checkout"
   Git.CheckoutChanges {} -> error "RootOpening must not inspect the checkout"
   Git.SynchronizeCheckout {} -> error "RootOpening must not synchronize the checkout"

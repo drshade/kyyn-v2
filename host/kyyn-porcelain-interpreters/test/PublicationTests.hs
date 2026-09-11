@@ -313,7 +313,7 @@ schemaMock contract = interpret $ \_ (Schema.InspectSchema _) -> pure (Right (Sc
 
 evaluationMock :: (RootOpening :> es, RootStore :> es) => Value -> Eff (EvolutionExecution : es) a -> Eff es a
 evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
-    (EvolutionContext _ _ (Before _ contract) _) source _)) -> do
+    (EvolutionContext _ _ (Before _ contract) _) source _ _)) -> do
   CheckedValue _ input <- loadRootValueForChecking source >>= either (error . show) pure
   let fingerprint = contractFingerprint (contractId (rootSchema contract))
       observation = EvolutionObservation output [StepObservation (Rationale "Clear completed work" [])

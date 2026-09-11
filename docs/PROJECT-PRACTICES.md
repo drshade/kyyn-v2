@@ -69,15 +69,21 @@ installed integration check.
   malformed manifests/layout, input additions/edits/deletions, and exclusion of
   lifecycle state and notes. They neither compile drafts nor verify archives.
   Evolution capture tests combine real filesystem/Dhall with recording RootOpening:
-  repository-root/nested KB paths, exact Before copies, revision changes, unfinished
-  targets, live matching without source loading, and diagnostics versus operational
+  repository-root/nested KB paths, exact Before copies, revision changes,
+  target preparation, live matching without source loading, and diagnostics versus operational
   failures. No new MicroHs or Git execution is involved in those capture tests.
   Evolution execution tests use real Dhall/filesystem/process handling and recording
   schema/compiler handlers. They check captured Before input reuse without RootOpening,
   contract/source mismatch, closure deduplication/collisions, generated endpoint steps,
   generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
-  Recording counts forbid repeated Before opening and require only target
-  inspections during execution. No real guest compilation is involved in these native tests.
+  Recording counts forbid repeated Before opening and any schema inspection during
+  execution. Workspace discovery tests use real RootOpening/RootStore/Dhall with
+  recorded Git/schema/API handlers: each tree read excludes facts, each endpoint is
+  inspected once, Before mismatch stops before target inspection, bad targets stop
+  before API inspection, and repair does not reuse stale results. Missing/invalid
+  evolution bodies are excluded; candidate, lifecycle, validator and execution
+  operations are unavailable or rejected. No real guest compilation is involved
+  in these native tests.
   Candidate tests in the roots suite check Dhall contract-description round trips
   (all type constructors and metadata), refusal of forward/cyclic/out-of-range
   type references,

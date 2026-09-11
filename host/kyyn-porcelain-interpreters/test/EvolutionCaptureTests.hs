@@ -95,7 +95,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     unless (createdKb == kb && evolutionIdName createdId == "000001-sales-september")
       (fail "Creation returned an invalid KB or directory ID")
     CapturedEvolution (EvolutionContext _ _ (Before createdBase _) (WorkspaceSnapshot
-      (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) _ _ <-
+      (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) _ _ _ <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
     identityEntry <- tree [("Evolution.hs",identityEvolutionSource "Schema.Root")]
@@ -119,7 +119,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "change/Evolution.hs" "unfinished entry"
     write "notes/review.md" "original note"
     captured@(CapturedEvolution context@(EvolutionContext actualKb actualId (Before base actualContract)
-      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _) before target _ _)) input closure) <-
+      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _) before target _ _)) input closure _) <-
       success (captureEvolution location) >>= right >>= right
     unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision && actualContract == contract && before == sourceTree)
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
@@ -141,7 +141,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     noOpening (matchesCapturedInputs context) >>= right >>= right >>= assertFalse
     rebased <- execute revisionB (Right (Right source)) (captureEvolution location) >>= right >>= right
     case rebased of
-      CapturedEvolution (EvolutionContext _ _ (Before selected _) _) _ _ ->
+      CapturedEvolution (EvolutionContext _ _ (Before selected _) _) _ _ _ ->
         unless (selected == revisionB) (fail "Capture reused the old Before revision")
     write "manifest.dhall" (manifest 'a' "Draft")
     write "before/Schema.hs" "edited copy, same schema type"
@@ -168,7 +168,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "manifest.dhall" (manifest 'a' "Draft")
     recaptured <- success (captureEvolution location) >>= right >>= right
     case (captured, recaptured) of
-      (CapturedEvolution (EvolutionContext _ _ _ original) _ _, CapturedEvolution (EvolutionContext _ _ _ current) _ _) ->
+      (CapturedEvolution (EvolutionContext _ _ _ original) _ _ _, CapturedEvolution (EvolutionContext _ _ _ current) _ _ _) ->
         unless (original /= current) (fail "Later note unexpectedly changed the original snapshot")
     missingResult <- noOpening (captureEvolution (EvolutionWorkspace kb missing))
     case missingResult of
@@ -205,14 +205,16 @@ openingMock
   -> Either OperationalFailure (Either [Diagnostic] SourceRoot)
   -> Eff (RootOpening : es) a -> Eff es a
 openingMock count expectedRepo expectedRevision expectedPath answer = interpret $ \_ operation -> do
-  liftIO (modifyIORef' count (+1))
   case operation of
     LoadSourceAt repo revision path
-      | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> either raiseFailure pure answer
-    LoadRootInputAt repo revision path
+      | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) -> do
+        liftIO (modifyIORef' count (+1))
+        either raiseFailure pure answer
+    OpenCapturedSource target -> either raiseFailure (pure . fmap (\(SourceRoot schema _ definition closure) ->
+      SourceRoot schema target definition closure)) answer
+    LoadRootFactsAt repo revision path (SourceRoot schema code _ _)
       | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
-        either raiseFailure (pure . fmap (\(SourceRoot schema code _ closure) ->
-          (Root schema (either error id (fileTree [])) code, closure))) answer
+        pure (Right (Root schema (either error id (fileTree [])) code))
     _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
 
 manifest :: Char -> String -> Bytes.ByteString

@@ -9,7 +9,8 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (checkRootLayout)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.Path (RelativePath)
+import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
+import Kyyn.Domain.Git (TreePath(..))
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
@@ -27,9 +28,20 @@ runRootOpening sdk = interpret $ \_ -> \case
   LoadRootAt repository revision prefix -> do
     captured <- Git.readTreeAt repository revision prefix
     either (pure . Left) (openTree sdk) captured
-  LoadRootInputAt repository revision prefix -> do
-    captured <- Git.readTreeAt repository revision prefix
-    either (pure . Left) (openInput sdk) captured
+  LoadRootFactsAt repository revision prefix (SourceRoot contract code _ _) -> runExceptT $ do
+    location <- checked (relativePath (case prefix of
+      WholeTree -> relativeName factsLocation
+      Subtree path -> relativeName path ++ "/" ++ relativeName factsLocation))
+    present <- ExceptT (Git.readDirectoryAt repository revision (Subtree location))
+    entries <- case present of
+      Nothing -> pure []
+      Just _ -> do
+        tree <- ExceptT (Git.readTreeAt repository revision (Subtree location))
+        traverse (\(p,b) -> do
+          path <- checked (relativePath (relativeName factsLocation ++ "/" ++ relativeName p))
+          pure (path,b)) (files tree)
+    facts <- checked (fileTree entries)
+    pure (Root contract facts code)
 
 openTree
   :: (Schema.SchemaInspection :> es, RootStore :> es)

@@ -1,9 +1,15 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Kyyn.Domain.GuestApi
-  ( ApiModule(..), ApiSymbol(..), Namespace(..) ) where
+  ( ApiModule(..), ApiSymbol(..), Namespace(..), WorkspaceCatalogue(..) ) where
 
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
+import Kyyn.Domain.Evolution (EvolutionWorkspace)
+import Kyyn.Domain.Git (GitRevision)
+
+data WorkspaceCatalogue = WorkspaceCatalogue
+  { workspace :: EvolutionWorkspace, beforeRevision :: GitRevision, modules :: [ApiModule] }
+  deriving (Eq, Show)
 
 data ApiModule = ApiModule String [ApiSymbol]
   deriving (Eq, Show, Generic, NFData)

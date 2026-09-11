@@ -247,10 +247,17 @@ data EvolutionContext = EvolutionContext
   , material      :: WorkspaceSnapshot
   }
 
+data PreparedEvolution = PreparedEvolution
+  { context :: EvolutionContext
+  , beforeSource :: SourceRoot
+  , afterSource :: SourceRoot
+  }
+
 data CapturedEvolution = CapturedEvolution
   { context :: EvolutionContext
   , input :: Root
   , sourceClosure :: [RelativePath]
+  , preparedAfter :: SourceRoot
   }
 ```
 
@@ -258,10 +265,11 @@ Here a workspace is simply the evolution's folder inside the KB, containing its
 specifications, transformation source and supporting files. It is not a separate
 Git worktree, interactive session or service. Capture fixes those bytes for one
 evaluation; it does not introduce an invocation registry or a replay obligation.
-Capture reads the Before subtree at its explicit Git revision and inspects its
-source once. `SourceRoot` retains the inspection's loaded source paths. Capture
-checks the workspace's Before copy against that source and carries the input Root
-and closure into execution. These are invocation-local values, not new persisted
+One source-only preparation function reads the workspace, opens Before at its
+explicit Git revision, checks the copied Before source, then opens the target.
+Capture and workspace discovery both call it. Capture subsequently adds the
+Before fact input and carries both its closure and the prepared After into
+execution. Discovery stops at the source endpoints. These are invocation-local values, not new persisted
 candidate/archive fields or a cache. The existing context/file snapshots remain
 the durable authority.
 
@@ -761,7 +769,9 @@ EvolutionExecution consumes the input Root and dependency closure supplied by
 capture, rather than loading or inspecting Before again. A Root alone does not
 establish its origin: the capture operation derives it from the selected immutable
 Git subtree. Execution checks its contract and source against the context, then
-decodes its facts. It inspects the target normally; there are no other contracts.
+decodes its facts. It consumes the prepared After without another schema inspection,
+checking that its code matches the captured target. Accept-time freshness checks
+still inspect current workspace sources when comparing a saved candidate.
 The input need not pass semantic validation. An evolution can therefore
 repair invalid facts introduced by an ordinary Git edit or merge. Preview surfaces
 the source validation report separately, without treating its errors as rejection
