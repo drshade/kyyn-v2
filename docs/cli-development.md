@@ -215,6 +215,22 @@ implementation comments are not collected.
 The catalogue covers six author-facing modules: `Kyyn.Schema`, `Kyyn.Validation`,
 `Kyyn.Query`, `Kyyn.Evolution`, `Kyyn.Edit` and `Kyyn.Optics`. Shared `Kyyn.Types.*`
 modules and runtime operations are implementation APIs, not catalogue entries.
-Reexports retain their real defining identities. Workspace-generated Before/After
-bindings are not yet discoverable here.
+Reexports retain their real defining identities.
+
+Add `--evolution ID` to explore generated bindings for a draft:
+
+```sh
+kyyn-v2 --kb PATH guest module list --evolution 000001-add-todos
+kyyn-v2 --kb PATH guest module show Kyyn.Workspace.Evolution --evolution 000001-add-todos
+kyyn-v2 --kb PATH guest symbol show Kyyn.Workspace.After.todos --evolution 000001-add-todos
+```
+
+This adds `Kyyn.Workspace.Evolution`, `Kyyn.Workspace.Before` and
+`Kyyn.Workspace.After` to the SDK catalogue. Results identify the workspace and
+its declared Before revision (`result.context` in JSON). The schema and metadata
+must compile, but the evolution body can be missing or unfinished. Fix invalid
+target schemas and repeat the command; omit the option to inspect the SDK alone.
+Human module output places workspace-defined operations before reexports.
+`--runtime DIRECTORY` selects the runtime for either form of discovery.
+
 If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.

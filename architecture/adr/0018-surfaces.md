@@ -170,7 +170,7 @@ and Dhall plumbing; it does not select a KB, invoke Git or compile guest code.
 Human output supports selective exploration and `--json` returns the same symbols
 as structured data. A missing module or symbol is a refusal with a navigation hint.
 
-#### Proposed: evolution-workspace discovery
+#### Evolution-workspace discovery
 
 Extend the same discovery commands with an explicit `--evolution ID` context:
 
@@ -204,7 +204,7 @@ ApiInspection interpreter in `kyyn-microhs`, alongside SchemaInspection.
 Unscoped discovery remains catalogue-only.
 
 Keep the two capabilities separate so fixed discovery does not acquire compiler
-or repository dependencies. Proposed host contracts are:
+or repository dependencies. The host contracts are:
 
 ```haskell
 data WorkspaceApi :: Effect where

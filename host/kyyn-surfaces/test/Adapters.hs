@@ -3,7 +3,7 @@ module Main (main) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=))
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, elemIndex)
 import Effectful (Eff, (:>), runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.State.Static.Local (State, modify, runState)
@@ -83,6 +83,22 @@ main = do
   assert "Candidate check opened or evaluated an evolution"
     (candidateCalls == ["candidate","prepare","examples","validate"] && exitStatus candidateChecked == 0)
   assert "Missing candidate invoked validation" (missingCalls == ["candidate"] && exitStatus missing == 1)
+  let reexport = Api.ApiSymbol "append" Api.ValueNamespace "Kyyn.Edit.append" "a" (Just "append :: a") Nothing
+      local = Api.ApiSymbol "edit" Api.ValueNamespace "Kyyn.Workspace.Evolution.edit" "b" (Just "edit :: b") (Just "Edit this root.")
+      apiModule = Api.ApiModule "Kyyn.Workspace.Evolution" [reexport,local]
+      catalogue = Api.WorkspaceCatalogue workspace revision [apiModule]
+      rendered = GuestApi.moduleResult (Right apiModule)
+  case rendered of
+    Response _ _ messages _ ->
+      assert "Workspace reexports precede local declarations"
+        (elemIndex "edit :: b" messages < elemIndex "append :: a" messages)
+  case GuestApi.workspaceResult catalogue (GuestApi.modulesResult (Right ["Kyyn.Workspace.Evolution"])) of
+    Response _ payload messages _ -> do
+      assert "Discovery context lost KB, workspace or declared revision"
+        (payload == object ["modules" .= (["Kyyn.Workspace.Evolution"] :: [String]),
+          "context" .= object ["kb" .= ("/test/repository/nested/kb" :: String),
+            "evolution" .= evolutionIdName identity, "beforeRevision" .= revisionName revision]])
+      assert "Human discovery context missing revision" (any (isInfixOf (revisionName revision)) messages)
   case shown of
     Response _ _ messages warnings -> do
       assert "Unicode human output was corrupted" (any (isInfixOf "Unicode λ") messages)

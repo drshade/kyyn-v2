@@ -4,13 +4,15 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
-    'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List',
+    'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
     'Kyyn.Domain.KnowledgeBase',
     'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+    'Kyyn.Domain.GuestApi', 'Kyyn.MicroHs.Interpreter.ApiInspection', 'Kyyn.Plumbing.Capability.ApiInspection',
+    'Kyyn.Porcelain.Interpreter.WorkspaceApi', 'Kyyn.Porcelain.Capability.WorkspaceApi',
     'Kyyn.Porcelain.Capability.GuestApi', 'Kyyn.Porcelain.Interpreter.GuestApi', 'Kyyn.Surfaces.GuestApi',
     'Kyyn.Domain.Publication', 'Kyyn.Porcelain.Capability.KnowledgeBaseInitialization',
     'Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization',
@@ -164,6 +166,7 @@ const plumbingModules = {
 
 const interpreterModules = {
   'Kyyn.Porcelain.Interpreter.GuestApi': ['Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.GuestApi',
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.DhallHandling',
     'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Protocol.GuestApi', 'Kyyn.Porcelain.Capability.GuestApi'],
   'Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization': ['Control.Monad', 'Control.Monad.Trans.Except',

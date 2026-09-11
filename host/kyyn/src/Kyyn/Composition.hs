@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeOperators #-}
 module Kyyn.Composition (execute) where
 
-import Effectful (Eff, IOE, runEff)
+import Effectful (Eff, IOE, runEff, (:>))
 import System.Environment (setEnv)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
@@ -9,6 +9,7 @@ import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), Evol
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository(..), revisionName)
+import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath)
 import Kyyn.Domain.Publication (InitializationTarget(..))
@@ -16,6 +17,9 @@ import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
 import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
+import Kyyn.MicroHs.Interpreter.ApiInspection (runApiInspectionIO)
+import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection)
+import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readTree)
@@ -48,7 +52,9 @@ import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
-import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi)
+import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi, runGuestApiFromCatalogue)
+import Kyyn.Porcelain.Interpreter.WorkspaceApi (runWorkspaceApi)
+import qualified Kyyn.Porcelain.Capability.WorkspaceApi as WorkspaceApi
 import qualified Kyyn.Porcelain.Capability.GuestApi as Api
 import qualified Kyyn.Surfaces.GuestApi as ApiResult
 import qualified Kyyn.Surfaces.Cli as Cli
@@ -83,15 +89,12 @@ runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Eithe
 runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
-execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest request)) = do
+execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest Nothing request)) = do
   runtime <- runtimeDirectory runtimeOverride
   case directoryScope runtime of
     Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
     Right scope -> finish $ runEff . runFailure . runFileSystemIO scope . runDhallHandling . runGuestApi scope $
-      case request of
-        Cli.ListGuestModules -> ApiResult.modulesResult <$> Api.listModules
-        Cli.ShowGuestModule name -> ApiResult.moduleResult <$> Api.findModule name
-        Cli.ShowGuestSymbol name -> ApiResult.symbolResult <$> Api.findSymbol name
+      guestResult request
 execute (Cli.Invocation selection _ command) = do
   configured <- configure selection
   case configured of
@@ -101,6 +104,41 @@ execute (Cli.Invocation selection _ command) = do
         Cli.Kb Cli.InitKb -> executeInitialization host scope
         Cli.Root request -> selectKnowledgeBase host scope >>= either pure (dispatchRoot host request)
         Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)
+        Cli.Guest (Just identity) request -> do
+          discovered <- runGitIO host (Git.discoverRepository scope)
+          case discovered of
+            Left failure -> pure (operationalFailure failure)
+            Right (Left diagnostics) -> pure (refusal diagnostics)
+            Right (Right (repository,prefix)) ->
+              dispatchWorkspaceApi host (EvolutionWorkspace (KnowledgeBase repository prefix) identity) request
+
+guestResult :: Api.GuestApi :> es => Cli.GuestCommand -> Eff es Response
+guestResult request = case request of
+  Cli.ListGuestModules -> ApiResult.modulesResult <$> Api.listModules
+  Cli.ShowGuestModule name -> ApiResult.moduleResult <$> Api.findModule name
+  Cli.ShowGuestSymbol name -> ApiResult.symbolResult <$> Api.findSymbol name
+
+type Discovery = '[WorkspaceApi.WorkspaceApi, Store.EvolutionStore, WorkspaceStore, RootOpening, ApiInspection, SchemaInspection, GuestCompilation, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
+
+runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Discovery a -> IO (Either OperationalFailure a)
+runDiscovery host toolchain sdk catalogue = runBase host . runGuestApi catalogue . runGuestCompilation toolchain
+  . runSchemaInspectionIO toolchain . runApiInspectionIO toolchain . runRootOpening sdk
+  . runWorkspaceStore . runEvolutionStore . runWorkspaceApi sdk
+
+dispatchWorkspaceApi :: Host -> EvolutionWorkspace -> Cli.GuestCommand -> IO Response
+dispatchWorkspaceApi host@(Host _ _ _ runtime) workspace request = withRuntime host $ \toolchain sdk ->
+  case directoryScope runtime of
+    Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
+    Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do
+      installed <- Api.readCatalogue
+      case installed of
+        Left diagnostics -> pure (refusal diagnostics)
+        Right modules -> do
+          inspected <- WorkspaceApi.inspectWorkspaceApi workspace
+          case inspected of
+            Left diagnostics -> pure (refusal diagnostics)
+            Right context@(WorkspaceCatalogue _ _ generated) ->
+              ApiResult.workspaceResult context <$> runGuestApiFromCatalogue (Right (modules ++ generated)) (guestResult request)
 
 executeInitialization :: Host -> DirectoryScope -> IO Response
 executeInitialization host scope = do

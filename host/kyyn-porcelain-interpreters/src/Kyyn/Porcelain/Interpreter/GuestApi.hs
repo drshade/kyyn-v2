@@ -1,14 +1,18 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
-module Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi) where
+module Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi, runGuestApiFromCatalogue) where
 
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.GuestApi (ApiModule)
 import Kyyn.Domain.Path (DirectoryScope, relativePath)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readOptionalBytes)
 import Kyyn.Plumbing.Protocol.GuestApi (decodeCatalogue)
 import Kyyn.Porcelain.Capability.GuestApi (GuestApi(..))
+
+runGuestApiFromCatalogue :: Either [Diagnostic] [ApiModule] -> Eff (GuestApi : es) a -> Eff es a
+runGuestApiFromCatalogue catalogue = interpret $ \_ ReadCatalogue -> pure catalogue
 
 runGuestApi :: (FileSystem :> es, DhallHandling :> es)
   => DirectoryScope -> Eff (GuestApi : es) a -> Eff es a
