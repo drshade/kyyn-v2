@@ -167,7 +167,8 @@ Use stable refusal codes at these boundaries:
 | `plugin.already-installed` | Destination already exists |
 
 Git acquisition/entry diagnostics retain their Git codes (including
-`git.clone-failed` and the existing `git.unsupported-entry`) rather than being
+`git.clone-failed`, `git.unsupported-entry`, `git.missing-subtree` for an absent
+`--path`, and `git.no-working-tree` for a directory outside Git) rather than being
 misreported as manifest errors. CLI option syntax errors retain the normal usage
 exit; semantic refusals use these codes, and operational failures remain distinct.
 
