@@ -73,6 +73,7 @@ haskellType IntegerType = "Integer"
 haskellType BoolType = "Bool"
 haskellType (ListType t) = "[" ++ haskellType t ++ "]"
 haskellType (OptionalType t) = "(Maybe " ++ haskellType t ++ ")"
+haskellType (Algebraic name [] _) = name
 haskellType (Algebraic name args _) = "(" ++ unwords (name : map haskellType args) ++ ")"
 
 reachableTypes :: DataType -> [DataType]

@@ -34,6 +34,11 @@ import System.Process (proc, readCreateProcessWithExitCode, CreateProcess(..))
 
 main :: IO ()
 main = do
+  let bare = Algebraic "Schema.Item" [] []
+      applied = Algebraic "Schema.Box" [bare] []
+  forM_ [(bare,"Schema.Item"), (applied,"(Schema.Box Schema.Item)"),
+         (Algebraic "Schema.Box" [applied] [],"(Schema.Box (Schema.Box Schema.Item))")] $ \(t,expected) ->
+    unless (haskellType t == expected) (fail "Schema type rendering changed application grouping")
   before <- checked "SchemaV1" [(Just "title",StringType)] "Title"
   renamed <- checked "SchemaV1" [(Just "title",StringType)] "New label"
   after <- checked "SchemaV2" [(Just "title",StringType),(Just "done",BoolType)] "Title"
@@ -51,11 +56,12 @@ main = do
     let endpointSource = lookup ("Kyyn/Workspace/" ++ endpoint ++ ".hs") generated
     forM_ ["todos = Internal.Collection \"work items\"",
            "import Kyyn.Edit (Collection)",
-           "-- | Collection \"work items\" in (SchemaV1.Root).\n-- Root field: todos; fact type: (SchemaV1.Todo).\ntodos :: Collection (SchemaV1.Root) ((SchemaV1.Todo))"] $ \expected ->
+           "-- | Collection \"work items\" in SchemaV1.Root.\n-- Root field: todos; fact type: SchemaV1.Todo.\ntodos :: Collection SchemaV1.Root (SchemaV1.Todo)"] $ \expected ->
       unless (maybe False (Bytes.isInfixOf expected) endpointSource)
         (fail "Collection binding lost its public signature, documentation or logical name")
-  forM_ ["-- | Transform (SchemaV1.Root) into (SchemaV2.Root).",
-         "-- | Edit (SchemaV1.Root).", "-- | Edit (SchemaV2.Root).",
+  forM_ ["-- | Transform the Before root, SchemaV1.Root, into the After root, SchemaV2.Root.",
+         "-- | Edit the Before root, SchemaV1.Root, without changing its schema.",
+         "-- | Edit the After root, SchemaV2.Root, without changing its schema.",
          "-- The supplied rationale describes one recorded step and its diff."] $ \expected ->
     unless (expected `Bytes.isInfixOf` source)
       (fail "Generated evolution documentation lost endpoint or rationale details")

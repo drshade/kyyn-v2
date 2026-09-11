@@ -78,15 +78,15 @@ evolutionBindings before after = do
         concat [[name ++ " :: RootBinding " ++ haskellType (rootType (rootSchema contract)),
           name ++ " = RootBinding " ++ show (contractFingerprint (contractId (rootSchema contract))) ++
           " (encodeWith " ++ codecName index ++ ".rootCodec)"] | (index,(name,contract)) <- zip [0..] declarations] ++
-        ["-- | Transform " ++ beforeType ++ " into " ++ afterType ++ ".",
+        ["-- | Transform the Before root, " ++ beforeType ++ ", into the After root, " ++ afterType ++ ".",
          "-- The supplied rationale describes one recorded step and its diff.",
          "evolve :: Rationale -> (" ++ beforeType ++ " -> Either EvolutionFailure " ++ afterType ++ ") -> Evolution " ++ beforeType ++ " " ++ afterType,
          "evolve = Internal.evolve beforeRoot afterRoot"] ++
-        concat [["-- | Edit " ++ endpoint ++ ".",
+        concat [["-- | Edit the " ++ role ++ " root, " ++ endpoint ++ ", without changing its schema.",
                  "-- The supplied rationale describes one recorded step and its diff.",
                  name ++ " :: Rationale -> Edit " ++ endpoint ++ " () -> Evolution " ++ endpoint ++ " " ++ endpoint,
                  name ++ " = Internal.edit " ++ binding] |
-          (name,binding,endpoint) <- [("editBefore","beforeRoot",beforeType),("edit","afterRoot",afterType)]]
+          (name,binding,endpoint,role) <- [("editBefore","beforeRoot",beforeType,"Before"),("edit","afterRoot",afterType,"After")]]
   fileTree ((path,utf8 source):codecs ++ concatMap files collections)
   where
     declarations = [("beforeRoot",before),("afterRoot",after)]
