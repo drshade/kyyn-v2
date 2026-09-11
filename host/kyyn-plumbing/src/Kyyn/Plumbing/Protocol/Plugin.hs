@@ -6,8 +6,8 @@ import Data.ByteString (ByteString)
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Git (TreePath(..), gitRevision, revisionName)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
+import Kyyn.Domain.Git (TreePath(..), gitRevision, revisionName, gitUrl, gitUrlText)
 import Kyyn.Domain.Path (directoryScope, scopePath, relativePath, relativeName)
 import Kyyn.Domain.Plugin
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue, encodeValue)
@@ -61,6 +61,6 @@ decode code shape parser bytes = case Text.decodeUtf8' bytes of
   Right source -> do
     decoded <- decodeValue shape source
     pure $ case decoded of
-      Left diagnostics -> bad (show diagnostics)
+      Left diagnostics -> Left [Diagnostic severity code message location | Diagnostic severity _ message location <- diagnostics]
       Right value -> either bad Right (parseEither parser value)
   where bad = Left . pure . errorDiagnostic code

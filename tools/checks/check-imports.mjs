@@ -108,7 +108,7 @@ const domainModules = {
   'Kyyn.Domain.Query': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Value', 'Kyyn.Types.Query'],
   'Kyyn.Domain.Example': ['Kyyn.Domain.Query', 'Kyyn.Domain.Value'],
   'Kyyn.Domain.FileTree': ['Data.ByteString', 'Data.List', 'Kyyn.Domain.Path'],
-  'Kyyn.Domain.Git': ['Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
+  'Kyyn.Domain.Git': ['Data.List', 'Kyyn.Domain.Path', 'Kyyn.Domain.FileTree'],
 };
 
 const plumbingModules = {
@@ -141,7 +141,6 @@ const plumbingModules = {
     'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Capability.Git': ['Effectful', 'Effectful.Dispatch.Dynamic',
-    'Kyyn.Domain.Plugin',
     'Data.ByteString', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Git', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Plumbing.Capability.SchemaInspection': ['Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
@@ -185,7 +184,6 @@ const interpreterModules = {
     'Kyyn.Plumbing.Capability.Git', 'Kyyn.Porcelain.Capability.RootPublication',
     'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.RootStore'],
   'Kyyn.Plumbing.Interpreter.Git': ['System.FilePath', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Char', 'Data.List', 'Data.ByteString', 'Data.ByteString.Char8',
-    'Kyyn.Domain.Plugin',
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.ProcessExecution'],

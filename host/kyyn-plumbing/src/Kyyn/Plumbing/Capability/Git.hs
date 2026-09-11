@@ -6,11 +6,10 @@ module Kyyn.Plumbing.Capability.Git
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Git (Repository, GitRevision, TreePath, GitTree, GitUser, CommitMetadata, LocalBranch, RefUpdate)
+import Kyyn.Domain.Git (Repository, GitRevision, GitUrl, TreePath, GitTree, GitUser, CommitMetadata, LocalBranch, RefUpdate)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
-import Kyyn.Domain.Plugin (GitUrl)
 import Data.ByteString (ByteString)
 
 data Git :: Effect where

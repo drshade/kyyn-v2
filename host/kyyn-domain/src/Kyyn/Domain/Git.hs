@@ -1,13 +1,25 @@
 module Kyyn.Domain.Git
-  ( Repository(..), GitRevision, gitRevision, revisionName, TreePath(..)
+  ( Repository(..), GitRevision, gitRevision, revisionName, GitUrl, gitUrl, gitUrlText, TreePath(..)
   , LocalBranch(..), GitTree(..), GitUser(..), CommitIdentity(..), CommitMetadata(..), RefUpdate(..)
   ) where
 
 import Kyyn.Domain.Path (DirectoryScope, RelativePath)
 import Kyyn.Domain.FileTree (FileTree)
+import Data.List (isPrefixOf)
 
 newtype Repository = Repository DirectoryScope deriving (Eq, Show)
 newtype GitRevision = GitRevision String deriving (Eq, Show)
+newtype GitUrl = GitUrl String deriving (Eq, Show)
+
+gitUrlText :: GitUrl -> String
+gitUrlText (GitUrl value) = value
+
+gitUrl :: String -> Either String GitUrl
+gitUrl value
+  | any (\prefix -> prefix `isPrefixOf` value && length value > length prefix) ["file://", "https://"]
+  , not (any (`elem` value) ['\0', '\n', '\r']) = Right (GitUrl value)
+  | otherwise = Left "Use a file:// or unauthenticated https:// Git URL, or a local checkout"
+
 data TreePath = WholeTree | Subtree RelativePath deriving (Eq, Show)
 
 -- Short branch name, checked by Git before use beneath refs/heads/.

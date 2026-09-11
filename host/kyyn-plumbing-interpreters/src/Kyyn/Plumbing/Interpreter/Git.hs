@@ -15,7 +15,6 @@ import Effectful.Error.Static (catchError)
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git
 import Kyyn.Domain.Path
-import Kyyn.Domain.Plugin (gitUrlText)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)

@@ -1,18 +1,22 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main (main) where
 
 import Control.Monad (forM_, unless)
 import Data.Either (isLeft)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
-import Effectful (runEff, runPureEff)
-import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Effectful (Eff, IOE, runEff, runPureEff)
+import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..), DiagnosticLocation(..))
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Git
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Root (pluginPackageExclusions)
 import Kyyn.Plumbing.Capability.Git
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
+import Kyyn.Plumbing.Capability.Failure (Failure)
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Protocol.Plugin
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
@@ -44,6 +48,9 @@ main = do
     assert ("accepted entry " ++ entry) (isLeft (pluginManifest "test" entry))
   let cwd = scope "/work"
   assert "local source classified incorrectly" (pluginSource cwd "plugins/local-file" WholeTree == Right (LocalPackage (scope "/work/plugins/local-file") WholeTree))
+  forM_ [("./with:colon/pkg", "/work/with:colon/pkg"), ("/abs/with:colon", "/abs/with:colon")] $ \(source, expected) ->
+    assert "colon in explicit local path treated as scp source"
+      (pluginSource cwd source WholeTree == Right (LocalPackage (scope expected) WholeTree))
   forM_ ["git@example.org:team/repo", "ssh://example.org/repo", "http://example.org/repo", ""] $ \source ->
     assert ("accepted unsupported source " ++ source) (isLeft (pluginSource cwd source WholeTree))
   let decode = runPureEff . runDhallHandling . decodeManifest
@@ -53,6 +60,14 @@ main = do
     case decode source of
       Left [Diagnostic _ "plugin.manifest-invalid" _ _] -> pure ()
       other -> fail (show other)
+  let original = [Diagnostic Error "dhall.import" "Imports are not supported" (Just (SourceLocation "manifest" 1 2)),
+                  Diagnostic Warning "dhall.detail" "Another detail" Nothing]
+      preserved = runPureEff $ interpret (\_ operation -> case operation of
+        DecodeValue {} -> pure (Left original)
+        _ -> error "Manifest decoding must only decode Dhall") (decodeManifest "{}")
+  assert "Dhall diagnostic messages, locations or multiplicity lost"
+    (preserved == Left [Diagnostic severity "plugin.manifest-invalid" message location |
+      Diagnostic severity _ message location <- original])
   url <- right (gitUrl "https://example.org/plugins.git")
   revision <- right (gitRevision (replicate 40 'a'))
   forM_ [PluginOrigin repository selected revision | repository <- [LocalRepository cwd, RemoteRepository url], selected <- [WholeTree, Subtree (path "nested/package")]] $ \origin -> do
@@ -69,6 +84,7 @@ gitTests = withSystemTempDirectory "kyyn-plugin-git-" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git required") pure
   let originPath = directory </> "origin"
       clonePath = directory </> "clone with spaces"
+      perform :: Eff '[Git, ProcessExecution, Failure, IOE] a -> IO a
       perform action = runEff (runFailure (runProcessExecutionIO (runGit executable [] action))) >>= right
       metadata = CommitMetadata (CommitIdentity "Test" "test@example.invalid" "1700000000 +0000")
         (CommitIdentity "Test" "test@example.invalid" "1700000000 +0000") "Fixture"
