@@ -9,7 +9,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (checkRootLayout)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.Path (RelativePath, relativeName)
+import Kyyn.Domain.Path (RelativePath, relativeName, relativePath)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
@@ -21,7 +21,7 @@ runRootOpening
 runRootOpening sdk = interpret $ \_ -> \case
   OpenCapturedSource tree -> openSource sdk tree
   LoadSourceAt repository revision prefix -> do
-    captured <- Git.readTreeAt repository revision prefix
+    captured <- Git.readTreeExcluding repository revision prefix [either error id (relativePath "facts")]
     either (pure . Left) (openSource sdk) captured
   OpenCapturedRoot tree -> openTree sdk tree
   LoadRootAt repository revision prefix -> do

@@ -120,33 +120,38 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
       if actual == Just desired then pure RefUpdated
       else if actual /= expected then pure (RefNotUpdated actual)
         else broken ("Conditional ref update failed: " ++ Char8.unpack diagnostics)
-  ReadTreeAt repo revision location -> runExceptT $ do
-    _ <- ExceptT (resolve repo (revisionName revision))
-    tree <- case location of
-      WholeTree -> pure (revisionName revision)
-      Subtree prefix -> do
-        found <- successful repo ["ls-tree", "-d", "-z", revisionName revision, "--", relativeName prefix]
-        if Bytes.null found then rejected "git.missing-subtree" (relativeName prefix) else pure ()
-        case Char8.words (Char8.takeWhile (/= '\t') found) of
-          [_, "tree", _] -> pure ()
-          _ -> rejected "git.unsupported-entry" "Selected subtree is not a directory tree"
-        pure (revisionName revision ++ ":" ++ relativeName prefix)
-    output <- successful repo ["ls-tree", "-r", "-z", tree]
-    if Bytes.null output || Bytes.last output == 0 then pure ()
-      else ExceptT (broken "Unterminated Git tree response")
-    let records = if Bytes.null output then [] else Char8.split '\0' (Bytes.init output)
-    entries <- forM records $ \entry -> do
-      let (header, rest) = Char8.break (== '\t') entry
-      (blobId,path) <- case Char8.words header of
-        [mode, "blob", objectId] | mode `elem` ["100644", "100755"] && not (Bytes.null rest) -> do
-          name <- either (rejected "git.unsupported-path" . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.tail rest))
-          path <- either (rejected "git.unsupported-path") pure (relativePath name)
-          pure (Char8.unpack objectId,path)
-        _ -> rejected "git.unsupported-entry" "Expected regular files; symlinks and submodules are unsupported"
-      bytes <- successful repo ["cat-file", "blob", blobId]
-      pure (path,bytes)
-    either (rejected "git.invalid-tree") pure (fileTree entries)
+  ReadTreeAt repo revision location -> captureTree repo revision location []
+  ReadTreeExcluding repo revision location excluded -> captureTree repo revision location excluded
   where
+    captureTree repo revision location excluded = runExceptT $ do
+      _ <- ExceptT (resolve repo (revisionName revision))
+      tree <- case location of
+        WholeTree -> pure (revisionName revision)
+        Subtree prefix -> do
+          found <- successful repo ["ls-tree", "-d", "-z", revisionName revision, "--", relativeName prefix]
+          if Bytes.null found then rejected "git.missing-subtree" (relativeName prefix) else pure ()
+          case Char8.words (Char8.takeWhile (/= '\t') found) of
+            [_, "tree", _] -> pure ()
+            _ -> rejected "git.unsupported-entry" "Selected subtree is not a directory tree"
+          pure (revisionName revision ++ ":" ++ relativeName prefix)
+      output <- successful repo ["ls-tree", "-r", "-z", tree]
+      if Bytes.null output || Bytes.last output == 0 then pure ()
+        else ExceptT (broken "Unterminated Git tree response")
+      let records = if Bytes.null output then [] else Char8.split '\0' (Bytes.init output)
+      entries <- forM records $ \entry -> do
+        let (header, rest) = Char8.break (== '\t') entry
+        whenEmpty rest
+        name <- either (rejected "git.unsupported-path" . show) (pure . Text.unpack) (Text.decodeUtf8' (Bytes.tail rest))
+        if any (\path -> name == relativeName path || (relativeName path ++ "/") `isPrefixOf` name) (excluded :: [RelativePath])
+          then pure []
+          else do
+            blobId <- case Char8.words header of
+              [mode, "blob", objectId] | mode `elem` ["100644", "100755"] -> pure (Char8.unpack objectId)
+              _ -> rejected "git.unsupported-entry" "Expected regular files; symlinks and submodules are unsupported"
+            path <- either (rejected "git.unsupported-path") pure (relativePath name)
+            bytes <- successful repo ["cat-file", "blob", blobId]
+            pure [(path,bytes)]
+      either (rejected "git.invalid-tree") pure (fileTree (concat entries))
     discover scope = do
       (output, Process.ProcessExit status diagnostics) <- command (Repository scope)
         ["rev-parse", "--path-format=absolute", "--show-toplevel"]

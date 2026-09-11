@@ -4,7 +4,7 @@ module Main (main) where
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value, object, (.=))
 import qualified Data.ByteString as Bytes
-import Data.List (isSuffixOf)
+import Data.List (isSuffixOf, isPrefixOf)
 import Data.Text (Text)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
@@ -112,7 +112,8 @@ main = do
 
 openingTests :: RootContract -> FileTree -> IO ()
 openingTests contract factFiles = do
-  authored <- tree [("src/Example.hs","authored source"),("kb.dhall",manifest)]
+  authored <- tree [("src/Example.hs","authored source"),("kb.dhall",manifest),
+    ("examples/retained.txt","required-example material"),("support.dhall","auxiliary code")]
   captured <- right (fileTree (files authored ++ files factFiles))
   sdk <- tree [("Kyyn/Types/Fact.hs","installed SDK")]
   let execute :: FileTree -> Eff '[RootOpening, RootStore, Git.Git, Schema.SchemaInspection, DhallHandling] a -> a
@@ -181,6 +182,12 @@ gitMock captured = interpret $ \_ -> \case
   Git.ReadTreeAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root" -> pure (Right captured)
   Git.ReadTreeAt _ _ _ -> pure (Left [errorDiagnostic "test.git" "Unusable root selection"])
+  Git.ReadTreeExcluding _ revision (Subtree prefix) excluded
+    | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root"
+      && map relativeName excluded == ["facts"] ->
+        pure (Right (either error id (fileTree [(p,b) | (p,b) <- files captured,
+          not ("facts/" `isPrefixOf` relativeName p)])))
+  Git.ReadTreeExcluding {} -> pure (Left [errorDiagnostic "test.git" "Unusable source selection"])
   Git.CreateCommit {} -> error "RootOpening must not create commits"
   Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
   Git.ReadFileAt {} -> error "RootOpening must read the selected complete tree"
