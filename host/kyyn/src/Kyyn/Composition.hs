@@ -8,10 +8,11 @@ import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Git (Repository(..), revisionName)
+import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
 import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath, relativePath)
+import Kyyn.Domain.Plugin (pluginSource)
 import Kyyn.Domain.Publication (InitializationTarget(..))
 import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -36,6 +37,8 @@ import Kyyn.Porcelain.Capability.Evolution (acceptStoredEvolution, checkEvolutio
 import qualified Kyyn.Porcelain.Capability.Root as Root
 import qualified Kyyn.Porcelain.Capability.KnowledgeBaseInitialization as Initialization
 import Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization (runKnowledgeBaseInitialization)
+import qualified Kyyn.Porcelain.Capability.PluginInstallation as Plugin
+import Kyyn.Porcelain.Interpreter.PluginInstallation (runPluginInstallation)
 import qualified Kyyn.Porcelain.Capability.EvolutionAuthoring as Authoring
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
@@ -60,6 +63,7 @@ import qualified Kyyn.Surfaces.GuestApi as ApiResult
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
 import System.FilePath ((</>))
+import System.Directory (getCurrentDirectory)
 
 type Base = '[RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
@@ -104,6 +108,7 @@ execute (Cli.Invocation selection _ command) = do
         Cli.Kb Cli.InitKb -> executeInitialization host scope
         Cli.Root request -> selectKnowledgeBase host scope >>= either pure (dispatchRoot host request)
         Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)
+        Cli.Plugin request -> selectKnowledgeBase host scope >>= either pure (dispatchPlugin host request)
         Cli.Guest (Just identity) request -> do
           discovered <- runGitIO host (Git.discoverRepository scope)
           case discovered of
@@ -111,6 +116,20 @@ execute (Cli.Invocation selection _ command) = do
             Right (Left diagnostics) -> pure (refusal diagnostics)
             Right (Right (repository,prefix)) ->
               dispatchWorkspaceApi host (EvolutionWorkspace (KnowledgeBase repository prefix) identity) request
+
+dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
+dispatchPlugin (Host executable environment temp _) (Cli.InstallPlugin source subdirectory) (SelectedKb kb _ _) = do
+  cwd <- getCurrentDirectory
+  let selected = do
+        current <- either (Left . errorDiagnostic "plugin.source-invalid") Right (directoryScope cwd)
+        path <- either (Left . errorDiagnostic "plugin.path-invalid") Right
+          (maybe (Right WholeTree) (fmap Subtree . relativePath) subdirectory)
+        either (Left . errorDiagnostic "plugin.source-invalid") Right (pluginSource current source path)
+  case selected of
+    Left diagnostic -> pure (refusal [diagnostic])
+    Right value -> finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
+      . runGit executable environment . runDhallHandling . runPluginInstallation $
+        either refusal pluginResult <$> Plugin.installPlugin kb value
 
 guestResult :: Api.GuestApi :> es => Cli.GuestCommand -> Eff es Response
 guestResult request = case request of

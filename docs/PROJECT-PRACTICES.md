@@ -31,6 +31,13 @@ integration: local and file-URL sources, nested KBs, persisted origins, independ
 copies, existing destinations (including empty directories and symlinks), and
 unchanged KB HEAD. It is included in the fast check and does not compile or invoke guests.
 
+`node tools/test-plugin-install.mjs EXECUTABLE` copies the host executable without
+its runtime and tests CLI installation from committed local/file-URL packages into
+a nested KB. It includes the first-party package, human/JSON results, origin revisions,
+source and destination refusals, exclusions, independent copies and unchanged HEAD.
+It runs in the installed integration check; the source fixture is committed in a
+disposable repository, so the developer checkout need not be clean.
+
 Guest API discovery has two focused checks: `cabal test guest-catalogue
 --test-show-details=direct` exercises the read-only catalogue capability and real
 Dhall codec, and `KYYN_TEST_ROOT="$PWD"
