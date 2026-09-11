@@ -395,6 +395,9 @@ follows the user's conversion settings. Configured hooks, including a global
 
 Runtime paths come from the
 installed layout, with `--runtime` and `--git` development overrides.
+Before installing compiler interpreters, the composition root configures the
+unpatched compiler's `MHSCPPHS` environment variable once from the resolved runtime;
+Kyyn's declaration reader uses that toolchain's preprocessor path directly.
 Workspace-scoped guest discovery loads the SDK and compiler integration; unscoped
 guest discovery reads only the installed catalogue. Evolution listing,
 state changes, archived inspection, recovery and already-accepted diagnosis do

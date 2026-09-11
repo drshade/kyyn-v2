@@ -5,7 +5,17 @@ import Data.Char (isAlpha, isAlphaNum, isLower, isSpace)
 import Data.List (nubBy, isInfixOf, isPrefixOf, nub)
 import Kyyn.MicroHs.ApiInspection
 import Kyyn.Domain.GuestApi
-import System.Environment (getEnv)
+import qualified Data.ByteString as Bytes
+import Effectful (runEff)
+import Kyyn.Domain.FileTree (fileTree)
+import Kyyn.Domain.Path (relativePath, directoryScope)
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
+import Kyyn.MicroHs.Interpreter.ApiInspection (runApiInspectionIO)
+import Kyyn.Plumbing.Capability.ApiInspection (inspectApiModules)
+import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
+import Kyyn.Plumbing.Interpreter.Failure (runFailure)
+import System.Environment (getEnv, setEnv)
 import System.Directory (createDirectoryIfMissing, listDirectory, doesDirectoryExist, copyFile)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -13,6 +23,7 @@ import System.IO.Temp (withSystemTempDirectory)
 main :: IO ()
 main = do
   repo <- getEnv "KYYN_TEST_ROOT"
+  setEnv "MHSCPPHS" (repo </> "vendor/MicroHs/bin/cpphs")
   let sources = map (repo </>) ["guest/kyyn-sdk/src","shared/kyyn-types/src","vendor/transformers","vendor/json"]
       public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics"]
       inspect paths names = inspectApi (repo </> "vendor/MicroHs") paths names >>= either (fail . show) pure
@@ -67,6 +78,27 @@ main = do
   assert "alias documentation" (documentationFor "Alias" TypeNamespace == [Just "A documented alias."])
   dataModules <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources)
     ["Kyyn.DataFixture", "Kyyn.DataReexport"]
+  fixtureFiles <- mapM (\name -> do
+    bytes <- Bytes.readFile (repo </> "host/kyyn-microhs/test/api-docs" </> name)
+    path <- either fail pure (relativePath name)
+    pure (path,bytes)) ["Kyyn/DataFixture.hs", "Kyyn/DataReexport.hs", "Kyyn/CppFixture.hs"]
+  fixtureTree <- either fail pure (fileTree fixtureFiles)
+  compilerScope <- either fail pure (directoryScope (repo </> "vendor/MicroHs"))
+  let throughCapability selected = withSystemTempDirectory "kyyn-api-capability-" $ \temporary -> do
+        temporaryScope <- either fail pure (directoryScope temporary)
+        result <- runEff . runFailure . runFileSystemIO temporaryScope
+          . runApiInspectionIO (GuestToolchain compilerScope) $ inspectApiModules fixtureTree selected
+        remaining <- listDirectory temporary
+        assert "API temporary sources cleaned up" (null remaining)
+        pure result
+  capabilityResult <- throughCapability ["Kyyn.DataFixture", "Kyyn.DataReexport"]
+  assert "captured API capability agrees with direct inspection" (capabilityResult == Right (Right dataModules))
+  cppCapability <- throughCapability ["Kyyn.CppFixture"]
+  assert "captured CPP API uses configured toolchain" (cppCapability == Right (Right cpp))
+  missingResult <- throughCapability ["Kyyn.Missing"]
+  assert "missing module is a compiler diagnostic" (case missingResult of
+    Right (Left [Diagnostic _ "guest.api-compiler-rejected" _ _]) -> True
+    _ -> False)
   let declarationIn m n = case [d | ApiModule name symbols <- dataModules, name == m,
           ApiSymbol name' TypeNamespace _ _ (Just d) _ <- symbols, name' == n] of
         [d] -> d

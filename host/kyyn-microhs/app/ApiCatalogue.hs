@@ -12,7 +12,7 @@ import Effectful (runEff)
 import Kyyn.MicroHs.ApiInspection (inspectApi)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Protocol.GuestApi (encodeCatalogue)
-import System.Environment (getArgs)
+import System.Environment (getArgs, setEnv)
 import System.Directory (withCurrentDirectory)
 import System.FilePath ((</>))
 
@@ -22,7 +22,9 @@ main = do
   case arguments of
     runtime:packages@(_:_) -> do
       modules <- sort . nub . concat <$> mapM publicModules packages
-      catalogue <- withCurrentDirectory runtime (inspectApi "microhs" ["sdk"] modules)
+      catalogue <- withCurrentDirectory runtime (do
+        setEnv "MHSCPPHS" "./microhs/bin/cpphs"
+        inspectApi "microhs" ["sdk"] modules)
         >>= either (fail . show) pure
       bytes <- runEff (runDhallHandling (encodeCatalogue catalogue)) >>= either (fail . show) pure
       Bytes.writeFile (runtime </> "guest-api.dhall") bytes

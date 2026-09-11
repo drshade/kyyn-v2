@@ -2,6 +2,7 @@
 module Kyyn.Composition (execute) where
 
 import Effectful (Eff, IOE, runEff)
+import System.Environment (setEnv)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
@@ -175,6 +176,7 @@ finish action = either operationalFailure id <$> action
 withRuntime :: Host -> (GuestToolchain -> FileTree -> IO Response) -> IO Response
 withRuntime (Host _ _ temp runtime) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
   (Right toolchain,Right sdkScope) -> do
+    setEnv "MHSCPPHS" (runtime </> "microhs/bin/cpphs")
     loaded <- runEff . runFailure . runFileSystemIO temp $ readTree sdkScope
     case loaded of
       Left failure -> pure (operationalFailure failure)
