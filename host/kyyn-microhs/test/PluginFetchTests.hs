@@ -1,0 +1,207 @@
+{-# LANGUAGE OverloadedStrings #-}
+module Main (main) where
+
+import Control.Monad (forM_, unless)
+import Data.Aeson (Value(..), eitherDecodeStrict, encode, object, (.=), (.:), toJSON)
+import Data.Aeson.Types (parseEither, withObject)
+import qualified Data.ByteString as Bytes
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
+import Data.Version (showVersion)
+import Effectful (runEff)
+import Kyyn.Domain.DataType (DataType(..))
+import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Domain.Path
+import Kyyn.MicroHs.Inspection (inspectDataType)
+import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
+import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
+import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Protocol.PluginInvocation
+import Kyyn.Plumbing.Interpreter.Failure (runFailure)
+import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
+import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
+import System.Directory (createDirectoryIfMissing, findExecutable)
+import System.Environment (getEnv)
+import System.Exit (ExitCode(..))
+import System.FilePath ((</>), takeDirectory)
+import System.Info (compilerVersion)
+import System.IO (hGetLine, hPutStrLn, hFlush, hClose, hIsEOF, hGetContents)
+import System.IO.Temp (withSystemTempDirectory)
+import System.Process
+import System.Timeout (timeout)
+
+assert :: String -> Bool -> IO ()
+assert message condition = unless condition (fail message)
+
+right :: Show e => Either e a -> IO a
+right = either (fail . show) pure
+
+main :: IO ()
+main = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
+  repo <- getEnv "KYYN_TEST_ROOT"
+  toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
+  nativeCompiler <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe
+    (fail "The matching versioned GHC executable is required for the plugin boundary proof") pure
+  let path = either error id . relativePath
+      load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
+  common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
+      name <- ["Evidence","Program","Plugin"]] ++
+    [load "guest/kyyn-sdk/src" "Kyyn/Plugin.hs"] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin"]] ++
+    [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
+    [load "host/kyyn-microhs/test/plugin" "FolderSchema.hs"])
+  let schemaDirectory = temporary </> "schema"
+  writeSources schemaDirectory common
+  (config,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.Config" >>= right
+  (payload,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.Document" >>= right
+  folder <- load "host/kyyn-microhs/test/plugin" "Folder.hs"
+  view <- load "host/kyyn-microhs/test/plugin" "ReadDocument.hs"
+  acquisition <- right (acquisitionSources config payload "Folder.fetch" (folder:common))
+  captured <- right (capturedReadSources StringType payload StringType "ReadDocument.view" (view:common))
+  forM_ ["KyynPluginBindings.hs","KyynPluginEntry.hs","KyynPluginPayloadCodec.hs"] $ \name ->
+    assert "generated adapter overwrote authored source" (case acquisitionSources config payload "Folder.fetch" ((path name,"collision"):folder:common) of
+      Left _ -> True; Right _ -> False)
+  fetchPrograms <- compileBoth temporary toolchain nativeCompiler "fetch" acquisition
+  readPrograms <- compileBoth temporary toolchain nativeCompiler "read" captured
+  let configValue directory = object ["directory" .= (directory :: String),"recursive" .= True]
+      input arguments = object ["arguments" .= arguments,"snapshot" .= ("prior" :: String)]
+      expected = success (toJSON
+        [change "Updated" "changed.txt" "changed 🦋\nline two",change "New" "new.txt" "new",
+         object ["tag" .= ("Removed" :: String),"value" .= ("gone.txt" :: String)]])
+  forM_ fetchPrograms $ \program -> do
+    (result,trace,status) <- broker Normal program (input (configValue "/folder"))
+    assert "acquisition delta differs between compilers" (result == Just expected && status == ExitSuccess)
+    assert "acquisition did not suspend for typed evidence reads"
+      (length [() | ("evidence","read") <- trace] == 3 && ("files","list") `elem` trace)
+    (relative,relativeTrace,relativeStatus) <- broker Normal program (input (configValue "relative"))
+    assert "relative directory caused host effects" (relative == Just (failure "Folder directory must be absolute") && null relativeTrace && relativeStatus == ExitSuccess)
+    (unreadable,unreadableTrace,unreadableStatus) <- broker DirectoryFailure program (input (configValue "/folder"))
+    assert "failed enumeration became removals" (unreadable == Just (failure "Directory unreadable") &&
+      unreadableTrace == [("files","list")] && unreadableStatus == ExitSuccess)
+    (readFailure,_,readFailureStatus) <- broker FileFailure program (input (configValue "/folder"))
+    assert "failed file read produced a successful delta" (readFailure == Just (failure "File unreadable") && readFailureStatus == ExitSuccess)
+    forM_ [WrongId,WrongPayload] $ \scenario -> do
+      (bad,_,badStatus) <- broker scenario program (input (configValue "/folder"))
+      assert "malformed host reply resumed a continuation" (bad == Nothing && badStatus /= ExitSuccess)
+  forM_ readPrograms $ \program -> do
+    (result,trace,status) <- broker Normal program (input (String "changed.txt"))
+    assert "captured read requested acquisition or lost payload" (result == Just (success (String "old")) &&
+      trace == [("evidence","read")] && status == ExitSuccess)
+  let forbidden = Text.encodeUtf8 (Text.unlines ["module ReadDocument where","import KyynPluginBindings",
+        "import qualified FolderSchema as Schema",
+        "view :: String -> EvidenceSnapshot Schema.Document -> CapturedRead (Either FetchError String)",
+        "view path _ = readTextFile path"])
+  forbiddenSources <- right (capturedReadSources StringType payload StringType "ReadDocument.view" ((path "ReadDocument.hs",forbidden):common))
+  rejectBoth temporary toolchain nativeCompiler forbiddenSources
+  putStrLn "Plugin acquisition/captured-read adapters passed under GHC and MicroHs with real request/response pipes."
+
+writeSources :: FilePath -> [(RelativePath,Bytes.ByteString)] -> IO ()
+writeSources directory sources = forM_ sources $ \(path,bytes) -> do
+  let target = directory </> relativeName path
+  createDirectoryIfMissing True (takeDirectory target)
+  Bytes.writeFile target bytes
+
+compileBoth :: FilePath -> FilePath -> FilePath -> String -> GuestSources -> IO [CreateProcess]
+compileBoth temporary toolchain ghc label sources = do
+  let directory = temporary </> label
+      executable = directory </> "native"
+  writeSources directory (sourceFiles sources)
+  (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fforce-recomp","-i" ++ directory,
+    "-outputdir",directory </> "objects","-main-is","KyynPluginEntry.main",
+    directory </> relativeName (selectedEntry sources),"-o",executable] ""
+  assert ("GHC rejected generated plugin: " ++ out ++ err) (status == ExitSuccess)
+  artifact <- compileMicroHs temporary toolchain sources >>= right
+  let CompiledProgram _ (_,bytes) = artifact
+      program = directory </> "program.comb"
+  Bytes.writeFile program bytes
+  pure [proc executable [],proc (toolchain </> "bin/mhseval") ["+RTS","-r" ++ program,"-RTS"]]
+
+compileMicroHs :: FilePath -> FilePath -> GuestSources -> IO (Either [Diagnostic] CompiledProgram)
+compileMicroHs temporary toolchain sources = do
+  scope <- right (directoryScope temporary)
+  compiler <- GuestToolchain <$> right (directoryScope toolchain)
+  runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runGuestCompilation compiler (compileGuest sources))))) >>= right
+
+rejectBoth :: FilePath -> FilePath -> FilePath -> GuestSources -> IO ()
+rejectBoth temporary toolchain ghc sources = do
+  let directory = temporary </> "forbidden"
+  writeSources directory (sourceFiles sources)
+  (status,_,_) <- readProcessWithExitCode ghc ["-v0","-fno-code","-i" ++ directory,
+    "-outputdir",directory </> "objects",directory </> relativeName (selectedEntry sources)] ""
+  assert "GHC granted filesystem calls to captured reads" (status /= ExitSuccess)
+  rejected <- compileMicroHs temporary toolchain sources
+  assert "MicroHs granted filesystem calls to captured reads" (case rejected of Left _ -> True; Right _ -> False)
+
+data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload deriving (Eq)
+
+broker :: Scenario -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
+broker scenario program input = do
+  result <- timeout 20000000 $ withCreateProcess program {std_in = CreatePipe,std_out = CreatePipe,std_err = CreatePipe} $ \stdin stdout stderr process ->
+    case (stdin,stdout,stderr) of
+      (Just toGuest,Just fromGuest,Just errors) -> do
+        let emit value = hPutStrLn toGuest (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))) >> hFlush toGuest
+            loop trace = do
+              done <- hIsEOF fromGuest
+              if done then pure (Nothing,trace) else do
+                line <- hGetLine fromGuest
+                message <- right (eitherDecodeStrict (Text.encodeUtf8 (Text.pack line)))
+                tag <- right (parseEither (withObject "frame" (.: "tag")) message)
+                case tag :: String of
+                  "Completed" -> do
+                    output <- right (parseEither (withObject "completed" (.: "result")) message)
+                    pure (Just output,trace)
+                  "HostRequest" -> do
+                    (identity,capability,method,args) <- right (parseEither (withObject "request" $ \fields ->
+                      (,,,) <$> fields .: "id" <*> fields .: "capability" <*> fields .: "method" <*> fields .: "arguments") message)
+                    assert "request IDs are not sequential" (identity == show (length trace + 1))
+                    answer <- respond scenario capability method args
+                    emit (object ["tag" .= ("HostResponse" :: String),"id" .=
+                      (if scenario == WrongId then "wrong" else identity),"result" .=
+                      (if scenario == WrongPayload then success (Bool True) else answer)])
+                    loop (trace ++ [(capability,method)])
+                  _ -> fail "Unknown guest frame"
+        emit input
+        (output,trace) <- loop []
+        hClose toGuest
+        diagnostics <- hGetContents errors
+        length diagnostics `seq` pure ()
+        status <- waitForProcess process
+        pure (output,trace,status)
+      _ -> fail "Missing test protocol pipes"
+  maybe (fail "Plugin protocol timed out") pure result
+
+respond :: Scenario -> String -> String -> Value -> IO Value
+respond scenario capability method arguments = case (capability,method) of
+  ("files","list") -> do
+    (directory,recursive) <- right (parseEither (withObject "list files" $ \fields -> (,) <$> fields .: "directory" <*> fields .: "recursive") arguments)
+    assert "configuration not passed through the guest" (directory == ("/folder" :: String) && recursive)
+    pure (if scenario == DirectoryFailure then failure "Directory unreadable" else success (toJSON ["changed.txt","same.txt","new.txt" :: String]))
+  ("files","read") -> do
+    path <- right (parseEither (withObject "read file" (.: "path")) arguments)
+    contents <- maybe (fail "Unexpected file path") pure (lookup (path :: String)
+      [("/folder/changed.txt","changed 🦋\nline two"),("/folder/same.txt","same"),("/folder/new.txt","new")])
+    pure (if scenario == FileFailure then failure "File unreadable" else success (String contents))
+  ("evidence","list") -> do
+    checkSnapshot arguments
+    pure (success (toJSON ["gone.txt","changed.txt","same.txt" :: String]))
+  ("evidence","read") -> do
+    checkSnapshot arguments
+    key <- right (parseEither (withObject "read evidence" (.: "id")) arguments)
+    contents <- maybe (fail "Unexpected evidence ID") pure (lookup key
+      [("gone.txt","gone"),("changed.txt","old"),("same.txt","same")])
+    pure (success (object ["tag" .= ("Some" :: String),"value" .= evidence key contents]))
+  _ -> fail "Guest requested a capability outside the fixture's row"
+  where
+    checkSnapshot value = do
+      snapshot <- right (parseEither (withObject "snapshot" (.: "snapshot")) value)
+      assert "guest lost its explicit prior snapshot handle" (snapshot == ("prior" :: String))
+
+success :: Value -> Value
+success value = object ["tag" .= ("Right" :: String),"value" .= value]
+failure :: String -> Value
+failure message = object ["tag" .= ("Left" :: String),"value" .= message]
+evidence :: String -> Text.Text -> Value
+evidence key contents = object ["references" .= ["/folder/" ++ key],"payload" .= object ["text" .= contents]]
+change :: String -> String -> Text.Text -> Value
+change kind key contents = object ["tag" .= kind,"value" .= object ["id" .= key,"evidence" .= evidence key contents]]

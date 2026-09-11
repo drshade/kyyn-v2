@@ -40,6 +40,7 @@ const allowed = {
     'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
+    'Kyyn.Types.Plugin', 'Kyyn.Types.Program',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
@@ -116,6 +117,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.PluginInvocation': ['Data.ByteString', 'Data.List', 'Data.Text', 'Data.Text.Encoding',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
+    'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Capability.EvidenceStore': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value'],
   'Kyyn.Plumbing.Protocol.Evidence': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Plumbing.Protocol.Plugin': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding',
@@ -175,6 +179,8 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Runtime.Plugin': ['Kyyn.Runtime.Json', 'Kyyn.Types.Evidence', 'Kyyn.Types.Plugin',
+    'Kyyn.Types.Program', 'System.IO', 'Text.JSON.Types'],
   'Kyyn.Plumbing.Interpreter.EvidenceStore': ['Control.Exception', 'Control.Monad', 'Control.Monad.Trans.Except',
     'Data.ByteString', 'Data.Text', 'Data.Text.Encoding', 'Data.Time.Clock', 'Data.Time.Format.ISO8601', 'Data.Word', 'Numeric',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence',
@@ -251,7 +257,7 @@ export function checkImports(packageName, source) {
       [...allowed['kyyn-porcelain-interpreters'], 'Kyyn.Porcelain.RootExecution.Types']) ||
     (packageName === 'kyyn-porcelain' && ['Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Validated'].includes(moduleName) && [...allowed['kyyn-porcelain'], 'Kyyn.Porcelain.Validation.Types']) ||
     (packageName === 'kyyn-microhs' && compilerModules[moduleName]) ||
-    (['kyyn-plumbing-interpreters', 'kyyn-porcelain-interpreters'].includes(packageName) && interpreterModules[moduleName]) || allowed[packageName];
+    (['kyyn-plumbing-interpreters', 'kyyn-porcelain-interpreters', 'kyyn-runtime'].includes(packageName) && interpreterModules[moduleName]) || allowed[packageName];
   return source.split('\n').filter(line => /^\s*import\b/.test(line)).flatMap(line => {
     const match = /^\s*import\s+(?:qualified\s+)?([A-Z][\w.]*)(?:\s|$)/.exec(line);
     if (!match) return ['unsupported import syntax; use a plain single-line module import'];

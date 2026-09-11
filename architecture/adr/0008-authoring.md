@@ -26,13 +26,14 @@ Kyyn generates entry adapters, codecs, transport calls and typed registration
 wrappers. No authored `main :: IO ()`, manual JSON/Dhall decoding, response IDs,
 paths to runtime artifacts or printer callbacks for ordinary KB tools.
 
-Group the installed author API by concept, with six public SDK modules:
+Group the installed author API by concept, with seven public SDK modules:
 
 - `Kyyn.Schema`: identified facts and schema metadata/roles.
 - `Kyyn.Validation`: diagnostics, locations, severities and validation reports.
 - `Kyyn.Query`: the abstract Query and CollectionBinding types plus collection/fact reads.
 - `Kyyn.Evolution`: evolution composition, rationale and evidence, reexporting editing vocabulary.
 - `Kyyn.Edit` and `Kyyn.Optics`: focused editing and optics sub-vocabularies.
+- `Kyyn.Plugin`: abstract Program and evidence-snapshot handles, evidence changes and typed acquisition failures.
 
 These are facades over the existing definitions, not new nominal types. Keep the
 shared `Kyyn.Types.*` wire profile available to host/runtime code but outside the
@@ -48,6 +49,14 @@ Generated Kyyn.Workspace.Evolution reexports only Kyyn.Evolution alongside its o
 workspace-specific combinators, not a mixed collection of schema/runtime modules.
 The installed catalogue derives its module inventory only from kyyn-sdk's public
 facade list; shared-profile package exports are not a second author inventory.
+
+Plugin adapters generate `KyynPluginBindings` for the selected entry. An acquisition
+entry receives an `Acquisition a` alias and filesystem/evidence helpers; a captured
+reader receives `CapturedRead a` and evidence helpers only. Both reexport
+`Kyyn.Plugin`. Authors use ordinary `do` notation and explicit typed snapshot
+arguments; the generated helpers inject requests into the selected capability sum
+without exposing codecs or request envelopes. The concrete algebras belong to
+[ADR 0009](0009-capabilities.md).
 
 KB-authored code has these entry-point kinds:
 

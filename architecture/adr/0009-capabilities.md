@@ -6,9 +6,9 @@ date: 2026-09-11
 ---
 # Typed capability rows describe program effects
 
-Basis: the accepted typed Program and snapshot-read encoding has passed the
-pinned MicroHs/GHC feasibility proof; plugin capability composition and transport
-remain unimplemented. The KB-tool read boundary is under design review.
+Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
+captured-read adapters pass the pinned MicroHs/GHC proofs. Native plugin dispatch,
+configured instances and KB-tool composition remain to be integrated.
 
 ## Context
 
@@ -118,10 +118,37 @@ the storage/transport interpreter must not force business queries to handle wire
 values or continuations themselves. Paging and plugin calls are later additions,
 not speculative constructors in the current request algebra.
 
-Composition of capability algebras can later be as small as a typed sum:
+Plugin acquisition now composes capability algebras using a typed sum:
 
 ```haskell
 data (left :+: right) a = InLeft (left a) | InRight (right a)
+
+data EvidenceRead payload a where
+  ListEvidenceIds :: EvidenceSnapshot payload
+                  -> EvidenceRead payload (Either FetchError [EvidenceId])
+  ReadEvidence :: EvidenceSnapshot payload -> EvidenceId
+               -> EvidenceRead payload (Either FetchError (Maybe (Evidence payload)))
+
+data FileRead a where
+  ListFiles :: FilePath -> Bool -> FileRead (Either FetchError [FilePath])
+  ReadTextFile :: FilePath -> FileRead (Either FetchError String)
+
+-- Generated for the plugin's inspected Payload type.
+type Acquisition a = Program (FileRead :+: EvidenceRead Payload) a
+type CapturedRead a = Program (EvidenceRead Payload) a
+```
+
+The snapshot argument is explicit. Acquisition may enumerate the source and read
+files; captured readers have only the two snapshot questions above. The folder
+proof requires an absolute directory and returns a typed error before requesting
+effects for a relative path. Enumeration failure is a typed error, never an empty
+directory. The generated adapters and request/response transport are exercised
+under both compilers; the proof's native broker supplies recording responses,
+not live filesystem acquisition or EvidenceStore publication.
+
+Caller-to-plugin composition remains a separate integration boundary:
+
+```haskell
 
 -- Illustrative generated proxy for a registered Microsoft method.
 data MicrosoftCalls a where
