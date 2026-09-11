@@ -90,7 +90,7 @@ main = do
       rendered = GuestApi.moduleResult (Right apiModule)
   case rendered of
     Response _ _ messages _ ->
-      assert "Workspace reexports precede local declarations"
+      assert "Workspace local declarations precede reexports"
         (elemIndex "edit :: b" messages < elemIndex "append :: a" messages)
   case GuestApi.workspaceResult catalogue (GuestApi.modulesResult (Right ["Kyyn.Workspace.Evolution"])) of
     Response _ payload messages _ -> do
