@@ -30,6 +30,7 @@ import System.IO (hGetLine, hPutStrLn, hFlush, hClose, hIsEOF, hGetContents)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process
 import System.Timeout (timeout)
+import PluginNativeTests (nativeTests)
 
 assert :: String -> Bool -> IO ()
 assert message condition = unless condition (fail message)
@@ -62,8 +63,8 @@ main = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   forM_ ["KyynPluginBindings.hs","KyynPluginEntry.hs","KyynPluginPayloadCodec.hs"] $ \name ->
     assert "generated adapter overwrote authored source" (case acquisitionSources config payload "Folder.fetch" ((path name,"collision"):folder:common) of
       Left _ -> True; Right _ -> False)
-  fetchPrograms <- compileBoth temporary toolchain nativeCompiler "fetch" acquisition
-  readPrograms <- compileBoth temporary toolchain nativeCompiler "read" captured
+  (fetchPrograms,artifact) <- compileBoth temporary toolchain nativeCompiler "fetch" acquisition
+  (readPrograms,_) <- compileBoth temporary toolchain nativeCompiler "read" captured
   let configValue directory = object ["directory" .= (directory :: String),"recursive" .= True]
       input arguments = object ["arguments" .= arguments,"snapshot" .= ("prior" :: String)]
       expected = success (toJSON
@@ -94,6 +95,7 @@ main = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
         "view path _ = readTextFile path"])
   forbiddenSources <- right (capturedReadSources StringType payload StringType "ReadDocument.view" ((path "ReadDocument.hs",forbidden):common))
   rejectBoth temporary toolchain nativeCompiler forbiddenSources
+  nativeTests temporary toolchain config payload artifact
   putStrLn "Plugin acquisition/captured-read adapters passed under GHC and MicroHs with real request/response pipes."
 
 writeSources :: FilePath -> [(RelativePath,Bytes.ByteString)] -> IO ()
@@ -102,7 +104,7 @@ writeSources directory sources = forM_ sources $ \(path,bytes) -> do
   createDirectoryIfMissing True (takeDirectory target)
   Bytes.writeFile target bytes
 
-compileBoth :: FilePath -> FilePath -> FilePath -> String -> GuestSources -> IO [CreateProcess]
+compileBoth :: FilePath -> FilePath -> FilePath -> String -> GuestSources -> IO ([CreateProcess],CompiledProgram)
 compileBoth temporary toolchain ghc label sources = do
   let directory = temporary </> label
       executable = directory </> "native"
@@ -115,7 +117,7 @@ compileBoth temporary toolchain ghc label sources = do
   let CompiledProgram _ (_,bytes) = artifact
       program = directory </> "program.comb"
   Bytes.writeFile program bytes
-  pure [proc executable [],proc (toolchain </> "bin/mhseval") ["+RTS","-r" ++ program,"-RTS"]]
+  pure ([proc executable [],proc (toolchain </> "bin/mhseval") ["+RTS","-r" ++ program,"-RTS"]],artifact)
 
 compileMicroHs :: FilePath -> FilePath -> GuestSources -> IO (Either [Diagnostic] CompiledProgram)
 compileMicroHs temporary toolchain sources = do

@@ -7,8 +7,9 @@ date: 2026-09-11
 # Typed capability rows describe program effects
 
 Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
-captured-read adapters pass the pinned MicroHs/GHC proofs. Native plugin dispatch,
-configured instances and KB-tool composition remain to be integrated.
+captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch connects
+filesystem and snapshot reads to evidence publication. Registration, configured
+instances and KB-tool composition remain to be integrated.
 
 ## Context
 
@@ -143,8 +144,9 @@ files; captured readers have only the two snapshot questions above. The folder
 proof requires an absolute directory and returns a typed error before requesting
 effects for a relative path. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised
-under both compilers; the proof's native broker supplies recording responses,
-not live filesystem acquisition or EvidenceStore publication.
+under both compilers with recording responses. The native MicroHs broker additionally
+exercises live filesystem acquisition and EvidenceStore publication, including
+historical reads and failed acquisitions that leave the previous head unchanged.
 
 Caller-to-plugin composition remains a separate integration boundary:
 
