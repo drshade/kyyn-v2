@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+    'Data.Coerce', 'Kyyn.Domain.Evidence',
     'Kyyn.Domain.Plugin',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
     'Kyyn.Domain.KnowledgeBase',
@@ -12,6 +13,12 @@ const allowed = {
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+    'Data.Coerce', 'Kyyn.Composition.Runtime', 'Kyyn.Composition.Connectors',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Porcelain.Capability.Connector',
+    'Kyyn.MicroHs.Interpreter.GuestExecution', 'Kyyn.Plumbing.Interpreter.EvidenceStore',
+    'Kyyn.Plumbing.Interpreter.FileAcquisition', 'Kyyn.Plumbing.Protocol.ConnectorConfig',
+    'Kyyn.Porcelain.Capability.EvidenceInspection', 'Kyyn.Porcelain.Interpreter.EvidenceInspection',
+    'Kyyn.Porcelain.Interpreter.EvidenceAcquisition', 'Kyyn.Surfaces.Connectors',
     'Kyyn.Porcelain.Capability.PluginPreparation', 'Kyyn.Porcelain.Interpreter.PluginPreparation',
     'Kyyn.Domain.Plugin', 'Kyyn.Porcelain.Capability.PluginInstallation', 'Kyyn.Porcelain.Interpreter.PluginInstallation',
     'Kyyn.Domain.GuestApi', 'Kyyn.MicroHs.Interpreter.ApiInspection', 'Kyyn.Plumbing.Capability.ApiInspection',
@@ -46,6 +53,7 @@ const allowed = {
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
   'kyyn-porcelain': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Porcelain.Capability.EvidenceAcquisition',
     'Kyyn.Porcelain.Capability.PluginPreparation',
     'Data.ByteString', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value',
     'Kyyn.Domain.GuestApi',
@@ -97,7 +105,7 @@ const allowed = {
 };
 
 const domainModules = {
-  'Kyyn.Domain.Evidence': ['Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence'],
+  'Kyyn.Domain.Evidence': ['Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
@@ -198,6 +206,9 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Porcelain.Interpreter.EvidenceInspection': ['Control.Monad.Trans.Except', 'Effectful',
+    'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence',
+    'Kyyn.Plumbing.Capability.EvidenceStore', 'Kyyn.Porcelain.Capability.EvidenceInspection'],
   'Kyyn.Runtime.PluginRegistration': ['Kyyn.Types.Plugin', 'Kyyn.Runtime.Json', 'Text.JSON.Types'],
   'Kyyn.Porcelain.Interpreter.PluginPreparation': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson',
     'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List', 'Data.Coerce', 'Data.Text.Encoding', 'Numeric',

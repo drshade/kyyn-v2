@@ -30,6 +30,7 @@ runDhallHandling :: Eff (DhallHandling : es) a -> Eff es a
 runDhallHandling = interpret $ \_ -> \case
   DecodeValue contract contents -> pure (decodeValueSource contract contents)
   EncodeValue contract value -> pure (encodeValueSource contract value)
+  RenderType contract -> pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr (project contract))) <> "\n")
 
 encodeValueSource :: Shape -> Value -> Either [Diagnostic] Text
 encodeValueSource contract value = do

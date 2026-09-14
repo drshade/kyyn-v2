@@ -104,7 +104,14 @@ kyyn
     connector
       list <plugin>
       show <plugin> <connector>
-      fetch <plugin> <connector>
+      schema
+        show <plugin>
+  evidence
+    fetch <plugin> <instance>
+    history
+      list <plugin> <instance>
+    change
+      list <plugin> <instance>
   output
     list
     show <name>
@@ -141,6 +148,38 @@ under the common `--kb PATH` selection. It prepares a copied source package in t
 returns its installed name, location and origin in human/JSON output; it does not
 compile or invoke the plugin, configure connectors, fetch evidence or commit the
 root. ADR 0015 owns source selection, manifest, storage and refusal contracts.
+
+Connector discovery uses `plugin connector list PLUGIN [--evolution ID]` and
+`plugin connector schema show PLUGIN [--evolution ID]`. The default is the
+accepted root; an evolution target can be inspected before its configuration is
+accepted. Schema output is the derived Dhall type for
+`target/plugins/config/PLUGIN.dhall`. Field documentation is a discovery-only
+extension through API inspection, not a dependency of root preparation or fetching;
+the first producer slice emits the exact type without documentation comments.
+Authors write that file and use ordinary check/ready/accept. Schema
+discovery must remain available when the configuration file needs repair.
+
+Evidence operations use their own noun path:
+
+```text
+evidence fetch PLUGIN INSTANCE
+evidence history list PLUGIN INSTANCE [--at FETCH]
+evidence change list PLUGIN INSTANCE [--since FETCH] [--at FETCH]
+```
+
+Fetching selects and checks the accepted root and its configured instance;
+there is no `--evolution` acquisition context. An unaccepted instance cannot
+start an evidence history. Unknown plugins and instances produce `plugin.unknown`
+and `plugin.instance-unknown`; a typed acquisition refusal is `plugin.fetch-failed`.
+History and change results contain fetch identifiers, ordering and citations,
+never payloads. `--since` is exclusive and `--at` selects the ending snapshot.
+Unavailable history, incompatible producers, publication conflicts and malformed
+deltas remain distinct: `evidence.history-unavailable`, `evidence.producer-changed`,
+`evidence.base-conflict`, `evidence.invalid-delta` and `evidence.invalid-data`
+(corrupt stored data). ADR 0014 owns their semantics.
+History and change inspection currently prepare plugin declarations and contracts,
+including compiled adapters; separating inspection from entry compilation is a
+later refinement, not a reason to add another registry or cache.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK,
 independently of KB selection. Public modules come from kyyn-sdk's exposed
@@ -304,7 +343,7 @@ There is no remembered active KB or global selection state.
 kyyn root schema list
 kyyn --kb knowledge/sales evolution list
 kyyn --kb knowledge/training root schema list
-kyyn --kb /path/to/kb plugin connector fetch microsoft sales-mail
+kyyn --kb /path/to/kb evidence fetch microsoft sales-mail
 ```
 
 A KB may occupy a repository root or a subdirectory; several KBs may share a

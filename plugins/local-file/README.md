@@ -32,6 +32,23 @@ in [ { name = "documents"
      } ]
 ```
 
-Evolution checking validates every configured instance before acceptance. The
-native registration proof exercises real configured fetches; CLI fetch commands
-are the next integration step.
+Discover the exact configuration type before writing it:
+
+```sh
+kyyn-v2 --kb /path/to/kb plugin connector schema show local-file --evolution 000001-add-plugin
+kyyn-v2 --kb /path/to/kb plugin connector list local-file --evolution 000001-add-plugin
+```
+
+Evolution checking validates every configured instance before acceptance. Once
+the evolution is checked, ready and accepted, fetch its configured instance:
+
+```sh
+kyyn-v2 --kb /path/to/kb evidence fetch local-file documents
+kyyn-v2 --kb /path/to/kb evidence history list local-file documents
+kyyn-v2 --kb /path/to/kb evidence change list local-file documents --since FETCH
+```
+
+Omit `--since` to list all retained changes. History and changes support
+`--at FETCH` to select an earlier fetch. Both return identifiers and summaries,
+not document payloads. Fetches are checkout-local Dhall data, not Git commits;
+they do not change accepted facts. A draft configuration cannot acquire evidence.

@@ -4,6 +4,8 @@ import Control.Monad (forM_, unless)
 import Data.List (isInfixOf)
 import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionId)
 import Kyyn.Domain.Git (gitRevision)
+import Kyyn.Domain.Plugin (pluginName, connectorName)
+import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Surfaces.Cli
 import Options.Applicative (ParserResult(..), renderFailure)
 import System.Exit (ExitCode(..))
@@ -13,6 +15,8 @@ main = do
   let selected = Selection "." Nothing Nothing
       identity = either error id (evolutionId "abc123")
       revision = either error id (gitRevision (replicate 40 'a'))
+      localFile = either error id (pluginName "local-file")
+      sales = either error id (connectorName "sales")
       assert label condition = unless condition (fail label)
       succeeds args expected = case parseArguments args of
         Success actual -> assert ("Wrong parse: " ++ show args ++ ": " ++ show actual) (actual == expected)
@@ -29,6 +33,20 @@ main = do
     (Invocation (Selection "nested/kb" Nothing Nothing) Json (Plugin (InstallPlugin identity "file:///repo" (Just "plugins/local-file"))))
   refuses ["plugin","install","--from","./plugins/local-file"]
   refuses ["plugin","install","--evolution","../bad","--from","./plugins/local-file"]
+  succeeds ["plugin","connector","list","local-file"]
+    (Invocation selected Human (Plugin (Connector (ListConnectors localFile Nothing))))
+  succeeds ["plugin","connector","schema","show","local-file","--evolution","abc123"]
+    (Invocation selected Human (Plugin (Connector (ShowConnectorSchema localFile (Just identity)))))
+  succeeds ["evidence","fetch","local-file","sales"]
+    (Invocation selected Human (Evidence (FetchConnector localFile sales)))
+  succeeds ["evidence","history","list","local-file","sales","--at","first"]
+    (Invocation selected Human (Evidence (ListFetchHistory localFile sales (Just (FetchId "first")))))
+  succeeds ["evidence","change","list","local-file","sales","--since","first","--at","second"]
+    (Invocation selected Human (Evidence (ListEvidenceChanges localFile sales (Just (FetchId "first")) (Just (FetchId "second")))))
+  forM_ [["evidence","fetch","local-file","sales","--evolution","abc123"],
+    ["plugin","connector","fetch","local-file","sales"],
+    ["evidence","fetch","local-file",""],
+    ["evidence","history","list","local-file","sales","--at",""]] refuses
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
   succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
     "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]
@@ -67,7 +85,9 @@ main = do
         assert "Wrong help exit status"
           (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
-  forM_ [([], ["kb", "root", "evolution", "guest", "plugin"]), (["plugin"], ["install"]), (["kb"], ["init"]), (["root"], ["show", "check"]),
+  forM_ [([], ["kb", "root", "evolution", "guest", "plugin", "evidence"]), (["plugin"], ["install", "connector"]),
+    (["evidence"], ["fetch", "history", "change"]), (["plugin", "connector"], ["list", "schema"]),
+    (["kb"], ["init"]), (["root"], ["show", "check"]),
     (["guest"], ["module", "symbol"]), (["guest", "module"], ["list", "show"]),
     (["evolution"], ["new", "list", "accept"]),
     (["root", "unknown"], ["show", "check"])] $ \(args,commands) ->

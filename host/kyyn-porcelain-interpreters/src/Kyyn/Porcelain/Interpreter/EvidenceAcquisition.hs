@@ -35,4 +35,4 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package paylo
   ExceptT (fmap (either (Left . problem) Right) (Store.publishFetch instanceRef producer payload base changes))
 
 problem :: EvidenceProblem -> [Diagnostic]
-problem failure = [errorDiagnostic "evidence.fetch-rejected" (show failure)]
+problem failure = [evidenceProblemDiagnostic failure]

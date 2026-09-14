@@ -5,8 +5,8 @@ import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Evidence (EvidenceId(..), EvidenceSnapshotRef)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
+import Kyyn.Domain.Evidence (EvidenceId(..), EvidenceSnapshotRef, EvidenceProblem, evidenceProblemDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Value (CheckedValue)
@@ -47,12 +47,12 @@ answerEvidence payload prior call = case call of
     checkToken token
     case prior of
       Nothing -> pure (success (toJSON ([] :: [String])))
-      Just snapshot -> either (failure . show) (success . toJSON . map (\(EvidenceId key) -> key))
+      Just snapshot -> either (failure . problemMessage) (success . toJSON . map (\(EvidenceId key) -> key))
         <$> Store.listEvidenceIds snapshot payload
   ReadEvidence token key -> do
     checkToken token
     result <- maybe (pure (Right Nothing)) (\snapshot -> Store.readEvidence snapshot payload key) prior
-    pure (either (failure . show) (success . maybe (object ["tag" .= ("None" :: String)])
+    pure (either (failure . problemMessage) (success . maybe (object ["tag" .= ("None" :: String)])
       (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value])) result)
   _ -> broken "Filesystem acquisition is unavailable in this invocation"
   where
@@ -83,3 +83,6 @@ conversation program arguments respond = do
 
 broken :: Failure :> es => String -> Eff es a
 broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput message))
+
+problemMessage :: EvidenceProblem -> String
+problemMessage problem = case evidenceProblemDiagnostic problem of Diagnostic _ _ message _ -> message

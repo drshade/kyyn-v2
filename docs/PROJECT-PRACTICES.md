@@ -61,6 +61,14 @@ and rejects invalid config through the whole-root checker. It also checks reflec
 record-field documentation, invalid registration/instance names and a mismatched
 fetch signature. This is a focused native integration check, not an installed CLI journey.
 
+`node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE` runs the installed
+producer journey in a disposable nested KB: discover the emitted Dhall schema,
+configure and accept two instances, fetch and change real files, inspect retained
+history and payload-free deltas, and preserve the head after acquisition failures.
+It checks retained payload bytes without adding a generic evidence-view endpoint.
+It belongs to the full installed check and can be run independently for changes
+to this boundary; it does not implement typed plugin reads or KB helpers.
+
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow
 no-checkout acquisition from a local Git remote. It uses real Dhall
