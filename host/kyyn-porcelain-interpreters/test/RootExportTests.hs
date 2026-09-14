@@ -144,7 +144,7 @@ noGitExport = interpret $ \_ _ -> error "Archive export used Git"
 
 checkingMock :: Root -> Eff (RootExecution : es) a -> Eff es a
 checkingMock expected = interpret $ \_ -> \case
-  PrepareRoot root -> same root >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
+  PrepareRoot root -> same root >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
   ValidateRoot root -> same (preparedRoot root) >> pure (Right (ValidationReport []))
   ExecuteQuery _ _ _ -> error "Unexpected query in export fixture"
   where

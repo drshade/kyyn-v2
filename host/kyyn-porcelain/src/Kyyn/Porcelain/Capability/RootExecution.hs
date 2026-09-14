@@ -23,10 +23,10 @@ validateRoot :: RootExecution :> es => PreparedRoot -> Eff es (Either [Diagnosti
 validateRoot = send . ValidateRoot
 
 preparedRoot :: PreparedRoot -> Root
-preparedRoot (PreparedRoot root _ _ _) = root
+preparedRoot (PreparedRoot root _ _ _ _) = root
 
 preparedQueries :: PreparedRoot -> [QueryDescriptor]
-preparedQueries (PreparedRoot _ _ _ queries) = [descriptor | PreparedQuery descriptor _ _ <- queries]
+preparedQueries (PreparedRoot _ _ _ queries _) = [descriptor | PreparedQuery descriptor _ _ <- queries]
 
 queryRoot :: RootExecution :> es => PreparedRoot -> QueryDescriptor -> CheckedValue -> Eff es (Either [Diagnostic] QueryResult)
 queryRoot root descriptor = send . ExecuteQuery root descriptor

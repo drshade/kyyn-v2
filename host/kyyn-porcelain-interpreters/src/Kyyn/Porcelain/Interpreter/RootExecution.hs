@@ -9,7 +9,7 @@ import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (rootType, rootSchema, contractShape, contractId)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Root (Root(..), RootDefinition(..), CheckedValue(..))
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
@@ -23,14 +23,16 @@ import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
+import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins, validatePlugins)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
-  :: (RootStore :> es, GuestCompilation :> es, Failure :> es,
+  :: (RootStore :> es, GuestCompilation :> es, Failure :> es, PluginPreparation :> es,
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
   PrepareRoot root@(Root contract _ code) -> runExceptT $ do
+    plugins <- ExceptT (preparePlugins code)
     RootDefinition _ _ validator declarations authored <- ExceptT (readRootDefinition code)
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"
@@ -42,14 +44,16 @@ runRootExecution sdk = interpret $ \_ -> \case
         (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
       entry <- ExceptT (compileGuest sources)
       pure (PreparedQuery descriptor selected entry)
-    pure (PreparedRoot root validator validatorEntry queries)
-  ValidateRoot (PreparedRoot root selected entry _) -> runExceptT $ do
+    pure (PreparedRoot root validator validatorEntry queries plugins)
+  ValidateRoot (PreparedRoot root selected entry _ plugins) -> runExceptT $ do
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
     output <- ExceptT (Right <$> executeCompiledEntry selected entry (Bytes.toStrict (encode value)))
     case decodeReport output of
       Left message -> protocolFailure selected message
-      Right report -> pure report
-  ExecuteQuery (PreparedRoot root _ _ queries) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
+      Right (ValidationReport report) -> do
+        ValidationReport pluginReport <- ExceptT (validatePlugins plugins)
+        pure (ValidationReport (report ++ pluginReport))
+  ExecuteQuery (PreparedRoot root _ _ queries _) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
     PreparedQuery (QueryDescriptor _ _ input result) selected entry <- case
       [q | q@(PreparedQuery (QueryDescriptor n _ _ _) _ _) <- queries, n == name] of
         [d] -> pure d

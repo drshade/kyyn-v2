@@ -245,10 +245,13 @@ derives the contract from the selected authored schema under ADR 0005; that is
 separate from parsing fact files. `MaterializeRoot` does not write a second
 temporary root: `SaveCandidate` owns persistence of that returned value, context
 and report. Loading a saved candidate reconstructs these same value representations.
-Structural root loading includes its plugin configuration. A malformed or
-structurally incompatible config fails the whole load (ADR 0016); no partial root
-or silently disabled connector is returned. Pure config validation subsequently
-participates in the whole-root semantic check.
+Preparation for a validated root includes its plugin configuration. Raw opening
+carries configuration files as bytes, including for scaffolding and Before
+comparisons. `PrepareRoot` uses `PluginPreparation` to decode every instance
+against its inspected connector config contract and compile the declared methods.
+A malformed or structurally incompatible config fails the whole preparation
+(ADR 0016); no partial usable root or silently disabled connector is returned.
+Pure config validation subsequently participates in the whole-root semantic check.
 
 Git's `ResolveRevision` reads the selected branch once and returns a revision for callers
 to pass explicitly to loading, creation or rebasing. Source reads do not substitute

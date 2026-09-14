@@ -27,6 +27,7 @@ import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootExecution
+import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore
 import System.Directory (findExecutable)
 import System.IO.Temp (withSystemTempDirectory)
@@ -48,13 +49,13 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
       args = CheckedValue (contractId input) (String "hello")
       entry = fixtureProgram
       execute compilation queryDescriptor arguments = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . gateCompiler shell (entry "printf '[]'") compilation . schemaMock input output . runDhallHandling . runRootStore . runRootExecution sdk $ do
+        . gateCompiler shell (entry "printf '[]'") compilation . schemaMock input output . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
           prepared <- prepareRoot root
           either (pure . Left) (\value -> queryRoot value queryDescriptor arguments) prepared
       unused = Right (entry "exit 99")
   discovered <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
     . gateCompiler shell (entry "exit 97") (Right (entry "exit 97")) . schemaMock input output
-    . runDhallHandling . runRootStore . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
+    . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
   unless (discovered == Right (Right [descriptor])) (fail "Prepared query discovery mismatch")
   success <- execute (Right (entry "printf '{\"result\":true,\"trace\":[{\"tag\":\"Collection\",\"collection\":\"todos\"}]}'")) descriptor args
   unless (success == Right (Right (QueryResult (CheckedValue (contractId output) (Bool True)) [CollectionRead "todos"])))
@@ -71,7 +72,7 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   unless (rejection == Right (Left rejected)) (fail "Compiler rejection lost diagnostics")
   let checkCode compilation = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
         . gateCompiler shell (entry "exit 97") compilation . schemaMock input output
-        . runDhallHandling . runRootStore . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
+        . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
   unusedQuery <- checkCode (Left rejected)
   unless (unusedQuery == Right (Left rejected)) (fail "Unused registered query escaped compilation checking")
   checkedCode <- checkCode (Right (entry "exit 97"))
@@ -79,7 +80,7 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   (reused, calls) <- runEff . runState ([] :: [String]) . runFailure . runProcessExecutionIO . runFileSystemIO scope
     . gateCompiler shell (entry "printf '[]'") (Right (entry "printf '{\"result\":true,\"trace\":[]}'"))
     . recordCompiler . schemaMock input output . recordInspection
-    . runDhallHandling . runRootStore . runRootExecution sdk $ do
+    . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot root >>= either (error . show) pure
       unless (preparedRoot prepared == root && preparedQueries prepared == [descriptor])
         (error "Preparation changed the root or its descriptors")

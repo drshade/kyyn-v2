@@ -15,6 +15,7 @@ import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Interpreter.RootExecution
+import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Path
@@ -178,7 +179,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   emptyRoot <- either (fail . show) pure
     (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode emptyValue))))
   emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ do
+    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot emptyRoot
       either (pure . Left) validateRoot prepared
   unless (emptyResponse == Right (Right (ValidationReport [])))
@@ -190,7 +191,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode checkedFacts))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
-      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runRootExecution sdk $ do
+      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
         prepared <- prepareRoot validationRoot
         either (pure . Left) validateRoot prepared
     report <- either (fail . show) (either (fail . show) pure) response

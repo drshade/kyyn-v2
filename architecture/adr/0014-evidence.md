@@ -11,7 +11,8 @@ KB-owned curation progress. The first native store implements the persistence/re
 boundary below. Generated guest acquisition/read adapters have a two-compiler
 recording-broker proof. Native acquisition now connects filesystem and selected
 evidence reads to complete-batch publication, with a real-files integration proof.
-Plugin registration and configured CLI invocation remain unimplemented.
+Plugin registration and configured native fetches are implemented; configured
+CLI invocation remains unimplemented.
 
 ## Context
 

@@ -55,7 +55,7 @@ opening root = interpret $ \_ -> \case
 
 checking :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a
 checking expected report = interpret $ \_ -> \case
-  PrepareRoot root | root == expected -> pure (Right (PreparedRoot root "Validate.validate" (error "Test must not execute bytecode") []))
+  PrepareRoot root | root == expected -> pure (Right (PreparedRoot root "Validate.validate" (error "Test must not execute bytecode") [] []))
   ValidateRoot root | preparedRoot root == expected -> pure (Right report)
   _ -> error "Initialization checked a different root or ran a query"
 
