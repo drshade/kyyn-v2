@@ -185,7 +185,7 @@ producer selection, history and expected-base publication; it uses the scoped
 DocumentPersistence capability from [ADR 0003](0003-effects.md) for native IO.
 The lock spans reading the previous document, checking its base, encoding the
 new state and replacing it. Its Dhall format helpers belong to
-`Kyyn.Porcelain.Capability.EvidenceStore.Persistence` in the interpreter package.
+`Kyyn.Porcelain.Protocol.EvidencePersistence` in the interpreter package.
 
 The interpreter stores one typed document at
 `.kyyn/evidence/<plugin>-<hex instance>/state.dhall`, relative to the explicitly

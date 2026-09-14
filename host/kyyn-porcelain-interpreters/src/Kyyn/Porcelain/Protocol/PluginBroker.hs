@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Capability.PluginInvocation.Broker (executeAcquisition, executeCapturedRead) where
+module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Effectful (Eff, (:>), raise)

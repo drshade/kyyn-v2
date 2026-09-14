@@ -52,8 +52,12 @@ facade list; shared-profile package exports are not a second author inventory.
 
 Plugin adapters generate `KyynPluginBindings` for the selected entry. An acquisition
 entry receives an `Acquisition a` alias and filesystem/evidence helpers; a captured
-reader receives `CapturedRead a` and evidence helpers only. Both reexport
-`Kyyn.Plugin`. Authors use ordinary `do` notation and explicit typed snapshot
+reader receives `CapturedRead a` and evidence helpers only. Both reexport the
+acquisition vocabulary: `Program`, `EvidenceSnapshot`, `FetchError`, `EvidenceId`,
+`Evidence` and `EvidenceChange`. Registration declarations (`SourceConnector` and
+its record fields) stay with the plugin entry module's direct `Kyyn.Plugin` import;
+they do not enter acquisition modules through generated bindings.
+Authors use ordinary `do` notation and explicit typed snapshot
 arguments; the generated helpers inject requests into the selected capability sum
 without exposing codecs or request envelopes. The concrete algebras belong to
 [ADR 0009](0009-capabilities.md).

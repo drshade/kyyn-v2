@@ -46,7 +46,7 @@ Capability rows are the normative interfaces; program roles describe common
 compositions, not a separate permission taxonomy (ADR 0009). The outer invocation
 owns nested call lifetimes; its cancellation does not leave orphan plugin calls.
 The plugin protocol broker lives in the porcelain-interpreter package as
-`Kyyn.Porcelain.Capability.PluginInvocation.Broker`: it dispatches decoded requests
+`Kyyn.Porcelain.Protocol.PluginBroker`: it dispatches decoded requests
 to semantic EvidenceStore and selected plumbing capabilities. Byte-frame codecs
 remain in plumbing; plumbing never imports porcelain to reach evidence storage.
 

@@ -200,9 +200,9 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
-  'Kyyn.Porcelain.Capability.PluginInvocation.Broker': ['Data.Aeson','Effectful','Effectful.State.Static.Local','Kyyn.Domain.CompiledProgram','Kyyn.Domain.Contract','Kyyn.Domain.Diagnostic','Kyyn.Domain.Evidence','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.GuestExecution','Kyyn.Plumbing.Capability.ProcessExecution','Kyyn.Plumbing.Capability.Failure','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Porcelain.Capability.EvidenceStore','Kyyn.Plumbing.Capability.FileAcquisition','Kyyn.Plumbing.Protocol.PluginMessages','System.FilePath'],
-  'Kyyn.Porcelain.Capability.EvidenceStore.Persistence': ['Control.Monad','Data.Aeson','Data.Aeson.Types','Data.ByteString','Data.Text','Data.Text.Encoding','Effectful','Kyyn.Domain.Contract','Kyyn.Domain.DataType','Kyyn.Domain.Evidence','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling'],
-  'Kyyn.Porcelain.Interpreter.EvidenceStore': ['Control.Monad','Control.Monad.Trans.Except','Data.ByteString','Data.Text','Data.Text.Encoding','Numeric','Effectful','Effectful.Dispatch.Dynamic','Kyyn.Domain.Contract','Kyyn.Domain.Evidence','Kyyn.Domain.KnowledgeBase','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Plumbing.Capability.DocumentPersistence','Kyyn.Plumbing.Capability.FileSystem','Kyyn.Plumbing.Capability.Failure','Kyyn.Porcelain.Capability.EvidenceStore','Kyyn.Porcelain.Capability.EvidenceStore.Persistence','System.FilePath'],
+  'Kyyn.Porcelain.Protocol.PluginBroker': ['Data.Aeson','Effectful','Effectful.State.Static.Local','Kyyn.Domain.CompiledProgram','Kyyn.Domain.Contract','Kyyn.Domain.Diagnostic','Kyyn.Domain.Evidence','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.GuestExecution','Kyyn.Plumbing.Capability.ProcessExecution','Kyyn.Plumbing.Capability.Failure','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Porcelain.Capability.EvidenceStore','Kyyn.Plumbing.Capability.FileAcquisition','Kyyn.Plumbing.Protocol.PluginMessages','System.FilePath'],
+  'Kyyn.Porcelain.Protocol.EvidencePersistence': ['Control.Monad','Data.Aeson','Data.Aeson.Types','Data.ByteString','Data.Text','Data.Text.Encoding','Effectful','Kyyn.Domain.Contract','Kyyn.Domain.DataType','Kyyn.Domain.Evidence','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling'],
+  'Kyyn.Porcelain.Interpreter.EvidenceStore': ['Control.Monad','Control.Monad.Trans.Except','Data.ByteString','Data.Text','Data.Text.Encoding','Numeric','Effectful','Effectful.Dispatch.Dynamic','Kyyn.Domain.Contract','Kyyn.Domain.Evidence','Kyyn.Domain.KnowledgeBase','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Plumbing.Capability.DocumentPersistence','Kyyn.Plumbing.Capability.FileSystem','Kyyn.Plumbing.Capability.Failure','Kyyn.Porcelain.Capability.EvidenceStore','Kyyn.Porcelain.Protocol.EvidencePersistence','System.FilePath'],
   'Kyyn.Plumbing.Interpreter.DocumentPersistence': ['Control.Exception','Control.Monad','Data.ByteString','Data.Time.Clock','Data.Time.Format.ISO8601','Data.Word','Numeric','Effectful','Effectful.Dispatch.Dynamic','Effectful.Exception','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Plumbing.Capability.DocumentPersistence','Kyyn.Plumbing.Capability.Failure','System.Directory','System.FileLock','System.FilePath','System.IO','System.IO.Error','System.IO.Temp','System.Random'],
   'Kyyn.Porcelain.Interpreter.EvidenceInspection': ['Control.Monad.Trans.Except', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence',
@@ -223,7 +223,7 @@ const interpreterModules = {
   'Kyyn.Porcelain.Interpreter.EvidenceAcquisition': ['Control.Monad.Trans.Except', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Plumbing.Capability.DhallHandling',
     'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Capability.GuestExecution', 'Kyyn.Plumbing.Capability.FileAcquisition',
-    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Porcelain.Capability.PluginInvocation.Broker', 'Kyyn.Plumbing.Protocol.PluginMessages',
+    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Porcelain.Protocol.PluginBroker', 'Kyyn.Plumbing.Protocol.PluginMessages',
     'Kyyn.Porcelain.Capability.EvidenceAcquisition'],
   'Kyyn.Runtime.Plugin': ['Kyyn.Runtime.Json', 'Kyyn.Types.Evidence', 'Kyyn.Types.Plugin',
     'Kyyn.Types.Program', 'System.IO', 'Text.JSON.Types'],
@@ -314,7 +314,7 @@ export function checkImports(packageName, source) {
       const explicit = /^\s*import Effectful \((.*)\)\s*$/.exec(line);
       const names = explicit?.[1].split(',').map(name => name.trim());
       const pureNames = ['Effect', 'Eff', 'DispatchOf', 'Dispatch(..)', '(:>)',
-        ...(moduleName === 'Kyyn.Porcelain.Capability.PluginInvocation.Broker' ? ['raise'] : [])];
+        ...(moduleName === 'Kyyn.Porcelain.Protocol.PluginBroker' ? ['raise'] : [])];
       if (!names || names.some(name => !pureNames.includes(name))) return ['Effectful: explicit API-only imports required'];
     }
     return [];

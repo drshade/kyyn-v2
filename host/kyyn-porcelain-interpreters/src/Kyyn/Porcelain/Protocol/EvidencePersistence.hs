@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Capability.EvidenceStore.Persistence
+module Kyyn.Porcelain.Protocol.EvidencePersistence
   ( encodeState, decodeState, decodeHeader, EvidenceHeader(..) ) where
 
 import Control.Monad (unless)

@@ -30,7 +30,7 @@ import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
-import Kyyn.Porcelain.Capability.EvidenceStore.Persistence
+import Kyyn.Porcelain.Protocol.EvidencePersistence
 import System.Directory (listDirectory, createDirectory, removeDirectory, doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)

@@ -1,6 +1,6 @@
 module Folder (fetch) where
 
-import KyynPluginBindings hiding (fetch)
+import KyynPluginBindings
 import qualified FolderSchema as Schema
 
 fetch :: Schema.Config -> EvidenceSnapshot Schema.Document

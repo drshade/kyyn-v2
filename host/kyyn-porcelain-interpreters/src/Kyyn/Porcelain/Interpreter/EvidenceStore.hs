@@ -22,7 +22,7 @@ import qualified Kyyn.Plumbing.Capability.DocumentPersistence as Document
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Porcelain.Capability.EvidenceStore
-import Kyyn.Porcelain.Capability.EvidenceStore.Persistence
+import Kyyn.Porcelain.Protocol.EvidencePersistence
 import System.FilePath ((</>))
 
 runEvidenceStore :: forall es a. (DocumentPersistence :> es, Failure :> es, DhallHandling :> es, FileSystem.FileSystem :> es)

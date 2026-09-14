@@ -111,7 +111,7 @@ test-suite plugin-registration
   ghc-options: -Wall -Werror -threaded
   build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain,
     kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
-    bytestring, text, filepath, directory, temporary ==1.3, aeson,
+    bytestring, text, filepath, directory, temporary ==1.3, aeson, process,
     kyyn-porcelain, kyyn-porcelain-interpreters
 
 test-suite queries

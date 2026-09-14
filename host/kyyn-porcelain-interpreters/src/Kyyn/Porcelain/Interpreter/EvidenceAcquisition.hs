@@ -12,7 +12,7 @@ import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Porcelain.Capability.PluginInvocation.Broker (executeAcquisition)
+import Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition)
 import Kyyn.Plumbing.Protocol.PluginMessages (changesShape, parseChanges)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition
 

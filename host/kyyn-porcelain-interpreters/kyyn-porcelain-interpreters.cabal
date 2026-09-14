@@ -12,8 +12,8 @@ library
     Kyyn.Porcelain.Interpreter.EvidenceAcquisition
     Kyyn.Porcelain.Interpreter.EvidenceInspection
     Kyyn.Porcelain.Interpreter.EvidenceStore
-    Kyyn.Porcelain.Capability.EvidenceStore.Persistence
-    Kyyn.Porcelain.Capability.PluginInvocation.Broker
+    Kyyn.Porcelain.Protocol.EvidencePersistence
+    Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Interpreter.PluginPreparation
     Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization
     Kyyn.Porcelain.Interpreter.RootOpening
