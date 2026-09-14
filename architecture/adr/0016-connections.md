@@ -139,10 +139,14 @@ changing only `binding` changes the authoring API, not the instance or its evide
 history. [ADR 0014](0014-evidence.md) defines current/default and historical evidence
 selection separately from this config binding. Installation creates no instances.
 
-Malformed or structurally incompatible plugin configuration fails loading the
-whole root, with a diagnostic locating the offending configuration. Do not skip
+Malformed or structurally incompatible plugin configuration fails preparation of
+the whole root for use, with a diagnostic locating the offending configuration. Do not skip
 the broken instance, substitute defaults or return a partially usable root.
-Repair the configuration files and retry loading. There is no partial-loading
+Raw `RootOpening` carries these files as bytes; it does not compile plugins for
+scaffolding or Before comparisons. `PrepareRoot` inspects connector declarations,
+decodes every configured instance and retains the compiled pure validators;
+`ValidateRoot` combines their reports with root validation. Neither probes a provider.
+Repair the configuration files and retry checking. There is no partial-loading
 model in the initial implementation. Successfully decoded config can still fail
 its pure semantic validator; that rejects validation of the whole root and blocks
 acceptance, not merely use of that connector. Missing local secrets remain a

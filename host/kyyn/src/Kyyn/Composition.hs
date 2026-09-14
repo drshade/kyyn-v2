@@ -51,6 +51,8 @@ import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
+import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
@@ -70,7 +72,7 @@ type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
 type Runtime = SchemaInspection ': GuestCompilation ': Base
 type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
 type Evaluation = EvolutionExecution ': Authoring
-type Checking = RootExecution ': Store.EvolutionStore ': WorkspaceStore ': Runtime
+type Checking = RootExecution ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runBase :: Host -> Eff Base a -> IO (Either OperationalFailure a)
 runBase (Host executable environment temp _) = runEff . runFailure . runProcessExecutionIO
@@ -90,7 +92,7 @@ runEvaluation :: Host -> GuestToolchain -> FileTree -> Eff Evaluation a -> IO (E
 runEvaluation host toolchain sdk = runAuthoring host toolchain sdk . runEvolutionExecution sdk
 
 runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)
-runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runRootExecution sdk
+runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
 execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest Nothing request)) = do
@@ -170,12 +172,12 @@ executeInitialization host scope = do
       case metadata of
         Left response -> pure response
         Right commit -> withRuntime host $ \toolchain sdk -> finish $
-          runRuntime host toolchain . runRootOpening sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
+          runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
             initializationResult <$> Initialization.initializeKnowledgeBase target commit
 
 dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
 dispatchRoot host request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
-    runRuntime host toolchain . runRootOpening sdk . runRootExecution sdk $ case request of
+    runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk $ case request of
       Cli.ShowRoot -> inspectionCheckResult revision <$> Root.inspectRootAt kb revision
       Cli.CheckRoot -> checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision
 dispatchEvolution :: Host -> Cli.EvolutionCommand -> SelectedKb -> IO Response
@@ -196,7 +198,7 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
           Left message -> refusal [errorDiagnostic "kb.path" message]
           Right path -> workspaceResult value (maybe revision id before) (scopedPath scope path)
     Cli.CheckEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runEvaluation host toolchain sdk . runRootExecution sdk $
+      runEvaluation host toolchain sdk . runPluginPreparation sdk . runRootExecution sdk $
         evolutionCheckResult identity <$> checkEvolution (workspace identity)
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached

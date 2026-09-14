@@ -110,11 +110,13 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
     manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
 
 schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
-schemaMock count contract = interpret $ \_ (InspectSchema source) -> do
-  liftIO (modifyIORef' count (+1))
-  pure $ if selectedType source == "Example.Root"
-    then Right (InspectedSchema (rootSchema contract) [path "Example.hs",path "Helper.hs"])
-    else Left [errorDiagnostic "schema.compiler-rejected" "Missing intermediate export"]
+schemaMock count contract = interpret $ \_ -> \case
+  InspectType {} -> error "Unexpected plain type inspection"
+  InspectSchema source -> do
+    liftIO (modifyIORef' count (+1))
+    pure $ if selectedType source == "Example.Root"
+      then Right (InspectedSchema (rootSchema contract) [path "Example.hs",path "Helper.hs"])
+      else Left [errorDiagnostic "schema.compiler-rejected" "Missing intermediate export"]
   where path = either error id . relativePath
 
 compileMock :: ProcessExecution :> es => FilePath -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a

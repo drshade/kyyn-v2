@@ -283,6 +283,36 @@ typed method boundary; they do not need their own executable/plugin framework.
 Health is explicit and may fail; opening a KB must not probe every provider.
 Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
+The first source registration is a plugin entry module's `connectors` value:
+
+```haskell
+connectors :: [SourceConnector]
+connectors = [SourceConnector
+  { name = "Folder"
+  , configType = "LocalFile.Types.FolderConfig"
+  , payloadType = "LocalFile.Types.Document"
+  , fetch = "LocalFile.Folder.fetch"
+  , validateConfig = "LocalFile.Config.validate"
+  }]
+```
+
+`SourceConnector` is exported through `Kyyn.Plugin`. The connector name must match
+`[A-Z][A-Za-z0-9_]*` and be unique within the plugin; it becomes an alternative in
+the derived Dhall configuration union. Qualified names refer to Haskell declarations,
+not duplicated structural schemas. A fixed adapter evaluates the registration;
+the compiler inspects the named types and generated adapters typecheck the selected
+fetch and pure `Config -> ValidationReport` validator against those same types.
+Native `ConnectorTypeName`, `BindingName`, `ConnectorName` and `QualifiedTypeName`
+distinguish the declared names after decoding. Type names have at least a module
+and type component, each an uppercase Haskell identifier. Bindings match
+`[a-z][A-Za-z0-9_']*` and exclude Haskell keywords; instance names are nonempty text.
+`SchemaInspection.inspectType` inspects a captured source tree directly and
+returns a contract without authored metadata; no synthetic metadata module is
+compiled for plugin config or payload types.
+This declaration registers the connector's fixed methods. ADR 0008's typed named
+methods, such as `viewEmail`, extend the same connector declaration rather than
+introducing another registry; that named-method surface remains separate work.
+
 Distinguish installed package identity and selected method. Configuration is
 ordinary typed data, not another plugin-instance lifecycle:
 

@@ -8,8 +8,9 @@ date: 2026-09-11
 
 Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
 captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch connects
-filesystem and snapshot reads to evidence publication. Registration, configured
-instances and KB-tool composition remain to be integrated.
+filesystem and snapshot reads to evidence publication. Source registration and
+configured instances have a native proof; CLI invocation and KB-tool composition
+remain to be integrated.
 
 ## Context
 

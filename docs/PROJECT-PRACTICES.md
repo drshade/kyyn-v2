@@ -53,6 +53,14 @@ that unchanged files and failed acquisitions do not manufacture changes. Recordi
 handlers check that malformed, unknown-snapshot and out-of-row requests never reach
 storage. This focused check does not exercise plugin registration or a CLI command.
 
+`cabal test plugin-registration --test-show-details=direct` uses the same toolchain
+to load the actual first-party local-file package, evaluate its declaration,
+inspect Haskell config/payload contracts and compile fetch/config-validation
+adapters. It decodes two configured instances, fetches real files independently,
+and rejects invalid config through the whole-root checker. It also checks reflected
+record-field documentation, invalid registration/instance names and a mismatched
+fetch signature. This is a focused native integration check, not an installed CLI journey.
+
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow
 no-checkout acquisition from a local Git remote. It uses real Dhall

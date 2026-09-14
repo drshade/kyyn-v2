@@ -308,7 +308,7 @@ validationMock :: Maybe Bool -> Eff (RootExecution : es) a -> Eff es a
 validationMock mode = interpret $ \_ operation -> case mode of
   Nothing -> error "Publication/recovery invoked validation"
   Just valid -> case operation of
-    PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
+    PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
     ValidateRoot _ -> pure (Right (ValidationReport (if valid then [] else [errorDiagnostic "test.invalid" "Invalid candidate"])))
     ExecuteQuery {} -> error "Unexpected query"
 
@@ -316,7 +316,9 @@ noOpening :: Eff (RootOpening : es) a -> Eff es a
 noOpening = interpret $ \_ _ -> error "Publication/recovery reopened source"
 
 schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
-schemaMock contract = interpret $ \_ (Schema.InspectSchema _) -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
+schemaMock contract = interpret $ \_ -> \case
+  Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectSchema _ -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
 
 evaluationMock :: (RootOpening :> es, RootStore :> es) => Value -> Eff (EvolutionExecution : es) a -> Eff es a
 evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution

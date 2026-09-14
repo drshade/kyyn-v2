@@ -23,6 +23,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.RootExecution (prepareRoot, validateRoot)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (findExecutable)
 import System.IO.Temp (withSystemTempDirectory)
@@ -39,7 +40,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       root = Root contract facts code
       entry = fixtureProgram
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock shell compilation . noInspection . runDhallHandling . runRootStore . runRootExecution sdkFiles $ do
+        . compileMock shell compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runRootExecution sdkFiles $ do
           prepared <- prepareRoot selected
           either (pure . Left) validateRoot prepared
       unexpected = error "Invalid root reached compilation"

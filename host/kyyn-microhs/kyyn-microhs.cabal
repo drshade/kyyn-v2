@@ -16,7 +16,7 @@ library
   ghc-options: -Wall -Wno-unrecognised-warning-flags -Wno-x-partial -Wno-deprecations
   build-depends: base >=4.20 && <4.21, kyyn-domain, containers, bytestring,
     deepseq, filepath, haskeline, time, process, directory, text, array,
-    kyyn-plumbing, effectful-core ==2.6.1.0
+    kyyn-plumbing, kyyn-types, effectful-core ==2.6.1.0
   other-modules:
     MicroHs.Abstract MicroHs.Builtin MicroHs.Compile MicroHs.CompileCache MicroHs.Config
     MicroHs.Deriving MicroHs.Desugar MicroHs.EncodeData MicroHs.Embed MicroHs.Exp
@@ -102,6 +102,17 @@ test-suite plugin-fetch
     kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
     bytestring, text, filepath, directory, temporary ==1.3, aeson, process,
     kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters
+
+test-suite plugin-registration
+  type: exitcode-stdio-1.0
+  main-is: PluginRegistrationTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    bytestring, text, filepath, directory, temporary ==1.3, aeson,
+    kyyn-porcelain, kyyn-porcelain-interpreters
 
 test-suite queries
   type: exitcode-stdio-1.0

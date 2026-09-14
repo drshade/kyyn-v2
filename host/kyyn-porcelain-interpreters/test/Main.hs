@@ -167,12 +167,14 @@ openingTests contract factFiles = do
     manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
-schemaMock contract = interpret $ \_ (Schema.InspectSchema source) ->
-  let entries = [(relativeName p,b) | (p,b) <- Sources.sourceFiles (Schema.schemaSources source)]
-  in pure $ if Schema.selectedType source == "Example.Root" &&
-       lookup "Example.hs" entries == Just "authored source" && lookup "Kyyn/Types/Fact.hs" entries == Just "installed SDK" &&
-       maybe False (Bytes.isInfixOf "Example.schemaMetadata") (lookup "KyynMetadataEntry.hs" entries)
-     then Right (Schema.InspectedSchema contract []) else Left [errorDiagnostic "test.schema" "Incorrect source capture"]
+schemaMock contract = interpret $ \_ -> \case
+  Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectSchema source ->
+    let entries = [(relativeName p,b) | (p,b) <- Sources.sourceFiles (Schema.schemaSources source)]
+    in pure $ if Schema.selectedType source == "Example.Root" &&
+         lookup "Example.hs" entries == Just "authored source" && lookup "Kyyn/Types/Fact.hs" entries == Just "installed SDK" &&
+         maybe False (Bytes.isInfixOf "Example.schemaMetadata") (lookup "KyynMetadataEntry.hs" entries)
+       then Right (Schema.InspectedSchema contract []) else Left [errorDiagnostic "test.schema" "Incorrect source capture"]
 
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case

@@ -2,9 +2,11 @@ module Kyyn.Domain.Plugin
   ( PluginName, pluginName, pluginNameText, PackageIdentity(..)
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
+  , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..)
+  , connectorTypeName, bindingName, connectorName, qualifiedTypeName
   ) where
 
-import Data.Char (isAlphaNum, isUpper)
+import Data.Char (isAlphaNum, isUpper, isAsciiLower, isAsciiUpper, isDigit)
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Kyyn.Domain.Git (TreePath, GitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath)
@@ -12,6 +14,42 @@ import System.FilePath (isAbsolute, (</>))
 
 newtype PluginName = PluginName String deriving (Eq, Show)
 newtype PackageIdentity = PackageIdentity String deriving (Eq, Show)
+newtype ConnectorTypeName = ConnectorTypeName String deriving (Eq, Show)
+newtype BindingName = BindingName String deriving (Eq, Show)
+newtype ConnectorName = ConnectorName String deriving (Eq, Show)
+newtype QualifiedTypeName = QualifiedTypeName String deriving (Eq, Show)
+data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String deriving (Eq, Show)
+
+connectorTypeName :: String -> Either String ConnectorTypeName
+connectorTypeName value
+  | identifier isAsciiUpper value && '\'' `notElem` value = Right (ConnectorTypeName value)
+  | otherwise = Left "Connector type name must match [A-Z][A-Za-z0-9_]*"
+
+bindingName :: String -> Either String BindingName
+bindingName value
+  | identifier isAsciiLower value && value `notElem` keywords = Right (BindingName value)
+  | otherwise = Left "Binding must match [a-z][A-Za-z0-9_']* and must not be a Haskell keyword"
+  where keywords = ["case","class","data","default","deriving","do","else","foreign","if","import",
+          "in","infix","infixl","infixr","instance","let","module","newtype","of","then","type","where",
+          "qualified","as","hiding","forall","mdo","rec","pattern"]
+
+connectorName :: String -> Either String ConnectorName
+connectorName value | null value = Left "Instance name must not be empty"
+                    | otherwise = Right (ConnectorName value)
+
+qualifiedTypeName :: String -> Either String QualifiedTypeName
+qualifiedTypeName value
+  | length (segments value) >= 2 && all (identifier isAsciiUpper) (segments value) = Right (QualifiedTypeName value)
+  | otherwise = Left "Expected a qualified Haskell type name: uppercase module and type identifiers separated by dots"
+
+identifier :: (Char -> Bool) -> String -> Bool
+identifier first (c:cs) = first c && all (\x -> isAsciiLower x || isAsciiUpper x || isDigit x || x `elem` "_'") cs
+identifier _ [] = False
+
+segments :: String -> [String]
+segments text = case break (== '.') text of
+  (part,[]) -> [part]
+  (part,_:rest) -> part : segments rest
 data PluginSource = LocalPackage DirectoryScope TreePath | GitPackage GitUrl TreePath deriving (Eq, Show)
 data PluginManifest = PluginManifest PluginName String deriving (Eq, Show)
 data PluginRepository = LocalRepository DirectoryScope | RemoteRepository GitUrl deriving (Eq, Show)

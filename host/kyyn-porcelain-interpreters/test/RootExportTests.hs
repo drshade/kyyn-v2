@@ -144,7 +144,7 @@ noGitExport = interpret $ \_ _ -> error "Archive export used Git"
 
 checkingMock :: Root -> Eff (RootExecution : es) a -> Eff es a
 checkingMock expected = interpret $ \_ -> \case
-  PrepareRoot root -> same root >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
+  PrepareRoot root -> same root >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
   ValidateRoot root -> same (preparedRoot root) >> pure (Right (ValidationReport []))
   ExecuteQuery _ _ _ -> error "Unexpected query in export fixture"
   where
@@ -152,6 +152,8 @@ checkingMock expected = interpret $ \_ -> \case
     same root = unless (root == expected) (error "Validation switched roots")
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
-schemaMock contract = interpret $ \_ (Schema.InspectSchema source) -> do
-  unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")
-  pure (Right (Schema.InspectedSchema contract []))
+schemaMock contract = interpret $ \_ -> \case
+  Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectSchema source -> do
+    unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")
+    pure (Right (Schema.InspectedSchema contract []))

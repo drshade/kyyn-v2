@@ -109,7 +109,7 @@ validationTests contract facts = do
 executionMock :: Root -> QueryDescriptor -> Either [Diagnostic] () -> ValidationReport -> Bool
   -> Eff (RootExecution : es) a -> Eff es a
 executionMock expectedRoot descriptor codeResult report actual = interpret $ \_ -> \case
-  PrepareRoot root -> same root >> pure (fmap (\() -> PreparedRoot root "validator" unused [PreparedQuery descriptor "query" unused]) codeResult)
+  PrepareRoot root -> same root >> pure (fmap (\() -> PreparedRoot root "validator" unused [PreparedQuery descriptor "query" unused] []) codeResult)
   ValidateRoot root -> same (preparedRoot root) >> pure (Right report)
   ExecuteQuery root query _ -> do
     same (preparedRoot root)
@@ -123,6 +123,6 @@ executionMock expectedRoot descriptor codeResult report actual = interpret $ \_ 
 
 failingExecution :: Failure :> es => OperationalFailure -> Eff (RootExecution : es) a -> Eff es a
 failingExecution failure = interpret $ \_ -> \case
-  PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") []))
+  PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
   ValidateRoot _ -> raiseFailure failure
   ExecuteQuery _ _ _ -> error "Example ran after failed validation"
