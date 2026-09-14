@@ -9,12 +9,12 @@ import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Plugin (PluginName, PackageIdentity)
+import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorTypeName, ConnectorName, BindingName)
 import Kyyn.Domain.Value (CheckedValue)
 
-data PreparedConnector = PreparedConnector String CheckedContract CheckedContract CompiledProgram CompiledProgram
+data PreparedConnector = PreparedConnector ConnectorTypeName CheckedContract CheckedContract CompiledProgram CompiledProgram
   deriving (Eq, Show)
-data ConfiguredConnector = ConfiguredConnector String String PreparedConnector CheckedValue deriving (Eq, Show)
+data ConfiguredConnector = ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue deriving (Eq, Show)
 data PreparedPlugin = PreparedPlugin PluginName PackageIdentity [PreparedConnector] [ConfiguredConnector] deriving (Eq, Show)
 
 data PluginPreparation :: Effect where

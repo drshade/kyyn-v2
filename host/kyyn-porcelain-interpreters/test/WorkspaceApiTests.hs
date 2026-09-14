@@ -64,14 +64,16 @@ workspaceApiTests = do
                 && lookup "Sdk.hs" entries == Just "installed sdk")
                 (error "Discovery included evolution/unused code or lost its captured closure")
               pure (Right expected))
-          . interpret (\_ (Schema.InspectSchema source) -> do
-              record ("schema:" ++ Schema.selectedType source)
-              let entries = sourceFiles (Schema.schemaSources source)
-              unless (all (not . isFactPath . fst) entries) (error "Schema inspection received facts")
-              pure $ case Schema.selectedType source of
-                "Before.Root" -> Right (Schema.InspectedSchema (rootSchema (contract "Before")) [path "Before.hs"])
-                "After.Root" -> Right (Schema.InspectedSchema (rootSchema (contract "After")) [path "After.hs"])
-                _ -> Left [errorDiagnostic "test.bad-schema" "Invalid target schema"])
+          . interpret (\_ -> \case
+              Schema.InspectType {} -> error "Unexpected plain type inspection"
+              Schema.InspectSchema source -> do
+                record ("schema:" ++ Schema.selectedType source)
+                let entries = sourceFiles (Schema.schemaSources source)
+                unless (all (not . isFactPath . fst) entries) (error "Schema inspection received facts")
+                pure $ case Schema.selectedType source of
+                  "Before.Root" -> Right (Schema.InspectedSchema (rootSchema (contract "Before")) [path "Before.hs"])
+                  "After.Root" -> Right (Schema.InspectedSchema (rootSchema (contract "After")) [path "After.hs"])
+                  _ -> Left [errorDiagnostic "test.bad-schema" "Invalid target schema"])
           . interpret (\_ -> \case
               Git.ReadTreeAt selected base location exclusions
                 | (selected,base,location,exclusions) == (repo,revision,Subtree (path "nested/root"),[factsLocation]) -> do

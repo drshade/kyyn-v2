@@ -105,7 +105,10 @@ project declarations (selected,checked,fixities) = do
             (TypeNamespace,Data (n,_) _ _) -> [n]
             (TypeNamespace,Newtype (n,_) _ _) -> [n]
             _ -> []) defs
-          docs = case [n | n <- declarationNames, n == unQualIdent origin] of
+          fieldNames = [field | (lhs,cs) <- algebraic, Constr _ _ _ _ (Right fs) <- cs,
+            (field,_) <- fs, ns == ValueNamespace,
+            unIdent origin == defining ++ ".get$." ++ unIdent (fst lhs) ++ "." ++ unIdent field]
+          docs = case [n | n <- declarationNames, n == unQualIdent origin] ++ fieldNames of
             [n] -> documentationBefore (slocIdent n) sourceLines
             _ -> Nothing
           matches = case ns of
@@ -277,7 +280,7 @@ presentConstructor (Constr vs ctx n _ fields) = quantifier ++ context ++ name ++
 documentationBefore :: SLoc -> [String] -> Maybe String
 documentationBefore (SLoc _ line _) source = collect [] (reverse (take (line - 1) source))
   where
-    collect following (previous:rest) = case stripPrefix "--" (dropWhile isSpace previous) of
+    collect following (previous:rest) = case stripPrefix "--" (dropWhile (\c -> isSpace c || c == '{' || c == ',') previous) of
       Just comment -> case stripPrefix " |" comment of
         Just first -> Just (intercalate "\n" (unspace first : following))
         Nothing -> collect (unspace comment : following) rest

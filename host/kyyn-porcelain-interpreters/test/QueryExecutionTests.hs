@@ -111,15 +111,17 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   putStrLn "Query discovery, contract/argument rejection, captured code and operational failure checks passed."
 
 schemaMock :: CheckedContract -> CheckedContract -> Eff (SchemaInspection : es) a -> Eff es a
-schemaMock input output = interpret $ \_ (InspectSchema source) -> do
-  let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles (schemaSources source)]
-  unless (lookup "Queries.hs" entries == Just "captured query" &&
-      lookup "Sdk.hs" entries == Just "explicit SDK" && lookup "KyynQueryBindings.hs" entries /= Nothing)
-    (error "Query inspection did not use captured code and generated bindings")
-  case selectedType source of
-    "Queries.Input" -> pure (Right (InspectedSchema input []))
-    "Queries.Result" -> pure (Right (InspectedSchema output []))
-    _ -> error "Unexpected selected query type"
+schemaMock input output = interpret $ \_ -> \case
+  InspectType {} -> error "Unexpected plain type inspection"
+  InspectSchema source -> do
+    let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles (schemaSources source)]
+    unless (lookup "Queries.hs" entries == Just "captured query" &&
+        lookup "Sdk.hs" entries == Just "explicit SDK" && lookup "KyynQueryBindings.hs" entries /= Nothing)
+      (error "Query inspection did not use captured code and generated bindings")
+    case selectedType source of
+      "Queries.Input" -> pure (Right (InspectedSchema input []))
+      "Queries.Result" -> pure (Right (InspectedSchema output []))
+      _ -> error "Unexpected selected query type"
 
 gateCompiler :: ProcessExecution :> es => FilePath -> CompiledProgram -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
 gateCompiler shell validator query = interpret $ \_ -> \case
@@ -145,6 +147,8 @@ recordCompiler = interpret $ \_ -> \case
 
 recordInspection :: (State [String] :> es, SchemaInspection :> es)
   => Eff (SchemaInspection : es) a -> Eff es a
-recordInspection = interpret $ \_ (InspectSchema source) -> do
-  modify (++ ["inspect:" ++ selectedType source])
-  inspectSchema source
+recordInspection = interpret $ \_ -> \case
+  InspectType {} -> error "Unexpected plain type inspection"
+  InspectSchema source -> do
+    modify (++ ["inspect:" ++ selectedType source])
+    inspectSchema source

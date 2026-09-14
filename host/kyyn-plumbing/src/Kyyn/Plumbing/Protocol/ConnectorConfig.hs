@@ -1,29 +1,28 @@
 module Kyyn.Plumbing.Protocol.ConnectorConfig (instanceShape, decodeInstances) where
 
-import Control.Monad (unless, forM_)
+import Control.Monad (unless, forM)
+import Data.Coerce (coerce)
 import Data.Aeson (Value, (.:), withArray, withObject)
 import Data.Aeson.Types (parseEither)
 import Data.Foldable (toList)
 import Data.List (nub)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
+import Kyyn.Domain.Plugin (ConnectorName(..), BindingName(..), ConnectorTypeName(..), connectorName, bindingName, connectorTypeName)
 
-instanceShape :: [(String,Shape)] -> Shape
+instanceShape :: [(ConnectorTypeName,Shape)] -> Shape
 instanceShape connectors = List (Record [("name",Scalar TextScalar),("binding",Scalar TextScalar),
-  ("connector",Union [(name,Just config) | (name,config) <- connectors])])
+  ("connector",Union [(coerce name,Just config) | (name,config) <- connectors])])
 
-decodeInstances :: Value -> Either String [(String,String,String,Value)]
+decodeInstances :: Value -> Either String [(ConnectorName,BindingName,ConnectorTypeName,Value)]
 decodeInstances value = do
   instances <- parseEither (withArray "connector instances" (traverse instanceValue . toList)) value
   let names = [name | (name,_,_,_) <- instances]
   unless (length names == length (nub names)) (Left "Instance names must be unique within a plugin")
-  forM_ instances $ \(name,binding,_,_) -> do
-    unless (not (null name)) (Left "Instance name must not be empty")
-    _ <- either (Left . ((name ++ ": binding: ") ++)) Right (bindingModule ("Kyyn.Connectors." ++ binding))
-    unless (binding `notElem` ["case","class","data","default","deriving","do","else","foreign","if","import",
-      "in","infix","infixl","infixr","instance","let","module","newtype","of","then","type","where","qualified","as","hiding"])
-      (Left (name ++ ": binding must not be a Haskell keyword"))
-  pure instances
+  forM instances $ \(name,binding,kind,config) -> do
+    checkedName <- connectorName name
+    checkedBinding <- either (Left . ((name ++ ": ") ++)) Right (bindingName binding)
+    checkedKind <- connectorTypeName kind
+    pure (checkedName,checkedBinding,checkedKind,config)
   where
     instanceValue = withObject "connector instance" $ \fields -> do
       name <- fields .: "name"

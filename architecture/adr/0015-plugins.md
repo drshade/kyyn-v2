@@ -302,6 +302,13 @@ the derived Dhall configuration union. Qualified names refer to Haskell declarat
 not duplicated structural schemas. A fixed adapter evaluates the registration;
 the compiler inspects the named types and generated adapters typecheck the selected
 fetch and pure `Config -> ValidationReport` validator against those same types.
+Native `ConnectorTypeName`, `BindingName`, `ConnectorName` and `QualifiedTypeName`
+distinguish the declared names after decoding. Type names have at least a module
+and type component, each an uppercase Haskell identifier. Bindings match
+`[a-z][A-Za-z0-9_']*` and exclude Haskell keywords; instance names are nonempty text.
+`SchemaInspection.inspectType` inspects a captured source tree directly and
+returns a contract without authored metadata; no synthetic metadata module is
+compiled for plugin config or payload types.
 This declaration registers the connector's fixed methods. ADR 0008's typed named
 methods, such as `viewEmail`, extend the same connector declaration rather than
 introducing another registry; that named-method surface remains separate work.

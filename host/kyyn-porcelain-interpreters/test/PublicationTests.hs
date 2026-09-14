@@ -316,7 +316,9 @@ noOpening :: Eff (RootOpening : es) a -> Eff es a
 noOpening = interpret $ \_ _ -> error "Publication/recovery reopened source"
 
 schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
-schemaMock contract = interpret $ \_ (Schema.InspectSchema _) -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
+schemaMock contract = interpret $ \_ -> \case
+  Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectSchema _ -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
 
 evaluationMock :: (RootOpening :> es, RootStore :> es) => Value -> Eff (EvolutionExecution : es) a -> Eff es a
 evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution

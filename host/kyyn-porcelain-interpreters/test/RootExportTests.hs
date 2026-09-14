@@ -152,6 +152,8 @@ checkingMock expected = interpret $ \_ -> \case
     same root = unless (root == expected) (error "Validation switched roots")
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
-schemaMock contract = interpret $ \_ (Schema.InspectSchema source) -> do
-  unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")
-  pure (Right (Schema.InspectedSchema contract []))
+schemaMock contract = interpret $ \_ -> \case
+  Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectSchema source -> do
+    unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")
+    pure (Right (Schema.InspectedSchema contract []))
