@@ -69,6 +69,12 @@ integration: local and file-URL sources, nested KBs, persisted origins, independ
 copies, existing destinations (including empty directories and symlinks), and
 unchanged KB HEAD. It is included in the fast check and does not compile or invoke guests.
 
+Plugin installation targets an evolution, not the accepted root. The installed
+`node tools/test-plugin-evolution.mjs EXECUTABLE` journey checks install into a Ready
+target, stale-candidate refusal, check/accept, accepted-workspace refusal and plugin
+inheritance through creation and acceptance of the next evolution. It uses real
+Git, Dhall and MicroHs, and belongs to the full installed check.
+
 `node tools/test-plugin-install.mjs EXECUTABLE` copies the host executable without
 its runtime and tests CLI installation from committed local/file-URL packages into
 a nested KB. It includes the first-party package, human/JSON results, origin revisions,

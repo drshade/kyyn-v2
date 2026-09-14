@@ -2,7 +2,7 @@
 id: 0015
 title: 'Locally built plugins group source and sink connectors'
 status: proposed
-date: 2026-09-11
+date: 2026-09-14
 ---
 # Locally built plugins group source and sink connectors
 
@@ -12,6 +12,9 @@ and account setup in one plugin. One KB has many plugins; each plugin can have
 many named connector instances, including multiple instances of the same type.
 Explicit source updates without plugin version
 pinning or SDK/runtime compatibility machinery are the first-release model.**
+
+Owner decision (2026-09-14): installation targets an evolution; the accepted root
+is changed only by accepting that evolution.
 
 ## Context
 
@@ -26,8 +29,8 @@ The package root is the directory containing `kyyn-plugin.dhall`, not necessaril
 the containing Git repository's root. The initial installation interface is:
 
 ```sh
-kyyn-v2 --kb ../my-kb plugin install --from ./plugins/local-file
-kyyn-v2 --kb ../my-kb plugin install --from https://example.org/team/plugins.git --path plugins/local-file
+kyyn-v2 --kb ../my-kb plugin install --evolution 000002-add-plugin --from ./plugins/local-file
+kyyn-v2 --kb ../my-kb plugin install --evolution 000002-add-plugin --from https://example.org/team/plugins.git --path plugins/local-file
 ```
 
 Every source is a Git repository. A local directory may select a package inside
@@ -73,7 +76,12 @@ typechecking, method registration, configuration, health or evidence acquisition
 It requires no installed guest runtime. It must not advertise a copied package as
 a successfully executable connector.
 
-Install a captured copy under `root/plugins/packages/<name>/source/`, and write
+Installation requires an existing, unaccepted evolution. Refuse missing or accepted
+workspaces before acquiring source. Draft and Ready targets remain editable; changing
+a target makes any previously checked candidate stale through the existing captured-input
+comparison. Installation does not automatically mark the evolution ready or accept it.
+
+Install a captured copy under `evolutions/<id>/target/plugins/packages/<name>/source/`, and write
 Kyyn-owned `origin.dhall` beside `source/`, not inside the package. Record the
 absolute discovered local repository root or supplied Git URL, the repository-relative
 package path, and the exact captured Git revision. This remembers where an explicit
@@ -106,8 +114,11 @@ existing destination (including an empty directory or symlink); do not merge int
 it or overwrite it. A missing/invalid manifest, absent entry source, failed fetch
 or unsupported package entry leaves the KB's installed packages unchanged.
 Installation does not create a Git commit, change accepted HEAD, configure instances
-or accept an evolution. The copied source is an ordinary local root change for the
-owner to adopt using the existing workflow.
+or accept an evolution. The accepted `root/` is untouched until evolution acceptance
+publishes the complete target, including `plugins/`, as the new root. New evolutions
+inherit all accepted non-fact root files, including plugin packages and configuration.
+Plugin installation, later updates and removals follow this same evolution-owned
+route; there is no direct-to-accepted-root installation mode.
 
 The first packages are self-contained. Dependency acquisition, tap lookup and update
 commands are separate slices; installation does not silently fetch imports or
@@ -134,12 +145,12 @@ data InstalledPlugin = InstalledPlugin
 
 data PluginInstallation :: Effect where
   InstallPlugin
-    :: KnowledgeBase -> PluginSource
+    :: EvolutionWorkspace -> PluginSource
     -> PluginInstallation m (Either [Diagnostic] InstalledPlugin)
 ```
 
 CLI composition resolves the KB and source selection. The installation interpreter
-uses filesystem, Git acquisition and Dhall capabilities; it has no `IOE`, compiler,
+uses EvolutionStore for lifecycle lookup, then filesystem, Git acquisition and Dhall capabilities; it has no `IOE`, compiler,
 root-publication, plugin-invocation or secret-store requirement. The successful
 CLI result exposes the installed name, location and origin in human/JSON forms.
 
@@ -171,6 +182,8 @@ Use stable refusal codes at these boundaries:
 | `plugin.entry-missing` | Declared entry module has no source under `src/` |
 | `plugin.source-uncommitted` | Selected local package has staged, unstaged or untracked changes |
 | `plugin.already-installed` | Destination already exists |
+| `plugin.evolution-accepted` | Selected evolution is already accepted; create a new evolution |
+| `evolution.unknown` | EvolutionStore found no workspace manifest; retain its existing diagnostic |
 
 Git acquisition/entry diagnostics retain their Git codes (including
 `git.clone-failed`, `git.unsupported-entry`, `git.missing-subtree` for an absent

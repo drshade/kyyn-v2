@@ -23,7 +23,7 @@ data Selection = Selection
 data OutputMode = Human | Json deriving (Eq, Show)
 
 data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand deriving (Eq, Show)
-data PluginCommand = InstallPlugin String (Maybe FilePath) deriving (Eq, Show)
+data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
 data RootCommand = ShowRoot | CheckRoot deriving (Eq, Show)
@@ -52,7 +52,7 @@ cliPrefs = prefs (showHelpOnEmpty <> showHelpOnError)
 progressMessage :: Command -> Maybe String
 progressMessage request = case request of
   Kb InitKb -> Just "Checking and initializing the knowledge base..."
-  Plugin (InstallPlugin _ _) -> Just "Installing plugin source..."
+  Plugin (InstallPlugin selectedId _ _) -> Just ("Installing plugin source into evolution " ++ evolutionIdName selectedId ++ "...")
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
   Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
@@ -69,8 +69,9 @@ invocation = Invocation <$> selectionParser
     <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
     <> group "guest" "Explore the guest SDK and workspace bindings" guestParser
     <> group "plugin" "Manage vendored plugin source" (Plugin <$> hsubparser
-      (group "install" "Copy a committed plugin package into this KB"
-        (InstallPlugin <$> strOption (long "from" <> metavar "SOURCE" <> help "Local Git checkout directory or Git URL")
+      (group "install" "Copy a committed plugin package into an evolution target"
+        (InstallPlugin <$> option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Evolution to receive the plugin")
+          <*> strOption (long "from" <> metavar "SOURCE" <> help "Local Git checkout directory or Git URL")
           <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))))
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
 

@@ -13,7 +13,9 @@ const repo = path.join(temporary, 'knowledge');
 const kb = path.join(repo, 'nested', 'kb λ');
 const source = path.join(temporary, 'source:repo');
 const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
-const installed = path.join(kb, 'root/plugins/packages');
+const evolution = '000001-install';
+const workspace = path.join(kb, 'evolutions', evolution);
+const installed = path.join(workspace, 'target/plugins/packages');
 function git(directory, args) {
   const result = spawnSync('git', ['-C', directory, ...args], { env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
@@ -32,9 +34,10 @@ function packageAt(directory, name) {
   write(path.join(directory, 'kyyn-plugin.dhall'), `{ name = "${name}", entryModule = "Example.Plugin" }`);
   write(path.join(directory, 'src/Example/Plugin.hs'), 'module Example.Plugin where\ndescription = "fixture"\n');
 }
-function invoke(args, status = 0, { cwd = temporary, json = true } = {}) {
+function invoke(args, status = 0, { cwd = temporary, json = true, selected = evolution } = {}) {
   const result = spawnSync(executable,
-    ['--kb', kb, '--runtime', path.join(temporary, 'no-runtime'), ...(json ? ['--json'] : []), 'plugin', 'install', ...args],
+    ['--kb', kb, '--runtime', path.join(temporary, 'no-runtime'), ...(json ? ['--json'] : []), 'plugin', 'install',
+      ...(selected === null ? [] : ['--evolution', selected]), ...args],
     { cwd, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.status, status, JSON.stringify(result));
   return json ? JSON.parse(result.stdout) : result.stdout;
@@ -62,6 +65,12 @@ try {
   write(path.join(repo, 'unrelated'), 'preserve');
   git(repo, ['init', '-q', '-b', 'main']);
   const beforeHead = commit(repo);
+  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${beforeHead}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft }`);
+  write(path.join(workspace, 'target/kb.dhall'), 'An unfinished target must not require compilation to install plugins');
+  const acceptedRoot = snapshot(path.join(kb, 'root'));
+  invoke(['--from', source], 2, { json: false, selected: null });
+  const missing = invoke(['--from', source], 1, { selected: '000002-missing' });
+  assert.equal(missing.diagnostics[0].code, 'evolution.unknown');
   fs.mkdirSync(source);
   git(source, ['init', '-q', '-b', 'main']);
   fs.cpSync(path.join(root, 'plugins/local-file'), path.join(source, 'plugins/local-file'), { recursive: true });
@@ -114,6 +123,7 @@ try {
   refuse(['--from', source, '--path', 'plugins/local-file'], 'plugin.source-uncommitted');
   assert.equal(fs.readFileSync(installedSource, 'utf8'), copied);
   assert.equal(git(repo, ['rev-parse', 'HEAD']), beforeHead);
+  assert.deepEqual(snapshot(path.join(kb, 'root')), acceptedRoot, 'Installation modified accepted root');
   assert.equal(fs.readFileSync(path.join(repo, 'unrelated'), 'utf8'), 'preserve');
   console.log('Plugin CLI passed: standalone host, local/remote packages, source origins, refusals, copies and unchanged HEAD.');
 } finally {

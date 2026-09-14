@@ -170,11 +170,12 @@ for each edit to your own evolution.
 
 ## Install plugin source
 
-From a committed Kyyn checkout, copy the first-party package into an existing KB:
+Create an evolution, then copy a committed plugin package into its target:
 
 ```sh
-kyyn-v2 --kb /path/to/kb plugin install --from ./plugins/local-file
-kyyn-v2 --kb /path/to/kb --json plugin install --from /path/to/another/repo --path plugins/example
+kyyn-v2 --kb /path/to/kb evolution new add-plugin
+kyyn-v2 --kb /path/to/kb plugin install --evolution 000001-add-plugin --from ./plugins/local-file
+kyyn-v2 --kb /path/to/kb --json plugin install --evolution 000001-add-plugin --from /path/to/another/repo --path plugins/example
 ```
 
 `--from` accepts a local directory inside a Git checkout or a `file://` / unauthenticated
@@ -186,7 +187,7 @@ do not block installation. SSH/scp-style addresses are not supported; use HTTPS 
 a local checkout. Prefix a local relative path containing a colon with `./`.
 
 The package has `kyyn-plugin.dhall` with `name` and `entryModule`, and the entry's
-source under `src/`. Installed files go into `root/plugins/packages/NAME/source/`;
+source under `src/`. Installed files go into `evolutions/ID/target/plugins/packages/NAME/source/`;
 the adjacent `origin.dhall` records the repository, package path and exact Git revision.
 The command reports those details in both human and JSON output. It refuses an
 existing destination rather than updating or merging into it.
@@ -194,8 +195,10 @@ existing destination rather than updating or merging into it.
 Installation needs Git but no guest runtime. It validates package structure, not
 guest compilation or connector behavior. The current `local-file` package demonstrates
 installation only; its source/sink operations are not implemented yet.
-Installation leaves HEAD unchanged. Review the copied files and adopt them through
-your ordinary root-change workflow. If a filesystem write fails after destination
+Use the ID returned by `evolution new`; `--evolution` is required. Missing or accepted
+evolutions are refused. Installation leaves HEAD and accepted `root/` unchanged.
+Review the target changes, check the evolution, mark it ready and accept it normally.
+New evolutions inherit accepted plugins. If a filesystem write fails after destination
 creation, inspect the reported directory before removing the partial copy and retrying.
 
 ## Discover the guest SDK

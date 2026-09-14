@@ -118,7 +118,7 @@ execute (Cli.Invocation selection _ command) = do
               dispatchWorkspaceApi host (EvolutionWorkspace (KnowledgeBase repository prefix) identity) request
 
 dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
-dispatchPlugin (Host executable environment temp _) (Cli.InstallPlugin source subdirectory) (SelectedKb kb _ _) = do
+dispatchPlugin (Host executable environment temp _) (Cli.InstallPlugin identity source subdirectory) (SelectedKb kb _ _) = do
   cwd <- getCurrentDirectory
   let selected = do
         current <- either (Left . errorDiagnostic "plugin.source-invalid") Right (directoryScope cwd)
@@ -128,8 +128,8 @@ dispatchPlugin (Host executable environment temp _) (Cli.InstallPlugin source su
   case selected of
     Left diagnostic -> pure (refusal [diagnostic])
     Right value -> finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
-      . runGit executable environment . runDhallHandling . runPluginInstallation $
-        either refusal pluginResult <$> Plugin.installPlugin kb value
+      . runGit executable environment . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore . runPluginInstallation $
+        either refusal pluginResult <$> Plugin.installPlugin (EvolutionWorkspace kb identity) value
 
 guestResult :: Api.GuestApi :> es => Cli.GuestCommand -> Eff es Response
 guestResult request = case request of

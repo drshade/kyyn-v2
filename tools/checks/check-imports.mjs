@@ -189,7 +189,7 @@ const interpreterModules = {
     'Kyyn.Plumbing.Protocol.Evidence', 'System.Directory', 'System.FileLock', 'System.FilePath', 'System.IO',
     'System.IO.Error', 'System.IO.Temp', 'System.Random'],
   'Kyyn.Porcelain.Interpreter.PluginInstallation': ['Control.Monad', 'Control.Monad.Trans.Except',
-    'Data.List', 'Kyyn.Porcelain.Capability.RootStore',
+    'Data.List', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Workspace',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree',
     'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Path', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Root',
     'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.Git',
