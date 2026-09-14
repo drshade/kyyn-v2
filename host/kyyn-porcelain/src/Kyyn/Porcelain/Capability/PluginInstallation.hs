@@ -7,20 +7,20 @@ import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
+import Kyyn.Domain.Evolution (EvolutionWorkspace)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Root (pluginSourceLocation, pluginOriginLocation)
 
 data PluginInstallation :: Effect where
-  InstallPlugin :: KnowledgeBase -> PluginSource
+  InstallPlugin :: EvolutionWorkspace -> PluginSource
     -> PluginInstallation m (Either [Diagnostic] InstalledPlugin)
 
 type instance DispatchOf PluginInstallation = Dynamic
 
-installPlugin :: PluginInstallation :> es => KnowledgeBase -> PluginSource
+installPlugin :: PluginInstallation :> es => EvolutionWorkspace -> PluginSource
   -> Eff es (Either [Diagnostic] InstalledPlugin)
-installPlugin kb = send . InstallPlugin kb
+installPlugin workspace = send . InstallPlugin workspace
 
 preparePlugin :: PluginManifest -> FileTree -> ByteString -> Either [Diagnostic] FileTree
 preparePlugin manifest source origin = do

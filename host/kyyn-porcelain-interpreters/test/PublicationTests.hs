@@ -74,7 +74,10 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
         manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
-        code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source")]
+        pluginFile = "plugins/packages/existing/source/src/Plugin.hs"
+        pluginBytes = "module Plugin where\n"
+        code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
+          (path pluginFile,pluginBytes)]
         initialRoot = Root contract facts code
         output = object ["description" .= ("accepted" :: String), "todos" .= ([] :: [Value])]
         write name bytes = do
@@ -120,6 +123,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     other <- normal (createEvolution kb (EvolutionName "Other") base) >>= right
     workspacePath <- either fail (pure . relativeName) (workspaceLocation workspace)
     otherPath <- either fail (pure . relativeName) (workspaceLocation other)
+    inheritedPlugin <- Bytes.readFile (directory </> workspacePath </> "target" </> pluginFile)
+    assert "New evolution omitted accepted plugin source" (inheritedPlugin == pluginBytes)
     let accept = acceptStoredEvolution branch metadata workspace
         unchanged result expected = do
           assert ("Unexpected refusal: " ++ show result) (result == NotAccepted expected)
@@ -224,6 +229,8 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
     repeated <- publication (recoverAcceptedEvolution branch workspace) >>= right
     assert "Recovery is not idempotent" (repeated == recovery)
     reopened <- normal (loadRootAt repo accepted (Subtree rootPath)) >>= right
+    preservedPlugin <- Bytes.readFile (directory </> relativeName rootPath </> pluginFile)
+    assert "Acceptance removed inherited plugin source" (preservedPlugin == pluginBytes)
     assert "Published root is not the checked candidate" (reopened == candidateRoot && validatedValueRoot checked == candidateRoot)
     archive <- publication (Git.readTreeAt repo accepted (Subtree (path workspacePath))) >>= right
     recordBytes <- maybe (fail "Missing archive report") pure (lookup (path "result.dhall") (files archive))

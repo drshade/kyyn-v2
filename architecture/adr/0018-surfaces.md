@@ -136,8 +136,8 @@ typed query arguments and secret input are details for their respective slices.
 `root schema list/show` exposes the selected root contract's types, definitions,
 fields and declared roles, not arbitrary compiler internals.
 
-The plugin-install slice adds `plugin install --from SOURCE [--path SUBDIRECTORY]`
-under the common `--kb PATH` selection. It prepares a copied source package and
+The plugin-install slice adds `plugin install --evolution ID --from SOURCE [--path SUBDIRECTORY]`
+under the common `--kb PATH` selection. It prepares a copied source package in that evolution's target and
 returns its installed name, location and origin in human/JSON output; it does not
 compile or invoke the plugin, configure connectors, fetch evidence or commit the
 root. ADR 0015 owns source selection, manifest, storage and refusal contracts.

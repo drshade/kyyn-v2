@@ -23,10 +23,12 @@ main = do
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
   succeeds ["kb","init"] (Invocation selected Human (Kb InitKb))
-  succeeds ["plugin","install","--from","./plugins/local-file"]
-    (Invocation selected Human (Plugin (InstallPlugin "./plugins/local-file" Nothing)))
-  succeeds ["--kb","nested/kb","--json","plugin","install","--from","file:///repo","--path","plugins/local-file"]
-    (Invocation (Selection "nested/kb" Nothing Nothing) Json (Plugin (InstallPlugin "file:///repo" (Just "plugins/local-file"))))
+  succeeds ["plugin","install","--evolution","abc123","--from","./plugins/local-file"]
+    (Invocation selected Human (Plugin (InstallPlugin identity "./plugins/local-file" Nothing)))
+  succeeds ["--kb","nested/kb","--json","plugin","install","--evolution","abc123","--from","file:///repo","--path","plugins/local-file"]
+    (Invocation (Selection "nested/kb" Nothing Nothing) Json (Plugin (InstallPlugin identity "file:///repo" (Just "plugins/local-file"))))
+  refuses ["plugin","install","--from","./plugins/local-file"]
+  refuses ["plugin","install","--evolution","../bad","--from","./plugins/local-file"]
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
   succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
     "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]

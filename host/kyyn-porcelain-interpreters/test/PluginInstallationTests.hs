@@ -7,6 +7,8 @@ import qualified Data.ByteString.Char8 as Char8
 import Effectful (Eff, IOE, runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
+import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionId)
+import Kyyn.Domain.Workspace (EvolutionState(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -24,6 +26,10 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Protocol.Plugin (decodeOrigin)
 import Kyyn.Porcelain.Capability.PluginInstallation
 import Kyyn.Porcelain.Interpreter.PluginInstallation
+import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
+import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
+import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
+import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (createDirectory, createDirectoryIfMissing, createFileLink, createDirectoryLink, findExecutable)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -39,6 +45,9 @@ path = either error id . relativePath
 
 scope :: String -> DirectoryScope
 scope = either error id . directoryScope
+
+workspace :: KnowledgeBase -> EvolutionWorkspace
+workspace kb = EvolutionWorkspace kb (either error id (evolutionId "000001-install"))
 
 fixture :: String -> FileTree
 fixture name = either error id (fileTree
@@ -80,8 +89,12 @@ refusalTests = do
             pure (expected /= "plugin.source-unavailable")
           FS.EntryExists _ _ -> pure exists
           _ -> error "Refused installation performed a filesystem write"
-        result = runPureEff (gitHandler (noWrites (runDhallHandling (runPluginInstallation
-          (installPlugin kb (LocalPackage (scope "/source/package") WholeTree))))))
+        editable :: Eff (Evolution.EvolutionStore : es) a -> Eff es a
+        editable = interpret $ \_ -> \case
+          Evolution.ReadEvolutionState selected | selected == workspace kb -> pure (Right Draft)
+          _ -> error "Unexpected evolution operation"
+        result = runPureEff (gitHandler (noWrites (runDhallHandling (editable (runPluginInstallation
+          (installPlugin (workspace kb) (LocalPackage (scope "/source/package") WholeTree)))))))
     case result of
       Left [Diagnostic _ code message _] -> do
         assert "wrong refusal" (code == expected)
@@ -116,7 +129,12 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
   _ <- gitAction (synchronizeCheckout kbRepository kbBranch kbCommit [path "work", path "unrelated"]) >>= right
   let kb = KnowledgeBase kbRepository (Subtree (path "work/kb"))
       install selected = runEff (runFailure (runProcessExecutionIO (runGit executable []
-        (runFileSystemIO (scope directory) (runDhallHandling (runPluginInstallation (installPlugin kb selected))))))) >>= right
+        (runFileSystemIO (scope directory) (runDhallHandling (runRootStore (runWorkspaceStore (runEvolutionStore
+          (runPluginInstallation (installPlugin (workspace kb) selected)))))))))) >>= right
+      targetRoot = kbDirectory </> "work/kb/evolutions/000001-install/target"
+  createDirectoryIfMissing True targetRoot
+  Bytes.writeFile (kbDirectory </> "work/kb/evolutions/000001-install/manifest.dhall")
+    (Char8.pack ("{ before.revision = \"" ++ revisionName kbCommit ++ "\", name = \"install\", explanation = \"\", state = < Draft | Ready | Accepted >.Draft }"))
   url <- right (gitUrl ("file://" ++ sourceDirectory))
   Bytes.writeFile (directory </> "not-a-directory") "file"
   createFileLink (directory </> "absent") (directory </> "dangling")
@@ -127,7 +145,7 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
          (GitPackage url (Subtree (path "packages/remote")), "remote-file", RemoteRepository url, "packages/remote")] $ \(selection,name,originRepository,selected) -> do
     InstalledPlugin installed target origin <- install selection >>= right
     assert "installed identity/origin" (pluginNameText installed == name && origin == PluginOrigin originRepository (Subtree (path selected)) sourceCommit)
-    let expected = kbDirectory </> "work/kb/root/plugins/packages" </> name
+    let expected = targetRoot </> "plugins/packages" </> name
     assert "wrong nested destination" (scopePath target == expected)
     copied <- Bytes.readFile (expected </> "source/src/LocalFile/Plugin.hs")
     assert "source bytes changed" (copied == "module LocalFile.Plugin where\n")
@@ -145,7 +163,7 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
   linkedSource <- install (LocalPackage (scope (directory </> "linked-source")) (Subtree (path "packages/local")))
   case linkedSource of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
   forM_ ["empty", "linked"] $ \name -> do
-    let destination = kbDirectory </> "work/kb/root/plugins/packages" </> name
+    let destination = targetRoot </> "plugins/packages" </> name
     if name == "empty" then createDirectory destination else createFileLink "/missing/plugin" destination
     package <- right (fileTree (files (fixture name)))
     next <- gitAction (createCommit sourceRepository (GitTree [(Subtree (path name), package)]) (Just sourceCommit) metadata)
@@ -159,7 +177,7 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
   Bytes.writeFile (sourceDirectory </> "packages/local/src/LocalFile/Plugin.hs") "changed after installation"
   dirty <- install (LocalPackage (scope (sourceDirectory </> "packages/local")) WholeTree)
   case dirty of Left [Diagnostic _ "plugin.source-uncommitted" _ _] -> pure (); other -> fail (show other)
-  copiedAfter <- Bytes.readFile (kbDirectory </> "work/kb/root/plugins/packages/local-file/source/src/LocalFile/Plugin.hs")
+  copiedAfter <- Bytes.readFile (targetRoot </> "plugins/packages/local-file/source/src/LocalFile/Plugin.hs")
   assert "installed copy followed source edits" (copiedAfter == "module LocalFile.Plugin where\n")
   keep <- Bytes.readFile (kbDirectory </> "work/kb/root/keep.dhall")
   unrelated <- Bytes.readFile (kbDirectory </> "unrelated")

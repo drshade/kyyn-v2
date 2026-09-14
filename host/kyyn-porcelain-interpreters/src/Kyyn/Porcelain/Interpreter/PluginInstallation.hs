@@ -7,6 +7,8 @@ import Data.List (intercalate)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Evolution (EvolutionWorkspace(..))
+import Kyyn.Domain.Workspace (EvolutionState(..))
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -18,12 +20,16 @@ import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Protocol.Plugin as Protocol
 import Kyyn.Porcelain.Capability.PluginInstallation
-import Kyyn.Porcelain.Capability.RootStore (rootLocation)
+import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 
-runPluginInstallation :: (FS.FileSystem :> es, Git.Git :> es, DhallHandling :> es)
+runPluginInstallation :: (FS.FileSystem :> es, Git.Git :> es, DhallHandling :> es, Evolution.EvolutionStore :> es)
   => Eff (PluginInstallation : es) a -> Eff es a
 runPluginInstallation = interpret $ \_ -> \case
-  InstallPlugin kb@(KnowledgeBase (Repository destination) _) source ->
+  InstallPlugin workspace@(EvolutionWorkspace (KnowledgeBase (Repository destination) _) _) source -> runExceptT $ do
+    state <- ExceptT (Evolution.readEvolutionState workspace)
+    when (state == Accepted) (reject "plugin.evolution-accepted" "Create a new evolution to change accepted plugins")
+    workspacePath <- pathChecked (Evolution.workspaceLocation workspace)
+    rootPath <- pathChecked (relativePath (relativeName workspacePath ++ "/target"))
     let acquire repository selected originRepository = runExceptT $ do
           revision <- ExceptT (Git.resolveRevision repository "HEAD")
           case originRepository of
@@ -40,7 +46,6 @@ runPluginInstallation = interpret $ \_ -> \case
               name = manifestName manifest
           originBytes <- ExceptT (Protocol.encodeOrigin origin)
           payload <- checked (preparePlugin manifest tree originBytes)
-          rootPath <- pathChecked (rootLocation kb)
           parentPath <- pathChecked (relativePath (relativeName rootPath ++ "/" ++ relativeName pluginPackagesLocation))
           parent <- pathChecked (directoryScope (scopedPath destination parentPath))
           namePath <- pathChecked (relativePath (pluginNameText name))
@@ -52,7 +57,7 @@ runPluginInstallation = interpret $ \_ -> \case
           unless created (reject "plugin.already-installed" (pluginNameText name ++ " is already installed"))
           forM_ (files payload) $ \(path, bytes) -> liftEff (FS.writeBytes target path bytes)
           pure (InstalledPlugin name target origin)
-    in case source of
+    ExceptT $ case source of
       LocalPackage directory path -> runExceptT $ do
         exists <- liftEff (FS.directoryExists directory)
         unless exists (reject "plugin.source-unavailable" ("Plugin source is not an available directory: " ++ scopePath directory))
