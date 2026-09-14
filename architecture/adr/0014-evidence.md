@@ -91,6 +91,11 @@ concurrent batches being applied against a different base; it is not an approval
 workflow. Provider pagination can happen inside acquisition, but no host partial-run,
 checkpoint or resumable acquisition lifecycle is required for this first boundary.
 
+Acquisition uses a configured instance from the checked accepted root. A draft
+evolution's configuration is available for authoring and inspection, but cannot
+start or advance an evidence history before acceptance. CLI navigation and
+diagnostics for this boundary are specified in [ADR 0018](0018-surfaces.md).
+
 ### Retained fetches and explicit selection
 
 The host records the instance, producing package/contract, selected configuration

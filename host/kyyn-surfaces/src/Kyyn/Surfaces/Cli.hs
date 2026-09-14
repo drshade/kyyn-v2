@@ -1,11 +1,14 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
-  , GuestCommand(..), PluginCommand(..)
+  , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, gitRevision)
+import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), pluginName, connectorName, pluginNameText)
+import Kyyn.Domain.Evidence (FetchId(..))
+import Data.Coerce (coerce)
 import Options.Applicative
 
 data Invocation = Invocation
@@ -22,8 +25,17 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand deriving (Eq, Show)
-data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) deriving (Eq, Show)
+data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Evidence EvidenceCommand deriving (Eq, Show)
+data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) | Connector ConnectorCommand deriving (Eq, Show)
+data ConnectorCommand
+  = ListConnectors PluginName (Maybe EvolutionId)
+  | ShowConnectorSchema PluginName (Maybe EvolutionId)
+  deriving (Eq, Show)
+data EvidenceCommand
+  = FetchConnector PluginName ConnectorName
+  | ListFetchHistory PluginName ConnectorName (Maybe FetchId)
+  | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId) (Maybe FetchId)
+  deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
 data RootCommand = ShowRoot | CheckRoot deriving (Eq, Show)
@@ -53,6 +65,8 @@ progressMessage :: Command -> Maybe String
 progressMessage request = case request of
   Kb InitKb -> Just "Checking and initializing the knowledge base..."
   Plugin (InstallPlugin selectedId _ _) -> Just ("Installing plugin source into evolution " ++ evolutionIdName selectedId ++ "...")
+  Evidence (FetchConnector plugin connector) -> Just
+    ("Checking the root and fetching " ++ pluginNameText plugin ++ "/" ++ coerce connector ++ "...")
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
   Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
@@ -68,12 +82,40 @@ invocation = Invocation <$> selectionParser
       (group "init" "Initialize an empty knowledge base and commit its validated root" (pure (Kb InitKb))))
     <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
     <> group "guest" "Explore the guest SDK and workspace bindings" guestParser
-    <> group "plugin" "Manage vendored plugin source" (Plugin <$> hsubparser
+    <> group "plugin" "Manage plugins and connector configuration" (Plugin <$> hsubparser
       (group "install" "Copy a committed plugin package into an evolution target"
         (InstallPlugin <$> option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Evolution to receive the plugin")
           <*> strOption (long "from" <> metavar "SOURCE" <> help "Local Git checkout directory or Git URL")
-          <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))))
+          <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))
+       <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
+    <> group "evidence" "Fetch and inspect captured evidence history" (Evidence <$> evidenceParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
+
+connectorParser :: Parser ConnectorCommand
+connectorParser = hsubparser
+  (group "list" "List a plugin's configured instances" (ListConnectors <$> plugin <*> evolution)
+  <> group "schema" "Discover connector configuration schemas" (hsubparser
+      (group "show" "Print the derived Dhall type for a plugin's configuration file" (ShowConnectorSchema <$> pluginArgument <*> evolution))))
+  where
+    plugin = pluginArgument
+    evolution = optional (option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Inspect an evolution target instead of the accepted root"))
+
+pluginArgument :: Parser PluginName
+pluginArgument = argument (eitherReader pluginName) (metavar "PLUGIN")
+
+evidenceParser :: Parser EvidenceCommand
+evidenceParser = hsubparser
+  (group "fetch" "Fetch evidence from an accepted connector instance" (FetchConnector <$> plugin <*> instanceName)
+  <> group "history" "Inspect retained fetch history" (hsubparser
+      (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName <*> at)))
+  <> group "change" "Inspect evidence changes" (hsubparser
+      (group "list" "List changes between retained fetches" (ListEvidenceChanges <$> plugin <*> instanceName
+        <*> optional (option fetchId (long "since" <> metavar "FETCH" <> help "Exclusive previous fetch")) <*> at))))
+  where
+    plugin = pluginArgument
+    instanceName = argument (eitherReader connectorName) (metavar "INSTANCE")
+    at = optional (option fetchId (long "at" <> metavar "FETCH" <> help "Select a retained fetch instead of the current one"))
+    fetchId = eitherReader (\identifier -> if null identifier then Left "Fetch ID must not be empty" else Right (FetchId identifier))
 
 selectionParser :: Parser Selection
 selectionParser = Selection

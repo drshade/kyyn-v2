@@ -102,7 +102,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
   case prepared of
-    [PreparedPlugin plugin identity [PreparedConnector kind _ _ _ _] instances] -> do
+    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector kind _ _ _ _]) instances] -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
       mapM_ (\(ConfiguredConnector name _ (PreparedConnector _ _ payload entry _) config) -> do
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling

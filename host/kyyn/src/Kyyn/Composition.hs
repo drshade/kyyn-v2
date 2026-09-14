@@ -2,7 +2,8 @@
 module Kyyn.Composition (execute) where
 
 import Effectful (Eff, IOE, runEff, (:>))
-import System.Environment (setEnv)
+import Kyyn.Composition.Runtime
+import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
@@ -23,7 +24,7 @@ import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readTree)
+import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
@@ -64,25 +65,15 @@ import qualified Kyyn.Porcelain.Capability.GuestApi as Api
 import qualified Kyyn.Surfaces.GuestApi as ApiResult
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
-import System.FilePath ((</>))
 import System.Directory (getCurrentDirectory)
 
-type Base = '[RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
-type Runtime = SchemaInspection ': GuestCompilation ': Base
 type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
 type Evaluation = EvolutionExecution ': Authoring
 type Checking = RootExecution ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
-runBase :: Host -> Eff Base a -> IO (Either OperationalFailure a)
-runBase (Host executable environment temp _) = runEff . runFailure . runProcessExecutionIO
-  . runFileSystemIO temp . runGit executable environment . runDhallHandling . runRootStore
-
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
 runMetadata host = runBase host . runWorkspaceStore . runEvolutionStore
-
-runRuntime :: Host -> GuestToolchain -> Eff Runtime a -> IO (Either OperationalFailure a)
-runRuntime host toolchain = runBase host . runGuestCompilation toolchain . runSchemaInspectionIO toolchain
 
 runAuthoring :: Host -> GuestToolchain -> FileTree -> Eff Authoring a -> IO (Either OperationalFailure a)
 runAuthoring host toolchain sdk = runRuntime host toolchain . runRootOpening sdk
@@ -111,6 +102,7 @@ execute (Cli.Invocation selection _ command) = do
         Cli.Root request -> selectKnowledgeBase host scope >>= either pure (dispatchRoot host request)
         Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)
         Cli.Plugin request -> selectKnowledgeBase host scope >>= either pure (dispatchPlugin host request)
+        Cli.Evidence request -> selectKnowledgeBase host scope >>= either pure (dispatchEvidence host request)
         Cli.Guest (Just identity) request -> do
           discovered <- runGitIO host (Git.discoverRepository scope)
           case discovered of
@@ -120,6 +112,7 @@ execute (Cli.Invocation selection _ command) = do
               dispatchWorkspaceApi host (EvolutionWorkspace (KnowledgeBase repository prefix) identity) request
 
 dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
+dispatchPlugin host (Cli.Connector command) kb = dispatchConnectors host command kb
 dispatchPlugin (Host executable environment temp _) (Cli.InstallPlugin identity source subdirectory) (SelectedKb kb _ _) = do
   cwd <- getCurrentDirectory
   let selected = do
@@ -228,16 +221,3 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
   where
     workspace = EvolutionWorkspace kb
     detached = refusal [errorDiagnostic "git.detached-head" "Check out a local branch before accepting or recovering an evolution."]
-
-finish :: IO (Either OperationalFailure Response) -> IO Response
-finish action = either operationalFailure id <$> action
-
-withRuntime :: Host -> (GuestToolchain -> FileTree -> IO Response) -> IO Response
-withRuntime (Host _ _ temp runtime) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
-  (Right toolchain,Right sdkScope) -> do
-    setEnv "MHSCPPHS" (runtime </> "microhs/bin/cpphs")
-    loaded <- runEff . runFailure . runFileSystemIO temp $ readTree sdkScope
-    case loaded of
-      Left failure -> pure (operationalFailure failure)
-      Right sdk -> action (GuestToolchain toolchain) sdk
-  _ -> pure (refusal [errorDiagnostic "setup.runtime" "Runtime must resolve to an absolute directory"])

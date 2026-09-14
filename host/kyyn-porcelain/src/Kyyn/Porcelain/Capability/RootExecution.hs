@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootExecution
-  ( RootExecution(..), PreparedRoot, prepareRoot, preparedRoot, preparedQueries, validateRoot, queryRoot ) where
+  ( RootExecution(..), PreparedRoot, prepareRoot, preparedRoot, preparedQueries, preparedPlugins, validateRoot, queryRoot ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -8,6 +8,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
 import Kyyn.Domain.Root (Root, CheckedValue)
 import Kyyn.Domain.Query (QueryDescriptor, QueryResult)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
+import Kyyn.Porcelain.Capability.PluginPreparation (PreparedPlugin)
 
 data RootExecution :: Effect where
   PrepareRoot :: Root -> RootExecution m (Either [Diagnostic] PreparedRoot)
@@ -27,6 +28,9 @@ preparedRoot (PreparedRoot root _ _ _ _) = root
 
 preparedQueries :: PreparedRoot -> [QueryDescriptor]
 preparedQueries (PreparedRoot _ _ _ queries _) = [descriptor | PreparedQuery descriptor _ _ <- queries]
+
+preparedPlugins :: PreparedRoot -> [PreparedPlugin]
+preparedPlugins (PreparedRoot _ _ _ _ plugins) = plugins
 
 queryRoot :: RootExecution :> es => PreparedRoot -> QueryDescriptor -> CheckedValue -> Eff es (Either [Diagnostic] QueryResult)
 queryRoot root descriptor = send . ExecuteQuery root descriptor

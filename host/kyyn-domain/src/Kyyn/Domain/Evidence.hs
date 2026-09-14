@@ -4,12 +4,14 @@ module Kyyn.Domain.Evidence
   , Evidence(..), EvidenceChange(..), Fetch(..), EvidenceState(..), EvidenceSelection(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), ChangeKind(..), EvidenceChangeSummary(..)
   , applyChanges, snapshotAt, fetchesBetween, summarizeChanges, validateState
+  , evidenceProblemDiagnostic, FetchSummary(..), summarizeFetch
   ) where
 
 import Control.Monad (foldM, unless)
 import Data.List (nub)
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..), Evidence(..), EvidenceChange(..))
 
 newtype FetchId = FetchId String deriving (Eq, Show)
@@ -19,6 +21,11 @@ data Fetch a = Fetch
   { identity :: FetchId, previous :: Maybe FetchId, fetchedAt :: String
   , changes :: [EvidenceChange a]
   } deriving (Eq, Show)
+data FetchSummary = FetchSummary FetchId (Maybe FetchId) String Int deriving (Eq, Show)
+
+summarizeFetch :: Fetch a -> FetchSummary
+summarizeFetch (Fetch identity previous at changes) = FetchSummary identity previous at (length changes)
+
 data EvidenceState a = EvidenceState
   { baseline :: Maybe FetchId, initial :: [(EvidenceId, Evidence a)]
   , current :: Maybe FetchId, values :: [(EvidenceId, Evidence a)]
@@ -29,6 +36,17 @@ data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProd
 data EvidenceProblem = HistoryUnavailable | ProducerContractChanged
   | BaseSnapshotConflict | InvalidDelta String | InvalidEvidence String
   deriving (Eq, Show)
+
+evidenceProblemDiagnostic :: EvidenceProblem -> Diagnostic
+evidenceProblemDiagnostic problem = case problem of
+  HistoryUnavailable -> errorDiagnostic "evidence.history-unavailable"
+    "The selected evidence history is unavailable. Choose a retained fetch or fetch this connector again."
+  ProducerContractChanged -> errorDiagnostic "evidence.producer-changed"
+    "The plugin source or evidence schema has changed. Fetch this connector again before reading its evidence."
+  BaseSnapshotConflict -> errorDiagnostic "evidence.base-conflict"
+    "Another fetch advanced this connector while acquisition was running. Retry against its new head."
+  InvalidDelta message -> errorDiagnostic "evidence.invalid-delta" message
+  InvalidEvidence message -> errorDiagnostic "evidence.invalid-data" message
 data ChangeKind = New | Updated | Removed deriving (Eq, Show)
 data EvidenceChangeSummary = EvidenceChangeSummary
   { fetch :: FetchId, previous :: Maybe FetchId, kind :: ChangeKind

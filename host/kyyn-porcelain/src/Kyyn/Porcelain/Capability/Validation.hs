@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Capability.Validation (checkRoot, checkCandidate, checkExample) where
+module Kyyn.Porcelain.Capability.Validation (checkRoot, checkPreparedRoot, checkCandidate, checkExample) where
 
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract (contractId)
@@ -7,7 +7,7 @@ import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.Evolution (Candidate(..))
 import Kyyn.Domain.Query (QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.Root (Root, CheckedValue(..))
-import Kyyn.Porcelain.Capability.RootExecution (RootExecution, PreparedRoot, prepareRoot, preparedQueries, queryRoot, validateRoot)
+import Kyyn.Porcelain.Capability.RootExecution (RootExecution, PreparedRoot, prepareRoot, preparedRoot, preparedQueries, queryRoot, validateRoot)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readExamples)
 import Kyyn.Porcelain.Validation.Types (Validated(..))
 
@@ -24,18 +24,22 @@ checkRoot root = do
   code <- prepareRoot root
   case code of
     Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
-    Right prepared -> do
-      loaded <- readExamples root (preparedQueries prepared)
-      case loaded of
+    Right prepared -> checkPreparedRoot prepared
+
+checkPreparedRoot :: (RootExecution :> es, RootStore :> es) => PreparedRoot -> Eff es (CheckResult (Validated Root))
+checkPreparedRoot prepared = do
+  let root = preparedRoot prepared
+  loaded <- readExamples root (preparedQueries prepared)
+  case loaded of
+    Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
+    Right examples -> do
+      semantic <- validateRoot prepared
+      case semantic of
         Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
-        Right examples -> do
-          semantic <- validateRoot prepared
-          case semantic of
-            Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
-            Right (ValidationReport diagnostics) -> do
-              reports <- traverse (checkExample prepared) examples
-              let combined = diagnostics ++ concat [ds | ValidationReport ds <- reports]
-              pure (checkReport (Validated root) (ValidationReport combined))
+        Right (ValidationReport diagnostics) -> do
+          reports <- traverse (checkExample prepared) examples
+          let combined = diagnostics ++ concat [ds | ValidationReport ds <- reports]
+          pure (checkReport (Validated root) (ValidationReport combined))
 
 checkExample :: RootExecution :> es => PreparedRoot -> Example -> Eff es ValidationReport
 checkExample root (Example name descriptor@(QueryDescriptor _ _ input result)

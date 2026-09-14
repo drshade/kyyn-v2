@@ -33,10 +33,11 @@ import Kyyn.Porcelain.Capability.PluginPreparation
 runPluginPreparation :: (GuestCompilation :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
   => FileTree -> Eff (PluginPreparation : es) a -> Eff es a
 runPluginPreparation sdk = interpret $ \_ -> \case
-  PreparePlugins code -> runExceptT (prepare sdk code)
+  PreparePackages code -> runExceptT (prepare sdk code)
+  PreparePlugins code -> runExceptT (prepare sdk code >>= configure code)
   ValidatePlugins plugins -> runExceptT $ do
     reports <- forM [(plugin,instanceName,entry,config) |
-      PreparedPlugin plugin _ _ instances <- plugins,
+      PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
       ConfiguredConnector instanceName _ (PreparedConnector _ _ _ _ entry) config <- instances] $
       \(plugin,instanceName,entry,CheckedValue _ config) -> do
         let label = pluginNameText plugin ++ "/" ++ coerce instanceName
@@ -46,11 +47,11 @@ runPluginPreparation sdk = interpret $ \_ -> \case
     pure (ValidationReport (concat reports))
 
 prepare :: (GuestCompilation :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
-  => FileTree -> FileTree -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]
+  => FileTree -> FileTree -> ExceptT [Diagnostic] (Eff es) [PreparedPackage]
 prepare sdk code = do
   let entries = [(relativeName path,bytes) | (path,bytes) <- files code]
       names = nub [takeWhile (/= '/') rest | (path,_) <- entries, Just rest <- [stripPrefix "plugins/packages/" path]]
-  plugins <- forM names $ \name -> do
+  forM names $ \name -> do
     let label = "plugin " ++ name
         prefix = "plugins/packages/" ++ name ++ "/source/"
         packageFiles = [(rest,bytes) | (path,bytes) <- entries, Just rest <- [stripPrefix prefix path]]
@@ -80,7 +81,15 @@ prepare sdk code = do
       validation <- checked connectorLabel (validationSources (rootType config) validate sources)
       validationEntry <- located connectorLabel (compileGuest validation)
       pure (PreparedConnector connector config payload fetchEntry validationEntry)
-    let configFile = "plugins/config/" ++ name ++ ".dhall"
+    pure (PreparedPackage (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors)
+
+configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]
+configure code packages = do
+  let entries = [(relativeName path,bytes) | (path,bytes) <- files code]
+  plugins <- forM packages $ \package@(PreparedPackage plugin _ connectors) -> do
+    let name = pluginNameText plugin
+        label = "plugin " ++ name
+        configFile = "plugins/config/" ++ name ++ ".dhall"
         configContracts = [(connector,contract) | PreparedConnector connector contract _ _ _ <- connectors]
     instances <- case lookup configFile entries of
       Nothing -> pure []
@@ -93,9 +102,9 @@ prepare sdk code = do
             [c@(PreparedConnector _ contract _ _ _)] -> pure
               (ConfiguredConnector instanceName binding c (CheckedValue (contractId contract) configuration))
             _ -> bad (label ++ "/" ++ coerce instanceName) "Unknown connector type"
-    pure (PreparedPlugin (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors instances)
-  let bindings = [binding | PreparedPlugin _ _ _ instances <- plugins, ConfiguredConnector _ binding _ _ <- instances]
-      expected = ["plugins/config/" ++ name ++ ".dhall" | name <- names]
+    pure (PreparedPlugin package instances)
+  let bindings = [binding | PreparedPlugin _ instances <- plugins, ConfiguredConnector _ binding _ _ <- instances]
+      expected = ["plugins/config/" ++ pluginNameText plugin ++ ".dhall" | PreparedPackage plugin _ _ <- packages]
   unless (length bindings == length (nub bindings)) (bad "plugins" "Connector bindings must be unique across the KB")
   unless (all (\(path,_) -> not ("plugins/config/" `isPrefixOf` path) || path `elem` expected) entries)
     (bad "plugins" "Configuration exists without a corresponding installed plugin")
