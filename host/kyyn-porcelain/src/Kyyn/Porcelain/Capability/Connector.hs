@@ -1,11 +1,14 @@
 module Kyyn.Porcelain.Capability.Connector
-  ( sourceAt, selectedPackage, selectedPlugin, selectedInstance, fetchConfiguredConnector ) where
+  ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
+  , connectorFetchHistory, connectorEvidenceChanges ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), CheckResult(..), errorDiagnostic)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef)
+import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
+import Kyyn.Domain.DataType (Shape)
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceSelection, FetchId, FetchSummary, EvidenceChangeSummary)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..))
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
@@ -14,12 +17,54 @@ import Kyyn.Domain.Plugin
 import Kyyn.Domain.Root (SourceRoot(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetchEvidence)
+import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, fetchHistory, evidenceChanges)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadSourceAt, loadRootAt)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution, prepareRoot, preparedPlugins)
 import Kyyn.Porcelain.Capability.Validation (checkPreparedRoot)
+
+listConfiguredConnectors :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName
+  -> Eff es (Either [Diagnostic] [(ConnectorName,BindingName,ConnectorTypeName)])
+listConfiguredConnectors kb revision workspace plugin = runExceptT $ do
+  code <- sourceAt kb revision workspace
+  plugins <- ExceptT (preparePlugins code)
+  PreparedPlugin _ instances <- checked (selectedPlugin plugin plugins)
+  pure [(name,binding,kind) | ConfiguredConnector name binding (PreparedConnector kind _ _ _ _) _ <- instances]
+
+connectorConfigurationSchema :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> Eff es (Either [Diagnostic] Shape)
+connectorConfigurationSchema kb revision workspace plugin = runExceptT $ do
+  code <- sourceAt kb revision workspace
+  packages <- ExceptT (preparePackages code)
+  PreparedPackage _ _ connectors <- checked (selectedPackage plugin packages)
+  pure (instanceShape [(name,contractShape config) | PreparedConnector name config _ _ _ <- connectors])
+
+connectorFetchHistory :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> EvidenceSelection
+  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[FetchSummary]))
+connectorFetchHistory kb revision plugin name selection = runExceptT $ do
+  (instanceRef,producer,payload) <- evidenceContext kb revision plugin name
+  ExceptT (fetchHistory instanceRef producer payload selection)
+
+connectorEvidenceChanges :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> EvidenceSelection -> Maybe FetchId
+  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[EvidenceChangeSummary]))
+connectorEvidenceChanges kb revision plugin name selection since = runExceptT $ do
+  (instanceRef,producer,payload) <- evidenceContext kb revision plugin name
+  ExceptT (evidenceChanges instanceRef producer payload selection since)
+
+evidenceContext :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
+  -> ExceptT [Diagnostic] (Eff es) (ConnectorInstanceRef,EvidenceProducer,CheckedContract)
+evidenceContext kb revision plugin name = do
+  code <- sourceAt kb revision Nothing
+  plugins <- ExceptT (preparePlugins code)
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _) _) <-
+    checked (selectedInstance plugin name plugins)
+  pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload)
 
 fetchConfiguredConnector
   :: (RootOpening :> es, RootExecution :> es, RootStore :> es, EvidenceAcquisition :> es)
@@ -70,4 +115,3 @@ pathResult :: Either String a -> Either [Diagnostic] a
 pathResult = either (Left . pure . errorDiagnostic "kb.path") Right
 checked :: Either [Diagnostic] a -> ExceptT [Diagnostic] (Eff es) a
 checked = ExceptT . pure
-

@@ -1,17 +1,11 @@
-module Kyyn.Plumbing.Protocol.ConnectorConfig (instanceShape, decodeInstances) where
+module Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances) where
 
 import Control.Monad (unless, forM)
-import Data.Coerce (coerce)
 import Data.Aeson (Value, (.:), withArray, withObject)
 import Data.Aeson.Types (parseEither)
 import Data.Foldable (toList)
 import Data.List (nub)
-import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Plugin (ConnectorName(..), BindingName(..), ConnectorTypeName(..), connectorName, bindingName, connectorTypeName)
-
-instanceShape :: [(ConnectorTypeName,Shape)] -> Shape
-instanceShape connectors = List (Record [("name",Scalar TextScalar),("binding",Scalar TextScalar),
-  ("connector",Union [(coerce name,Just config) | (name,config) <- connectors])])
 
 decodeInstances :: Value -> Either String [(ConnectorName,BindingName,ConnectorTypeName,Value)]
 decodeInstances value = do
