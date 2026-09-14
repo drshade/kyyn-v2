@@ -51,17 +51,7 @@ runGuestCompilation (GuestToolchain toolchain) = interpret $ \_ -> \case
         Left _ -> broken "compiler emitted invalid UTF-8 diagnostics"
         Right message -> pure (Left [errorDiagnostic "guest.compiler-rejected" (Text.unpack message)])
       _ -> broken ("compiler terminated with exit status " ++ show status)
-  ExecuteCompiled (CompiledProgram _ (path, bytes)) input -> withTemporaryScope $ \scope -> do
-    writeBytes scope path bytes
-    let evaluator = scopePath toolchain ++ "/bin/mhseval"
-        arguments = ["+RTS", "-r" ++ relativeName path, "-RTS"]
-        environment = [("LC_ALL", "C.UTF-8"), ("PATH", "")]
-    Process.withProcess (Process.ProcessSpec evaluator arguments (scopePath scope) environment) $ do
-      Process.writeStdin input
-      Process.closeStdin
-      output <- Process.collectStdout
-      status <- Process.awaitExit
-      pure (output, status)
+
   where
     broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit message))
     -- Only fixed names and a fixed prefix joined to an already checked path enter here.

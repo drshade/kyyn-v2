@@ -82,7 +82,9 @@ Kyyn.Porcelain.Interpreter.EvolutionStore
 Kyyn.Plumbing.Capability.FileSystem
 Kyyn.Plumbing.Interpreter.FileSystem
 Kyyn.Plumbing.Capability.GuestCompilation
-Kyyn.Plumbing.Interpreter.GuestCompilation
+Kyyn.MicroHs.Interpreter.GuestCompilation
+Kyyn.Plumbing.Capability.GuestExecution
+Kyyn.MicroHs.Interpreter.GuestExecution
 Kyyn.Plumbing.Capability.DhallHandling
 Kyyn.Plumbing.Capability.DhallHandling.Schema
 Kyyn.Plumbing.Interpreter.DhallHandling
@@ -143,12 +145,13 @@ plugins own authentication, not a ConnectionUse handler. Pure serialization
 need not be an effect; it is a helper within its capability. Native process and
 filesystem details stay out of porcelain signatures.
 SchemaInspection owns checked-type extraction and checking the selected Haskell
-schema metadata export. GuestCompilation owns compilation of explicit source bundles
-through the installed toolchain; its interpreter, like SchemaInspection's, lives in
-`kyyn-microhs`. Porcelain interpreters prepare source/adapters and request compilation,
-not raw MicroHs commands. SchemaInspection uses GuestCompilation for its fixed
-metadata adapter and ProcessExecution for pure metadata evaluation through the SDK
-codec; compilation does not call back into inspection. Neither operation calls
+schema metadata export. GuestCompilation owns compilation of explicit source bundles;
+GuestExecution owns one-shot and conversational execution of compiled artifacts.
+Both interpreters, like SchemaInspection's, live in `kyyn-microhs` and receive the
+installed toolchain explicitly. Porcelain interpreters request compilation and
+execution separately, not raw MicroHs commands. SchemaInspection uses GuestCompilation
+for its fixed metadata adapter and GuestExecution for pure metadata evaluation through
+the SDK codec; compilation does not call back into inspection. Neither operation calls
 RootExecution or loads facts. This keeps the inspection/compilation dependency acyclic.
 The metadata attaches field roles (title/timeline/badge) and declares identities
 and references; its data types and authoring example belong to ADR 0005.

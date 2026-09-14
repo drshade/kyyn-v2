@@ -3,7 +3,7 @@ module ExecutionTests (executionTests) where
 
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
-import Effectful (Eff, runEff, (:>))
+import Effectful (Eff, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
@@ -15,7 +15,6 @@ import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import GuestFixture
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -40,7 +39,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       root = Root contract facts code
       entry = fixtureProgram
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . compileMock shell compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runRootExecution sdkFiles $ do
+        . runFixtureExecution shell . compileMock compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runRootExecution sdkFiles $ do
           prepared <- prepareRoot selected
           either (pure . Left) validateRoot prepared
       unexpected = error "Invalid root reached compilation"
@@ -69,9 +68,8 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
   case collision of Right (Left _) -> pure (); _ -> fail "Source collision reached compilation"
   putStrLn "RootExecution manifest/source selection and structural/compiler/runtime failure distinctions passed."
 
-compileMock :: ProcessExecution :> es => FilePath -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
-compileMock shell result = interpret $ \_ -> \case
-  ExecuteCompiled program input -> executeFixture shell program input
+compileMock :: Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
+compileMock result = interpret $ \_ -> \case
   CompileGuest captured -> do
     let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
     unless (lookup "Checks.hs" entries == Just "captured validator" &&

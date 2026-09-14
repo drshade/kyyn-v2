@@ -20,7 +20,8 @@ import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, executeCompiledEntry)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIdentity)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSchema(..), inspectType)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
@@ -30,7 +31,7 @@ import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Porcelain.Capability.PluginPreparation
 
-runPluginPreparation :: (GuestCompilation :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
+runPluginPreparation :: (GuestCompilation :> es, GuestExecution :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
   => FileTree -> Eff (PluginPreparation : es) a -> Eff es a
 runPluginPreparation sdk = interpret $ \_ -> \case
   PreparePackages code -> runExceptT (prepare sdk code)
@@ -46,7 +47,7 @@ runPluginPreparation sdk = interpret $ \_ -> \case
         pure (map (locate label) report)
     pure (ValidationReport (concat reports))
 
-prepare :: (GuestCompilation :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
+prepare :: (GuestCompilation :> es, GuestExecution :> es, SchemaInspection :> es, DhallHandling :> es, Failure :> es)
   => FileTree -> FileTree -> ExceptT [Diagnostic] (Eff es) [PreparedPackage]
 prepare sdk code = do
   let entries = [(relativeName path,bytes) | (path,bytes) <- files code]

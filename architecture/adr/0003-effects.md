@@ -63,6 +63,22 @@ Do not call those modules `Runner`. Interpreter installation functions remain wi
 their respective interpreter modules, not in the application composition package.
 The [repository layout](0026-repository-layout.md) maps these responsibilities to disk.
 
+Compilation and execution are distinct plumbing capabilities. A handler that prepares
+and invokes an adapter declares both; a caller executing an existing artifact needs
+only GuestExecution. For example, the native schema-inspection interpreter declares:
+
+```haskell
+runSchemaInspectionIO
+  :: (IOE :> es, FileSystem :> es, GuestCompilation :> es,
+      GuestExecution :> es, Failure :> es)
+  => GuestToolchain -> Eff (SchemaInspection : es) a -> Eff es a
+```
+
+Its IOE is for native compiler-library inspection, not guest execution. The
+GuestCompilation and GuestExecution interpreters themselves lower through FileSystem
+and ProcessExecution without IOE. Command composition installs those handlers where
+needed; EvidenceStore operations alone do not require either capability.
+
 For example, the plumbing filesystem accepts a caller-supplied scope and relative
 path, not a KB noun. These are representative operations, not the full filesystem
 API. `DirectoryScope` and `RelativePath` are opaque resolved/checked values;

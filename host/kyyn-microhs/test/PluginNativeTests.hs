@@ -154,25 +154,29 @@ snapshotStore entries = interpret $ \_ -> \case
   _ -> error "Invocation performed a live per-item storage operation"
 
 exchangeFrames :: [Value] -> [Value] -> Value -> Eff es () -> Eff (GuestExecution : es) a -> Eff es a
-exchangeFrames requests answers result between = interpret $ \env (ExecuteGuest _ _ respond) ->
-  localSeqUnlift env $ \unlift -> do
-    forM_ (zip3 [1 :: Int ..] requests answers) $ \(identity,args,answer) -> do
-      let request = object ["tag" .= ("HostRequest" :: String),"id" .= show identity,
-            "capability" .= ("evidence" :: String),"method" .= (if identity == 1 then "list" else "read" :: String),
-            "arguments" .= args]
-          expected = object ["tag" .= ("HostResponse" :: String),"id" .= show identity,"result" .= answer]
-      reply <- unlift (respond (Lazy.toStrict (encode request)))
-      case fmap eitherDecodeStrict reply of
-        Just (Right value) | value == expected -> pure ()
-        _ -> error ("Unexpected snapshot reply: " ++ show reply)
-      if identity == 1 then between else pure ()
-    pure (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),"result" .=
-      object ["tag" .= ("Right" :: String),"value" .= result]])),ProcessExit 0 Bytes.empty)
+exchangeFrames requests answers result between = interpret $ \env -> \case
+  ExecuteCompiled {} -> error "Plugin invocation requested one-shot execution"
+  ExecuteGuest _ _ respond ->
+    localSeqUnlift env $ \unlift -> do
+      forM_ (zip3 [1 :: Int ..] requests answers) $ \(identity,args,answer) -> do
+        let request = object ["tag" .= ("HostRequest" :: String),"id" .= show identity,
+              "capability" .= ("evidence" :: String),"method" .= (if identity == 1 then "list" else "read" :: String),
+              "arguments" .= args]
+            expected = object ["tag" .= ("HostResponse" :: String),"id" .= show identity,"result" .= answer]
+        reply <- unlift (respond (Lazy.toStrict (encode request)))
+        case fmap eitherDecodeStrict reply of
+          Just (Right value) | value == expected -> pure ()
+          _ -> error ("Unexpected snapshot reply: " ++ show reply)
+        if identity == 1 then between else pure ()
+      pure (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),"result" .=
+        object ["tag" .= ("Right" :: String),"value" .= result]])),ProcessExit 0 Bytes.empty)
 
 emitFrame :: Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
-emitFrame frame = interpret $ \env (ExecuteGuest _ _ respond) -> localSeqUnlift env $ \unlift -> do
-  _ <- unlift (respond frame)
-  pure (frame,ProcessExit 0 Bytes.empty)
+emitFrame frame = interpret $ \env -> \case
+  ExecuteCompiled {} -> error "Plugin invocation requested one-shot execution"
+  ExecuteGuest _ _ respond ->   localSeqUnlift env $ \unlift -> do
+    _ <- unlift (respond frame)
+    pure (frame,ProcessExit 0 Bytes.empty)
 
 refuseStore :: Eff (EvidenceStore : es) a -> Eff es a
 refuseStore = interpret $ \_ _ -> error "Invalid guest request reached evidence storage"

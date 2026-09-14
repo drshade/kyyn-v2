@@ -1,4 +1,4 @@
-{-# LANGUAGE GHC2021, DataKinds, GADTs #-}
+{-# LANGUAGE GHC2021, DataKinds, GADTs, LambdaCase #-}
 {-# OPTIONS_GHC -Werror #-}
 module Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution) where
 
@@ -16,27 +16,38 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 
 runGuestExecution :: (FileSystem :> es, Process.ProcessExecution :> es, Failure :> es)
   => GuestToolchain -> Eff (GuestExecution : es) a -> Eff es a
-runGuestExecution (GuestToolchain toolchain) = interpret $ \env (ExecuteGuest (CompiledProgram _ (path, bytes)) input respond) ->
-  localSeqUnlift env $ \unlift -> withTemporaryScope $ \scope -> do
+runGuestExecution (GuestToolchain toolchain) = interpret $ \env -> \case
+  ExecuteCompiled (CompiledProgram _ (path, bytes)) input -> withTemporaryScope $ \scope -> do
     writeBytes scope path bytes
     Process.withProcess (Process.ProcessSpec (scopePath toolchain ++ "/bin/mhseval")
       ["+RTS", "-r" ++ relativeName path, "-RTS"] (scopePath scope)
       [("LC_ALL", "C.UTF-8"), ("PATH", "")]) $ do
-        Process.writeStdin (input <> Bytes.singleton 10)
-        let loop buffered = do
-              (line, rest) <- frame buffered
-              answer <- raise (unlift (respond line))
-              case answer of
-                Just response -> do
-                  Process.writeStdin (response <> Bytes.singleton 10)
-                  loop rest
-                Nothing -> do
-                  Process.closeStdin
-                  trailing <- Process.collectStdout
-                  status <- Process.awaitExit
-                  if Bytes.null (rest <> trailing) then pure (line,status)
-                    else broken "Output follows the terminal guest frame"
-        loop Bytes.empty
+        Process.writeStdin input
+        Process.closeStdin
+        output <- Process.collectStdout
+        status <- Process.awaitExit
+        pure (output, status)
+  ExecuteGuest (CompiledProgram _ (path, bytes)) input respond ->
+    localSeqUnlift env $ \unlift -> withTemporaryScope $ \scope -> do
+      writeBytes scope path bytes
+      Process.withProcess (Process.ProcessSpec (scopePath toolchain ++ "/bin/mhseval")
+        ["+RTS", "-r" ++ relativeName path, "-RTS"] (scopePath scope)
+        [("LC_ALL", "C.UTF-8"), ("PATH", "")]) $ do
+          Process.writeStdin (input <> Bytes.singleton 10)
+          let loop buffered = do
+                (line, rest) <- frame buffered
+                answer <- raise (unlift (respond line))
+                case answer of
+                  Just response -> do
+                    Process.writeStdin (response <> Bytes.singleton 10)
+                    loop rest
+                  Nothing -> do
+                    Process.closeStdin
+                    trailing <- Process.collectStdout
+                    status <- Process.awaitExit
+                    if Bytes.null (rest <> trailing) then pure (line,status)
+                      else broken "Output follows the terminal guest frame"
+          loop Bytes.empty
 
 frame :: (Process.ProcessPipes :> es, Failure :> es) => Bytes.ByteString -> Eff es (Bytes.ByteString, Bytes.ByteString)
 frame buffered = case Bytes.elemIndex 10 buffered of

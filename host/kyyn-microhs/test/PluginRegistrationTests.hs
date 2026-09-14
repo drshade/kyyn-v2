@@ -30,6 +30,7 @@ import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readTree)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
 import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources)
 import Kyyn.Plumbing.Capability.Git (Git)
@@ -61,7 +62,7 @@ import System.Info (compilerVersion)
 import System.Process (readProcessWithExitCode)
 import System.IO.Temp (withSystemTempDirectory)
 
-type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
+type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, GuestExecution, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
@@ -128,7 +129,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestCompilation toolchain (runSchemaInspectionIO toolchain (runRootStore (noGit (runRootOpening sdk
+    (runGuestExecution toolchain $ runGuestCompilation toolchain (runSchemaInspectionIO toolchain (runRootStore (noGit (runRootOpening sdk
       (runPluginPreparation sdk (runRootExecution sdk $ do
         opened <- openCapturedRoot invalidCode
         either (pure . Rejected . ValidationReport) checkRoot opened))))))))))) >>= right
@@ -163,7 +164,7 @@ compileFirstParty directory sources = do
 
 runPreparation :: DirectoryScope -> GuestToolchain -> FileTree -> Eff Preparation a -> IO a
 runPreparation scope toolchain sdk = (>>= right) . runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-  . runDhallHandling . runGuestCompilation toolchain . runSchemaInspectionIO toolchain . runPluginPreparation sdk
+  . runDhallHandling . runGuestExecution toolchain . runGuestCompilation toolchain . runSchemaInspectionIO toolchain . runPluginPreparation sdk
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
 assert :: String -> Bool -> IO ()

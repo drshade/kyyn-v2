@@ -129,13 +129,21 @@ test('effect APIs do not grant IO to capabilities or pure codec generation', () 
   assert.deepEqual(checkImports('kyyn-plumbing-interpreters', 'import MicroHs.Expr'), ['MicroHs.Expr']);
 });
 
-test('guest compilation lowers only through plumbing despite its native package', () => {
-  const header = 'module Kyyn.MicroHs.Interpreter.GuestCompilation where\n';
-  for (const name of ['System.IO', 'System.Process', 'MicroHs.Compile', 'Control.Exception']) {
-    assert.deepEqual(checkImports('kyyn-microhs', header + `import ${name}`), [name]);
+test('guest compilation and execution lower only through plumbing despite their native package', () => {
+  for (const module of ['GuestCompilation', 'GuestExecution']) {
+    const header = `module Kyyn.MicroHs.Interpreter.${module} where\n`;
+    for (const name of ['System.IO', 'System.Process', 'MicroHs.Compile', 'Control.Exception']) {
+      assert.deepEqual(checkImports('kyyn-microhs', header + `import ${name}`), [name]);
+    }
+    assert.match(checkImports('kyyn-microhs', header + 'import Effectful (Eff, IOE)').join(), /API-only/);
+    assert.deepEqual(checkImports('kyyn-microhs', header + 'import Kyyn.Plumbing.Capability.FileSystem'), []);
   }
-  assert.match(checkImports('kyyn-microhs', header + 'import Effectful (Eff, IOE)').join(), /API-only/);
-  assert.deepEqual(checkImports('kyyn-microhs', header + 'import Kyyn.Plumbing.Capability.FileSystem'), []);
   const types = 'module Kyyn.Plumbing.Capability.GuestCompilation.Types where\n';
   assert.deepEqual(checkImports('kyyn-plumbing', types + 'import Effectful'), ['Effectful']);
+  const compilation = 'module Kyyn.Plumbing.Capability.GuestCompilation where\n';
+  assert.deepEqual(checkImports('kyyn-plumbing', compilation + 'import Kyyn.Plumbing.Capability.GuestExecution'),
+    ['Kyyn.Plumbing.Capability.GuestExecution']);
+  const execution = 'module Kyyn.Plumbing.Capability.GuestExecution where\n';
+  assert.deepEqual(checkImports('kyyn-plumbing', execution + 'import Kyyn.Plumbing.Capability.GuestCompilation'),
+    ['Kyyn.Plumbing.Capability.GuestCompilation']);
 });

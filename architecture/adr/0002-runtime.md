@@ -53,9 +53,6 @@ data GuestCompilation :: Effect where
   CompileGuest
     :: GuestSources
     -> GuestCompilation m (Either [Diagnostic] CompiledProgram)
-  ExecuteCompiled
-    :: CompiledProgram -> Bytes
-    -> GuestCompilation m (Bytes, ProcessExit)
 
 compileGuest
   :: GuestCompilation :> es
@@ -125,12 +122,20 @@ data CompiledProgram = CompiledProgram
   , artifact :: (RelativePath, Bytes)
   }
 
+data GuestExecution :: Effect where
+  ExecuteCompiled
+    :: CompiledProgram -> Bytes
+    -> GuestExecution m (Bytes, ProcessExit)
+  ExecuteGuest
+    :: CompiledProgram -> Bytes -> (Bytes -> m (Maybe Bytes))
+    -> GuestExecution m (Bytes, ProcessExit)
+
 executeCompiled
-  :: GuestCompilation :> es
+  :: GuestExecution :> es
   => CompiledProgram -> Bytes -> Eff es (Bytes, ProcessExit)
 
 executeCompiledEntry
-  :: (GuestCompilation :> es, Failure :> es)
+  :: (GuestExecution :> es, Failure :> es)
   => String -> CompiledProgram -> Bytes -> Eff es Bytes
 ```
 
@@ -147,7 +152,14 @@ The selected-entry helper turns a nonzero exit into RuntimeUnavailable; metadata
 decoding retains its specific diagnostic context using the raw result.
 Process startup/transport failures remain Failure. The build scope can disappear before any invocation, and the invocation
 scope is removed after process cleanup. No live build path is returned as the
-artifact. This is one compiler capability, not a compiler-backend framework.
+artifact. GuestCompilation only compiles; GuestExecution owns both one-shot
+input/output and framed conversations with host callbacks. Neither execution mode
+requires the compilation effect. Its `runGuestExecution` interpreter lives in
+`kyyn-microhs` and requires only FileSystem, ProcessExecution and Failure, just as
+the compilation interpreter does. Schema metadata, validation and pure query/evolution
+adapters use one-shot execution; plugin host calls use the conversational operation.
+The conversation's callback stays in the caller's effect row, not native IO.
+Both modes retain the same scoped process cleanup and explicit installed toolchain.
 
 Ordinary parse/type rejection returns diagnostics. The preview/checking caller
 maps them into its normal result channel; inability to start the compiler or a

@@ -1,9 +1,12 @@
-module GuestFixture (fixtureProgram, executeFixture) where
+{-# LANGUAGE GADTs, LambdaCase #-}
+module GuestFixture (fixtureProgram, runFixtureExecution) where
 
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
+import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.ProcessExecution
@@ -21,3 +24,8 @@ executeFixture shell (CompiledProgram _ (_,script)) input =
     output <- collectStdout
     status <- awaitExit
     pure (output,status)
+
+runFixtureExecution :: ProcessExecution :> es => FilePath -> Eff (GuestExecution : es) a -> Eff es a
+runFixtureExecution shell = interpret $ \_ -> \case
+  ExecuteCompiled program input -> executeFixture shell program input
+  ExecuteGuest {} -> error "One-shot fixture requested a conversational guest"

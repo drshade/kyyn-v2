@@ -22,7 +22,6 @@ import Kyyn.Types.SchemaMetadata (SchemaMetadata(..), RoleDecl(..), Affordance(.
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import GuestFixture
 import Kyyn.Plumbing.Capability.SchemaInspection
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -59,7 +58,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       execute compilation source (CapturedEvolution context _ closure after) = do
         count <- newIORef 0
         result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-          . compileMock shell compilation . schemaMock count contract . runDhallHandling
+          . runFixtureExecution shell . compileMock compilation . schemaMock count contract . runDhallHandling
           . runRootStore . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure after)
         inspections <- readIORef count
         case result of
@@ -119,9 +118,8 @@ schemaMock count contract = interpret $ \_ -> \case
       else Left [errorDiagnostic "schema.compiler-rejected" "Missing intermediate export"]
   where path = either error id . relativePath
 
-compileMock :: ProcessExecution :> es => FilePath -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
-compileMock shell result = interpret $ \_ -> \case
-  ExecuteCompiled program input -> executeFixture shell program input
+compileMock :: Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
+compileMock result = interpret $ \_ -> \case
   CompileGuest sources -> do
     let entries = [(relativeName p,b) | (p,b) <- sourceFiles sources]
     unless (lookup "Checks.hs" entries == Just "new checks" && lookup "Helper.hs" entries == Just "helper" &&

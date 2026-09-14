@@ -222,7 +222,8 @@ installed integration check.
   Creation/capture use EvolutionAuthoring. Candidate and lifecycle/history tests
   install EvolutionStore with no RootOpening effect or placeholder handler; their
   interpreter rows require no compiler or SDK.
-  RootExecution tests use a recording compiler handler and small shell fixtures
+  RootExecution tests use a recording compiler handler, a separate GuestExecution
+  handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.
   They also check that registered query entries are compiled without executing
@@ -288,7 +289,9 @@ installed integration check.
   native test suite inspects authored types, generates codecs, compiles them and
   exchanges runtime values with the resulting guest. It does not substitute GHC
   for guest execution. Captured source compilation uses GuestCompilation and
-  emits bytecode consumed by the bundled evaluator, not C-compiled guest binaries.
+  emits bytecode consumed through GuestExecution by the bundled evaluator, not
+  C-compiled guest binaries. GuestExecution owns both one-shot and conversational
+  invocation; compile-only tests do not install execution handlers.
   Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
   cancellation; their reaping assertions currently require POSIX (Linux in CI).
   The first CLI is under development; plugin and Web builds do not exist yet.
