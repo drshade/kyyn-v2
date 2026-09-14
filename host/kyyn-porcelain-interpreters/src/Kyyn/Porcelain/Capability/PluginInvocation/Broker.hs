@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.PluginBroker (executeAcquisition, executeCapturedRead) where
+module Kyyn.Porcelain.Capability.PluginInvocation.Broker (executeAcquisition, executeCapturedRead) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Effectful (Eff, (:>), raise)
@@ -14,7 +14,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
-import qualified Kyyn.Plumbing.Capability.EvidenceStore as Store
+import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import qualified Kyyn.Plumbing.Capability.FileAcquisition as Files
 import Kyyn.Plumbing.Protocol.PluginMessages
 import System.FilePath (takeDirectory, takeFileName)

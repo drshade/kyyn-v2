@@ -15,7 +15,8 @@ import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
 import Kyyn.MicroHs.Toolchain (GuestToolchain)
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Capability.DhallHandling (renderType)
-import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
@@ -50,7 +51,7 @@ dispatchEvidence :: Host -> Cli.EvidenceCommand -> SelectedKb -> IO Response
 dispatchEvidence host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
   Cli.FetchConnector plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right scope -> respond $ runRuntime host toolchain . runEvidenceStoreIO scope . runFileAcquisitionIO
+    Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
       . runGuestExecution toolchain . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
@@ -62,7 +63,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = withRuntime host $ \t
   where
     inspectEvidence toolchain sdk action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-      Right scope -> respond $ runRuntime host toolchain . runEvidenceStoreIO scope
+      Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
         . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runEvidenceInspection $ action
 
 respond :: IO (Either OperationalFailure (Either [Diagnostic] Response)) -> IO Response

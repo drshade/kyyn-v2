@@ -29,9 +29,10 @@ import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
 import Kyyn.Plumbing.Capability.Git (Git)
-import Kyyn.Plumbing.Capability.EvidenceStore (listEvidenceIds)
+import Kyyn.Porcelain.Capability.EvidenceStore (listEvidenceIds)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -106,9 +107,9 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
       mapM_ (\(ConfiguredConnector name _ (PreparedConnector _ _ payload entry _) config) -> do
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-          (runEvidenceStoreIO scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
+          (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config))))))))) >>= right >>= right
-        ids <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runEvidenceStoreIO scope
+        ids <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
           (listEvidenceIds snapshot payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (length ids == 1)) instances
     _ -> fail "Wrong plugin registration shape"

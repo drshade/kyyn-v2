@@ -155,6 +155,38 @@ its required row. A polymorphic row may eventually be composed with native IO;
 it does not grant the function an `IOE` dictionary. Package/import checks are
 still needed to prevent helpers bypassing this contract.
 
+For read/check/replace operations that must share one lock lifetime, document
+persistence exposes a scoped local effect, like ProcessExecution/ProcessPipes:
+
+```haskell
+data DocumentPersistence :: Effect where
+  WithLockedDocument
+    :: DirectoryScope -> Eff (DocumentAccess : es) a
+    -> DocumentPersistence (Eff es) a
+
+data DocumentAccess :: Effect where
+  ReadCurrent    :: DocumentAccess m (Maybe ByteString)
+  ReplaceCurrent :: ByteString -> DocumentAccess m ()
+  ArchiveCurrent :: ByteString -> DocumentAccess m ()
+  ClearCurrent   :: DocumentAccess m ()
+  ClearArchives  :: DocumentAccess m ()
+  FreshStamp     :: DocumentAccess m DocumentStamp
+
+data DocumentStamp = DocumentStamp
+  { identity :: String, timestamp :: String }
+```
+
+The native interpreter ensures the selected directory exists and holds its
+exclusive lock throughout the callback, releasing it on success, failure or
+cancellation. Current bytes occupy `state.dhall`; replacement uses a temporary
+file and rename within that directory. Archives use fresh identities under
+`archives/`; missing current data is optional, but unreadable data is Failure.
+The stamp supplies an opaque identity and ISO 8601 UTC time, not a domain revision.
+This layer does not parse the document or know KBs, connectors, producers or
+expected evidence heads. Semantic interpreters make those decisions inside the
+scoped callback. KB ignore-file management remains with the semantic publication
+path, not document persistence.
+
 ## Alternatives and consequences
 
 Reject ambient-IO helpers, callbacks carrying arbitrary IO, service-locator

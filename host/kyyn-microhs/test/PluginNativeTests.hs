@@ -15,17 +15,19 @@ import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
-import Kyyn.Plumbing.Capability.EvidenceStore
+import Kyyn.Porcelain.Capability.EvidenceStore
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation (CompiledProgram)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
-import Kyyn.Plumbing.Protocol.PluginBroker (executeCapturedRead)
+import Kyyn.Porcelain.Capability.PluginInvocation.Broker (executeCapturedRead)
 import Kyyn.Plumbing.Capability.FileAcquisition (readSourceText)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
+import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -37,7 +39,7 @@ import Kyyn.Domain.DataType (DataType)
 import System.Directory (createDirectory, removeFile, createFileLink)
 import System.FilePath ((</>))
 
-type StoreEffects = '[EvidenceStore, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
+type StoreEffects = '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
 
 nativeTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
 nativeTests temporary toolchain configType payloadType program = do
@@ -118,7 +120,7 @@ refuseStore = interpret $ \_ _ -> error "Invalid guest request reached evidence 
 
 runStore :: DirectoryScope -> Eff StoreEffects a -> IO a
 runStore kb action = runEff (runFailure (runProcessExecutionIO (runFileSystemIO kb
-  (runDhallHandling (runEvidenceStoreIO kb action))))) >>= right
+  (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore kb action))))) >>= right
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

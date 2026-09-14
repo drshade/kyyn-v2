@@ -43,6 +43,7 @@ cabal test git-snapshots --test-show-details=direct
 cabal test file-trees --test-show-details=direct
 cabal test plugin-packages --test-show-details=direct
 cabal test evidence-store --test-show-details=direct
+cabal test document-persistence --test-show-details=direct
 cabal test plugin-installation --test-show-details=direct
 cabal test metadata --test-options=--codec-only --test-show-details=direct
 cabal test queries --test-options=--pure --test-show-details=direct

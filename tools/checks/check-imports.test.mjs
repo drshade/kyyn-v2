@@ -48,6 +48,20 @@ test('Dhall library stays behind its interpreter', () => {
     assert.deepEqual(checkImports('kyyn-plumbing-interpreters', implementation + `import ${name}`), []);
   }
 });
+
+test('evidence semantics cannot acquire IO and document persistence cannot know evidence', () => {
+  const semantic = 'module Kyyn.Porcelain.Interpreter.EvidenceStore where\n';
+  assert.deepEqual(checkImports('kyyn-porcelain-interpreters', semantic + 'import Kyyn.Plumbing.Capability.DocumentPersistence'), []);
+  for (const name of ['System.Directory', 'System.FileLock', 'Kyyn.Plumbing.Interpreter.DocumentPersistence']) {
+    assert.deepEqual(checkImports('kyyn-porcelain-interpreters', semantic + `import ${name}`), [name]);
+  }
+  assert.match(checkImports('kyyn-porcelain-interpreters', semantic + 'import Effectful (Eff, IOE)').join(), /API-only/);
+  const native = 'module Kyyn.Plumbing.Interpreter.DocumentPersistence where\n';
+  for (const name of ['Kyyn.Domain.Evidence', 'Kyyn.Porcelain.Capability.EvidenceStore']) {
+    assert.deepEqual(checkImports('kyyn-plumbing-interpreters', native + `import ${name}`), [name]);
+  }
+  assert.deepEqual(checkImports('kyyn-plumbing', 'import Kyyn.Porcelain.Capability.EvidenceStore'), ['Kyyn.Porcelain.Capability.EvidenceStore']);
+});
 test('publication cannot import validation, source loading or native effects', () => {
   const header = 'module Kyyn.Porcelain.Interpreter.RootPublication where\n';
   for (const name of ['Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Capability.RootOpening',

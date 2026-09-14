@@ -180,7 +180,14 @@ Clearing the entire evidence store also clears current
 evidence. Refetching does not restore lost history; reconstruction from deltas is
 possible only while the required history remains available.
 
-The first interpreter stores one typed document at
+EvidenceStore is a porcelain capability. Its interpreter owns delta application,
+producer selection, history and expected-base publication; it uses the scoped
+DocumentPersistence capability from [ADR 0003](0003-effects.md) for native IO.
+The lock spans reading the previous document, checking its base, encoding the
+new state and replacing it. Its Dhall format helpers belong to
+`Kyyn.Porcelain.Capability.EvidenceStore.Persistence` in the interpreter package.
+
+The interpreter stores one typed document at
 `.kyyn/evidence/<plugin>-<hex instance>/state.dhall`, relative to the explicitly
 selected KB directory. Encode the instance name as lowercase hexadecimal UTF-8 bytes;
 plugin names already follow the package-name grammar. `.kyyn/.gitignore` owns the

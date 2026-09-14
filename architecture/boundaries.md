@@ -45,6 +45,10 @@ inherits every capability installed by the native application.
 Capability rows are the normative interfaces; program roles describe common
 compositions, not a separate permission taxonomy (ADR 0009). The outer invocation
 owns nested call lifetimes; its cancellation does not leave orphan plugin calls.
+The plugin protocol broker lives in the porcelain-interpreter package as
+`Kyyn.Porcelain.Capability.PluginInvocation.Broker`: it dispatches decoded requests
+to semantic EvidenceStore and selected plumbing capabilities. Byte-frame codecs
+remain in plumbing; plumbing never imports porcelain to reach evidence storage.
 
 ## Package and module ownership
 
@@ -129,7 +133,8 @@ Failure/progress/cancellation are explicit supporting concerns. Do not inject
 clock, logging or a universal environment into a function merely because others
 need them. Exact implementation rows may be narrower than the capability table.
 
-Plumbing examples: FileSystem (scoped paths and file/tree/lock primitives), Git
+Plumbing examples: FileSystem (scoped paths and file/tree primitives),
+DocumentPersistence (scoped locked documents under ADR 0003), Git
 (objects, trees, refs and transport), ProcessExecution (typed lifecycle/pipe
 operations), DhallHandling (real library schema/value functions), HTTP, SecretStore
 (local named values, independent of plugins), document decoding, clock/entropy and

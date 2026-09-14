@@ -81,6 +81,14 @@ summaries, concurrent expected-base publication, history deletion with current-v
 retention, whole-store clear and producer-change refusal. It requires no guest compiler,
 plugin invocation or external provider. [ADR 0014](../architecture/adr/0014-evidence.md)
 owns the store layout and persistence contract.
+This suite lives in `kyyn-porcelain-interpreters`; it includes a pure recording
+DocumentPersistence proof of semantic publication and conflict refusal, plus the
+existing real-Dhall/filesystem integration assertions.
+
+`cabal test document-persistence --test-show-details=direct` in
+`kyyn-plumbing-interpreters` checks scoped native locking across read/modify/replace,
+archive/clear operations, replacement-failure cleanup and lock release on
+cancellation. It uses bytes, not evidence types or a guest compiler.
 
 `cabal test plugin-installation --test-show-details=direct` checks the installation
 handler with write-forbidding refusal handlers and real Git/filesystem/Dhall

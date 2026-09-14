@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Plumbing.Capability.EvidenceStore
+module Kyyn.Porcelain.Capability.EvidenceStore
   ( EvidenceStore(..), evidenceHead, publishFetch, selectEvidence, readEvidence, listEvidenceIds
   , readFetchesBetween, listEvidenceChanges, deleteEvidenceHistory, clearEvidence
   ) where
