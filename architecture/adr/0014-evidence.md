@@ -9,8 +9,9 @@ date: 2026-09-11
 Basis: owner-agreed plugin-declared deltas, retained local fetch history and
 KB-owned curation progress. The first native store implements the persistence/read
 boundary below. Generated guest acquisition/read adapters have a two-compiler
-recording-broker proof; native acquisition, configured invocation and publication
-still need to be connected.
+recording-broker proof. Native acquisition now connects filesystem and selected
+evidence reads to complete-batch publication, with a real-files integration proof.
+Plugin registration and configured CLI invocation remain unimplemented.
 
 ## Context
 
@@ -270,8 +271,7 @@ Producer and connector identify the integration and selected instance; source is
 the plugin-supplied scoped item identity. References carry useful source links or
 paths. These are authored descriptive values, not proof that the source is still
 available. `EvidenceSnapshotRef` instead selects cached data for plugin reads;
-the store implements this selection, while acquisition orchestration remains
-unimplemented. A citation
+the native acquisition broker binds guest reads to this selection. A citation
 must not silently become a cache lookup handle.
 
 An archived citation must retain enough source identity to describe what was
