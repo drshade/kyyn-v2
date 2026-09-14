@@ -10,12 +10,10 @@ import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Failure (OperationalFailure)
-import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Porcelain.Capability.Connector
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath)
+import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
 import Kyyn.Domain.Plugin
 import Kyyn.MicroHs.Toolchain (GuestToolchain)
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
@@ -62,7 +60,7 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
 
 dispatchEvidence :: Host -> Cli.EvidenceCommand -> SelectedKb -> IO Response
 dispatchEvidence host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
-  Cli.FetchConnector plugin name -> case kbDirectory kb of
+  Cli.FetchConnector plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runEvidenceStoreIO scope . runFileAcquisitionIO
       . runGuestExecution toolchain . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
@@ -74,7 +72,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = withRuntime host $ \t
   Cli.ListEvidenceChanges plugin name since at -> inspectEvidence toolchain sdk plugin name $ \instanceRef producer payload ->
     fmap (fmap (uncurry changesResult)) (evidenceChanges instanceRef producer payload (maybe CurrentEvidence AtFetch at) since)
   where
-    inspectEvidence toolchain sdk plugin name action = case kbDirectory kb of
+    inspectEvidence toolchain sdk plugin name action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
       Right scope -> respond $ runRuntime host toolchain . runEvidenceStoreIO scope
         . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runEvidenceInspection $ runExceptT $ do
@@ -83,11 +81,6 @@ dispatchEvidence host command (SelectedKb kb revision _) = withRuntime host $ \t
           (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _) _) <-
             checked (selectedInstance plugin name plugins)
           ExceptT (action (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload)
-
-kbDirectory :: KnowledgeBase -> Either String DirectoryScope
-kbDirectory (KnowledgeBase (Repository repository) prefix) = case prefix of
-  WholeTree -> Right repository
-  Subtree path -> directoryScope (scopedPath repository path)
 
 checked :: Either [Diagnostic] a -> ExceptT [Diagnostic] (Eff es) a
 checked = ExceptT . pure

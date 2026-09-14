@@ -175,7 +175,11 @@ History and change results contain fetch identifiers, ordering and citations,
 never payloads. `--since` is exclusive and `--at` selects the ending snapshot.
 Unavailable history, incompatible producers, publication conflicts and malformed
 deltas remain distinct: `evidence.history-unavailable`, `evidence.producer-changed`,
-`evidence.base-conflict` and `evidence.invalid-delta`. ADR 0014 owns their semantics.
+`evidence.base-conflict`, `evidence.invalid-delta` and `evidence.invalid-data`
+(corrupt stored data). ADR 0014 owns their semantics.
+History and change inspection currently prepare plugin declarations and contracts,
+including compiled adapters; separating inspection from entry compilation is a
+later refinement, not a reason to add another registry or cache.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK,
 independently of KB selection. Public modules come from kyyn-sdk's exposed

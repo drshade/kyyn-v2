@@ -5,7 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-if (process.argv.length !== 3) throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE');
+const configurationSmoke = process.argv[3] === '--configuration-smoke';
+if (process.argv.length !== 3 && !(process.argv.length === 4 && configurationSmoke))
+  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke]');
 const executable = path.resolve(process.argv[2]);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-connector-fetch-'));
@@ -36,6 +38,7 @@ const configuration = entries => 'let Connector = < Folder : { directory : Text,
 const fetch = name => cli(['evidence', 'fetch', 'local-file', name]).result.fetch;
 const history = (name, options = []) => cli(['evidence', 'history', 'list', 'local-file', name, ...options]).result;
 const changes = (name, options = []) => cli(['evidence', 'change', 'list', 'local-file', name, ...options]).result;
+function main() {
 try {
   git(temporary, 'config', '--global', 'user.name', 'Evidence fixture');
   git(temporary, 'config', '--global', 'user.email', 'evidence@example.invalid');
@@ -58,6 +61,10 @@ try {
   assert.match(schema, /directory/);
   assert.match(schema, /recursive/);
   assert.match(schema, /Folder/);
+  fs.writeFileSync(configPath, configuration([['sales', 'relative-folder'], ['support', support]]));
+  const rejected = cli(['evolution', 'check', draft.id], 1);
+  assert(rejected.diagnostics.some(diagnostic => diagnostic.code === 'local-file.directory'
+    && diagnostic.message.includes('local-file/sales')), JSON.stringify(rejected));
   // The emitted schema is directly usable as the configuration's annotation.
   fs.writeFileSync(configPath, `(${configuration([['sales', sales], ['support', support]])}) : (${schema})\n`);
   assert.equal(cli(['plugin', 'connector', 'list', 'local-file', '--evolution', draft.id]).result.connectors.length, 2);
@@ -69,6 +76,14 @@ try {
   const accepted = git(checkout, 'rev-parse', 'HEAD');
   assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.history-unavailable');
   const first = fetch('sales');
+  if (configurationSmoke) {
+    assert.equal(history('sales').selection.fetch, first);
+    assert(fs.existsSync(path.join(kb, '.kyyn/evidence')));
+    assert(!fs.existsSync(path.join(checkout, '.kyyn/evidence')));
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    console.log('Installed nested-KB bad-config refusal, repair, acceptance, fetch and history scope smoke passed.');
+    return;
+  }
   const other = fetch('support');
   assert.equal(changes('sales').changes.length, 3);
   assert.equal(changes('support').changes.length, 1);
@@ -110,3 +125,5 @@ try {
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
+}
+main();
