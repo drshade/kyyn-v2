@@ -17,7 +17,7 @@ import Kyyn.Domain.Root
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Query (ReadAccess(..))
 import Kyyn.Plumbing.Capability.GuestCompilation
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
+import Kyyn.Plumbing.Capability.GuestExecution
 import GuestFixture
 import Kyyn.Plumbing.Capability.SchemaInspection
 import Kyyn.Plumbing.Interpreter.DhallHandling
@@ -49,12 +49,12 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
       args = CheckedValue (contractId input) (String "hello")
       entry = fixtureProgram
       execute compilation queryDescriptor arguments = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . gateCompiler shell (entry "printf '[]'") compilation . schemaMock input output . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
+        . runFixtureExecution shell . gateCompiler (entry "printf '[]'") compilation . schemaMock input output . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
           prepared <- prepareRoot root
           either (pure . Left) (\value -> queryRoot value queryDescriptor arguments) prepared
       unused = Right (entry "exit 99")
   discovered <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-    . gateCompiler shell (entry "exit 97") (Right (entry "exit 97")) . schemaMock input output
+    . runFixtureExecution shell . gateCompiler (entry "exit 97") (Right (entry "exit 97")) . schemaMock input output
     . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
   unless (discovered == Right (Right [descriptor])) (fail "Prepared query discovery mismatch")
   success <- execute (Right (entry "printf '{\"result\":true,\"trace\":[{\"tag\":\"Collection\",\"collection\":\"todos\"}]}'")) descriptor args
@@ -71,15 +71,15 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   rejection <- execute (Left rejected) descriptor args
   unless (rejection == Right (Left rejected)) (fail "Compiler rejection lost diagnostics")
   let checkCode compilation = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . gateCompiler shell (entry "exit 97") compilation . schemaMock input output
+        . runFixtureExecution shell . gateCompiler (entry "exit 97") compilation . schemaMock input output
         . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
   unusedQuery <- checkCode (Left rejected)
   unless (unusedQuery == Right (Left rejected)) (fail "Unused registered query escaped compilation checking")
   checkedCode <- checkCode (Right (entry "exit 97"))
   unless (checkedCode == Right (Right [descriptor])) (fail "Code checking executed a validator/query or failed to check it")
   (reused, calls) <- runEff . runState ([] :: [String]) . runFailure . runProcessExecutionIO . runFileSystemIO scope
-    . gateCompiler shell (entry "printf '[]'") (Right (entry "printf '{\"result\":true,\"trace\":[]}'"))
-    . recordCompiler . schemaMock input output . recordInspection
+    . runFixtureExecution shell . gateCompiler (entry "printf '[]'") (Right (entry "printf '{\"result\":true,\"trace\":[]}'"))
+    . recordExecution . recordCompiler . schemaMock input output . recordInspection
     . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot root >>= either (error . show) pure
       unless (preparedRoot prepared == root && preparedQueries prepared == [descriptor])
@@ -123,9 +123,8 @@ schemaMock input output = interpret $ \_ -> \case
       "Queries.Result" -> pure (Right (InspectedSchema output []))
       _ -> error "Unexpected selected query type"
 
-gateCompiler :: ProcessExecution :> es => FilePath -> CompiledProgram -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
-gateCompiler shell validator query = interpret $ \_ -> \case
-  ExecuteCompiled program input -> executeFixture shell program input
+gateCompiler :: CompiledProgram -> Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
+gateCompiler validator query = interpret $ \_ -> \case
   CompileGuest captured -> do
     let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles captured]
     unless (lookup "KyynQueryBindings.hs" entries /= Nothing) (error "Code-check entry lacks query bindings for shared helper imports")
@@ -141,6 +140,10 @@ recordCompiler = interpret $ \_ -> \case
   CompileGuest sources -> do
     modify (++ ["compile:" ++ relativeName (selectedEntry sources)])
     compileGuest sources
+recordExecution :: (State [String] :> es, GuestExecution :> es)
+  => Eff (GuestExecution : es) a -> Eff es a
+recordExecution = interpret $ \_ -> \case
+  ExecuteGuest {} -> error "Query attempted conversational execution"
   ExecuteCompiled program input -> do
     modify (++ ["execute" :: String])
     executeCompiled program input

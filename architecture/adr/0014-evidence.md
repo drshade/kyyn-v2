@@ -11,8 +11,8 @@ KB-owned curation progress. The first native store implements the persistence/re
 boundary below. Generated guest acquisition/read adapters have a two-compiler
 recording-broker proof. Native acquisition now connects filesystem and selected
 evidence reads to complete-batch publication, with a real-files integration proof.
-Plugin registration and configured native fetches are implemented; configured
-CLI invocation remains unimplemented.
+Plugin registration, configured native fetches and their CLI invocation are
+implemented. Typed plugin read discovery and KB helpers remain unimplemented.
 
 ## Context
 
@@ -180,7 +180,14 @@ Clearing the entire evidence store also clears current
 evidence. Refetching does not restore lost history; reconstruction from deltas is
 possible only while the required history remains available.
 
-The first interpreter stores one typed document at
+EvidenceStore is a porcelain capability. Its interpreter owns delta application,
+producer selection, history and expected-base publication; it uses the scoped
+DocumentPersistence capability from [ADR 0003](0003-effects.md) for native IO.
+The lock spans reading the previous document, checking its base, encoding the
+new state and replacing it. Its Dhall format helpers belong to
+`Kyyn.Porcelain.Protocol.EvidencePersistence` in the interpreter package.
+
+The interpreter stores one typed document at
 `.kyyn/evidence/<plugin>-<hex instance>/state.dhall`, relative to the explicitly
 selected KB directory. Encode the instance name as lowercase hexadecimal UTF-8 bytes;
 plugin names already follow the package-name grammar. `.kyyn/.gitignore` owns the
@@ -203,6 +210,21 @@ its configured source instances, so a later conditional read cannot accidentally
 pick up a concurrent refresh. This fixes local captured inputs, not a simultaneous
 external-world transaction across providers. An unavailable selection reports a
 useful error when read; an unused connector need not have fetched successfully.
+
+For one plugin invocation, the host loads the selected snapshot once, on the first
+valid evidence request, and answers subsequent ID/payload reads from that immutable
+value. The store lock is released after loading; it is not held during guest code
+or external acquisition. Refresh or history deletion cannot change an already
+loaded invocation's input. Loading an unavailable selection returns an error, not
+empty evidence, and repeated reads in that invocation retain the same result.
+This lifetime is internal to the host; plugin authors do not open or close stores.
+
+```haskell
+loadEvidenceSnapshot
+  :: EvidenceStore :> es
+  => EvidenceSnapshotRef -> CheckedContract
+  -> Eff es (Either EvidenceProblem [(EvidenceId, Evidence CheckedValue)])
+```
 
 Historical choices are explicit per-instance invocation inputs, not edits to the
 generated connector value. The caller supplies an instance-to-fetch selection to

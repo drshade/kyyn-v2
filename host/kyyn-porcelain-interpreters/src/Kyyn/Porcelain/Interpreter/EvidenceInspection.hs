@@ -6,7 +6,7 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (EvidenceProblem, evidenceProblemDiagnostic, summarizeFetch)
-import qualified Kyyn.Plumbing.Capability.EvidenceStore as Store
+import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.EvidenceInspection
 
 runEvidenceInspection :: Store.EvidenceStore :> es => Eff (EvidenceInspection : es) a -> Eff es a

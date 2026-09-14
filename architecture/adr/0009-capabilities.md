@@ -9,8 +9,8 @@ date: 2026-09-11
 Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
 captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch connects
 filesystem and snapshot reads to evidence publication. Source registration and
-configured instances have a native proof; CLI invocation and KB-tool composition
-remain to be integrated.
+configured instances and CLI acquisition are implemented; KB-tool composition
+remains to be integrated.
 
 ## Context
 
@@ -196,6 +196,21 @@ plugin's HTTP/Secrets requirements do not become requirements available to the
 caller. The generated caller proxy, plugin registration and host dispatch must be
 proved together; registering a `Method PluginHost input output` does not by itself
 make that method callable as `Program EvolutionHost output`.
+
+On the host, the broker requires GuestExecution plus precisely the capabilities
+it dispatches, not GuestCompilation. For example:
+
+```haskell
+executeAcquisition
+  :: (GuestExecution :> es, EvidenceStore :> es, FileAcquisition :> es, Failure :> es)
+  => CompiledProgram -> CheckedValue -> CheckedContract -> Maybe EvidenceSnapshotRef
+  -> Eff es (Either [Diagnostic] Value)
+```
+
+GuestExecution supplies both one-shot evaluation and conversational execution
+(ADR 0002). The latter preserves the broker callback's effect row while the guest
+continuation waits for a reply; moving process execution does not grant additional
+guest capabilities or change the request protocol.
 
 ## Alternatives and consequences
 

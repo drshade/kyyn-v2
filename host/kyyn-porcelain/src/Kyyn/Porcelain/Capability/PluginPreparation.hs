@@ -1,18 +1,26 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.PluginPreparation
   ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), ConfiguredConnector(..)
-  , preparePackages, preparePlugins, validatePlugins ) where
+  , preparePackages, preparePlugins, validatePlugins, instanceShape ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
+import Data.Coerce (coerce)
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorTypeName, ConnectorName, BindingName)
+import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorTypeName(..), ConnectorName, BindingName)
 import Kyyn.Domain.Value (CheckedValue)
 
-data PreparedConnector = PreparedConnector ConnectorTypeName CheckedContract CheckedContract CompiledProgram CompiledProgram
+data PreparedConnector = PreparedConnector
+  { connectorType :: ConnectorTypeName
+  , configContract :: CheckedContract
+  , payloadContract :: CheckedContract
+  , fetchEntry :: CompiledProgram
+  , validationEntry :: CompiledProgram
+  }
   deriving (Eq, Show)
 data ConfiguredConnector = ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue deriving (Eq, Show)
 data PreparedPackage = PreparedPackage PluginName PackageIdentity [PreparedConnector] deriving (Eq, Show)
@@ -31,3 +39,7 @@ preparePlugins :: PluginPreparation :> es => FileTree -> Eff es (Either [Diagnos
 preparePlugins = send . PreparePlugins
 validatePlugins :: PluginPreparation :> es => [PreparedPlugin] -> Eff es (Either [Diagnostic] ValidationReport)
 validatePlugins = send . ValidatePlugins
+
+instanceShape :: [(ConnectorTypeName,Shape)] -> Shape
+instanceShape connectors = List (Record [("name",Scalar TextScalar),("binding",Scalar TextScalar),
+  ("connector",Union [(coerce name,Just config) | (name,config) <- connectors])])

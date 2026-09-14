@@ -26,6 +26,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.MicroHs.Toolchain
 import Kyyn.MicroHs.Interpreter.GuestCompilation
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Porcelain.Capability.EvolutionExecution
 import Kyyn.Porcelain.Capability.RootStore
@@ -83,7 +84,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
         before target (tree [entry]) (tree [])
       context = EvolutionContext kb identifier (Before revision beforeContract) snapshot
       acceptedTree = tree (files beforeCode ++ files factFiles)
-  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . gitMock repository revision acceptedTree
     . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure

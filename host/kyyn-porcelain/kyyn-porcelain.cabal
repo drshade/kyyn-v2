@@ -10,6 +10,7 @@ library
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
     Kyyn.Porcelain.Capability.EvidenceAcquisition
     Kyyn.Porcelain.Capability.EvidenceInspection
+    Kyyn.Porcelain.Capability.EvidenceStore
     Kyyn.Porcelain.Capability.Connector
     Kyyn.Porcelain.Capability.PluginPreparation
     Kyyn.Porcelain.Capability.PluginInstallation

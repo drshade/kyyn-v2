@@ -63,6 +63,22 @@ Do not call those modules `Runner`. Interpreter installation functions remain wi
 their respective interpreter modules, not in the application composition package.
 The [repository layout](0026-repository-layout.md) maps these responsibilities to disk.
 
+Compilation and execution are distinct plumbing capabilities. A handler that prepares
+and invokes an adapter declares both; a caller executing an existing artifact needs
+only GuestExecution. For example, the native schema-inspection interpreter declares:
+
+```haskell
+runSchemaInspectionIO
+  :: (IOE :> es, FileSystem :> es, GuestCompilation :> es,
+      GuestExecution :> es, Failure :> es)
+  => GuestToolchain -> Eff (SchemaInspection : es) a -> Eff es a
+```
+
+Its IOE is for native compiler-library inspection, not guest execution. The
+GuestCompilation and GuestExecution interpreters themselves lower through FileSystem
+and ProcessExecution without IOE. Command composition installs those handlers where
+needed; EvidenceStore operations alone do not require either capability.
+
 For example, the plumbing filesystem accepts a caller-supplied scope and relative
 path, not a KB noun. These are representative operations, not the full filesystem
 API. `DirectoryScope` and `RelativePath` are opaque resolved/checked values;
@@ -154,6 +170,38 @@ a semantic effect and introduces only plumbing requirements, with no `IOE` in
 its required row. A polymorphic row may eventually be composed with native IO;
 it does not grant the function an `IOE` dictionary. Package/import checks are
 still needed to prevent helpers bypassing this contract.
+
+For read/check/replace operations that must share one lock lifetime, document
+persistence exposes a scoped local effect, like ProcessExecution/ProcessPipes:
+
+```haskell
+data DocumentPersistence :: Effect where
+  WithLockedDocument
+    :: DirectoryScope -> Eff (DocumentAccess : es) a
+    -> DocumentPersistence (Eff es) a
+
+data DocumentAccess :: Effect where
+  ReadCurrent    :: DocumentAccess m (Maybe ByteString)
+  ReplaceCurrent :: ByteString -> DocumentAccess m ()
+  ArchiveCurrent :: ByteString -> DocumentAccess m ()
+  ClearCurrent   :: DocumentAccess m ()
+  ClearArchives  :: DocumentAccess m ()
+  FreshStamp     :: DocumentAccess m DocumentStamp
+
+data DocumentStamp = DocumentStamp
+  { identity :: String, timestamp :: String }
+```
+
+The native interpreter ensures the selected directory exists and holds its
+exclusive lock throughout the callback, releasing it on success, failure or
+cancellation. Current bytes occupy `state.dhall`; replacement uses a temporary
+file and rename within that directory. Archives use fresh identities under
+`archives/`; missing current data is optional, but unreadable data is Failure.
+The stamp supplies an opaque identity and ISO 8601 UTC time, not a domain revision.
+This layer does not parse the document or know KBs, connectors, producers or
+expected evidence heads. Semantic interpreters make those decisions inside the
+scoped callback. KB ignore-file management remains with the semantic publication
+path, not document persistence.
 
 ## Alternatives and consequences
 

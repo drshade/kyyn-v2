@@ -51,12 +51,17 @@ calls from the captured-read entry. The native MicroHs broker also fetches real 
 publishes successive Dhall evidence batches, reads historical payloads and verifies
 that unchanged files and failed acquisitions do not manufacture changes. Recording
 handlers check that malformed, unknown-snapshot and out-of-row requests never reach
-storage. This focused check does not exercise plugin registration or a CLI command.
+storage. They also check one snapshot load for repeated reads; a native fixture
+publishes another fetch between callbacks and verifies that the invocation still
+sees its original input. This focused check does not exercise plugin registration
+or a CLI command.
 
 `cabal test plugin-registration --test-show-details=direct` uses the same toolchain
 to load the actual first-party local-file package, evaluate its declaration,
 inspect Haskell config/payload contracts and compile fetch/config-validation
-adapters. It decodes two configured instances, fetches real files independently,
+adapters. The first-party acquisition adapter also compiles with the matching
+versioned GHC executable, checking generated exports against both compilers.
+It decodes two configured instances, fetches real files independently,
 and rejects invalid config through the whole-root checker. It also checks reflected
 record-field documentation, invalid registration/instance names and a mismatched
 fetch signature. This is a focused native integration check, not an installed CLI journey.
@@ -81,6 +86,14 @@ summaries, concurrent expected-base publication, history deletion with current-v
 retention, whole-store clear and producer-change refusal. It requires no guest compiler,
 plugin invocation or external provider. [ADR 0014](../architecture/adr/0014-evidence.md)
 owns the store layout and persistence contract.
+This suite lives in `kyyn-porcelain-interpreters`; it includes a pure recording
+DocumentPersistence proof of semantic publication and conflict refusal, plus the
+existing real-Dhall/filesystem integration assertions.
+
+`cabal test document-persistence --test-show-details=direct` in
+`kyyn-plumbing-interpreters` checks scoped native locking across read/modify/replace,
+archive/clear operations, replacement-failure cleanup and lock release on
+cancellation. It uses bytes, not evidence types or a guest compiler.
 
 `cabal test plugin-installation --test-show-details=direct` checks the installation
 handler with write-forbidding refusal handlers and real Git/filesystem/Dhall
@@ -209,7 +222,8 @@ installed integration check.
   Creation/capture use EvolutionAuthoring. Candidate and lifecycle/history tests
   install EvolutionStore with no RootOpening effect or placeholder handler; their
   interpreter rows require no compiler or SDK.
-  RootExecution tests use a recording compiler handler and small shell fixtures
+  RootExecution tests use a recording compiler handler, a separate GuestExecution
+  handler and small shell fixtures
   for process exits/malformed replies; they check pre-execution rejection and
   failure classification without compiling MicroHs. These fixtures require `sh`.
   They also check that registered query entries are compiled without executing
@@ -275,7 +289,9 @@ installed integration check.
   native test suite inspects authored types, generates codecs, compiles them and
   exchanges runtime values with the resulting guest. It does not substitute GHC
   for guest execution. Captured source compilation uses GuestCompilation and
-  emits bytecode consumed by the bundled evaluator, not C-compiled guest binaries.
+  emits bytecode consumed through GuestExecution by the bundled evaluator, not
+  C-compiled guest binaries. GuestExecution owns both one-shot and conversational
+  invocation; compile-only tests do not install execution handlers.
   Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
   cancellation; their reaping assertions currently require POSIX (Linux in CI).
   The first CLI is under development; plugin and Web builds do not exist yet.

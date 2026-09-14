@@ -11,9 +11,11 @@ import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestExecution (executeCompiled)
 import Kyyn.Domain.Path
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
@@ -64,7 +66,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
     remaining <- listDirectory temporary
     unless (null remaining) (fail "compilation leaked its temporary sources")
     let invoke input = do
-          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
+          outcome <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestExecution toolchain $
             executeCompiled compiled (B.toStrict (utf8 (input ++ "\n")))
           (actual, ProcessExit status diagnostics) <- either (fail . show) pure outcome
           unless (status == 0) (fail (show diagnostics))
@@ -113,7 +115,7 @@ testEmptyRoot temporary toolchain compiler fixtures guest json = do
   forM_ [("{}", A.object [], True), ("{\"extra\":true}", A.object ["error" A..= True], False),
     ("{\"tag\":\"Root\"}", A.object ["error" A..= True], False)] $ \(input,expected,valid) -> do
       result <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO temporary
-        (runGuestCompilation toolchain (executeCompiled compiled (B.toStrict (utf8 (input ++ "\n"))))))))
+        (runGuestExecution toolchain (executeCompiled compiled (B.toStrict (utf8 (input ++ "\n"))))))))
       (output,ProcessExit status diagnostics) <- either (fail . show) pure result
       actual <- either fail pure (A.eitherDecodeStrict output)
       unless (status == 0 && actual == expected && Bytes.null diagnostics == valid)

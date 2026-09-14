@@ -11,6 +11,9 @@ library
     Kyyn.Porcelain.Interpreter.PluginInstallation
     Kyyn.Porcelain.Interpreter.EvidenceAcquisition
     Kyyn.Porcelain.Interpreter.EvidenceInspection
+    Kyyn.Porcelain.Interpreter.EvidenceStore
+    Kyyn.Porcelain.Protocol.EvidencePersistence
+    Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Interpreter.PluginPreparation
     Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization
     Kyyn.Porcelain.Interpreter.RootOpening
@@ -69,3 +72,13 @@ test-suite roots
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
     kyyn-porcelain-interpreters, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
     kyyn-plumbing, aeson, bytestring, text, directory, filepath, temporary ==1.3
+
+test-suite evidence-store
+  type: exitcode-stdio-1.0
+  main-is: EvidenceTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing, kyyn-porcelain, kyyn-porcelain-interpreters,
+    kyyn-plumbing-interpreters, kyyn-types, effectful-core ==2.6.1.0,
+    aeson, bytestring, text, time, directory, filepath, temporary ==1.3, async

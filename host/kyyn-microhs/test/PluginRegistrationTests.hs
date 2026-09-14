@@ -2,7 +2,8 @@
 module Main (main) where
 
 import Control.Monad (unless, forM_)
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, stripPrefix)
+import Data.Version (showVersion)
 import Data.Coerce (coerce)
 import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..))
 import Data.Aeson (encode, object, (.=), toJSON)
@@ -14,6 +15,7 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (ValidationReport(..), Diagnostic(..), Severity(..), CheckResult(..))
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
+import Kyyn.Domain.Contract (rootType)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..))
 import Kyyn.Domain.GuestApi (ApiModule(..), ApiSymbol(..), Namespace(..))
@@ -28,10 +30,14 @@ import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readTree)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
+import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources)
 import Kyyn.Plumbing.Capability.Git (Git)
-import Kyyn.Plumbing.Capability.EvidenceStore (listEvidenceIds)
+import Kyyn.Porcelain.Capability.EvidenceStore (listEvidenceIds)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -48,12 +54,15 @@ import Kyyn.Porcelain.Capability.Validation (checkRoot)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
-import System.Directory (createDirectory)
+import System.Directory (createDirectory, createDirectoryIfMissing, findExecutable)
 import System.Environment (getEnv)
-import System.FilePath ((</>))
+import System.FilePath ((</>), takeDirectory)
+import System.Exit (ExitCode(..))
+import System.Info (compilerVersion)
+import System.Process (readProcessWithExitCode)
 import System.IO.Temp (withSystemTempDirectory)
 
-type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
+type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, GuestExecution, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
@@ -102,20 +111,25 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
   case prepared of
-    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector kind _ _ _ _]) instances] -> do
+    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector kind configContract payloadContract _ _]) instances] -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
+      authored <- traverse (\(p,b) -> (,) <$> right (relativePath p) <*> pure b)
+        [(p,b) | (path,b) <- files package, Just p <- [stripPrefix "src/" (relativeName path)]]
+      adapter <- right (acquisitionSources (rootType configContract) (rootType payloadContract)
+        "LocalFile.Folder.fetch" (authored ++ files sdk))
+      compileFirstParty (temporary </> "ghc-acquisition") adapter
       mapM_ (\(ConfiguredConnector name _ (PreparedConnector _ _ payload entry _) config) -> do
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-          (runEvidenceStoreIO scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
+          (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config))))))))) >>= right >>= right
-        ids <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runEvidenceStoreIO scope
+        ids <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
           (listEvidenceIds snapshot payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (length ids == 1)) instances
     _ -> fail "Wrong plugin registration shape"
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestCompilation toolchain (runSchemaInspectionIO toolchain (runRootStore (noGit (runRootOpening sdk
+    (runGuestExecution toolchain $ runGuestCompilation toolchain (runSchemaInspectionIO toolchain (runRootStore (noGit (runRootOpening sdk
       (runPluginPreparation sdk (runRootExecution sdk $ do
         opened <- openCapturedRoot invalidCode
         either (pure . Rejected . ValidationReport) checkRoot opened))))))))))) >>= right
@@ -135,9 +149,22 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
     Right _ -> fail "Registration accepted a config validator as its fetch function"
   putStrLn "Plugin registration: inspected real package, two independent configured fetches and pure per-instance validation passed."
 
+compileFirstParty :: FilePath -> GuestSources -> IO ()
+compileFirstParty directory sources = do
+  ghc <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe
+    (fail "The matching versioned GHC executable is required for the first-party plugin proof") pure
+  forM_ (sourceFiles sources) $ \(path,bytes) -> do
+    let target = directory </> relativeName path
+    createDirectoryIfMissing True (takeDirectory target)
+    Bytes.writeFile target bytes
+  (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fforce-recomp","-i" ++ directory,
+    "-outputdir",directory </> "objects","-main-is","KyynPluginEntry.main",
+    directory </> relativeName (selectedEntry sources),"-o",directory </> "native"] ""
+  assert ("GHC rejected first-party local-file acquisition: " ++ out ++ err) (status == ExitSuccess)
+
 runPreparation :: DirectoryScope -> GuestToolchain -> FileTree -> Eff Preparation a -> IO a
 runPreparation scope toolchain sdk = (>>= right) . runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-  . runDhallHandling . runGuestCompilation toolchain . runSchemaInspectionIO toolchain . runPluginPreparation sdk
+  . runDhallHandling . runGuestExecution toolchain . runGuestCompilation toolchain . runSchemaInspectionIO toolchain . runPluginPreparation sdk
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
 assert :: String -> Bool -> IO ()

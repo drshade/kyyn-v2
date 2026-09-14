@@ -19,12 +19,14 @@ import Kyyn.Domain.Path
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply)
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestExecution (executeCompiled)
 import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.MicroHs.Toolchain
 import Kyyn.MicroHs.Interpreter.GuestCompilation
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (getArgs, getEnv)
 import System.Exit (ExitCode(..))
@@ -115,7 +117,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   (status,expected,errors) <- readCreateProcessWithExitCode (proc (temporary </> "native/proof") []) ""
   unless (status == ExitSuccess) (fail errors)
   compiled <- compileGuestFiles captured >>= right >>= right
-  guest <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
+  guest <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain $
     executeCompiled compiled Bytes.empty
   actual <- right guest
   unless (actual == (Text.encodeUtf8 (Text.pack expected),ProcessExit 0 "")) (fail ("GHC/MicroHs evolution proof differed: " ++ show actual))

@@ -10,7 +10,9 @@ import Kyyn.Domain.Failure
 import Kyyn.Domain.Path
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestExecution (executeCompiled)
 import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -26,7 +28,7 @@ testCompilation temporary toolchain = do
       compileWith selected sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation selected $
         compileGuest sources
       compile = compileWith toolchain
-      invoke entry = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation toolchain $
+      invoke entry = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestExecution toolchain $
         executeCompiled entry Bytes.empty
       assert label ok = unless ok (fail label)
       expectSourceFailure label input = case input of

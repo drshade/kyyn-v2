@@ -45,6 +45,10 @@ inherits every capability installed by the native application.
 Capability rows are the normative interfaces; program roles describe common
 compositions, not a separate permission taxonomy (ADR 0009). The outer invocation
 owns nested call lifetimes; its cancellation does not leave orphan plugin calls.
+The plugin protocol broker lives in the porcelain-interpreter package as
+`Kyyn.Porcelain.Protocol.PluginBroker`: it dispatches decoded requests
+to semantic EvidenceStore and selected plumbing capabilities. Byte-frame codecs
+remain in plumbing; plumbing never imports porcelain to reach evidence storage.
 
 ## Package and module ownership
 
@@ -78,7 +82,9 @@ Kyyn.Porcelain.Interpreter.EvolutionStore
 Kyyn.Plumbing.Capability.FileSystem
 Kyyn.Plumbing.Interpreter.FileSystem
 Kyyn.Plumbing.Capability.GuestCompilation
-Kyyn.Plumbing.Interpreter.GuestCompilation
+Kyyn.MicroHs.Interpreter.GuestCompilation
+Kyyn.Plumbing.Capability.GuestExecution
+Kyyn.MicroHs.Interpreter.GuestExecution
 Kyyn.Plumbing.Capability.DhallHandling
 Kyyn.Plumbing.Capability.DhallHandling.Schema
 Kyyn.Plumbing.Interpreter.DhallHandling
@@ -129,7 +135,8 @@ Failure/progress/cancellation are explicit supporting concerns. Do not inject
 clock, logging or a universal environment into a function merely because others
 need them. Exact implementation rows may be narrower than the capability table.
 
-Plumbing examples: FileSystem (scoped paths and file/tree/lock primitives), Git
+Plumbing examples: FileSystem (scoped paths and file/tree primitives),
+DocumentPersistence (scoped locked documents under ADR 0003), Git
 (objects, trees, refs and transport), ProcessExecution (typed lifecycle/pipe
 operations), DhallHandling (real library schema/value functions), HTTP, SecretStore
 (local named values, independent of plugins), document decoding, clock/entropy and
@@ -138,12 +145,13 @@ plugins own authentication, not a ConnectionUse handler. Pure serialization
 need not be an effect; it is a helper within its capability. Native process and
 filesystem details stay out of porcelain signatures.
 SchemaInspection owns checked-type extraction and checking the selected Haskell
-schema metadata export. GuestCompilation owns compilation of explicit source bundles
-through the installed toolchain; its interpreter, like SchemaInspection's, lives in
-`kyyn-microhs`. Porcelain interpreters prepare source/adapters and request compilation,
-not raw MicroHs commands. SchemaInspection uses GuestCompilation for its fixed
-metadata adapter and ProcessExecution for pure metadata evaluation through the SDK
-codec; compilation does not call back into inspection. Neither operation calls
+schema metadata export. GuestCompilation owns compilation of explicit source bundles;
+GuestExecution owns one-shot and conversational execution of compiled artifacts.
+Both interpreters, like SchemaInspection's, live in `kyyn-microhs` and receive the
+installed toolchain explicitly. Porcelain interpreters request compilation and
+execution separately, not raw MicroHs commands. SchemaInspection uses GuestCompilation
+for its fixed metadata adapter and GuestExecution for pure metadata evaluation through
+the SDK codec; compilation does not call back into inspection. Neither operation calls
 RootExecution or loads facts. This keeps the inspection/compilation dependency acyclic.
 The metadata attaches field roles (title/timeline/badge) and declares identities
 and references; its data types and authoring example belong to ADR 0005.

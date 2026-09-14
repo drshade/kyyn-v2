@@ -18,6 +18,7 @@ import Kyyn.Domain.Publication (InitializationTarget(..))
 import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
 import Kyyn.MicroHs.Interpreter.ApiInspection (runApiInspectionIO)
 import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection)
@@ -27,6 +28,7 @@ import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -132,10 +134,10 @@ guestResult request = case request of
   Cli.ShowGuestModule name -> ApiResult.moduleResult <$> Api.findModule name
   Cli.ShowGuestSymbol name -> ApiResult.symbolResult <$> Api.findSymbol name
 
-type Discovery = '[WorkspaceApi.WorkspaceApi, Store.EvolutionStore, WorkspaceStore, RootOpening, ApiInspection, SchemaInspection, GuestCompilation, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
+type Discovery = '[WorkspaceApi.WorkspaceApi, Store.EvolutionStore, WorkspaceStore, RootOpening, ApiInspection, SchemaInspection, GuestCompilation, GuestExecution, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host toolchain sdk catalogue = runBase host . runGuestApi catalogue . runGuestCompilation toolchain
+runDiscovery host toolchain sdk catalogue = runBase host . runGuestApi catalogue . runGuestExecution toolchain . runGuestCompilation toolchain
   . runSchemaInspectionIO toolchain . runApiInspectionIO toolchain . runRootOpening sdk
   . runWorkspaceStore . runEvolutionStore . runWorkspaceApi sdk
 

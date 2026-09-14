@@ -16,7 +16,8 @@ import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
-import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, executeCompiledEntry)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Plumbing.Protocol.Query (queryBindings, querySources, decodeQueryReply)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
@@ -27,7 +28,7 @@ import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePl
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
-  :: (RootStore :> es, GuestCompilation :> es, Failure :> es, PluginPreparation :> es,
+  :: (RootStore :> es, GuestCompilation :> es, GuestExecution :> es, Failure :> es, PluginPreparation :> es,
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case

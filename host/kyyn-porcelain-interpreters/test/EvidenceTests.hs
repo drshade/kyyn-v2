@@ -9,8 +9,9 @@ import Data.Either (isLeft)
 import qualified Data.Text as Text
 import Data.Time.Clock (UTCTime)
 import Data.Time.Format.ISO8601 (iso8601ParseM)
-import Effectful (Eff, IOE, runEff, runPureEff)
-import Effectful.Dispatch.Dynamic (interpret)
+import Effectful (Eff, IOE, runEff, runPureEff, (:>), UnliftStrategy(..))
+import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
+import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType (DataType(..), Shape(..))
 import Kyyn.Domain.Evidence
@@ -20,14 +21,16 @@ import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Evidence (EvidenceRef(EvidenceRef))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
-import Kyyn.Plumbing.Capability.EvidenceStore
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import Kyyn.Porcelain.Capability.EvidenceStore
+import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
+import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
-import Kyyn.Plumbing.Protocol.Evidence
+import Kyyn.Porcelain.Protocol.EvidencePersistence
 import System.Directory (listDirectory, createDirectory, removeDirectory, doesFileExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -55,14 +58,15 @@ itemB = EvidenceId "b.txt"
 value :: String -> Evidence CheckedValue
 value name = Evidence ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack name)))
 
-execute :: DirectoryScope -> Eff '[EvidenceStore, DhallHandling, FileSystem, Failure, IOE] a -> IO a
-execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runEvidenceStoreIO scope action)))) >>= right
+execute :: DirectoryScope -> Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope action)))) >>= right
 
 key :: EvidenceSnapshotRef -> FetchId
 key (EvidenceSnapshotRef _ _ identity) = identity
 
 main :: IO ()
 main = do
+  recordingProof
   let first = [NewEvidence itemA (value "old"),NewEvidence itemB (value "removed")]
       second = [UpdatedEvidence itemA (value "new"),RemovedEvidence itemB]
   initial <- right (applyChanges [] first)
@@ -95,7 +99,7 @@ main = do
     (runPureEff (headerOnly (decodeState wrongProducer contract bytes)) == Left ProducerContractChanged)
   withSystemTempDirectory "kyyn-evidence-" $ \directory -> do
     scope <- right (directoryScope directory)
-    let run :: Eff '[EvidenceStore, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+    let run :: Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
         run = execute scope
     empty <- run (evidenceHead instanceA) >>= right
     assert "new store has a head" (empty == Nothing)
@@ -196,9 +200,41 @@ main = do
     assert "clear left archived payloads" (null remaining)
     let statePath = directory </> ".kyyn/evidence/folder-73616c6573/state.dhall"
     createDirectory statePath
-    failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runEvidenceStoreIO scope (evidenceHead instanceA)))))
+    failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope (evidenceHead instanceA)))))
     assert "storage error became absent history" (isLeft failedRead)
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
   putStrLn "Evidence store: delta, Dhall, history, deletion, producer and concurrent publication checks passed."
+
+type Recording = (Maybe Bytes.ByteString,[String])
+
+recordDocuments :: State.State Recording :> es => Eff (DocumentPersistence : es) a -> Eff es a
+recordDocuments = interpret $ \env (WithLockedDocument _ action) ->
+  localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
+    unlift (interpret (\_ operation -> liftLocal (recordDocument operation)) action)
+
+recordDocument :: State.State Recording :> es => DocumentAccess m a -> Eff es a
+recordDocument operation = do
+  (document,trace) <- State.get @Recording
+  case operation of
+    ReadCurrent -> State.put (document,trace ++ ["read"]) >> pure document
+    ReplaceCurrent bytes -> State.put (Just bytes,trace ++ ["replace"])
+    FreshStamp -> State.put (document,trace ++ ["stamp"]) >> pure (DocumentStamp "recorded" "2026-09-14T00:00:00Z")
+    _ -> error "Unexpected persistence operation in semantic publication proof"
+
+recordingProof :: IO ()
+recordingProof = do
+  let scope = either error id (directoryScope "/recording-kb")
+      files = interpret $ \_ operation -> case operation of
+        ReadOptionalBytes _ _ -> pure (Just "*")
+        _ -> error "Semantic publication requested unexpected filesystem work"
+      (result,(_,trace)) = runPureEff . State.runState ((Nothing,[]) :: Recording) . runFailure . files
+        . runDhallHandling . recordDocuments . runEvidenceStore scope $ do
+          first <- publishFetch instanceA producer contract Nothing [NewEvidence itemA (value "recorded")]
+          conflict <- publishFetch instanceA producer contract Nothing []
+          pure (first,conflict)
+  (first,conflict) <- right result
+  _ <- right first
+  assert "recorded semantic store lost CAS refusal" (conflict == Left BaseSnapshotConflict)
+  assert "conflict wrote or allocated a revision" (trace == ["read","stamp","replace","read"])

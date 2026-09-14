@@ -42,7 +42,7 @@ sources arguments payload result implementation authored = do
           " -> Bindings." ++ mode ++ " (Either SDK.FetchError " ++ resultType ++ ")",
          "selected = " ++ implementation,"main :: IO ()","main = " ++ runtime]
       bindings = unlines $ ["{-# LANGUAGE TypeOperators #-}",
-        "module KyynPluginBindings (module Kyyn.Plugin, " ++ mode ++ ", listEvidenceIds, readEvidence" ++
+        "module KyynPluginBindings (Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), Evidence(..), EvidenceChange(..), " ++ mode ++ ", listEvidenceIds, readEvidence" ++
           (case result of Nothing -> ", listFiles, readTextFile"; Just _ -> "") ++ ") where",
         "import Kyyn.Plugin","import qualified Kyyn.Types.Program as P","import qualified Kyyn.Types.Plugin as Calls"] ++
         imports [payload] ++

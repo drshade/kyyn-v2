@@ -11,12 +11,14 @@ import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Path (directoryScope)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readTree)
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -29,14 +31,14 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Surfaces.Result (Response, operationalFailure, refusal)
 
 type Base = '[RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
-type Runtime = SchemaInspection ': GuestCompilation ': Base
+type Runtime = SchemaInspection ': GuestCompilation ': GuestExecution ': Base
 
 runBase :: Host -> Eff Base a -> IO (Either OperationalFailure a)
 runBase (Host executable environment temp _) = runEff . runFailure . runProcessExecutionIO
   . runFileSystemIO temp . runGit executable environment . runDhallHandling . runRootStore
 
 runRuntime :: Host -> GuestToolchain -> Eff Runtime a -> IO (Either OperationalFailure a)
-runRuntime host toolchain = runBase host . runGuestCompilation toolchain . runSchemaInspectionIO toolchain
+runRuntime host toolchain = runBase host . runGuestExecution toolchain . runGuestCompilation toolchain . runSchemaInspectionIO toolchain
 
 finish :: IO (Either OperationalFailure Response) -> IO Response
 finish action = either operationalFailure id <$> action

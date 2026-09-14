@@ -8,11 +8,11 @@ import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
-import qualified Kyyn.Plumbing.Capability.EvidenceStore as Store
+import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Plumbing.Protocol.PluginBroker (executeAcquisition)
+import Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition)
 import Kyyn.Plumbing.Protocol.PluginMessages (changesShape, parseChanges)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition
 

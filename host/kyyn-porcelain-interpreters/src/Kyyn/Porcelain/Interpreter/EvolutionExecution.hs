@@ -14,7 +14,8 @@ import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedVa
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
-import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, executeCompiledEntry)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Protocol.Evolution (evolutionSources, decodeEvolutionReply, mergeEvolutionSources)
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
@@ -22,7 +23,7 @@ import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadR
 
 runEvolutionExecution
   :: (RootStore :> es,
-      GuestCompilation :> es, Failure :> es)
+      GuestCompilation :> es, GuestExecution :> es, Failure :> es)
   => FileTree -> Eff (EvolutionExecution : es) a -> Eff es a
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)

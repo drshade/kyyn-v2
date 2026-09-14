@@ -24,6 +24,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.MicroHs.Toolchain
 import Kyyn.MicroHs.Interpreter.GuestCompilation
+import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootStore
@@ -106,7 +107,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
         "people" .= [object ["id" .= ("person-001" :: String), "value" .= object ["name" .= ("Ada 🦋" :: String)]]]]
   root <- either (fail . show) pure (runPureEff . runDhallHandling . runRootStore $
     materializeRoot contract code (CheckedValue (contractId (rootSchema contract)) values))
-  discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+  discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ prepareRoot root
   prepared <- either (fail . show) (either (fail . show) pure) discovery
   descriptor@(QueryDescriptor _ _ input result) <- case preparedQueries prepared of
@@ -116,7 +117,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
     (fail "Named query types were not inspected")
   unless (metadataOf result == SchemaMetadata [RoleDecl "label" "Person's name" Title]
     [FieldRole "Schema.Person" "name" "label"] []) (fail "Query result metadata lost or copied from Root")
-  response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain
+  response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $
       queryRoot prepared descriptor (CheckedValue (contractId input) (String "Review"))
   let expected = QueryResult (CheckedValue (contractId result)

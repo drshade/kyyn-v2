@@ -14,6 +14,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestExecution
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
 import Kyyn.Plumbing.Capability.ProcessExecution
 
@@ -53,7 +54,7 @@ exact label expected parse = withObject label $ \o -> do
   parse o
 
 evaluateMetadata
-  :: (GuestCompilation :> es, Failure :> es)
+  :: (GuestCompilation :> es, GuestExecution :> es, Failure :> es)
   => GuestSources -> Eff es (Either [Diagnostic] SchemaMetadata)
 evaluateMetadata sources = do
   compiled <- compileGuest sources

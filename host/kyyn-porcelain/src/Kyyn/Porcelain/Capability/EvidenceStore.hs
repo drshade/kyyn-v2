@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Plumbing.Capability.EvidenceStore
-  ( EvidenceStore(..), evidenceHead, publishFetch, selectEvidence, readEvidence, listEvidenceIds
+module Kyyn.Porcelain.Capability.EvidenceStore
+  ( EvidenceStore(..), evidenceHead, publishFetch, selectEvidence, loadEvidenceSnapshot, readEvidence, listEvidenceIds
   , readFetchesBetween, listEvidenceChanges, deleteEvidenceHistory, clearEvidence
   ) where
 
@@ -16,6 +16,8 @@ data EvidenceStore :: Effect where
     -> [EvidenceChange CheckedValue] -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   SelectEvidence :: ConnectorInstanceRef -> EvidenceProducer -> EvidenceSelection
     -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
+  LoadEvidenceSnapshot :: EvidenceSnapshotRef -> CheckedContract
+    -> EvidenceStore m (Either EvidenceProblem [(EvidenceId, Evidence CheckedValue)])
   ReadEvidence :: EvidenceSnapshotRef -> CheckedContract -> EvidenceId
     -> EvidenceStore m (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
   ListEvidenceIds :: EvidenceSnapshotRef -> CheckedContract
@@ -38,6 +40,9 @@ publishFetch instanceRef producer contract base = send . PublishFetch instanceRe
 selectEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> EvidenceSelection
   -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
 selectEvidence instanceRef producer = send . SelectEvidence instanceRef producer
+loadEvidenceSnapshot :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract
+  -> Eff es (Either EvidenceProblem [(EvidenceId, Evidence CheckedValue)])
+loadEvidenceSnapshot snapshot = send . LoadEvidenceSnapshot snapshot
 readEvidence :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract -> EvidenceId
   -> Eff es (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
 readEvidence snapshot contract = send . ReadEvidence snapshot contract
