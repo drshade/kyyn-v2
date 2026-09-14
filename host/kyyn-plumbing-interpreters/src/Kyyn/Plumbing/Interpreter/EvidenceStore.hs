@@ -77,6 +77,9 @@ runEvidenceStoreIO kb = interpret $ \_ -> \case
   ReadEvidence snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract key -> locked instanceRef $ \directory -> runExceptT $ do
     state <- load directory snapshot contract
     lookup key <$> liftEither (snapshotAt state identity)
+  ListEvidenceIds snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract -> locked instanceRef $ \directory -> runExceptT $ do
+    state <- load directory snapshot contract
+    map fst <$> liftEither (snapshotAt state identity)
   ReadFetchesBetween snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract base -> locked instanceRef $ \directory -> runExceptT $ do
     state <- load directory snapshot contract
     liftEither (fetchesBetween state identity base)

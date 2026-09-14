@@ -47,8 +47,11 @@ matching versioned GHC executable to compile the same folder acquisition and
 captured-read fixtures under both compilers. A recording host exchanges real JSON
 pipe frames: typed config/prior evidence, new/updated/removed changes, Unicode,
 enumeration/read failures and malformed replies. Both compilers reject filesystem
-calls from the captured-read entry. This full-only proof does not fetch real files,
-publish evidence or exercise a CLI command.
+calls from the captured-read entry. The native MicroHs broker also fetches real files,
+publishes successive Dhall evidence batches, reads historical payloads and verifies
+that unchanged files and failed acquisitions do not manufacture changes. Recording
+handlers check that malformed, unknown-snapshot and out-of-row requests never reach
+storage. This focused check does not exercise plugin registration or a CLI command.
 
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow

@@ -8,6 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Capability.RootStore
+    Kyyn.Porcelain.Capability.EvidenceAcquisition
     Kyyn.Porcelain.Capability.PluginInstallation
     Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
     Kyyn.Porcelain.Capability.Root

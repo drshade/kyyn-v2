@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.EvidenceStore
-  ( EvidenceStore(..), evidenceHead, publishFetch, selectEvidence, readEvidence
+  ( EvidenceStore(..), evidenceHead, publishFetch, selectEvidence, readEvidence, listEvidenceIds
   , readFetchesBetween, listEvidenceChanges, deleteEvidenceHistory, clearEvidence
   ) where
 
@@ -18,6 +18,8 @@ data EvidenceStore :: Effect where
     -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   ReadEvidence :: EvidenceSnapshotRef -> CheckedContract -> EvidenceId
     -> EvidenceStore m (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
+  ListEvidenceIds :: EvidenceSnapshotRef -> CheckedContract
+    -> EvidenceStore m (Either EvidenceProblem [EvidenceId])
   ReadFetchesBetween :: EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
     -> EvidenceStore m (Either EvidenceProblem [Fetch CheckedValue])
   ListEvidenceChanges :: EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
@@ -39,6 +41,9 @@ selectEvidence instanceRef producer = send . SelectEvidence instanceRef producer
 readEvidence :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract -> EvidenceId
   -> Eff es (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
 readEvidence snapshot contract = send . ReadEvidence snapshot contract
+listEvidenceIds :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract
+  -> Eff es (Either EvidenceProblem [EvidenceId])
+listEvidenceIds snapshot = send . ListEvidenceIds snapshot
 readFetchesBetween :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
   -> Eff es (Either EvidenceProblem [Fetch CheckedValue])
 readFetchesBetween snapshot contract = send . ReadFetchesBetween snapshot contract

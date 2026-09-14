@@ -10,6 +10,8 @@ library
   exposed-modules: Kyyn.Plumbing.Capability.SchemaInspection.Codecs
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
+    Kyyn.Plumbing.Capability.GuestExecution Kyyn.Plumbing.Capability.FileAcquisition
+    Kyyn.Plumbing.Capability.PluginExecution Kyyn.Plumbing.Protocol.PluginMessages
     Kyyn.Plumbing.Capability.GuestCompilation.Types
     Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Protocol.Query
@@ -31,4 +33,4 @@ library
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0,
-    cryptohash-sha256 ==0.11.102.1, text, kyyn-types, aeson ==2.2.5.0
+    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson ==2.2.5.0
