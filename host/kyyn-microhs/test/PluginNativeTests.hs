@@ -22,7 +22,8 @@ import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation (CompiledProgram)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
-import Kyyn.Plumbing.Capability.PluginExecution (executeCapturedRead)
+import Kyyn.Plumbing.Protocol.PluginBroker (executeCapturedRead)
+import Kyyn.Plumbing.Capability.FileAcquisition (readSourceText)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.EvidenceStore (runEvidenceStoreIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -33,7 +34,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Domain.DataType (DataType)
-import System.Directory (createDirectory, removeFile)
+import System.Directory (createDirectory, removeFile, createFileLink)
 import System.FilePath ((</>))
 
 type StoreEffects = '[EvidenceStore, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
@@ -87,6 +88,13 @@ nativeTests temporary toolchain configType payloadType program = do
   invalid <- fetch directory
   assert "invalid UTF-8 produced a partial batch" (isLeft invalid)
   unchangedHead >>= assert "failed decoding moved the evidence head" . (== Just thirdId)
+  createFileLink (directory </> "same.txt") (directory </> "linked.txt")
+  sourceScope <- right (directoryScope directory)
+  linkPath <- right (relativePath "linked.txt")
+  link <- runEff (runFileAcquisitionIO (readSourceText sourceScope linkPath))
+  case link of
+    Left _ -> pure ()
+    Right _ -> fail "Direct text read followed a symbolic link"
   forM_
     [ "{\"tag\":\"HostRequest\",\"id\":\"1\",\"capability\":\"files\",\"method\":\"read\",\"arguments\":{\"path\":\"/file\"}}"
     , "{\"tag\":\"HostRequest\",\"id\":\"1\",\"capability\":\"evidence\",\"method\":\"list\",\"arguments\":{\"snapshot\":\"forged\"}}"

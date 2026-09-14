@@ -119,7 +119,7 @@ const domainModules = {
 const plumbingModules = {
   'Kyyn.Plumbing.Capability.GuestExecution': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Plumbing.Capability.ProcessExecution'],
   'Kyyn.Plumbing.Capability.FileAcquisition': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path'],
-  'Kyyn.Plumbing.Capability.PluginExecution': ['Data.Aeson', 'Effectful', 'Effectful.State.Static.Local',
+  'Kyyn.Plumbing.Protocol.PluginBroker': ['Data.Aeson', 'Effectful', 'Effectful.State.Static.Local',
     'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence',
     'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.GuestExecution',
     'Kyyn.Plumbing.Capability.ProcessExecution', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.DhallHandling',
@@ -195,7 +195,7 @@ const interpreterModules = {
   'Kyyn.Porcelain.Interpreter.EvidenceAcquisition': ['Control.Monad.Trans.Except', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Plumbing.Capability.DhallHandling',
     'Kyyn.Plumbing.Capability.EvidenceStore', 'Kyyn.Plumbing.Capability.GuestExecution', 'Kyyn.Plumbing.Capability.FileAcquisition',
-    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.PluginExecution', 'Kyyn.Plumbing.Protocol.PluginMessages',
+    'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Protocol.PluginBroker', 'Kyyn.Plumbing.Protocol.PluginMessages',
     'Kyyn.Porcelain.Capability.EvidenceAcquisition'],
   'Kyyn.Runtime.Plugin': ['Kyyn.Runtime.Json', 'Kyyn.Types.Evidence', 'Kyyn.Types.Plugin',
     'Kyyn.Types.Program', 'System.IO', 'Text.JSON.Types'],
@@ -291,7 +291,8 @@ export function checkImports(packageName, source) {
     if ((['kyyn-plumbing', 'kyyn-porcelain', 'kyyn-porcelain-interpreters', 'kyyn-surfaces'].includes(packageName) || ['Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.Plumbing.Interpreter.Git'].includes(moduleName)) && match[1] === 'Effectful') {
       const explicit = /^\s*import Effectful \((.*)\)\s*$/.exec(line);
       const names = explicit?.[1].split(',').map(name => name.trim());
-      const pureNames = ['Effect', 'Eff', 'DispatchOf', 'Dispatch(..)', '(:>)', 'raise'];
+      const pureNames = ['Effect', 'Eff', 'DispatchOf', 'Dispatch(..)', '(:>)',
+        ...(moduleName === 'Kyyn.Plumbing.Protocol.PluginBroker' ? ['raise'] : [])];
       if (!names || names.some(name => !pureNames.includes(name))) return ['Effectful: explicit API-only imports required'];
     }
     return [];

@@ -20,7 +20,9 @@ runFileAcquisitionIO = interpret $ \_ -> \case
     names <- enumerate (scopePath scope) recursive ""
     traverse (either (ioError . userError) pure . relativePath) names
   ReadSourceText scope path -> native $ do
-    bytes <- Bytes.readFile (scopedPath scope path)
+    let source = scopedPath scope path
+    refuseLink source
+    bytes <- Bytes.readFile source
     either (ioError . userError . show) (pure . Text.unpack) (Text.decodeUtf8' bytes)
 
 native :: IOE :> es => IO a -> Eff es (Either String a)
@@ -29,16 +31,19 @@ native action = liftIO $ either (Left . displayException @IOException) Right <$>
 enumerate :: FilePath -> Bool -> FilePath -> IO [FilePath]
 enumerate base recursive prefix = do
   let directory = if null prefix then base else base </> prefix
-  linked <- pathIsSymbolicLink directory
-  when linked (ioError (userError (directory ++ ": symbolic links are not supported")))
+  refuseLink directory
   names <- sort <$> listDirectory directory
   concat <$> forM names (\name -> do
     let relative = if null prefix then name else prefix </> name
         absolute = base </> relative
-    link <- pathIsSymbolicLink absolute
-    when link (ioError (userError (absolute ++ ": symbolic links are not supported")))
+    refuseLink absolute
     child <- doesDirectoryExist absolute
     if child then if recursive then enumerate base recursive relative else pure []
       else do
         file <- doesFileExist absolute
         if file then pure [relative] else ioError (userError (absolute ++ ": not a regular file")))
+
+refuseLink :: FilePath -> IO ()
+refuseLink path = do
+  linked <- pathIsSymbolicLink path
+  when linked (ioError (userError (path ++ ": symbolic links are not supported")))
