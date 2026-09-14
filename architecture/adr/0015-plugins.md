@@ -182,6 +182,8 @@ Use stable refusal codes at these boundaries:
 | `plugin.entry-missing` | Declared entry module has no source under `src/` |
 | `plugin.source-uncommitted` | Selected local package has staged, unstaged or untracked changes |
 | `plugin.already-installed` | Destination already exists |
+| `plugin.evolution-accepted` | Selected evolution is already accepted; create a new evolution |
+| `evolution.unknown` | EvolutionStore found no workspace manifest; retain its existing diagnostic |
 
 Git acquisition/entry diagnostics retain their Git codes (including
 `git.clone-failed`, `git.unsupported-entry`, `git.missing-subtree` for an absent
