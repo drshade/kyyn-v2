@@ -65,6 +65,9 @@ runEvidenceStore kb = interpret $ \_ -> \case
       AtFetch identity | Just identity == baseline || identity `elem` history -> pure identity
                        | otherwise -> throwE HistoryUnavailable
     pure (EvidenceSnapshotRef instanceRef producer identity)
+  LoadEvidenceSnapshot snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract -> locked instanceRef $ runExceptT $ do
+    state <- load snapshot contract
+    liftEither (snapshotAt state identity)
   ReadEvidence snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract key -> locked instanceRef $ runExceptT $ do
     state <- load snapshot contract
     lookup key <$> liftEither (snapshotAt state identity)

@@ -1,11 +1,13 @@
-{-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
+{-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module PluginNativeTests (nativeTests) where
 
 import Control.Monad (unless, forM_)
-import Data.Aeson (object, (.=))
+import Data.Aeson (Value, object, (.=), encode, eitherDecodeStrict, toJSON)
 import qualified Data.ByteString as Bytes
-import Effectful (Eff, IOE, runEff, runPureEff)
+import qualified Data.ByteString.Lazy as Lazy
+import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
+import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence
@@ -23,6 +25,7 @@ import Kyyn.Plumbing.Capability.GuestCompilation (CompiledProgram)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Porcelain.Protocol.PluginBroker (executeCapturedRead)
+import Kyyn.Plumbing.Protocol.PluginMessages (evidenceValue)
 import Kyyn.Plumbing.Capability.FileAcquisition (readSourceText)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
@@ -108,7 +111,63 @@ nativeTests temporary toolchain configType payloadType program = do
       case refused of
         Left _ -> pure ()
         Right _ -> fail "Malformed or out-of-row guest request was answered"
+  let key = EvidenceId "changed.txt"
+      saved = Evidence [directory </> "changed.txt"]
+        (CheckedValue (contractId payload) (object ["text" .= ("changed" :: String)]))
+      changed = Evidence [] (CheckedValue (contractId payload) (object ["text" .= ("later" :: String)]))
+      requests =
+        [ object ["snapshot" .= ("selected" :: String)]
+        , object ["snapshot" .= ("selected" :: String),"id" .= ("changed.txt" :: String)]
+        , object ["snapshot" .= ("selected" :: String),"id" .= ("absent" :: String)]
+        ]
+      answer value = object ["tag" .= ("Right" :: String),"value" .= value]
+      expected = map answer
+        [ toJSON (["changed.txt","same.txt","new.txt"] :: [String])
+        , object ["tag" .= ("Some" :: String),"value" .= evidenceValue saved]
+        , object ["tag" .= ("None" :: String)]
+        ]
+      completed = object ["text" .= ("changed" :: String)]
+      inspectBetween action = exchangeFrames requests expected completed action $
+        executeCapturedRead program (config directory) payload third payload
+      advance = do
+        let EvidenceSnapshotRef _ producer _ = third
+        result <- publishFetch instanceRef producer payload (Just thirdId) [UpdatedEvidence key changed]
+        case result of Right _ -> pure (); Left problem -> error (show problem)
+  stable <- runStore kb (inspectBetween advance) >>= right
+  assert "captured read changed after concurrent publication" (stable == completed)
+  latest <- runStore kb (selectEvidence instanceRef (case third of EvidenceSnapshotRef _ producer _ -> producer) CurrentEvidence) >>= right
+  newest <- runStore kb (readEvidence latest payload key) >>= right
+  assert "snapshot fixture did not actually advance stored evidence" (newest == Just changed)
+  let loaded = [(key,saved),(EvidenceId "same.txt",saved),(EvidenceId "new.txt",saved)]
+      recorded = runPureEff $ State.runState (0 :: Int) $ runFailure $ runDhallHandling $
+        snapshotStore loaded $ exchangeFrames requests expected completed (pure ()) $
+          executeCapturedRead program (config directory) payload third payload
+  let (outer,loads) = recorded
+  readResult <- right outer
+  assert "captured read loaded storage more than once" (loads == 1 && readResult == Right completed)
   putStrLn "Native acquisition: real files, persisted deltas, historical reads, unchanged files and failure atomicity passed."
+
+snapshotStore :: State.State Int :> es => [(EvidenceId, Evidence CheckedValue)]
+  -> Eff (EvidenceStore : es) a -> Eff es a
+snapshotStore entries = interpret $ \_ -> \case
+  LoadEvidenceSnapshot _ _ -> State.modify @Int (+ 1) >> pure (Right entries)
+  _ -> error "Invocation performed a live per-item storage operation"
+
+exchangeFrames :: [Value] -> [Value] -> Value -> Eff es () -> Eff (GuestExecution : es) a -> Eff es a
+exchangeFrames requests answers result between = interpret $ \env (ExecuteGuest _ _ respond) ->
+  localSeqUnlift env $ \unlift -> do
+    forM_ (zip3 [1 :: Int ..] requests answers) $ \(identity,args,answer) -> do
+      let request = object ["tag" .= ("HostRequest" :: String),"id" .= show identity,
+            "capability" .= ("evidence" :: String),"method" .= (if identity == 1 then "list" else "read" :: String),
+            "arguments" .= args]
+          expected = object ["tag" .= ("HostResponse" :: String),"id" .= show identity,"result" .= answer]
+      reply <- unlift (respond (Lazy.toStrict (encode request)))
+      case fmap eitherDecodeStrict reply of
+        Just (Right value) | value == expected -> pure ()
+        _ -> error ("Unexpected snapshot reply: " ++ show reply)
+      if identity == 1 then between else pure ()
+    pure (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),"result" .=
+      object ["tag" .= ("Right" :: String),"value" .= result]])),ProcessExit 0 Bytes.empty)
 
 emitFrame :: Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
 emitFrame frame = interpret $ \env (ExecuteGuest _ _ respond) -> localSeqUnlift env $ \unlift -> do

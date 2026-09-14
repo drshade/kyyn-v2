@@ -51,7 +51,10 @@ calls from the captured-read entry. The native MicroHs broker also fetches real 
 publishes successive Dhall evidence batches, reads historical payloads and verifies
 that unchanged files and failed acquisitions do not manufacture changes. Recording
 handlers check that malformed, unknown-snapshot and out-of-row requests never reach
-storage. This focused check does not exercise plugin registration or a CLI command.
+storage. They also check one snapshot load for repeated reads; a native fixture
+publishes another fetch between callbacks and verifies that the invocation still
+sees its original input. This focused check does not exercise plugin registration
+or a CLI command.
 
 `cabal test plugin-registration --test-show-details=direct` uses the same toolchain
 to load the actual first-party local-file package, evaluate its declaration,
