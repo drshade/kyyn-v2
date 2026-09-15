@@ -22,6 +22,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.RootExecution (prepareRoot, validateRoot)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (findExecutable)
@@ -33,13 +34,13 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
   shell <- findExecutable "sh" >>= maybe (fail "sh required for process failure fixtures") pure
   let path = either error id . relativePath
       tree = either error id . fileTree
-      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
+      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest)]
       sdk = tree [(path "Sdk.hs", "explicit SDK")]
       root = Root contract facts code
       entry = fixtureProgram
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . runFixtureExecution shell . compileMock compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runRootExecution sdkFiles $ do
+        . runFixtureExecution shell . compileMock compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runToolPreparation sdkFiles . runRootExecution sdkFiles $ do
           prepared <- prepareRoot selected
           either (pure . Left) validateRoot prepared
       unexpected = error "Invalid root reached compilation"
@@ -58,8 +59,8 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
     _ -> fail ("Malformed report became semantic diagnostics: " ++ show malformed)
   forM_ [tree [], tree [(path "kb.dhall", "True")],
       tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }")],
-      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }")]] $ \badCode -> do
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")],
+      tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")]] $ \badCode -> do
     failure <- execute sdk unexpected (Root contract facts badCode)
     case failure of Right (Left _) -> pure (); _ -> fail "Invalid manifest reached execution"
   noFacts <- execute sdk (Right (entry "exit 99")) (Root contract (tree []) code)

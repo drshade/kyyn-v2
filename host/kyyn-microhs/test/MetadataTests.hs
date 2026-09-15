@@ -15,6 +15,7 @@ import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Interpreter.RootExecution
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Types.SchemaMetadata
@@ -156,7 +157,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
          "  Diagnostic Warning \"example\" \"Illustrative\" (Just (ExampleLocation \"sample\"))] ++",
          "  if any (\\(Fact _ (Authored.Todo title _)) -> null title) todos then",
          "    [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])"]
-      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
+      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
   authoredBytes <- maybe (fail "Missing captured Authored.hs") pure (lookup (path "Authored.hs") files)
   validationCode <- either fail pure (fileTree
     [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])
@@ -181,7 +182,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   emptyRoot <- either (fail . show) pure
     (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode emptyValue))))
   emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
+    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot emptyRoot
       either (pure . Left) validateRoot prepared
   unless (emptyResponse == Right (Right (ValidationReport [])))
@@ -193,7 +194,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode checkedFacts))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
-      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ do
+      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
         prepared <- prepareRoot validationRoot
         either (pure . Left) validateRoot prepared
     report <- either (fail . show) (either (fail . show) pure) response

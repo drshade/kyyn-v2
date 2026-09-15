@@ -25,16 +25,18 @@ import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins, validatePlugins)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareTools)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
-  :: (RootStore :> es, GuestCompilation :> es, GuestExecution :> es, Failure :> es, PluginPreparation :> es,
+  :: (RootStore :> es, GuestCompilation :> es, GuestExecution :> es, Failure :> es, PluginPreparation :> es, ToolPreparation :> es,
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
   PrepareRoot root@(Root contract _ code) -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
-    RootDefinition _ _ validator declarations authored <- ExceptT (readRootDefinition code)
+    _ <- ExceptT (prepareTools code plugins)
+    RootDefinition _ _ validator declarations _ authored <- ExceptT (readRootDefinition code)
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"
       (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))

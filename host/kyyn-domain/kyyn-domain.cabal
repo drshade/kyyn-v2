@@ -12,6 +12,7 @@ library
     Kyyn.Domain.FileTree Kyyn.Domain.Git Kyyn.Domain.Workspace
     Kyyn.Domain.CompiledProgram Kyyn.Domain.GuestApi
     Kyyn.Domain.Plugin
+    Kyyn.Domain.Tool
     Kyyn.Domain.Evidence
     Kyyn.Domain.KnowledgeBase Kyyn.Domain.Evolution Kyyn.Domain.EvolutionReport Kyyn.Domain.Publication
   default-language: GHC2021

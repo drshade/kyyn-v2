@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.PluginPreparation
   ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), ConfiguredConnector(..), PreparedMethod(..)
-  , preparePackages, preparePlugins, validatePlugins, instanceShape ) where
+  , preparePackages, preparePlugins, validatePlugins, instanceShape, selectedPackage, selectedPlugin, selectedInstance ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -9,9 +9,9 @@ import Data.Coerce (coerce)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract)
-import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorTypeName(..), ConnectorName, BindingName, MethodName)
+import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity, ConnectorTypeName(..), ConnectorName(..), BindingName, MethodName)
 import Kyyn.Domain.Value (CheckedValue)
 
 data PreparedConnector = PreparedConnector
@@ -45,3 +45,20 @@ validatePlugins = send . ValidatePlugins
 instanceShape :: [(ConnectorTypeName,Shape)] -> Shape
 instanceShape connectors = List (Record [("name",Scalar TextScalar),("binding",Scalar TextScalar),
   ("connector",Union [(coerce name,Just config) | (name,config) <- connectors])])
+
+selectedPackage :: PluginName -> [PreparedPackage] -> Either [Diagnostic] PreparedPackage
+selectedPackage name packages = case [package | package@(PreparedPackage actual _ _) <- packages, name == actual] of
+  [package] -> Right package
+  _ -> Left [errorDiagnostic "plugin.unknown" ("No installed plugin named " ++ pluginNameText name)]
+
+selectedPlugin :: PluginName -> [PreparedPlugin] -> Either [Diagnostic] PreparedPlugin
+selectedPlugin name plugins = case [plugin | plugin@(PreparedPlugin (PreparedPackage actual _ _) _) <- plugins, name == actual] of
+  [plugin] -> Right plugin
+  _ -> Left [errorDiagnostic "plugin.unknown" ("No installed plugin named " ++ pluginNameText name)]
+
+selectedInstance :: PluginName -> ConnectorName -> [PreparedPlugin] -> Either [Diagnostic] (PreparedPackage,ConfiguredConnector)
+selectedInstance plugin name plugins = do
+  PreparedPlugin package instances <- selectedPlugin plugin plugins
+  case [instanceValue | instanceValue@(ConfiguredConnector actual _ _ _) <- instances, actual == name] of
+    [value] -> Right (package,value)
+    _ -> Left [errorDiagnostic "plugin.instance-unknown" ("No configured connector " ++ pluginNameText plugin ++ "/" ++ coerce name)]

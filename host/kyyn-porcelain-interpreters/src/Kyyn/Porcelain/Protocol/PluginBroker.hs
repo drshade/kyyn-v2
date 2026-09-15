@@ -1,6 +1,7 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead) where
+module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
+import Data.ByteString (ByteString)
 import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
@@ -10,6 +11,7 @@ import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Value (CheckedValue)
+import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -20,7 +22,8 @@ import System.FilePath (takeDirectory, takeFileName)
 
 executeAcquisition :: (GuestExecution :> es, Failure :> es, Files.FileAcquisition :> es)
   => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
-executeAcquisition program config prior = conversation "plugin.fetch-failed" program config $ \call -> case call of
+executeAcquisition program config prior = fmap (either (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" message]) Right) $
+  conversation decodeFrame program (initialInput config) $ \call -> case call of
   ListFiles directory recursive -> case directoryScope directory of
     Left message -> pure (failure message)
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive
@@ -32,12 +35,12 @@ executeAcquisition program config prior = conversation "plugin.fetch-failed" pro
 
 executeCapturedRead :: (GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => CompiledProgram -> CheckedValue -> CurrentEvidence -> CheckedContract
-  -> Eff es (Either [Diagnostic] Value)
+  -> Eff es (Either [Diagnostic] (Either FetchError Value))
 executeCapturedRead program arguments current result = do
-  output <- conversation "plugin.read-failed" program arguments (answerEvidence (Just current))
+  output <- conversation decodeFrame program (initialInput arguments) (answerEvidence (Just current))
   case output of
-    Left diagnostics -> pure (Left diagnostics)
-    Right value -> fmap (fmap (const value)) (encodeValue (contractShape result) value)
+    Left problem -> pure (Right (Left problem))
+    Right value -> fmap (fmap (const (Right value))) (encodeValue (contractShape result) value)
 
 answerEvidence :: Failure :> es => Maybe CurrentEvidence -> PluginCall -> Eff es Value
 answerEvidence prior call = case call of
@@ -55,10 +58,11 @@ answerEvidence prior call = case call of
                      | otherwise = broken "Unknown evidence snapshot handle"
 
 conversation :: (GuestExecution :> es, Failure :> es)
-  => String -> CompiledProgram -> CheckedValue -> (PluginCall -> Eff es Value) -> Eff es (Either [Diagnostic] Value)
-conversation failureCode program arguments respond = do
-  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program (initialInput arguments) $ \bytes -> do
-    frame <- either broken pure (decodeFrame bytes)
+  => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
+conversation decode program arguments respond = do
+  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program arguments $ \bytes -> do
+    frame <- either broken pure (decode bytes)
     case frame of
       HostRequest identity call -> do
         expected <- get
@@ -68,11 +72,11 @@ conversation failureCode program arguments respond = do
       Completed _ -> pure Nothing
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
     ("Plugin exited " ++ show status ++ ": " ++ show stderr))) else do
-    frame <- either broken pure (decodeFrame output)
+    frame <- either broken pure (decode output)
     case frame of
       Completed value -> case parseResult value of
         Left message -> broken message
-        Right (Left message) -> pure (Left [errorDiagnostic failureCode message])
+        Right (Left message) -> pure (Left (FetchError message))
         Right (Right result) -> pure (Right result)
       _ -> broken "Guest did not complete"
 

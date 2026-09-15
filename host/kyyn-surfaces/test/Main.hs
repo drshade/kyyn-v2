@@ -27,6 +27,13 @@ main = do
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
+  succeeds ["root","tool","list"] (Invocation selected Human (Root (RootTool (ListTools Nothing))))
+  succeeds ["root","tool","show","content","--evolution","abc123"]
+    (Invocation selected Human (Root (RootTool (ShowTool content (Just identity)))))
+  succeeds ["root","tool","execute","content","--input","[\"one.txt\"]"]
+    (Invocation selected Human (Root (RootTool (ExecuteTool content "[\"one.txt\"]"))))
+  forM_ [["root","tool","execute","content"], ["root","tool","show","case"],
+    ["root","tool","execute","content","--input","[]","--evolution","abc123"]] refuses
   succeeds ["kb","init"] (Invocation selected Human (Kb InitKb))
   succeeds ["plugin","install","--evolution","abc123","--from","./plugins/local-file"]
     (Invocation selected Human (Plugin (InstallPlugin identity "./plugins/local-file" Nothing)))

@@ -1,7 +1,7 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
-  , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..)
+  , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -42,7 +42,9 @@ data EvidenceCommand
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
-data RootCommand = ShowRoot | CheckRoot deriving (Eq, Show)
+data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand deriving (Eq, Show)
+data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
+  | ExecuteTool MethodName String deriving (Eq, Show)
 
 data EvolutionCommand
   = NewEvolution EvolutionName (Maybe GitRevision)
@@ -141,7 +143,15 @@ selectionParser = Selection
 rootParser :: Parser RootCommand
 rootParser = hsubparser
   (group "show" "Inspect the accepted root at the selected revision" (pure ShowRoot)
-  <> group "check" "Check the accepted root, including required examples" (pure CheckRoot))
+  <> group "check" "Check the accepted root, including required examples" (pure CheckRoot)
+  <> group "tool" "Discover and invoke KB-authored investigation helpers" (RootTool <$> hsubparser
+    (group "list" "List registered KB tools" (ListTools <$> workspace)
+    <> group "show" "Show a tool's description and Dhall types" (ShowTool <$> name <*> workspace)
+    <> group "execute" "Execute an accepted KB tool" (ExecuteTool <$> name
+      <*> strOption (long "input" <> metavar "DHALL" <> help "Input value as a hermetic Dhall expression")))))
+  where
+    name = argument (eitherReader methodName) (metavar "TOOL")
+    workspace = optional (option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Inspect an evolution target"))
 
 guestParser :: Parser Command
 guestParser = hsubparser

@@ -1,8 +1,11 @@
 {-# LANGUAGE GADTs #-}
 module Kyyn.Types.Plugin
-  ( SourceConnector(..), CapturedMethod(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
+  ( SourceConnector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
 
 import Kyyn.Types.Evidence (EvidenceId, Evidence, EvidenceFingerprint)
+
+-- | A configured instance of one connector type.
+newtype ConnectorInstance connector = ConnectorInstance String
 
 -- | Register a source connector in the plugin entry module's connectors value.
 data SourceConnector = SourceConnector

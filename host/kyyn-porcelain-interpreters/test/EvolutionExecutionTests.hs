@@ -49,7 +49,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks")]
       target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
       root = Root contract facts code
-      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" []
+      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] []
         (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")])) []
       capture proposed = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft)
@@ -106,7 +106,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   case sourceMismatch of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail "Changed Before copy reached execution"
   putStrLn "Evolution execution selects exact Before, deduplicates its closure and preserves rejection/failure layers."
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
 schemaMock count contract = interpret $ \_ -> \case

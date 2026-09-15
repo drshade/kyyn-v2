@@ -2,7 +2,7 @@
 module Kyyn.Porcelain.Interpreter.RootStore (runRootStore) where
 
 import Control.Monad (unless, forM)
-import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE, withExceptT)
 import Data.Aeson (Value(..), object, (.=), toJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
@@ -21,6 +21,8 @@ import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiag
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Root
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..))
+import Kyyn.Domain.Tool (ToolDefinition(..))
+import Kyyn.Domain.Plugin (methodName, qualifiedTypeName)
 import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
@@ -30,10 +32,12 @@ import Kyyn.Porcelain.Validated (validatedValue)
 runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
 runRootStore = interpret $ \_ -> \case
   ReadRootDefinition code -> runExceptT $ do
-    manifest <- decodeFile code "kb.dhall"
+    manifest <- withExceptT (map manifestDiagnostic) $ decodeFile code "kb.dhall"
       (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
-          ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]]))])) >>= record
+          ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]])),
+         ("tools", List (Record [(name, Scalar TextScalar) | name <-
+          ["name", "description", "implementation", "inputType", "resultType"]]))])) >>= record
     typeName <- field "schemaType" manifest >>= text
     metadataName <- field "schemaMetadata" manifest >>= text
     validatorName <- field "validator" manifest >>= text
@@ -45,11 +49,19 @@ runRootStore = interpret $ \_ -> \case
         get "inputType" <*> get "inputMetadata" <*> get "resultType" <*> get "resultMetadata")
     let names = [name | QueryDefinition name _ _ _ _ _ _ <- declarations]
     ensure (all (not . null) names && length names == length (nub names)) "Query names must be nonempty and unique"
+    tools <- field "tools" manifest >>= list >>= traverse (\value -> do
+      fields <- record value
+      let get name = Text.unpack <$> (field name fields >>= text)
+      ToolDefinition <$> (get "name" >>= liftChecked . methodName) <*> get "description"
+        <*> (get "inputType" >>= liftChecked . qualifiedTypeName)
+        <*> (get "resultType" >>= liftChecked . qualifiedTypeName) <*> get "implementation")
+    let toolNames = [name | ToolDefinition name _ _ _ _ <- tools]
+    ensure (length toolNames == length (nub toolNames)) "Tool names must be unique"
     authored <- traverse (\(name,bytes) -> do
       path <- liftChecked (relativePath name)
       pure (path,bytes)) [(name,bytes) | (path,bytes) <- files code, Just name <- [stripPrefix "src/" (relativeName path)]]
     sources <- liftChecked (fileTree authored)
-    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) declarations sources)
+    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) declarations tools sources)
   CheckRootValue selected value -> runExceptT $ do
     let contract = rootSchema selected
     _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)
@@ -63,6 +75,10 @@ runRootStore = interpret $ \_ -> \case
     liftChecked (fileTree (files facts ++ files code))
 
 type Result es = ExceptT [Diagnostic] (Eff es)
+
+manifestDiagnostic :: Diagnostic -> Diagnostic
+manifestDiagnostic (Diagnostic severity code message location) = Diagnostic severity code
+  (message ++ "\nCheck kb.dhall. If this KB has no tools, include: tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }") location
 
 problem :: String -> Result es a
 problem = throwE . pure . errorDiagnostic "root.storage"
