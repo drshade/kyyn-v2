@@ -33,8 +33,9 @@ data ConnectorCommand
   deriving (Eq, Show)
 data EvidenceCommand
   = FetchConnector PluginName ConnectorName
-  | ListFetchHistory PluginName ConnectorName (Maybe FetchId)
-  | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId) (Maybe FetchId)
+  | ListFetchHistory PluginName ConnectorName
+  | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
+  | ClearEvidence PluginName ConnectorName
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
@@ -107,14 +108,14 @@ evidenceParser :: Parser EvidenceCommand
 evidenceParser = hsubparser
   (group "fetch" "Fetch evidence from an accepted connector instance" (FetchConnector <$> plugin <*> instanceName)
   <> group "history" "Inspect retained fetch history" (hsubparser
-      (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName <*> at)))
+      (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))
   <> group "change" "Inspect evidence changes" (hsubparser
-      (group "list" "List changes between retained fetches" (ListEvidenceChanges <$> plugin <*> instanceName
-        <*> optional (option fetchId (long "since" <> metavar "FETCH" <> help "Exclusive previous fetch")) <*> at))))
+      (group "list" "List changes through the latest fetch" (ListEvidenceChanges <$> plugin <*> instanceName
+        <*> optional (option fetchId (long "since" <> metavar "FETCH" <> help "Exclusive previous fetch")))))
+  <> group "clear" "Clear one connector instance's evidence cache" (ClearEvidence <$> plugin <*> instanceName))
   where
     plugin = pluginArgument
     instanceName = argument (eitherReader connectorName) (metavar "INSTANCE")
-    at = optional (option fetchId (long "at" <> metavar "FETCH" <> help "Select a retained fetch instead of the current one"))
     fetchId = eitherReader (\identifier -> if null identifier then Left "Fetch ID must not be empty" else Right (FetchId identifier))
 
 selectionParser :: Parser Selection

@@ -17,6 +17,8 @@ import Kyyn.Domain.Git
 import qualified Kyyn.Domain.GuestApi as Api
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
+import Kyyn.Domain.Plugin (pluginName, connectorName)
+import Kyyn.Surfaces.Connectors (clearResult)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
@@ -34,6 +36,14 @@ import qualified Kyyn.Surfaces.GuestApi as GuestApi
 
 main :: IO ()
 main = do
+  let plugin = either error id (pluginName "local-file")
+      instanceName = either error id (connectorName "sales")
+  mapM_ (\(existed,expected) -> case clearResult plugin instanceName existed of
+    Response _ payload messages _ -> unless
+      (payload == object ["plugin" .= ("local-file" :: String),"connector" .= ("sales" :: String),"cleared" .= existed]
+        && messages == [expected ++ "local-file/sales"])
+      (fail "Clear output did not distinguish existing and absent evidence"))
+    [(True,"Cleared evidence for "),(False,"No cached evidence for ")]
   let render name namespace origin signature = case GuestApi.symbolResult
         (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of
         Response _ _ messages _ -> unlines messages

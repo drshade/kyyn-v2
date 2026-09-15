@@ -183,18 +183,22 @@ data DocumentPersistence :: Effect where
 data DocumentAccess :: Effect where
   ReadCurrent    :: DocumentAccess m (Maybe ByteString)
   ReplaceCurrent :: ByteString -> DocumentAccess m ()
-  ClearCurrent   :: DocumentAccess m ()
+  ClearCurrent   :: DocumentAccess m Bool
   FreshStamp     :: DocumentAccess m DocumentStamp
 
 data DocumentStamp = DocumentStamp
   { identity :: String, timestamp :: String }
 ```
 
-The native interpreter ensures the selected directory exists and holds its
-exclusive lock throughout the callback, releasing it on success, failure or
+The native interpreter holds the scope's exclusive lock throughout the callback,
+releasing it on success, failure or
 cancellation. Current bytes occupy `state.dhall`; replacement uses a temporary
 file and rename within that directory. Missing current data is optional, but
 unreadable data is Failure.
+Clearing removes the scoped directory and its contents and reports whether it existed.
+Its lock file is a sibling
+of that directory, so clearing cannot change the lock identity while a callback
+or another caller holds it. Replacement recreates a cleared directory when needed.
 The stamp supplies an opaque identity and ISO 8601 UTC time, not a domain revision.
 This layer does not parse the document or know KBs, connectors, producers or
 expected evidence heads. Semantic interpreters make those decisions inside the

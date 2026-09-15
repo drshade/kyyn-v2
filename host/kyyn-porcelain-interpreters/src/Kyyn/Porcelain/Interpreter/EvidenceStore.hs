@@ -30,67 +30,40 @@ runEvidenceStore :: forall es a. (DocumentPersistence :> es, Failure :> es, Dhal
 runEvidenceStore kb = interpret $ \_ -> \case
   EvidenceHead instanceRef -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
-    case bytes of
-      Nothing -> pure Nothing
-      Just contents -> do
-        EvidenceHeader _ _ current _ _ <- ExceptT (decodeHeader contents)
-        pure current
+    traverse (fmap (\(EvidenceHeader _ _ current) -> current) . ExceptT . decodeHeader) bytes
   PublishFetch instanceRef producer contract expected changes -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
     header <- traverse (ExceptT . decodeHeader) bytes
-    let current = case header of Just (EvidenceHeader _ _ key _ _) -> key; Nothing -> Nothing
+    let current = case header of Just (EvidenceHeader _ _ key) -> Just key; Nothing -> Nothing
     unless (current == expected) (throwE BaseSnapshotConflict)
-    let same = maybe False (matches producer) header
-    state <- case (same,bytes) of
+    state <- case (maybe False (matches producer) header,bytes) of
       (True,Just contents) -> ExceptT (decodeState producer contract contents)
-      _ -> pure (EvidenceState Nothing [] Nothing [] [])
-    let EvidenceState baseline initial previous values history = state
-    next <- liftEither (applyChanges values changes)
+      _ -> pure (EvidenceState Nothing [] [])
+    let EvidenceState previous values history = state
+    (next,markers) <- liftEither (recordChanges instanceRef values changes)
     DocumentStamp key at <- ExceptT (Right <$> Document.freshStamp)
     let identity = FetchId key
-    let updated = EvidenceState baseline initial (Just identity) next (history ++ [Fetch identity previous at changes])
+        updated = EvidenceState (Just identity) next (history ++ [Fetch identity previous at markers])
     encoded <- ExceptT (encodeState producer contract updated)
     ExceptT $ Right <$> FileSystem.ensureIgnoredDirectory kb cacheLocation
-    case (same,bytes) of
-      (False,Just old) -> ExceptT $ Right <$> Document.archiveCurrent old
-      _ -> pure ()
     ExceptT $ Right <$> Document.replaceCurrent encoded
     pure (EvidenceSnapshotRef instanceRef producer identity)
-  SelectEvidence instanceRef producer selection -> locked instanceRef $ runExceptT $ do
-    contents <- requireCurrent
-    header@(EvidenceHeader _ _ current baseline history) <- ExceptT (decodeHeader contents)
-    unless (matches producer header) (throwE ProducerContractChanged)
-    identity <- case selection of
-      CurrentEvidence -> maybe (throwE HistoryUnavailable) pure current
-      AtFetch identity | Just identity == baseline || identity `elem` history -> pure identity
-                       | otherwise -> throwE HistoryUnavailable
-    pure (EvidenceSnapshotRef instanceRef producer identity)
-  LoadEvidenceSnapshot snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract -> locked instanceRef $ runExceptT $ do
-    state <- load snapshot contract
-    liftEither (snapshotAt state identity)
-  ReadEvidence snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract key -> locked instanceRef $ runExceptT $ do
-    state <- load snapshot contract
-    lookup key <$> liftEither (snapshotAt state identity)
-  ListEvidenceIds snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract -> locked instanceRef $ runExceptT $ do
-    state <- load snapshot contract
-    map fst <$> liftEither (snapshotAt state identity)
-  ReadFetchesBetween snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract base -> locked instanceRef $ runExceptT $ do
-    state <- load snapshot contract
-    liftEither (fetchesBetween state identity base)
-  ListEvidenceChanges snapshot@(EvidenceSnapshotRef instanceRef _ identity) contract base -> locked instanceRef $ runExceptT $ do
-    state <- load snapshot contract
-    selected <- liftEither (fetchesBetween state identity base)
-    initial <- maybe (pure []) (liftEither . snapshotAt state) base
-    liftEither (summarizeChanges instanceRef initial selected)
-  DeleteEvidenceHistory instanceRef producer contract -> locked instanceRef $ runExceptT $ do
-    contents <- requireCurrent
-    state <- ExceptT (decodeState producer contract contents)
-    let EvidenceState _ _ current values _ = state
-    encoded <- ExceptT (encodeState producer contract (EvidenceState current values current values []))
-    ExceptT $ Right <$> Document.replaceCurrent encoded
-    ExceptT $ Right <$> Document.clearArchives
-  ClearEvidence instanceRef -> locked instanceRef $
-    Document.clearCurrent >> Document.clearArchives
+  LoadCurrentEvidence instanceRef producer contract -> locked instanceRef $ runExceptT $ do
+    bytes <- readCurrent
+    traverse (\contents -> do
+      state@(EvidenceState _ values _) <- ExceptT (decodeState producer contract contents)
+      snapshot <- snapshotRef instanceRef producer state
+      pure (CurrentEvidence snapshot values)) bytes
+  ReadFetchHistory instanceRef producer contract -> locked instanceRef $ runExceptT $ do
+    state@(EvidenceState _ _ history) <- load producer contract
+    snapshot <- snapshotRef instanceRef producer state
+    pure (snapshot,map summarizeFetch history)
+  ListEvidenceChanges instanceRef producer contract since -> locked instanceRef $ runExceptT $ do
+    state <- load producer contract
+    snapshot <- snapshotRef instanceRef producer state
+    selected <- liftEither (fetchesSince state since)
+    pure (snapshot,summarizeChanges selected)
+  ClearEvidence instanceRef -> locked instanceRef Document.clearCurrent
   where
     locked :: ConnectorInstanceRef -> Eff (DocumentAccess : es) b -> Eff es b
     locked instanceRef action =
@@ -105,20 +78,21 @@ liftEither :: Either EvidenceProblem a -> Result es a
 liftEither = either throwE pure
 
 matches :: EvidenceProducer -> EvidenceHeader -> Bool
-matches (EvidenceProducer producer contract) (EvidenceHeader stored fingerprint _ _ _) =
+matches (EvidenceProducer producer contract) (EvidenceHeader stored fingerprint _) =
   stored == producer && fingerprint == contractFingerprint contract
 
+snapshotRef :: ConnectorInstanceRef -> EvidenceProducer -> EvidenceState a -> Result es EvidenceSnapshotRef
+snapshotRef instanceRef producer (EvidenceState current _ _) =
+  maybe (throwE NotFetched) (pure . EvidenceSnapshotRef instanceRef producer) current
+
 load :: (DocumentAccess :> es, DhallHandling :> es)
-  => EvidenceSnapshotRef -> CheckedContract -> Result es (EvidenceState CheckedValue)
-load (EvidenceSnapshotRef _ producer _) contract = do
-  contents <- requireCurrent
+  => EvidenceProducer -> CheckedContract -> Result es (EvidenceState CheckedValue)
+load producer contract = do
+  contents <- readCurrent >>= maybe (throwE NotFetched) pure
   ExceptT (decodeState producer contract contents)
 
 readCurrent :: DocumentAccess :> es => Result es (Maybe Bytes.ByteString)
 readCurrent = ExceptT (Right <$> Document.readCurrent)
-
-requireCurrent :: DocumentAccess :> es => Result es Bytes.ByteString
-requireCurrent = readCurrent >>= maybe (throwE HistoryUnavailable) pure
 
 instancePath :: ConnectorInstanceRef -> FilePath
 instancePath (ConnectorInstanceRef plugin name) = pluginNameText plugin ++ "-" ++

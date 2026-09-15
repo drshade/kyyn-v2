@@ -2,11 +2,11 @@ module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCaptured
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Effectful (Eff, (:>), raise)
-import Effectful.State.Static.Local (State, evalState, get, put)
+import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
-import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
-import Kyyn.Domain.Evidence (Evidence(..), EvidenceId(..), EvidenceSnapshotRef, EvidenceProblem, evidenceProblemDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Value (CheckedValue)
@@ -14,57 +14,43 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
-import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import qualified Kyyn.Plumbing.Capability.FileAcquisition as Files
 import Kyyn.Plumbing.Protocol.PluginMessages
 import System.FilePath (takeDirectory, takeFileName)
 
-executeAcquisition :: (GuestExecution :> es, Failure :> es, Store.EvidenceStore :> es, Files.FileAcquisition :> es)
-  => CompiledProgram -> CheckedValue -> CheckedContract -> Maybe EvidenceSnapshotRef
-  -> Eff es (Either [Diagnostic] Value)
-executeAcquisition program config payload prior = evalState (Nothing :: Maybe SnapshotResult) $
-  conversation program config $ \call -> case call of
+executeAcquisition :: (GuestExecution :> es, Failure :> es, Files.FileAcquisition :> es)
+  => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
+executeAcquisition program config prior = conversation program config $ \call -> case call of
   ListFiles directory recursive -> case directoryScope directory of
     Left message -> pure (failure message)
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive
   ReadText path -> case (,) <$> directoryScope (takeDirectory path) <*> relativePath (takeFileName path) of
     Left message -> pure (failure message)
-    Right (scope,name) -> either failure (success . toJSON) <$> Files.readSourceText scope name
-  other -> answerEvidence payload prior other
+    Right (scope,name) -> either failure (\(Files.CapturedText contents (Files.EvidenceFingerprint fingerprint)) ->
+      success (object ["contents" .= contents,"fingerprint" .= fingerprint])) <$> Files.readSourceText scope name
+  other -> answerEvidence prior other
 
-executeCapturedRead :: (GuestExecution :> es, Failure :> es, Store.EvidenceStore :> es, DhallHandling :> es)
-  => CompiledProgram -> CheckedValue -> CheckedContract -> EvidenceSnapshotRef -> CheckedContract
+executeCapturedRead :: (GuestExecution :> es, Failure :> es, DhallHandling :> es)
+  => CompiledProgram -> CheckedValue -> CurrentEvidence -> CheckedContract
   -> Eff es (Either [Diagnostic] Value)
-executeCapturedRead program arguments payload snapshot result = do
-  output <- evalState (Nothing :: Maybe SnapshotResult) $
-    conversation program arguments (answerEvidence payload (Just snapshot))
+executeCapturedRead program arguments current result = do
+  output <- conversation program arguments (answerEvidence (Just current))
   case output of
     Left diagnostics -> pure (Left diagnostics)
     Right value -> fmap (fmap (const value)) (encodeValue (contractShape result) value)
 
-type SnapshotResult = Either EvidenceProblem [(EvidenceId, Evidence CheckedValue)]
-
-answerEvidence :: (Store.EvidenceStore :> es, Failure :> es, State (Maybe SnapshotResult) :> es)
-  => CheckedContract -> Maybe EvidenceSnapshotRef -> PluginCall -> Eff es Value
-answerEvidence payload prior call = case call of
+answerEvidence :: Failure :> es => Maybe CurrentEvidence -> PluginCall -> Eff es Value
+answerEvidence prior call = case call of
   ListEvidence token -> do
     checkToken token
-    either (failure . problemMessage) (success . toJSON . map (\(EvidenceId key,_) -> key)) <$> selected
+    pure (success (toJSON [key | (EvidenceId key,_) <- selected]))
   ReadEvidence token key -> do
     checkToken token
-    result <- fmap (lookup key) <$> selected
-    pure (either (failure . problemMessage) (success . maybe (object ["tag" .= ("None" :: String)])
-      (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value])) result)
+    pure (success (maybe (object ["tag" .= ("None" :: String)])
+      (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value]) (lookup key selected)))
   _ -> broken "Filesystem acquisition is unavailable in this invocation"
   where
-    selected = do
-      loaded <- get
-      case loaded of
-        Just result -> pure result
-        Nothing -> do
-          result <- maybe (pure (Right [])) (\snapshot -> Store.loadEvidenceSnapshot snapshot payload) prior
-          put (Just result)
-          pure result
+    selected = maybe [] (\(CurrentEvidence _ values) -> values) prior
     checkToken token | token == "selected" = pure ()
                      | otherwise = broken "Unknown evidence snapshot handle"
 
@@ -92,6 +78,3 @@ conversation program arguments respond = do
 
 broken :: Failure :> es => String -> Eff es a
 broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput message))
-
-problemMessage :: EvidenceProblem -> String
-problemMessage problem = case evidenceProblemDiagnostic problem of Diagnostic _ _ message _ -> message

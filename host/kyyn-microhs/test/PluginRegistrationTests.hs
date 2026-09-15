@@ -15,9 +15,9 @@ import Effectful (Eff, IOE, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (ValidationReport(..), Diagnostic(..), Severity(..), CheckResult(..))
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
-import Kyyn.Domain.Contract (rootType)
+import Kyyn.Domain.Contract (rootType, contractId)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath, relativeName)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..))
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), CurrentEvidence(..), EvidenceProducer(..))
 import Kyyn.Domain.GuestApi (ApiModule(..), ApiSymbol(..), Namespace(..))
 import Kyyn.MicroHs.ApiInspection (inspectApi)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -34,7 +34,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
 import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources)
 import Kyyn.Plumbing.Capability.Git (Git)
-import Kyyn.Porcelain.Capability.EvidenceStore (listEvidenceIds)
+import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
@@ -122,9 +122,11 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
           (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config))))))))) >>= right >>= right
-        ids <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
-          (listEvidenceIds snapshot payload))))) >>= right >>= right
-        assert "configured local-file did not fetch a real file" (length ids == 1)) instances
+        current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
+          (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
+        assert "configured local-file did not fetch a real file" (case current of
+          Just (CurrentEvidence selected items) -> selected == snapshot && length items == 1
+          Nothing -> False)) instances
     _ -> fail "Wrong plugin registration shape"
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))

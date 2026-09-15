@@ -74,13 +74,16 @@ try {
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   const accepted = git(checkout, 'rev-parse', 'HEAD');
-  assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.history-unavailable');
+  assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch('sales');
   if (configurationSmoke) {
     assert.equal(history('sales').selection.fetch, first);
     assert(fs.existsSync(path.join(kb, '.kyyn/evidence')));
     assert(!fs.existsSync(path.join(checkout, '.kyyn/evidence')));
     assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    const clear = ['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales'];
+    assert.equal(cli(clear).result.cleared, true);
+    assert.equal(cli(clear).result.cleared, false);
     console.log('Installed nested-KB bad-config refusal, repair, acceptance, fetch and history scope smoke passed.');
     return;
   }
@@ -91,21 +94,23 @@ try {
   fs.unlinkSync(path.join(sales, 'removed.txt'));
   fs.writeFileSync(path.join(sales, 'added.txt'), 'New sales evidence');
   const second = fetch('sales');
-  const delta = changes('sales', ['--since', first, '--at', second]);
+  const delta = changes('sales', ['--since', first]);
+  assert.equal(delta.selection.fetch, second);
   assert.deepEqual(delta.changes.map(change => [change.id, change.kind]).sort(),
     [['added.txt', 'New'], ['removed.txt', 'Removed'], ['updated.txt', 'Updated']]);
   for (const change of delta.changes) {
     assert.equal(change.fetch, second);
     assert.equal(change.previous, first);
+    assert.equal(typeof change.fingerprint, 'string');
+    assert(change.fingerprint.length > 0);
     assert.equal(change.citation.connector, 'sales');
     assert(change.citation.references.includes(path.join(sales, change.id)));
   }
   assert.deepEqual(history('sales').fetches.map(entry => entry.id), [first, second]);
-  assert.deepEqual(history('sales', ['--at', first]).fetches.map(entry => entry.id), [first]);
   assert.equal(history('support').selection.fetch, other);
   assert(!JSON.stringify([history('sales'), delta]).includes('sales evidence'));
   const third = fetch('sales');
-  assert.deepEqual(changes('sales', ['--since', second, '--at', third]).changes, []);
+  assert.deepEqual(changes('sales', ['--since', second]).changes, []);
   fs.renameSync(sales, sales + '-offline');
   assert.equal(cli(['evidence', 'fetch', 'local-file', 'sales'], 1).diagnostics[0].code, 'plugin.fetch-failed');
   assert.equal(history('sales').selection.fetch, third);
@@ -114,14 +119,30 @@ try {
   assert.equal(cli(['evidence', 'fetch', 'local-file', 'sales'], 1).diagnostics[0].code, 'plugin.fetch-failed');
   assert.equal(history('sales').selection.fetch, third);
   assert.equal(cli(['evidence', 'fetch', 'local-file', 'draft-only'], 1).diagnostics[0].code, 'plugin.instance-unknown');
-  assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales', '--at', 'missing'], 1).diagnostics[0].code, 'evidence.history-unavailable');
+  assert.equal(cli(['evidence', 'change', 'list', 'local-file', 'sales', '--since', 'missing'], 1).diagnostics[0].code, 'evidence.cursor-unavailable');
   const evidenceDirectory = path.join(kb, '.kyyn/evidence');
-  const stored = fs.readdirSync(evidenceDirectory).map(name => fs.readFileSync(path.join(evidenceDirectory, name, 'state.dhall'), 'utf8')).join('\n');
-  assert(stored.includes('Original sales evidence'), 'CLI-produced history discarded the original payload');
+  const stored = fs.readdirSync(evidenceDirectory, { withFileTypes: true }).filter(entry => entry.isDirectory())
+    .map(entry => fs.readFileSync(path.join(evidenceDirectory, entry.name, 'state.dhall'), 'utf8')).join('\n');
+  assert(!stored.includes('Original sales evidence'), 'Superseded payload was retained');
+  assert(!stored.includes('Removed sales evidence'), 'Removed payload was retained');
   assert(stored.includes('Changed sales evidence'), 'Current evidence was not persisted');
+  fs.unlinkSync(path.join(sales, 'bad.bin'));
+  const salesState = path.join(evidenceDirectory, 'local-file-73616c6573', 'state.dhall');
+  fs.writeFileSync(salesState, '{ broken = True }');
+  const invalid = cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1);
+  assert.equal(invalid.diagnostics[0].code, 'evidence.invalid-data');
+  assert.match(invalid.diagnostics[0].message, /clear.*fetch/i);
+  assert.equal(cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, true);
+  assert(!fs.existsSync(path.dirname(salesState)));
+  assert.equal(cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, false);
+  assert.equal(history('support').selection.fetch, other);
+  assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
+  const refetched = fetch('sales');
+  assert.equal(history('sales').selection.fetch, refetched);
+  assert.equal(cli(['evidence', 'change', 'list', 'local-file', 'sales', '--since', third], 1).diagnostics[0].code, 'evidence.cursor-unavailable');
   assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
   assert.equal(git(checkout, 'ls-files', 'knowledge/.kyyn/evidence'), '');
-  console.log('Installed nested-KB schema/config acceptance, two-instance fetches, retained history, payload-free deltas and failure preservation passed.');
+  console.log('Installed nested-KB config acceptance, latest payloads, change markers, scoped clear/refetch and failure preservation passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

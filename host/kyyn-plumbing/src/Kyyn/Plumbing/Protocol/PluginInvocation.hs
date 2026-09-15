@@ -42,8 +42,8 @@ sources arguments payload result implementation authored = do
           " -> Bindings." ++ mode ++ " (Either SDK.FetchError " ++ resultType ++ ")",
          "selected = " ++ implementation,"main :: IO ()","main = " ++ runtime]
       bindings = unlines $ ["{-# LANGUAGE TypeOperators #-}",
-        "module KyynPluginBindings (Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), Evidence(..), EvidenceChange(..), " ++ mode ++ ", listEvidenceIds, readEvidence" ++
-          (case result of Nothing -> ", listFiles, readTextFile"; Just _ -> "") ++ ") where",
+        "module KyynPluginBindings (Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..), " ++ mode ++ ", listEvidenceIds, readEvidence" ++
+          (case result of Nothing -> ", CapturedText(..), listFiles, readTextFile"; Just _ -> "") ++ ") where",
         "import Kyyn.Plugin","import qualified Kyyn.Types.Program as P","import qualified Kyyn.Types.Plugin as Calls"] ++
         imports [payload] ++
         ["type " ++ mode ++ " a = Program " ++ (case result of
@@ -57,7 +57,7 @@ sources arguments payload result implementation authored = do
         (case result of
           Nothing -> ["listFiles :: FilePath -> Bool -> Acquisition (Either FetchError [FilePath])",
             "listFiles directory recursive = P.request (P.InLeft (Calls.ListFiles directory recursive))",
-            "readTextFile :: FilePath -> Acquisition (Either FetchError String)",
+            "readTextFile :: FilePath -> Acquisition (Either FetchError CapturedText)",
             "readTextFile path = P.request (P.InLeft (Calls.ReadTextFile path))"]
           Just _ -> [])
       inject operation = "P.request (" ++ (case result of Nothing -> "P.InRight (" ++ operation ++ ")"; Just _ -> operation) ++ ")"

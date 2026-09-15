@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult) where
+module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -32,11 +32,17 @@ historyResult snapshot fetches = success (object ["selection" .= context snapsho
 changesResult :: EvidenceSnapshotRef -> [EvidenceChangeSummary] -> Response
 changesResult snapshot changes = success (object ["selection" .= context snapshot,"changes" .= map value changes])
   (if null changes then ["No evidence changes in the selected interval."] else
-    [fetchName identity ++ "  " ++ show kind ++ "  " ++ key | EvidenceChangeSummary identity _ kind (EvidenceId key) _ <- changes])
+    [fetchName identity ++ "  " ++ show kind ++ "  " ++ key | EvidenceChangeSummary identity _ kind (EvidenceId key) _ _ <- changes])
   where
-    value (EvidenceChangeSummary identity previous kind (EvidenceId key) (EvidenceRef producer connector source refs)) = object
+    value (EvidenceChangeSummary identity previous kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef producer connector source refs)) = object
       ["fetch" .= fetchName identity,"previous" .= fmap fetchName previous,"kind" .= show kind,"id" .= key,
+       "fingerprint" .= fingerprint,
        "citation" .= object ["producer" .= producer,"connector" .= connector,"source" .= source,"references" .= refs]]
+
+clearResult :: PluginName -> ConnectorName -> Bool -> Response
+clearResult plugin name existed = success
+  (object ["plugin" .= pluginNameText plugin,"connector" .= text name,"cleared" .= existed])
+  [(if existed then "Cleared evidence for " else "No cached evidence for ") ++ pluginNameText plugin ++ "/" ++ text name]
 
 context :: EvidenceSnapshotRef -> Value
 context (EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ identity) = object

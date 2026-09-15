@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceStore
-  ( EvidenceStore(..), evidenceHead, publishFetch, selectEvidence, loadEvidenceSnapshot, readEvidence, listEvidenceIds
-  , readFetchesBetween, listEvidenceChanges, deleteEvidenceHistory, clearEvidence
+  ( EvidenceStore(..), evidenceHead, publishFetch, loadCurrentEvidence
+  , readFetchHistory, listEvidenceChanges, clearEvidence
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -14,21 +14,13 @@ data EvidenceStore :: Effect where
   EvidenceHead :: ConnectorInstanceRef -> EvidenceStore m (Either EvidenceProblem (Maybe FetchId))
   PublishFetch :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
     -> [EvidenceChange CheckedValue] -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
-  SelectEvidence :: ConnectorInstanceRef -> EvidenceProducer -> EvidenceSelection
-    -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
-  LoadEvidenceSnapshot :: EvidenceSnapshotRef -> CheckedContract
-    -> EvidenceStore m (Either EvidenceProblem [(EvidenceId, Evidence CheckedValue)])
-  ReadEvidence :: EvidenceSnapshotRef -> CheckedContract -> EvidenceId
-    -> EvidenceStore m (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
-  ListEvidenceIds :: EvidenceSnapshotRef -> CheckedContract
-    -> EvidenceStore m (Either EvidenceProblem [EvidenceId])
-  ReadFetchesBetween :: EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
-    -> EvidenceStore m (Either EvidenceProblem [Fetch CheckedValue])
-  ListEvidenceChanges :: EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
-    -> EvidenceStore m (Either EvidenceProblem [EvidenceChangeSummary])
-  DeleteEvidenceHistory :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-    -> EvidenceStore m (Either EvidenceProblem ())
-  ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m ()
+  LoadCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+    -> EvidenceStore m (Either EvidenceProblem (Maybe CurrentEvidence))
+  ReadFetchHistory :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+    -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [FetchSummary]))
+  ListEvidenceChanges :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
+    -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
+  ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m Bool
 
 type instance DispatchOf EvidenceStore = Dynamic
 
@@ -37,26 +29,14 @@ evidenceHead = send . EvidenceHead
 publishFetch :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Maybe FetchId -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
 publishFetch instanceRef producer contract base = send . PublishFetch instanceRef producer contract base
-selectEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> EvidenceSelection
-  -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
-selectEvidence instanceRef producer = send . SelectEvidence instanceRef producer
-loadEvidenceSnapshot :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract
-  -> Eff es (Either EvidenceProblem [(EvidenceId, Evidence CheckedValue)])
-loadEvidenceSnapshot snapshot = send . LoadEvidenceSnapshot snapshot
-readEvidence :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract -> EvidenceId
-  -> Eff es (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
-readEvidence snapshot contract = send . ReadEvidence snapshot contract
-listEvidenceIds :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract
-  -> Eff es (Either EvidenceProblem [EvidenceId])
-listEvidenceIds snapshot = send . ListEvidenceIds snapshot
-readFetchesBetween :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
-  -> Eff es (Either EvidenceProblem [Fetch CheckedValue])
-readFetchesBetween snapshot contract = send . ReadFetchesBetween snapshot contract
-listEvidenceChanges :: EvidenceStore :> es => EvidenceSnapshotRef -> CheckedContract -> Maybe FetchId
-  -> Eff es (Either EvidenceProblem [EvidenceChangeSummary])
-listEvidenceChanges snapshot contract = send . ListEvidenceChanges snapshot contract
-deleteEvidenceHistory :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-  -> Eff es (Either EvidenceProblem ())
-deleteEvidenceHistory instanceRef producer = send . DeleteEvidenceHistory instanceRef producer
-clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es ()
+loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
+loadCurrentEvidence instanceRef producer = send . LoadCurrentEvidence instanceRef producer
+readFetchHistory :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  -> Eff es (Either EvidenceProblem (EvidenceSnapshotRef, [FetchSummary]))
+readFetchHistory instanceRef producer = send . ReadFetchHistory instanceRef producer
+listEvidenceChanges :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
+  -> Eff es (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
+listEvidenceChanges instanceRef producer contract = send . ListEvidenceChanges instanceRef producer contract
+clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es Bool
 clearEvidence = send . ClearEvidence

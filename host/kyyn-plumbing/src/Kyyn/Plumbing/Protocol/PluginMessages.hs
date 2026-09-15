@@ -69,13 +69,14 @@ parseResult = parseEither (exact ["tag","value"] $ \o -> do
     _ -> fail "Expected typed Left or Right result")
 
 evidenceValue :: Evidence CheckedValue -> Value
-evidenceValue (Evidence refs (CheckedValue _ payload)) = object ["references" .= refs,"payload" .= payload]
+evidenceValue (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue _ payload)) =
+  object ["fingerprint" .= fingerprint,"references" .= refs,"payload" .= payload]
 
 changesShape :: Shape -> Shape
 changesShape payload = List (Union [("New",Just entry),("Updated",Just entry),("Removed",Just text)])
   where
     text = Scalar TextScalar
-    entry = Record [("id",text),("evidence",Record [("references",List text),("payload",payload)])]
+    entry = Record [("id",text),("evidence",Record [("fingerprint",text),("references",List text),("payload",payload)])]
 
 parseChanges :: CheckedContract -> Value -> Either String [EvidenceChange CheckedValue]
 parseChanges contract = parseEither (withArray "evidence changes" (traverse change . toList))
@@ -90,6 +91,7 @@ parseChanges contract = parseEither (withArray "evidence changes" (traverse chan
         _ -> fail "Unknown evidence change"
     entry constructor = exact ["id","evidence"] $ \o -> do
       key <- EvidenceId <$> o .: "id"
-      payload <- o .: "evidence" >>= exact ["references","payload"] (\e ->
-        Evidence <$> e .: "references" <*> (CheckedValue (contractId contract) <$> e .: "payload"))
+      payload <- o .: "evidence" >>= exact ["fingerprint","references","payload"] (\e ->
+        Evidence <$> (EvidenceFingerprint <$> e .: "fingerprint") <*> e .: "references"
+          <*> (CheckedValue (contractId contract) <$> e .: "payload"))
       pure (constructor key payload)

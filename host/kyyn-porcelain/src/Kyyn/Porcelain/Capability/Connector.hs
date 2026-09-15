@@ -1,6 +1,6 @@
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
-  , connectorFetchHistory, connectorEvidenceChanges ) where
+  , connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
@@ -8,7 +8,7 @@ import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), CheckResult(..), errorDiagnostic)
 import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
 import Kyyn.Domain.DataType (Shape)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceSelection, FetchId, FetchSummary, EvidenceChangeSummary)
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), FetchId, FetchSummary, EvidenceChangeSummary)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..))
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
@@ -18,12 +18,16 @@ import Kyyn.Domain.Root (SourceRoot(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetchEvidence)
 import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, fetchHistory, evidenceChanges)
+import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.PluginPreparation
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadSourceAt, loadRootAt)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution, prepareRoot, preparedPlugins)
 import Kyyn.Porcelain.Capability.Validation (checkPreparedRoot)
+
+clearConnectorEvidence :: Store.EvidenceStore :> es => PluginName -> ConnectorName -> Eff es Bool
+clearConnectorEvidence plugin name = Store.clearEvidence (ConnectorInstanceRef plugin (coerce name))
 
 listConfiguredConnectors :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName
@@ -43,18 +47,18 @@ connectorConfigurationSchema kb revision workspace plugin = runExceptT $ do
   pure (instanceShape [(name,contractShape config) | PreparedConnector name config _ _ _ <- connectors])
 
 connectorFetchHistory :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
-  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> EvidenceSelection
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
   -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[FetchSummary]))
-connectorFetchHistory kb revision plugin name selection = runExceptT $ do
+connectorFetchHistory kb revision plugin name = runExceptT $ do
   (instanceRef,producer,payload) <- evidenceContext kb revision plugin name
-  ExceptT (fetchHistory instanceRef producer payload selection)
+  ExceptT (fetchHistory instanceRef producer payload)
 
 connectorEvidenceChanges :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
-  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> EvidenceSelection -> Maybe FetchId
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Maybe FetchId
   -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[EvidenceChangeSummary]))
-connectorEvidenceChanges kb revision plugin name selection since = runExceptT $ do
+connectorEvidenceChanges kb revision plugin name since = runExceptT $ do
   (instanceRef,producer,payload) <- evidenceContext kb revision plugin name
-  ExceptT (evidenceChanges instanceRef producer payload selection since)
+  ExceptT (evidenceChanges instanceRef producer payload since)
 
 evidenceContext :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName

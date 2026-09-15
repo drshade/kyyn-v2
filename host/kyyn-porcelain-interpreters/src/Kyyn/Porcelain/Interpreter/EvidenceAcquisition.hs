@@ -19,17 +19,15 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition
 runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
 runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config) -> runExceptT $ do
-  base <- ExceptT (fmap (either (Left . problem) Right) (Store.evidenceHead instanceRef))
   let producer = EvidenceProducer package (contractId payload)
-  prior <- case base of
-    Nothing -> pure Nothing
-    Just identity -> do
-      selected <- ExceptT (Right <$> Store.selectEvidence instanceRef producer (AtFetch identity))
-      case selected of
-        Left ProducerContractChanged -> pure Nothing
-        Left failure -> throwE (problem failure)
-        Right snapshot -> pure (Just snapshot)
-  result <- ExceptT (executeAcquisition program config payload prior)
+  observedHead <- ExceptT (fmap (either (Left . problem) Right) (Store.evidenceHead instanceRef))
+  loaded <- ExceptT (Right <$> Store.loadCurrentEvidence instanceRef producer payload)
+  (base,prior) <- case loaded of
+    Right Nothing -> pure (Nothing,Nothing)
+    Right current@(Just (CurrentEvidence (EvidenceSnapshotRef _ _ identity) _)) -> pure (Just identity,current)
+    Left ProducerContractChanged -> pure (observedHead,Nothing)
+    Left failure -> throwE (problem failure)
+  result <- ExceptT (executeAcquisition program config prior)
   _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
   changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload result)
   ExceptT (fmap (either (Left . problem) Right) (Store.publishFetch instanceRef producer payload base changes))

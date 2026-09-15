@@ -1,11 +1,14 @@
 module Kyyn.Types.Evidence
-  ( EvidenceRef(..), EvidenceId(..), Evidence(..), EvidenceChange(..) ) where
+  ( EvidenceRef(..), EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..) ) where
 
 -- | A plugin-defined item identity within one connector instance.
 newtype EvidenceId = EvidenceId String deriving (Eq, Show)
 
--- | Source links and the plugin's typed captured payload.
-data Evidence a = Evidence [String] a deriving (Eq, Show)
+-- | An opaque connector-defined token identifying captured contents.
+newtype EvidenceFingerprint = EvidenceFingerprint String deriving (Eq, Show)
+
+-- | Content fingerprint, source links and the plugin's typed captured payload.
+data Evidence a = Evidence EvidenceFingerprint [String] a deriving (Eq, Show)
 
 -- | Changes declared by a source connector against its prior snapshot.
 data EvidenceChange a = NewEvidence EvidenceId (Evidence a)

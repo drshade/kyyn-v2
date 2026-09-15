@@ -133,7 +133,9 @@ data EvidenceRead payload a where
 
 data FileRead a where
   ListFiles :: FilePath -> Bool -> FileRead (Either FetchError [FilePath])
-  ReadTextFile :: FilePath -> FileRead (Either FetchError String)
+  ReadTextFile :: FilePath -> FileRead (Either FetchError CapturedText)
+
+data CapturedText = CapturedText String EvidenceFingerprint
 
 -- Generated for the plugin's inspected Payload type.
 type Acquisition a = Program (FileRead :+: EvidenceRead Payload) a
@@ -141,7 +143,10 @@ type CapturedRead a = Program (EvidenceRead Payload) a
 ```
 
 The snapshot argument is explicit. Acquisition may enumerate the source and read
-files; captured readers have only the two snapshot questions above. The folder
+files; captured readers have only the two snapshot questions above. Native text
+acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
+from the same captured bytes. The generated `readTextFile` returns both together.
+The folder
 proof requires an absolute directory and returns a typed error before requesting
 effects for a relative path. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised
@@ -202,10 +207,16 @@ it dispatches, not GuestCompilation. For example:
 
 ```haskell
 executeAcquisition
-  :: (GuestExecution :> es, EvidenceStore :> es, FileAcquisition :> es, Failure :> es)
-  => CompiledProgram -> CheckedValue -> CheckedContract -> Maybe EvidenceSnapshotRef
+  :: (GuestExecution :> es, FileAcquisition :> es, Failure :> es)
+  => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence
   -> Eff es (Either [Diagnostic] Value)
 ```
+
+The acquisition workflow loads current evidence before entering the broker.
+Guest evidence reads use that immutable input directly; the broker has no
+EvidenceStore requirement. Publication uses the loaded fetch as its expected base.
+When the producer has changed, acquisition instead starts empty and uses the
+head observed before the refused load as its replacement base.
 
 GuestExecution supplies both one-shot evaluation and conversational execution
 (ADR 0002). The latter preserves the broker callback's effect row while the guest

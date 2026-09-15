@@ -1,15 +1,15 @@
 ---
 id: 0014
 title: 'Latest evidence informs the KB; change markers support curation'
-status: proposed
+status: accepted
 date: 2026-09-15
 ---
 # Latest evidence informs the KB; change markers support curation
 
 Basis: owner-directed latest-only evidence model. The accepted KB is our prior
 understanding; the latest successful acquisition supplies current external input.
-Accepted evolutions update the KB. Implementation of this storage revision and
-typed plugin read discovery/KB helpers remains outstanding.
+Accepted evolutions update the KB. Latest-only storage and plugin acquisition are
+implemented; typed plugin read discovery/KB helpers remain outstanding.
 
 ## Context
 
@@ -71,7 +71,9 @@ producer. An unchanged captured representation has the same token; changed conte
 has a different token. Item IDs identify items; fingerprints compare their captured
 content. The host does not attempt to infer business equivalence.
 
-For local files, use a content hash. A connector may instead use a suitable provider
+For local files, use a content hash. The first-party folder connector combines the
+source path with that digest, so changing its directory updates matching items and
+their source references too. A connector may instead use a suitable provider
 revision or hash of a deliberately chosen stable representation. Exclude fetch
 timestamps and other incidental acquisition metadata from that representation.
 Plugins own this choice; there is no requirement to canonicalize arbitrary external

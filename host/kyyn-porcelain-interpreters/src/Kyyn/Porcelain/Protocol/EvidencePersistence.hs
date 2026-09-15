@@ -1,7 +1,6 @@
 module Kyyn.Porcelain.Protocol.EvidencePersistence
   ( encodeState, decodeState, decodeHeader, EvidenceHeader(..) ) where
 
-import Control.Monad (unless)
 import Data.Aeson (Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
 import Data.ByteString (ByteString)
@@ -13,22 +12,23 @@ import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (PackageIdentity(..))
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 
-data EvidenceHeader = EvidenceHeader PackageIdentity String (Maybe FetchId) (Maybe FetchId) [FetchId] deriving (Eq, Show)
+data EvidenceHeader = EvidenceHeader PackageIdentity String FetchId deriving (Eq, Show)
 
 headerShape :: Shape
-headerShape = Record [("producer",text),("contract",text),("current",Optional text),("baseline",Optional text),("fetches",List text)]
+headerShape = Record [("producer",text),("contract",text),("current",text)]
 
 stateShape :: Shape -> Shape
-stateShape payload = Record [("header",headerShape),
-  ("initial",members),("values",members),("history",List fetch)]
+stateShape payload = Record [("header",headerShape),("values",members),("history",List fetch)]
   where
-    evidence = Record [("references",List text),("payload",payload)]
+    evidence = Record [("fingerprint",text),("references",List text),("payload",payload)]
     members = List (Record [("id",text),("evidence",evidence)])
-    entry = Record [("id",text),("evidence",evidence)]
-    change = Union [("New",Just entry),("Updated",Just entry),("Removed",Just text)]
-    fetch = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List change)]
+    citation = Record ([(name,text) | name <- ["producer","connector","source"]] ++ [("references",List text)])
+    marker = Record [("kind",Union [(name,Nothing) | name <- ["New","Updated","Removed"]]),
+      ("id",text),("fingerprint",text),("citation",citation)]
+    fetch = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker)]
 
 text :: Shape
 text = Scalar TextScalar
@@ -38,7 +38,7 @@ optional Nothing = object ["tag" .= ("None" :: String)]
 optional (Just (FetchId value)) = object ["tag" .= ("Some" :: String),"value" .= value]
 
 parseOptional :: Value -> Parser (Maybe FetchId)
-parseOptional = withObject "fetch selection" $ \fields -> do
+parseOptional = withObject "fetch cursor" $ \fields -> do
   tag <- fields .: "tag"
   case tag :: String of
     "None" -> pure Nothing
@@ -48,9 +48,7 @@ parseOptional = withObject "fetch selection" $ \fields -> do
 parseHeader :: Value -> Parser EvidenceHeader
 parseHeader = withObject "evidence header" $ \fields -> EvidenceHeader
   <$> (PackageIdentity <$> fields .: "producer") <*> fields .: "contract"
-  <*> (fields .: "current" >>= parseOptional)
-  <*> (fields .: "baseline" >>= parseOptional)
-  <*> (map FetchId <$> fields .: "fetches")
+  <*> (FetchId <$> fields .: "current")
 
 decodeHeader :: DhallHandling :> es => ByteString -> Eff es (Either EvidenceProblem EvidenceHeader)
 decodeHeader bytes = case Text.decodeUtf8' bytes of
@@ -59,7 +57,7 @@ decodeHeader bytes = case Text.decodeUtf8' bytes of
 
 encodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> EvidenceState CheckedValue
   -> Eff es (Either EvidenceProblem ByteString)
-encodeState (EvidenceProducer (PackageIdentity producer) identity) contract state@(EvidenceState baseline initial current values history)
+encodeState (EvidenceProducer (PackageIdentity producer) identity) contract state@(EvidenceState current values history)
   | identity /= contractId contract = pure (Left ProducerContractChanged)
   | otherwise = case encodedValue of
       Left problem -> pure (Left problem)
@@ -69,24 +67,20 @@ encodeState (EvidenceProducer (PackageIdentity producer) identity) contract stat
   where
     encodedValue = do
       validateState state
-      initialValues <- traverse member initial
+      FetchId currentKey <- maybe (Left (InvalidEvidence "A stored evidence state must have a fetch")) Right current
       currentValues <- traverse member values
-      fetchValues <- traverse fetch history
       pure (object ["header" .= object ["producer" .= producer,
-        "contract" .= contractFingerprint identity,"current" .= optional current,"baseline" .= optional baseline,
-        "fetches" .= [key | Fetch (FetchId key) _ _ _ <- history]],
-        "initial" .= initialValues,"values" .= currentValues,"history" .= fetchValues])
-    evidence (Evidence refs (CheckedValue actual value))
-      | actual == identity = Right (object ["references" .= refs,"payload" .= value])
+        "contract" .= contractFingerprint identity,"current" .= currentKey],
+        "values" .= currentValues,"history" .= map fetch history])
+    evidence (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue actual value))
+      | actual == identity = Right (object ["fingerprint" .= fingerprint,"references" .= refs,"payload" .= value])
       | otherwise = Left ProducerContractChanged
     member (EvidenceId key,value) = (\e -> object ["id" .= key,"evidence" .= e]) <$> evidence value
-    change (NewEvidence key value) = tagged "New" <$> member (key,value)
-    change (UpdatedEvidence key value) = tagged "Updated" <$> member (key,value)
-    change (RemovedEvidence (EvidenceId key)) = Right (object ["tag" .= ("Removed" :: String),"value" .= key])
-    tagged :: String -> Value -> Value
-    tagged tag value = object ["tag" .= tag,"value" .= value]
-    fetch (Fetch (FetchId key) previous at changes) = (\entries -> object
-      ["id" .= key,"previous" .= optional previous,"fetchedAt" .= at,"changes" .= entries]) <$> traverse change changes
+    marker (EvidenceChangeMarker kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef plugin connector source refs)) =
+      object ["kind" .= object ["tag" .= show kind],"id" .= key,"fingerprint" .= fingerprint,
+        "citation" .= object ["producer" .= plugin,"connector" .= connector,"source" .= source,"references" .= refs]]
+    fetch (Fetch (FetchId key) previous at changes) = object
+      ["id" .= key,"previous" .= optional previous,"fetchedAt" .= at,"changes" .= map marker changes]
 
 decodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> ByteString
   -> Eff es (Either EvidenceProblem (EvidenceState CheckedValue))
@@ -96,33 +90,36 @@ decodeState (EvidenceProducer producer identity) contract bytes
       header <- decodeHeader bytes
       case header of
         Left problem -> pure (Left problem)
-        Right (EvidenceHeader selected fingerprint _ _ _) | selected /= producer || fingerprint /= contractFingerprint identity ->
+        Right (EvidenceHeader selected fingerprint _) | selected /= producer || fingerprint /= contractFingerprint identity ->
           pure (Left ProducerContractChanged)
         Right _ -> case Text.decodeUtf8' bytes of
           Left problem -> pure (Left (InvalidEvidence (show problem)))
           Right source -> decode (stateShape (contractShape contract)) parseState source
   where
-    evidence = withObject "evidence" $ \fields -> Evidence <$> fields .: "references"
-      <*> (CheckedValue identity <$> fields .: "payload")
+    evidence = withObject "evidence" $ \fields -> Evidence <$> (EvidenceFingerprint <$> fields .: "fingerprint")
+      <*> fields .: "references" <*> (CheckedValue identity <$> fields .: "payload")
     member = withObject "evidence member" $ \fields -> (,)
       <$> (EvidenceId <$> fields .: "id") <*> (fields .: "evidence" >>= evidence)
-    change = withObject "change" $ \fields -> do
+    kind = withObject "change kind" $ \fields -> do
       tag <- fields .: "tag"
       case tag :: String of
-        "New" -> uncurry NewEvidence <$> (fields .: "value" >>= member)
-        "Updated" -> uncurry UpdatedEvidence <$> (fields .: "value" >>= member)
-        "Removed" -> RemovedEvidence . EvidenceId <$> fields .: "value"
+        "New" -> pure New
+        "Updated" -> pure Updated
+        "Removed" -> pure Removed
         _ -> fail "Unknown change kind"
+    citation = withObject "citation" $ \fields -> EvidenceRef <$> fields .: "producer" <*> fields .: "connector"
+      <*> fields .: "source" <*> fields .: "references"
+    marker = withObject "change marker" $ \fields -> EvidenceChangeMarker
+      <$> (fields .: "kind" >>= kind) <*> (EvidenceId <$> fields .: "id")
+      <*> (EvidenceFingerprint <$> fields .: "fingerprint") <*> (fields .: "citation" >>= citation)
     fetch = withObject "fetch" $ \fields -> Fetch <$> (FetchId <$> fields .: "id")
       <*> (fields .: "previous" >>= parseOptional) <*> fields .: "fetchedAt"
-      <*> (fields .: "changes" >>= traverse change)
+      <*> (fields .: "changes" >>= traverse marker)
     parseState = withObject "evidence state" $ \fields -> do
-      EvidenceHeader _ _ current baseline keys <- fields .: "header" >>= parseHeader
-      initial <- fields .: "initial" >>= traverse member
+      EvidenceHeader _ _ current <- fields .: "header" >>= parseHeader
       values <- fields .: "values" >>= traverse member
       history <- fields .: "history" >>= traverse fetch
-      unless (keys == [key | Fetch key _ _ _ <- history]) (fail "Fetch index disagrees with history")
-      let state = EvidenceState baseline initial current values history
+      let state = EvidenceState (Just current) values history
       either (fail . show) pure (validateState state)
       pure state
 

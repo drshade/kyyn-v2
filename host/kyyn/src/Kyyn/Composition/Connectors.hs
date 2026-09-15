@@ -6,7 +6,6 @@ import Effectful (Eff)
 import Kyyn.Configuration (Host, SelectedKb(..))
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
-import Kyyn.Domain.Evidence
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Porcelain.Capability.Connector
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
@@ -47,18 +46,23 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
     pure (schemaResult plugin schema)
 
 dispatchEvidence :: Host -> Cli.EvidenceCommand -> SelectedKb -> IO Response
-dispatchEvidence host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
-  Cli.FetchConnector plugin name -> case knowledgeBaseScope kb of
+dispatchEvidence host command (SelectedKb kb revision _) = case command of
+  Cli.ClearEvidence plugin name -> case knowledgeBaseScope kb of
+    Left message -> pure (refusal [errorDiagnostic "kb.path" message])
+    Right scope -> finish $ runBase host . runDocumentPersistenceIO . runEvidenceStore scope $ do
+      existed <- clearConnectorEvidence plugin name
+      pure (clearResult plugin name existed)
+  Cli.FetchConnector plugin name -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
       . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
-  Cli.ListFetchHistory plugin name at -> inspectEvidence toolchain sdk $
-    fmap (fmap (uncurry historyResult)) (connectorFetchHistory kb revision plugin name (maybe CurrentEvidence AtFetch at))
-  Cli.ListEvidenceChanges plugin name since at -> inspectEvidence toolchain sdk $
-    fmap (fmap (uncurry changesResult)) (connectorEvidenceChanges kb revision plugin name (maybe CurrentEvidence AtFetch at) since)
+  Cli.ListFetchHistory plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
+    fmap (fmap (uncurry historyResult)) (connectorFetchHistory kb revision plugin name)
+  Cli.ListEvidenceChanges plugin name since -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
+    fmap (fmap (uncurry changesResult)) (connectorEvidenceChanges kb revision plugin name since)
   where
     inspectEvidence toolchain sdk action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
