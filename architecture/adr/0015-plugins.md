@@ -209,8 +209,9 @@ Evidence-producing methods should supply useful source identifiers as described
 in [evidence](0014-evidence.md): a stable URI where available, a scoped provider
 item ID, or a local file path. Citations should remain meaningful outside Kyyn's
 temporary evidence cache, without promising permanent access to the source.
-No source-version, fingerprint or historical-reconstruction obligation accompanies
-that guidance; identifying the cited item is sufficient.
+Identifying the cited item is sufficient for provenance; citations need no version
+or fingerprint. The separate operational fingerprint required for current evidence
+and refresh comparison belongs to ADR 0014, not the citation contract.
 
 The distributed plugin is an inspectable source directory with its declarations
 and dependencies, not a supplied WASM/native/combinator executable. Installation

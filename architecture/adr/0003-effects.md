@@ -183,9 +183,7 @@ data DocumentPersistence :: Effect where
 data DocumentAccess :: Effect where
   ReadCurrent    :: DocumentAccess m (Maybe ByteString)
   ReplaceCurrent :: ByteString -> DocumentAccess m ()
-  ArchiveCurrent :: ByteString -> DocumentAccess m ()
   ClearCurrent   :: DocumentAccess m ()
-  ClearArchives  :: DocumentAccess m ()
   FreshStamp     :: DocumentAccess m DocumentStamp
 
 data DocumentStamp = DocumentStamp
@@ -195,8 +193,8 @@ data DocumentStamp = DocumentStamp
 The native interpreter ensures the selected directory exists and holds its
 exclusive lock throughout the callback, releasing it on success, failure or
 cancellation. Current bytes occupy `state.dhall`; replacement uses a temporary
-file and rename within that directory. Archives use fresh identities under
-`archives/`; missing current data is optional, but unreadable data is Failure.
+file and rename within that directory. Missing current data is optional, but
+unreadable data is Failure.
 The stamp supplies an opaque identity and ISO 8601 UTC time, not a domain revision.
 This layer does not parse the document or know KBs, connectors, producers or
 expected evidence heads. Semantic interpreters make those decisions inside the
