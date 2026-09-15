@@ -6,7 +6,7 @@ import Data.List (isInfixOf, stripPrefix)
 import Data.Version (showVersion)
 import Data.Coerce (coerce)
 import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..))
-import Data.Aeson (encode, object, (.=), toJSON)
+import Data.Aeson (Value, encode, object, (.=), toJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
@@ -69,14 +69,23 @@ type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, Gues
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
-  let declaration name = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
+  let declaration name = withMethods name []
+      withMethods name methods = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
         "payloadType" .= ("LocalFile.Types.Document" :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
-        "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= ([] :: [String])]
+        "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= (methods :: [Value])]
+      methodValue name input = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
+        "inputType" .= (input :: String),"resultType" .= ("LocalFile.Types.Content" :: String),
+        "implementation" .= ("LocalFile.Read.content" :: String)]
       rejected :: Either e a -> Bool
       rejected (Left _) = True
       rejected _ = False
   forM_ [[declaration "Folder",declaration "Folder"],[declaration "folder"],[object ["name" .= ("Folder" :: String)]]] $
     \value -> assert "Invalid connector registration accepted" (rejected (decodeConnectors (Lazy.toStrict (encode value))))
+  let validMethod = methodValue "content" "LocalFile.Types.ContentId"
+  forM_ [[validMethod,validMethod],[methodValue "case" "LocalFile.Types.ContentId"],[methodValue "content" "String"]] $ \methods ->
+    assert "Invalid method registration accepted" (case decodeConnectors (Lazy.toStrict (encode [withMethods "Folder" methods])) of
+      Left message -> "Folder" `isInfixOf` message
+      Right _ -> False)
   let instanceValue name binding = object ["name" .= (name :: String),"binding" .= (binding :: String),
         "connector" .= object ["tag" .= ("Folder" :: String),"value" .= object []]]
   forM_ [[instanceValue "same" "a",instanceValue "same" "b"],[instanceValue "one" "case"],

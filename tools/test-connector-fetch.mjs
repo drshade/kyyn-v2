@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const configurationSmoke = process.argv[3] === '--configuration-smoke';
-if (process.argv.length !== 3 && !(process.argv.length === 4 && configurationSmoke))
-  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke]');
+const readSmoke = process.argv[3] === '--read-smoke';
+if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke)))
+  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke]');
 const executable = path.resolve(process.argv[2]);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-connector-fetch-'));
@@ -38,6 +39,8 @@ const configuration = entries => 'let Connector = < Folder : { directory : Text,
 const fetch = name => cli(['evidence', 'fetch', 'local-file', name]).result.fetch;
 const history = (name, options = []) => cli(['evidence', 'history', 'list', 'local-file', name, ...options]).result;
 const changes = (name, options = []) => cli(['evidence', 'change', 'list', 'local-file', name, ...options]).result;
+const content = (name, id, expected = 0) => cli(['plugin', 'connector', 'method', 'execute', 'local-file', name,
+  'content', '--input', JSON.stringify(id)], expected);
 function main() {
 try {
   git(temporary, 'config', '--global', 'user.name', 'Evidence fixture');
@@ -68,6 +71,14 @@ try {
   // The emitted schema is directly usable as the configuration's annotation.
   fs.writeFileSync(configPath, `(${configuration([['sales', sales], ['support', support]])}) : (${schema})\n`);
   assert.equal(cli(['plugin', 'connector', 'list', 'local-file', '--evolution', draft.id]).result.connectors.length, 2);
+  if (readSmoke || !configurationSmoke) {
+    const methods = cli(['plugin', 'connector', 'method', 'list', 'local-file', 'sales', '--evolution', draft.id]).result.methods;
+    assert.deepEqual(methods.map(method => method.name), ['content']);
+    assert.match(methods[0].description, /latest fetched text/);
+    const contract = cli(['plugin', 'connector', 'method', 'show', 'local-file', 'sales', 'content', '--evolution', draft.id]).result;
+    assert.equal(contract.inputType.trim(), 'Text');
+    assert.equal(contract.resultType.trim(), 'Text');
+  }
   assert.equal(cli(['evidence', 'fetch', 'local-file', 'sales'], 1).diagnostics[0].code, 'plugin.unknown');
   console.log('Checking and accepting two configured instances...');
   cli(['evolution', 'check', draft.id]);
@@ -75,6 +86,8 @@ try {
   cli(['evolution', 'accept', draft.id]);
   const accepted = git(checkout, 'rev-parse', 'HEAD');
   assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
+  if (readSmoke || !configurationSmoke)
+    assert.equal(content('sales', 'updated.txt', 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch('sales');
   if (configurationSmoke) {
     assert.equal(history('sales').selection.fetch, first);
@@ -88,12 +101,35 @@ try {
     return;
   }
   const other = fetch('support');
+  if (readSmoke || !configurationSmoke) {
+    fs.renameSync(sales, sales + '-offline');
+    assert.equal(content('sales', 'updated.txt').result, 'Original sales evidence Ω');
+    assert.equal(content('support', 'ticket.txt').result, 'Independent support evidence');
+    assert.equal(content('sales', 'ticket.txt', 1).diagnostics[0].code, 'plugin.read-failed');
+    const badInput = cli(['plugin', 'connector', 'method', 'execute', 'local-file', 'sales', 'content', '--input', 'True'], 1);
+    assert.equal(badInput.diagnostics[0].code, 'dhall.type');
+    assert.equal(cli(['plugin', 'connector', 'method', 'show', 'local-file', 'sales', 'missing'], 1).diagnostics[0].code, 'plugin.method-unknown');
+    fs.renameSync(sales + '-offline', sales);
+  }
   assert.equal(changes('sales').changes.length, 3);
   assert.equal(changes('support').changes.length, 1);
   fs.writeFileSync(path.join(sales, 'updated.txt'), 'Changed sales evidence λ');
   fs.unlinkSync(path.join(sales, 'removed.txt'));
   fs.writeFileSync(path.join(sales, 'added.txt'), 'New sales evidence');
   const second = fetch('sales');
+  if (readSmoke || !configurationSmoke) {
+    assert.equal(content('sales', 'updated.txt').result, 'Changed sales evidence λ');
+    assert.equal(content('sales', 'removed.txt', 1).diagnostics[0].code, 'plugin.read-failed');
+    const human = spawnSync(executable, ['--kb', kb, 'plugin', 'connector', 'method', 'execute',
+      'local-file', 'support', 'content', '--input', '"ticket.txt"'], { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    assert.equal(human.status, 0, JSON.stringify(human));
+    assert.equal(human.stdout.trim(), '"Independent support evidence"');
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    if (readSmoke) {
+      console.log('Installed typed method discovery, captured content, refresh/removal, independent instances, input refusal and Dhall output passed.');
+      return;
+    }
+  }
   const delta = changes('sales', ['--since', first]);
   assert.equal(delta.selection.fetch, second);
   assert.deepEqual(delta.changes.map(change => [change.id, change.kind]).sort(),

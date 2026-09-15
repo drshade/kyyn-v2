@@ -1,4 +1,4 @@
-{-# LANGUAGE DuplicateRecordFields, NoFieldSelectors #-}
+{-# LANGUAGE NoFieldSelectors #-}
 module LocalFile.Plugin (description, connectors) where
 
 import Kyyn.Plugin (SourceConnector(..), CapturedMethod(..))
@@ -14,7 +14,7 @@ connectors = [SourceConnector
   , fetch = "LocalFile.Folder.fetch"
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
-      { name = "content"
+      { methodName = "content"
       , description = "Read the latest fetched text of a file by its evidence ID."
       , inputType = "LocalFile.Types.ContentId"
       , resultType = "LocalFile.Types.Content"

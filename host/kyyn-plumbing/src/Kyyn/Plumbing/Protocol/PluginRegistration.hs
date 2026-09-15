@@ -12,7 +12,7 @@ import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Plugin (ConnectorDeclaration(..), CapturedMethodDeclaration(..), connectorTypeName, qualifiedTypeName, methodName)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
-import Kyyn.Types.Plugin (SourceConnector(..), CapturedMethod(..))
+import Kyyn.Types.Plugin (SourceConnector(SourceConnector), CapturedMethod(CapturedMethod))
 
 registrationSources :: String -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
 registrationSources entryModule sources = do

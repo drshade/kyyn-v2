@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, DuplicateRecordFields #-}
+{-# LANGUAGE GADTs #-}
 module Kyyn.Types.Plugin
   ( SourceConnector(..), CapturedMethod(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
 
@@ -22,11 +22,16 @@ data SourceConnector = SourceConnector
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.
 data CapturedMethod = CapturedMethod
-  { name :: String
-  , description :: String
-  , inputType :: String
-  , resultType :: String
-  , implementation :: String
+  { -- | Unique lowercase Haskell identifier within this connector, such as content.
+    methodName :: String
+  , -- | Description shown when an agent or human discovers the method.
+    description :: String
+  , -- | Qualified Haskell input type or type alias.
+    inputType :: String
+  , -- | Qualified Haskell result type or type alias.
+    resultType :: String
+  , -- | Qualified function: Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result).
+    implementation :: String
   } deriving (Eq, Show)
 
 -- | A selected captured-evidence snapshot, read through the generated plugin bindings.
