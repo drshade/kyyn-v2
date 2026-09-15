@@ -30,9 +30,7 @@ runDocumentPersistenceIO = interpret $ \env (WithLockedDocument scope action) ->
     Exception.bracket
       (native Failure.InspectEntry directory (lockFile (directory ++ ".lock") Exclusive))
       (native Failure.InspectEntry directory . unlockFile)
-      (const $ do
-        native Failure.EnsureDirectory directory (createDirectoryIfMissing True directory)
-        unlift (interpret (\_ operation -> liftLocal (handleDocument directory operation)) action))
+      (const (unlift (interpret (\_ operation -> liftLocal (handleDocument directory operation)) action)))
 
 handleDocument :: (IOE :> es, Failure :> es) => FilePath -> DocumentAccess m a -> Eff es a
 handleDocument directory = \case
@@ -59,13 +57,13 @@ freshIdentity = do
   second <- randomIO :: IO Word64
   pure (showHex first "-" ++ showHex second "")
 
-removeOptional :: FilePath -> IO ()
+removeOptional :: FilePath -> IO Bool
 removeOptional path = do
   result <- try (removeDirectoryRecursive path)
   case result of
-    Left err | isDoesNotExistError err -> pure ()
+    Left err | isDoesNotExistError err -> pure False
              | otherwise -> ioError err
-    Right () -> pure ()
+    Right () -> pure True
 
 native :: (IOE :> es, Failure :> es) => Failure.StorageOperation -> FilePath -> IO a -> Eff es a
 native operation path action = liftIO action `Exception.catch` \(err :: IOException) ->

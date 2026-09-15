@@ -20,7 +20,7 @@ data EvidenceStore :: Effect where
     -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [FetchSummary]))
   ListEvidenceChanges :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
     -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
-  ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m ()
+  ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m Bool
 
 type instance DispatchOf EvidenceStore = Dynamic
 
@@ -38,5 +38,5 @@ readFetchHistory instanceRef producer = send . ReadFetchHistory instanceRef prod
 listEvidenceChanges :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
   -> Eff es (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
 listEvidenceChanges instanceRef producer contract = send . ListEvidenceChanges instanceRef producer contract
-clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es ()
+clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es Bool
 clearEvidence = send . ClearEvidence

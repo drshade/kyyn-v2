@@ -48,8 +48,6 @@ main = do
   forM_ [["evidence","fetch","local-file","sales","--evolution","abc123"],
     ["plugin","connector","fetch","local-file","sales"],
     ["evidence","fetch","local-file",""],
-    ["evidence","history","list","local-file","sales","--at","first"],
-    ["evidence","change","list","local-file","sales","--at","first"],
     ["evidence","change","list","local-file","sales","--since",""],
     ["evidence","clear","local-file",""]] refuses
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))

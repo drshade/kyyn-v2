@@ -81,6 +81,9 @@ try {
     assert(fs.existsSync(path.join(kb, '.kyyn/evidence')));
     assert(!fs.existsSync(path.join(checkout, '.kyyn/evidence')));
     assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    const clear = ['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales'];
+    assert.equal(cli(clear).result.cleared, true);
+    assert.equal(cli(clear).result.cleared, false);
     console.log('Installed nested-KB bad-config refusal, repair, acceptance, fetch and history scope smoke passed.');
     return;
   }
@@ -129,8 +132,9 @@ try {
   const invalid = cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1);
   assert.equal(invalid.diagnostics[0].code, 'evidence.invalid-data');
   assert.match(invalid.diagnostics[0].message, /clear.*fetch/i);
-  cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']);
+  assert.equal(cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, true);
   assert(!fs.existsSync(path.dirname(salesState)));
+  assert.equal(cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, false);
   assert.equal(history('support').selection.fetch, other);
   assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
   const refetched = fetch('sales');

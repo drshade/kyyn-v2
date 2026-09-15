@@ -30,7 +30,7 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   empty <- execute scope readCurrent
   assert "missing document wasn't optional" (empty == Nothing)
   exists <- doesDirectoryExist path
-  assert "lock didn't create directory" exists
+  assert "read created the document directory" (not exists)
   execute scope (replaceCurrent "0")
   let increment = execute scope $ do
         bytes <- readCurrent
@@ -49,13 +49,16 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   cancel worker
   resumed <- timeout 2000000 (execute scope readCurrent)
   assert "cancelled callback retained lock" (resumed == Just (Just "40"))
-  execute scope (clearCurrent >> clearCurrent)
+  firstClear <- execute scope clearCurrent
+  secondClear <- execute scope clearCurrent
+  assert "clear did not distinguish existing from missing scope" (firstClear && not secondClear)
   absent <- not <$> doesDirectoryExist path
   assert "clear retained the scoped directory" absent
   lockExists <- doesFileExist (path ++ ".lock")
   assert "clear removed lock identity" lockExists
   cleared <- execute scope readCurrent
   assert "clear didn't remove document" (cleared == Nothing)
+  createDirectory path
   createDirectory (path </> "extra")
   Bytes.writeFile (path </> "extra/contents") "discard me"
   execute scope (clearCurrent >> replaceCurrent "replacement")
@@ -65,7 +68,7 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   clearedWhileLocked <- newEmptyMVar
   release <- newEmptyMVar
   holder <- async $ execute scope $ do
-    clearCurrent
+    _ <- clearCurrent
     liftIO (putMVar clearedWhileLocked () >> takeMVar release)
     replaceCurrent "after clear"
   takeMVar clearedWhileLocked
@@ -83,8 +86,9 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   observed <- wait waiter
   assert "clear allowed another callback to acquire a different lock" (premature == Nothing)
   assert "waiting callback did not see post-clear replacement" (observed == Just "after clear")
-  execute scope clearCurrent
+  _ <- execute scope clearCurrent
   _ <- execute scope readCurrent
+  createDirectory path
   createDirectory (path </> "state.dhall")
   refused <- runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope (replaceCurrent "cannot replace directory"))))
   assert "replacement failure swallowed" (isLeft refused)

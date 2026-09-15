@@ -1,6 +1,6 @@
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
-  , connectorFetchHistory, connectorEvidenceChanges ) where
+  , connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
@@ -18,12 +18,16 @@ import Kyyn.Domain.Root (SourceRoot(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetchEvidence)
 import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, fetchHistory, evidenceChanges)
+import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.PluginPreparation
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadSourceAt, loadRootAt)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution, prepareRoot, preparedPlugins)
 import Kyyn.Porcelain.Capability.Validation (checkPreparedRoot)
+
+clearConnectorEvidence :: Store.EvidenceStore :> es => PluginName -> ConnectorName -> Eff es Bool
+clearConnectorEvidence plugin name = Store.clearEvidence (ConnectorInstanceRef plugin (coerce name))
 
 listConfiguredConnectors :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName

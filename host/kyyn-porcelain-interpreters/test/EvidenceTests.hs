@@ -190,12 +190,15 @@ main = do
     assert "producer replacement retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
     entries <- listDirectory storePath
     assert "producer replacement retained extra documents" (entries == ["state.dhall"])
-    run (clearEvidence instanceA)
+    existed <- run (clearEvidence instanceA)
+    assert "clearing present evidence reported no cache" existed
     remaining <- doesDirectoryExist storePath
     assert "clear retained the instance cache" (not remaining)
     absent <- load instanceA changedProducer
     otherStill <- load instanceB producer
     assert "clear failed or crossed instance boundary" (absent == Nothing && otherStill == other)
+    absentClear <- run (clearEvidence instanceA)
+    assert "clearing absent evidence reported a cache" (not absentClear)
     fresh <- run (publishFetch instanceA changedProducer contract Nothing []) >>= right
     emptyCapture <- load instanceA changedProducer
     assert "empty capture confused with not fetched" (emptyCapture == Just (CurrentEvidence fresh []))
@@ -206,8 +209,9 @@ main = do
     assert "malformed evidence became absent" (case bad of Left (InvalidEvidence _) -> True; _ -> False)
     badFetch <- run (publishFetch instanceA changedProducer contract (Just (key fresh)) [])
     assert "fetch silently replaced unreadable data" (isLeft badFetch)
-    run (clearEvidence instanceA)
+    _ <- run (clearEvidence instanceA)
     _ <- load instanceA changedProducer
+    createDirectory storePath
     createDirectory statePath
     failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope (evidenceHead instanceA)))))
     assert "storage error became absent evidence" (isLeft failedRead)

@@ -2,16 +2,12 @@
 module Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
-import Data.Coerce (coerce)
 import Effectful (Eff)
 import Kyyn.Configuration (Host, SelectedKb(..))
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
-import Kyyn.Domain.Evidence
-import Kyyn.Domain.Plugin (ConnectorName(..))
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Porcelain.Capability.Connector
-import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
@@ -54,8 +50,8 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
   Cli.ClearEvidence plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> finish $ runBase host . runDocumentPersistenceIO . runEvidenceStore scope $ do
-      Store.clearEvidence (ConnectorInstanceRef plugin (coerce name))
-      pure (clearResult plugin name)
+      existed <- clearConnectorEvidence plugin name
+      pure (clearResult plugin name existed)
   Cli.FetchConnector plugin name -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO

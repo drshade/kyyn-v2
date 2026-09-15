@@ -175,6 +175,7 @@ and `plugin.instance-unknown`; a typed acquisition refusal is `plugin.fetch-fail
 History and change results contain fetch identifiers, ordering and citations,
 never payloads. `--since` is exclusive; the ending fetch is always the latest.
 Clearing discards only the selected instance's local evidence and change markers.
+It needs neither the runtime nor plugin preparation, and reports whether a cache existed.
 Unavailable cursors, unfetched instances, incompatible producers, publication conflicts and malformed
 deltas remain distinct: `evidence.cursor-unavailable`, `evidence.not-fetched`, `evidence.producer-changed`,
 `evidence.base-conflict`, `evidence.invalid-delta` and `evidence.invalid-data`

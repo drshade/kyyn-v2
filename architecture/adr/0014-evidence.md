@@ -1,15 +1,15 @@
 ---
 id: 0014
 title: 'Latest evidence informs the KB; change markers support curation'
-status: proposed
+status: accepted
 date: 2026-09-15
 ---
 # Latest evidence informs the KB; change markers support curation
 
 Basis: owner-directed latest-only evidence model. The accepted KB is our prior
 understanding; the latest successful acquisition supplies current external input.
-Accepted evolutions update the KB. Implementation of this storage revision and
-typed plugin read discovery/KB helpers remains outstanding.
+Accepted evolutions update the KB. Latest-only storage and plugin acquisition are
+implemented; typed plugin read discovery/KB helpers remain outstanding.
 
 ## Context
 

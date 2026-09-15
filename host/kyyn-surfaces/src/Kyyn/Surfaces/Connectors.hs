@@ -39,9 +39,10 @@ changesResult snapshot changes = success (object ["selection" .= context snapsho
        "fingerprint" .= fingerprint,
        "citation" .= object ["producer" .= producer,"connector" .= connector,"source" .= source,"references" .= refs]]
 
-clearResult :: PluginName -> ConnectorName -> Response
-clearResult plugin name = success (object ["plugin" .= pluginNameText plugin,"connector" .= text name])
-  ["Cleared evidence for " ++ pluginNameText plugin ++ "/" ++ text name]
+clearResult :: PluginName -> ConnectorName -> Bool -> Response
+clearResult plugin name existed = success
+  (object ["plugin" .= pluginNameText plugin,"connector" .= text name,"cleared" .= existed])
+  [(if existed then "Cleared evidence for " else "No cached evidence for ") ++ pluginNameText plugin ++ "/" ++ text name]
 
 context :: EvidenceSnapshotRef -> Value
 context (EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ identity) = object
