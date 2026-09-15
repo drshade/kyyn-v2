@@ -56,7 +56,7 @@ itemA = EvidenceId "a.txt"
 itemB = EvidenceId "b.txt"
 
 value :: String -> Evidence CheckedValue
-value name = Evidence (EvidenceFingerprint name) ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack name)))
+value name = Evidence (EvidenceFingerprint name) ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack ("payload-only-" ++ name))))
 
 execute :: DirectoryScope -> Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
 execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope action)))) >>= right
@@ -84,24 +84,24 @@ main = do
       Left (InvalidDelta _) -> True; _ -> False)
   sequential <- right (applyChanges [] [NewEvidence itemA (value "a"),UpdatedEvidence itemA (value "b"),RemovedEvidence itemA])
   assert "changes not applied in order" (null sequential)
-  let state = EvidenceState Nothing [] (Just (FetchId "one")) initial [Fetch (FetchId "one") Nothing "2026-09-11" first]
-  assert "unrecorded initial payloads accepted" (isLeft (validateState (EvidenceState Nothing initial Nothing initial [])))
-  assert "corrupt derivative accepted" (isLeft (validateState (EvidenceState Nothing [] (Just (FetchId "one")) []
-    [Fetch (FetchId "one") Nothing "2026-09-11" first])))
+  (_,markers) <- right (recordChanges instanceA [] first)
+  let state = EvidenceState (Just (FetchId "one")) initial [Fetch (FetchId "one") Nothing "2026-09-11" markers]
+  assert "values without a fetch accepted" (isLeft (validateState (EvidenceState Nothing initial [])))
+  assert "corrupt current metadata accepted" (isLeft (validateState
+    (EvidenceState (Just (FetchId "one")) [] [Fetch (FetchId "one") Nothing "2026-09-11" markers])))
   bytes <- right (runPureEff (runDhallHandling (encodeState producer contract state)))
   restored <- right (runPureEff (runDhallHandling (decodeState producer contract bytes)))
   assert "Dhall state round trip differs" (state == restored)
   assert "state is not Dhall" (Bytes.isInfixOf "New" bytes && Bytes.isInfixOf "payload" bytes)
-  badBytes <- right (runPureEff (runDhallHandling (decodeHeader bytes)))
-  assert "header loses current" (badBytes == EvidenceHeader (PackageIdentity "package-contents-one") (contractFingerprint (contractId contract)) (Just (FetchId "one")) Nothing [FetchId "one"])
+  header <- right (runPureEff (runDhallHandling (decodeHeader bytes)))
+  assert "header loses current" (header == EvidenceHeader (PackageIdentity "package-contents-one")
+    (contractFingerprint (contractId contract)) (FetchId "one"))
   assert "Dhall import accepted" (isLeft (runPureEff (runDhallHandling (decodeHeader "./untrusted.dhall"))))
   let wrongProducer = EvidenceProducer (PackageIdentity "different-source") (contractId contract)
       headerOnly = interpret $ \_ request -> case request of
-        DecodeValue (Record fields) _ | map fst fields == ["producer","contract","current","baseline","fetches"] ->
+        DecodeValue (Record fields) _ | map fst fields == ["producer","contract","current"] ->
           pure (Right (object ["producer" .= ("package-contents-one" :: String),
-            "contract" .= contractFingerprint (contractId contract),
-            "current" .= object ["tag" .= ("None" :: String)],
-            "baseline" .= object ["tag" .= ("None" :: String)],"fetches" .= ([] :: [String])]))
+            "contract" .= contractFingerprint (contractId contract),"current" .= ("one" :: String)]))
         _ -> error "Producer refusal attempted payload decoding or encoding"
   assert "producer mismatch reached payload decoder"
     (runPureEff (headerOnly (decodeState wrongProducer contract bytes)) == Left ProducerContractChanged)
@@ -109,14 +109,18 @@ main = do
     scope <- right (directoryScope directory)
     let run :: Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
         run = execute scope
-    empty <- run (evidenceHead instanceA) >>= right
-    assert "new store has a head" (empty == Nothing)
-    missing <- run (selectEvidence instanceA producer CurrentEvidence)
-    assert "missing snapshot looks empty" (missing == Left HistoryUnavailable)
+        load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
+        storePath = directory </> ".kyyn/evidence/folder-73616c6573"
+        statePath = storePath </> "state.dhall"
+    empty <- load instanceA producer
+    assert "new store has current evidence" (empty == Nothing)
+    missing <- run (readFetchHistory instanceA producer contract)
+    assert "missing fetch looks like an empty successful fetch" (missing == Left NotFetched)
     let ignorePath = directory </> ".kyyn/.gitignore"
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
     f1 <- run (publishFetch instanceA producer contract Nothing first) >>= right
+    saved <- load instanceA producer
     ignore <- Bytes.readFile ignorePath
     assert "first publication did not ignore local evidence" (ignore == "*\n")
     Bytes.writeFile ignorePath "*\n# preserve local comment\n"
@@ -124,29 +128,31 @@ main = do
     f2 <- run (publishFetch instanceA producer contract (Just (key f1)) second) >>= right
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
-    old <- run (readEvidence f1 contract itemA) >>= right
-    latest <- run (readEvidence f2 contract itemA) >>= right
-    other <- run (readEvidence independent contract itemA) >>= right
-    removed <- run (readEvidence f2 contract itemB) >>= right
-    assert "historical payload followed latest" (old == Just (value "old"))
-    assert "current payload incorrect" (latest == Just (value "new"))
-    assert "instances share evidence" (other == Just (value "independent"))
+    latest <- load instanceA producer
+    other <- load instanceB producer
+    assert "current payload or removal incorrect" (latest == Just (CurrentEvidence f2 [(itemA,value "new")]))
+    assert "loaded invocation input changed after publication" (saved == Just (CurrentEvidence f1 initial))
+    assert "instances share evidence" (other == Just (CurrentEvidence independent [(itemA,value "independent")]))
+    persisted <- Bytes.readFile statePath
+    assert "replaced or removed payload remains on disk"
+      (not (Bytes.isInfixOf "payload-only-old" persisted || Bytes.isInfixOf "payload-only-removed" persisted)
+        && Bytes.isInfixOf "payload-only-new" persisted)
     withSystemTempDirectory "kyyn-other-evidence-" $ \otherDirectory -> do
       otherScope <- right (directoryScope otherDirectory)
       otherHead <- execute otherScope (evidenceHead instanceA) >>= right
       assert "same instance leaked into another KB" (otherHead == Nothing)
-    assert "removed item still exists" (removed == Nothing)
-    summaries <- run (listEvidenceChanges f2 contract (Just (key f1))) >>= right
+    (_,summaries) <- run (listEvidenceChanges instanceA producer contract (Just (key f1))) >>= right
     assert "summary metadata/citation wrong" (summaries ==
-      [EvidenceChangeSummary (key f2) (Just (key f1)) Updated itemA (EvidenceRef "folder" "sales" "a.txt" ["/source/new"]),
-       EvidenceChangeSummary (key f2) (Just (key f1)) Removed itemB (EvidenceRef "folder" "sales" "b.txt" ["/source/removed"])])
-    batch <- run (readFetchesBetween f2 contract (Just (key f1))) >>= right
-    assert "fetch delta lost payload" (case batch of [Fetch _ _ _ changes] -> changes == second; _ -> False)
-    assert "fetch timestamp is not ISO 8601 UTC" (case batch of
-      [Fetch _ _ at _] -> case iso8601ParseM at :: Maybe UTCTime of Just _ -> last at == 'Z'; Nothing -> False
-      _ -> False)
-    foreignBase <- run (readFetchesBetween f2 contract (Just (key independent)))
-    assert "foreign cursor treated as empty" (foreignBase == Left HistoryUnavailable)
+      [EvidenceChangeSummary (key f2) (Just (key f1)) Updated itemA (EvidenceFingerprint "new") (EvidenceRef "folder" "sales" "a.txt" ["/source/new"]),
+       EvidenceChangeSummary (key f2) (Just (key f1)) Removed itemB (EvidenceFingerprint "removed") (EvidenceRef "folder" "sales" "b.txt" ["/source/removed"])])
+    (at,batches) <- run (readFetchHistory instanceA producer contract) >>= right
+    assert "history is not metadata through the current fetch" (at == f2 && length batches == 2)
+    assert "fetch timestamp is not ISO 8601 UTC" (all (\(FetchSummary _ _ time _) ->
+      case iso8601ParseM time :: Maybe UTCTime of Just _ -> last time == 'Z'; Nothing -> False) batches)
+    foreignBase <- run (listEvidenceChanges instanceA producer contract (Just (key independent)))
+    assert "foreign cursor treated as empty" (foreignBase == Left CursorUnavailable)
+    currentSpan <- run (listEvidenceChanges instanceA producer contract (Just (key f2))) >>= right
+    assert "current cursor did not produce an empty span" (currentSpan == (f2,[]))
     stale <- run (publishFetch instanceA producer contract (Just (key f1)) [])
     assert "stale base accepted" (stale == Left BaseSnapshotConflict)
     wrong <- run (publishFetch instanceA producer contract (Just (key f2)) [NewEvidence itemA (value "bad")])
@@ -155,65 +161,60 @@ main = do
       [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (CheckedValue (contractId contract) (Bool True)))])
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
     let boolContract = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
-    wrongContract <- run (readEvidence f2 boolContract itemA)
-    assert "snapshot decoded under wrong contract" (wrongContract == Left ProducerContractChanged)
+    wrongContract <- run (loadCurrentEvidence instanceA producer boolContract)
+    assert "evidence decoded under wrong contract" (wrongContract == Left ProducerContractChanged)
     tip <- run (evidenceHead instanceA) >>= right
     assert "refusal changed head" (tip == Just (key f2))
     (left,rightResult) <- concurrently
       (run (publishFetch instanceA producer contract (Just (key f2)) []))
       (run (publishFetch instanceA producer contract (Just (key f2)) []))
-    assert "concurrent writers both published" (case (left,rightResult) of
-      (Right _,Left BaseSnapshotConflict) -> True
-      (Left BaseSnapshotConflict,Right _) -> True
-      _ -> False)
-    f3 <- run (selectEvidence instanceA producer CurrentEvidence) >>= right
-    _ <- run (deleteEvidenceHistory instanceA producer contract) >>= right
-    oldGone <- run (selectEvidence instanceA producer (AtFetch (key f1)))
-    selfSpan <- run (readFetchesBetween f3 contract (Just (key f3)))
-    historyGone <- run (readFetchesBetween f3 contract (Just (key f1)))
-    retained <- run (readEvidence f3 contract itemA) >>= right
-    assert "deleted history silently usable" (oldGone == Left HistoryUnavailable && historyGone == Left HistoryUnavailable)
-    assert "baseline self-span needs deleted deltas" (selfSpan == Right [])
-    assert "history deletion removed current" (retained == Just (value "new"))
-    f4 <- run (publishFetch instanceA producer contract (Just (key f3)) [UpdatedEvidence itemA (value "four")]) >>= right
-    f5 <- run (publishFetch instanceA producer contract (Just (key f4)) [UpdatedEvidence itemA (value "five")]) >>= right
-    postDeletion <- run (readEvidence f4 contract itemA) >>= right
-    assert "historical reconstruction after deletion failed" (postDeletion == Just (value "four"))
-    afterDeletion <- run (readFetchesBetween f5 contract (Just (key f4))) >>= right
-    assert "new history after deletion unavailable" (length afterDeletion == 1)
-    baseline <- run (selectEvidence instanceA producer (AtFetch (key f3))) >>= right
-    baselineValue <- run (readEvidence baseline contract itemA) >>= right
-    assert "baseline value lost after later fetches" (baselineValue == Just (value "new"))
-    fromBaseline <- run (listEvidenceChanges f5 contract (Just (key f3))) >>= right
-    assert "baseline span lost retained deltas" (fromBaseline ==
-      [EvidenceChangeSummary (key f4) (Just (key f3)) Updated itemA (EvidenceRef "folder" "sales" "a.txt" ["/source/four"]),
-       EvidenceChangeSummary (key f5) (Just (key f4)) Updated itemA (EvidenceRef "folder" "sales" "a.txt" ["/source/five"])])
-    unknown <- run (readFetchesBetween (EvidenceSnapshotRef instanceA producer (FetchId "unknown")) contract (Just (FetchId "unknown")))
-    assert "unknown self-span silently accepted" (unknown == Left HistoryUnavailable)
+    f3 <- case (left,rightResult) of
+      (Right result,Left BaseSnapshotConflict) -> pure result
+      (Left BaseSnapshotConflict,Right result) -> pure result
+      _ -> fail "concurrent writers did not produce exactly one publication"
     let changedProducer = EvidenceProducer (PackageIdentity "package-contents-two") (contractId contract)
-    incompatible <- run (selectEvidence instanceA changedProducer CurrentEvidence)
+    incompatible <- run (loadCurrentEvidence instanceA changedProducer contract)
     assert "same-schema producer change accepted" (incompatible == Left ProducerContractChanged)
-    changed <- run (publishFetch instanceA changedProducer contract (Just (key f5)) [NewEvidence itemA (value "refetched")]) >>= right
-    oldProducer <- run (readEvidence f5 contract itemA)
+    failedReset <- run (publishFetch instanceA changedProducer contract (Just (key f3)) [RemovedEvidence itemA])
+    assert "invalid new-producer batch accepted" (isLeft failedReset)
+    retained <- load instanceA producer
+    assert "failed producer refetch changed evidence" (retained == Just (CurrentEvidence f3 [(itemA,value "new")]))
+    changed <- run (publishFetch instanceA changedProducer contract (Just (key f3)) [NewEvidence itemA (value "refetched")]) >>= right
+    oldProducer <- run (loadCurrentEvidence instanceA producer contract)
     assert "old producer reinterpreted" (oldProducer == Left ProducerContractChanged)
-    reset <- run (readFetchesBetween changed contract Nothing) >>= right
-    assert "new producer carried previous delta base" (case reset of [Fetch _ Nothing _ _] -> True; _ -> False)
-    entries <- listDirectory (directory </> ".kyyn/evidence/folder-73616c6573")
+    (_,reset) <- run (readFetchHistory instanceA changedProducer contract) >>= right
+    assert "new producer carried previous change base" (case reset of [FetchSummary _ Nothing _ _] -> True; _ -> False)
+    lostCursor <- run (listEvidenceChanges instanceA changedProducer contract (Just (key f3)))
+    assert "reset producer retained old cursor" (lostCursor == Left CursorUnavailable)
+    replaced <- Bytes.readFile statePath
+    assert "producer replacement retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
+    entries <- listDirectory storePath
     assert "producer replacement retained extra documents" (entries == ["state.dhall"])
     run (clearEvidence instanceA)
-    remaining <- doesDirectoryExist (directory </> ".kyyn/evidence/folder-73616c6573")
+    remaining <- doesDirectoryExist storePath
     assert "clear retained the instance cache" (not remaining)
-    absent <- run (evidenceHead instanceA) >>= right
-    otherStill <- run (readEvidence independent contract itemA) >>= right
-    assert "clear failed or crossed instance boundary" (absent == Nothing && otherStill == Just (value "independent"))
-    let statePath = directory </> ".kyyn/evidence/folder-73616c6573/state.dhall"
+    absent <- load instanceA changedProducer
+    otherStill <- load instanceB producer
+    assert "clear failed or crossed instance boundary" (absent == Nothing && otherStill == other)
+    fresh <- run (publishFetch instanceA changedProducer contract Nothing []) >>= right
+    emptyCapture <- load instanceA changedProducer
+    assert "empty capture confused with not fetched" (emptyCapture == Just (CurrentEvidence fresh []))
+    unavailable <- run (listEvidenceChanges instanceA changedProducer contract (Just (key changed)))
+    assert "cleared cursor remained usable" (unavailable == Left CursorUnavailable)
+    Bytes.writeFile statePath "{ malformed = True }"
+    bad <- run (loadCurrentEvidence instanceA changedProducer contract)
+    assert "malformed evidence became absent" (case bad of Left (InvalidEvidence _) -> True; _ -> False)
+    badFetch <- run (publishFetch instanceA changedProducer contract (Just (key fresh)) [])
+    assert "fetch silently replaced unreadable data" (isLeft badFetch)
+    run (clearEvidence instanceA)
+    _ <- load instanceA changedProducer
     createDirectory statePath
     failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope (evidenceHead instanceA)))))
-    assert "storage error became absent history" (isLeft failedRead)
+    assert "storage error became absent evidence" (isLeft failedRead)
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
-  putStrLn "Evidence store: delta, Dhall, history, deletion, producer and concurrent publication checks passed."
+  putStrLn "Evidence store: latest payloads, markers, Dhall, cursors, producer reset, clear and concurrent publication passed."
 
 type Recording = (Maybe Bytes.ByteString,[String])
 

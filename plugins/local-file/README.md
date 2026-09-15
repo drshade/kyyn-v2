@@ -54,3 +54,10 @@ Omit `--since` to list all retained change markers. History and changes return
 identifiers and summaries; plugin reads use the latest captured document contents.
 Fetches are checkout-local Dhall data, not Git commits;
 they do not change accepted facts. A draft configuration cannot acquire evidence.
+
+To discard one instance's local evidence and fetch it again:
+
+```sh
+kyyn-v2 --kb /path/to/kb evidence clear local-file documents
+kyyn-v2 --kb /path/to/kb evidence fetch local-file documents
+```

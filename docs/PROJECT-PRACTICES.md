@@ -48,10 +48,11 @@ captured-read fixtures under both compilers. A recording host exchanges real JSO
 pipe frames: typed config/prior evidence, new/updated/removed changes, Unicode,
 enumeration/read failures and malformed replies. Both compilers reject filesystem
 calls from the captured-read entry. The native MicroHs broker also fetches real files,
-publishes successive Dhall evidence batches, reads historical payloads and verifies
+publishes successive Dhall evidence batches, reads latest captured input and verifies
 that unchanged files and failed acquisitions do not manufacture changes. Recording
-handlers check that malformed, unknown-snapshot and out-of-row requests never reach
-storage. They also check one snapshot load for repeated reads; a native fixture
+handlers check that malformed, unknown-snapshot and out-of-row requests are refused.
+They also check one current-evidence load before guest execution and the loaded
+fetch as publication's expected base; the broker has no storage capability. A native fixture
 publishes another fetch between callbacks and verifies that the invocation still
 sees its original input. This focused check does not exercise plugin registration
 or a CLI command.
@@ -70,7 +71,8 @@ fetch signature. This is a focused native integration check, not an installed CL
 producer journey in a disposable nested KB: discover the emitted Dhall schema,
 configure and accept two instances, fetch and change real files, inspect retained
 history and payload-free deltas, and preserve the head after acquisition failures.
-It checks retained payload bytes without adding a generic evidence-view endpoint.
+It checks superseded/removed payload absence, invalid-data repair and scoped
+clear/refetch without a runtime bundle, without adding a generic evidence-view endpoint.
 It belongs to the full installed check and can be run independently for changes
 to this boundary; it does not implement typed plugin reads or KB helpers.
 
@@ -81,9 +83,9 @@ and Git handlers, without network access, a guest compiler or plugin invocation.
 It is included in the fast check.
 
 `cabal test evidence-store --test-show-details=direct` checks ordered delta application,
-real Dhall persistence, instance isolation, historical payloads and payload-free change
-summaries, concurrent expected-base publication, history deletion with current-value
-retention, whole-store clear and producer-change refusal. It requires no guest compiler,
+real Dhall persistence, instance isolation, latest-only payloads and payload-free change
+summaries, concurrent expected-base publication, cursor refusal, scoped clear,
+producer-change refusal/reset and malformed-data repair. It requires no guest compiler,
 plugin invocation or external provider. [ADR 0014](../architecture/adr/0014-evidence.md)
 owns the store layout and persistence contract.
 This suite lives in `kyyn-porcelain-interpreters`; it includes a pure recording

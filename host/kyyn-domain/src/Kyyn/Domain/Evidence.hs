@@ -1,9 +1,9 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evidence
   ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
-  , Evidence(..), EvidenceChange(..), Fetch(..), EvidenceState(..), EvidenceSelection(..)
-  , EvidenceSnapshotRef(..), EvidenceProblem(..), ChangeKind(..), EvidenceChangeSummary(..)
-  , applyChanges, snapshotAt, fetchesBetween, summarizeChanges, validateState
+  , Evidence(..), EvidenceChange(..), Fetch(..), EvidenceState(..), CurrentEvidence(..)
+  , EvidenceSnapshotRef(..), EvidenceProblem(..), ChangeKind(..), EvidenceChangeMarker(..), EvidenceChangeSummary(..)
+  , applyChanges, recordChanges, fetchesSince, summarizeChanges, validateState
   , evidenceProblemDiagnostic, FetchSummary(..), summarizeFetch
   ) where
 
@@ -12,45 +12,53 @@ import Data.List (nub)
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
 
 newtype FetchId = FetchId String deriving (Eq, Show)
 data ConnectorInstanceRef = ConnectorInstanceRef PluginName String deriving (Eq, Show)
 data EvidenceProducer = EvidenceProducer PackageIdentity ContractId deriving (Eq, Show)
-data Fetch a = Fetch
+data Fetch = Fetch
   { identity :: FetchId, previous :: Maybe FetchId, fetchedAt :: String
-  , changes :: [EvidenceChange a]
+  , changes :: [EvidenceChangeMarker]
   } deriving (Eq, Show)
 data FetchSummary = FetchSummary FetchId (Maybe FetchId) String Int deriving (Eq, Show)
 
-summarizeFetch :: Fetch a -> FetchSummary
+summarizeFetch :: Fetch -> FetchSummary
 summarizeFetch (Fetch identity previous at changes) = FetchSummary identity previous at (length changes)
 
 data EvidenceState a = EvidenceState
-  { baseline :: Maybe FetchId, initial :: [(EvidenceId, Evidence a)]
-  , current :: Maybe FetchId, values :: [(EvidenceId, Evidence a)]
-  , history :: [Fetch a]
+  { current :: Maybe FetchId, values :: [(EvidenceId, Evidence a)], history :: [Fetch]
   } deriving (Eq, Show)
-data EvidenceSelection = CurrentEvidence | AtFetch FetchId deriving (Eq, Show)
+data CurrentEvidence = CurrentEvidence
+  { snapshot :: EvidenceSnapshotRef, items :: [(EvidenceId, Evidence CheckedValue)]
+  } deriving (Eq, Show)
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
-data EvidenceProblem = HistoryUnavailable | ProducerContractChanged
+data EvidenceProblem = CursorUnavailable | NotFetched | ProducerContractChanged
   | BaseSnapshotConflict | InvalidDelta String | InvalidEvidence String
   deriving (Eq, Show)
 
 evidenceProblemDiagnostic :: EvidenceProblem -> Diagnostic
 evidenceProblemDiagnostic problem = case problem of
-  HistoryUnavailable -> errorDiagnostic "evidence.history-unavailable"
-    "The selected evidence history is unavailable. Choose a retained fetch or fetch this connector again."
+  CursorUnavailable -> errorDiagnostic "evidence.cursor-unavailable"
+    "The evidence cursor is unavailable. Reconcile against current evidence and record a new cursor."
+  NotFetched -> errorDiagnostic "evidence.not-fetched"
+    "This connector has no captured evidence. Fetch it before reading its evidence."
   ProducerContractChanged -> errorDiagnostic "evidence.producer-changed"
     "The plugin source or evidence schema has changed. Fetch this connector again before reading its evidence."
   BaseSnapshotConflict -> errorDiagnostic "evidence.base-conflict"
     "Another fetch advanced this connector while acquisition was running. Retry against its new head."
   InvalidDelta message -> errorDiagnostic "evidence.invalid-delta" message
-  InvalidEvidence message -> errorDiagnostic "evidence.invalid-data" message
+  InvalidEvidence message -> errorDiagnostic "evidence.invalid-data"
+    (message ++ " Clear this instance with evidence clear PLUGIN INSTANCE, then fetch it again.")
+
 data ChangeKind = New | Updated | Removed deriving (Eq, Show)
+data EvidenceChangeMarker = EvidenceChangeMarker
+  { kind :: ChangeKind, item :: EvidenceId, fingerprint :: EvidenceFingerprint, citation :: EvidenceRef
+  } deriving (Eq, Show)
 data EvidenceChangeSummary = EvidenceChangeSummary
   { fetch :: FetchId, previous :: Maybe FetchId, kind :: ChangeKind
-  , item :: EvidenceId, citation :: EvidenceRef
+  , item :: EvidenceId, fingerprint :: EvidenceFingerprint, citation :: EvidenceRef
   } deriving (Eq, Show)
 
 applyChanges :: [(EvidenceId, Evidence a)] -> [EvidenceChange a]
@@ -74,71 +82,62 @@ applyChanges = foldM step
       | null token = Left (InvalidDelta "Evidence fingerprint must not be empty")
       | otherwise = Right ()
 
-snapshotAt :: EvidenceState a -> FetchId -> Either EvidenceProblem [(EvidenceId, Evidence a)]
-snapshotAt (EvidenceState baseline initial current values history) target
-  | current == Just target = Right values
-  | baseline == Just target = Right initial
-  | otherwise = do
-      selected <- through baseline history target
-      foldM apply initial selected
+recordChanges :: ConnectorInstanceRef -> [(EvidenceId, Evidence a)] -> [EvidenceChange a]
+  -> Either EvidenceProblem ([(EvidenceId, Evidence a)], [EvidenceChangeMarker])
+recordChanges (ConnectorInstanceRef plugin instanceName) initial = foldM step (initial,[])
   where
-    apply members (Fetch _ _ _ changes) = applyChanges members changes
-
-through :: Maybe FetchId -> [Fetch a] -> FetchId -> Either EvidenceProblem [Fetch a]
-through baseline history target = go baseline [] history
-  where
-    go _ _ [] = Left HistoryUnavailable
-    go expected result (entry@(Fetch identity previous _ _):rest)
-      | previous /= expected = Left HistoryUnavailable
-      | identity == target = Right (result ++ [entry])
-      | otherwise = go (Just identity) (result ++ [entry]) rest
-
-fetchesBetween :: EvidenceState a -> FetchId -> Maybe FetchId -> Either EvidenceProblem [Fetch a]
-fetchesBetween (EvidenceState baseline _ _ _ history) target base = case base of
-  Nothing | baseline == Nothing -> through Nothing history target
-          | otherwise -> Left HistoryUnavailable
-  Just start -> do
-    rest <- if Just start == baseline then Right history else after start history
-    if start == target then Right [] else untilTarget (Just start) rest
-  where
-    after _ [] = Left HistoryUnavailable
-    after key (Fetch identity _ _ _:rest) | key == identity = Right rest
-                                        | otherwise = after key rest
-    untilTarget _ [] = Left HistoryUnavailable
-    untilTarget expected (entry@(Fetch identity previous _ _):rest)
-      | previous /= expected = Left HistoryUnavailable
-      | identity == target = Right [entry]
-      | otherwise = (entry :) <$> untilTarget (Just identity) rest
-
-summarizeChanges :: ConnectorInstanceRef -> [(EvidenceId, Evidence a)] -> [Fetch a]
-  -> Either EvidenceProblem [EvidenceChangeSummary]
-summarizeChanges (ConnectorInstanceRef plugin instanceName) initial fetches = snd <$> foldM summarize (initial,[]) fetches
-  where
-    summarize (values, summaries) (Fetch identity previous _ changes) =
-      foldM (step identity previous) (values,summaries) changes
-    step identity previous (values,summaries) change = do
-      let (key@(EvidenceId source), kind, refs) = case change of
-            NewEvidence changed (Evidence _ links _) -> (changed,New,links)
-            UpdatedEvidence changed (Evidence _ links _) -> (changed,Updated,links)
-            RemovedEvidence changed -> (changed,Removed,maybe [] (\(Evidence _ links _) -> links) (lookup changed values))
+    step (values,markers) change = do
       next <- applyChanges values [change]
-      pure (next,summaries ++ [EvidenceChangeSummary identity previous kind key
+      (key@(EvidenceId source),kind,value) <- case change of
+        NewEvidence key value -> pure (key,New,value)
+        UpdatedEvidence key value -> pure (key,Updated,value)
+        RemovedEvidence key -> maybe (Left (InvalidDelta "Removed evidence ID is missing"))
+          (\value -> pure (key,Removed,value)) (lookup key values)
+      let Evidence fingerprint refs _ = value
+      pure (next,markers ++ [EvidenceChangeMarker kind key fingerprint
         (EvidenceRef (pluginNameText plugin) instanceName source refs)])
 
-validateState :: Eq a => EvidenceState a -> Either EvidenceProblem ()
-validateState (EvidenceState baseline initial current values history) = do
+fetchesSince :: EvidenceState a -> Maybe FetchId -> Either EvidenceProblem [Fetch]
+fetchesSince (EvidenceState _ _ history) = maybe (Right history) after
+  where
+    after key = go history
+      where
+        go [] = Left CursorUnavailable
+        go (Fetch identity _ _ _:rest) | identity == key = Right rest
+                                     | otherwise = go rest
+
+summarizeChanges :: [Fetch] -> [EvidenceChangeSummary]
+summarizeChanges fetches =
+  [EvidenceChangeSummary identity previous kind key fingerprint citation |
+    Fetch identity previous _ markers <- fetches,
+    EvidenceChangeMarker kind key fingerprint citation <- markers]
+
+validateState :: EvidenceState a -> Either EvidenceProblem ()
+validateState (EvidenceState current values history) = do
   let ids = [key | Fetch key _ _ _ <- history]
-      unique members = length (map fst members) == length (nub (map fst members))
-      validId (EvidenceId name,_) = not (null name)
-  unless (length ids == length (nub ids) && baseline `notElem` map Just ids &&
-    all (\(FetchId name) -> not (null name)) ids &&
-    (baseline /= Nothing || null initial) &&
-    unique initial && unique values && all validId (initial ++ values))
-    (Left (InvalidEvidence "Invalid or duplicate evidence/fetch IDs in storage"))
-  case reverse history of
-    [] -> unless (baseline == current && initial == values) (Left (InvalidEvidence "Invalid materialized baseline"))
-    Fetch latest _ _ _: _ -> do
-      unless (current == Just latest) (Left (InvalidEvidence "Current fetch differs from history"))
-      -- Exclude the current-value shortcut while checking the stored derivative.
-      reconstructed <- snapshotAt (EvidenceState baseline initial Nothing values history) latest
-      unless (values == reconstructed) (Left (InvalidEvidence "Current snapshot differs from fetch history"))
+      memberIds = map fst values
+      validMember (EvidenceId key,Evidence (EvidenceFingerprint token) _ _) = not (null key || null token)
+      validMarker (EvidenceChangeMarker _ (EvidenceId key) (EvidenceFingerprint token) _) = not (null key || null token)
+  unless (length ids == length (nub ids) && all (\(FetchId key) -> not (null key)) ids &&
+    length memberIds == length (nub memberIds) && all validMember values &&
+    all (\(Fetch _ _ _ markers) -> all validMarker markers) history)
+    (Left (InvalidEvidence "Invalid or duplicate evidence/fetch identities or fingerprints"))
+  latest <- foldM (\expected (Fetch identity previous _ _) ->
+    if previous == expected then Right (Just identity) else Left (InvalidEvidence "Broken fetch marker chain")) Nothing history
+  unless (current == latest && (current /= Nothing || null values))
+    (Left (InvalidEvidence "Current evidence and fetch marker head disagree"))
+  recorded <- foldM applyMarker [] [marker | Fetch _ _ _ markers <- history, marker <- markers]
+  unless (recorded == [(key,metadata value) | (key,value) <- values])
+    (Left (InvalidEvidence "Current evidence identities/fingerprints disagree with change markers"))
+  where
+    metadata (Evidence token refs _) = Evidence token refs ()
+    applyMarker entries (EvidenceChangeMarker kind key token (EvidenceRef _ _ source refs)) = do
+      unless (key == EvidenceId source) (Left (InvalidEvidence "Change citation differs from evidence identity"))
+      let value = Evidence token refs ()
+      change <- case kind of
+        New -> pure (NewEvidence key value)
+        Updated -> pure (UpdatedEvidence key value)
+        Removed -> do
+          unless (lookup key entries == Just value) (Left (InvalidEvidence "Removal metadata differs from current item"))
+          pure (RemovedEvidence key)
+      either (Left . InvalidEvidence . show) Right (applyChanges entries [change])

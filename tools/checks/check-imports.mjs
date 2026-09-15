@@ -14,7 +14,7 @@ const allowed = {
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
     'Data.Coerce', 'Kyyn.Composition.Runtime', 'Kyyn.Composition.Connectors',
-    'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Porcelain.Capability.Connector',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Porcelain.Capability.Connector', 'Kyyn.Porcelain.Capability.EvidenceStore',
     'Kyyn.MicroHs.Interpreter.GuestExecution', 'Kyyn.Porcelain.Interpreter.EvidenceStore',
     'Kyyn.Plumbing.Interpreter.FileAcquisition',
     'Kyyn.Porcelain.Capability.EvidenceInspection', 'Kyyn.Porcelain.Interpreter.EvidenceInspection',
@@ -105,7 +105,7 @@ const allowed = {
 };
 
 const domainModules = {
-  'Kyyn.Domain.Evidence': ['Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
+  'Kyyn.Domain.Evidence': ['Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
@@ -199,8 +199,8 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
-  'Kyyn.Porcelain.Protocol.PluginBroker': ['Data.Aeson','Effectful','Effectful.State.Static.Local','Kyyn.Domain.CompiledProgram','Kyyn.Domain.Contract','Kyyn.Domain.Diagnostic','Kyyn.Domain.Evidence','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.GuestExecution','Kyyn.Plumbing.Capability.ProcessExecution','Kyyn.Plumbing.Capability.Failure','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Porcelain.Capability.EvidenceStore','Kyyn.Plumbing.Capability.FileAcquisition','Kyyn.Plumbing.Protocol.PluginMessages','System.FilePath'],
-  'Kyyn.Porcelain.Protocol.EvidencePersistence': ['Control.Monad','Data.Aeson','Data.Aeson.Types','Data.ByteString','Data.Text','Data.Text.Encoding','Effectful','Kyyn.Domain.Contract','Kyyn.Domain.DataType','Kyyn.Domain.Evidence','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling'],
+  'Kyyn.Porcelain.Protocol.PluginBroker': ['Data.Aeson','Effectful','Effectful.State.Static.Local','Kyyn.Domain.CompiledProgram','Kyyn.Domain.Contract','Kyyn.Domain.Diagnostic','Kyyn.Domain.Evidence','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.GuestExecution','Kyyn.Plumbing.Capability.ProcessExecution','Kyyn.Plumbing.Capability.Failure','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Plumbing.Capability.FileAcquisition','Kyyn.Plumbing.Protocol.PluginMessages','System.FilePath'],
+  'Kyyn.Porcelain.Protocol.EvidencePersistence': ['Kyyn.Types.Evidence','Data.Aeson','Data.Aeson.Types','Data.ByteString','Data.Text','Data.Text.Encoding','Effectful','Kyyn.Domain.Contract','Kyyn.Domain.DataType','Kyyn.Domain.Evidence','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Porcelain.Interpreter.EvidenceStore': ['Control.Monad','Control.Monad.Trans.Except','Data.ByteString','Data.Text','Data.Text.Encoding','Numeric','Effectful','Effectful.Dispatch.Dynamic','Kyyn.Domain.Contract','Kyyn.Domain.Evidence','Kyyn.Domain.KnowledgeBase','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Domain.Plugin','Kyyn.Domain.Value','Kyyn.Plumbing.Capability.DhallHandling','Kyyn.Plumbing.Capability.DocumentPersistence','Kyyn.Plumbing.Capability.FileSystem','Kyyn.Plumbing.Capability.Failure','Kyyn.Porcelain.Capability.EvidenceStore','Kyyn.Porcelain.Protocol.EvidencePersistence','System.FilePath'],
   'Kyyn.Plumbing.Interpreter.DocumentPersistence': ['Control.Exception','Control.Monad','Data.ByteString','Data.Time.Clock','Data.Time.Format.ISO8601','Data.Word','Numeric','Effectful','Effectful.Dispatch.Dynamic','Effectful.Exception','Kyyn.Domain.Failure','Kyyn.Domain.Path','Kyyn.Plumbing.Capability.DocumentPersistence','Kyyn.Plumbing.Capability.Failure','System.Directory','System.FileLock','System.FilePath','System.IO','System.IO.Error','System.IO.Temp','System.Random'],
   'Kyyn.Porcelain.Interpreter.EvidenceInspection': ['Control.Monad.Trans.Except', 'Effectful',

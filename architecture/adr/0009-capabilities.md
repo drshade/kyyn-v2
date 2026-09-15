@@ -207,10 +207,16 @@ it dispatches, not GuestCompilation. For example:
 
 ```haskell
 executeAcquisition
-  :: (GuestExecution :> es, EvidenceStore :> es, FileAcquisition :> es, Failure :> es)
-  => CompiledProgram -> CheckedValue -> CheckedContract -> Maybe EvidenceSnapshotRef
+  :: (GuestExecution :> es, FileAcquisition :> es, Failure :> es)
+  => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence
   -> Eff es (Either [Diagnostic] Value)
 ```
+
+The acquisition workflow loads current evidence before entering the broker.
+Guest evidence reads use that immutable input directly; the broker has no
+EvidenceStore requirement. Publication uses the loaded fetch as its expected base.
+When the producer has changed, acquisition instead starts empty and uses the
+head observed before the refused load as its replacement base.
 
 GuestExecution supplies both one-shot evaluation and conversational execution
 (ADR 0002). The latter preserves the broker callback's effect row while the guest

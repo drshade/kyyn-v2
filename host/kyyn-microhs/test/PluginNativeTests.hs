@@ -26,7 +26,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Porcelain.Protocol.PluginBroker (executeCapturedRead)
 import Kyyn.Plumbing.Protocol.PluginMessages (evidenceValue)
-import Kyyn.Plumbing.Capability.FileAcquisition (readSourceText)
+import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition, readSourceText)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
@@ -64,8 +64,11 @@ nativeTests temporary toolchain configType payloadType program = do
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ runEvidenceAcquisition $
         fetchEvidence instanceRef package payload program (config (path :: String))
   first <- fetch directory >>= right
-  firstIds <- runStore kb (listEvidenceIds first payload) >>= right
-  firstOld <- runStore kb (readEvidence first payload (EvidenceId "changed.txt")) >>= right
+  let producer = EvidenceProducer package (contractId payload)
+      load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
+  firstCurrent@(CurrentEvidence _ firstItems) <- load
+  let firstIds = map fst firstItems
+      firstOld = lookup (EvidenceId "changed.txt") firstItems
   assert "first capture lost content or fingerprint" (case firstOld of
     Just (Evidence (EvidenceFingerprint token) refs (CheckedValue _ value)) ->
       not (null token) && refs == [directory </> "changed.txt"] && value == object ["text" .= ("old" :: String)]
@@ -78,15 +81,18 @@ nativeTests temporary toolchain configType payloadType program = do
   second <- fetch directory >>= right
   let EvidenceSnapshotRef _ _ firstId = first
       EvidenceSnapshotRef _ _ secondId = second
-  summaries <- runStore kb (listEvidenceChanges second payload (Just firstId)) >>= right
+  (_,summaries) <- runStore kb (listEvidenceChanges instanceRef producer payload (Just firstId)) >>= right
   assert "second real acquisition lost new/updated/removed distinctions"
-    ([(kind,key) | EvidenceChangeSummary _ _ kind key _ <- summaries] ==
+    ([(kind,key) | EvidenceChangeSummary _ _ kind key _ _ <- summaries] ==
       [(Updated,EvidenceId "changed.txt"),(New,EvidenceId "new.txt"),(Removed,EvidenceId "gone.txt")])
-  old <- runStore kb (readEvidence first payload (EvidenceId "changed.txt")) >>= right
-  assert "reading historical evidence returned today's file"
-    (old == firstOld)
+  CurrentEvidence secondRef secondItems <- load
+  assert "new invocation did not load latest contents" (secondRef == second &&
+    lookup (EvidenceId "changed.txt") secondItems /= firstOld)
+  assert "previously loaded invocation input changed" (case firstCurrent of
+    CurrentEvidence firstRef _ -> firstRef == first)
   third <- fetch directory >>= right
-  unchanged <- runStore kb (listEvidenceChanges third payload (Just secondId)) >>= right
+  (_,unchanged) <- runStore kb (listEvidenceChanges instanceRef producer payload (Just secondId)) >>= right
+  currentThird@(CurrentEvidence _ thirdItems) <- load
   assert "unchanged files emitted spurious updates" (null unchanged)
   let EvidenceSnapshotRef _ _ thirdId = third
       unchangedHead = runStore kb (evidenceHead instanceRef) >>= right
@@ -110,13 +116,12 @@ nativeTests temporary toolchain configType payloadType program = do
     , "{\"tag\":\"HostRequest\",\"id\":\"2\",\"capability\":\"evidence\",\"method\":\"list\",\"arguments\":{\"snapshot\":\"selected\"}}"
     , "{\"tag\":\"HostRequest\",\"id\":\"1\",\"capability\":\"unknown\",\"method\":\"list\",\"arguments\":{}}"
     ] $ \frame -> do
-      let refused = runPureEff $ runFailure $ runDhallHandling $ refuseStore $ emitFrame frame $
-            executeCapturedRead program (config directory) payload third payload
+      let refused = runPureEff $ runFailure $ runDhallHandling $ emitFrame frame $
+            executeCapturedRead program (config directory) currentThird payload
       case refused of
         Left _ -> pure ()
         Right _ -> fail "Malformed or out-of-row guest request was answered"
-  saved <- runStore kb (readEvidence third payload (EvidenceId "changed.txt")) >>= right
-    >>= maybe (fail "Missing changed evidence") pure
+  saved <- maybe (fail "Missing changed evidence") pure (lookup (EvidenceId "changed.txt") thirdItems)
   let key = EvidenceId "changed.txt"
       changed = Evidence (EvidenceFingerprint "later") [] (CheckedValue (contractId payload) (object ["text" .= ("later" :: String)]))
       requests =
@@ -132,30 +137,35 @@ nativeTests temporary toolchain configType payloadType program = do
         ]
       completed = object ["text" .= ("changed" :: String)]
       inspectBetween action = exchangeFrames requests expected completed action $
-        executeCapturedRead program (config directory) payload third payload
+        executeCapturedRead program (config directory) currentThird payload
       advance = do
-        let EvidenceSnapshotRef _ producer _ = third
         result <- publishFetch instanceRef producer payload (Just thirdId) [UpdatedEvidence key changed]
         case result of Right _ -> pure (); Left problem -> error (show problem)
   stable <- runStore kb (inspectBetween advance) >>= right
   assert "captured read changed after concurrent publication" (stable == completed)
-  latest <- runStore kb (selectEvidence instanceRef (case third of EvidenceSnapshotRef _ producer _ -> producer) CurrentEvidence) >>= right
-  newest <- runStore kb (readEvidence latest payload key) >>= right
-  assert "snapshot fixture did not actually advance stored evidence" (newest == Just changed)
-  let loaded = [(key,saved),(EvidenceId "same.txt",saved),(EvidenceId "new.txt",saved)]
-      recorded = runPureEff $ State.runState (0 :: Int) $ runFailure $ runDhallHandling $
-        snapshotStore loaded $ exchangeFrames requests expected completed (pure ()) $
-          executeCapturedRead program (config directory) payload third payload
-  let (outer,loads) = recorded
-  readResult <- right outer
-  assert "captured read loaded storage more than once" (loads == 1 && readResult == Right completed)
-  putStrLn "Native acquisition: real files, persisted deltas, historical reads, unchanged files and failure atomicity passed."
+  CurrentEvidence newestRef newestItems <- load
+  assert "snapshot fixture did not actually advance stored evidence"
+    (newestRef /= third && lookup key newestItems == Just changed)
+  let noFiles :: Eff (FileAcquisition : es) a -> Eff es a
+      noFiles = interpret $ \_ _ -> error "Acquisition fixture unexpectedly read source files"
+      recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
+        noFiles $ recordAcquisition firstId currentThird $
+          exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
+            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory))
+      (outer,trace) = recorded
+  result <- right outer >>= right
+  assert "acquisition did not use one loaded input and its fetch as CAS base"
+    (result == third && trace == ["head","load","publish"])
+  putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
 
-snapshotStore :: State.State Int :> es => [(EvidenceId, Evidence CheckedValue)]
-  -> Eff (EvidenceStore : es) a -> Eff es a
-snapshotStore entries = interpret $ \_ -> \case
-  LoadEvidenceSnapshot _ _ -> State.modify @Int (+ 1) >> pure (Right entries)
-  _ -> error "Invocation performed a live per-item storage operation"
+recordAcquisition :: State.State [String] :> es => FetchId -> CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
+recordAcquisition earlier current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _) =
+  interpret $ \_ -> \case
+    EvidenceHead _ -> State.modify @[String] (++ ["head"]) >> pure (Right (Just earlier))
+    LoadCurrentEvidence _ _ _ -> State.modify @[String] (++ ["load"]) >> pure (Right (Just current))
+    PublishFetch _ _ _ expected [] | expected == Just identity ->
+      State.modify @[String] (++ ["publish"]) >> pure (Right snapshot)
+    _ -> error "Acquisition reopened evidence or published against a head other than its loaded input"
 
 exchangeFrames :: [Value] -> [Value] -> Value -> Eff es () -> Eff (GuestExecution : es) a -> Eff es a
 exchangeFrames requests answers result between = interpret $ \env -> \case
@@ -181,9 +191,6 @@ emitFrame frame = interpret $ \env -> \case
   ExecuteGuest _ _ respond ->   localSeqUnlift env $ \unlift -> do
     _ <- unlift (respond frame)
     pure (frame,ProcessExit 0 Bytes.empty)
-
-refuseStore :: Eff (EvidenceStore : es) a -> Eff es a
-refuseStore = interpret $ \_ _ -> error "Invalid guest request reached evidence storage"
 
 runStore :: DirectoryScope -> Eff StoreEffects a -> IO a
 runStore kb action = runEff (runFailure (runProcessExecutionIO (runFileSystemIO kb

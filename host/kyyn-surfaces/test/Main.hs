@@ -39,14 +39,19 @@ main = do
     (Invocation selected Human (Plugin (Connector (ShowConnectorSchema localFile (Just identity)))))
   succeeds ["evidence","fetch","local-file","sales"]
     (Invocation selected Human (Evidence (FetchConnector localFile sales)))
-  succeeds ["evidence","history","list","local-file","sales","--at","first"]
-    (Invocation selected Human (Evidence (ListFetchHistory localFile sales (Just (FetchId "first")))))
-  succeeds ["evidence","change","list","local-file","sales","--since","first","--at","second"]
-    (Invocation selected Human (Evidence (ListEvidenceChanges localFile sales (Just (FetchId "first")) (Just (FetchId "second")))))
+  succeeds ["evidence","history","list","local-file","sales"]
+    (Invocation selected Human (Evidence (ListFetchHistory localFile sales)))
+  succeeds ["evidence","change","list","local-file","sales","--since","first"]
+    (Invocation selected Human (Evidence (ListEvidenceChanges localFile sales (Just (FetchId "first")))))
+  succeeds ["evidence","clear","local-file","sales"]
+    (Invocation selected Human (Evidence (ClearEvidence localFile sales)))
   forM_ [["evidence","fetch","local-file","sales","--evolution","abc123"],
     ["plugin","connector","fetch","local-file","sales"],
     ["evidence","fetch","local-file",""],
-    ["evidence","history","list","local-file","sales","--at",""]] refuses
+    ["evidence","history","list","local-file","sales","--at","first"],
+    ["evidence","change","list","local-file","sales","--at","first"],
+    ["evidence","change","list","local-file","sales","--since",""],
+    ["evidence","clear","local-file",""]] refuses
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
   succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
     "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]
