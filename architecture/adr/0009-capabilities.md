@@ -133,7 +133,9 @@ data EvidenceRead payload a where
 
 data FileRead a where
   ListFiles :: FilePath -> Bool -> FileRead (Either FetchError [FilePath])
-  ReadTextFile :: FilePath -> FileRead (Either FetchError String)
+  ReadTextFile :: FilePath -> FileRead (Either FetchError CapturedText)
+
+data CapturedText = CapturedText String EvidenceFingerprint
 
 -- Generated for the plugin's inspected Payload type.
 type Acquisition a = Program (FileRead :+: EvidenceRead Payload) a
@@ -141,7 +143,10 @@ type CapturedRead a = Program (EvidenceRead Payload) a
 ```
 
 The snapshot argument is explicit. Acquisition may enumerate the source and read
-files; captured readers have only the two snapshot questions above. The folder
+files; captured readers have only the two snapshot questions above. Native text
+acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
+from the same captured bytes. The generated `readTextFile` returns both together.
+The folder
 proof requires an absolute directory and returns a typed error before requesting
 effects for a relative path. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised

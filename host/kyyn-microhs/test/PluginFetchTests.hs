@@ -183,7 +183,8 @@ respond scenario capability method arguments = case (capability,method) of
     path <- right (parseEither (withObject "read file" (.: "path")) arguments)
     contents <- maybe (fail "Unexpected file path") pure (lookup (path :: String)
       [("/folder/changed.txt","changed 🦋\nline two"),("/folder/same.txt","same"),("/folder/new.txt","new")])
-    pure (if scenario == FileFailure then failure "File unreadable" else success (String contents))
+    pure (if scenario == FileFailure then failure "File unreadable" else success
+      (object ["contents" .= (contents :: Text.Text),"fingerprint" .= ("recorded-" <> contents)]))
   ("evidence","list") -> do
     checkSnapshot arguments
     pure (success (toJSON ["gone.txt","changed.txt","same.txt" :: String]))
@@ -204,6 +205,7 @@ success value = object ["tag" .= ("Right" :: String),"value" .= value]
 failure :: String -> Value
 failure message = object ["tag" .= ("Left" :: String),"value" .= message]
 evidence :: String -> Text.Text -> Value
-evidence key contents = object ["references" .= ["/folder/" ++ key],"payload" .= object ["text" .= contents]]
+evidence key contents = object ["fingerprint" .= show ("/folder/" ++ key,"recorded-" <> contents),
+  "references" .= ["/folder/" ++ key],"payload" .= object ["text" .= contents]]
 change :: String -> String -> Text.Text -> Value
 change kind key contents = object ["tag" .= kind,"value" .= object ["id" .= key,"evidence" .= evidence key contents]]

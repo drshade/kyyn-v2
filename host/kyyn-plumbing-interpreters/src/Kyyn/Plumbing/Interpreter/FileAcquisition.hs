@@ -3,12 +3,14 @@ module Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO) where
 
 import Control.Exception (IOException, displayException, try)
 import Control.Monad (forM, when)
+import qualified Crypto.Hash.SHA256 as SHA256
 import qualified Data.ByteString as Bytes
 import Data.List (sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
+import Numeric (showHex)
 import Kyyn.Domain.Path
 import Kyyn.Plumbing.Capability.FileAcquisition
 import System.Directory (listDirectory, doesDirectoryExist, doesFileExist, pathIsSymbolicLink)
@@ -23,7 +25,10 @@ runFileAcquisitionIO = interpret $ \_ -> \case
     let source = scopedPath scope path
     refuseLink source
     bytes <- Bytes.readFile source
-    either (ioError . userError . show) (pure . Text.unpack) (Text.decodeUtf8' bytes)
+    contents <- either (ioError . userError . show) (pure . Text.unpack) (Text.decodeUtf8' bytes)
+    let fingerprint = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
+          (Bytes.unpack (SHA256.hash bytes))
+    pure (CapturedText contents (EvidenceFingerprint fingerprint))
 
 native :: IOE :> es => IO a -> Eff es (Either String a)
 native action = liftIO $ either (Left . displayException @IOException) Right <$> try action

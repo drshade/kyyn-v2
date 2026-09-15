@@ -29,7 +29,8 @@ executeAcquisition program config payload prior = evalState (Nothing :: Maybe Sn
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive
   ReadText path -> case (,) <$> directoryScope (takeDirectory path) <*> relativePath (takeFileName path) of
     Left message -> pure (failure message)
-    Right (scope,name) -> either failure (success . toJSON) <$> Files.readSourceText scope name
+    Right (scope,name) -> either failure (\(Files.CapturedText contents (Files.EvidenceFingerprint fingerprint)) ->
+      success (object ["contents" .= contents,"fingerprint" .= fingerprint])) <$> Files.readSourceText scope name
   other -> answerEvidence payload prior other
 
 executeCapturedRead :: (GuestExecution :> es, Failure :> es, Store.EvidenceStore :> es, DhallHandling :> es)

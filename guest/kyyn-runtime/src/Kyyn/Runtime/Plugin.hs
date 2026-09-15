@@ -2,7 +2,7 @@
 module Kyyn.Runtime.Plugin (executeAcquisition, executeCapturedRead) where
 
 import Kyyn.Runtime.Json
-import Kyyn.Types.Evidence (EvidenceId(..), Evidence(..), EvidenceChange(..))
+import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
 import Kyyn.Types.Plugin
 import Kyyn.Types.Program
 import System.IO (hFlush, stdout)
@@ -45,7 +45,17 @@ fileRequest identity (ListFiles directory recursive) = exchange identity "files"
   (record [("directory",encodeWith stringCodec directory),("recursive",encodeWith boolCodec recursive)])
   (eitherCodec (listCodec stringCodec))
 fileRequest identity (ReadTextFile path) = exchange identity "files" "read"
-  (record [("path",encodeWith stringCodec path)]) (eitherCodec stringCodec)
+  (record [("path",encodeWith stringCodec path)]) (eitherCodec capturedTextCodec)
+
+capturedTextCodec :: Codec CapturedText
+capturedTextCodec = Codec encode decode
+  where
+    encode (CapturedText contents (EvidenceFingerprint fingerprint)) = record
+      [("contents",encodeWith stringCodec contents),("fingerprint",encodeWith stringCodec fingerprint)]
+    decode value = do
+      values <- fields ["contents","fingerprint"] value
+      CapturedText <$> field "contents" stringCodec values
+        <*> (EvidenceFingerprint <$> field "fingerprint" stringCodec values)
 
 evidenceRequest :: Codec payload -> Integer -> EvidenceRead payload a -> IO a
 evidenceRequest _ identity (ListEvidenceIds (EvidenceSnapshot snapshot)) = exchange identity "evidence" "list"
@@ -87,11 +97,13 @@ eitherCodec codec = Codec encode decode
 evidenceCodec :: Codec a -> Codec (Evidence a)
 evidenceCodec codec = Codec encode decode
   where
-    encode (Evidence references payload) = record [("references",encodeWith (listCodec stringCodec) references),
+    encode (Evidence (EvidenceFingerprint fingerprint) references payload) = record
+      [("fingerprint",encodeWith stringCodec fingerprint),("references",encodeWith (listCodec stringCodec) references),
       ("payload",encodeWith codec payload)]
     decode value = do
-      values <- fields ["references","payload"] value
-      Evidence <$> field "references" (listCodec stringCodec) values <*> field "payload" codec values
+      values <- fields ["fingerprint","references","payload"] value
+      Evidence <$> (EvidenceFingerprint <$> field "fingerprint" stringCodec values)
+        <*> field "references" (listCodec stringCodec) values <*> field "payload" codec values
 
 changeCodec :: Codec a -> Codec (EvidenceChange a)
 changeCodec codec = Codec encode decode

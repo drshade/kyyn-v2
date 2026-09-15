@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evidence
-  ( EvidenceId(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
+  ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
   , Evidence(..), EvidenceChange(..), Fetch(..), EvidenceState(..), EvidenceSelection(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), ChangeKind(..), EvidenceChangeSummary(..)
   , applyChanges, snapshotAt, fetchesBetween, summarizeChanges, validateState
@@ -12,7 +12,7 @@ import Data.List (nub)
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..), Evidence(..), EvidenceChange(..))
+import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
 
 newtype FetchId = FetchId String deriving (Eq, Show)
 data ConnectorInstanceRef = ConnectorInstanceRef PluginName String deriving (Eq, Show)
@@ -58,15 +58,21 @@ applyChanges :: [(EvidenceId, Evidence a)] -> [EvidenceChange a]
 applyChanges = foldM step
   where
     step values change = case change of
-      NewEvidence key value | missing key values -> valid key >> pure (values ++ [(key,value)])
+      NewEvidence key value | missing key values -> valid key >> validFingerprint value >> pure (values ++ [(key,value)])
                             | otherwise -> Left (InvalidDelta "New evidence ID already exists")
       UpdatedEvidence key value | missing key values -> Left (InvalidDelta "Updated evidence ID is missing")
-                                | otherwise -> pure [(k,if k == key then value else v) | (k,v) <- values]
+                                | Just (fingerprint value) == (fingerprint <$> lookup key values) ->
+                                    Left (InvalidDelta "Updated evidence fingerprint is unchanged")
+                                | otherwise -> validFingerprint value >> pure [(k,if k == key then value else v) | (k,v) <- values]
       RemovedEvidence key | missing key values -> Left (InvalidDelta "Removed evidence ID is missing")
                           | otherwise -> pure [(k,v) | (k,v) <- values, k /= key]
     missing key = not . any ((== key) . fst)
     valid (EvidenceId key) | null key = Left (InvalidDelta "Evidence ID must not be empty")
                           | otherwise = Right ()
+    fingerprint (Evidence token _ _) = token
+    validFingerprint (Evidence (EvidenceFingerprint token) _ _)
+      | null token = Left (InvalidDelta "Evidence fingerprint must not be empty")
+      | otherwise = Right ()
 
 snapshotAt :: EvidenceState a -> FetchId -> Either EvidenceProblem [(EvidenceId, Evidence a)]
 snapshotAt (EvidenceState baseline initial current values history) target
@@ -112,9 +118,9 @@ summarizeChanges (ConnectorInstanceRef plugin instanceName) initial fetches = sn
       foldM (step identity previous) (values,summaries) changes
     step identity previous (values,summaries) change = do
       let (key@(EvidenceId source), kind, refs) = case change of
-            NewEvidence changed (Evidence links _) -> (changed,New,links)
-            UpdatedEvidence changed (Evidence links _) -> (changed,Updated,links)
-            RemovedEvidence changed -> (changed,Removed,maybe [] (\(Evidence links _) -> links) (lookup changed values))
+            NewEvidence changed (Evidence _ links _) -> (changed,New,links)
+            UpdatedEvidence changed (Evidence _ links _) -> (changed,Updated,links)
+            RemovedEvidence changed -> (changed,Removed,maybe [] (\(Evidence _ links _) -> links) (lookup changed values))
       next <- applyChanges values [change]
       pure (next,summaries ++ [EvidenceChangeSummary identity previous kind key
         (EvidenceRef (pluginNameText plugin) instanceName source refs)])

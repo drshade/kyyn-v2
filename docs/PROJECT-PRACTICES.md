@@ -95,6 +95,10 @@ existing real-Dhall/filesystem integration assertions.
 scoped clearing (including lock continuity across clear), replacement-failure cleanup and lock release on
 cancellation. It uses bytes, not evidence types or a guest compiler.
 
+`cabal test file-acquisition --test-show-details=direct` checks native text/fingerprint
+capture against a known digest, repeated reads, changed bytes and invalid UTF-8.
+It requires no guest compiler and is included in the fast check.
+
 `cabal test plugin-installation --test-show-details=direct` checks the installation
 handler with write-forbidding refusal handlers and real Git/filesystem/Dhall
 integration: local and file-URL sources, nested KBs, persisted origins, independent

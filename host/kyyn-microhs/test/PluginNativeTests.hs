@@ -65,6 +65,11 @@ nativeTests temporary toolchain configType payloadType program = do
         fetchEvidence instanceRef package payload program (config (path :: String))
   first <- fetch directory >>= right
   firstIds <- runStore kb (listEvidenceIds first payload) >>= right
+  firstOld <- runStore kb (readEvidence first payload (EvidenceId "changed.txt")) >>= right
+  assert "first capture lost content or fingerprint" (case firstOld of
+    Just (Evidence (EvidenceFingerprint token) refs (CheckedValue _ value)) ->
+      not (null token) && refs == [directory </> "changed.txt"] && value == object ["text" .= ("old" :: String)]
+    _ -> False)
   assert "first real acquisition did not publish all files"
     (firstIds == map EvidenceId ["changed.txt","gone.txt","same.txt"])
   Bytes.writeFile (directory </> "changed.txt") "changed"
@@ -79,8 +84,7 @@ nativeTests temporary toolchain configType payloadType program = do
       [(Updated,EvidenceId "changed.txt"),(New,EvidenceId "new.txt"),(Removed,EvidenceId "gone.txt")])
   old <- runStore kb (readEvidence first payload (EvidenceId "changed.txt")) >>= right
   assert "reading historical evidence returned today's file"
-    (old == Just (Evidence [directory </> "changed.txt"]
-      (CheckedValue (contractId payload) (object ["text" .= ("old" :: String)]))))
+    (old == firstOld)
   third <- fetch directory >>= right
   unchanged <- runStore kb (listEvidenceChanges third payload (Just secondId)) >>= right
   assert "unchanged files emitted spurious updates" (null unchanged)
@@ -111,10 +115,10 @@ nativeTests temporary toolchain configType payloadType program = do
       case refused of
         Left _ -> pure ()
         Right _ -> fail "Malformed or out-of-row guest request was answered"
+  saved <- runStore kb (readEvidence third payload (EvidenceId "changed.txt")) >>= right
+    >>= maybe (fail "Missing changed evidence") pure
   let key = EvidenceId "changed.txt"
-      saved = Evidence [directory </> "changed.txt"]
-        (CheckedValue (contractId payload) (object ["text" .= ("changed" :: String)]))
-      changed = Evidence [] (CheckedValue (contractId payload) (object ["text" .= ("later" :: String)]))
+      changed = Evidence (EvidenceFingerprint "later") [] (CheckedValue (contractId payload) (object ["text" .= ("later" :: String)]))
       requests =
         [ object ["snapshot" .= ("selected" :: String)]
         , object ["snapshot" .= ("selected" :: String),"id" .= ("changed.txt" :: String)]

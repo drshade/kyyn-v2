@@ -7,8 +7,10 @@ Symbolic links and non-UTF-8 files are unsupported; a failed fetch publishes no 
 Evidence IDs are relative paths. Changing a file produces an update; adding or
 removing a path produces an addition or removal. Unchanged files are omitted.
 Source references are absolute file paths, and payloads contain the captured text.
-Changing the configured directory retains relative IDs, so matching paths are
-compared with the preceding snapshot, including their source references.
+The plugin's fingerprint combines the source path with the host-provided content
+digest, so changing either produces an update. Changing the configured directory
+retains relative IDs; matching files at a new source path therefore update their
+references too.
 
 `LocalFile.Plugin.connectors` advertises the Haskell config/payload types, fetch
 function and pure config validator. The host derives contracts and generated

@@ -31,7 +31,7 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Protocol.EvidencePersistence
-import System.Directory (createDirectory, removeDirectory, doesFileExist, doesDirectoryExist)
+import System.Directory (createDirectory, removeDirectory, doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -56,7 +56,7 @@ itemA = EvidenceId "a.txt"
 itemB = EvidenceId "b.txt"
 
 value :: String -> Evidence CheckedValue
-value name = Evidence ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack name)))
+value name = Evidence (EvidenceFingerprint name) ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack name)))
 
 execute :: DirectoryScope -> Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
 execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope action)))) >>= right
@@ -74,6 +74,14 @@ main = do
   assert "missing update accepted" (isLeft (applyChanges [] second))
   assert "missing removal accepted" (isLeft (applyChanges [] [RemovedEvidence itemB]))
   assert "empty ID accepted" (isLeft (applyChanges [] [NewEvidence (EvidenceId "") (value "bad")]))
+  assert "empty fingerprint accepted" (isLeft (applyChanges [] [NewEvidence itemA (value "")]))
+  assert "same-fingerprint update accepted" (case applyChanges initial [UpdatedEvidence itemA (value "old")] of
+    Left (InvalidDelta _) -> True; _ -> False)
+  let sameTokenDifferentPayload = Evidence (EvidenceFingerprint "old") []
+        (CheckedValue (contractId contract) (String "different"))
+  assert "same-fingerprint update accepted because payload differed"
+    (case applyChanges initial [UpdatedEvidence itemA sameTokenDifferentPayload] of
+      Left (InvalidDelta _) -> True; _ -> False)
   sequential <- right (applyChanges [] [NewEvidence itemA (value "a"),UpdatedEvidence itemA (value "b"),RemovedEvidence itemA])
   assert "changes not applied in order" (null sequential)
   let state = EvidenceState Nothing [] (Just (FetchId "one")) initial [Fetch (FetchId "one") Nothing "2026-09-11" first]
@@ -144,7 +152,7 @@ main = do
     wrong <- run (publishFetch instanceA producer contract (Just (key f2)) [NewEvidence itemA (value "bad")])
     assert "invalid batch accepted" (isLeft wrong)
     invalidPayload <- run (publishFetch instanceA producer contract (Just (key f2))
-      [UpdatedEvidence itemA (Evidence [] (CheckedValue (contractId contract) (Bool True)))])
+      [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (CheckedValue (contractId contract) (Bool True)))])
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
     let boolContract = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
     wrongContract <- run (readEvidence f2 boolContract itemA)
@@ -190,8 +198,8 @@ main = do
     assert "old producer reinterpreted" (oldProducer == Left ProducerContractChanged)
     reset <- run (readFetchesBetween changed contract Nothing) >>= right
     assert "new producer carried previous delta base" (case reset of [Fetch _ Nothing _ _] -> True; _ -> False)
-    archives <- doesDirectoryExist (directory </> ".kyyn/evidence/folder-73616c6573/archives")
-    assert "producer update archived replaced contents" (not archives)
+    entries <- listDirectory (directory </> ".kyyn/evidence/folder-73616c6573")
+    assert "producer replacement retained extra documents" (entries == ["state.dhall"])
     run (clearEvidence instanceA)
     remaining <- doesDirectoryExist (directory </> ".kyyn/evidence/folder-73616c6573")
     assert "clear retained the instance cache" (not remaining)

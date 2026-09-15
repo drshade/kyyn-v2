@@ -24,7 +24,7 @@ stateShape :: Shape -> Shape
 stateShape payload = Record [("header",headerShape),
   ("initial",members),("values",members),("history",List fetch)]
   where
-    evidence = Record [("references",List text),("payload",payload)]
+    evidence = Record [("fingerprint",text),("references",List text),("payload",payload)]
     members = List (Record [("id",text),("evidence",evidence)])
     entry = Record [("id",text),("evidence",evidence)]
     change = Union [("New",Just entry),("Updated",Just entry),("Removed",Just text)]
@@ -76,8 +76,8 @@ encodeState (EvidenceProducer (PackageIdentity producer) identity) contract stat
         "contract" .= contractFingerprint identity,"current" .= optional current,"baseline" .= optional baseline,
         "fetches" .= [key | Fetch (FetchId key) _ _ _ <- history]],
         "initial" .= initialValues,"values" .= currentValues,"history" .= fetchValues])
-    evidence (Evidence refs (CheckedValue actual value))
-      | actual == identity = Right (object ["references" .= refs,"payload" .= value])
+    evidence (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue actual value))
+      | actual == identity = Right (object ["fingerprint" .= fingerprint,"references" .= refs,"payload" .= value])
       | otherwise = Left ProducerContractChanged
     member (EvidenceId key,value) = (\e -> object ["id" .= key,"evidence" .= e]) <$> evidence value
     change (NewEvidence key value) = tagged "New" <$> member (key,value)
@@ -102,7 +102,7 @@ decodeState (EvidenceProducer producer identity) contract bytes
           Left problem -> pure (Left (InvalidEvidence (show problem)))
           Right source -> decode (stateShape (contractShape contract)) parseState source
   where
-    evidence = withObject "evidence" $ \fields -> Evidence <$> fields .: "references"
+    evidence = withObject "evidence" $ \fields -> Evidence <$> (EvidenceFingerprint <$> fields .: "fingerprint") <*> fields .: "references"
       <*> (CheckedValue identity <$> fields .: "payload")
     member = withObject "evidence member" $ \fields -> (,)
       <$> (EvidenceId <$> fields .: "id") <*> (fields .: "evidence" >>= evidence)
