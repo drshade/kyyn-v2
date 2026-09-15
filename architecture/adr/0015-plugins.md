@@ -296,7 +296,7 @@ connectors = [SourceConnector
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
       { methodName = "content"
-      , description = "Read the latest fetched text of a file by its evidence ID."
+      , methodDescription = "Read the latest fetched text of a file by its evidence ID."
       , inputType = "LocalFile.Types.ContentId"
       , resultType = "LocalFile.Types.Content"
       , implementation = "LocalFile.Read.content"
@@ -332,7 +332,7 @@ method is `plugin.method-unknown`. The local-file method takes an evidence ID as
 surfaced as `plugin.read-failed`, not a live-file fallback.
 
 The `PluginRead` porcelain capability receives a resolved instance, producer,
-payload contract, prepared method and checked input. Its interpreter validates
+payload contract, prepared method and structural input. Its interpreter validates
 the input against that method's contract, loads current evidence once, and calls
 the captured-read broker with that immutable value. It has no file-acquisition
 capability. `evidence.not-fetched`, producer-change and invalid-cache diagnostics

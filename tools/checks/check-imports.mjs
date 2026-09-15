@@ -200,8 +200,8 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
-  'Kyyn.Porcelain.Interpreter.PluginRead': ['Control.Monad', 'Control.Monad.Trans.Except', 'Effectful', 'Effectful.Dispatch.Dynamic',
-    'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value',
+  'Kyyn.Porcelain.Interpreter.PluginRead': ['Control.Monad.Trans.Except', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value',
     'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.GuestExecution',
     'Kyyn.Porcelain.Capability.PluginRead', 'Kyyn.Porcelain.Capability.PluginPreparation',
     'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Porcelain.Protocol.PluginBroker'],

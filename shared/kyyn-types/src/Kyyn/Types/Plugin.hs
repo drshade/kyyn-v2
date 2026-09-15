@@ -25,7 +25,7 @@ data CapturedMethod = CapturedMethod
   { -- | Unique lowercase Haskell identifier within this connector, such as content.
     methodName :: String
   , -- | Description shown when an agent or human discovers the method.
-    description :: String
+    methodDescription :: String
   , -- | Qualified Haskell input type or type alias.
     inputType :: String
   , -- | Qualified Haskell result type or type alias.

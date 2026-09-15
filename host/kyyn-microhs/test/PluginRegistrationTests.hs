@@ -5,7 +5,7 @@ import Control.Monad (unless, forM_)
 import Data.List (isInfixOf, stripPrefix)
 import Data.Version (showVersion)
 import Data.Coerce (coerce)
-import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..))
+import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..), PackageIdentity(..))
 import Data.Aeson (Value, encode, object, (.=), toJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
@@ -141,7 +141,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
               (runDocumentPersistenceIO $ runEvidenceStore scope (runGuestExecution toolchain (runPluginRead
                 (callCapturedMethod (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer producerIdentity (contractId payload)) payload selected value)))))))) >>= right
-            arguments key = CheckedValue (contractId input) (toJSON (key :: String))
+            arguments key = toJSON (key :: String)
             hasCode expectedCode result = case result of
               Left diagnostics -> any (\(Diagnostic _ actual _ _) -> expectedCode == actual) diagnostics
               Right _ -> False
@@ -159,7 +159,9 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         assert "Content read returned the wrong payload" (result == CheckedValue (contractId output) (toJSON ("one" :: String)))
         missing <- invoke identity method (arguments "missing.txt")
         assert "Missing evidence was not a typed read failure" (hasCode "plugin.read-failed" missing)
-        malformed <- invoke identity method (CheckedValue (contractId input) (toJSON True))
+        changed <- invoke (PackageIdentity "changed-producer") method (arguments "one.txt")
+        assert "Changed producer did not preserve its refusal code" (hasCode "evidence.producer-changed" changed)
+        malformed <- invoke identity method (toJSON True)
         assert "Invalid method input was accepted" (rejected malformed)) instances
     _ -> fail "Wrong plugin registration shape"
   initial <- right initialRootFiles

@@ -10,7 +10,7 @@ import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Porcelain.Capability.Connector
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Contract (contractShape, contractId)
+import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Value (CheckedValue(..))
 import qualified Data.Text as Text
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
@@ -64,7 +64,7 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
         (instanceRef,producer,payload,selected@(PreparedMethod _ _ input output _)) <-
           ExceptT (selectConnectorMethod kb revision Nothing plugin name method)
         value <- ExceptT (decodeValue (contractShape input) (Text.pack inputText))
-        CheckedValue _ result <- ExceptT (callCapturedMethod instanceRef producer payload selected (CheckedValue (contractId input) value))
+        CheckedValue _ result <- ExceptT (callCapturedMethod instanceRef producer payload selected value)
         rendered <- ExceptT (encodeValue (contractShape output) result)
         pure (methodOutputResult result rendered)
 
