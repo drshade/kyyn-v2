@@ -20,7 +20,7 @@ import System.FilePath (takeDirectory, takeFileName)
 
 executeAcquisition :: (GuestExecution :> es, Failure :> es, Files.FileAcquisition :> es)
   => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
-executeAcquisition program config prior = conversation program config $ \call -> case call of
+executeAcquisition program config prior = conversation "plugin.fetch-failed" program config $ \call -> case call of
   ListFiles directory recursive -> case directoryScope directory of
     Left message -> pure (failure message)
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive
@@ -34,7 +34,7 @@ executeCapturedRead :: (GuestExecution :> es, Failure :> es, DhallHandling :> es
   => CompiledProgram -> CheckedValue -> CurrentEvidence -> CheckedContract
   -> Eff es (Either [Diagnostic] Value)
 executeCapturedRead program arguments current result = do
-  output <- conversation program arguments (answerEvidence (Just current))
+  output <- conversation "plugin.read-failed" program arguments (answerEvidence (Just current))
   case output of
     Left diagnostics -> pure (Left diagnostics)
     Right value -> fmap (fmap (const value)) (encodeValue (contractShape result) value)
@@ -55,8 +55,8 @@ answerEvidence prior call = case call of
                      | otherwise = broken "Unknown evidence snapshot handle"
 
 conversation :: (GuestExecution :> es, Failure :> es)
-  => CompiledProgram -> CheckedValue -> (PluginCall -> Eff es Value) -> Eff es (Either [Diagnostic] Value)
-conversation program arguments respond = do
+  => String -> CompiledProgram -> CheckedValue -> (PluginCall -> Eff es Value) -> Eff es (Either [Diagnostic] Value)
+conversation failureCode program arguments respond = do
   (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program (initialInput arguments) $ \bytes -> do
     frame <- either broken pure (decodeFrame bytes)
     case frame of
@@ -72,7 +72,7 @@ conversation program arguments respond = do
     case frame of
       Completed value -> case parseResult value of
         Left message -> broken message
-        Right (Left message) -> pure (Left [errorDiagnostic "plugin.fetch-failed" message])
+        Right (Left message) -> pure (Left [errorDiagnostic failureCode message])
         Right (Right result) -> pure (Right result)
       _ -> broken "Guest did not complete"
 

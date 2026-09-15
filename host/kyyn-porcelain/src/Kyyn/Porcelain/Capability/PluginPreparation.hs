@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.PluginPreparation
-  ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), ConfiguredConnector(..)
+  ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), ConfiguredConnector(..), PreparedMethod(..)
   , preparePackages, preparePlugins, validatePlugins, instanceShape ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -11,7 +11,7 @@ import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorTypeName(..), ConnectorName, BindingName)
+import Kyyn.Domain.Plugin (PluginName, PackageIdentity, ConnectorTypeName(..), ConnectorName, BindingName, MethodName)
 import Kyyn.Domain.Value (CheckedValue)
 
 data PreparedConnector = PreparedConnector
@@ -20,8 +20,10 @@ data PreparedConnector = PreparedConnector
   , payloadContract :: CheckedContract
   , fetchEntry :: CompiledProgram
   , validationEntry :: CompiledProgram
+  , methods :: [PreparedMethod]
   }
   deriving (Eq, Show)
+data PreparedMethod = PreparedMethod MethodName String CheckedContract CheckedContract CompiledProgram deriving (Eq, Show)
 data ConfiguredConnector = ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue deriving (Eq, Show)
 data PreparedPackage = PreparedPackage PluginName PackageIdentity [PreparedConnector] deriving (Eq, Show)
 data PreparedPlugin = PreparedPlugin PreparedPackage [ConfiguredConnector] deriving (Eq, Show)

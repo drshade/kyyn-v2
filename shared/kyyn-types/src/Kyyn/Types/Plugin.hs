@@ -1,6 +1,6 @@
 {-# LANGUAGE GADTs #-}
 module Kyyn.Types.Plugin
-  ( SourceConnector(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
+  ( SourceConnector(..), CapturedMethod(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
 
 import Kyyn.Types.Evidence (EvidenceId, Evidence, EvidenceFingerprint)
 
@@ -16,6 +16,22 @@ data SourceConnector = SourceConnector
     fetch :: String
   , -- | Qualified pure configuration validator, with type Config -> ValidationReport.
     validateConfig :: String
+  , -- | Typed methods for reading this connector's captured evidence.
+    methods :: [CapturedMethod]
+  } deriving (Eq, Show)
+
+-- | Advertise a captured-evidence reader using qualified Haskell export names.
+data CapturedMethod = CapturedMethod
+  { -- | Unique lowercase Haskell identifier within this connector, such as content.
+    methodName :: String
+  , -- | Description shown when an agent or human discovers the method.
+    methodDescription :: String
+  , -- | Qualified Haskell input type or type alias.
+    inputType :: String
+  , -- | Qualified Haskell result type or type alias.
+    resultType :: String
+  , -- | Qualified function: Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result).
+    implementation :: String
   } deriving (Eq, Show)
 
 -- | A selected captured-evidence snapshot, read through the generated plugin bindings.

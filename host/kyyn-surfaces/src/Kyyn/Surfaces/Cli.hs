@@ -6,7 +6,7 @@ module Kyyn.Surfaces.Cli
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, gitRevision)
-import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), pluginName, connectorName, pluginNameText)
+import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Data.Coerce (coerce)
 import Options.Applicative
@@ -30,6 +30,9 @@ data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) | Connect
 data ConnectorCommand
   = ListConnectors PluginName (Maybe EvolutionId)
   | ShowConnectorSchema PluginName (Maybe EvolutionId)
+  | ListConnectorMethods PluginName ConnectorName (Maybe EvolutionId)
+  | ShowConnectorMethod PluginName ConnectorName MethodName (Maybe EvolutionId)
+  | ExecuteConnectorMethod PluginName ConnectorName MethodName String
   deriving (Eq, Show)
 data EvidenceCommand
   = FetchConnector PluginName ConnectorName
@@ -96,9 +99,17 @@ connectorParser :: Parser ConnectorCommand
 connectorParser = hsubparser
   (group "list" "List a plugin's configured instances" (ListConnectors <$> plugin <*> evolution)
   <> group "schema" "Discover connector configuration schemas" (hsubparser
-      (group "show" "Print the derived Dhall type for a plugin's configuration file" (ShowConnectorSchema <$> pluginArgument <*> evolution))))
+      (group "show" "Print the derived Dhall type for a plugin's configuration file" (ShowConnectorSchema <$> pluginArgument <*> evolution)))
+  <> group "method" "Discover and invoke captured-evidence methods" (hsubparser
+      (group "list" "List a connector instance's methods" (ListConnectorMethods <$> plugin <*> instanceName <*> evolution)
+      <> group "show" "Show a method's description and Dhall input/result types" (ShowConnectorMethod <$> plugin <*> instanceName <*> method <*> evolution)
+      <> group "execute" "Invoke a method over the latest fetched evidence"
+        (ExecuteConnectorMethod <$> plugin <*> instanceName <*> method
+          <*> strOption (long "input" <> metavar "DHALL" <> help "Input value as a hermetic Dhall expression")))))
   where
     plugin = pluginArgument
+    instanceName = argument (eitherReader connectorName) (metavar "INSTANCE")
+    method = argument (eitherReader methodName) (metavar "METHOD")
     evolution = optional (option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Inspect an evolution target instead of the accepted root"))
 
 pluginArgument :: Parser PluginName

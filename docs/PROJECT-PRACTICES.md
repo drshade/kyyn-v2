@@ -63,7 +63,9 @@ inspect Haskell config/payload contracts and compile fetch/config-validation
 adapters. The first-party acquisition adapter also compiles with the matching
 versioned GHC executable, checking generated exports against both compilers.
 It decodes two configured instances, fetches real files independently,
-and rejects invalid config through the whole-root checker. It also checks reflected
+and rejects invalid config through the whole-root checker. It also compiles the
+local-file content reader with both compilers and invokes it through PluginRead,
+checking missing captures/IDs and malformed input. It also checks reflected
 record-field documentation, invalid registration/instance names and a mismatched
 fetch signature. This is a focused native integration check, not an installed CLI journey.
 
@@ -74,7 +76,9 @@ history and payload-free deltas, and preserve the head after acquisition failure
 It checks superseded/removed payload absence, invalid-data repair and scoped
 clear/refetch without a runtime bundle, without adding a generic evidence-view endpoint.
 It belongs to the full installed check and can be run independently for changes
-to this boundary; it does not implement typed plugin reads or KB helpers.
+to this boundary. `--read-smoke` focuses on method discovery (including draft
+targets), reads while the source folder is unavailable, independent instances,
+refresh/removal, input refusal and Dhall/JSON outputs. KB helpers are not exercised.
 
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow

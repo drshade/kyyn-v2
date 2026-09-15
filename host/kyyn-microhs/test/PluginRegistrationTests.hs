@@ -5,8 +5,8 @@ import Control.Monad (unless, forM_)
 import Data.List (isInfixOf, stripPrefix)
 import Data.Version (showVersion)
 import Data.Coerce (coerce)
-import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..))
-import Data.Aeson (encode, object, (.=), toJSON)
+import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..), PackageIdentity(..))
+import Data.Aeson (Value, encode, object, (.=), toJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
@@ -16,6 +16,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (ValidationReport(..), Diagnostic(..), Severity(..), CheckResult(..))
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Contract (rootType, contractId)
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), CurrentEvidence(..), EvidenceProducer(..))
 import Kyyn.Domain.GuestApi (ApiModule(..), ApiSymbol(..), Namespace(..))
@@ -32,7 +33,7 @@ import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
-import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources)
+import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources)
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -46,6 +47,8 @@ import Kyyn.Plumbing.Protocol.PluginRegistration (decodeConnectors)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
+import Kyyn.Porcelain.Capability.PluginRead (callCapturedMethod)
+import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
 import Kyyn.Porcelain.Capability.KnowledgeBaseInitialization (initialRootFiles)
@@ -66,14 +69,23 @@ type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, Gues
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
-  let declaration name = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
+  let declaration name = withMethods name []
+      withMethods name methods = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
         "payloadType" .= ("LocalFile.Types.Document" :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
-        "validateConfig" .= ("LocalFile.Config.validate" :: String)]
+        "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= (methods :: [Value])]
+      methodValue name input = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
+        "inputType" .= (input :: String),"resultType" .= ("LocalFile.Types.Content" :: String),
+        "implementation" .= ("LocalFile.Read.content" :: String)]
       rejected :: Either e a -> Bool
       rejected (Left _) = True
       rejected _ = False
   forM_ [[declaration "Folder",declaration "Folder"],[declaration "folder"],[object ["name" .= ("Folder" :: String)]]] $
     \value -> assert "Invalid connector registration accepted" (rejected (decodeConnectors (Lazy.toStrict (encode value))))
+  let validMethod = methodValue "content" "LocalFile.Types.ContentId"
+  forM_ [[validMethod,validMethod],[methodValue "case" "LocalFile.Types.ContentId"],[methodValue "content" "String"]] $ \methods ->
+    assert "Invalid method registration accepted" (case decodeConnectors (Lazy.toStrict (encode [withMethods "Folder" methods])) of
+      Left message -> "Folder" `isInfixOf` message
+      Right _ -> False)
   let instanceValue name binding = object ["name" .= (name :: String),"binding" .= (binding :: String),
         "connector" .= object ["tag" .= ("Folder" :: String),"value" .= object []]]
   forM_ [[instanceValue "same" "a",instanceValue "same" "b"],[instanceValue "one" "case"],
@@ -111,14 +123,30 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
   case prepared of
-    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector kind configContract payloadContract _ _]) instances] -> do
+    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector kind configContract payloadContract _ _ methods]) instances] -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
       authored <- traverse (\(p,b) -> (,) <$> right (relativePath p) <*> pure b)
         [(p,b) | (path,b) <- files package, Just p <- [stripPrefix "src/" (relativeName path)]]
       adapter <- right (acquisitionSources (rootType configContract) (rootType payloadContract)
         "LocalFile.Folder.fetch" (authored ++ files sdk))
       compileFirstParty (temporary </> "ghc-acquisition") adapter
-      mapM_ (\(ConfiguredConnector name _ (PreparedConnector _ _ payload entry _) config) -> do
+      method@(PreparedMethod methodName description input output _) <- case methods of
+        [m] -> pure m
+        _ -> fail "Local-file should register exactly one content method"
+      assert "Content method metadata lost" (methodName == MethodName "content" && "latest fetched text" `isInfixOf` description)
+      readAdapter <- right (capturedReadSources (rootType input) (rootType payloadContract) (rootType output)
+        "LocalFile.Read.content" (authored ++ files sdk))
+      compileFirstParty (temporary </> "ghc-read") readAdapter
+      mapM_ (\(ConfiguredConnector name _ (PreparedConnector _ _ payload entry _ _) config) -> do
+        let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
+              (runDocumentPersistenceIO $ runEvidenceStore scope (runGuestExecution toolchain (runPluginRead
+                (callCapturedMethod (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer producerIdentity (contractId payload)) payload selected value)))))))) >>= right
+            arguments key = toJSON (key :: String)
+            hasCode expectedCode result = case result of
+              Left diagnostics -> any (\(Diagnostic _ actual _ _) -> expectedCode == actual) diagnostics
+              Right _ -> False
+        absent <- invoke identity method (arguments "one.txt")
+        assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
           (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config))))))))) >>= right >>= right
@@ -126,7 +154,15 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of
           Just (CurrentEvidence selected items) -> selected == snapshot && length items == 1
-          Nothing -> False)) instances
+          Nothing -> False)
+        result <- invoke identity method (arguments "one.txt") >>= right
+        assert "Content read returned the wrong payload" (result == CheckedValue (contractId output) (toJSON ("one" :: String)))
+        missing <- invoke identity method (arguments "missing.txt")
+        assert "Missing evidence was not a typed read failure" (hasCode "plugin.read-failed" missing)
+        changed <- invoke (PackageIdentity "changed-producer") method (arguments "one.txt")
+        assert "Changed producer did not preserve its refusal code" (hasCode "evidence.producer-changed" changed)
+        malformed <- invoke identity method (toJSON True)
+        assert "Invalid method input was accepted" (rejected malformed)) instances
     _ -> fail "Wrong plugin registration shape"
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))

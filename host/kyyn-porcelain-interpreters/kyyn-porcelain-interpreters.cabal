@@ -15,6 +15,7 @@ library
     Kyyn.Porcelain.Protocol.EvidencePersistence
     Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Interpreter.PluginPreparation
+    Kyyn.Porcelain.Interpreter.PluginRead
     Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization
     Kyyn.Porcelain.Interpreter.RootOpening
     Kyyn.Porcelain.Interpreter.GuestApi

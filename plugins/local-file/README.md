@@ -55,6 +55,20 @@ identifiers and summaries; plugin reads use the latest captured document content
 Fetches are checkout-local Dhall data, not Git commits;
 they do not change accepted facts. A draft configuration cannot acquire evidence.
 
+Discover and read a fetched file:
+
+```sh
+kyyn-v2 --kb /path/to/kb plugin connector method list local-file documents
+kyyn-v2 --kb /path/to/kb plugin connector method show local-file documents content
+kyyn-v2 --kb /path/to/kb plugin connector method execute local-file documents content --input '"notes.txt"'
+```
+
+The ID is the path relative to the configured directory. `content` returns the
+latest fetched UTF-8 text, not the live file. Fetch again to refresh it. A missing
+ID is an error. Inputs and human-readable results are Dhall; `--json` returns
+structural JSON. List/show also accept `--evolution ID` to inspect a draft target;
+execution uses only accepted configuration.
+
 To discard one instance's local evidence and fetch it again:
 
 ```sh

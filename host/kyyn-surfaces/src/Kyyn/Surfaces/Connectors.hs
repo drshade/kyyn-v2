@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult) where
+module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult,
+  methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -18,6 +19,19 @@ connectorListResult plugin connectors = success
 
 schemaResult :: PluginName -> Text.Text -> Response
 schemaResult plugin schema = success (object ["plugin" .= pluginNameText plugin,"schema" .= schema]) [Text.unpack (Text.stripEnd schema)]
+
+methodListResult :: [(MethodName,String)] -> Response
+methodListResult methods = success
+  (object ["methods" .= [object ["name" .= text name,"description" .= description] | (name,description) <- methods]])
+  (if null methods then ["No captured-evidence methods."] else [text name ++ "  " ++ description | (name,description) <- methods])
+
+methodResult :: MethodName -> String -> Text.Text -> Text.Text -> Response
+methodResult name description input output = success
+  (object ["name" .= text name,"description" .= description,"inputType" .= input,"resultType" .= output])
+  [text name ++ " — " ++ description,"Input: " ++ Text.unpack input,"Result: " ++ Text.unpack output]
+
+methodOutputResult :: Value -> Text.Text -> Response
+methodOutputResult value rendered = success value [Text.unpack (Text.stripEnd rendered)]
 
 fetchResult :: EvidenceSnapshotRef -> Response
 fetchResult snapshot@(EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ identity) = success (context snapshot)
