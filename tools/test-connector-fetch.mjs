@@ -7,8 +7,11 @@ import { spawnSync } from 'node:child_process';
 
 const configurationSmoke = process.argv[3] === '--configuration-smoke';
 const readSmoke = process.argv[3] === '--read-smoke';
-if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke)))
-  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke]');
+const toolSmoke = process.argv[3] === '--tool-smoke';
+const methodChecks = readSmoke || (!configurationSmoke && !toolSmoke);
+const toolChecks = toolSmoke || (!configurationSmoke && !readSmoke);
+if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke || toolSmoke)))
+  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke|--tool-smoke]');
 const executable = path.resolve(process.argv[2]);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-connector-fetch-'));
@@ -70,8 +73,33 @@ try {
     && diagnostic.message.includes('local-file/sales')), JSON.stringify(rejected));
   // The emitted schema is directly usable as the configuration's annotation.
   fs.writeFileSync(configPath, `(${configuration([['sales', sales], ['support', support]])}) : (${schema})\n`);
+  if (toolChecks) {
+    const manifestPath = path.join(draft.path, 'target/kb.dhall');
+    const manifest = fs.readFileSync(manifestPath, 'utf8');
+    const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
+    assert(manifest.includes(emptyTools));
+    fs.writeFileSync(manifestPath, manifest.replace(emptyTools,
+      '[{ name = "bulk", description = "Read captured folders", implementation = "Helpers.bulk", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));
+    fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `module Helpers where
+import Kyyn.Plugin (FetchError)
+import Kyyn.Connectors (Tool)
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_local_file.Folder as Files
+type Input = [String]
+type Output = [String]
+bulk :: Input -> Tool (Either FetchError Output)
+bulk ids = do
+  sales <- mapM (Files.content Connectors.sales) ids
+  support <- Files.content Connectors.support "ticket.txt"
+  pure (sequence (sales ++ [support]))
+`);
+    assert.deepEqual(cli(['root', 'tool', 'list', '--evolution', draft.id]).result.tools.map(t => t.name), ['bulk']);
+    const descriptor = cli(['root', 'tool', 'show', 'bulk', '--evolution', draft.id]).result;
+    assert.equal(descriptor.inputType.trim(), 'List Text');
+    assert.equal(descriptor.resultType.trim(), 'List Text');
+  }
   assert.equal(cli(['plugin', 'connector', 'list', 'local-file', '--evolution', draft.id]).result.connectors.length, 2);
-  if (readSmoke || !configurationSmoke) {
+  if (methodChecks) {
     const methods = cli(['plugin', 'connector', 'method', 'list', 'local-file', 'sales', '--evolution', draft.id]).result.methods;
     assert.deepEqual(methods.map(method => method.name), ['content']);
     assert.match(methods[0].description, /latest fetched text/);
@@ -86,7 +114,7 @@ try {
   cli(['evolution', 'accept', draft.id]);
   const accepted = git(checkout, 'rev-parse', 'HEAD');
   assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
-  if (readSmoke || !configurationSmoke)
+  if (methodChecks)
     assert.equal(content('sales', 'updated.txt', 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch('sales');
   if (configurationSmoke) {
@@ -101,7 +129,22 @@ try {
     return;
   }
   const other = fetch('support');
-  if (readSmoke || !configurationSmoke) {
+  if (toolChecks) {
+    fs.renameSync(sales, sales + '-offline');
+    const args = ['root', 'tool', 'execute', 'bulk', '--input', '["updated.txt", "unchanged.txt"]'];
+    assert.deepEqual(cli(args).result, ['Original sales evidence Ω', 'Stable sales evidence', 'Independent support evidence']);
+    const human = spawnSync(executable, ['--kb', kb, ...args], { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    assert.equal(human.status, 0, JSON.stringify(human));
+    assert.match(human.stdout, /Original sales evidence Ω/);
+    assert.match(human.stdout, /Independent support evidence/);
+    assert.equal(cli(['root', 'tool', 'execute', 'bulk', '--input', 'True'], 1).diagnostics[0].code, 'dhall.type');
+    assert.equal(cli(['root', 'tool', 'execute', 'bulk', '--input', '["missing.txt"]'], 1).diagnostics[0].code, 'tool.failed');
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    console.log('Installed KB helper discovery, evolution acceptance, two-instance captured reads and Dhall/JSON results passed.');
+    if (toolSmoke) return;
+    fs.renameSync(sales + '-offline', sales);
+  }
+  if (methodChecks) {
     fs.renameSync(sales, sales + '-offline');
     assert.equal(content('sales', 'updated.txt').result, 'Original sales evidence Ω');
     assert.equal(content('support', 'ticket.txt').result, 'Independent support evidence');
@@ -117,7 +160,7 @@ try {
   fs.unlinkSync(path.join(sales, 'removed.txt'));
   fs.writeFileSync(path.join(sales, 'added.txt'), 'New sales evidence');
   const second = fetch('sales');
-  if (readSmoke || !configurationSmoke) {
+  if (methodChecks) {
     assert.equal(content('sales', 'updated.txt').result, 'Changed sales evidence λ');
     assert.equal(content('sales', 'removed.txt', 1).diagnostics[0].code, 'plugin.read-failed');
     const human = spawnSync(executable, ['--kb', kb, 'plugin', 'connector', 'method', 'execute',

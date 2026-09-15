@@ -155,8 +155,8 @@ openingTests contract factFiles = do
     rejected (execute sdk (openCapturedSource incomplete))
   forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
     [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
     filter ((/= "facts/root.dhall") . relativeName . fst) (files captured)] $ \entries -> do
       bad <- right (fileTree entries)
       rejected (execute sdk (openCapturedRoot bad))
@@ -164,7 +164,7 @@ openingTests contract factFiles = do
   rejected (execute collision (openCapturedRoot captured))
   rejected (execute sdk (loadRootAt repo revision WholeTree))
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case

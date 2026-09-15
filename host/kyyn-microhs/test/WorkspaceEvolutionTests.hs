@@ -118,7 +118,7 @@ metadata = SchemaMetadata [RoleDecl "title" "Title" Title] [] [CollectionDecl "t
 
 manifest :: String -> String
 manifest namespace = "{ schemaType = " ++ show (namespace ++ ".Root") ++
-  ", schemaMetadata = \"Metadata.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }"
+  ", schemaMetadata = \"Metadata.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

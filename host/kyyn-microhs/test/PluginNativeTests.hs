@@ -141,7 +141,7 @@ nativeTests temporary toolchain configType payloadType program = do
       advance = do
         result <- publishFetch instanceRef producer payload (Just thirdId) [UpdatedEvidence key changed]
         case result of Right _ -> pure (); Left problem -> error (show problem)
-  stable <- runStore kb (inspectBetween advance) >>= right
+  stable <- runStore kb (inspectBetween advance) >>= right >>= right
   assert "captured read changed after concurrent publication" (stable == completed)
   CurrentEvidence newestRef newestItems <- load
   assert "snapshot fixture did not actually advance stored evidence"

@@ -29,6 +29,7 @@ import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.Capability.RootStore
 import Kyyn.Porcelain.Interpreter.RootExecution
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore
 import qualified QueryCore
@@ -99,7 +100,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let sdk = tree sdkFiles
       registration = "{ name = \"owner\", description = \"Look up the task owner\", implementation = \"Queries.ownerOf\", inputType = \"Schema.Input\", inputMetadata = \"Schema.inputMetadata\", resultType = \"Schema.Result\", resultMetadata = \"Schema.resultMetadata\" }"
-      manifest = "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.schemaMetadata\", validator = \"Validate.validate\", queries = [" ++ registration ++ "] }"
+      manifest = "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.schemaMetadata\", validator = \"Validate.validate\", queries = [" ++ registration ++ "], tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree ((path "kb.dhall",utf8 manifest) : [(path ("src/" ++ relativeName p),b) | (p,b) <- authored])
   contract <- either (fail . show) pure (checkContract rootTypeFixture rootMetadata >>= checkRootLayout)
   let values = object ["tasks" .= [object ["id" .= ("todo-001" :: String), "value" .= object
@@ -108,7 +109,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   root <- either (fail . show) pure (runPureEff . runDhallHandling . runRootStore $
     materializeRoot contract code (CheckedValue (contractId (rootSchema contract)) values))
   discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $ prepareRoot root
+    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ prepareRoot root
   prepared <- either (fail . show) (either (fail . show) pure) discovery
   descriptor@(QueryDescriptor _ _ input result) <- case preparedQueries prepared of
     [d] -> pure d
@@ -118,7 +119,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   unless (metadataOf result == SchemaMetadata [RoleDecl "label" "Person's name" Title]
     [FieldRole "Schema.Person" "name" "label"] []) (fail "Query result metadata lost or copied from Root")
   response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runRootExecution sdk $
+    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
       queryRoot prepared descriptor (CheckedValue (contractId input) (String "Review"))
   let expected = QueryResult (CheckedValue (contractId result)
         (object ["tag" .= ("Some" :: String), "value" .= object ["name" .= ("Ada 🦋" :: String)]]))

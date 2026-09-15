@@ -1,15 +1,51 @@
-module Kyyn.Porcelain.Capability.Root (checkRootAt, inspectRootAt) where
+module Kyyn.Porcelain.Capability.Root (checkRootAt, inspectRootAt, sourceCodeAt, listRootTools, selectRootTool) where
 
 import Effectful (Eff, (:>))
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Data.Coerce (coerce)
+import Kyyn.Domain.Plugin (MethodName(..))
+import Kyyn.Domain.Tool (ToolDescriptor(..))
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation, PreparedTool(..), prepareTools)
+import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins)
+import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..))
+import Kyyn.Domain.FileTree (FileTree)
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Root (Root, CheckedValue)
-import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt)
+import Kyyn.Domain.Root (Root, CheckedValue, SourceRoot(..))
+import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt, loadSourceAt)
+import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.Validation (checkRoot)
 import Kyyn.Porcelain.Validated (Validated, validatedValue)
+
+sourceCodeAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> Eff es (Either [Diagnostic] FileTree)
+sourceCodeAt kb@(KnowledgeBase repository _) revision workspace = runExceptT $ case workspace of
+  Nothing -> do
+    location <- ExceptT (pure (either (Left . pure . errorDiagnostic "kb.path") Right (rootLocation kb)))
+    SourceRoot _ code _ _ <- ExceptT (loadSourceAt repository revision (Subtree location))
+    pure code
+  Just identity -> do
+    WorkspaceSnapshot _ _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
+    pure code
+
+listRootTools :: (ToolPreparation :> es, PluginPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> Eff es (Either [Diagnostic] [PreparedTool])
+listRootTools kb revision workspace = runExceptT $ do
+  code <- ExceptT (sourceCodeAt kb revision workspace)
+  plugins <- ExceptT (preparePlugins code)
+  ExceptT (prepareTools code plugins)
+
+selectRootTool :: (ToolPreparation :> es, PluginPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> MethodName -> Eff es (Either [Diagnostic] PreparedTool)
+selectRootTool kb revision workspace name = runExceptT $ do
+  tools <- ExceptT (listRootTools kb revision workspace)
+  case [tool | tool@(PreparedTool (ToolDescriptor actual _ _ _) _ _) <- tools, actual == name] of
+    [tool] -> pure tool
+    _ -> throwE [errorDiagnostic "tool.unknown" ("No registered tool named " ++ coerce name)]
 
 checkRootAt :: (RootOpening :> es, RootExecution :> es, RootStore :> es)
   => KnowledgeBase -> GitRevision -> Eff es (CheckResult (Validated Root))

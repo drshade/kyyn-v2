@@ -31,6 +31,7 @@ import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Connectors
 import Kyyn.Surfaces.Result (Response(..), refusal)
@@ -78,7 +79,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
   Cli.FetchConnector plugin name -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
-      . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
+      . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))

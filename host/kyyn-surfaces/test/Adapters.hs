@@ -80,6 +80,7 @@ main = do
         . opening kb revision root $ case request of
           ShowRoot -> inspectionCheckResult revision <$> inspectRootAt kb revision
           CheckRoot -> checkResult "Root" <$> checkRootAt kb revision
+          RootTool _ -> error "Tool commands have their own dispatcher"
       runCandidate :: Maybe (Candidate Root) -> (Response, [String])
       runCandidate selected = runPureEff . runState ([] :: [String]) . storeRoot value . execution
         . candidates selected $ checkResult "Candidate" <$> checkSavedCandidate workspace

@@ -129,6 +129,14 @@ such as `Kyyn.Connectors` from the selected configuration:
 salesMail :: Mail.Instance
 ```
 
+Generated proxy modules are named `Kyyn.Plugins.P_<plugin>.<ConnectorType>`,
+replacing hyphens in the plugin name with underscores. Plugin names forbid
+underscores, so this mapping is unambiguous: `local-file` becomes
+`Kyyn.Plugins.P_local_file.Folder`. Authors can import it qualified as `Files`.
+The exported `Instance` is phantom-typed by plugin and connector type; handles
+for another connector type cannot be passed to its methods. Configured handles
+are exported by `Kyyn.Connectors`, together with the selected `Tool a` alias.
+
 Authors use `Mail.viewEmail Connectors.salesMail emailId` without repeating plugin
 names, config lookup or instance construction. The generated value identifies the
 instance and its connector type; it does not contain a fetched payload or a secret.

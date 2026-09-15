@@ -267,3 +267,29 @@ Human module output places workspace-defined operations before reexports.
 `--runtime DIRECTORY` selects the runtime for either form of discovery.
 
 If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.
+
+## KB investigation helpers
+
+Register helpers in the root's `kb.dhall` `tools` list. The
+[authoring example](../architecture/adr/0008-authoring.md#composed-kb-investigation-tools)
+shows a bulk local-file reader using generated instance bindings. Edit the helper
+and registration in an evolution target, then check and accept it as usual.
+
+```sh
+kyyn-v2 --kb PATH root tool list --evolution ID
+kyyn-v2 --kb PATH root tool show bulkContent --evolution ID
+kyyn-v2 --kb PATH root tool execute bulkContent --input '["notes.txt", "summary.txt"]'
+```
+
+Execution uses the accepted helper and latest fetched evidence. Fetch the named
+instances first with `evidence fetch PLUGIN INSTANCE`. Results are Dhall by default;
+add `--json` for structured JSON. Discovery does not execute the helper.
+
+Existing KB manifests without tools need this field in `kb.dhall`:
+
+```dhall
+, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }
+```
+
+New KBs already include it. An older captured evolution may need the same manifest
+update before it can be checked with this development build.

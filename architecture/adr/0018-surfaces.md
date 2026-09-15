@@ -87,6 +87,10 @@ kyyn
       list
       show <name>
       execute <name>
+    tool
+      list [--evolution <id>]
+      show <name> [--evolution <id>]
+      execute <name> --input <dhall>
   evolution
     new <name>
     list
@@ -467,8 +471,20 @@ accepted instance, with `--input DHALL` decoded hermetically against its inspect
 input contract. A type mismatch retains the normal Dhall diagnostic. Results are
 rendered as Dhall by default and structural JSON with `--json`. Unknown methods
 and unfetched/incompatible evidence remain explicit errors (ADR 0015); the command
-neither acquires evidence nor edits the root. Discovery of generated KB-call proxies
-and registered KB helpers remains under implementation.
+neither acquires evidence nor edits the root.
+
+`root tool list/show` discovers registered KB helpers, including a draft target
+with `--evolution ID`. `root tool execute NAME --input DHALL` invokes only the
+accepted declaration. Input and output follow the same Dhall/JSON conventions
+as connector methods. Listing and showing compile/check declarations but do not
+run the helper or read evidence. Generated proxy source catalogue integration
+remains separate from this registered input/result discovery.
+
+Tool diagnostics use `tool.unknown` for a missing registered name,
+`tool.preparation` for invalid source assembly, and `tool.failed` for the helper's
+own top-level `FetchError`. A helper can catch a plugin method's typed failure
+instead of returning it. An impossible instance/type/method request from a guest
+is a protocol failure, not another user-facing tool state.
 
 MCP exports relevant named typed methods and selective discovery, using generated
 JSON Schema and structured results. Expose exact source contracts as resources

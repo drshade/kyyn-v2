@@ -183,7 +183,30 @@ ADR 0014. The plugin reads that captured evidence through its own host capabilit
 Another registered method can explicitly acquire fresh evidence. The generated
 proxy carries a method identity and checked types, not arbitrary code over JSON.
 
-### Proposed addition: KB-tool read composition
+### KB-tool read composition
+
+The initial generated `Tool a` is `Program Calls a`, where `Calls` is a closed
+GADT with one typed constructor per advertised captured-read method. Its input
+and output refer to the plugin's actual Haskell types. Generated proxy functions
+hide these constructors and wire codecs from authors:
+
+```haskell
+content :: Files.Instance -> ContentId -> Tool (Either FetchError Content)
+```
+
+The host resolves the named instance against the selected code/configuration,
+checks its connector type and method, and lazily loads its latest captured input
+on first use. It reuses that explicit input for subsequent calls to the same
+instance during this tool invocation; it does not reopen the evidence store per
+callback. Each method executes in the plugin's captured-read context. The first
+implementation starts a method guest per call, without a plugin-process pool.
+
+A method's declared `FetchError` remains a typed value that the helper may handle.
+Not-fetched, incompatible-producer and invalid stored evidence stop the invocation
+with a diagnostic naming the instance; these are not converted into catchable
+method failures. Acquisition and sink requests are absent from this caller row.
+Selected-root reads and evolution reuse remain separate implementation work;
+the first tool slice proves captured-read composition only.
 
 Acquisition and captured reads have distinct request algebras. A KB tool may compose
 `SnapshotRead root :+: (MailReads :+: CalendarReads)`, but its interpreter supplies neither acquisition nor

@@ -160,7 +160,7 @@ manifest :: String -> String
 manifest schema = "{ schemaType = " ++ show (schema ++ ".Root") ++
   ", schemaMetadata = " ++ show (schema ++ ".metadata") ++
   ", validator = \"Validate.validate\", queries = [" ++ declaration "titleFor" "Result" ++
-  "," ++ declaration "isDone" "DoneResult" ++ "] }"
+  "," ++ declaration "isDone" "DoneResult" ++ "], tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
   where
     declaration name result = "{ name = " ++ show name ++ ", description = \"Todo query\", implementation = " ++
       show ("Queries." ++ name) ++ ", inputType = \"Queries.Input\", inputMetadata = \"Queries.metadata\", resultType = " ++

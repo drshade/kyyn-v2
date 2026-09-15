@@ -4,6 +4,7 @@ module Kyyn.Composition (execute) where
 import Effectful (Eff, IOE, runEff, (:>))
 import Kyyn.Composition.Runtime
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
+import Kyyn.Composition.Tools (dispatchTools)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
@@ -46,6 +47,7 @@ import qualified Kyyn.Porcelain.Capability.EvolutionAuthoring as Authoring
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import qualified Kyyn.Porcelain.Capability.RootPublication as Publication
 import Kyyn.Porcelain.Capability.RootStore (RootStore)
@@ -54,6 +56,7 @@ import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
@@ -72,7 +75,7 @@ import System.Directory (getCurrentDirectory)
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
 type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
 type Evaluation = EvolutionExecution ': Authoring
-type Checking = RootExecution ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
+type Checking = RootExecution ': ToolPreparation ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
 runMetadata host = runBase host . runWorkspaceStore . runEvolutionStore
@@ -85,7 +88,7 @@ runEvaluation :: Host -> GuestToolchain -> FileTree -> Eff Evaluation a -> IO (E
 runEvaluation host toolchain sdk = runAuthoring host toolchain sdk . runEvolutionExecution sdk
 
 runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)
-runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runRootExecution sdk
+runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
 execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest Nothing request)) = do
@@ -167,14 +170,17 @@ executeInitialization host scope = do
       case metadata of
         Left response -> pure response
         Right commit -> withRuntime host $ \toolchain sdk -> finish $
-          runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
+          runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
             initializationResult <$> Initialization.initializeKnowledgeBase target commit
 
 dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
-dispatchRoot host request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
-    runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runRootExecution sdk $ case request of
-      Cli.ShowRoot -> inspectionCheckResult revision <$> Root.inspectRootAt kb revision
-      Cli.CheckRoot -> checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision
+dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
+  Cli.RootTool command -> dispatchTools host command selected
+  Cli.ShowRoot -> withRoot (inspectionCheckResult revision <$> Root.inspectRootAt kb revision)
+  Cli.CheckRoot -> withRoot (checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision)
+  where
+    withRoot action = withRuntime host $ \toolchain sdk -> finish $
+      runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ action
 dispatchEvolution :: Host -> Cli.EvolutionCommand -> SelectedKb -> IO Response
 dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case request of
     Cli.ListEvolutions selection -> finish $ runMetadata host $
@@ -193,7 +199,7 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
           Left message -> refusal [errorDiagnostic "kb.path" message]
           Right path -> workspaceResult value (maybe revision id before) (scopedPath scope path)
     Cli.CheckEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runEvaluation host toolchain sdk . runPluginPreparation sdk . runRootExecution sdk $
+      runEvaluation host toolchain sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
         evolutionCheckResult identity <$> checkEvolution (workspace identity)
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached

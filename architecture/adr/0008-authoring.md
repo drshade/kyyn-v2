@@ -199,7 +199,52 @@ the authored function does not call a nested `propose` operation or silently upd
 accepted fact files. Generated plugin proxies expose concrete input/output types
 while routing calls through the host and the plugin's own capability context.
 
-### Proposed addition: composed KB investigation tools
+### Composed KB investigation tools
+
+The initial registry is a `tools` list alongside `queries` in `kb.dhall`:
+
+```dhall
+tools =
+  [ { name = "bulkContent"
+    , description = "Read captured documents"
+    , implementation = "Helpers.bulkContent"
+    , inputType = "Helpers.DocumentIds"
+    , resultType = "Helpers.Contents"
+    }
+  ]
+```
+
+Types and implementations are qualified Haskell exports, not inline structural
+schemas. Tool names reuse the connector-binding identifier rule and must be
+unique among tools; queries have a separate namespace. A KB without tools declares
+`tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }`.
+Whole-root checking compiles registered tools without invoking them. Discovery
+uses the same checked declarations; invocation accepts typed arguments and returns
+the inspected result type. No second registration file or historical manifest
+decoder is needed.
+
+For the initial captured-read implementation, an authored helper can be:
+
+```haskell
+import Kyyn.Plugin (FetchError)
+import Kyyn.Connectors (Tool)
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_local_file.Folder as Files
+
+type DocumentIds = [String]
+type Contents = [String]
+
+bulkContent :: DocumentIds -> Tool (Either FetchError Contents)
+bulkContent ids = sequence <$> mapM (Files.content Connectors.documents) ids
+```
+
+Generated bindings import the plugin's real contract-bearing Haskell modules.
+They do not generate structurally identical replacement data types. The caller
+source closure includes every installed plugin's `src/` tree; conflicting module
+paths are reported, not silently renamed. Plugin implementation adapters are
+generated in their own execution context, not imported by the caller. A plugin's
+contract-bearing type modules must not import its generated acquisition bindings:
+those bindings exist only when compiling the plugin entry, not its callers.
 
 For investigation, a KB author can compose plugin methods as ordinary functions:
 
@@ -224,8 +269,8 @@ These are illustrative authored modules and result types, not installed SDK expo
 owns selection of their captured evidence. The same composition can cross plugin
 packages. Register `getActivity` as a KB tool to expose its checked input/result
 contracts and documentation to agents; unregistered helpers remain ordinary private
-functions. Use the typed `Method`/`registerMethod` boundary above with KB-owned method
-identity and the read-only capabilities in ADR 0009, not another registry of structural
+functions. The initial manifest registry generates a typed entry signature with
+the read-only capabilities in ADR 0009, not another registry of structural
 schemas or an author-written MCP wrapper. Discovery checks exports and contracts
 without invoking the tool. A KB tool is not a snapshot `Query`: adding this entry
 point must not give queries, validators or renderers access to plugin calls.

@@ -108,7 +108,7 @@ workspaceApiTests = do
 manifest :: String -> Bytes.ByteString
 manifest name = Bytes.pack ("{ schemaType = " ++ show (name ++ ".Root") ++
   ", schemaMetadata = " ++ show (name ++ ".metadata") ++
-  ", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text } }")
+  ", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")
 
 assert :: String -> Bool -> IO ()
 assert label ok = unless ok (fail label)

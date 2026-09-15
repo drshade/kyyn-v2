@@ -5,6 +5,7 @@ module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedVa
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Query (QueryDefinition)
+import Kyyn.Domain.Tool (ToolDefinition)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Data.List (isPrefixOf)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
@@ -32,5 +33,5 @@ data SourceRoot = SourceRoot
   , loadedSources :: [RelativePath] } deriving (Eq, Show)
 data RootDefinition = RootDefinition
   { schemaType :: String, schemaMetadata :: String, validator :: String
-  , queries :: [QueryDefinition], sources :: FileTree }
+  , queries :: [QueryDefinition], tools :: [ToolDefinition], sources :: FileTree }
   deriving (Eq, Show)

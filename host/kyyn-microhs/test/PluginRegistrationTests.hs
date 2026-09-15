@@ -49,6 +49,7 @@ import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import Kyyn.Porcelain.Capability.PluginRead (callCapturedMethod)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
+import ToolTests (testTools)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
 import Kyyn.Porcelain.Capability.KnowledgeBaseInitialization (initialRootFiles)
@@ -56,6 +57,7 @@ import Kyyn.Porcelain.Capability.RootOpening (openCapturedRoot)
 import Kyyn.Porcelain.Capability.Validation (checkRoot)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (createDirectory, createDirectoryIfMissing, findExecutable)
 import System.Environment (getEnv)
@@ -164,11 +166,12 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         malformed <- invoke identity method (toJSON True)
         assert "Invalid method input was accepted" (rejected malformed)) instances
     _ -> fail "Wrong plugin registration shape"
+  testTools scope toolchain sdk code prepared
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
     (runGuestExecution toolchain $ runGuestCompilation toolchain (runSchemaInspectionIO toolchain (runRootStore (noGit (runRootOpening sdk
-      (runPluginPreparation sdk (runRootExecution sdk $ do
+      (runPluginPreparation sdk (runToolPreparation sdk . runRootExecution sdk $ do
         opened <- openCapturedRoot invalidCode
         either (pure . Rejected . ValidationReport) checkRoot opened))))))))))) >>= right
   case rootResult of
