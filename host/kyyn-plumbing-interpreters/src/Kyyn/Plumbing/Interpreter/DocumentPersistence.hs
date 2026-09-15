@@ -2,7 +2,6 @@
 module Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO) where
 
 import Control.Exception (IOException, displayException, try)
-import Control.Monad (forM_)
 import qualified Data.ByteString as Bytes
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
@@ -15,9 +14,9 @@ import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Path (scopePath)
 import Kyyn.Plumbing.Capability.DocumentPersistence
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
-import System.Directory (createDirectoryIfMissing, listDirectory, removeFile, renameFile)
+import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, renameFile)
 import System.FileLock (lockFile, unlockFile, SharedExclusive(..))
-import System.FilePath ((</>))
+import System.FilePath ((</>), takeDirectory)
 import System.IO (hClose, hSetBinaryMode)
 import System.IO.Error (isDoesNotExistError)
 import System.IO.Temp (withTempFile)
@@ -27,11 +26,13 @@ runDocumentPersistenceIO :: (IOE :> es, Failure :> es) => Eff (DocumentPersisten
 runDocumentPersistenceIO = interpret $ \env (WithLockedDocument scope action) ->
   localLiftUnlift env SeqUnlift $ \liftLocal unlift -> do
     let directory = scopePath scope
-    native Failure.EnsureDirectory directory (createDirectoryIfMissing True directory)
+    native Failure.EnsureDirectory directory (createDirectoryIfMissing True (takeDirectory directory))
     Exception.bracket
-      (native Failure.InspectEntry directory (lockFile (directory </> "store.lock") Exclusive))
+      (native Failure.InspectEntry directory (lockFile (directory ++ ".lock") Exclusive))
       (native Failure.InspectEntry directory . unlockFile)
-      (const (unlift (interpret (\_ operation -> liftLocal (handleDocument directory operation)) action)))
+      (const $ do
+        native Failure.EnsureDirectory directory (createDirectoryIfMissing True directory)
+        unlift (interpret (\_ operation -> liftLocal (handleDocument directory operation)) action))
 
 handleDocument :: (IOE :> es, Failure :> es) => FilePath -> DocumentAccess m a -> Eff es a
 handleDocument directory = \case
@@ -41,24 +42,14 @@ handleDocument directory = \case
       Right bytes -> pure (Just bytes)
       Left err | isDoesNotExistError err -> pure Nothing
                | otherwise -> ioError err
-  ReplaceCurrent bytes -> native Failure.ReplaceFile directory $ withTempFile directory ".pending-" $ \path handle -> do
-    hSetBinaryMode handle True
-    Bytes.hPut handle bytes
-    hClose handle
-    renameFile path (directory </> "state.dhall")
-  ArchiveCurrent bytes -> native Failure.WriteFile directory $ do
-    identity <- freshIdentity
-    let archives = directory </> "archives"
-    createDirectoryIfMissing True archives
-    Bytes.writeFile (archives </> identity ++ ".dhall") bytes
-  ClearCurrent -> native Failure.WriteFile directory (removeOptional (directory </> "state.dhall"))
-  ClearArchives -> native Failure.WriteFile directory $ do
-    let archives = directory </> "archives"
-    entries <- try (listDirectory archives)
-    case entries of
-      Left err | isDoesNotExistError err -> pure ()
-               | otherwise -> ioError err
-      Right names -> forM_ names (removeFile . (archives </>))
+  ReplaceCurrent bytes -> native Failure.ReplaceFile directory $ do
+    createDirectoryIfMissing True directory
+    withTempFile directory ".pending-" $ \path handle -> do
+      hSetBinaryMode handle True
+      Bytes.hPut handle bytes
+      hClose handle
+      renameFile path (directory </> "state.dhall")
+  ClearCurrent -> native Failure.WriteFile directory (removeOptional directory)
   FreshStamp -> native Failure.CreateUniqueDirectory directory $
     DocumentStamp <$> freshIdentity <*> (iso8601Show <$> getCurrentTime)
 
@@ -70,7 +61,7 @@ freshIdentity = do
 
 removeOptional :: FilePath -> IO ()
 removeOptional path = do
-  result <- try (removeFile path)
+  result <- try (removeDirectoryRecursive path)
   case result of
     Left err | isDoesNotExistError err -> pure ()
              | otherwise -> ioError err

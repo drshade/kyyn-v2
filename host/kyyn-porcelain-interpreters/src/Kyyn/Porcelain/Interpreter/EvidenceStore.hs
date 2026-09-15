@@ -51,9 +51,6 @@ runEvidenceStore kb = interpret $ \_ -> \case
     let updated = EvidenceState baseline initial (Just identity) next (history ++ [Fetch identity previous at changes])
     encoded <- ExceptT (encodeState producer contract updated)
     ExceptT $ Right <$> FileSystem.ensureIgnoredDirectory kb cacheLocation
-    case (same,bytes) of
-      (False,Just old) -> ExceptT $ Right <$> Document.archiveCurrent old
-      _ -> pure ()
     ExceptT $ Right <$> Document.replaceCurrent encoded
     pure (EvidenceSnapshotRef instanceRef producer identity)
   SelectEvidence instanceRef producer selection -> locked instanceRef $ runExceptT $ do
@@ -88,9 +85,8 @@ runEvidenceStore kb = interpret $ \_ -> \case
     let EvidenceState _ _ current values _ = state
     encoded <- ExceptT (encodeState producer contract (EvidenceState current values current values []))
     ExceptT $ Right <$> Document.replaceCurrent encoded
-    ExceptT $ Right <$> Document.clearArchives
   ClearEvidence instanceRef -> locked instanceRef $
-    Document.clearCurrent >> Document.clearArchives
+    Document.clearCurrent
   where
     locked :: ConnectorInstanceRef -> Eff (DocumentAccess : es) b -> Eff es b
     locked instanceRef action =

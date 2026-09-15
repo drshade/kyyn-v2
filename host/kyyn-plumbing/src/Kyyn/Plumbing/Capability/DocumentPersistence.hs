@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.DocumentPersistence
   ( DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..)
-  , withLockedDocument, readCurrent, replaceCurrent, archiveCurrent, clearCurrent, clearArchives, freshStamp
+  , withLockedDocument, readCurrent, replaceCurrent, clearCurrent, freshStamp
   ) where
 
 import Data.ByteString (ByteString)
@@ -23,10 +23,8 @@ data DocumentAccess :: Effect where
   ReadCurrent :: DocumentAccess m (Maybe ByteString)
   -- | Replace by writing a temporary file and renaming it within the locked directory.
   ReplaceCurrent :: ByteString -> DocumentAccess m ()
-  -- | Retain the supplied document in an archive named by a fresh identity.
-  ArchiveCurrent :: ByteString -> DocumentAccess m ()
+  -- | Remove the scoped document directory and its contents, retaining the lock.
   ClearCurrent :: DocumentAccess m ()
-  ClearArchives :: DocumentAccess m ()
   FreshStamp :: DocumentAccess m DocumentStamp
 type instance DispatchOf DocumentAccess = Dynamic
 
@@ -36,11 +34,7 @@ readCurrent :: DocumentAccess :> es => Eff es (Maybe ByteString)
 readCurrent = send ReadCurrent
 replaceCurrent :: DocumentAccess :> es => ByteString -> Eff es ()
 replaceCurrent = send . ReplaceCurrent
-archiveCurrent :: DocumentAccess :> es => ByteString -> Eff es ()
-archiveCurrent = send . ArchiveCurrent
 clearCurrent :: DocumentAccess :> es => Eff es ()
 clearCurrent = send ClearCurrent
-clearArchives :: DocumentAccess :> es => Eff es ()
-clearArchives = send ClearArchives
 freshStamp :: DocumentAccess :> es => Eff es DocumentStamp
 freshStamp = send FreshStamp

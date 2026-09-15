@@ -31,7 +31,7 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Protocol.EvidencePersistence
-import System.Directory (listDirectory, createDirectory, removeDirectory, doesFileExist)
+import System.Directory (createDirectory, removeDirectory, doesFileExist, doesDirectoryExist)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -190,14 +190,14 @@ main = do
     assert "old producer reinterpreted" (oldProducer == Left ProducerContractChanged)
     reset <- run (readFetchesBetween changed contract Nothing) >>= right
     assert "new producer carried previous delta base" (case reset of [Fetch _ Nothing _ _] -> True; _ -> False)
-    archives <- listDirectory (directory </> ".kyyn/evidence/folder-73616c6573/archives")
-    assert "producer update deleted retained bytes" (not (null archives))
+    archives <- doesDirectoryExist (directory </> ".kyyn/evidence/folder-73616c6573/archives")
+    assert "producer update archived replaced contents" (not archives)
     run (clearEvidence instanceA)
+    remaining <- doesDirectoryExist (directory </> ".kyyn/evidence/folder-73616c6573")
+    assert "clear retained the instance cache" (not remaining)
     absent <- run (evidenceHead instanceA) >>= right
     otherStill <- run (readEvidence independent contract itemA) >>= right
     assert "clear failed or crossed instance boundary" (absent == Nothing && otherStill == Just (value "independent"))
-    remaining <- listDirectory (directory </> ".kyyn/evidence/folder-73616c6573/archives")
-    assert "clear left archived payloads" (null remaining)
     let statePath = directory </> ".kyyn/evidence/folder-73616c6573/state.dhall"
     createDirectory statePath
     failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope (evidenceHead instanceA)))))

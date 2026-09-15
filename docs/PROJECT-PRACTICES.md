@@ -92,7 +92,7 @@ existing real-Dhall/filesystem integration assertions.
 
 `cabal test document-persistence --test-show-details=direct` in
 `kyyn-plumbing-interpreters` checks scoped native locking across read/modify/replace,
-archive/clear operations, replacement-failure cleanup and lock release on
+scoped clearing (including lock continuity across clear), replacement-failure cleanup and lock release on
 cancellation. It uses bytes, not evidence types or a guest compiler.
 
 `cabal test plugin-installation --test-show-details=direct` checks the installation
