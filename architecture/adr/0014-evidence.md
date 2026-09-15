@@ -75,7 +75,10 @@ Plugins own this choice; there is no requirement to canonicalize arbitrary exter
 objects in the kernel. Host file acquisition can supply the hash alongside the text
 from the same read, so guest authors need neither native IO nor a hashing library.
 
-Acquisition compares with the current prior capture. Unchanged items produce no
+Connectors still declare New/Updated/Removed; adding fingerprints does not move
+change derivation into the host. A provider delta feed is translated into these
+same operations, supplying full replacement payloads and suitable revision tokens
+for changed items. Acquisition compares with the current prior capture. Unchanged items produce no
 delta. An update supplies the full replacement value, not a field patch. The host
 checks payload contracts, nonempty fingerprints and delta consistency: new IDs must
 be absent and updated/removed IDs present. It applies changes in order. It does not
@@ -104,7 +107,7 @@ typed bindings and capabilities as described in ADRs 0008, 0009 and 0016.
 
 Publish one complete successful batch atomically. Failure leaves the current
 capture and its change markers unchanged. Publication checks the expected previous
-fetch ID so a concurrent acquisition cannot apply its delta against a different
+fetch ID (or no fetch for a new instance) so a concurrent acquisition cannot apply its delta against a different
 base. This is local update consistency, not a curation approval workflow.
 
 A plugin invocation reads one immutable in-memory view of the latest captured
@@ -162,6 +165,8 @@ The marker records the supplied fingerprint for additions/updates, and the last
 known fingerprint and source references for a removal. The fingerprint does not
 encode the content. An unchanged fetch can have an empty change list. Change
 summaries associate markers with their fetch/predecessor; they contain no payload.
+The initial implementation retains this lightweight metadata until the instance's
+evidence store is explicitly cleared. No bounded retention policy is introduced.
 
 `Nothing` requests all available markers; `Just f` requests markers after that fetch
 through the latest fetch. A cursor identifies progress, not a payload version to
@@ -174,6 +179,12 @@ claiming nothing changed. The agent can reconcile the full current capture inste
 Clearing evidence removes the local capture and marker history, not accepted facts,
 rationales or KB-owned curation state. No per-item review/dismissal queue, inferred
 curation progress or automatic acceptance.
+
+Diagnostics distinguish `evidence.cursor-unavailable` for unknown/unavailable
+curation markers, `evidence.not-fetched` for an instance without a current capture,
+`evidence.producer-changed` for incompatible producing code/contract,
+`evidence.base-conflict` for a concurrent publication, `evidence.invalid-delta` for
+inconsistent returned changes and `evidence.invalid-data` for malformed storage.
 
 EvidenceStore is a porcelain capability. Its interpreter owns delta application,
 producer context and expected-base publication; scoped DocumentPersistence from
@@ -257,6 +268,9 @@ This is an unreleased local cache, not a compatibility commitment. Replacing the
 historical format must not leave old payload archives behind as an unused fallback.
 Implementation must use an explicit scoped discard/refetch path for old-format
 evidence; it must not silently migrate or rewrite accepted KB facts.
+An old-format cache is refused with `evidence.invalid-data` and guidance to clear
+that instance and refetch. `evidence clear PLUGIN INSTANCE` discards its current
+capture and metadata, including any old cache files in that instance's storage.
 
 ## Verification
 

@@ -165,6 +165,7 @@ Evidence operations use their own noun path:
 evidence fetch PLUGIN INSTANCE
 evidence history list PLUGIN INSTANCE
 evidence change list PLUGIN INSTANCE [--since FETCH]
+evidence clear PLUGIN INSTANCE
 ```
 
 Fetching selects and checks the accepted root and its configured instance;
@@ -173,9 +174,9 @@ start an evidence history. Unknown plugins and instances produce `plugin.unknown
 and `plugin.instance-unknown`; a typed acquisition refusal is `plugin.fetch-failed`.
 History and change results contain fetch identifiers, ordering and citations,
 never payloads. `--since` is exclusive; the ending fetch is always the latest.
-There is no `--at` selector or historical evidence-read operation.
-Unavailable history, incompatible producers, publication conflicts and malformed
-deltas remain distinct: `evidence.history-unavailable`, `evidence.producer-changed`,
+Clearing discards only the selected instance's local evidence and change markers.
+Unavailable cursors, unfetched instances, incompatible producers, publication conflicts and malformed
+deltas remain distinct: `evidence.cursor-unavailable`, `evidence.not-fetched`, `evidence.producer-changed`,
 `evidence.base-conflict`, `evidence.invalid-delta` and `evidence.invalid-data`
 (corrupt stored data). ADR 0014 owns their semantics.
 History and change inspection currently prepare plugin declarations and contracts,

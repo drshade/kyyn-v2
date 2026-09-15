@@ -62,12 +62,11 @@ curation cursor, requests changes after F1 through the latest fetch, and investi
 those changes with plugin methods.
 That change index contains identities, change kinds and citations, not the document
 payloads shown in the plugin batch illustration above.
-Reading Contoso now returns absent. Its prior meaning is in the KB's accepted facts,
-not an old evidence payload. Reading Acme returns 125; there is no read-at-F1 option.
+Reading Contoso now returns absent. Its prior meaning is in the KB's accepted facts.
+Reading Acme returns 125.
 
 If F3 is fetched during a tool invocation selected at F2, that invocation still
-reads its already-loaded input. The next invocation reads F3. No persistent session,
-historical selection parameter or old-payload archive is needed.
+reads its already-loaded input. The next invocation reads F3.
 
 ## 4. Compose useful investigation tools
 
