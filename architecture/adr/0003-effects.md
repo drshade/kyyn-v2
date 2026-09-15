@@ -194,7 +194,7 @@ The native interpreter ensures the selected directory exists and holds its
 exclusive lock throughout the callback, releasing it on success, failure or
 cancellation. Current bytes occupy `state.dhall`; replacement uses a temporary
 file and rename within that directory. Missing current data is optional, but
-unreadable data is Failure. This primitive does not retain replaced documents.
+unreadable data is Failure.
 The stamp supplies an opaque identity and ISO 8601 UTC time, not a domain revision.
 This layer does not parse the document or know KBs, connectors, producers or
 expected evidence heads. Semantic interpreters make those decisions inside the

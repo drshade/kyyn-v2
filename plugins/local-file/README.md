@@ -48,7 +48,7 @@ kyyn-v2 --kb /path/to/kb evidence history list local-file documents
 kyyn-v2 --kb /path/to/kb evidence change list local-file documents --since FETCH
 ```
 
-Omit `--since` to list all retained changes. History and changes support
-`--at FETCH` to select an earlier fetch. Both return identifiers and summaries,
-not document payloads. Fetches are checkout-local Dhall data, not Git commits;
+Omit `--since` to list all retained change markers. History and changes return
+identifiers and summaries; plugin reads use the latest captured document contents.
+Fetches are checkout-local Dhall data, not Git commits;
 they do not change accepted facts. A draft configuration cannot acquire evidence.

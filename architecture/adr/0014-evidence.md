@@ -1,16 +1,15 @@
 ---
 id: 0014
-title: 'Latest evidence updates the KB; change markers support curation'
+title: 'Latest evidence informs the KB; change markers support curation'
 status: proposed
 date: 2026-09-15
 ---
-# Latest evidence updates the KB; change markers support curation
+# Latest evidence informs the KB; change markers support curation
 
 Basis: owner-directed latest-only evidence model. The accepted KB is our prior
 understanding; the latest successful acquisition supplies current external input.
-The existing historical-payload implementation must be replaced to satisfy this
-revision. Typed plugin read discovery and KB helpers remain separate implementation
-work.
+Accepted evolutions update the KB. Implementation of this storage revision and
+typed plugin read discovery/KB helpers remains outstanding.
 
 ## Context
 
@@ -21,18 +20,22 @@ version duplicates a responsibility the evidence store does not need.
 Curation still needs to know what changed since it last processed a source. That
 requires lightweight change markers, not old payloads. Separate these concerns.
 
+This revision removes historical fetch selection, payload replay, producer archives
+and history-deletion baselines. Existing caches using that unreleased format are
+refused with `evidence.invalid-data` and guidance to clear the selected instance
+and refetch. Scoped clearing must discard all its cache files, including archives,
+without modifying accepted KB facts. There is no format migration commitment.
+
 ## Decision
 
 ### One current captured value per evidence item
 
 Each configured connector instance has one latest captured evidence state, stored
 as Dhall in an ignored checkout-local store. A successful fetch replaces changed
-items, adds new items and removes deleted items. Superseded and removed contents
-are not retained in fetch history, baselines or producer archives.
+items, adds new items and removes deleted items. Persistent payload storage contains
+only the resulting current values.
 
-All new evidence-read invocations use the latest successful fetch. There is no
-historical fetch selector, version-addressed payload lookup, replay API or
-restoration of an earlier evidence snapshot. Latest means latest successfully
+All new evidence-read invocations use the latest successful fetch. Latest means latest successfully
 captured input, not a claim of continuous synchronization with the provider.
 Browsing does not implicitly acquire fresh provider data.
 
@@ -65,8 +68,8 @@ fetch
 Every supplied item has a nonempty connector-supplied fingerprint. It is an opaque
 equality token for the captured content of that item, scoped to its connector and
 producer. An unchanged captured representation has the same token; changed content
-has a different token. It is not the item ID, a storage address or a means of
-retrieving an old version. The host does not attempt to infer business equivalence.
+has a different token. Item IDs identify items; fingerprints compare their captured
+content. The host does not attempt to infer business equivalence.
 
 For local files, use a content hash. A connector may instead use a suitable provider
 revision or hash of a deliberately chosen stable representation. Exclude fetch
@@ -81,7 +84,10 @@ same operations, supplying full replacement payloads and suitable revision token
 for changed items. Acquisition compares with the current prior capture. Unchanged items produce no
 delta. An update supplies the full replacement value, not a field patch. The host
 checks payload contracts, nonempty fingerprints and delta consistency: new IDs must
-be absent and updated/removed IDs present. It applies changes in order. It does not
+be absent and updated/removed IDs present. An update with the same fingerprint as
+the current item is refused as `evidence.invalid-delta`. The snapshot read handle
+returns `Evidence a`, including its fingerprint, for that comparison.
+The host applies changes in order. It does not
 manufacture changes by comparing arbitrary payloads.
 
 The first-party folder connector starts with:
@@ -113,11 +119,11 @@ base. This is local update consistency, not a curation approval workflow.
 A plugin invocation reads one immutable in-memory view of the latest captured
 evidence. The host owns its lifetime and releases the store lock before running
 guest code or external acquisition. Refresh does not change an already-loaded
-invocation's input; the next invocation uses the latest capture. There is no public
-way to reopen that old input after the invocation ends.
+invocation's input; the next invocation uses the latest capture. That in-memory
+view lasts only for its invocation.
 
 ```haskell
--- Host-side materialization; not a historical selector.
+-- Host-side materialization of current captured evidence.
 data CurrentEvidence = CurrentEvidence
   { snapshot :: EvidenceSnapshotRef
   , items :: [(EvidenceId, Evidence CheckedValue)]
@@ -139,8 +145,7 @@ A missing item in an available capture is an ordinary absent result.
 ### Payload-free change tracking
 
 Keep fetch identity, predecessor, acquisition time and lightweight item-change
-markers. These support independent KB-authored curation cursors. They do not retain
-payloads or permit replay:
+markers. These support independent KB-authored curation cursors:
 
 ```haskell
 data Fetch = Fetch
@@ -170,7 +175,7 @@ known fingerprint and source references for a removal. The fingerprint does not
 encode the content. An unchanged fetch can have an empty change list. Change
 summaries associate markers with their fetch/predecessor; they contain no payload.
 The initial implementation retains this lightweight metadata until the instance's
-evidence store is explicitly cleared. No bounded retention policy is introduced.
+evidence store is explicitly cleared; marker retention is unbounded for now.
 
 `Nothing` requests all available markers; `Just f` requests markers after that fetch
 through the latest fetch. A cursor identifies progress, not a payload version to
@@ -250,10 +255,9 @@ plugin-supplied item ID. References should use good source identifiers: stable U
 where available, provider IDs with useful account/mailbox/organization scope, or
 file paths with an explicit base. They need not be publicly accessible URLs.
 
-A citation means "this source supports the change", not "this old source version
-can be retrieved". It remains useful independently of Kyyn's transient cache.
-The provider may change or delete the source. Kyyn neither retains that content
-nor promises historical reconstruction.
+A citation means "this source supports the change". It remains useful independently
+of Kyyn's transient cache. Following it accesses the provider as available now;
+the provider may change or delete the source.
 
 The operational EvidenceFingerprint is separate from EvidenceRef. Citations do not
 need fingerprints, source versions or content hashes. The connector's change token
@@ -264,17 +268,12 @@ not establish whether the external source has changed since a citation was made.
 
 Current evidence is bound to its producing plugin source and payload contract.
 After a plugin update, do not reinterpret incompatible cached contents under the
-new producer. Refetch. A successful fetch replaces that instance's old capture and
-marker history; it does not archive either. Old cursors report unavailable history
+new producer. Refetch. A successful fetch replaces that instance's capture and
+marker history. Previous cursors report unavailable history
 and the agent reconciles the new current capture. A failed refetch publishes nothing.
 
-This is an unreleased local cache, not a compatibility commitment. Replacing the
-historical format must not leave old payload archives behind as an unused fallback.
-Implementation must use an explicit scoped discard/refetch path for old-format
-evidence; it must not silently migrate or rewrite accepted KB facts.
-An old-format cache is refused with `evidence.invalid-data` and guidance to clear
-that instance and refetch. `evidence clear PLUGIN INSTANCE` discards its current
-capture and metadata, including any old cache files in that instance's storage.
+`evidence clear PLUGIN INSTANCE` discards that instance's local capture and metadata.
+Accepted KB facts and curation progress remain owned by evolutions.
 
 ## Verification
 
@@ -285,8 +284,8 @@ markers still identify changes after a curation cursor.
 
 Verify latest reads across separate invocations, consistent reads within one
 invocation during refresh, instance isolation, missing evidence and unavailable
-cursors. Reject historical-selection CLI arguments. Plugin changes replace rather
-than archive evidence. Keep source citations and accepted KB facts intact after
+cursors. Verify complete capture replacement following a plugin change.
+Keep source citations and accepted KB facts intact after
 scoped evidence clearing. Prove the first-party connector under GHC and MicroHs.
 
 The [curation walkthrough](../walkthroughs/evidence-curation.md) illustrates this
