@@ -4,7 +4,7 @@ import Control.Monad (forM_, unless)
 import Data.List (isInfixOf)
 import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionId)
 import Kyyn.Domain.Git (gitRevision)
-import Kyyn.Domain.Plugin (pluginName, connectorName)
+import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Surfaces.Cli
 import Options.Applicative (ParserResult(..), renderFailure)
@@ -17,6 +17,7 @@ main = do
       revision = either error id (gitRevision (replicate 40 'a'))
       localFile = either error id (pluginName "local-file")
       sales = either error id (connectorName "sales")
+      content = either error id (methodName "content")
       assert label condition = unless condition (fail label)
       succeeds args expected = case parseArguments args of
         Success actual -> assert ("Wrong parse: " ++ show args ++ ": " ++ show actual) (actual == expected)
@@ -39,6 +40,15 @@ main = do
     (Invocation selected Human (Plugin (Connector (ShowConnectorSchema localFile (Just identity)))))
   succeeds ["evidence","fetch","local-file","sales"]
     (Invocation selected Human (Evidence (FetchConnector localFile sales)))
+  succeeds ["plugin","connector","method","list","local-file","sales","--evolution","abc123"]
+    (Invocation selected Human (Plugin (Connector (ListConnectorMethods localFile sales (Just identity)))))
+  succeeds ["plugin","connector","method","show","local-file","sales","content"]
+    (Invocation selected Human (Plugin (Connector (ShowConnectorMethod localFile sales content Nothing))))
+  succeeds ["plugin","connector","method","execute","local-file","sales","content","--input","\"one.txt\""]
+    (Invocation selected Human (Plugin (Connector (ExecuteConnectorMethod localFile sales content "\"one.txt\""))))
+  refuses ["plugin","connector","method","execute","local-file","sales","content","--input","\"one.txt\"","--evolution","abc123"]
+  refuses ["plugin","connector","method","execute","local-file","sales","content"]
+  refuses ["plugin","connector","method","show","local-file","sales","case"]
   succeeds ["evidence","history","list","local-file","sales"]
     (Invocation selected Human (Evidence (ListFetchHistory localFile sales)))
   succeeds ["evidence","change","list","local-file","sales","--since","first"]

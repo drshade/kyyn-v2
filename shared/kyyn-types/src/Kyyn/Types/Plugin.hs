@@ -1,6 +1,6 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, DuplicateRecordFields #-}
 module Kyyn.Types.Plugin
-  ( SourceConnector(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
+  ( SourceConnector(..), CapturedMethod(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
 
 import Kyyn.Types.Evidence (EvidenceId, Evidence, EvidenceFingerprint)
 
@@ -16,6 +16,17 @@ data SourceConnector = SourceConnector
     fetch :: String
   , -- | Qualified pure configuration validator, with type Config -> ValidationReport.
     validateConfig :: String
+  , -- | Typed methods for reading this connector's captured evidence.
+    methods :: [CapturedMethod]
+  } deriving (Eq, Show)
+
+-- | Advertise a captured-evidence reader using qualified Haskell export names.
+data CapturedMethod = CapturedMethod
+  { name :: String
+  , description :: String
+  , inputType :: String
+  , resultType :: String
+  , implementation :: String
   } deriving (Eq, Show)
 
 -- | A selected captured-evidence snapshot, read through the generated plugin bindings.

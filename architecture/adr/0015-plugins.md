@@ -294,6 +294,13 @@ connectors = [SourceConnector
   , payloadType = "LocalFile.Types.Document"
   , fetch = "LocalFile.Folder.fetch"
   , validateConfig = "LocalFile.Config.validate"
+  , methods = [CapturedMethod
+      { name = "content"
+      , description = "Read the latest fetched text of a file by its evidence ID."
+      , inputType = "LocalFile.Types.ContentId"
+      , resultType = "LocalFile.Types.Content"
+      , implementation = "LocalFile.Read.content"
+      }]
   }]
 ```
 
@@ -310,9 +317,28 @@ and type component, each an uppercase Haskell identifier. Bindings match
 `SchemaInspection.inspectType` inspects a captured source tree directly and
 returns a contract without authored metadata; no synthetic metadata module is
 compiled for plugin config or payload types.
-This declaration registers the connector's fixed methods. ADR 0008's typed named
-methods, such as `viewEmail`, extend the same connector declaration rather than
-introducing another registry; that named-method surface remains separate work.
+The `methods` list extends this declaration with captured-evidence readers.
+`CapturedMethod` supplies a name, agent-facing description and qualified Haskell
+input/result/implementation exports. The compiler inspects those types and the
+generated adapter checks the selected implementation against ADR 0009's
+`CapturedRead` signature. Descriptions belong to registration, not a second API
+documentation registry. No method is executed during discovery.
+
+Native `MethodName` uses the same identifier rule as `BindingName`. Method names
+must be unique within a connector; a malformed or duplicate declaration is a
+`plugin.preparation` diagnostic locating the plugin/connector. A selected unknown
+method is `plugin.method-unknown`. The local-file method takes an evidence ID as
+`Text` and returns the captured text as `Text`. A missing ID is a typed `FetchError`,
+surfaced as `plugin.read-failed`, not a live-file fallback.
+
+The `PluginRead` porcelain capability receives a resolved instance, producer,
+payload contract, prepared method and checked input. Its interpreter validates
+the input against that method's contract, loads current evidence once, and calls
+the captured-read broker with that immutable value. It has no file-acquisition
+capability. `evidence.not-fetched`, producer-change and invalid-cache diagnostics
+are preserved; absence never becomes an empty snapshot. The result is checked
+against the inspected output contract. ADR 0018 owns direct discovery/invocation;
+generated KB-caller proxies and helper registration remain separate implementation.
 
 Distinguish installed package identity and selected method. Configuration is
 ordinary typed data, not another plugin-instance lifecycle:

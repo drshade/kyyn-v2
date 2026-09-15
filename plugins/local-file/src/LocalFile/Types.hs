@@ -10,3 +10,6 @@ data FolderConfig = FolderConfig
 
 -- | Captured contents of one text file.
 data Document = Document { text :: String } deriving (Eq, Show)
+
+type ContentId = String
+type Content = String

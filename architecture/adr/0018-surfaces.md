@@ -106,6 +106,10 @@ kyyn
       show <plugin> <connector>
       schema
         show <plugin>
+      method
+        list <plugin> <instance> [--evolution <id>]
+        show <plugin> <instance> <method> [--evolution <id>]
+        execute <plugin> <instance> <method> --input <dhall>
   evidence
     fetch <plugin> <instance>
     history
@@ -455,6 +459,16 @@ workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
 Surfaces do not compose root opening, validation or evolution execution themselves.
 
 ### MCP and Web
+
+The CLI's `plugin connector method list/show` resolves registered readers and
+inspects their Haskell contracts without invoking a reader. Both allow
+`--evolution ID` for inspecting target configuration. `execute` accepts only an
+accepted instance, with `--input DHALL` decoded hermetically against its inspected
+input contract. A type mismatch retains the normal Dhall diagnostic. Results are
+rendered as Dhall by default and structural JSON with `--json`. Unknown methods
+and unfetched/incompatible evidence remain explicit errors (ADR 0015); the command
+neither acquires evidence nor edits the root. Discovery of generated KB-call proxies
+and registered KB helpers remains under implementation.
 
 MCP exports relevant named typed methods and selective discovery, using generated
 JSON Schema and structured results. Expose exact source contracts as resources

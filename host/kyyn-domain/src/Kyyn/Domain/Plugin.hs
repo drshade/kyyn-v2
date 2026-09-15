@@ -3,7 +3,7 @@ module Kyyn.Domain.Plugin
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
   , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..)
-  , connectorTypeName, bindingName, connectorName, qualifiedTypeName
+  , CapturedMethodDeclaration(..), MethodName(..), methodName, connectorTypeName, bindingName, connectorName, qualifiedTypeName
   ) where
 
 import Data.Char (isAlphaNum, isUpper, isAsciiLower, isAsciiUpper, isDigit)
@@ -16,9 +16,14 @@ newtype PluginName = PluginName String deriving (Eq, Show)
 newtype PackageIdentity = PackageIdentity String deriving (Eq, Show)
 newtype ConnectorTypeName = ConnectorTypeName String deriving (Eq, Show)
 newtype BindingName = BindingName String deriving (Eq, Show)
+newtype MethodName = MethodName String deriving (Eq, Show)
 newtype ConnectorName = ConnectorName String deriving (Eq, Show)
 newtype QualifiedTypeName = QualifiedTypeName String deriving (Eq, Show)
-data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String deriving (Eq, Show)
+data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String [CapturedMethodDeclaration] deriving (Eq, Show)
+data CapturedMethodDeclaration = CapturedMethodDeclaration MethodName String QualifiedTypeName QualifiedTypeName String deriving (Eq, Show)
+
+methodName :: String -> Either String MethodName
+methodName value = (\(BindingName name) -> MethodName name) <$> bindingName value
 
 connectorTypeName :: String -> Either String ConnectorTypeName
 connectorTypeName value

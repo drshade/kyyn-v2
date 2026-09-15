@@ -142,6 +142,17 @@ type Acquisition a = Program (FileRead :+: EvidenceRead Payload) a
 type CapturedRead a = Program (EvidenceRead Payload) a
 ```
 
+A registered captured method implements:
+
+```haskell
+content :: Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result)
+```
+
+The generated adapter fixes `Input`, `Payload` and `Result` from the inspected
+declarations. The author writes neither an IO entry nor a codec. The host supplies
+the latest captured evidence at invocation start; method failure does not fetch or
+change that evidence. ADR 0015 owns registration and checked native dispatch.
+
 The snapshot argument is explicit. Acquisition may enumerate the source and read
 files; captured readers have only the two snapshot questions above. Native text
 acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint

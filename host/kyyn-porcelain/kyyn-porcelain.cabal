@@ -13,6 +13,7 @@ library
     Kyyn.Porcelain.Capability.EvidenceStore
     Kyyn.Porcelain.Capability.Connector
     Kyyn.Porcelain.Capability.PluginPreparation
+    Kyyn.Porcelain.Capability.PluginRead
     Kyyn.Porcelain.Capability.PluginInstallation
     Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
     Kyyn.Porcelain.Capability.Root
