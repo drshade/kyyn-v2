@@ -118,12 +118,16 @@ way to reopen that old input after the invocation ends.
 
 ```haskell
 -- Host-side materialization; not a historical selector.
+data CurrentEvidence = CurrentEvidence
+  { snapshot :: EvidenceSnapshotRef
+  , items :: [(EvidenceId, Evidence CheckedValue)]
+  }
+
 loadCurrentEvidence
   :: EvidenceStore :> es
   => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
 
--- CurrentEvidence contains the latest fetch identity and checked item values.
 -- The guest sees a typed EvidenceSnapshot read handle, not the host representation.
 ```
 
@@ -197,7 +201,7 @@ Use one current typed document at
 The instance component is lowercase hexadecimal UTF-8. `.kyyn/.gitignore` owns the
 checkout-local ignore rule; first publication creates it if absent, preserving
 existing content. Store producer identity, latest values and payload-free fetch
-markers. Timestamps use ISO 8601 UTC. No old-payload baseline or producer archive.
+markers. Timestamps use ISO 8601 UTC.
 The initial implementation may rewrite this document; paging or another storage
 engine is not required by this decision.
 
