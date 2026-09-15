@@ -136,8 +136,8 @@ Bindings must be valid unqualified Haskell value identifiers, not reserved words
 and unique across this KB's generated connector module. Report collisions rather
 than silently renaming exports. Instance identity remains plugin plus instance name;
 changing only `binding` changes the authoring API, not the instance or its evidence
-history. [ADR 0014](0014-evidence.md) defines current/default and historical evidence
-selection separately from this config binding. Installation creates no instances.
+history. [ADR 0014](0014-evidence.md) defines latest-only evidence and invocation-local
+read consistency separately from this config binding. Installation creates no instances.
 
 Malformed or structurally incompatible plugin configuration fails preparation of
 the whole root for use, with a diagnostic locating the offending configuration. Do not skip

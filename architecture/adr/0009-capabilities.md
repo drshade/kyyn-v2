@@ -147,7 +147,7 @@ effects for a relative path. Enumeration failure is a typed error, never an empt
 directory. The generated adapters and request/response transport are exercised
 under both compilers with recording responses. The native MicroHs broker additionally
 exercises live filesystem acquisition and EvidenceStore publication, including
-historical reads and failed acquisitions that leave the previous head unchanged.
+invocation-local reads and failed acquisitions that leave the previous head unchanged.
 
 Caller-to-plugin composition remains a separate integration boundary:
 

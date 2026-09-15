@@ -1,8 +1,8 @@
 # Fetch, investigate and curate
 
 This is a design walkthrough, not a runnable example or a claim that these commands
-already exist. Installation is implemented; source invocation, fetch storage and
-KB tools are not. [Evidence](../adr/0014-evidence.md) owns the history contract,
+already exist. Installation and acquisition are implemented; latest-only storage
+is being revised and KB tools remain unimplemented. [Evidence](../adr/0014-evidence.md) owns the retention contract,
 [configuration](../adr/0016-connections.md) owns instance bindings, and
 [authoring](../adr/0008-authoring.md) owns tool registration. The names below illustrate
 those boundaries without fixing generated SDK/module spellings.
@@ -22,23 +22,23 @@ Dhall union supplies the `Folder` constructor:
 
 The generated `Kyyn.Connectors.salesDocuments :: Folder.Instance` is the value KB
 code imports. Another configured folder would have its own instance name, binding
-and history. Neither requires another plugin installation. The installation fixture
-currently called `local-file` is not yet this folder connector.
+and change tracking. Neither requires another plugin installation. The first-party
+`local-file` package supplies the folder connector.
 
 ## 2. Fetch and inspect
 
 For this example the plugin chooses relative paths as evidence IDs and stores text
-contents with their source paths. The first fetch, F1, returns:
+contents with their source paths and content fingerprints. The first fetch, F1, returns:
 
 ```text
 NewEvidence "acme.txt"    { text = "Acme forecast: 100", ... }
 NewEvidence "contoso.txt" { text = "Contoso forecast: 200", ... }
 ```
 
-Kyyn persists the complete successful batch in ignored Dhall storage and makes F1
+Kyyn persists the latest values and payload-free markers in ignored Dhall storage and makes F1
 the latest captured evidence for this instance. The agent discovers the plugin's
 `readDocument` and `summarizeDocument` methods, including their input/result types
-and documentation. It calls them against F1; Kyyn does not prescribe one generic
+and documentation. It calls them against the latest capture, currently F1; Kyyn does not prescribe one generic
 view or understand how this plugin extracts useful text.
 
 The agent authors an evolution adding its interpreted sales facts, explanations and
@@ -56,20 +56,18 @@ RemovedEvidence "contoso.txt"
 NewEvidence     "fabrikam.txt" { text = "Fabrikam forecast: 75", ... }
 ```
 
-The host records F2's predecessor F1 and materializes its resulting snapshot. F1's
-payloads remain available. The agent reads its accepted curation cursor, requests
-changes after F1 through F2, and investigates those changes with plugin methods.
+The host records F2's predecessor F1 and replaces the current evidence. Superseded
+Acme text and removed Contoso text are discarded. The agent reads its accepted
+curation cursor, requests changes after F1 through the latest fetch, and investigates
+those changes with plugin methods.
 That change index contains identities, change kinds and citations, not the document
 payloads shown in the plugin batch illustration above.
-To understand the removed Contoso document it reads that ID at F1; at F2 it is
-absent. Reading Acme at F1 returns 100, not F2's 125.
+Reading Contoso now returns absent. Its prior meaning is in the KB's accepted facts,
+not an old evidence payload. Reading Acme returns 125; there is no read-at-F1 option.
 
 If F3 is fetched during a tool invocation selected at F2, that invocation still
-reads F2. Across separate agent calls, explicitly selecting F2 keeps the investigation
-on that fetch; a new default-current invocation may select F3. This distinction
-does not need a persistent agent session or a global lock on fetching.
-The caller supplies the historical choice as a per-instance invocation parameter;
-the generated connector binding and ordinary helper source do not change.
+reads its already-loaded input. The next invocation reads F3. No persistent session,
+historical selection parameter or old-payload archive is needed.
 
 ## 4. Compose useful investigation tools
 
@@ -115,17 +113,15 @@ accepting facts and the F2 cursor together. The cursor is the KB author's assert
 of progress, not a kernel proof that every document was understood. Another curation
 workflow can independently still be at F1.
 
-## 6. Handle missing or incompatible history honestly
+## 6. Reconcile after cache loss or a plugin change
 
-If someone explicitly deletes needed F1 history, requesting F1 → F2 reports history
-unavailable. It does not report an empty change list or quietly advance the cursor.
-Deleting history alone preserves the materialized current evidence; clearing the
-entire evidence store is a separate, explicit scope of deletion.
+If the local change markers were cleared, requesting changes since F1 reports
+history unavailable. It does not report an empty change list or quietly advance the cursor.
 The agent can inspect available current evidence and prepare a reconciliation
 evolution. Likewise, after changing the producing plugin, old payloads are not
 decoded under the new contract merely because field shapes happen to match.
-Refetch using the new plugin and reconcile; no automatic evidence migration.
+Refetch using the new plugin and reconcile; old contents are replaced, not archived.
 
 Neither deletion nor a plugin update removes accepted sales facts or their saved
-rationales. The citations still identify useful source items, even when historical
-local payloads are unavailable or the source now contains different information.
+rationales. The citations still identify useful source items when the source now
+contains different information or has disappeared.
