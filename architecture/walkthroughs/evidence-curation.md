@@ -65,7 +65,7 @@ payloads shown in the plugin batch illustration above.
 Reading Contoso now returns absent. Its prior meaning is in the KB's accepted facts.
 Reading Acme returns 125.
 
-If F3 is fetched during a tool invocation selected at F2, that invocation still
+If F3 is fetched during a tool invocation that loaded F2, that invocation still
 reads its already-loaded input. The next invocation reads F3.
 
 ## 4. Compose useful investigation tools
@@ -119,7 +119,7 @@ history unavailable. It does not report an empty change list or quietly advance 
 The agent can inspect available current evidence and prepare a reconciliation
 evolution. Likewise, after changing the producing plugin, old payloads are not
 decoded under the new contract merely because field shapes happen to match.
-Refetch using the new plugin and reconcile; old contents are replaced, not archived.
+Refetch using the new plugin and reconcile; old contents are replaced.
 
 Neither deletion nor a plugin update removes accepted sales facts or their saved
 rationales. The citations still identify useful source items when the source now
