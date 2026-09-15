@@ -9,6 +9,7 @@ const configurationSmoke = process.argv[3] === '--configuration-smoke';
 const readSmoke = process.argv[3] === '--read-smoke';
 const toolSmoke = process.argv[3] === '--tool-smoke';
 const methodChecks = readSmoke || (!configurationSmoke && !toolSmoke);
+const toolChecks = toolSmoke || (!configurationSmoke && !readSmoke);
 if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke || toolSmoke)))
   throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke|--tool-smoke]');
 const executable = path.resolve(process.argv[2]);
@@ -72,7 +73,7 @@ try {
     && diagnostic.message.includes('local-file/sales')), JSON.stringify(rejected));
   // The emitted schema is directly usable as the configuration's annotation.
   fs.writeFileSync(configPath, `(${configuration([['sales', sales], ['support', support]])}) : (${schema})\n`);
-  if (toolSmoke) {
+  if (toolChecks) {
     const manifestPath = path.join(draft.path, 'target/kb.dhall');
     const manifest = fs.readFileSync(manifestPath, 'utf8');
     const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
@@ -128,7 +129,7 @@ bulk ids = do
     return;
   }
   const other = fetch('support');
-  if (toolSmoke) {
+  if (toolChecks) {
     fs.renameSync(sales, sales + '-offline');
     const args = ['root', 'tool', 'execute', 'bulk', '--input', '["updated.txt", "unchanged.txt"]'];
     assert.deepEqual(cli(args).result, ['Original sales evidence Ω', 'Stable sales evidence', 'Independent support evidence']);
@@ -140,7 +141,8 @@ bulk ids = do
     assert.equal(cli(['root', 'tool', 'execute', 'bulk', '--input', '["missing.txt"]'], 1).diagnostics[0].code, 'tool.failed');
     assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
     console.log('Installed KB helper discovery, evolution acceptance, two-instance captured reads and Dhall/JSON results passed.');
-    return;
+    if (toolSmoke) return;
+    fs.renameSync(sales + '-offline', sales);
   }
   if (methodChecks) {
     fs.renameSync(sales, sales + '-offline');
