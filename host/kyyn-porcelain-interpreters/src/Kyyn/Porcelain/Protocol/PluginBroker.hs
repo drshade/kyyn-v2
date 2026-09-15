@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation) where
+module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
@@ -51,34 +51,34 @@ answerEvidence prior call = case call of
     checkToken token
     pure (success (maybe (object ["tag" .= ("None" :: String)])
       (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value]) (lookup key selected)))
-  _ -> broken "Filesystem acquisition is unavailable in this invocation"
+  _ -> protocolFailure "Filesystem acquisition is unavailable in this invocation"
   where
     selected = maybe [] (\(CurrentEvidence _ values) -> values) prior
     checkToken token | token == "selected" = pure ()
-                     | otherwise = broken "Unknown evidence snapshot handle"
+                     | otherwise = protocolFailure "Unknown evidence snapshot handle"
 
 conversation :: (GuestExecution :> es, Failure :> es)
   => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
   -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
 conversation decode program arguments respond = do
   (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program arguments $ \bytes -> do
-    frame <- either broken pure (decode bytes)
+    frame <- either protocolFailure pure (decode bytes)
     case frame of
       HostRequest identity call -> do
         expected <- get
-        if identity /= expected then broken "Unexpected guest request ID" else put (expected + 1)
+        if identity /= expected then protocolFailure "Unexpected guest request ID" else put (expected + 1)
         value <- raise (respond call)
         pure (Just (encodeResponse identity value))
       Completed _ -> pure Nothing
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
     ("Plugin exited " ++ show status ++ ": " ++ show stderr))) else do
-    frame <- either broken pure (decode output)
+    frame <- either protocolFailure pure (decode output)
     case frame of
       Completed value -> case parseResult value of
-        Left message -> broken message
+        Left message -> protocolFailure message
         Right (Left message) -> pure (Left (FetchError message))
         Right (Right result) -> pure (Right result)
-      _ -> broken "Guest did not complete"
+      _ -> protocolFailure "Guest did not complete"
 
-broken :: Failure :> es => String -> Eff es a
-broken message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput message))
+protocolFailure :: Failure :> es => String -> Eff es a
+protocolFailure message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput message))

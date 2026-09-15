@@ -24,7 +24,7 @@ import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), decodeToolFrame)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead, loadCapturedInput, executeCapturedMethod)
 import Kyyn.Porcelain.Capability.Tool
-import Kyyn.Porcelain.Protocol.PluginBroker (conversation)
+import Kyyn.Porcelain.Protocol.PluginBroker (conversation, protocolFailure)
 
 runToolExecution :: (PluginRead :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es)
   => Eff (ToolExecution : es) a -> Eff es a
@@ -33,13 +33,12 @@ runToolExecution = interpret $ \_ (ExecuteTool (PreparedTool (ToolDescriptor _ _
   result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState ([] :: [(ConnectorInstanceRef,CurrentEvidence)]) $
     conversation decodeToolFrame program (Lazy.toStrict (encode arguments)) $ \(ToolCall plugin kind instanceName methodName value) -> do
       let label = pluginNameText plugin ++ "/" ++ coerce instanceName
-          diagnostic code message = [errorDiagnostic code (label ++ ": " ++ message)]
       (PreparedPackage _ identity _, ConfiguredConnector _ _ (PreparedConnector actual _ payload _ _ methods) _) <-
-        either throwError pure (selectedInstance plugin instanceName plugins)
-      if actual /= kind then throwError (diagnostic "plugin.instance-type" "Connector type differs from the requested method") else pure ()
+        either (protocolFailure . ((label ++ ": ") ++) . show) pure (selectedInstance plugin instanceName plugins)
+      if actual /= kind then protocolFailure (label ++ ": connector type differs from the requested method") else pure ()
       method <- case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == methodName] of
         [m] -> pure m
-        _ -> throwError (diagnostic "plugin.method-unknown" ("No captured method named " ++ coerce methodName))
+        _ -> protocolFailure (label ++ ": no captured method named " ++ coerce methodName)
       let instanceRef = ConnectorInstanceRef plugin (coerce instanceName)
       loaded <- lookup instanceRef <$> get @[(ConnectorInstanceRef,CurrentEvidence)]
       current <- case loaded of

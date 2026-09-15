@@ -78,7 +78,16 @@ clear/refetch without a runtime bundle, without adding a generic evidence-view e
 It belongs to the full installed check and can be run independently for changes
 to this boundary. `--read-smoke` focuses on method discovery (including draft
 targets), reads while the source folder is unavailable, independent instances,
-refresh/removal, input refusal and Dhall/JSON outputs. KB helpers are not exercised.
+refresh/removal, input refusal and Dhall/JSON outputs. `--tool-smoke` instead adds
+and accepts a registered helper, discovers its contracts, and composes captured
+reads across two configured instances while the source directory is unavailable.
+It checks structured and Dhall results, invalid arguments and typed method failure.
+
+The plugin-registration suite also exercises generated tool bindings in GHC and
+MicroHs: an empty request row, wrong-instance compile refusal, two-instance reads,
+catchable missing-item failures, one captured-input load per instance, and
+invocation-level not-fetched refusal. These tests reuse the configured plugin
+fixture; no second acquisition setup or full integration gate is required.
 
 `cabal test plugin-packages --test-show-details=direct` checks source classification,
 hermetic plugin manifest/origin codecs, scoped Git source changes and shallow

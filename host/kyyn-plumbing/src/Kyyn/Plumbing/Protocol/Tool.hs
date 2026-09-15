@@ -42,11 +42,12 @@ toolBindings interfaces bindings = do
   core <- source "KyynToolCalls" calls
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",
-     "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)","import Kyyn.Types.Program (Program, request)",
+     "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)","import Kyyn.Types.Program (Program)",
+     "import qualified Kyyn.Types.Program as Program",
      "import qualified KyynToolCalls as Calls"] ++ imports (concat [[a,b] | (_,a,b) <- methods]) ++
     ["type Instance = ConnectorInstance Calls.Connector" ++ show i] ++ concat
     [[coerce n ++ " :: Instance -> " ++ haskellType a ++ " -> Program Calls.Calls (Either FetchError " ++ haskellType b ++ ")",
-      coerce n ++ " instanceValue arguments = request (Calls." ++ requestName i n ++ " instanceValue arguments)"] | (n,a,b) <- methods])) indexed
+      coerce n ++ " instanceValue arguments = Program.request (Calls." ++ requestName i n ++ " instanceValue arguments)"] | (n,a,b) <- methods])) indexed
   connectorModule <- source "Kyyn.Connectors" (unlines $
     ["module Kyyn.Connectors (Tool" ++ concat [", " ++ coerce n | InstanceBinding n _ _ _ <- bindings] ++ ") where",
      "import Kyyn.Types.Program (Program)","import Kyyn.Types.Plugin (ConnectorInstance(..))",

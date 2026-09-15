@@ -480,6 +480,12 @@ as connector methods. Listing and showing compile/check declarations but do not
 run the helper or read evidence. Generated proxy source catalogue integration
 remains separate from this registered input/result discovery.
 
+Tool diagnostics use `tool.unknown` for a missing registered name,
+`tool.preparation` for invalid source assembly, and `tool.failed` for the helper's
+own top-level `FetchError`. A helper can catch a plugin method's typed failure
+instead of returning it. An impossible instance/type/method request from a guest
+is a protocol failure, not another user-facing tool state.
+
 MCP exports relevant named typed methods and selective discovery, using generated
 JSON Schema and structured results. Expose exact source contracts as resources
 or files for agent adoption too. The MCP tool specification supports input and

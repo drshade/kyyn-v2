@@ -240,9 +240,11 @@ bulkContent ids = sequence <$> mapM (Files.content Connectors.documents) ids
 
 Generated bindings import the plugin's real contract-bearing Haskell modules.
 They do not generate structurally identical replacement data types. The caller
-source closure includes the vendored plugin sources; conflicting module paths
-are reported, not silently renamed. Plugin implementation adapters are generated
-in their own execution context, not imported by the caller.
+source closure includes every installed plugin's `src/` tree; conflicting module
+paths are reported, not silently renamed. Plugin implementation adapters are
+generated in their own execution context, not imported by the caller. A plugin's
+contract-bearing type modules must not import its generated acquisition bindings:
+those bindings exist only when compiling the plugin entry, not its callers.
 
 For investigation, a KB author can compose plugin methods as ordinary functions:
 
