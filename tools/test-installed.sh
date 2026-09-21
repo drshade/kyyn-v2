@@ -8,6 +8,7 @@ journey_stage=$(mktemp -d /tmp/kyyn-installed-stage.XXXXXXXX)
 trap 'rm -rf -- "$journey_stage"' EXIT
 bash tools/install-cli.sh "$journey_stage/install"
 node tools/test-guest-api.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-cpp-paths.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-plugin-install.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-plugin-evolution.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-connector-fetch.mjs "$journey_stage/install/bin/kyyn-v2"

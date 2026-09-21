@@ -5,4 +5,4 @@ import Kyyn.Domain.Path (DirectoryScope)
 newtype GuestToolchain = GuestToolchain DirectoryScope
 
 toolchainRevision :: String
-toolchainRevision = "455782164e75998b140d869c1b7cdde0c8a21508"
+toolchainRevision = "3322c60aad59da83fee9f870c37dab56e56238b5"

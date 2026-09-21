@@ -151,8 +151,10 @@ PR that establishes the completion criteria closes it.
 `PROJECT-PRACTICES.md` names the available local checks and full integration check.
 The author chooses proportionate verification and records the tested revision,
 commands and results in the PR. No blanket test command or remote CI run is required
-for every PR. Independent review is the merge gate. Issue completion requires the
-full integration check before the Issue is closed.
+for every PR. Independent review is the merge gate. A fix-sized Issue closes on
+focused checks and an installed journey covering the changed behavior. For a
+large outcome, run the full integration check on its terminal PR before closing
+the Issue.
 
 The project decides what the gate contains. Common components include
 formatting, compilation, linting, unit tests, integration tests, contract tests
