@@ -361,8 +361,11 @@ recording-handler tests for publication races and absence of evolution replay.
 `node tools/test-cpp-paths.mjs INSTALLED_EXECUTABLE` is a focused installed check
 for native schema/API inspection and guest compilation with CPP enabled. It copies
 the runtime into a path containing spaces, single quotes and Unicode, and uses
-similarly named KB and compiler-temporary directories. It is included in the full
+a similarly named KB directory. It is included in the full
 installed check and can be run independently for compiler updates.
+This fixture uses a space-free compiler temporary directory; CPP source-location
+handling under space-containing temporary paths is tracked in
+[issue #109](https://github.com/drshade/kyyn-v2/issues/109).
 
 The installed check also runs `tools/test-initialization.mjs`: an empty KB is
 initialized through the CLI and evolved into its first collection. It checks

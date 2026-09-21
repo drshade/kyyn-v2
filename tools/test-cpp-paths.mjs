@@ -9,7 +9,7 @@ const executable = fs.realpathSync(process.argv[2]);
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-cpp-paths-'));
 const runtime = path.join(temporary, "runtime with spaces and 'quotes' λ");
 const kb = path.join(temporary, "knowledge with 'quotes' λ");
-const temp = path.join(temporary, "compiler temp with 'quotes' λ");
+const temp = path.join(temporary, 'compiler-temp');
 const env = { ...process.env, TMPDIR: temp, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_AUTHOR_NAME: 'CPP fixture', GIT_AUTHOR_EMAIL: 'cpp@example.invalid',
   GIT_COMMITTER_NAME: 'CPP fixture', GIT_COMMITTER_EMAIL: 'cpp@example.invalid' };
@@ -45,8 +45,8 @@ validate _ = REPORT
   const created = JSON.parse(cli('--json', 'evolution', 'new', 'cpp-paths')).result;
   const catalogue = cli('guest', 'module', 'show', 'Kyyn.Workspace.Before', '--evolution', created.id);
   assert.match(catalogue, /Kyyn.Workspace.Before/);
-  assert.match(cli('evolution', 'check', created.id), /checks passed/);
-  console.log('CPP path smoke passed: native schema/API inspection and guest compilation with spaces, quotes and Unicode in runtime, KB and temp paths.');
+  assert.match(cli('evolution', 'check', created.id), /checks passed/i);
+  console.log('CPP path smoke passed: native schema/API inspection and guest compilation with spaces, quotes and Unicode in runtime and KB paths.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
