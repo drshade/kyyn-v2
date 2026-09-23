@@ -1,14 +1,14 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: proposed
+status: accepted
 date: 2026-09-23
 ---
 # Latest evidence and recipe-scoped declared curation
 
 Basis: latest-only evidence and recipe-scoped acknowledgements are implemented.
-The owner-directed revision making recipes typed evolution data is under design
-review; the existing implementation still authors them in the root manifest.
+The owner-directed revision making recipes typed evolution data is accepted;
+the existing implementation still authors them in the root manifest.
 
 ## Context
 
