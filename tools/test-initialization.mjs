@@ -89,7 +89,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   }
   assert(!bindings.some(s => ['beforeRoot', 'afterRoot', 'evaluateEvolution'].includes(s.name)));
   const handle = discover('symbol', 'show', 'Kyyn.Workspace.After.todos').symbols[0];
-  assert.match(handle.declaration, /Collection RootV2.Root RootV2.Todo/);
+  assert.match(handle.declaration, /Collection \(KnowledgeBase RootV2.Root\) RootV2.Todo/);
   assert(handle.documentation.includes('todos'));
   for (const symbol of [...bindings, handle]) {
     assert(!symbol.declaration?.includes('.Internal.'), JSON.stringify(symbol));
@@ -102,10 +102,10 @@ import Kyyn.Schema
 import qualified RootV1 as Before
 import qualified RootV2 as After
 import qualified Kyyn.Workspace.After as Collections
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution =
   evolve (Rationale "Start tracking work." [])
-    (\\Before.Root -> Right (After.Root []))
+    (onFacts (\\Before.Root -> Right (After.Root [])))
   >=> edit (Rationale "Record the first task." [])
     (within Collections.todos (append (Fact (FactId "todo-001") (After.Todo "First task"))))
 `);

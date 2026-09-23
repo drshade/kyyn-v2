@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import qualified Kyyn.Types.KnowledgeBase as KB
+
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.ByteString as Bytes
@@ -100,14 +102,14 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let sdk = tree sdkFiles
       registration = "{ name = \"owner\", description = \"Look up the task owner\", implementation = \"Queries.ownerOf\", inputType = \"Schema.Input\", inputMetadata = \"Schema.inputMetadata\", resultType = \"Schema.Result\", resultMetadata = \"Schema.resultMetadata\" }"
-      manifest = "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.schemaMetadata\", validator = \"Validate.validate\", queries = [" ++ registration ++ "], recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.schemaMetadata\", validator = \"Validate.validate\", queries = [" ++ registration ++ "], tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree ((path "kb.dhall",utf8 manifest) : [(path ("src/" ++ relativeName p),b) | (p,b) <- authored])
   contract <- either (fail . show) pure (checkContract rootTypeFixture rootMetadata >>= checkRootLayout)
   let values = object ["tasks" .= [object ["id" .= ("todo-001" :: String), "value" .= object
         ["title" .= ("Review" :: String), "owner" .= ("person-001" :: String)]]],
         "people" .= [object ["id" .= ("person-001" :: String), "value" .= object ["name" .= ("Ada 🦋" :: String)]]]]
   root <- either (fail . show) pure (runPureEff . runDhallHandling . runRootStore $
-    materializeRoot contract code (CheckedValue (contractId (rootSchema contract)) values))
+    materializeRoot contract code (KB.KnowledgeBase (CheckedValue (contractId (rootSchema contract)) values) []))
   discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ prepareRoot root
   prepared <- either (fail . show) (either (fail . show) pure) discovery

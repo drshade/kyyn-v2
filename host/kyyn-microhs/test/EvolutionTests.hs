@@ -57,13 +57,13 @@ main = do
   forM_ ["Before","After"] $ \endpoint -> do
     let endpointSource = lookup ("Kyyn/Workspace/" ++ endpoint ++ ".hs") generated
     forM_ ["todos = Internal.Collection \"work items\"",
-           "import Kyyn.Edit (Collection)",
-           "-- | Collection \"work items\" in SchemaV1.Root.\n-- Root field: todos; fact type: SchemaV1.Todo.\ntodos :: Collection SchemaV1.Root SchemaV1.Todo"] $ \expected ->
+           "import Kyyn.Evolution (KnowledgeBase, facts)",
+           "-- | Collection \"work items\" in SchemaV1.Root.\n-- Root field: todos; fact type: SchemaV1.Todo.\ntodos :: Collection (KnowledgeBase SchemaV1.Root) SchemaV1.Todo"] $ \expected ->
       unless (maybe False (Bytes.isInfixOf expected) endpointSource)
         (fail "Collection binding lost its public signature, documentation or logical name")
-  forM_ ["-- | Transform the Before root, SchemaV1.Root, into the After root, SchemaV2.Root.",
-         "-- | Edit the Before root, SchemaV1.Root, without changing its schema.",
-         "-- | Edit the After root, SchemaV2.Root, without changing its schema.",
+  forM_ ["-- | Transform the Before root, (KnowledgeBase SchemaV1.Root), into the After root, (KnowledgeBase SchemaV2.Root).",
+         "-- | Edit the Before root, (KnowledgeBase SchemaV1.Root), without changing its schema.",
+         "-- | Edit the After root, (KnowledgeBase SchemaV2.Root), without changing its schema.",
          "-- The supplied rationale describes one recorded step and its diff."] $ \expected ->
     unless (expected `Bytes.isInfixOf` source)
       (fail "Generated evolution documentation lost endpoint or rationale details")

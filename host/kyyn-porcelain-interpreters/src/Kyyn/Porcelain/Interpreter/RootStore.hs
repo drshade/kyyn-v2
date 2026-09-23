@@ -16,8 +16,10 @@ import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.Curation (Recipe(..), recipeId, emptyCurationRegister, curationEntries)
+import Kyyn.Domain.Curation (checkRecipes, emptyCurationRegister, curationEntries)
+import qualified Kyyn.Types.KnowledgeBase as Value
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister, decodeRegister)
+import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes, decodeRecipes)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiagnostic)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
@@ -34,14 +36,14 @@ import Kyyn.Porcelain.Validated (validatedValue)
 runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
 runRootStore = interpret $ \_ -> \case
   ReadRootCuration tree -> decodeRegister (lookup curationLocation (files tree))
+  ReadRootRecipes tree -> decodeRecipes (lookup recipesLocation (files tree))
   ReadRootDefinition code -> runExceptT $ do
     manifest <- withExceptT (map manifestDiagnostic) $ decodeFile code "kb.dhall"
       (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
           ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]])),
          ("tools", List (Record [(name, Scalar TextScalar) | name <-
-          ["name", "description", "implementation", "inputType", "resultType"]])),
-         ("recipes", List (Record [("name", Scalar TextScalar), ("instructions", Scalar TextScalar)]))])) >>= record
+          ["name", "description", "implementation", "inputType", "resultType"]]))])) >>= record
     typeName <- field "schemaType" manifest >>= text
     metadataName <- field "schemaMetadata" manifest >>= text
     validatorName <- field "validator" manifest >>= text
@@ -61,39 +63,32 @@ runRootStore = interpret $ \_ -> \case
         <*> (get "resultType" >>= liftChecked . qualifiedTypeName) <*> get "implementation")
     let toolNames = [name | ToolDefinition name _ _ _ _ <- tools]
     ensure (length toolNames == length (nub toolNames)) "Tool names must be unique"
-    recipes <- field "recipes" manifest >>= list >>= traverse (\value -> do
-      fields <- record value
-      name <- field "name" fields >>= text >>= liftChecked . recipeId . Text.unpack
-      instructions <- field "instructions" fields >>= text
-      pure (Recipe name (Text.unpack instructions)))
-    let recipeNames = [name | Recipe name _ <- recipes]
-    ensure (length recipeNames == length (nub recipeNames)) "Recipe names must be unique"
     authored <- traverse (\(name,bytes) -> do
       path <- liftChecked (relativePath name)
       pure (path,bytes)) [(name,bytes) | (path,bytes) <- files code, Just name <- [stripPrefix "src/" (relativeName path)]]
     sources <- liftChecked (fileTree authored)
-    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) declarations tools recipes sources)
+    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) declarations tools sources)
   CheckRootValue selected value -> runExceptT $ do
     let contract = rootSchema selected
     _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)
     pure (CheckedValue (contractId contract) value)
   MaterializeRoot contract code checked -> runExceptT (materialize contract code checked)
   LoadRootValueForChecking root -> runExceptT (loadValue root)
-  ReadExamples (Root _ _ code _) descriptors -> runExceptT (loadExamples code descriptors)
+  ReadExamples (Root _ _ code _ _) descriptors -> runExceptT (loadExamples code descriptors)
   EncodeExample example -> runExceptT (saveExample example)
   ExportRootFiles checked -> runExceptT $ do
-    let Root _ facts code curation = validatedValue checked
+    let Root _ facts code curation recipes = validatedValue checked
+    recipeBytes <- ExceptT (encodeRecipes recipes)
     progress <- if null (curationEntries curation) then pure [] else do
       bytes <- ExceptT (encodeRegister curation)
       pure [(curationLocation,bytes)]
-    liftChecked (fileTree (progress ++ files facts ++ files code))
+    liftChecked (fileTree ((recipesLocation,recipeBytes) : progress ++ files facts ++ files code))
 
 type Result es = ExceptT [Diagnostic] (Eff es)
 
 manifestDiagnostic :: Diagnostic -> Diagnostic
 manifestDiagnostic (Diagnostic severity code message location) = Diagnostic severity code
-  (message ++ "\nCheck kb.dhall. If this KB has no tools, include: tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }"
-    ++ "\nIf this KB has no recipes, include: recipes = [] : List { name : Text, instructions : Text }") location
+  (message ++ "\nCheck kb.dhall. If this KB has no tools, include: tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }") location
 
 problem :: String -> Result es a
 problem = throwE . pure . errorDiagnostic "root.storage"
@@ -152,12 +147,13 @@ encodeFile name shape value = do
   contents <- ExceptT (Dhall.encodeValue shape value)
   pure (path, Text.encodeUtf8 contents)
 
-materialize :: Dhall.DhallHandling :> es => RootContract -> FileTree -> CheckedValue -> Result es Root
-materialize selected code (CheckedValue identity value) = do
+materialize :: Dhall.DhallHandling :> es => RootContract -> FileTree -> Value.KnowledgeBase CheckedValue -> Result es Root
+materialize selected code (Value.KnowledgeBase (CheckedValue identity value) recipes) = do
+  _ <- ExceptT (pure (checkRecipes recipes))
   let contract = rootSchema selected
   ensure (identity == contractId contract) "Checked value belongs to a different contract"
   ensure (all (not . isRootMaterial . fst) (files code))
-    "Code snapshot overlaps host-owned facts or curation material"
+    "Code snapshot overlaps root data"
   fields <- rootFields contract
   values <- record value
   ensure (sort (map fst fields) == sort (map (Key.toString) (Keys.keys values))) "Root fields do not match contract"
@@ -174,7 +170,7 @@ materialize selected code (CheckedValue identity value) = do
     facts <- forM (zip identities members) $ \(factId,member) -> encodeFile (factName name factId) (factShape payload) member
     pure (index : facts)
   snapshot <- liftChecked (fileTree (rootFile : entries))
-  pure (Root selected snapshot code emptyCurationRegister)
+  pure (Root selected snapshot code emptyCurationRegister recipes)
 
 decodeFile :: Dhall.DhallHandling :> es => FileTree -> String -> Shape -> Result es Value
 decodeFile tree name shape = do
@@ -184,7 +180,7 @@ decodeFile tree name shape = do
   ExceptT (Dhall.decodeValue shape source)
 
 loadValue :: Dhall.DhallHandling :> es => Root -> Result es CheckedValue
-loadValue (Root selected snapshot _ _) = do
+loadValue (Root selected snapshot _ _ _) = do
   let contract = rootSchema selected
   fields <- rootFields contract
   let collections = collectionContracts contract

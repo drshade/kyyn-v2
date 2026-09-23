@@ -9,5 +9,4 @@
     { name : Text, description : Text, implementation : Text
     , inputType : Text, resultType : Text
     }
-, recipes = [] : List { name : Text, instructions : Text }
 }

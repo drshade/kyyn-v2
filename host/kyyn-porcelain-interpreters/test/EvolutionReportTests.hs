@@ -10,11 +10,13 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.EvolutionReport
 import qualified Kyyn.Types.Curation as Curation
 import Kyyn.Plumbing.Protocol.Curation (curationValue)
+import Kyyn.Plumbing.Protocol.Recipes (knowledgeBaseValue)
+import qualified Kyyn.Types.KnowledgeBase as KB
 import Kyyn.Domain.Root (CheckedValue(..))
 import Kyyn.Types.Diagnostic
 import Kyyn.Types.Evolution
 import Kyyn.Types.Evidence
-import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Porcelain.Capability.EvolutionReport
 import Kyyn.Porcelain.Interpreter.RootStore
@@ -29,10 +31,11 @@ main = do
   let input = root [fact "a" "First",fact "b" "Second"]
       edited = root [fact "c" "New",fact "a" "Changed"]
       rationale = Rationale "Reconcile todos" [EvidenceRef "graph" "work" "email-id" ["https://example.test/email"]]
-      observed c = ObservedRoot (contractFingerprint (contractId (rootSchema c)))
+      observed c value = ObservedRoot (contractFingerprint (contractId (rootSchema c))) (KB.KnowledgeBase value [])
       step c a d b = StepObservation rationale (observed c a) (observed d b)
-      check source value target steps output = runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport source value target (EvolutionObservation output steps Nothing)
+      check source value target steps output = fmap (\(KB.KnowledgeBase result _,report) -> (result,report)) $
+        runPureEff . runDhallHandling . runRootStore $
+          checkEvolutionReport source (KB.KnowledgeBase value []) target (EvolutionObservation (KB.KnowledgeBase output []) steps Nothing)
       changed before after identifier = FactChange "todos" (FactId identifier) before after
       recorded c value = Just (RecordedFact c value)
   (checked, report) <- right (check old input old [step old input old edited] edited)
@@ -69,7 +72,7 @@ main = do
     , check old input old [step old input old edited,step old input old input] input
     , check old input old [step old input renamed input,step old input old input] input
     , check old input old [step old input old edited] input
-    , check old input old [StepObservation rationale (observed old input) (ObservedRoot "unknown" edited)] edited
+    , check old input old [StepObservation rationale (observed old input) (ObservedRoot "unknown" (KB.KnowledgeBase edited []))] edited
     , check old input old [step old input old Null,step old Null old input] input
     , check old input old [step old input renamed (root [fact "a" "First",fact "a" "Second"]),
         step renamed (root [fact "a" "First",fact "a" "Second"]) old input] input
@@ -84,31 +87,77 @@ main = do
   assert (scoped == EvolutionReport [StepReport rationale [changed (recorded two (fact "a" "First")) Nothing "a"]] Nothing)
     "Fact identity was not scoped to its collection"
   protocolTests
+  recipeTests old new input migrated
   putStrLn "Evolution chain, structural values, identity-based reports and protocol rejection checks passed."
+
+recipeTests :: RootContract -> RootContract -> Value -> Value -> IO ()
+recipeTests beforeContract afterContract input migrated = do
+  let first = KB.Recipe "Read todos"
+      updated = KB.Recipe "Read todos and explain changes"
+      entry value = Fact (FactId "syncTodos") value
+      before = KB.KnowledgeBase input [entry first]
+      after = KB.KnowledgeBase input [entry updated]
+      empty = KB.KnowledgeBase input []
+      why = Rationale "Refine curation" []
+      observed c value = ObservedRoot (contractFingerprint (contractId (rootSchema c))) value
+      step c a d b = StepObservation why (observed c a) (observed d b)
+      check initial finalContract steps final = runPureEff . runDhallHandling . runRootStore $
+        checkEvolutionReport beforeContract initial finalContract (EvolutionObservation final steps Nothing)
+      same initial final = check initial beforeContract [step beforeContract initial beforeContract final] final
+      expected a b = EvolutionReport [StepReport why [RecipeChange (FactId "syncTodos") a b]] Nothing
+  (_,added) <- right (same empty before)
+  assert (added == expected Nothing (Just first)) "Recipe addition lost identity or instructions"
+  (_,edited) <- right (same before after)
+  assert (edited == expected (Just first) (Just updated)) "Recipe edit absent from report"
+  (_,removed) <- right (same before empty)
+  assert (removed == expected (Just first) Nothing) "Recipe deletion absent from report"
+  (_,identity) <- right (check before beforeContract [] before)
+  assert (identity == EvolutionReport [] Nothing) "Unchanged recipes created changes"
+  rejected (check before beforeContract [] after)
+  rejected (check before beforeContract [step beforeContract empty beforeContract after] after)
+  forM_ [[entry first,entry updated], [Fact (FactId "bad-name") first]] $ \entries -> do
+    let invalid = KB.KnowledgeBase input entries
+    rejected (same before invalid)
+    rejected (check before beforeContract
+      [step beforeContract before beforeContract invalid,step beforeContract invalid beforeContract before] before)
+  let migratedKb = KB.KnowledgeBase migrated [entry first]
+  (_,EvolutionReport steps _) <- right (check before afterContract
+    [step beforeContract before afterContract migratedKb] migratedKb)
+  assert (all (\(StepReport _ changes) -> all domainChange changes) steps)
+    "Schema migration falsely changed preserved recipes"
+  let changedBoth = KB.KnowledgeBase (root []) [entry updated]
+  (_,EvolutionReport mixed _) <- right (same before changedBoth)
+  assert (case mixed of [StepReport _ changes] -> any domainChange changes && any (not . domainChange) changes; _ -> False)
+    "Mixed fact and recipe edits lost a change category"
+  where
+    domainChange FactChange{} = True
+    domainChange RecipeChange{} = False
 
 protocolTests :: IO ()
 protocolTests = do
   let decode = decodeEvolutionReply . Lazy.toStrict . encode
       success value = object ["tag" .= ("Succeeded" :: String),"value" .= value]
-      output = object ["after" .= root [],"steps" .= ([] :: [Value]),"curation" .= object ["tag" .= ("None" :: String)]]
+      empty = KB.KnowledgeBase (root []) []
+      wire = knowledgeBaseValue empty
+      output = object ["after" .= wire,"steps" .= ([] :: [Value]),"curation" .= object ["tag" .= ("None" :: String)]]
   result <- right (decode (success output))
-  assert (result == Right (EvolutionObservation (root []) [] Nothing)) "Success decoding changed value"
+  assert (result == Right (EvolutionObservation empty [] Nothing)) "Success decoding changed value"
   let declaration = Just (Curation.Curation (Curation.RecipeId "syncTodos")
         [Curation.EntireBatch (Curation.EvidenceScope "files" "documents" "f1"),
          Curation.IndividualRecords (Curation.EvidenceScope "files" "documents" "f2") []])
-      declared = object ["after" .= root [],"steps" .= ([] :: [Value]),"curation" .= curationValue declaration]
+      declared = object ["after" .= wire,"steps" .= ([] :: [Value]),"curation" .= curationValue declaration]
   acknowledged <- right (decode (success declared))
-  assert (acknowledged == Right (EvolutionObservation (root []) [] declaration)) "Curation protocol lost scope or order"
+  assert (acknowledged == Right (EvolutionObservation empty [] declaration)) "Curation protocol lost scope or order"
   let citation = object ["producer" .= ("graph" :: String),"connector" .= ("work" :: String),
         "source" .= ("email-λ" :: String),"references" .= (["https://example.test/λ","/tmp/email"] :: [String])]
-      boundary = object ["contract" .= ("contract-id" :: String),"value" .= root []]
+      boundary = object ["contract" .= ("contract-id" :: String),"value" .= wire]
       step evidence = object ["before" .= boundary,"after" .= boundary,
         "rationale" .= object ["explanation" .= ("Explain λ" :: String),"evidence" .= [evidence]]]
-      withStep value = success (object ["after" .= root [],"steps" .= [value],"curation" .= object ["tag" .= ("None" :: String)]])
+      withStep value = success (object ["after" .= wire,"steps" .= [value],"curation" .= object ["tag" .= ("None" :: String)]])
   cited <- right (decode (withStep (step citation)))
-  assert (cited == Right (EvolutionObservation (root [])
+  assert (cited == Right (EvolutionObservation empty
     [StepObservation (Rationale "Explain λ" [EvidenceRef "graph" "work" "email-λ" ["https://example.test/λ","/tmp/email"]])
-      (ObservedRoot "contract-id" (root [])) (ObservedRoot "contract-id" (root []))] Nothing)) "Citation decoding lost identifiers or references"
+      (ObservedRoot "contract-id" empty) (ObservedRoot "contract-id" empty)] Nothing)) "Citation decoding lost identifiers or references"
   rejected (decode (withStep (step (object ["producer" .= ("graph" :: String)]))))
   refusal <- right (decode (object ["tag" .= ("Rejected" :: String),"value" .=
     [object ["severity" .= object ["tag" .= ("Error" :: String)],"code" .= ("refused" :: String),

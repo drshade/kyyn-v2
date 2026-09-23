@@ -13,15 +13,16 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (CollectionContract(..), collectionContracts, rootSchema)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), FactChange(..), RecordedFact(..))
+import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), Change(..), RecordedFact(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(..))
 import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath, cacheLocation)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, scopedPath, directoryScope)
-import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath, isRootMaterial, curationLocation)
+import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath, isRootMaterial, curationLocation, recipesLocation)
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
-import Kyyn.Domain.Curation (curationEntries)
+import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes)
+import Kyyn.Domain.Curation (curationEntries, recipeId)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
@@ -78,7 +79,7 @@ runEvolutionStore = interpret $ \_ -> \case
   MarkDraft workspace -> runExceptT (setState workspace Draft)
   ExportAcceptedWorkspace (Candidate (EvolutionContext kb@(KnowledgeBase (Repository scope) _) identity (Before revision before)
       (WorkspaceSnapshot (WorkspaceManifest selected name explanation _) source target change _)) report validated) -> runExceptT $ do
-    let Root after _ code _ = validatedValue validated
+    let Root after _ code _ _ = validatedValue validated
     unless (revision == selected && target == code) (throwE [errorDiagnostic "evolution.archive-context"
       "Checked root or Before revision disagrees with captured workspace inputs"])
     notesPath <- checked (workspaceLocation (EvolutionWorkspace kb identity) >>= \p -> relativePath (relativeName p ++ "/notes"))
@@ -99,7 +100,7 @@ runEvolutionStore = interpret $ \_ -> \case
     current <- readWorkspace (EvolutionWorkspace kb identity)
     pure (Workspace.matchesCapturedInputs captured current)
   SaveCandidate (Candidate (EvolutionContext kb identity (Before revision before)
-      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _) _ target _ _)) report root@(Root after facts code progress)) -> do
+      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _) _ target _ _)) report root@(Root after facts code progress recipes)) -> do
     parent <- candidateScope kb
     unless (revision == selected && code == target)
       (storageFailure WriteFile "candidate.dhall" "Candidate disagrees with its captured Before or target")
@@ -109,7 +110,8 @@ runEvolutionStore = interpret $ \_ -> \case
     progressFiles <- if null (curationEntries progress) then pure [] else do
       progressBytes <- encodeRegister progress >>= stored WriteFile "curation.dhall"
       pure [(curationLocation,progressBytes)]
-    tree <- stored WriteFile "root" (fileTree (progressFiles ++ files facts ++ files code))
+    recipeBytes <- encodeRecipes recipes >>= stored WriteFile "recipes.dhall"
+    tree <- stored WriteFile "root" (fileTree ((recipesLocation,recipeBytes) : progressFiles ++ files facts ++ files code))
     let KnowledgeBase (Repository repositoryScope) _ = kb
     cache <- stored WriteFile (relativeName cacheLocation) (knowledgeBasePath kb cacheLocation)
     FileSystem.ensureIgnoredDirectory repositoryScope cache
@@ -148,9 +150,10 @@ runEvolutionStore = interpret $ \_ -> \case
                 facts <- stored ReadFile ("root/" ++ relativeName factsLocation) (fileTree [(p,b) | (p,b) <- files rootFiles, isFactPath p])
                 code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not (isRootMaterial p)])
                 progress <- RootStore.readRootCuration rootFiles >>= stored ReadFile "root/curation.dhall"
+                recipes <- RootStore.readRootRecipes rootFiles >>= stored ReadFile "root/recipes.dhall"
                 unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
                 unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
-                let root = Root after facts code progress
+                let root = Root after facts code progress recipes
                 _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
                 checkSavedReport ReadFile report
                 pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
@@ -262,16 +265,22 @@ introducingCommits kb@(KnowledgeBase repository _) identity before visited (revi
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
 checkSavedReport operation (EvolutionReport steps _) = forM_ steps $ \(StepReport _ changes) ->
-  forM_ changes $ \(FactChange collection (FactId identity) before after) -> do
-    unless (before /= Nothing || after /= Nothing)
-      (storageFailure operation "candidate.dhall" "Fact change has neither a before nor an after value")
-    forM_ [fact | Just fact <- [before,after]] $ \(RecordedFact schema value) -> do
-      shape <- case [shape | CollectionContract name _ _ shape <- collectionContracts (rootSchema schema), name == collection] of
-        [shape] -> pure (Record [("id", Scalar TextScalar), ("value", shape)])
-        _ -> storageFailure operation "candidate.dhall" "Recorded fact names an unknown collection"
-      _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.dhall"
-      recordedId <- stored operation "candidate.dhall" (parseEither (withObject "Fact" (.: "id")) value)
-      unless (recordedId == identity) (storageFailure operation "candidate.dhall" "Recorded fact ID disagrees with the change")
+  forM_ changes check
+  where
+    check (RecipeChange (FactId identity) before after) = do
+      _ <- stored operation "candidate.dhall" (recipeId identity)
+      unless (before /= Nothing || after /= Nothing)
+        (storageFailure operation "candidate.dhall" "Recipe change has neither a before nor an after value")
+    check (FactChange collection (FactId identity) before after) = do
+      unless (before /= Nothing || after /= Nothing)
+        (storageFailure operation "candidate.dhall" "Fact change has neither a before nor an after value")
+      forM_ [fact | Just fact <- [before,after]] $ \(RecordedFact schema value) -> do
+        shape <- case [shape | CollectionContract name _ _ shape <- collectionContracts (rootSchema schema), name == collection] of
+          [shape] -> pure (Record [("id", Scalar TextScalar), ("value", shape)])
+          _ -> storageFailure operation "candidate.dhall" "Recorded fact names an unknown collection"
+        _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.dhall"
+        recordedId <- stored operation "candidate.dhall" (parseEither (withObject "Fact" (.: "id")) value)
+        unless (recordedId == identity) (storageFailure operation "candidate.dhall" "Recorded fact ID disagrees with the change")
 
 candidateScope :: Failure :> es => KnowledgeBase -> Eff es DirectoryScope
 candidateScope kb@(KnowledgeBase (Repository scope) _) = stored ReadDirectoryTree ".kyyn/candidates" $ do

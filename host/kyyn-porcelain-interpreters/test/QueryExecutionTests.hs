@@ -41,9 +41,9 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
   let path = either error id . relativePath
       tree = either error id . fileTree
       query = "{ name = \"summary\", description = \"Summary\", implementation = \"Queries.summary\", inputType = \"Queries.Input\", inputMetadata = \"Queries.inputMetadata\", resultType = \"Queries.Result\", resultMetadata = \"Queries.resultMetadata\" }"
-      manifest declarations = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\", queries = " <> declarations <> ", recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest declarations = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\", queries = " <> declarations <> ", tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree [(path "src/Queries.hs", "captured query"), (path "kb.dhall", manifest ("[" <> query <> "]"))]
-      root = Root rootContract facts code emptyCurationRegister
+      root = Root rootContract facts code emptyCurationRegister []
       sdk = tree [(path "Sdk.hs", "explicit SDK")]
       input = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
       output = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))

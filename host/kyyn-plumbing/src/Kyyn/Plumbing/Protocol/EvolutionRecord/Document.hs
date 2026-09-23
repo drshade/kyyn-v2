@@ -1,8 +1,8 @@
 module Kyyn.Plumbing.Protocol.EvolutionRecord.Document
-  ( recordDocument, recordShape, headerShape, decodeHeader, decodeRecord ) where
+  ( recordDocument, recordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord ) where
 
 import Control.Monad (unless)
-import Data.Aeson (Value, object, (.=), withObject, (.:))
+import Data.Aeson (Value, object, (.=), withObject, (.:), (.:?), (.!=))
 import Data.Aeson.Types (Parser, parseEither, parseJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
@@ -14,6 +14,8 @@ import Kyyn.Domain.Evolution (EvolutionId, evolutionId, evolutionIdName)
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration)
+import Kyyn.Plumbing.Protocol.Recipes (recipeShape, recipeValue, parseRecipe)
+import Kyyn.Domain.Curation (recipeId)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
@@ -23,20 +25,26 @@ recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
 recordDocument identity before after (EvolutionReport steps curation) = do
   encoded <- traverse step steps
   pure (recordShape before after,
-    object ["version" .= ("2" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+    object ["version" .= ("3" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
       "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation])
   where
     endpoints = [("Before",before),("After",after)]
     collections = collectionNames before after
     step (StepReport (Rationale explanation evidence) changes) = do
-      unless (all (\(FactChange collection _ _ _) -> collection `elem` collections) changes)
+      unless (all (`elem` collections) [collection | FactChange collection _ _ _ <- changes])
         (invalid "Report names a collection outside its endpoint schemas")
       grouped <- traverse (\collection -> do
-        values <- traverse change [c | c@(FactChange name _ _ _) <- changes, name == collection]
+        values <- traverse (\(ident,old,new) -> change ident old new)
+          [(ident,old,new) | FactChange name ident old new <- changes, name == collection]
         pure (Key.fromString collection .= values)) collections
+      recipes <- traverse (\(ident,old,new) -> do
+        _ <- either invalid pure (recipeId ident)
+        unless (old /= Nothing || new /= Nothing) (invalid "Recipe change has no value")
+        pure (object ["id" .= ident,"before" .= optional recipeValue old,"after" .= optional recipeValue new]))
+        [(ident,old,new) | RecipeChange (FactId ident) old new <- changes]
       pure (object ["explanation" .= explanation, "evidence" .= map evidenceValue evidence,
-        "changes" .= object grouped])
-    change (FactChange _ (FactId name) old new) = do
+        "changes" .= object grouped, "recipeChanges" .= recipes])
+    change (FactId name) old new = do
       unless (old /= Nothing || new /= Nothing) (invalid "Fact change has no value")
       b <- side old
       a <- side new
@@ -53,14 +61,21 @@ headerShape :: Shape
 headerShape = Record headerFields
 
 recordShape :: RootContract -> RootContract -> Shape
-recordShape before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
+recordShape = recordShapeWithRecipes True
+
+legacyRecordShape :: RootContract -> RootContract -> Shape
+legacyRecordShape = recordShapeWithRecipes False
+
+recordShapeWithRecipes :: Bool -> RootContract -> RootContract -> Shape
+recordShapeWithRecipes includeRecipes before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
   where
     fact collection = Union [(tag, Just (Record [("id",text),("value",shape)])) |
       (tag,contract) <- [("Before",before),("After",after)],
       CollectionContract name _ _ shape <- collectionContracts (rootSchema contract), name == collection]
     change collection = Record [("id",text),("before",Optional (fact collection)),("after",Optional (fact collection))]
-    step = Record [("explanation",text),("evidence",List evidenceShape),
-      ("changes",Record [(name,List (change name)) | name <- collectionNames before after])]
+    step = Record ([("explanation",text),("evidence",List evidenceShape),
+      ("changes",Record [(name,List (change name)) | name <- collectionNames before after])] ++
+      [("recipeChanges",List (Record [("id",text),("before",Optional recipeShape),("after",Optional recipeShape)])) | includeRecipes])
 
 collectionNames :: RootContract -> RootContract -> [String]
 collectionNames before after = sort (nub [name | contract <- [before,after],
@@ -73,7 +88,7 @@ header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootCon
 header = withObject "Evolution record" $ \record -> do
   version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version /= "2" then pure (Left [errorDiagnostic "evolution.record-format"
+  if version `notElem` ["2","3"] then pure (Left [errorDiagnostic "evolution.record-format"
     "Stored evolution record format is not supported by this kernel"])
   else do
     before <- record .: "before" >>= restoreSnapshot
@@ -93,7 +108,15 @@ decodeRecord before after = parseEither $ withObject "Evolution record" $ \recor
       changes <- record .: "changes" >>= withObject "Changes" (\groups ->
         concat <$> traverse (\(collection,values) ->
           parseChanges endpoints (Key.toString collection) values) (sortOn fst (Keys.toList groups)))
-      pure (StepReport (Rationale explanation evidence) changes)
+      recipes <- record .:? "recipeChanges" .!= [] >>= traverse
+        (withObject "RecipeChange" $ \fields -> do
+          name <- fields .: "id"
+          _ <- either fail pure (recipeId name)
+          old <- fields .: "before" >>= parseOptional parseRecipe
+          new <- fields .: "after" >>= parseOptional parseRecipe
+          unless (old /= Nothing || new /= Nothing) (fail "Recipe change has no value")
+          pure (RecipeChange (FactId name) old new))
+      pure (StepReport (Rationale explanation evidence) (changes ++ recipes))
     parseChanges endpoints collection values = do
       entries <- parseJSON values
       traverse (withObject "Change" $ \record -> do
@@ -131,6 +154,18 @@ evidenceRef = withObject "Evidence" $ \record -> EvidenceRef
 
 tagged :: String -> Maybe Value -> Value
 tagged tag value = object (["tag" .= tag] ++ maybe [] (\v -> ["value" .= v]) value)
+
+optional :: (a -> Value) -> Maybe a -> Value
+optional _ Nothing = tagged "None" Nothing
+optional encode (Just value) = tagged "Some" (Just (encode value))
+
+parseOptional :: (Value -> Parser a) -> Value -> Parser (Maybe a)
+parseOptional parse = withObject "Optional" $ \fields -> do
+  tag <- fields .: "tag" :: Parser String
+  case tag of
+    "None" -> pure Nothing
+    "Some" -> Just <$> (fields .: "value" >>= parse)
+    _ -> fail "Expected Some or None"
 
 invalid :: String -> Either [Diagnostic] a
 invalid = Left . pure . errorDiagnostic "evolution.invalid-report"

@@ -1,9 +1,10 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), factsLocation, isFactPath, curationLocation, isRootMaterial
+module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), factsLocation, isFactPath, curationLocation, recipesLocation, isRootMaterial
   , pluginPackagesLocation, pluginSourceLocation, pluginOriginLocation, pluginManifestLocation, pluginPackageExclusions) where
 
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Curation (Recipe, CurationRegister)
+import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Query (QueryDefinition)
 import Kyyn.Domain.Tool (ToolDefinition)
@@ -18,8 +19,11 @@ factsLocation = either error id (relativePath "facts")
 curationLocation :: RelativePath
 curationLocation = either error id (relativePath "curation.dhall")
 
+recipesLocation :: RelativePath
+recipesLocation = either error id (relativePath "recipes.dhall")
+
 isRootMaterial :: RelativePath -> Bool
-isRootMaterial path = isFactPath path || path == curationLocation
+isRootMaterial path = isFactPath path || path == curationLocation || path == recipesLocation
 
 pluginPackagesLocation, pluginSourceLocation, pluginOriginLocation, pluginManifestLocation :: RelativePath
 pluginPackagesLocation = either error id (relativePath "plugins/packages")
@@ -34,11 +38,11 @@ isFactPath :: RelativePath -> Bool
 isFactPath path = relativeName path == relativeName factsLocation
   || (relativeName factsLocation ++ "/") `isPrefixOf` relativeName path
 
-data Root = Root { schema :: RootContract, facts :: FileTree, code :: FileTree, curation :: CurationRegister } deriving (Eq, Show)
+data Root = Root { schema :: RootContract, facts :: FileTree, code :: FileTree, curation :: CurationRegister, recipes :: [Fact Recipe] } deriving (Eq, Show)
 data SourceRoot = SourceRoot
   { schema :: RootContract, code :: FileTree, definition :: RootDefinition
   , loadedSources :: [RelativePath] } deriving (Eq, Show)
 data RootDefinition = RootDefinition
   { schemaType :: String, schemaMetadata :: String, validator :: String
-  , queries :: [QueryDefinition], tools :: [ToolDefinition], recipes :: [Recipe], sources :: FileTree }
+  , queries :: [QueryDefinition], tools :: [ToolDefinition], sources :: FileTree }
   deriving (Eq, Show)

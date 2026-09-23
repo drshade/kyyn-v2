@@ -19,6 +19,7 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (EvolutionFailure(..))
+import qualified Kyyn.Types.KnowledgeBase as KB
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..), RoleDecl(..), Affordance(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
@@ -49,8 +50,8 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       before = tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","old checks")]
       code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks")]
       target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
-      root = Root contract facts code emptyCurationRegister
-      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] [] []
+      root = Root contract facts code emptyCurationRegister []
+      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] []
         (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")])) []
       capture proposed = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft)
@@ -71,14 +72,14 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       captured = capture target
   expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
   result <- execute identityEntry root captured
-  unless (result == Right (Right (EvaluatedEvolution captured (After contract) expected (EvolutionReport [] Nothing))))
+  unless (result == Right (Right (EvaluatedEvolution captured (After contract) (KB.KnowledgeBase expected []) (EvolutionReport [] Nothing))))
     (fail ("Execution lost selected Before or captured context: " ++ show result))
   let errors = [errorDiagnostic "guest.compiler-rejected" "bad evolution type"]
   compilation <- execute (Left errors) root captured
   unless (compilation == Right (Left (ProposedCodeRejected errors))) (fail "Compile failure became guest refusal")
   refusal <- execute (Right (entry "printf '{\"tag\":\"Rejected\",\"value\":[]}'")) root captured
   unless (refusal == Right (Left (EvolutionRejected (EvolutionFailure [])))) (fail "Guest refusal lost its classification")
-  invalidOutput <- execute (Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":null,\"steps\":[],\"curation\":{\"tag\":\"None\"}}}'")) root captured
+  invalidOutput <- execute (Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":{\"facts\":null,\"recipes\":[]},\"steps\":[],\"curation\":{\"tag\":\"None\"}}}'")) root captured
   case invalidOutput of
     Right (Left (ProposedCodeRejected _)) -> pure ()
     _ -> fail "Host output rejection was misclassified as guest refusal"
@@ -94,20 +95,20 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
     capture (tree [("kb.dhall",manifest),("src/Example.hsc","competing module")])] $ \invalid -> do
       rejected <- execute unexpected root invalid
       case rejected of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail (show rejected)
-  let Root selected _ selectedCode _ = root
-  unreadable <- execute unexpected (Root selected (tree []) selectedCode emptyCurationRegister) captured
+  let Root selected _ selectedCode _ _ = root
+  unreadable <- execute unexpected (Root selected (tree []) selectedCode emptyCurationRegister []) captured
   case unreadable of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail (show unreadable)
   let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
   different <- right (checkContract (rootType (rootSchema contract))
     (SchemaMetadata (RoleDecl "extra" "Changed" Title : roles) assignments collections) >>= checkRootLayout)
-  mismatch <- execute unexpected (Root different facts code emptyCurationRegister) captured
+  mismatch <- execute unexpected (Root different facts code emptyCurationRegister []) captured
   case mismatch of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail "Loaded contract mismatch reached execution"
   let changedCode = tree [("kb.dhall",manifest),("src/Example.hs","changed source")]
-  sourceMismatch <- execute unexpected (Root contract facts changedCode emptyCurationRegister) captured
+  sourceMismatch <- execute unexpected (Root contract facts changedCode emptyCurationRegister []) captured
   case sourceMismatch of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail "Changed Before copy reached execution"
   putStrLn "Evolution execution selects exact Before, deduplicates its closure and preserves rejection/failure layers."
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
 schemaMock count contract = interpret $ \_ -> \case

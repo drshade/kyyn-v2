@@ -122,7 +122,10 @@ main = do
     (second,secondWorkspace) <- create "remove-report"
     assert "Accepted workspace did not count toward the sequence" (second == "000002-remove-report")
     copyFile (fixture </> "Delete.hs") (secondWorkspace </> "change/Evolution.hs")
-    void (cli (ExitFailure 1) ["evolution","check",second])
+    checkedDeletion <- cli (ExitFailure 1) ["evolution","check",second]
+    assert "Deletion did not reach inherited-example validation"
+      (any (\diagnostic -> at ["location","name"] diagnostic == String "report-done")
+        (array (at ["diagnostics"] checkedDeletion)))
     void (ok ["evolution","ready",second])
     rejected <- cli (ExitFailure 1) ["evolution","accept",second]
     assert "Inherited example did not explain rejection"
@@ -160,7 +163,7 @@ manifest :: String -> String
 manifest schema = "{ schemaType = " ++ show (schema ++ ".Root") ++
   ", schemaMetadata = " ++ show (schema ++ ".metadata") ++
   ", validator = \"Validate.validate\", queries = [" ++ declaration "titleFor" "Result" ++
-  "," ++ declaration "isDone" "DoneResult" ++ "], recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+  "," ++ declaration "isDone" "DoneResult" ++ "], tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
   where
     declaration name result = "{ name = " ++ show name ++ ", description = \"Todo query\", implementation = " ++
       show ("Queries." ++ name) ++ ", inputType = \"Queries.Input\", inputMetadata = \"Queries.metadata\", resultType = " ++

@@ -8,8 +8,8 @@ import qualified Kyyn.Workspace.Unchanged as Unchanged
 import Kyyn.Evolution
 import Kyyn.Evolution.Internal (RecordedRoot(..), StepObservation(..), EvolutionOutput(..), evaluateEvolution)
 import Kyyn.Types.Fact
-import Kyyn.Runtime.Json (parseValue)
-import Kyyn.Runtime.Evolution (encodeEvolutionReply)
+import Kyyn.Runtime.Json (parseValue, record)
+import Kyyn.Runtime.Evolution (encodeEvolutionReply, knowledgeBaseCodec)
 import Kyyn.Types.Diagnostic
 import qualified KyynEvolutionCodec1 as AfterCodec
 import qualified SchemaV1 as Before
@@ -18,7 +18,7 @@ import qualified SchemaV2 as After
 main :: IO ()
 main = do
   EvolutionCore.main
-  let input = Before.Root [Fact (FactId "todo-001") (Before.Todo "Review")]
+  let input = KnowledgeBase (Before.Root [Fact (FactId "todo-001") (Before.Todo "Review")]) []
   case evaluateEvolution Identity.evolution input of
     Right (EvolutionOutput value observations Nothing) -> assert (value == input && null observations)
     _ -> fail "Identity scaffold did not return the unchanged root with an empty log"
@@ -42,14 +42,14 @@ main = do
   expectedFinal <- either fail pure (parseValue "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"Review λ\",\"done\":true}}]}")
   case evaluateEvolution Evolution.evolution input of
     Right (EvolutionOutput value observations@(StepObservation _ (RecordedRoot oldId _) _ : StepObservation _ _ (RecordedRoot targetId _) : _) Nothing) -> do
-      assert (value == After.Root [Fact (FactId "todo-001") (After.Todo "Review λ" True)])
+      assert (value == KnowledgeBase (After.Root [Fact (FactId "todo-001") (After.Todo "Review λ" True)]) [])
       assert (oldId /= targetId)
       assert (observations ==
-        [ StepObservation (Rationale "Rename" []) (RecordedRoot oldId expectedOld) (RecordedRoot oldId expectedRenamed)
-        , StepObservation (Rationale "Add completion status" []) (RecordedRoot oldId expectedRenamed) (RecordedRoot targetId expectedAfter)
-        , StepObservation (Rationale "Complete the review" []) (RecordedRoot targetId expectedAfter) (RecordedRoot targetId expectedFinal)
+        [ StepObservation (Rationale "Rename" []) (RecordedRoot oldId (wrap expectedOld)) (RecordedRoot oldId (wrap expectedRenamed))
+        , StepObservation (Rationale "Add completion status" []) (RecordedRoot oldId (wrap expectedRenamed)) (RecordedRoot targetId (wrap expectedAfter))
+        , StepObservation (Rationale "Complete the review" []) (RecordedRoot targetId (wrap expectedAfter)) (RecordedRoot targetId (wrap expectedFinal))
         ])
-      encoded <- either fail pure (encodeEvolutionReply AfterCodec.rootCodec (Right (EvolutionOutput value observations Nothing)))
+      encoded <- either fail pure (encodeEvolutionReply (knowledgeBaseCodec AfterCodec.rootCodec) (Right (EvolutionOutput value observations Nothing)))
       putStrLn encoded
     _ -> fail "Expected a pure successful evolution entry"
   putStrLn "Generated evolution bindings preserve typed schema and metadata transitions."
@@ -61,3 +61,5 @@ main = do
 assert :: Bool -> IO ()
 assert True = pure ()
 assert False = fail "Generated binding observation mismatch"
+
+wrap value = record [("facts",value),("recipes",either error id (parseValue "[]"))]

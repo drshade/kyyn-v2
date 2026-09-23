@@ -3,6 +3,7 @@ module Kyyn.Porcelain.Capability.Recipe (findRecipeAt, pendingRecipeEvidence) wh
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Curation
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Git (GitRevision)
@@ -16,10 +17,10 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
 
 findRecipeAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> RecipeId
-  -> Eff es (Either [Diagnostic] Recipe)
-findRecipeAt kb revision selected@(RecipeId name) = runExceptT $ do
+  -> Eff es (Either [Diagnostic] (Fact Recipe))
+findRecipeAt kb revision (RecipeId name) = runExceptT $ do
   recipes <- ExceptT (loadRecipesAt kb revision)
-  case [recipe | recipe@(Recipe identity _) <- recipes, identity == selected] of
+  case [recipe | recipe@(Fact (FactId identity) _) <- recipes, identity == name] of
     [recipe] -> pure recipe
     _ -> throwE [errorDiagnostic "curation.recipe-unknown" ("No recipe named " ++ name ++ " is declared in the selected root")]
 

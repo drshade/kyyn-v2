@@ -125,7 +125,9 @@ the facts lens internally: `AfterCollections.todos` has type
 no extra zoom, and recipe edits use the same syntax. An existing unaccepted
 draft using the former bare-Root entry must update its signature, wrap whole-root
 schema functions with `onFacts`, and focus manual root state actions with `zoom facts`;
-preparation diagnostics point to that repair. Do not add a second
+the ordinary compiler error reports the mismatch, and the
+[CLI guide](../../docs/cli-development.md#recipe-declarations-and-curation-progress)
+describes the repair. Do not add a second
 legacy entry adapter. Accepted archives remain readable without recompiling entries.
 
 Same-schema edits use standard strict StateT over Either. A refusal returns no
@@ -389,7 +391,7 @@ The evolution instead makes both sides explicit:
 import qualified SchemaV1 as Before
 import qualified SchemaV2 as After
 
-change :: Evolution Before.Root After.Root
+change :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 ```
 
 This is the owner-selected authoring convention, not only a first-proof workaround.
@@ -740,7 +742,7 @@ import Kyyn.Workspace.Evolution
 import qualified RootV1 as Before
 import qualified RootV1 as After
 
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = identityEvolution
 ```
 
@@ -762,7 +764,7 @@ data EvolutionExecution :: Effect where
 data EvaluatedEvolution = EvaluatedEvolution
   { captured :: CapturedEvolution
   , after  :: After
-  , value  :: CheckedValue
+  , value  :: KnowledgeBase CheckedValue
   , report :: EvolutionReport
   }
 
@@ -867,7 +869,7 @@ Each evolution workspace provides one conventional guest binding, `evolution`.
 Choose a reusable function and bind its arguments in ordinary source:
 
 ```haskell
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = importSales September
 ```
 
@@ -933,19 +935,20 @@ Transformation code may change structure in ways no optic can infer automaticall
 On the host, derive a reviewable ordered report from the annotated boundaries:
 
 ```haskell
-newtype EvolutionReport = EvolutionReport [StepReport]
+data EvolutionReport = EvolutionReport [StepReport] (Maybe Curation)
 
 data StepReport = StepReport
   { rationale :: Rationale
-  , changes   :: [FactChange]
+  , changes   :: [Change]
   }
 
-data FactChange = FactChange
+data Change = FactChange
   { collection :: CollectionId
   , fact       :: FactId
   , before     :: Maybe RecordedFact
   , after      :: Maybe RecordedFact
   }
+  | RecipeChange FactId (Maybe Recipe) (Maybe Recipe)
 
 data RecordedFact = RecordedFact
   { contract :: RootContract
@@ -976,10 +979,10 @@ descriptions supplied by the guest:
 ```haskell
 checkEvolutionReport
   :: RootStore :> es
-  => RootContract -> Value  -- selected Before and its decoded value
+  => RootContract -> KnowledgeBase Value  -- selected Before and its decoded value
   -> RootContract           -- inspected target
   -> EvolutionObservation   -- decoded guest After value and step observations
-  -> Eff es (Either [Diagnostic] (CheckedValue, EvolutionReport))
+  -> Eff es (Either [Diagnostic] (KnowledgeBase CheckedValue, EvolutionReport))
 ```
 
 This capability function checks every annotated boundary value through

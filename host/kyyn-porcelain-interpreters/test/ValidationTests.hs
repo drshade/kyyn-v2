@@ -38,14 +38,14 @@ validationTests contract facts = do
       example = expectation "Done 🦋" Required True
       storage operation = runPureEff (runDhallHandling (runRootStore operation))
   encoded <- either (fail . show) pure (storage (encodeExample example))
-  let root = Root contract facts encoded emptyCurationRegister
+  let root = Root contract facts encoded emptyCurationRegister []
   unless (all (\(p,_) -> "examples/~" `isPrefixOf` relativeName p) (files encoded))
     (fail "Non-ASCII example name was not escaped")
   unless (storage (readExamples root [descriptor]) == Right [example]) (fail "Example round trip changed values or contracts")
   forM_ ["index", "CON", "a/b", "example", "other"] $ \name -> do
     let sample = expectation name Required True
     saved <- either (fail . show) pure (storage (encodeExample sample))
-    unless (storage (readExamples (Root contract facts saved emptyCurationRegister) [descriptor]) == Right [sample])
+    unless (storage (readExamples (Root contract facts saved emptyCurationRegister []) [descriptor]) == Right [sample])
       (fail ("Example path round trip failed: " ++ name))
   let run codeResult semantic actual selected = runPureEff . executionMock selected descriptor codeResult semantic actual
         . runDhallHandling . runRootStore $ checkRoot selected
@@ -55,14 +55,14 @@ validationTests contract facts = do
   case valid of
     Passed checked (ValidationReport diagnostics) -> do
       unless (validatedValue checked == root && diagnostics == [semanticWarning]) (fail "Validation changed the snapshot/report")
-      unless (storage (exportRootFiles checked) == Right (tree (files facts ++ files encoded)))
+      unless (fmap (filter ((/= "recipes.dhall") . relativeName . fst) . files) (storage (exportRootFiles checked)) == Right (files (tree (files facts ++ files encoded))))
         (fail "Root export dropped saved examples or changed their bytes")
     _ -> fail (show valid)
   case run (Right ()) (ValidationReport []) False root of
     Rejected (ValidationReport [Diagnostic Error "example.mismatch" _ (Just (ExampleLocation "Done 🦋"))]) -> pure ()
     _ -> fail "Required mismatch did not reject validation with its location"
   illustrative <- either (fail . show) pure (storage (encodeExample (expectation "illustration" Illustrative True)))
-  case run (Right ()) (ValidationReport [semanticWarning]) False (Root contract facts illustrative emptyCurationRegister) of
+  case run (Right ()) (ValidationReport [semanticWarning]) False (Root contract facts illustrative emptyCurationRegister []) of
     Passed _ (ValidationReport [_, Diagnostic Warning "example.mismatch" _ _]) -> pure ()
     _ -> fail "Illustrative mismatch lost its warning or rejected the root"
   case run (Right ()) (ValidationReport [semanticError]) True root of
@@ -83,21 +83,21 @@ validationTests contract facts = do
   let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
   changedRoot <- either (fail . show) pure (checkContract (rootType (rootSchema contract))
     (SchemaMetadata (RoleDecl "root-extra" "Unrelated root change" Title : roles) assignments collections) >>= checkRootLayout)
-  unless (storage (readExamples (Root changedRoot facts encoded emptyCurationRegister) [descriptor]) == Right [example])
+  unless (storage (readExamples (Root changedRoot facts encoded emptyCurationRegister []) [descriptor]) == Right [example])
     (fail "Unchanged query contracts were incorrectly pinned to the whole root")
   let equivalent = tree [(p,if "/expected.dhall" `isSuffixOf` relativeName p then "let answer = True in answer" else b) | (p,b) <- files encoded]
-  unless (storage (readExamples (Root contract facts equivalent emptyCurationRegister) [descriptor]) == Right [example])
+  unless (storage (readExamples (Root contract facts equivalent emptyCurationRegister []) [descriptor]) == Right [example])
     (fail "Example comparison retained Dhall source spelling rather than values")
   case storage (readExamples root []) of Left _ -> pure (); _ -> fail "Unknown query accepted"
   forM_ [tree (drop 1 (files encoded)), tree ((either error id (relativePath "examples/stray"),"bad") : files encoded),
       tree [(p,if "/expected.dhall" `isSuffixOf` relativeName p then "\"wrong type\"" else b) | (p,b) <- files encoded]] $ \bad ->
-    case storage (readExamples (Root contract facts bad emptyCurationRegister) [descriptor]) of
+    case storage (readExamples (Root contract facts bad emptyCurationRegister []) [descriptor]) of
       Left _ -> pure ()
       _ -> fail "Malformed example files accepted"
   let wrong = Example "wrong" descriptor (CheckedValue (contractId result) (Bool True))
         (CheckedValue (contractId result) (Bool True)) Required ""
   case storage (encodeExample wrong) of Left _ -> pure (); _ -> fail "Wrong value contract persisted"
-  let noExamples = Root contract facts (tree []) emptyCurationRegister
+  let noExamples = Root contract facts (tree []) emptyCurationRegister []
   case run (Right ()) (ValidationReport []) True noExamples of
     Passed checked _ | validatedValue checked == noExamples -> pure ()
     _ -> fail "Root without examples could not validate"

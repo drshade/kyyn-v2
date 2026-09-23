@@ -1,14 +1,14 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: accepted
+status: implemented
 date: 2026-09-23
 ---
 # Latest evidence and recipe-scoped declared curation
 
-Basis: latest-only evidence and recipe-scoped acknowledgements are implemented.
-The owner-directed revision making recipes typed evolution data is accepted;
-the existing implementation still authors them in the root manifest.
+Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
+recipe evolution data are implemented. Recipes persist separately from the root
+manifest and use the ordinary evolution editing and review surfaces.
 
 ## Context
 
@@ -287,6 +287,7 @@ Persist the recipes in `root/recipes.dhall` as the known type
 `List { id : Text, value : { instructions : Text } }`. The fixed codec follows
 the shared Recipe/Fact structure; it is not a second KB-authored schema.
 Initialization emits an empty list; absence reads as empty, malformed data fails.
+Materialization and acceptance always write recipes.dhall, including an empty list.
 Recipes do not change the author's RootContract identity. Read them from the
 Before revision, send them with facts to the guest, validate the returned recipes
 and materialize them with the returned facts. Exclude them from source/config
@@ -309,9 +310,9 @@ Recipe payloads, not a fake collection in the author's RootContract. Human and
 structured review display both:
 
 ```haskell
--- Host review data; FactChange retains the domain contract on its values.
+-- Host review data; RecordedFact retains the domain contract on its value.
 data Change
-  = DomainFactChange FactChange
+  = FactChange CollectionName FactId (Maybe RecordedFact) (Maybe RecordedFact)
   | RecipeChange FactId (Maybe Recipe) (Maybe Recipe)
 
 data StepReport = StepReport Rationale [Change]
@@ -420,6 +421,9 @@ Preparation diagnostics give the author a concrete repair:
 
 | Code | Repair |
 | --- | --- |
+| `recipe.invalid-id` | Rename the identified recipe using the connector-binding identifier rule. |
+| `recipe.duplicate` | Give the identified recipes distinct IDs or remove the unintended duplicate. |
+| `recipe.invalid-data` | Repair the recipe file to the documented list of Fact Recipe values; malformed Dhall retains its Dhall diagnostic. |
 | `curation.recipe-invalid` | Use a valid recipe identifier. |
 | `curation.recipe-unknown` | Add the recipe in this evolution or select a recipe present in its result. |
 | `curation.recipe-conflict` | Compose declarations for one recipe per evolution. |
