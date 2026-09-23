@@ -28,7 +28,7 @@ runRootOpening sdk = interpret $ \_ -> \case
   LoadRootAt repository revision prefix -> do
     captured <- Git.readTreeAt repository revision prefix
     either (pure . Left) (openTree sdk) captured
-  LoadRootFactsAt repository revision prefix (SourceRoot contract code _ _) -> runExceptT $ do
+  LoadRootMaterialAt repository revision prefix (SourceRoot contract code _ _) -> runExceptT $ do
     location <- checked (relativePath (case prefix of
       WholeTree -> relativeName factsLocation
       Subtree path -> relativeName path ++ "/" ++ relativeName factsLocation))

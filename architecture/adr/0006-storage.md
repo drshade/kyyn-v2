@@ -53,7 +53,8 @@ whole contract identity and compares that identity before materialization. A
 role-only contract change therefore rejects an old checked value. Materialization
 does not confer semantic validation, execute guest code or write files. Its
 porcelain interpreter requires only DhallHandling, with no IOE. Code and supporting
-files are preserved verbatim in a separate tree; code paths cannot overlap `facts/`.
+files are preserved verbatim in a separate tree; code paths cannot overlap `facts/`
+or the host-owned curation material in [ADR 0014](0014-evidence.md).
 
 Fact-tree paths are relative to `root/`. Reserved file `facts/root.dhall` retains
 non-collection root fields (an empty record when there are none). Each collection
@@ -93,6 +94,8 @@ The store makes snapshot selection explicit. These host operations use
 data RootStore :: Effect where
   ReadRootDefinition
     :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
+  ReadRootCuration
+    :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
   LoadRootValueForChecking
     :: Root -> RootStore m CheckedValue
   ListFacts
@@ -141,7 +144,7 @@ data RootOpening :: Effect where
   OpenCapturedRoot :: FileTree -> RootOpening m (Either [Diagnostic] Root)
   LoadRootAt :: Repository -> GitRevision -> TreePath
              -> RootOpening m (Either [Diagnostic] Root)
-  LoadRootFactsAt :: Repository -> GitRevision -> TreePath -> SourceRoot
+  LoadRootMaterialAt :: Repository -> GitRevision -> TreePath -> SourceRoot
                  -> RootOpening m (Either [Diagnostic] Root)
 
 runRootOpening
@@ -150,16 +153,18 @@ runRootOpening
   -> Eff (RootOpening : es) a -> Eff es a
 ```
 
-`LoadRootFactsAt` adds the selected revision's undecoded fact files to an already
-prepared `SourceRoot`, without inspecting its schema again. Its file reads are
-scoped to the facts location; an absent facts directory yields an empty fact tree.
+`LoadRootMaterialAt` adds the selected revision's undecoded fact files and decoded
+curation register to an already prepared `SourceRoot`, without inspecting its
+schema again. Its file reads are scoped to those host-material locations; an absent
+facts directory yields an empty fact tree and an absent register means no progress.
 Evolution capture uses it after preparing both source endpoints. This operation
 does not claim structural or semantic validation of the facts. Ordinary
 `LoadRootAt` also checks structural fact decoding.
 
 The manifest is `kb.dhall` inside the selected root subtree. Its fields are
-`schemaType`, `schemaMetadata`, `validator` and the `queries` registration list
-defined in [authoring](0008-authoring.md). The first three select qualified exports
+`schemaType`, `schemaMetadata`, `validator`, the `queries` and `tools` registration
+lists defined in [authoring](0008-authoring.md), and the `recipes` declarations
+in [ADR 0014](0014-evidence.md). The first three select qualified exports
 such as `Schema.Root`, `Schema.schemaMetadata` and `Validate.validate`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
 RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,

@@ -152,15 +152,15 @@ openingTests contract factFiles = do
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
   sourceFromGit <- right (execute sdk (loadSourceAt repo revision (Subtree prefix)))
   unless (sourceFromGit == source) (fail "Source loading differs from captured source opening")
-  input <- right (execute sdk (loadRootFactsAt repo revision (Subtree prefix) sourceFromGit))
+  input <- right (execute sdk (loadRootMaterialAt repo revision (Subtree prefix) sourceFromGit))
   unless (input == opened) (fail "Input capture changed prepared source or root bytes")
   progressedInput <- right (runPureEff . runDhallHandling . schemaMock (rootSchema contract)
     . gitMock withProgress . runRootStore . runRootOpening sdk $
-      loadRootFactsAt repo revision (Subtree prefix) sourceFromGit)
+      loadRootMaterialAt repo revision (Subtree prefix) sourceFromGit)
   unless (progressedInput == progressed) (fail "Evolution input omitted accepted curation")
   let undecoded = runPureEff . runDhallHandling . schemaMock (rootSchema contract)
         . gitMock withCorruptFacts . runRootStore . runRootOpening sdk $
-          loadRootFactsAt repo revision (Subtree prefix) sourceFromGit
+          loadRootMaterialAt repo revision (Subtree prefix) sourceFromGit
   corruptInput <- right undecoded
   unless (corruptInput == Root contract corrupt authored emptyCurationRegister) (fail "Input capture decoded or changed malformed facts")
   otherRevision <- right (gitRevision (replicate 40 'b'))

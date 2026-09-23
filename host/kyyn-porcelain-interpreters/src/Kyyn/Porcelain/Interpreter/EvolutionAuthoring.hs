@@ -53,7 +53,7 @@ runEvolutionAuthoring = interpret $ \_ -> \case
     PreparedEvolution context@(EvolutionContext _ _ (Before revision _) _) before@(SourceRoot _ _ _ closure) after <-
       ExceptT (prepareEvolution location)
     rootPath <- checked (rootLocation kb)
-    input <- ExceptT (RootOpening.loadRootFactsAt repository revision (Subtree rootPath) before)
+    input <- ExceptT (RootOpening.loadRootMaterialAt repository revision (Subtree rootPath) before)
     pure (CapturedEvolution context input closure after)
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a

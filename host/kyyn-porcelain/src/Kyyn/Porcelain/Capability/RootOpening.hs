@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Porcelain.Capability.RootOpening (RootOpening(..), openCapturedRoot, loadRootAt, loadRootFactsAt, openCapturedSource, loadSourceAt) where
+module Kyyn.Porcelain.Capability.RootOpening (RootOpening(..), openCapturedRoot, loadRootAt, loadRootMaterialAt, openCapturedSource, loadSourceAt) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -13,7 +13,7 @@ data RootOpening :: Effect where
   LoadSourceAt :: Repository -> GitRevision -> TreePath -> RootOpening m (Either [Diagnostic] SourceRoot)
   OpenCapturedRoot :: FileTree -> RootOpening m (Either [Diagnostic] Root)
   LoadRootAt :: Repository -> GitRevision -> TreePath -> RootOpening m (Either [Diagnostic] Root)
-  LoadRootFactsAt :: Repository -> GitRevision -> TreePath -> SourceRoot -> RootOpening m (Either [Diagnostic] Root)
+  LoadRootMaterialAt :: Repository -> GitRevision -> TreePath -> SourceRoot -> RootOpening m (Either [Diagnostic] Root)
 
 type instance DispatchOf RootOpening = Dynamic
 
@@ -29,6 +29,6 @@ openCapturedRoot = send . OpenCapturedRoot
 loadRootAt :: RootOpening :> es => Repository -> GitRevision -> TreePath -> Eff es (Either [Diagnostic] Root)
 loadRootAt repository revision = send . LoadRootAt repository revision
 
-loadRootFactsAt :: RootOpening :> es => Repository -> GitRevision -> TreePath -> SourceRoot
+loadRootMaterialAt :: RootOpening :> es => Repository -> GitRevision -> TreePath -> SourceRoot
   -> Eff es (Either [Diagnostic] Root)
-loadRootFactsAt repository revision location = send . LoadRootFactsAt repository revision location
+loadRootMaterialAt repository revision location = send . LoadRootMaterialAt repository revision location

@@ -213,7 +213,7 @@ openingMock count expectedRepo expectedRevision expectedPath answer = interpret 
         either raiseFailure pure answer
     OpenCapturedSource target -> either raiseFailure (pure . fmap (\(SourceRoot schema _ definition closure) ->
       SourceRoot schema target definition closure)) answer
-    LoadRootFactsAt repo revision path (SourceRoot schema code _ _)
+    LoadRootMaterialAt repo revision path (SourceRoot schema code _ _)
       | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
         pure (Right (Root schema (either error id (fileTree [])) code emptyCurationRegister))
     _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
