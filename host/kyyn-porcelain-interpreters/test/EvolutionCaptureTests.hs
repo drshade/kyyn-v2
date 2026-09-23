@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module EvolutionCaptureTests (evolutionCaptureTests) where
 
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (forM_, unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
@@ -61,11 +62,11 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   identity <- right (evolutionId "e001")
   missing <- right (evolutionId "e002")
   sourceTree <- tree [("Schema.hs", "selected source"), ("Helpers.hs", "selected helper")]
-  sourceCode <- tree [("kb.dhall", "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"), ("src/Schema.hs", "selected source"),
+  sourceCode <- tree [("kb.dhall", "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"), ("src/Schema.hs", "selected source"),
     ("src/Helpers.hs", "selected helper"), ("examples/check.dhall", "selected example"),
     ("plugins/config/provider.dhall", "selected config")]
   expectedClosure <- traverse (right . relativePath) ["Schema.hs", "Helpers.hs"]
-  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] sourceTree) expectedClosure
+  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] [] sourceTree) expectedClosure
   forM_ [Nothing, Just "examples/sales"] $ \prefixName -> do
     prefix <- maybe (pure WholeTree) (fmap Subtree . right . relativePath) prefixName
     rootPath <- Subtree <$> right (relativePath (maybe "root" (++ "/root") prefixName))
@@ -125,7 +126,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
     expectedTarget <- tree [("kb.dhall", "unfinished target manifest"), ("src/Schema.hs", "unfinished target source")]
     emptyFacts <- tree []
-    unless (input == Root contract emptyFacts sourceCode && closure == expectedClosure) (fail "Capture lost its input root or closure")
+    unless (input == Root contract emptyFacts sourceCode emptyCurationRegister && closure == expectedClosure) (fail "Capture lost its input root or closure")
     unless (target == expectedTarget) (fail "Capture changed proposed target bytes")
     snapshot <- noOpening (readWorkspace location) >>= right >>= right
     unless (case context of EvolutionContext _ _ _ material -> snapshot == material)
@@ -214,7 +215,7 @@ openingMock count expectedRepo expectedRevision expectedPath answer = interpret 
       SourceRoot schema target definition closure)) answer
     LoadRootFactsAt repo revision path (SourceRoot schema code _ _)
       | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
-        pure (Right (Root schema (either error id (fileTree [])) code))
+        pure (Right (Root schema (either error id (fileTree [])) code emptyCurationRegister))
     _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
 
 manifest :: Char -> String -> Bytes.ByteString

@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module EvolutionExecutionTests (evolutionExecutionTests) where
 
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
 import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
@@ -48,8 +49,8 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       before = tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","old checks")]
       code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks")]
       target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
-      root = Root contract facts code
-      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] []
+      root = Root contract facts code emptyCurationRegister
+      prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] [] []
         (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")])) []
       capture proposed = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft)
@@ -93,20 +94,20 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
     capture (tree [("kb.dhall",manifest),("src/Example.hsc","competing module")])] $ \invalid -> do
       rejected <- execute unexpected root invalid
       case rejected of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail (show rejected)
-  let Root selected _ selectedCode = root
-  unreadable <- execute unexpected (Root selected (tree []) selectedCode) captured
+  let Root selected _ selectedCode _ = root
+  unreadable <- execute unexpected (Root selected (tree []) selectedCode emptyCurationRegister) captured
   case unreadable of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail (show unreadable)
   let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
   different <- right (checkContract (rootType (rootSchema contract))
     (SchemaMetadata (RoleDecl "extra" "Changed" Title : roles) assignments collections) >>= checkRootLayout)
-  mismatch <- execute unexpected (Root different facts code) captured
+  mismatch <- execute unexpected (Root different facts code emptyCurationRegister) captured
   case mismatch of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail "Loaded contract mismatch reached execution"
   let changedCode = tree [("kb.dhall",manifest),("src/Example.hs","changed source")]
-  sourceMismatch <- execute unexpected (Root contract facts changedCode) captured
+  sourceMismatch <- execute unexpected (Root contract facts changedCode emptyCurationRegister) captured
   case sourceMismatch of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail "Changed Before copy reached execution"
   putStrLn "Evolution execution selects exact Before, deduplicates its closure and preserves rejection/failure layers."
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
 schemaMock count contract = interpret $ \_ -> \case

@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Main (main) where
 
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value, object, (.=))
 import qualified Data.ByteString as Bytes
@@ -37,16 +38,19 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import PublicationTests (publicationTests)
 import InitializationTests (initializationTests)
 import WorkspaceApiTests (workspaceApiTests)
+import CurationPersistenceTests (curationPersistenceTests, sampleCuration)
+import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
 
 main :: IO ()
 main = do
+  curationPersistenceTests
   initializationTests
   workspaceApiTests
   emptyContract <- right (checkContract
     (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
   emptyCode <- tree []
   emptyChecked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue emptyContract (object [])))))
-  emptyRoot@(Root _ emptySnapshot _) <- right
+  emptyRoot@(Root _ emptySnapshot _ _) <- right
     (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode emptyChecked))))
   emptyReloaded <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking emptyRoot))))
   unless (emptyReloaded == emptyChecked && map (relativeName . fst) (files emptySnapshot) == ["facts/root.dhall"])
@@ -55,7 +59,7 @@ main = do
   other <- right (checkContract schema (SchemaMetadata [RoleDecl "label" "Changed metadata" Title] [] declarations) >>= checkRootLayout)
   code <- tree [("src/Schema.hs", "authored code"), ("kb.dhall", "selected schema")]
   checked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract value))))
-  root@(Root _ snapshot savedCode) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code checked))))
+  root@(Root _ snapshot savedCode _) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code checked))))
   unless (savedCode == code) (fail "Code snapshot changed")
   unless ("facts/todos/a.dhall" `elem` map (relativeName . fst) (files snapshot)) (fail "Ordinary ID path is not readable")
   pathValue <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract
@@ -65,37 +69,37 @@ main = do
   unless (pathReloaded == pathValue) (fail "Escaped names collided or changed IDs")
   let reopen r = runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking r)))
   reopenedFiles <- right (fileTree (files snapshot))
-  reopened <- right (reopen (Root contract reopenedFiles code))
+  reopened <- right (reopen (Root contract reopenedFiles code emptyCurationRegister))
   unless (reopened == checked) (fail "Reopening changed the root")
   rejected (runPureEff (runDhallHandling (runRootStore (materializeRoot other code checked))))
   forM_ [[], [("same","one"),("same","two")]] $ \items -> do
     candidate <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract (rootValue items)))))
     case items of
       [] -> do
-        empty@(Root _ emptyFiles _) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code candidate))))
+        empty@(Root _ emptyFiles _ _) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code candidate))))
         emptyValue <- right (reopen empty)
         unless (emptyValue == candidate && length (files emptyFiles) == 2) (fail "Empty collection not retained")
       _ -> rejected (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code candidate))))
   forM_ (files snapshot) $ \(path,_) -> do
     missing <- right (fileTree (filter ((/= path) . fst) (files snapshot)))
-    rejected (reopen (Root contract missing code))
+    rejected (reopen (Root contract missing code emptyCurationRegister))
   extra <- tree [("facts/unlisted.dhall", "{}")]
   unlisted <- right (fileTree (files snapshot ++ files extra))
-  rejected (reopen (Root contract unlisted code))
+  rejected (reopen (Root contract unlisted code emptyCurationRegister))
   forM_ ["[\"a\", \"a\"]", "[\"missing\"]", "[\"a\"]", "[\"../\"]", "[] : List Text"] $ \index -> do
     changed <- right (fileTree [(p, if "index.dhall" `isSuffixOf` relativeName p then index else b) | (p,b) <- files snapshot])
-    rejected (reopen (Root contract changed code))
+    rejected (reopen (Root contract changed code emptyCurationRegister))
   let damage replacement = fileTree [(p, if relativeName p == "facts/todos/a.dhall" then replacement else b) | (p,b) <- files snapshot]
   forM_ ["{ id = \"wrong\", value = { title = \"one\" } }", Bytes.pack [255]] $ \bad -> do
     corrupt <- right (damage bad)
-    rejected (reopen (Root contract corrupt code))
+    rejected (reopen (Root contract corrupt code emptyCurationRegister))
   overlap <- tree [("facts/extra", "not code")]
   rejected (runPureEff (runDhallHandling (runRootStore (materializeRoot contract overlap checked))))
   a <- right (relativePath "a")
   ab <- right (relativePath "a/b")
   rejected (fileTree [(a,""),(a,"")])
   rejected (fileTree [(a,""),(ab,"")])
-  unless (root == Root contract snapshot code) (fail "Snapshot mutated")
+  unless (root == Root contract snapshot code emptyCurationRegister) (fail "Snapshot mutated")
   orderA <- tree [("a/c","one"),("a-b","two")]
   orderB <- tree [("a-b","two"),("a/c","one")]
   unless (orderA == orderB) (fail "FileTree depends on producer ordering")
@@ -122,7 +126,15 @@ openingTests contract factFiles = do
       execute sdkFiles action = runPureEff (runDhallHandling (schemaMock (rootSchema contract) (gitMock captured
         (runRootStore (runRootOpening sdkFiles action)))))
   opened <- right (execute sdk (openCapturedRoot captured))
-  unless (opened == Root contract factFiles authored) (fail "Opening changed the selected files")
+  progressBytes <- right (runPureEff (runDhallHandling (encodeRegister sampleCuration)))
+  withProgress <- right (fileTree ((curationLocation,progressBytes) : files captured))
+  progressed <- right (execute sdk (openCapturedRoot withProgress))
+  unless (progressed == Root contract factFiles authored sampleCuration) (fail "Opening lost host-owned curation")
+  progressSource <- right (execute sdk (openCapturedSource withProgress))
+  unless (progressSource == SourceRoot contract authored (either (error . show) id
+      (runPureEff (runDhallHandling (runRootStore (readRootDefinition authored))))) [])
+    (fail "Source-only target includes curation material")
+  unless (opened == Root contract factFiles authored emptyCurationRegister) (fail "Opening changed the selected files")
   definition <- right (runPureEff (runDhallHandling (runRootStore (readRootDefinition authored))))
   source <- right (execute sdk (openCapturedSource captured))
   unless (source == SourceRoot contract authored definition []) (fail "Source opening changed schema/code/definition")
@@ -146,7 +158,7 @@ openingTests contract factFiles = do
         . gitMock withCorruptFacts . runRootStore . runRootOpening sdk $
           loadRootFactsAt repo revision (Subtree prefix) sourceFromGit
   corruptInput <- right undecoded
-  unless (corruptInput == Root contract corrupt authored) (fail "Input capture decoded or changed malformed facts")
+  unless (corruptInput == Root contract corrupt authored emptyCurationRegister) (fail "Input capture decoded or changed malformed facts")
   otherRevision <- right (gitRevision (replicate 40 'b'))
   rejected (execute sdk (loadSourceAt repo otherRevision (Subtree prefix)))
   rejected (execute sdk (loadSourceAt repo revision WholeTree))
@@ -155,8 +167,8 @@ openingTests contract factFiles = do
     rejected (execute sdk (openCapturedSource incomplete))
   forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
     [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
-    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
+    [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
     filter ((/= "facts/root.dhall") . relativeName . fst) (files captured)] $ \entries -> do
       bad <- right (fileTree entries)
       rejected (execute sdk (openCapturedRoot bad))
@@ -164,7 +176,7 @@ openingTests contract factFiles = do
   rejected (execute collision (openCapturedRoot captured))
   rejected (execute sdk (loadRootAt repo revision WholeTree))
   where
-    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+    manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
@@ -192,13 +204,16 @@ gitMock captured = interpret $ \_ -> \case
           | (p,b) <- files captured, "facts/" `isPrefixOf` relativeName p])))
   Git.ReadTreeAt _ revision (Subtree prefix) excluded
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root"
-      && map relativeName excluded == ["facts"] ->
+      && map relativeName excluded == ["facts", "curation.dhall"] ->
         pure (Right (either error id (fileTree [(p,b) | (p,b) <- files captured,
-          not ("facts/" `isPrefixOf` relativeName p)])))
+          not (isRootMaterial p)])))
   Git.ReadTreeAt {} -> pure (Left [errorDiagnostic "test.git" "Unusable source selection"])
   Git.CreateCommit {} -> error "RootOpening must not create commits"
   Git.CompareAndSwapRef {} -> error "RootOpening must not publish refs"
-  Git.ReadFileAt {} -> error "RootOpening must read the selected complete tree"
+  Git.ReadFileAt _ revision path
+    | Right revision == gitRevision (replicate 40 'a') && relativeName path == "root/curation.dhall" ->
+        pure (Right (lookup curationLocation (files captured)))
+  Git.ReadFileAt {} -> error "RootOpening read unexpected material"
   Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
   Git.ReadDirectoryAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root/facts" -> pure (Right (Just []))

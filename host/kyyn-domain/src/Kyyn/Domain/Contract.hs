@@ -1,6 +1,6 @@
 module Kyyn.Domain.Contract
   ( CheckedContract, ContractId, CollectionContract(..), checkContract
-  , rootType, metadataOf, contractShape, contractId, contractFingerprint, collectionContracts
+  , rootType, metadataOf, contractShape, contractId, contractFingerprint, parseContractFingerprint, collectionContracts
   , RootContract, checkRootLayout, rootSchema, describeRootContract ) where
 
 import Control.Monad (unless, forM_)
@@ -10,12 +10,24 @@ import Data.Aeson (Value, toJSON, encode)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub)
-import Numeric (showHex)
+import Numeric (showHex, readHex)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Types.SchemaMetadata
 
 newtype ContractId = ContractId Bytes.ByteString deriving (Eq, Show)
+
+parseContractFingerprint :: String -> Either String ContractId
+parseContractFingerprint value
+  | length value == 64 && all (`elem` ("0123456789abcdef" :: String)) value =
+      ContractId . Bytes.pack <$> pairs value
+  | otherwise = Left "Expected a 64-character lowercase hexadecimal contract fingerprint"
+  where
+    pairs [] = Right []
+    pairs (a:b:rest) = case readHex [a,b] of
+      [(byte,"")] -> (byte:) <$> pairs rest
+      _ -> Left "Invalid contract fingerprint"
+    pairs _ = Left "Invalid contract fingerprint"
 data CollectionContract = CollectionContract
   { collectionName :: String, rootFieldName :: String
   , payloadType :: DataType, payloadShape :: Shape

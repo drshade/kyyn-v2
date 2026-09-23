@@ -114,7 +114,7 @@ evolutionCheckResult identity result = case result of
   where name = evolutionIdName identity
 
 rootResult :: GitRevision -> Root -> CheckedValue -> Response
-rootResult revision (Root schema _ _) (CheckedValue _ value) = success
+rootResult revision (Root schema _ _ _) (CheckedValue _ value) = success
   (object ["revision" .= revisionName revision, "schema" .= describeRootContract schema, "value" .= value])
   ["Root at " ++ revisionName revision, jsonText value]
 
@@ -133,7 +133,7 @@ inspectionResult revision (summary, report) = success
   ([summaryText summary, "Inspected at " ++ revisionName revision] ++ maybe ["No saved report."] reportText report)
 
 candidateResult :: Candidate Root -> Response
-candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _)) = success
+candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _)) = success
   (object ["id" .= evolutionIdName identity, "beforeRevision" .= revisionName revision,
     "schema" .= describeRootContract schema, "report" .= reportJson report])
   (["Saved candidate for " ++ evolutionIdName identity] ++ reportText report)

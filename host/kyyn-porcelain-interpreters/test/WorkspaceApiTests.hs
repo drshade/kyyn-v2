@@ -76,7 +76,7 @@ workspaceApiTests = do
                   _ -> Left [errorDiagnostic "test.bad-schema" "Invalid target schema"])
           . interpret (\_ -> \case
               Git.ReadTreeAt selected base location exclusions
-                | (selected,base,location,exclusions) == (repo,revision,Subtree (path "nested/root"),[factsLocation]) -> do
+                | (selected,base,location,exclusions) == (repo,revision,Subtree (path "nested/root"),[factsLocation, curationLocation]) -> do
                     record "before"
                     pure (Right beforeCode)
               _ -> error "Discovery read facts, HEAD, history or wrote Git state")
@@ -108,7 +108,7 @@ workspaceApiTests = do
 manifest :: String -> Bytes.ByteString
 manifest name = Bytes.pack ("{ schemaType = " ++ show (name ++ ".Root") ++
   ", schemaMetadata = " ++ show (name ++ ".metadata") ++
-  ", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")
+  ", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")
 
 assert :: String -> Bool -> IO ()
 assert label ok = unless ok (fail label)

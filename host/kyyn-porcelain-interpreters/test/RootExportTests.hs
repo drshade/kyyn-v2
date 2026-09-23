@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module RootExportTests (rootExportTests) where
 
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
@@ -44,16 +45,16 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 rootExportTests :: Root -> IO ()
-rootExportTests original@(Root contract facts code) = withSystemTempDirectory "kyyn-root-export" $ \directory -> do
+rootExportTests original@(Root contract facts code _) = withSystemTempDirectory "kyyn-root-export" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git required for root export integration") pure
   scope <- either fail pure (directoryScope directory)
   let path = either error id . relativePath
       tree = either error id . fileTree
       repo = Repository scope
-      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       completeCode = tree ([(p,if relativeName p == "kb.dhall" then manifest else b) | (p,b) <- files code] ++ [(path "plugins/config/example.dhall","{ enabled = True }"),
         (path "assets/template.bin",Bytes.pack [0..255])])
-      root = Root contract facts completeCode
+      root = Root contract facts completeCode emptyCurationRegister
       storage action = runPureEff (runDhallHandling (runRootStore action))
       outcome = runPureEff . checkingMock root . runDhallHandling . runRootStore $ checkRoot root
   checked <- case outcome of
@@ -134,7 +135,7 @@ rootExportTests original@(Root contract facts code) = withSystemTempDirectory "k
   unless (currentIndex == indexBefore && liveOutside == "unstaged outside")
     (fail "Export/commit/ref primitives modified the checkout")
   let (factEntries,codeEntries) = partition (\(p,_) -> "facts/" `isPrefixOf` relativeName p) (files reopened)
-  reopenedValue <- either (fail . show) pure (storage (loadRootValueForChecking (Root contract (tree factEntries) (tree codeEntries))))
+  reopenedValue <- either (fail . show) pure (storage (loadRootValueForChecking (Root contract (tree factEntries) (tree codeEntries) emptyCurationRegister)))
   originalValue <- either (fail . show) pure (storage (loadRootValueForChecking original))
   unless (reopenedValue == originalValue) (fail "Reopened committed facts changed")
   putStrLn "Validated root export composes with real Git commit/CAS: exact files, deletion, parent and unrelated checkout preservation passed."

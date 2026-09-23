@@ -56,6 +56,7 @@ const allowed = {
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
   'kyyn-porcelain': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Curation',
     'Kyyn.Domain.Tool', 'Kyyn.Types.Plugin', 'Kyyn.Porcelain.Capability.Root', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Capability.EvidenceAcquisition', 'Kyyn.Porcelain.Capability.EvidenceInspection', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Domain.DataType',
     'Kyyn.Porcelain.Capability.PluginPreparation',
@@ -69,6 +70,8 @@ const allowed = {
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Kyyn.Porcelain.Protocol.CurationPersistence',
+    'Kyyn.Domain.Curation',
     'Kyyn.Domain.Tool', 'Kyyn.Domain.Plugin', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Capability.PluginPreparation',
     'Kyyn.Domain.GuestApi', 'Kyyn.Plumbing.Capability.ApiInspection',
@@ -110,7 +113,7 @@ const allowed = {
 };
 
 const domainModules = {
-  'Kyyn.Domain.Curation': ['Data.List', 'Kyyn.Domain.Evidence'],
+  'Kyyn.Domain.Curation': ['Data.List', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Tool': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Evidence': ['Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],
@@ -126,7 +129,7 @@ const domainModules = {
   'Kyyn.Domain.Contract': ['Control.Monad', 'Data.Coerce', 'Crypto.Hash.SHA256', 'Numeric',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
-  'Kyyn.Domain.Root': ['Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Value', 'Kyyn.Domain.Path'],
+  'Kyyn.Domain.Root': ['Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Curation', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Value', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Value': ['Data.Aeson', 'Kyyn.Domain.Contract'],
   'Kyyn.Domain.Query': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Value', 'Kyyn.Types.Query'],
   'Kyyn.Domain.Example': ['Kyyn.Domain.Query', 'Kyyn.Domain.Value'],
@@ -210,6 +213,7 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Porcelain.Protocol.CurationPersistence': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Curation', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling'],
   'Kyyn.Porcelain.Interpreter.ToolPreparation': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.List',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path', 'Kyyn.Domain.Root', 'Kyyn.Domain.Tool',

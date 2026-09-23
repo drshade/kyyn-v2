@@ -33,10 +33,10 @@ runRootExecution
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
-  PrepareRoot root@(Root contract _ code) -> runExceptT $ do
+  PrepareRoot root@(Root contract _ code _) -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
     _ <- ExceptT (prepareTools code plugins)
-    RootDefinition _ _ validator declarations _ authored <- ExceptT (readRootDefinition code)
+    RootDefinition _ _ validator declarations _ _ authored <- ExceptT (readRootDefinition code)
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"
       (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))

@@ -2,6 +2,7 @@
 module PublicationTests (publicationTests) where
 
 import Control.Exception (AsyncException(..), throwIO, try)
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless, when, forM_)
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (coerce)
@@ -62,7 +63,7 @@ type Effects = '[RootPublication, RootExecution, EvolutionExecution, EvolutionAu
   Git.Git, Git.Git, Process.ProcessExecution, FileSystem, Failure, IOE]
 
 publicationTests :: Root -> IO ()
-publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
+publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
   withSystemTempDirectory "kyyn-publication" $ \directory -> do
     executable <- findExecutable "git" >>= maybe (fail "Git required") pure
     scope <- either fail pure (directoryScope directory)
@@ -73,12 +74,12 @@ publicationTests (Root contract facts _) = forM_ [False, True] $ \interrupt ->
         kb = KnowledgeBase repo prefix
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
-        manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+        manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
         pluginFile = "plugins/packages/existing/source/src/Plugin.hs"
         pluginBytes = "module Plugin where\n"
         code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
           (path pluginFile,pluginBytes)]
-        initialRoot = Root contract facts code
+        initialRoot = Root contract facts code emptyCurationRegister
         output = object ["description" .= ("accepted" :: String), "todos" .= ([] :: [Value])]
         write name bytes = do
           createDirectoryIfMissing True (takeDirectory (directory </> name))
