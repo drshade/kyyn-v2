@@ -113,9 +113,14 @@ through guest code or claim pending-work CLI discovery.
 guest declarations against local-file fetches: older-scope resolution, failed
 preparation retaining the candidate, cache-free acceptance, archived declarations
 and selective deletion after a fresh refetch. It is included in the full installed
-check. Native `roots` and `evidence-store` checks cover declaration resolution,
+check. The journey also covers recipe discovery without a runtime, net pending
+changes, independent recipes/instances and mixed acknowledgements with a fact edit.
+Native `roots` and `evidence-store` checks cover declaration resolution,
 canonical report round trips (including version-one archives) and historical
 metadata replay without guest compilation.
+The `roots` suite records the recipe reader's Git operations, checking explicit
+KB/revision selection, manifest-only list/show and absent/invalid registers without
+a schema or guest compiler.
 
 `cabal test evidence-store --test-show-details=direct` checks ordered delta application,
 real Dhall persistence, instance isolation, latest-only payloads and payload-free change

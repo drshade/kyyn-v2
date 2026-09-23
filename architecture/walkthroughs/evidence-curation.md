@@ -2,8 +2,8 @@
 
 This illustrates the proposed [curation decision](../adr/0014-evidence.md), not
 a runnable script. Acquisition, latest-only storage, typed plugin reads and KB
-helpers, recipe declarations and acknowledgement helpers exist; pending-work
-discovery does not yet. Scope variables below stand for specific instance/fetch data.
+helpers, recipe declarations, acknowledgement helpers and pending-work discovery
+exist. Scope variables below stand for specific instance/fetch data.
 
 ## 1. Define the tasks and sources
 
@@ -18,6 +18,8 @@ instances; their [configuration and bindings](../adr/0016-connections.md) remain
 plugin-owned contracts. A recipe can use all three instances. Another recipe can
 process the same evidence without sharing acknowledgements.
 
+Use `root recipe list` and `root recipe show syncTodos` to discover those instructions.
+
 ## 2. Fetch twice before curating
 
 The file source publishes these acquisition changes:
@@ -31,6 +33,9 @@ Only current payloads remain. Asking for pending evidence for `syncTodos`, which
 has no prior acknowledgements, returns milk as New at its F2 state. The temporary
 item has disappeared without being processed and is not pending. Raw fetch history
 still shows both batches; pending work is a different view.
+
+For example, `root recipe pending list syncTodos local-file documents` selects the
+recipe and the configured file instance. JSON results carry `scope` and `changes`.
 
 The result carries the file instance and F2 identity as ordinary scope data. Plugin
 methods read the latest capture. If another fetch occurs between investigation

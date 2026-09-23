@@ -25,8 +25,7 @@ An unresolved gate is not permission to quietly invent a fallback.
 
 The [evidence curation walkthrough](walkthroughs/evidence-curation.md) illustrates
 the proposed recipe-guided curation journey. Plugin installation, acquisition and
-typed KB tools and recipe-scoped acknowledgements exist; pending-work discovery
-is not yet implemented.
+typed KB tools, recipe-scoped acknowledgements and pending-work discovery exist.
 
 The ADRs are written literately: types and signatures appear where they explain
 the decision, not in a detached interface appendix. Each definition has one owning
