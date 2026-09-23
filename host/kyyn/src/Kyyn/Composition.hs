@@ -5,6 +5,7 @@ import Effectful (Eff, IOE, runEff, (:>))
 import Kyyn.Composition.Runtime
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
+import Kyyn.Composition.Recipes (dispatchRecipes)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
@@ -181,6 +182,7 @@ executeInitialization host scope = do
 dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
 dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
   Cli.RootTool command -> dispatchTools host command selected
+  Cli.RootRecipe command -> dispatchRecipes host command selected
   Cli.ShowRoot -> withRoot (inspectionCheckResult revision <$> Root.inspectRootAt kb revision)
   Cli.CheckRoot -> withRoot (checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision)
   where

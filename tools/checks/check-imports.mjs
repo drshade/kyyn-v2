@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
-  'kyyn-surfaces': ['Kyyn.Types.Curation', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+  'kyyn-surfaces': ['Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
     'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Tool',
     'Kyyn.Domain.Plugin',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
@@ -12,7 +12,7 @@ const allowed = {
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
-  'kyyn': ['Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+  'kyyn': ['Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
     'Data.Coerce', 'Data.Text', 'Kyyn.Domain.Value', 'Kyyn.Composition.Runtime', 'Kyyn.Composition.Connectors',
     'Kyyn.Composition.Tools', 'Kyyn.Domain.Tool', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Interpreter.ToolPreparation', 'Kyyn.Porcelain.Interpreter.ToolExecution', 'Kyyn.Surfaces.Tools',
@@ -56,7 +56,7 @@ const allowed = {
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
   'kyyn-porcelain': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
-    'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Porcelain.Capability.Curation',
+    'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Porcelain.Capability.Curation', 'Kyyn.Porcelain.Capability.Connector', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Tool', 'Kyyn.Types.Plugin', 'Kyyn.Porcelain.Capability.Root', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Capability.EvidenceAcquisition', 'Kyyn.Porcelain.Capability.EvidenceInspection', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Domain.DataType',
     'Kyyn.Porcelain.Capability.PluginPreparation',
@@ -70,7 +70,7 @@ const allowed = {
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
-    'Kyyn.Porcelain.Protocol.CurationPersistence',
+    'Kyyn.Porcelain.Protocol.CurationPersistence', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Curation',
     'Kyyn.Domain.Tool', 'Kyyn.Domain.Plugin', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Capability.PluginPreparation',

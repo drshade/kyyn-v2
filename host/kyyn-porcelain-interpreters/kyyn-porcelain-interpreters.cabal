@@ -26,6 +26,7 @@ library
     Kyyn.Porcelain.Interpreter.RootPublication
     Kyyn.Porcelain.Interpreter.WorkspaceStore
     Kyyn.Porcelain.Interpreter.EvolutionStore
+    Kyyn.Porcelain.Interpreter.RecipeStore
     Kyyn.Porcelain.Interpreter.EvolutionAuthoring
     Kyyn.Porcelain.Interpreter.EvolutionExecution
     Kyyn.Porcelain.Interpreter.RootExecution
@@ -68,7 +69,7 @@ test-suite evolution-reports
 test-suite roots
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: GuestFixture ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests PublicationTests InitializationTests WorkspaceApiTests CurationPersistenceTests
+  other-modules: GuestFixture ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests PublicationTests InitializationTests WorkspaceApiTests CurationPersistenceTests RecipeTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: OverloadedStrings
