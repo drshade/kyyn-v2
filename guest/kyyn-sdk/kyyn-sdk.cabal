@@ -9,7 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Plugin
-  other-modules: Kyyn.Evolution.Internal Kyyn.Edit.Internal
+  other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1
@@ -18,7 +18,8 @@ test-suite evolution-core
   type: exitcode-stdio-1.0
   main-is: EvolutionCore.hs
   hs-source-dirs: test src
-  other-modules: Kyyn.Evolution Kyyn.Evolution.Internal Kyyn.Edit Kyyn.Edit.Internal Kyyn.Optics EditTests
+  other-modules: Kyyn.Evolution Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase
+    Kyyn.Edit Kyyn.Edit.Internal Kyyn.Optics EditTests KnowledgeBaseTests
   default-language: Haskell2010
   ghc-options: -Wall -Werror -main-is EvolutionCore.main
   build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1

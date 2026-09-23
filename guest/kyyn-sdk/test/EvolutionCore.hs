@@ -5,10 +5,12 @@ import Kyyn.Evolution.Internal (RootBinding(..), RecordedRoot(..), StepObservati
 import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))
 import Text.JSON.Types (JSValue(..), toJSString)
 import qualified EditTests
+import qualified KnowledgeBaseTests
 
 main :: IO ()
 main = do
   EditTests.main
+  KnowledgeBaseTests.main
   let old = RootBinding "old" (JSString . toJSString . show) :: RootBinding Integer
       new = RootBinding "new" (JSString . toJSString . show) :: RootBinding Integer
       citation = EvidenceRef "sales" "account-one" "org/opportunity/123" ["https://example.test/123"]

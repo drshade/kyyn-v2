@@ -2,6 +2,7 @@ module Kyyn.Evolution
   ( Evolution, Rationale(..), EvolutionFailure(..)
   , EvidenceRef(..), EvidenceId(..), (>=>), identityEvolution, withCuration
   , RecipeId(..), EvidenceScope(..), Acknowledgement(..), Curation(..)
+  , KnowledgeBase(..), Recipe(..), facts, recipes, onFacts
   , module Kyyn.Edit
   ) where
 
@@ -10,6 +11,7 @@ import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..))
 import Kyyn.Types.Curation
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Evolution.Internal
+import Kyyn.Evolution.KnowledgeBase
 import Kyyn.Edit
 
 infixr 1 >=>
