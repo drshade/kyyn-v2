@@ -110,6 +110,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Curation': ['Data.List', 'Kyyn.Domain.Evidence'],
   'Kyyn.Domain.Tool': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Evidence': ['Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],

@@ -10,7 +10,8 @@ Basis: owner-directed latest-only evidence and recipe-scoped acknowledgements.
 This revision proposes their interface and persistence mechanics for review.
 Latest-only storage, acquisition, typed plugin reads and composed KB tools are
 implemented. Recipes, acknowledgement bookkeeping and net pending-work discovery
-are not yet implemented.
+are not yet implemented. The pure host comparison and resolved-acknowledgement
+operations are implemented and tested independently of storage and guest execution.
 
 ## Context
 
@@ -244,6 +245,14 @@ data Recipe = Recipe
 type Recipes = Map RecipeId Recipe
 ```
 
+Persist recipe declarations in `root/kb.dhall` as a required
+`recipes : List { name : Text, instructions : Text }` field. Names use the existing
+connector-binding identifier rule, are unique among recipes, and have their own
+namespace. When this manifest change is implemented, existing KBs without recipes
+add `recipes = [] : List { name : Text, instructions : Text }`; initialization and
+manifest diagnostics must supply that shape. This pure-core slice does not yet
+change the manifest decoder.
+
 An evolution may name one recipe or none. A recipe may use many connector instances;
 different recipes may independently process the same evidence. Instructions can
 change without automatically resetting progress. Ordinary manual corrections and
@@ -324,7 +333,17 @@ type CurationRegister =
   Map RecipeId (Map ConnectorInstanceRef CurationProgress)
 ```
 
-The exact file layout remains provisional. A batch replaces the instance's map
+Persist the register at `root/curation.dhall`, as host material alongside facts,
+excluded from the code tree copied into evolution targets. Root capture/export
+must preserve it separately from authored code; preparation derives candidate
+progress from Before, never from a target-edited register. Absence means an empty
+register, so existing KBs need no empty-file migration. The Dhall codec uses sorted
+association lists for stable diffs; its exact schema accompanies the persistence
+implementation. Removing a recipe declaration does not delete its acknowledged
+map; it is inactive until that identity is used again. None of this persistence
+is implemented by the pure-core slice.
+
+A batch replaces the instance's map
 with all IDs/fingerprints present at its selected fetch, not just pending rows.
 An individual declaration inserts/replaces selected present items and removes
 selected absent ones. Apply declarations in their authored list order; the last
