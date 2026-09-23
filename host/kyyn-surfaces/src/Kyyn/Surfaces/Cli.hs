@@ -1,13 +1,14 @@
 module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
-  , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..)
+  , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, gitRevision)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
 import Kyyn.Domain.Evidence (FetchId(..))
+import Kyyn.Domain.Curation (RecipeId, recipeId)
 import Data.Coerce (coerce)
 import Options.Applicative
 
@@ -42,7 +43,8 @@ data EvidenceCommand
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
-data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand deriving (Eq, Show)
+data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand deriving (Eq, Show)
+data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName deriving (Eq, Show)
 data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
   | ExecuteTool MethodName String deriving (Eq, Show)
 
@@ -144,6 +146,7 @@ rootParser :: Parser RootCommand
 rootParser = hsubparser
   (group "show" "Inspect the accepted root at the selected revision" (pure ShowRoot)
   <> group "check" "Check the accepted root, including required examples" (pure CheckRoot)
+  <> group "recipe" "Discover curation instructions and pending evidence" (RootRecipe <$> recipeParser)
   <> group "tool" "Discover and invoke KB-authored investigation helpers" (RootTool <$> hsubparser
     (group "list" "List registered KB tools" (ListTools <$> workspace)
     <> group "show" "Show a tool's description and Dhall types" (ShowTool <$> name <*> workspace)
@@ -152,6 +155,16 @@ rootParser = hsubparser
   where
     name = argument (eitherReader methodName) (metavar "TOOL")
     workspace = optional (option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Inspect an evolution target"))
+
+recipeParser :: Parser RecipeCommand
+recipeParser = hsubparser
+  (group "list" "List recipes in the accepted root" (pure ListRecipes)
+  <> group "show" "Read a recipe's instructions" (ShowRecipe <$> recipe)
+  <> group "pending" "Inspect net unacknowledged evidence changes" (hsubparser
+    (group "list" "List pending evidence for a recipe and connector instance"
+      (ListPendingEvidence <$> recipe <*> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))))
+  where
+    recipe = argument (eitherReader recipeId) (metavar "RECIPE")
 
 guestParser :: Parser Command
 guestParser = hsubparser

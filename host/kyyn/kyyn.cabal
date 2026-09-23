@@ -9,7 +9,7 @@ executable kyyn-v2
   hs-source-dirs: app src
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
-    Kyyn.Composition.Tools
+    Kyyn.Composition.Tools Kyyn.Composition.Recipes
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror -threaded -rtsopts

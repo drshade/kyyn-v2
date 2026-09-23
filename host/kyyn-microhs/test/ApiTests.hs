@@ -158,13 +158,15 @@ main = do
   assert "selector keeps String alias" (signature "Kyyn.Evolution" "source" == "source :: EvidenceRef -> String")
   withSystemTempDirectory "kyyn-api-values-" $ \temporary -> do
     createDirectoryIfMissing True (temporary </> "Kyyn")
-    let symbols = nubBy sameOrigin (concatMap symbolsIn public)
-        signatures = [(n,d) | ApiSymbol n ValueNamespace origin _ (Just d) _ <- symbols,
+    let symbols = nubBy (\(_,a) (_,b) -> sameOrigin a b)
+          [(m,s) | m <- public, s <- symbolsIn m]
+        signatures = [(m,n,d) | (m,ApiSymbol n ValueNamespace origin _ (Just d) _) <- symbols,
           not (authoredFunction n origin)]
         valueName n@(c:_) | isAlpha c || c == '_' = n
         valueName n = "(" ++ n ++ ")"
-        witness (i,(n,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
-          "proof" ++ show i ++ " = " ++ valueName n]
+        witness (i,(m,n,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
+          "proof" ++ show i ++ " = " ++
+            (if valueName n == n then m ++ "." ++ n else "(" ++ m ++ "." ++ n ++ ")")]
     writeFile (temporary </> "Kyyn/ValueProof.hs") (unlines
       (["{-# LANGUAGE GADTs, RankNTypes #-}", "module Kyyn.ValueProof where",
         "import Control.Monad.Trans.State.Strict (StateT)"]

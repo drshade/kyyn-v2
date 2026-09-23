@@ -93,7 +93,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   metadataBindings <- renamedBindings "Metadata" before renamed
   sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Evolution","Program","SchemaMetadata"]] ++
+    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","Evolution","Program","SchemaMetadata"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-sdk/test" name | name <- ["EvolutionCore.hs","EditTests.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
@@ -135,7 +135,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   let badType = [(p,if relativeName p == "Evolution.hs"
         then Text.encodeUtf8 (Text.replace "editBefore" "edit" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
       badConstructor = [(p,if relativeName p == "Proof.hs" then
-        "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [])\n" else b) | (p,b) <- captured]
+        "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [] Nothing)\n" else b) | (p,b) <- captured]
       badBinding = [(p,if relativeName p == "Proof.hs" then
         "module Proof where\nimport Kyyn.Workspace.Evolution (beforeRoot)\nmain :: IO ()\nmain = pure ()\n" else b) | (p,b) <- captured]
       hiddenCollection = [(p,if relativeName p == "Proof.hs" then

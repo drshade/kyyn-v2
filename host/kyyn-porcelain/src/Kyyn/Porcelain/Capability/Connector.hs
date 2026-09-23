@@ -1,7 +1,7 @@
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
   , connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
-  , listConnectorMethods, selectConnectorMethod ) where
+  , listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
@@ -70,20 +70,20 @@ connectorFetchHistory :: (RootOpening :> es, Evolution.EvolutionStore :> es, Plu
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
   -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[FetchSummary]))
 connectorFetchHistory kb revision plugin name = runExceptT $ do
-  (instanceRef,producer,payload) <- evidenceContext kb revision plugin name
+  (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
   ExceptT (fetchHistory instanceRef producer payload)
 
 connectorEvidenceChanges :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Maybe FetchId
   -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[EvidenceChangeSummary]))
 connectorEvidenceChanges kb revision plugin name since = runExceptT $ do
-  (instanceRef,producer,payload) <- evidenceContext kb revision plugin name
+  (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
   ExceptT (evidenceChanges instanceRef producer payload since)
 
-evidenceContext :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+selectConnectorEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
-  -> ExceptT [Diagnostic] (Eff es) (ConnectorInstanceRef,EvidenceProducer,CheckedContract)
-evidenceContext kb revision plugin name = do
+  -> Eff es (Either [Diagnostic] (ConnectorInstanceRef,EvidenceProducer,CheckedContract))
+selectConnectorEvidence kb revision plugin name = runExceptT $ do
   code <- sourceAt kb revision Nothing
   plugins <- ExceptT (preparePlugins code)
   (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ _) _) <-

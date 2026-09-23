@@ -11,8 +11,8 @@ The interface and persistence mechanics were accepted in the design review.
 Latest-only storage, acquisition, typed plugin reads and composed KB tools are
 implemented. Recipe manifest declarations, register persistence/preservation and
 the pure host comparison/acknowledgement operations are implemented. Guest
-acknowledgement declarations and their preparation-time resolution are implemented;
-recipe/pending discovery surfaces remain outstanding.
+acknowledgement declarations, their preparation-time resolution and CLI recipe/pending
+discovery are implemented.
 
 ## Context
 
@@ -253,6 +253,27 @@ namespace. Existing KBs without recipes
 add `recipes = [] : List { name : Text, instructions : Text }`; initialization and
 manifest diagnostics supply that shape.
 
+CLI discovery is rooted at `root recipe list`, `root recipe show NAME`, and
+`root recipe pending list NAME PLUGIN INSTANCE`. List/show needs only the selected
+revision's manifest, not a schema or plugin compiler. The read-only `RecipeStore`
+capability exposes those selected root-document reads separately from schema opening:
+
+```haskell
+LoadRecipesAt :: KnowledgeBase -> GitRevision
+  -> RecipeStore m (Either [Diagnostic] [Recipe])
+LoadCurationAt :: KnowledgeBase -> GitRevision
+  -> RecipeStore m (Either [Diagnostic] CurationRegister)
+```
+
+Its interpreter reads through Git and delegates manifest/register decoding to
+RootStore. It does not create another writer. Pending discovery prepares the
+selected connector, loads its current capture under that producer contract, reads
+the register from the same selected Git revision and performs the pure comparison.
+Results include a fixed plugin/instance/fetch scope and ID/change-kind entries,
+not payloads. An incompatible stored capture requires refetch
+(`evidence.producer-changed`); a refetched producer which differs from accepted
+recipe progress requires batch reconciliation (`curation.producer-changed`).
+
 An evolution may name one recipe or none. A recipe may use many connector instances;
 different recipes may independently process the same evidence. Instructions can
 change without automatically resetting progress. Ordinary manual corrections and
@@ -328,6 +349,7 @@ Preparation diagnostics give the author a concrete repair:
 | `curation.scope-invalid` | Correct the plugin/instance/fetch fields or an empty evidence ID. |
 | `curation.scope-unavailable` | Inspect a fresh fetch and update the declaration to its scope. |
 | `curation.progress` | For a changed producer, reconcile an entire batch; for malformed captured IDs/fingerprints, repair or refetch the evidence as the message directs. |
+| `curation.producer-changed` | Inspect current evidence and acknowledge an entire batch to reconcile the recipe with the new producer. |
 
 For an individual declaration, presence at the selected fetch supplies its
 fingerprint; absence removes its acknowledged entry. Absence can be established
@@ -403,11 +425,12 @@ data PendingEvidence = PendingEvidence
 
 -- Pure comparison after host capabilities load progress and evidence metadata.
 pendingEvidence
-  :: Maybe CurationProgress -> CurrentEvidence
-  -> Either EvidenceProblem PendingEvidence
+  :: RecipeId -> CurationRegister -> EvidenceCapture
+  -> Either CurationProblem PendingEvidence
 ```
 
-The caller selects the recipe and instance before this comparison. Real discovery
+`EvidenceCapture` is the snapshot identity plus ID/fingerprint pairs, with no
+payloads. The caller selects the recipe and instance before this comparison. Real discovery
 can include citations/descriptions; the sketch isolates scope and net change kinds.
 
 | Acknowledged state | Later acquisition changes | Pending result |
@@ -513,4 +536,4 @@ and deletions without old fetch history. Cover acknowledgement of deletion after
 that refetch, failed fetch versus empty capture, and producer mismatch/reconciliation.
 
 The [curation walkthrough](../walkthroughs/evidence-curation.md) illustrates the
-complete intended journey; recipe/pending CLI discovery is not yet implemented.
+complete intended journey with the implemented CLI and guest acknowledgement helpers.

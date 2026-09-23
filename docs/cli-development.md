@@ -332,4 +332,20 @@ deletion. Declare the recipe in the target manifest before checking.
 `evolution check` resolves these declarations and saves the resulting progress;
 `evolution show` displays them. Acceptance publishes that saved progress even if
 evidence has since refreshed or been cleared. An unavailable fetch scope must be
-updated and checked again. Recipe/pending discovery commands are not yet available.
+updated and checked again.
+
+Discover the accepted recipes and their net pending evidence:
+
+```sh
+kyyn-v2 --kb PATH root recipe list
+kyyn-v2 --kb PATH root recipe show syncTodos
+kyyn-v2 --kb PATH --json root recipe pending list syncTodos local-file documents
+```
+
+List/show needs no runtime bundle. Pending discovery returns a fixed `scope`
+(`plugin`, `instance`, `fetch`) and `changes` (`id`, `kind`), comparing latest
+evidence against this recipe's accepted acknowledgements. It neither fetches nor
+marks anything handled. Missing evidence asks you to fetch; changed producers ask
+you to refetch or reconcile as appropriate. An empty list means no unacknowledged
+changes, not that the recipe's task is complete. Use plugin methods or KB tools to
+read the actual evidence.

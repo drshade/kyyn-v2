@@ -8,7 +8,7 @@ newtype RecipeId = RecipeId String deriving (Eq, Show)
 
 -- | A connector instance and the particular fetch being acknowledged.
 data EvidenceScope = EvidenceScope
-  { plugin :: String, instanceName :: String, fetch :: String }
+  { scopePlugin :: String, scopeInstance :: String, scopeFetch :: String }
   deriving (Eq, Show)
 
 -- | Declare all evidence in a fetch handled, or only the selected IDs.
