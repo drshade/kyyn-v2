@@ -64,6 +64,8 @@ main = do
   expect "acknowledged new then deleted" recipe selected (at "f3" []) [("milk",Removed)]
   deleted <- right (acknowledgeEvidence recipe (IndividualRecords [EvidenceId "milk"]) (at "fresh-clone-fetch" []) selected)
   expect "deletion acknowledged without old history" recipe deleted (at "another-fetch" []) []
+  repeatedDeletion <- right (acknowledgeEvidence recipe (IndividualRecords [EvidenceId "milk"]) (at "another-fetch" []) deleted)
+  assert "repeated deletion acknowledgement is idempotent" (repeatedDeletion == deleted)
   expect "reappearance after acknowledged deletion" recipe deleted original [("milk",New),("bread",New)]
   duplicate <- right (acknowledgeEvidence recipe (IndividualRecords [EvidenceId "milk",EvidenceId "milk"]) original selected)
   assert "duplicate acknowledgements idempotent" (duplicate == selected)
