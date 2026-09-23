@@ -29,7 +29,7 @@ runEvolutionAuthoring
 runEvolutionAuthoring = interpret $ \_ -> \case
   CreateEvolution kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision -> runExceptT $ do
     rootPath <- checked (rootLocation kb)
-    SourceRoot _ code (RootDefinition selected _ _ _ _ sources) _ <-
+    SourceRoot _ code (RootDefinition selected _ _ _ _ _ sources) _ <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
     empty <- checked (fileTree [])
     entryPath <- checked (relativePath "Evolution.hs")
@@ -53,7 +53,7 @@ runEvolutionAuthoring = interpret $ \_ -> \case
     PreparedEvolution context@(EvolutionContext _ _ (Before revision _) _) before@(SourceRoot _ _ _ closure) after <-
       ExceptT (prepareEvolution location)
     rootPath <- checked (rootLocation kb)
-    input <- ExceptT (RootOpening.loadRootFactsAt repository revision (Subtree rootPath) before)
+    input <- ExceptT (RootOpening.loadRootMaterialAt repository revision (Subtree rootPath) before)
     pure (CapturedEvolution context input closure after)
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a

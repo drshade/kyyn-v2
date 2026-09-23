@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=))
 import Data.List (isInfixOf, elemIndex)
@@ -64,7 +65,7 @@ main = do
       schema = right (checkContract
         (Algebraic "Example.Root" [] [Constructor "Example.Root" [(Just "title",StringType)]])
         (SchemaMetadata [] [] []) >>= checkRootLayout)
-      root = Root schema empty empty
+      root = Root schema empty empty emptyCurationRegister
       value = CheckedValue (contractId (rootSchema schema)) (object ["title" .= ("Unicode λ" :: String)])
       scope = right (directoryScope "/test/repository")
       kb = KnowledgeBase (Repository scope) (Subtree (right (relativePath "nested/kb")))

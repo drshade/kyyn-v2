@@ -19,7 +19,9 @@ import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), Stora
 import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath, cacheLocation)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, scopedPath, directoryScope)
-import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath)
+import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath, isRootMaterial, curationLocation)
+import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
+import Kyyn.Domain.Curation (curationEntries)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
@@ -76,7 +78,7 @@ runEvolutionStore = interpret $ \_ -> \case
   MarkDraft workspace -> runExceptT (setState workspace Draft)
   ExportAcceptedWorkspace (Candidate (EvolutionContext kb@(KnowledgeBase (Repository scope) _) identity (Before revision before)
       (WorkspaceSnapshot (WorkspaceManifest selected name explanation _) source target change _)) report validated) -> runExceptT $ do
-    let Root after _ code = validatedValue validated
+    let Root after _ code _ = validatedValue validated
     unless (revision == selected && target == code) (throwE [errorDiagnostic "evolution.archive-context"
       "Checked root or Before revision disagrees with captured workspace inputs"])
     notesPath <- checked (workspaceLocation (EvolutionWorkspace kb identity) >>= \p -> relativePath (relativeName p ++ "/notes"))
@@ -97,14 +99,17 @@ runEvolutionStore = interpret $ \_ -> \case
     current <- readWorkspace (EvolutionWorkspace kb identity)
     pure (Workspace.matchesCapturedInputs captured current)
   SaveCandidate (Candidate (EvolutionContext kb identity (Before revision before)
-      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _) _ target _ _)) report root@(Root after facts code)) -> do
+      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _) _ target _ _)) report root@(Root after facts code progress)) -> do
     parent <- candidateScope kb
     unless (revision == selected && code == target)
       (storageFailure WriteFile "candidate.dhall" "Candidate disagrees with its captured Before or target")
     _ <- RootStore.loadRootValueForChecking root >>= stored WriteFile "root"
     checkSavedReport WriteFile report
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
-    tree <- stored WriteFile "root" (fileTree (files facts ++ files code))
+    progressFiles <- if null (curationEntries progress) then pure [] else do
+      progressBytes <- encodeRegister progress >>= stored WriteFile "curation.dhall"
+      pure [(curationLocation,progressBytes)]
+    tree <- stored WriteFile "root" (fileTree (progressFiles ++ files facts ++ files code))
     let KnowledgeBase (Repository repositoryScope) _ = kb
     cache <- stored WriteFile (relativeName cacheLocation) (knowledgeBasePath kb cacheLocation)
     FileSystem.ensureIgnoredDirectory repositoryScope cache
@@ -141,10 +146,11 @@ runEvolutionStore = interpret $ \_ -> \case
               (Right (owner,before,after,report), Right snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) _ target _ _)) -> do
                 rootFiles <- stored ReadFile "root" (subtree "root/" tree)
                 facts <- stored ReadFile ("root/" ++ relativeName factsLocation) (fileTree [(p,b) | (p,b) <- files rootFiles, isFactPath p])
-                code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not (isFactPath p)])
+                code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not (isRootMaterial p)])
+                progress <- RootStore.readRootCuration rootFiles >>= stored ReadFile "root/curation.dhall"
                 unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
                 unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
-                let root = Root after facts code
+                let root = Root after facts code progress
                 _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
                 checkSavedReport ReadFile report
                 pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))

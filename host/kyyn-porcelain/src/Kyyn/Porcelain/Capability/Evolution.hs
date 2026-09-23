@@ -5,7 +5,7 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.Git (LocalBranch, CommitMetadata)
 import Kyyn.Domain.Diagnostic (CheckResult(..), ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Publication (AcceptanceResult(..), AcceptanceProblem(..))
-import Kyyn.Domain.Root (Root)
+import Kyyn.Domain.Root (Root(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution, evaluateEvolution)
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, loadCandidate)
@@ -46,12 +46,12 @@ applyEvolution captured = do
   case evaluated of
     Left rejection -> pure (Left rejection)
     Right (EvaluatedEvolution (CapturedEvolution context@(EvolutionContext _ _ _
-        (WorkspaceSnapshot _ _ target _ _)) _ _ _) (After schema) value report) -> do
+        (WorkspaceSnapshot _ _ target _ _)) (Root _ _ _ progress) _ _) (After schema) value report) -> do
       materialized <- materializeRoot schema target value
       case materialized of
         Left diagnostics -> pure (Left (ProposedCodeRejected diagnostics))
         Right root -> do
-          let candidate = Candidate context report root
+          let candidate = Candidate context report root { curation = progress }
           saveCandidate candidate
           pure (Right candidate)
 

@@ -102,6 +102,13 @@ without old fetch history. It runs in the fast check and needs no guest compiler
 Git repository, evidence store or filesystem. This does not claim acceptance or
 manifest/persistence integration.
 
+The `roots` suite also exercises the curation Dhall codec, canonical ordering,
+recipe declarations, nonempty candidate save/reload and register preservation
+through opening and Git export. `node tools/test-curation-persistence.mjs
+INSTALLED_EXECUTABLE` checks the real installed init/check/accept journey, target
+register refusal and repeated preservation. It does not declare acknowledgements
+through guest code or claim pending-work CLI discovery.
+
 `cabal test evidence-store --test-show-details=direct` checks ordered delta application,
 real Dhall persistence, instance isolation, latest-only payloads and payload-free change
 summaries, concurrent expected-base publication, cursor refusal, scoped clear,

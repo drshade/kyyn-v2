@@ -157,7 +157,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
          "  Diagnostic Warning \"example\" \"Illustrative\" (Just (ExampleLocation \"sample\"))] ++",
          "  if any (\\(Fact _ (Authored.Todo title _)) -> null title) todos then",
          "    [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])"]
-      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
   authoredBytes <- maybe (fail "Missing captured Authored.hs") pure (lookup (path "Authored.hs") files)
   validationCode <- either fail pure (fileTree
     [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])

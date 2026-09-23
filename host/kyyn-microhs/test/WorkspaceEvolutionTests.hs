@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Main (main) where
 
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless)
 import Data.Aeson (object, (.=))
 import qualified Data.ByteString as Bytes
@@ -75,7 +76,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       rootAction = do
         value <- checkRootValue beforeContract input
         either (pure . Left) (materializeRoot beforeContract beforeCode) value
-  Root _ factFiles _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
+  Root _ factFiles _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
   revision <- right (gitRevision (replicate 40 'a'))
   identifier <- right (evolutionId "abc")
   let repository = Repository scope
@@ -89,7 +90,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
     . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       prepared <- openCapturedSource target >>= either (error . show) pure
-      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles) closure prepared)
+      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles emptyCurationRegister) closure prepared)
   EvaluatedEvolution preserved (After afterContract) checked@(CheckedValue _ value) (EvolutionReport reports) <- right result >>= right
   unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 3 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
@@ -103,7 +104,7 @@ gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
   ReadTreeAt selected selectedRevision (Subtree path) excluded
     | selected == repository && selectedRevision == revision && relativeName path == "nested/root"
-      && excluded == [factsLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isFactPath p)])))
+      && excluded == [factsLocation, curationLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
   _ -> error "Evolution attempted Git operations other than its exact Before read"
 
 beforeType :: DataType
@@ -118,7 +119,7 @@ metadata = SchemaMetadata [RoleDecl "title" "Title" Title] [] [CollectionDecl "t
 
 manifest :: String -> String
 manifest namespace = "{ schemaType = " ++ show (namespace ++ ".Root") ++
-  ", schemaMetadata = \"Metadata.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+  ", schemaMetadata = \"Metadata.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

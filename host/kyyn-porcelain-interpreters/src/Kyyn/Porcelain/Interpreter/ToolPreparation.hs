@@ -22,7 +22,7 @@ import Kyyn.Porcelain.Capability.Tool
 runToolPreparation :: (RootStore :> es, SchemaInspection :> es, GuestCompilation :> es)
   => FileTree -> Eff (ToolPreparation : es) a -> Eff es a
 runToolPreparation sdk = interpret $ \_ (PrepareTools code plugins) -> runExceptT $ do
-  RootDefinition _ _ _ _ declarations authored <- ExceptT (readRootDefinition code)
+  RootDefinition _ _ _ _ declarations _ authored <- ExceptT (readRootDefinition code)
   let checked = either (throwE . pure . errorDiagnostic "tool.preparation") pure
   pluginSources <- traverse (\(name,bytes) -> (,) <$> checked (relativePath name) <*> pure bytes)
     [(name,bytes) | (path,bytes) <- files code,

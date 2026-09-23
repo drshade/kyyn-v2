@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module CandidateTests (candidateTests) where
 
+import CurationPersistenceTests (sampleCuration)
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), object, (.=))
 import Data.Aeson.Types (parseEither)
@@ -73,15 +74,15 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       location = EvolutionWorkspace kb identity
       snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
-      captured = CapturedEvolution context (Root schema facts code) []
-        (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] beforeFiles) [])
+      captured = CapturedEvolution context (Root schema facts code sampleCuration) []
+        (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] [] beforeFiles) [])
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       report = EvolutionReport
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
          StepReport (Rationale "No fact changes" []) []]
-      root = Root schema facts code
+      root = Root schema facts code sampleCuration
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
       execute = runEff . runFailure . runFileSystemIO scope . runDhallHandling . runRootStore
@@ -168,8 +169,8 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         _ -> error "Expected record root value"
       migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft) empty migratedCode empty empty
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
-      migratedCapture = CapturedEvolution migratedContext (Root schema facts code) []
-        (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] empty) [])
+      migratedCapture = CapturedEvolution migratedContext (Root schema facts code sampleCuration) []
+        (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] [] empty) [])
       migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
         [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
