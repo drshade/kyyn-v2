@@ -91,6 +91,11 @@ kyyn
       list [--evolution <id>]
       show <name> [--evolution <id>]
       execute <name> --input <dhall>
+    recipe
+      list
+      show <name>
+      pending
+        list <name> <plugin> <instance>
   evolution
     new <name>
     list
@@ -168,6 +173,15 @@ Authors write that file and use ordinary check/ready/accept. Schema
 discovery must remain available when the configuration file needs repair.
 
 Evidence operations use their own noun path:
+
+Recipe instructions and pending evidence use `root recipe list/show` and
+`root recipe pending list NAME PLUGIN INSTANCE`. They inspect the accepted root;
+list/show requires no runtime bundle. Pending results contain the recipe name,
+fixed `scope` (plugin, instance, fetch) and net `changes` (ID and kind), in human or
+JSON form. [ADR 0014](0014-evidence.md) owns the comparison, progress and recovery
+semantics. Empty pending work is displayed as "No unacknowledged changes."
+
+Raw acquisition history remains separate:
 
 ```text
 evidence fetch PLUGIN INSTANCE
