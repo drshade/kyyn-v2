@@ -1,11 +1,13 @@
 {-# LANGUAGE GADTs, EmptyDataDecls, EmptyCase #-}
-module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, encodeEvolutionReply) where
+module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, encodeEvolutionReply, knowledgeBaseCodec) where
 
 import Kyyn.Evolution.Internal (EvolutionOutput(..), StepObservation(..), RecordedRoot(..))
 import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Evidence (EvidenceId(..))
 import Kyyn.Types.Curation
+import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Program (Program(..))
 import Kyyn.Runtime.Json
@@ -13,6 +15,29 @@ import Kyyn.Runtime.Validation (encodeReportValue)
 import Text.JSON.Types (JSValue(JSArray))
 
 data NoRequests a
+
+knowledgeBaseCodec :: Codec a -> Codec (KnowledgeBase a)
+knowledgeBaseCodec valueCodec = Codec encode decode
+  where
+    encode (KnowledgeBase value recipes) = record
+      [("facts", encodeWith valueCodec value), ("recipes", encodeWith (listCodec recipeCodec) recipes)]
+    decode value = do
+      values <- fields ["facts","recipes"] value
+      KnowledgeBase <$> field "facts" valueCodec values <*> field "recipes" (listCodec recipeCodec) values
+    recipeCodec = Codec encodeRecipe decodeRecipe
+    encodeRecipe (Fact (FactId name) (Recipe instructions)) = record
+      [("id",encodeWith stringCodec name),
+       ("value",record [("instructions",encodeWith stringCodec instructions)])]
+    decodeRecipe value = do
+      values <- fields ["id","value"] value
+      name <- field "id" stringCodec values
+      payload <- field "value" payloadCodec values
+      pure (Fact (FactId name) payload)
+    payloadCodec = Codec encodePayload decodePayload
+    encodePayload (Recipe instructions) = record [("instructions",encodeWith stringCodec instructions)]
+    decodePayload value = do
+      values <- fields ["instructions"] value
+      Recipe <$> field "instructions" stringCodec values
 
 executeEvolution :: Codec a -> Codec b
   -> (a -> Program NoRequests (Either EvolutionFailure (EvolutionOutput b)))

@@ -19,8 +19,7 @@ function invoke(command, args, status = 0) {
 const cli = (...args) => invoke(executable, ['--kb', kb, '--json', ...args]);
 try {
   cli('kb', 'init');
-  const manifest = path.join(kb, 'root/kb.dhall');
-  fs.writeFileSync(manifest, `(${fs.readFileSync(manifest, 'utf8')}) // { recipes = [{ name = "syncTodos", instructions = "Inspect current evidence" }] }`);
+  fs.writeFileSync(path.join(kb, 'root/recipes.dhall'), `[{ id = "syncTodos", value = { instructions = "Inspect current evidence" } }]`);
   const register = path.join(kb, 'root/curation.dhall');
   fs.writeFileSync(register, `[{ recipe = "syncTodos", plugin = "files", instance = "documents", producer = "source", contract = "${'0'.repeat(64)}", acknowledged = [{ id = "milk", fingerprint = "v1" }] }]`);
   invoke('git', ['-C', kb, 'add', 'root']);

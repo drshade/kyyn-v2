@@ -1,7 +1,7 @@
 module Kyyn.Domain.Curation
   ( RecipeId(..), Recipe(..), Acknowledgement(..), CurationRegister
   , PendingEvidence(..), CurationProblem(..)
-  , emptyCurationRegister, acknowledgeEvidence, pendingEvidence, recipeId
+  , emptyCurationRegister, acknowledgeEvidence, pendingEvidence, recipeId, checkRecipes
   , CurationEntry, curationEntries, curationRegister
   ) where
 
@@ -9,10 +9,23 @@ import Data.List (nub, sortOn)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (bindingName, pluginNameText, PackageIdentity(..))
 import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 
 recipeId :: String -> Either String RecipeId
 recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId value))) (bindingName value)
-data Recipe = Recipe { name :: RecipeId, instructions :: String } deriving (Eq, Show)
+checkRecipes :: [Fact Recipe] -> Either [Diagnostic] [Fact Recipe]
+checkRecipes values = do
+  mapM_ check names
+  case [name | name <- nub names, length (filter (== name) names) > 1] of
+    name : _ -> Left [errorDiagnostic "recipe.duplicate" ("Duplicate recipe ID: " ++ name)]
+    [] -> Right values
+  where
+    names = [name | Fact (FactId name) _ <- values]
+    check name = either (\message -> Left [errorDiagnostic "recipe.invalid-id" (name ++ ": " ++ message)])
+      (const (Right ())) (recipeId name)
+
 data Acknowledgement = EntireBatch | IndividualRecords [EvidenceId] deriving (Eq, Show)
 
 data Progress = Progress EvidenceProducer [(EvidenceId, EvidenceFingerprint)] deriving (Eq, Show)

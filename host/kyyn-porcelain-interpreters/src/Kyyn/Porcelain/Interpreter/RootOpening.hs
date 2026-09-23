@@ -7,14 +7,14 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (checkRootLayout)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath, isRootMaterial, curationLocation)
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath, isRootMaterial, curationLocation, recipesLocation)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Git (TreePath(..))
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
-import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, readRootCuration)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, readRootCuration, readRootRecipes)
 
 runRootOpening
   :: (Schema.SchemaInspection :> es, Git.Git :> es, RootStore :> es)
@@ -22,7 +22,7 @@ runRootOpening
 runRootOpening sdk = interpret $ \_ -> \case
   OpenCapturedSource tree -> openSource sdk tree
   LoadSourceAt repository revision prefix -> do
-    captured <- Git.readTreeExcluding repository revision prefix [factsLocation, curationLocation]
+    captured <- Git.readTreeExcluding repository revision prefix [factsLocation, curationLocation, recipesLocation]
     either (pure . Left) (openSource sdk) captured
   OpenCapturedRoot tree -> openTree sdk tree
   LoadRootAt repository revision prefix -> do
@@ -47,7 +47,13 @@ runRootOpening sdk = interpret $ \_ -> \case
     progressBytes <- ExceptT (Git.readFileAt repository revision progressPath)
     progressTree <- checked (fileTree (maybe [] (\bytes -> [(curationLocation,bytes)]) progressBytes))
     progress <- ExceptT (readRootCuration progressTree)
-    pure (Root contract facts code progress)
+    recipePath <- checked (relativePath (case prefix of
+      WholeTree -> relativeName recipesLocation
+      Subtree path -> relativeName path ++ "/" ++ relativeName recipesLocation))
+    recipeBytes <- ExceptT (Git.readFileAt repository revision recipePath)
+    recipeTree <- checked (fileTree (maybe [] (\bytes -> [(recipesLocation,bytes)]) recipeBytes))
+    recipes <- ExceptT (readRootRecipes recipeTree)
+    pure (Root contract facts code progress recipes)
 
 openTree
   :: (Schema.SchemaInspection :> es, RootStore :> es)
@@ -64,13 +70,14 @@ openInput sdk tree = runExceptT $ do
   SourceRoot contract code _ closure <- ExceptT (openSource sdk tree)
   facts <- checked (fileTree [(p,b) | (p,b) <- files tree, isFactPath p])
   progress <- ExceptT (readRootCuration tree)
-  pure (Root contract facts code progress, closure)
+  recipes <- ExceptT (readRootRecipes tree)
+  pure (Root contract facts code progress recipes, closure)
 
 openSource
   :: (Schema.SchemaInspection :> es, RootStore :> es)
   => FileTree -> FileTree -> Eff es (Either [Diagnostic] SourceRoot)
 openSource sdk tree = runExceptT $ do
-  definition@(RootDefinition typeName metadataName _ _ _ _ authored) <- ExceptT (readRootDefinition tree)
+  definition@(RootDefinition typeName metadataName _ _ _ authored) <- ExceptT (readRootDefinition tree)
   source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
   Schema.InspectedSchema inspected closure <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))

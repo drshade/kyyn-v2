@@ -113,7 +113,7 @@ data RootStore :: Effect where
   ExportRootFiles
     :: Validated Root -> RootStore m (Either [Diagnostic] FileTree)
   MaterializeRoot
-    :: RootContract -> CodeSnapshot -> CheckedValue -> [Fact Recipe]
+    :: RootContract -> CodeSnapshot -> KnowledgeBase CheckedValue
     -> RootStore m Root
 
 runRootStore

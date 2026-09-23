@@ -7,7 +7,7 @@ import Data.List (isPrefixOf, stripPrefix)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.Path (relativeName, relativePath)
-import Kyyn.Domain.Root (factsLocation, curationLocation)
+import Kyyn.Domain.Root (factsLocation, curationLocation, recipesLocation)
 
 data EvolutionState = Draft | Ready | Accepted deriving (Eq, Show)
 
@@ -33,6 +33,8 @@ projectWorkspace manifest tree
       Left "Target facts must be produced by the evolution"
   | any (\(p,_) -> relativeName p == "target/" ++ relativeName curationLocation) (files tree) =
       Left "Target curation progress is host material, not authored code"
+  | any (\(p,_) -> relativeName p == "target/" ++ relativeName recipesLocation) (files tree) =
+      Left "Target recipes must be produced by the evolution"
   | otherwise = WorkspaceSnapshot manifest <$> subtree "before/" <*> subtree "target/" <*>
       subtree "change/" <*> subtree "notes/"
   where

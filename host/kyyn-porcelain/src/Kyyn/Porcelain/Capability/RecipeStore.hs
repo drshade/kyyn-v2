@@ -5,17 +5,18 @@ module Kyyn.Porcelain.Capability.RecipeStore
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Curation (Recipe, CurationRegister)
+import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 
 data RecipeStore :: Effect where
-  LoadRecipesAt :: KnowledgeBase -> GitRevision -> RecipeStore m (Either [Diagnostic] [Recipe])
+  LoadRecipesAt :: KnowledgeBase -> GitRevision -> RecipeStore m (Either [Diagnostic] [Fact Recipe])
   LoadCurationAt :: KnowledgeBase -> GitRevision -> RecipeStore m (Either [Diagnostic] CurationRegister)
 
 type instance DispatchOf RecipeStore = Dynamic
 
-loadRecipesAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] [Recipe])
+loadRecipesAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] [Fact Recipe])
 loadRecipesAt kb = send . LoadRecipesAt kb
 
 loadCurationAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] CurationRegister)

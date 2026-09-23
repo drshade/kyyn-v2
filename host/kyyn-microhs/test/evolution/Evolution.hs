@@ -7,13 +7,13 @@ import qualified SchemaV2 as After
 import qualified Kyyn.Workspace.Before as BeforeCollections
 import qualified Kyyn.Workspace.After as AfterCollections
 
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution =
   editBefore (Rationale "Rename" [])
     (within BeforeCollections.todos $ update (FactId "todo-001") $
       modify (\todo -> todo { Before.title = Before.title todo ++ " λ" }))
   >=> evolve (Rationale "Add completion status" [])
-    (\(Before.Root facts) -> Right (After.Root [Fact identity (After.Todo title False) | Fact identity (Before.Todo title) <- facts]))
+    (onFacts (\(Before.Root items) -> Right (After.Root [Fact identity (After.Todo title False) | Fact identity (Before.Todo title) <- items])))
   >=> edit (Rationale "Complete the review" [])
     (within AfterCollections.todos $ do
       todo <- current (FactId "todo-001")

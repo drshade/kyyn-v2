@@ -52,7 +52,6 @@ try {
   fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } >
 in [${['documents', 'prices'].map(name => `{ name = "${name}", binding = "${name}", connector = Connector.Folder { directory = ${JSON.stringify(folder)}, recursive = False } }`).join(', ')}]`);
   const manifest = path.join(setup.path, 'target/kb.dhall');
-  fs.writeFileSync(manifest, `(${fs.readFileSync(manifest, 'utf8')}) // { recipes = [{ name = "syncTodos", instructions = "Inspect evidence" }, { name = "groceryPrices", instructions = "Refresh prices" }] }`);
   fs.unlinkSync(path.join(setup.path, 'target/src/RootV1.hs'));
   fs.writeFileSync(path.join(setup.path, 'target/src/RootV2.hs'), `module RootV2 where
 import Kyyn.Schema
@@ -67,8 +66,11 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 import Kyyn.Workspace.Evolution
 import qualified RootV1 as Before
 import qualified RootV2 as After
-evolution :: Evolution Before.Root After.Root
-evolution = evolve (Rationale "Start tracking tasks" []) (\\Before.Root -> Right (After.Root []))
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
+evolution = evolve (Rationale "Start tracking tasks" []) (onFacts (\\Before.Root -> Right (After.Root [])))
+  >=> edit (Rationale "Teach the KB its curation tasks" []) (within recipes $ do
+    append (Fact (FactId "syncTodos") (Recipe "Inspect evidence"))
+    append (Fact (FactId "groceryPrices") (Recipe "Refresh prices")))
 `);
   cli(['evolution', 'check', setup.id]);
   accept(setup.id);

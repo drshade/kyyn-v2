@@ -9,6 +9,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runEff, runPureEff)
 import Kyyn.Domain.Root (CheckedValue(..))
+import qualified Kyyn.Types.KnowledgeBase as KB
 import Kyyn.Domain.Diagnostic (Diagnostic(Diagnostic), Severity(..), DiagnosticLocation(..), ValidationReport(..), CheckResult(..), checkReport)
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Porcelain.Capability.RootStore
@@ -132,7 +133,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   inputValue <- either fail pure (Aeson.eitherDecodeStrict input)
   code <- either fail pure (fileTree files)
   checkedInput <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract inputValue))))
-  root <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract code checkedInput))))
+  root <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract code (KB.KnowledgeBase checkedInput [])))))
   CheckedValue _ reloaded <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking root))))
   (output, status) <- invoke (Lazy.toStrict (Aeson.encode reloaded)) >>= either (fail . show) pure
   let expectedValue = Aeson.eitherDecodeStrict input :: Either String Aeson.Value
@@ -157,7 +158,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
          "  Diagnostic Warning \"example\" \"Illustrative\" (Just (ExampleLocation \"sample\"))] ++",
          "  if any (\\(Fact _ (Authored.Todo title _)) -> null title) todos then",
          "    [Diagnostic Error \"blank\" \"Name is blank\" (Just (FactLocation \"todos\" \"todo-001\" Nothing))] else [])"]
-      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ schemaType = \"Authored.Root\", schemaMetadata = \"Authored.schemaMetadata\", validator = \"ValidationEntry.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
   authoredBytes <- maybe (fail "Missing captured Authored.hs") pure (lookup (path "Authored.hs") files)
   validationCode <- either fail pure (fileTree
     [(path "src/Authored.hs", authoredBytes), (path "src/ValidationEntry.hs", utf8 reportSource), (path "kb.dhall", utf8 manifest)])
@@ -180,7 +181,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   emptyValue <- either (fail . show) pure
     (runPureEff (runDhallHandling (runRootStore (checkRootValue emptyContract (Aeson.object [])))))
   emptyRoot <- either (fail . show) pure
-    (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode emptyValue))))
+    (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode (KB.KnowledgeBase emptyValue [])))))
   emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot emptyRoot
@@ -192,7 +193,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
          (Text.encodeUtf8 (Text.replace "A task" "" (Text.decodeUtf8 input)), expectedWarnings ++ [blankError])] $ \(inputBytes, expectedDiagnostics) -> do
     factValue <- either fail pure (Aeson.eitherDecodeStrict inputBytes)
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
-    validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode checkedFacts))))
+    validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode (KB.KnowledgeBase checkedFacts [])))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
       . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
         prepared <- prepareRoot validationRoot

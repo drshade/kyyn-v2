@@ -28,6 +28,7 @@ import Kyyn.Porcelain.Validated (Validated, validatedValue)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..))
 
 data Outcome = Succeeded | Refused | Failed | Incomplete | Interrupted deriving (Eq, Show)
 data Response = Response Outcome Value [String] [Diagnostic] deriving (Eq, Show)
@@ -116,7 +117,7 @@ evolutionCheckResult identity result = case result of
   where name = evolutionIdName identity
 
 rootResult :: GitRevision -> Root -> CheckedValue -> Response
-rootResult revision (Root schema _ _ _) (CheckedValue _ value) = success
+rootResult revision (Root schema _ _ _ _) (CheckedValue _ value) = success
   (object ["revision" .= revisionName revision, "schema" .= describeRootContract schema, "value" .= value])
   ["Root at " ++ revisionName revision, jsonText value]
 
@@ -135,7 +136,7 @@ inspectionResult revision (summary, report) = success
   ([summaryText summary, "Inspected at " ++ revisionName revision] ++ maybe ["No saved report."] reportText report)
 
 candidateResult :: Candidate Root -> Response
-candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _)) = success
+candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _ _)) = success
   (object ["id" .= evolutionIdName identity, "beforeRevision" .= revisionName revision,
     "schema" .= describeRootContract schema, "report" .= reportJson report])
   (["Saved candidate for " ++ evolutionIdName identity] ++ reportText report)
@@ -218,7 +219,10 @@ reportJson (EvolutionReport steps curation) = object
     step (StepReport (Rationale explanation evidence) changes) = object
       ["explanation" .= explanation, "evidence" .= map evidenceJson evidence, "changes" .= map change changes]
     change (FactChange collection (FactId identity) before after) = object
-      ["collection" .= collection, "id" .= identity, "before" .= fmap recorded before, "after" .= fmap recorded after]
+      ["kind" .= ("Fact" :: String), "collection" .= collection, "id" .= identity, "before" .= fmap recorded before, "after" .= fmap recorded after]
+    change (RecipeChange (FactId identity) before after) = object
+      ["kind" .= ("Recipe" :: String), "id" .= identity, "before" .= fmap recipeJson before, "after" .= fmap recipeJson after]
+    recipeJson (Recipe instructions) = object ["instructions" .= instructions]
     recorded (RecordedFact contract value) = object ["schema" .= describeRootContract contract, "value" .= value]
     evidenceJson (EvidenceRef producer connector source references) = object
       ["producer" .= producer, "connector" .= connector, "source" .= source, "references" .= references]
@@ -237,6 +241,10 @@ reportText (EvolutionReport steps curation) = concatMap step steps ++ maybe [] d
     change (FactChange collection (FactId identity) before after) =
       ["  " ++ collection ++ "/" ++ identity]
       ++ ["    before: " ++ maybe "(absent)" value before, "    after:  " ++ maybe "(absent)" value after]
+    change (RecipeChange (FactId identity) before after) =
+      ["  Recipe: " ++ identity,
+       "    before: " ++ maybe "(absent)" recipeInstructions before,
+       "    after:  " ++ maybe "(absent)" recipeInstructions after]
     value (RecordedFact _ contents) = jsonText contents
 
 diagnosticText :: Diagnostic -> String

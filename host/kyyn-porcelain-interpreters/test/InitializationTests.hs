@@ -1,6 +1,8 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module InitializationTests (initializationTests) where
 
+import qualified Kyyn.Types.KnowledgeBase as KB
+
 import Control.Monad (unless)
 import Data.Aeson (object)
 import Effectful (Eff, runPureEff)
@@ -27,12 +29,12 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 initializationTests :: IO ()
 initializationTests = do
   initial <- either fail pure initialRootFiles
-  code <- either fail pure (fileTree [(p,b) | (p,b) <- files initial, relativeName p /= "facts/root.dhall"])
+  code <- either fail pure (fileTree [(p,b) | (p,b) <- files initial, relativeName p `notElem` ["facts/root.dhall","recipes.dhall"]])
   contract <- either (fail . show) pure (checkContract
     (Algebraic "RootV1.Root" [] [Constructor "RootV1.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
   root <- either (fail . show) pure $ runPureEff . runDhallHandling . runRootStore $ do
     checked <- checkRootValue contract (object [])
-    either (pure . Left) (materializeRoot contract code) checked
+    either (pure . Left) (\value -> materializeRoot contract code (KB.KnowledgeBase value [])) checked
   scope <- either fail pure (directoryScope "/unused-initialization-test")
   revision <- either fail pure (gitRevision (replicate 40 'a'))
   let target = InitializationTarget scope scope Nothing

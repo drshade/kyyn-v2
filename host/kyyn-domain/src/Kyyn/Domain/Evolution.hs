@@ -19,6 +19,7 @@ import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure)
+import qualified Kyyn.Types.KnowledgeBase as Value
 
 newtype EvolutionId = EvolutionId String deriving (Eq, Show)
 newtype EvolutionName = EvolutionName String deriving (Eq, Show)
@@ -86,7 +87,7 @@ data Candidate a = Candidate
 
 data After = After { schema :: RootContract } deriving (Eq, Show)
 data EvaluatedEvolution = EvaluatedEvolution
-  { captured :: CapturedEvolution, after :: After, value :: CheckedValue, report :: EvolutionReport }
+  { captured :: CapturedEvolution, after :: After, value :: Value.KnowledgeBase CheckedValue, report :: EvolutionReport }
   deriving (Eq, Show)
 data PreviewRejection
   = ProposedCodeRejected [Diagnostic]

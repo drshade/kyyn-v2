@@ -21,6 +21,7 @@ import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Plumbing.Protocol.Validation (parseReport)
 import Kyyn.Plumbing.Protocol.Curation (parseCuration)
+import Kyyn.Plumbing.Protocol.Recipes (parseKnowledgeBase)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
@@ -33,7 +34,7 @@ identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
   , "import qualified Kyyn.Workspace.Before as BeforeCollections"
   , "import qualified Kyyn.Workspace.After as AfterCollections"
   , ""
-  , "evolution :: Evolution " ++ aliased "Before" ++ " " ++ aliased "After"
+  , "evolution :: Evolution (KnowledgeBase " ++ aliased "Before" ++ ") (KnowledgeBase " ++ aliased "After" ++ ")"
   , "evolution = identityEvolution"
   ]))
   where
@@ -56,12 +57,12 @@ evolutionSources before after authored = do
         ["import qualified " ++ name | name <- nub [definingModule name |
           t <- [beforeType,afterType], Algebraic name _ _ <- reachableTypes t]] ++
         ["import qualified KyynEvolutionCodec0 as BeforeCodec", "import qualified KyynEvolutionCodec1 as AfterCodec",
-         "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure)",
+         "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure, KnowledgeBase)",
          "import Kyyn.Evolution.Internal (EvolutionOutput, evaluateEvolution)",
          "import Kyyn.Types.Program (Program)",
-         "selected :: " ++ haskellType beforeType ++ " -> Program NoRequests (Either EvolutionFailure (EvolutionOutput " ++ haskellType afterType ++ "))",
+         "selected :: KnowledgeBase " ++ haskellType beforeType ++ " -> Program NoRequests (Either EvolutionFailure (EvolutionOutput (KnowledgeBase " ++ haskellType afterType ++ ")))",
          "selected = pure . evaluateEvolution Evolution.evolution", "main :: IO ()", "main = do", "  input <- getContents",
-         "  output <- either fail pure (executeEvolution BeforeCodec.rootCodec AfterCodec.rootCodec selected input)",
+         "  output <- either fail pure (executeEvolution (knowledgeBaseCodec BeforeCodec.rootCodec) (knowledgeBaseCodec AfterCodec.rootCodec) selected input)",
          "  putStrLn output"]
   guestSources entryPath (files authored ++ files bindings ++ [(entryPath,Text.encodeUtf8 (Text.pack entry))])
 
@@ -77,13 +78,14 @@ evolutionBindings before after = do
         ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
          "import Kyyn.Evolution",
          "import Kyyn.Evolution.Internal (RootBinding(..))",
-         "import qualified Kyyn.Evolution.Internal as Internal", "import Kyyn.Runtime.Json (encodeWith)"] ++
+         "import qualified Kyyn.Evolution.Internal as Internal", "import Kyyn.Runtime.Json (encodeWith)",
+         "import Kyyn.Runtime.Evolution (knowledgeBaseCodec)"] ++
         ["import qualified " ++ name | name <- nub [definingModule name |
           (_,contract) <- declarations, Algebraic name _ _ <- reachableTypes (rootType (rootSchema contract))]] ++
         ["import qualified " ++ codecName index | (index,_) <- zip [0..] declarations] ++
-        concat [[name ++ " :: RootBinding " ++ haskellType (rootType (rootSchema contract)),
+        concat [[name ++ " :: RootBinding (KnowledgeBase " ++ haskellType (rootType (rootSchema contract)) ++ ")",
           name ++ " = RootBinding " ++ show (contractFingerprint (contractId (rootSchema contract))) ++
-          " (encodeWith " ++ codecName index ++ ".rootCodec)"] | (index,(name,contract)) <- zip [0..] declarations] ++
+          " (encodeWith (knowledgeBaseCodec " ++ codecName index ++ ".rootCodec))"] | (index,(name,contract)) <- zip [0..] declarations] ++
         ["-- | Transform the Before root, " ++ beforeType ++ ", into the After root, " ++ afterType ++ ".",
          "-- The supplied rationale describes one recorded step and its diff.",
          "evolve :: Rationale -> (" ++ beforeType ++ " -> Either EvolutionFailure " ++ afterType ++ ") -> Evolution " ++ beforeType ++ " " ++ afterType,
@@ -96,8 +98,8 @@ evolutionBindings before after = do
   fileTree ((path,utf8 source):codecs ++ concatMap files collections)
   where
     declarations = [("beforeRoot",before),("afterRoot",after)]
-    beforeType = haskellType (rootType (rootSchema before))
-    afterType = haskellType (rootType (rootSchema after))
+    beforeType = "(KnowledgeBase " ++ haskellType (rootType (rootSchema before)) ++ ")"
+    afterType = "(KnowledgeBase " ++ haskellType (rootType (rootSchema after)) ++ ")"
     codecName :: Int -> String
     codecName index = "KyynEvolutionCodec" ++ show index
     utf8 = Text.encodeUtf8 . Text.pack
@@ -110,13 +112,13 @@ collectionBindings endpoint contract = do
       rootModule = case root of Algebraic name _ _ -> definingModule name; _ -> error "Checked root is not a record"
       source = unlines $
         ["module Kyyn.Workspace." ++ endpoint ++ " (" ++ comma [field | CollectionContract _ field _ _ <- declarations] ++ ") where",
-         "import Kyyn.Edit (Collection)",
+         "import Kyyn.Edit (Collection)", "import Kyyn.Evolution (KnowledgeBase, facts)",
          "import qualified Kyyn.Edit.Internal as Internal", "import qualified Kyyn.Optics as Optics"] ++
         ["import qualified " ++ name | name <- nub [definingModule name | Algebraic name _ _ <- reachableTypes root]] ++
         concat [["-- | Collection " ++ show name ++ " in " ++ haskellType root ++ ".",
                  "-- Root field: " ++ field ++ "; fact type: " ++ haskellType payload ++ ".",
-                 field ++ " :: Collection " ++ haskellType root ++ " " ++ haskellType payload,
-                 field ++ " = Internal.Collection " ++ show name ++ " (Optics.lens " ++ rootModule ++ "." ++ field ++
+                 field ++ " :: Collection (KnowledgeBase " ++ haskellType root ++ ") " ++ haskellType payload,
+                 field ++ " = Internal.Collection " ++ show name ++ " (facts . Optics.lens " ++ rootModule ++ "." ++ field ++
                    " (\\root value -> root { " ++ rootModule ++ "." ++ field ++ " = value }))"] |
           CollectionContract name field payload _ <- declarations]
   fileTree [(path,Text.encodeUtf8 (Text.pack source))]
@@ -135,13 +137,13 @@ decodeEvolutionReply bytes = eitherDecodeStrict bytes >>= parseEither
         ValidationReport diagnostics <- parseReport value
         pure (Left (EvolutionFailure diagnostics))
       "Succeeded" -> Right <$> exact "EvolutionOutput" ["after","steps","curation"] (\output ->
-        EvolutionObservation <$> output .: "after" <*> (output .: "steps" >>= array step)
+        EvolutionObservation <$> (output .: "after" >>= parseKnowledgeBase) <*> (output .: "steps" >>= array step)
           <*> (output .: "curation" >>= parseCuration)) value
       _ -> fail "Unknown evolution outcome")
   where
     step = exact "StepObservation" ["rationale","before","after"] $ \o ->
       StepObservation <$> (o .: "rationale" >>= rationale) <*> (o .: "before" >>= root) <*> (o .: "after" >>= root)
-    root = exact "ObservedRoot" ["contract","value"] $ \o -> ObservedRoot <$> o .: "contract" <*> o .: "value"
+    root = exact "ObservedRoot" ["contract","value"] $ \o -> ObservedRoot <$> o .: "contract" <*> (o .: "value" >>= parseKnowledgeBase)
     rationale = exact "Rationale" ["explanation","evidence"] $ \o ->
       Rationale <$> o .: "explanation" <*> (o .: "evidence" >>= array evidence)
     evidence = exact "EvidenceRef" ["producer","connector","source","references"] $ \o ->

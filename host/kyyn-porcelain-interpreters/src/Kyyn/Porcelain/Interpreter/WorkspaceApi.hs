@@ -20,8 +20,8 @@ runWorkspaceApi :: (EvolutionStore :> es, RootOpening :> es, ApiInspection :> es
   => FileTree -> Eff (WorkspaceApi : es) a -> Eff es a
 runWorkspaceApi sdk = interpret $ \_ (InspectWorkspaceApi workspace) -> runExceptT $ do
   PreparedEvolution (EvolutionContext _ _ (Before revision _) _)
-    (SourceRoot before _ (RootDefinition _ _ _ _ _ _ beforeSources) closure)
-    (SourceRoot after _ (RootDefinition _ _ _ _ _ _ afterSources) afterClosure) <- ExceptT (prepareEvolution workspace)
+    (SourceRoot before _ (RootDefinition _ _ _ _ _ beforeSources) closure)
+    (SourceRoot after _ (RootDefinition _ _ _ _ _ afterSources) afterClosure) <- ExceptT (prepareEvolution workspace)
   old <- checked (fileTree [(p,b) | (p,b) <- files beforeSources, p `elem` closure])
   new <- checked (fileTree [(p,b) | (p,b) <- files afterSources, p `elem` afterClosure])
   bindings <- checked (evolutionBindings before after)

@@ -309,9 +309,9 @@ Recipe payloads, not a fake collection in the author's RootContract. Human and
 structured review display both:
 
 ```haskell
--- Host review data; FactChange retains the domain contract on its values.
+-- Host review data; RecordedFact retains the domain contract on its value.
 data Change
-  = DomainFactChange FactChange
+  = FactChange CollectionName FactId (Maybe RecordedFact) (Maybe RecordedFact)
   | RecipeChange FactId (Maybe Recipe) (Maybe Recipe)
 
 data StepReport = StepReport Rationale [Change]

@@ -102,10 +102,10 @@ import Kyyn.Schema
 import qualified RootV1 as Before
 import qualified RootV2 as After
 import qualified Kyyn.Workspace.After as Collections
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution =
   evolve (Rationale "Start tracking work." [])
-    (\\Before.Root -> Right (After.Root []))
+    (onFacts (\\Before.Root -> Right (After.Root [])))
   >=> edit (Rationale "Record the first task." [])
     (within Collections.todos (append (Fact (FactId "todo-001") (After.Todo "First task"))))
 `);

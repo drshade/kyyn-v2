@@ -4,6 +4,7 @@ module RootExportTests (rootExportTests) where
 import Kyyn.Domain.Curation (emptyCurationRegister)
 import CurationPersistenceTests (sampleCuration)
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
+import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes)
 import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
@@ -47,16 +48,16 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 rootExportTests :: Root -> IO ()
-rootExportTests original@(Root contract facts code _) = withSystemTempDirectory "kyyn-root-export" $ \directory -> do
+rootExportTests original@(Root contract facts code _ _) = withSystemTempDirectory "kyyn-root-export" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git required for root export integration") pure
   scope <- either fail pure (directoryScope directory)
   let path = either error id . relativePath
       tree = either error id . fileTree
       repo = Repository scope
-      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+      manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       completeCode = tree ([(p,if relativeName p == "kb.dhall" then manifest else b) | (p,b) <- files code] ++ [(path "plugins/config/example.dhall","{ enabled = True }"),
         (path "assets/template.bin",Bytes.pack [0..255])])
-      root = Root contract facts completeCode sampleCuration
+      root = Root contract facts completeCode sampleCuration []
       storage action = runPureEff (runDhallHandling (runRootStore action))
       outcome = runPureEff . checkingMock root . runDhallHandling . runRootStore $ checkRoot root
   checked <- case outcome of
@@ -64,7 +65,8 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
     _ -> fail (show outcome)
   exported <- either (fail . show) pure (storage (exportRootFiles checked))
   progress <- either (fail . show) pure (runPureEff (runDhallHandling (encodeRegister sampleCuration)))
-  unless (exported == tree ((curationLocation,progress) : files facts ++ files completeCode) && validatedValue checked == root)
+  recipeBytes <- either (fail . show) pure (runPureEff (runDhallHandling (encodeRecipes [])))
+  unless (exported == tree ((recipesLocation,recipeBytes) : (curationLocation,progress) : files facts ++ files completeCode) && validatedValue checked == root)
     (fail "Export substituted or rerendered the validated root")
   let process args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
@@ -138,7 +140,7 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
   unless (currentIndex == indexBefore && liveOutside == "unstaged outside")
     (fail "Export/commit/ref primitives modified the checkout")
   let (factEntries,codeEntries) = partition (\(p,_) -> "facts/" `isPrefixOf` relativeName p) (files reopened)
-  reopenedValue <- either (fail . show) pure (storage (loadRootValueForChecking (Root contract (tree factEntries) (tree codeEntries) emptyCurationRegister)))
+  reopenedValue <- either (fail . show) pure (storage (loadRootValueForChecking (Root contract (tree factEntries) (tree codeEntries) emptyCurationRegister [])))
   originalValue <- either (fail . show) pure (storage (loadRootValueForChecking original))
   unless (reopenedValue == originalValue) (fail "Reopened committed facts changed")
   putStrLn "Validated root export composes with real Git commit/CAS: exact files, deletion, parent and unrelated checkout preservation passed."

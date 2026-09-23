@@ -6,6 +6,7 @@ import Data.ByteString (ByteString)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Curation
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -21,7 +22,7 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 
 recipeTests :: IO ()
 recipeTests = do
-  let recipe = Recipe (RecipeId "syncTodos") "Read current documents, then explain the proposed changes."
+  let recipe = Fact (FactId "syncTodos") (Recipe "Read current documents, then explain the proposed changes.")
       check label condition = unless condition (fail label)
       kb = KnowledgeBase repository (Subtree (either error id (relativePath "nested/kb")))
       at = either error id (gitRevision (replicate 40 'a'))
@@ -38,7 +39,7 @@ recipeTests = do
     Left [Diagnostic _ "curation.recipe-unknown" _ _] -> True
     _ -> False)
   check "Malformed register accepted" (case run (Just "malformed") (loadCurationAt kb at) of Left _ -> True; _ -> False)
-  putStrLn "Recipe discovery reads only selected Git manifest/register documents without a compiler."
+  putStrLn "Recipe discovery reads only selected Git recipe/register documents without a compiler."
 
 repository :: Repository
 repository = Repository (either error id (directoryScope "/fixture"))
@@ -46,14 +47,10 @@ repository = Repository (either error id (directoryScope "/fixture"))
 recording :: GitRevision -> Maybe ByteString -> Eff (Git : es) a -> Eff es a
 recording selected progress = interpret $ \_ request -> case request of
   ReadFileAt actual revision path | actual == repository -> case relativeName path of
-    "nested/kb/root/kb.dhall" -> pure (Right (Just (manifest (revision == selected))))
+    "nested/kb/root/recipes.dhall" -> pure (Right (if revision == selected then Just recipeData else Nothing))
     "nested/kb/root/curation.dhall" | revision == selected -> pure (Right progress)
     _ -> error "Recipe store read outside selected KB/revision"
   _ -> error "Recipe discovery performed a non-document Git operation"
 
-manifest :: Bool -> ByteString
-manifest selected = "{ schemaType = \"Missing.Root\", schemaMetadata = \"Missing.metadata\", validator = \"Missing.validate\", " <>
-  "queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, " <>
-  "tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }, recipes = " <>
-  (if selected then "[{ name = \"syncTodos\", instructions = \"Read current documents, then explain the proposed changes.\" }]"
-   else "[] : List { name : Text, instructions : Text }") <> " }"
+recipeData :: ByteString
+recipeData = "[{ id = \"syncTodos\", value = { instructions = \"Read current documents, then explain the proposed changes.\" } }]"

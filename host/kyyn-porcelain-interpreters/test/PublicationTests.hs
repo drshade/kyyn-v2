@@ -3,6 +3,7 @@ module PublicationTests (publicationTests) where
 
 import Control.Exception (AsyncException(..), throwIO, try)
 import Kyyn.Domain.Curation (emptyCurationRegister)
+import qualified Kyyn.Types.KnowledgeBase as KB
 import Control.Monad (unless, when, forM_)
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (coerce)
@@ -64,7 +65,7 @@ type Effects = '[EvidenceStore, RootPublication, RootExecution, EvolutionExecuti
   Git.Git, Git.Git, Process.ProcessExecution, FileSystem, Failure, IOE]
 
 publicationTests :: Root -> IO ()
-publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
+publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt ->
   withSystemTempDirectory "kyyn-publication" $ \directory -> do
     executable <- findExecutable "git" >>= maybe (fail "Git required") pure
     scope <- either fail pure (directoryScope directory)
@@ -75,12 +76,12 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
         kb = KnowledgeBase repo prefix
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
-        manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+        manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
         pluginFile = "plugins/packages/existing/source/src/Plugin.hs"
         pluginBytes = "module Plugin where\n"
         code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
           (path pluginFile,pluginBytes)]
-        initialRoot = Root contract facts code emptyCurationRegister
+        initialRoot = Root contract facts code emptyCurationRegister []
         output = object ["description" .= ("accepted" :: String), "todos" .= ([] :: [Value])]
         write name bytes = do
           createDirectoryIfMissing True (takeDirectory (directory </> name))
@@ -330,9 +331,11 @@ evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvol
     (EvolutionContext _ _ (Before _ contract) _) source _ _)) -> do
   CheckedValue _ input <- loadRootValueForChecking source >>= either (error . show) pure
   let fingerprint = contractFingerprint (contractId (rootSchema contract))
-      observation = EvolutionObservation output [StepObservation (Rationale "Clear completed work" [])
-        (ObservedRoot fingerprint input) (ObservedRoot fingerprint output)] Nothing
-  checked <- checkEvolutionReport contract input contract observation
+      before = KB.KnowledgeBase input []
+      after = KB.KnowledgeBase output []
+      observation = EvolutionObservation after [StepObservation (Rationale "Clear completed work" [])
+        (ObservedRoot fingerprint before) (ObservedRoot fingerprint after)] Nothing
+  checked <- checkEvolutionReport contract before contract observation
   pure $ case checked of
     Left diagnostics -> Left (ProposedCodeRejected diagnostics)
     Right (value,report) -> Right (EvaluatedEvolution captured (After contract) value report)

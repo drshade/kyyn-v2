@@ -1,13 +1,15 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootStore
   ( RootStore(..), readRootDefinition, checkRootValue, materializeRoot, loadRootValueForChecking
-  , readExamples, encodeExample, exportRootFiles, readRootCuration, rootLocation ) where
+  , readExamples, encodeExample, exportRootFiles, readRootCuration, readRootRecipes, rootLocation ) where
 
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Curation (CurationRegister)
+import Kyyn.Types.Fact (Fact)
+import qualified Kyyn.Types.KnowledgeBase as Value
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Root (Root, RootDefinition, CheckedValue)
 import Kyyn.Domain.FileTree (FileTree)
@@ -23,8 +25,9 @@ rootLocation kb = relativePath "root" >>= knowledgeBasePath kb
 data RootStore :: Effect where
   ReadRootDefinition :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
   ReadRootCuration :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
+  ReadRootRecipes :: FileTree -> RootStore m (Either [Diagnostic] [Fact Value.Recipe])
   CheckRootValue :: RootContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)
-  MaterializeRoot :: RootContract -> FileTree -> CheckedValue -> RootStore m (Either [Diagnostic] Root)
+  MaterializeRoot :: RootContract -> FileTree -> Value.KnowledgeBase CheckedValue -> RootStore m (Either [Diagnostic] Root)
   LoadRootValueForChecking :: Root -> RootStore m (Either [Diagnostic] CheckedValue)
   ReadExamples :: Root -> [QueryDescriptor] -> RootStore m (Either [Diagnostic] [Example])
   EncodeExample :: Example -> RootStore m (Either [Diagnostic] FileTree)
@@ -38,10 +41,13 @@ readRootDefinition = send . ReadRootDefinition
 readRootCuration :: RootStore :> es => FileTree -> Eff es (Either [Diagnostic] CurationRegister)
 readRootCuration = send . ReadRootCuration
 
+readRootRecipes :: RootStore :> es => FileTree -> Eff es (Either [Diagnostic] [Fact Value.Recipe])
+readRootRecipes = send . ReadRootRecipes
+
 checkRootValue :: RootStore :> es => RootContract -> Value -> Eff es (Either [Diagnostic] CheckedValue)
 checkRootValue contract = send . CheckRootValue contract
 
-materializeRoot :: RootStore :> es => RootContract -> FileTree -> CheckedValue -> Eff es (Either [Diagnostic] Root)
+materializeRoot :: RootStore :> es => RootContract -> FileTree -> Value.KnowledgeBase CheckedValue -> Eff es (Either [Diagnostic] Root)
 materializeRoot contract code = send . MaterializeRoot contract code
 
 loadRootValueForChecking :: RootStore :> es => Root -> Eff es (Either [Diagnostic] CheckedValue)

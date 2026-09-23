@@ -1,6 +1,8 @@
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Main (main) where
 
+import qualified Kyyn.Types.KnowledgeBase as KB
+
 import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless)
 import Data.Aeson (object, (.=))
@@ -75,8 +77,8 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       expected = object ["todos" .= [object ["id" .= ("todo-001" :: String),"value" .= object ["title" .= ("Review λ" :: String),"done" .= True]]]]
       rootAction = do
         value <- checkRootValue beforeContract input
-        either (pure . Left) (materializeRoot beforeContract beforeCode) value
-  Root _ factFiles _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
+        either (pure . Left) (\v -> materializeRoot beforeContract beforeCode (KB.KnowledgeBase v [])) value
+  Root _ factFiles _ _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
   revision <- right (gitRevision (replicate 40 'a'))
   identifier <- right (evolutionId "abc")
   let repository = Repository scope
@@ -90,21 +92,21 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
     . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       prepared <- openCapturedSource target >>= either (error . show) pure
-      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles emptyCurationRegister) closure prepared)
-  EvaluatedEvolution preserved (After afterContract) checked@(CheckedValue _ value) (EvolutionReport reports _) <- right result >>= right
+      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles emptyCurationRegister []) closure prepared)
+  EvaluatedEvolution preserved (After afterContract) checked@(KB.KnowledgeBase (CheckedValue _ value) recipes) (EvolutionReport reports _) <- right result >>= right
   unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 3 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
     (fail ("Unexpected evaluated workspace: " ++ show result))
   materialized <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot afterContract target checked))))
   reopened <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking materialized))))
-  unless (checked == reopened) (fail "Evaluated After did not materialize and reopen exactly")
+  unless (checked == KB.KnowledgeBase reopened recipes) (fail "Evaluated After did not materialize and reopen exactly")
   putStrLn "Captured workspace evaluated through real schema inspection, MicroHs and checked reports; exact After materialized and reopened."
 
 gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
   ReadTreeAt selected selectedRevision (Subtree path) excluded
     | selected == repository && selectedRevision == revision && relativeName path == "nested/root"
-      && excluded == [factsLocation, curationLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
+      && excluded == [factsLocation, curationLocation, recipesLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
   _ -> error "Evolution attempted Git operations other than its exact Before read"
 
 beforeType :: DataType
@@ -119,7 +121,7 @@ metadata = SchemaMetadata [RoleDecl "title" "Title" Title] [] [CollectionDecl "t
 
 manifest :: String -> String
 manifest namespace = "{ schemaType = " ++ show (namespace ++ ".Root") ++
-  ", schemaMetadata = \"Metadata.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+  ", schemaMetadata = \"Metadata.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

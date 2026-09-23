@@ -12,6 +12,8 @@ import qualified Kyyn.Types.Curation as Declaration
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.Curation
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Data.Coerce (coerce)
 import Kyyn.Domain.DataType (DataType(StringType))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName)
@@ -20,7 +22,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Porcelain.Protocol.CurationPersistence
 import Kyyn.Porcelain.Capability.RootStore (readRootDefinition)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
-import Kyyn.Domain.Root (RootDefinition(..))
+import Kyyn.Porcelain.Protocol.RecipePersistence
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Domain.Path (relativePath)
 
@@ -56,13 +58,21 @@ curationPersistenceTests = do
           ("{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", " ++
            "queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, " ++
            "tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }" ++ extra ++ " }"))])
-      declaration = "{ name = \"syncTodos\", instructions = \"Inspect current evidence\" }"
-  RootDefinition _ _ _ _ _ recipes _ <- right (readManifest (", recipes = [" ++ declaration ++ "]"))
-  unless (recipes == [Recipe (RecipeId "syncTodos") "Inspect current evidence"]) (fail "Recipe manifest changed declarations")
-  unless (all (isLeft . readManifest)
-      ["", ", recipes = [" ++ declaration ++ "," ++ declaration ++ "]",
-       ", recipes = [{ name = \"bad-name\", instructions = \"x\" }]"])
-    (fail "Missing, duplicate or invalid recipe declarations accepted")
+      declaration = Fact (FactId "syncTodos") (Recipe "Inspect current evidence")
+      encodeRecipeData value = runPureEff (runDhallHandling (encodeRecipes value))
+      decodeRecipeData value = runPureEff (runDhallHandling (decodeRecipes value))
+  _ <- right (readManifest "")
+  unless (isLeft (readManifest ", recipes = [] : List { name : Text, instructions : Text }"))
+    (fail "Obsolete manifest recipe field accepted")
+  recipeBytes <- right (encodeRecipeData [declaration])
+  unless (decodeRecipeData (Just recipeBytes) == Right [declaration]) (fail "Recipe data round trip failed")
+  unless (decodeRecipeData Nothing == Right []) (fail "Absent recipe data is not empty")
+  unless (all (isLeft . encodeRecipeData)
+      [[declaration,declaration], [Fact (FactId "bad-name") (Recipe "x")]])
+    (fail "Duplicate or invalid recipe IDs accepted")
+  unless (all (isLeft . decodeRecipeData . Just)
+      ["./external.dhall", "True", "[{ id = \"bad-name\", value = { instructions = \"x\" } }]"])
+    (fail "Invalid recipe data accepted")
   putStrLn "Curation Dhall round trips, canonical order and absent/invalid material checks passed."
 
 resolutionTests :: IO ()
@@ -70,7 +80,7 @@ resolutionTests = do
   let (recipe,instanceRef,producer,items) = case curationEntries sampleCuration of
         [entry] -> entry
         _ -> error "Expected one sample register entry"
-      recipes = [Recipe recipe "Inspect evidence"]
+      recipes = [Fact (FactId (coerce recipe)) (Recipe "Inspect evidence")]
       scope fetch = Declaration.EvidenceScope "files" "documents" fetch
       declaration values = Just (Declaration.Curation recipe values)
       run selected = runPureEff . interpret (\_ operation -> case operation of

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
-  'kyyn-surfaces': ['Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+  'kyyn-surfaces': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
     'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Tool',
     'Kyyn.Domain.Plugin',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
@@ -55,7 +55,7 @@ const allowed = {
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
-  'kyyn-porcelain': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+  'kyyn-porcelain': ['Kyyn.Types.KnowledgeBase', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Porcelain.Capability.Curation', 'Kyyn.Porcelain.Capability.Connector', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Tool', 'Kyyn.Types.Plugin', 'Kyyn.Porcelain.Capability.Root', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Capability.EvidenceAcquisition', 'Kyyn.Porcelain.Capability.EvidenceInspection', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Domain.DataType',
@@ -69,7 +69,7 @@ const allowed = {
     'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
-  'kyyn-porcelain-interpreters': ['Control.Monad', 'Control.Monad.Trans.Except',
+  'kyyn-porcelain-interpreters': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Porcelain.Protocol.RecipePersistence', 'Control.Monad', 'Control.Monad.Trans.Except',
     'Kyyn.Porcelain.Protocol.CurationPersistence', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Curation',
     'Kyyn.Domain.Tool', 'Kyyn.Domain.Plugin', 'Kyyn.Porcelain.Capability.Tool',
@@ -98,7 +98,7 @@ const allowed = {
     'MicroHs.Compile', 'MicroHs.CompileCache', 'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident',
     'MicroHs.SymTab', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
   ],
-  'kyyn-runtime': ['Kyyn.Types.Curation', 'Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
+  'kyyn-runtime': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Curation', 'Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
     'Kyyn.Evolution.Internal', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Program', 'Kyyn.Runtime.Validation'],
   'kyyn-plumbing-interpreters': [
     'Data.Word', 'Numeric', 'System.IO.Error', 'System.Random',
@@ -113,23 +113,23 @@ const allowed = {
 };
 
 const domainModules = {
-  'Kyyn.Domain.Curation': ['Kyyn.Types.Curation', 'Data.List', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
+  'Kyyn.Domain.Curation': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Fact', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Curation', 'Data.List', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Tool': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Evidence': ['Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.KnowledgeBase'],
-  'Kyyn.Domain.EvolutionReport': ['Kyyn.Types.Curation', 'Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
+  'Kyyn.Domain.EvolutionReport': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Curation', 'Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
   'Kyyn.Domain.KnowledgeBase': ['Kyyn.Domain.Git', 'Kyyn.Domain.Path'],
-  'Kyyn.Domain.Evolution': ['Data.Coerce', 'Data.Char', 'Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Workspace',
+  'Kyyn.Domain.Evolution': ['Kyyn.Types.KnowledgeBase', 'Data.Coerce', 'Data.Char', 'Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Workspace',
     'Kyyn.Domain.Value', 'Kyyn.Domain.Root', 'Kyyn.Domain.Path', 'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Evolution'],
   'Kyyn.Domain.Workspace': ['Data.List', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Root'],
   'Kyyn.Domain.Diagnostic': ['Kyyn.Types.Diagnostic'],
   'Kyyn.Domain.Contract': ['Control.Monad', 'Data.Coerce', 'Crypto.Hash.SHA256', 'Numeric',
     'Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
-  'Kyyn.Domain.Root': ['Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Curation', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Value', 'Kyyn.Domain.Path'],
+  'Kyyn.Domain.Root': ['Kyyn.Types.Fact', 'Data.List', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Curation', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Query', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Value', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Value': ['Data.Aeson', 'Kyyn.Domain.Contract'],
   'Kyyn.Domain.Query': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Value', 'Kyyn.Types.Query'],
   'Kyyn.Domain.Example': ['Kyyn.Domain.Query', 'Kyyn.Domain.Value'],
@@ -138,6 +138,7 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Recipes': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Types.Fact', 'Kyyn.Types.KnowledgeBase'],
   'Kyyn.Plumbing.Protocol.Tool': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.KeyMap', 'Data.ByteString',
     'Data.Coerce', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
@@ -169,11 +170,11 @@ const plumbingModules = {
   'Kyyn.Plumbing.Protocol.EvolutionRecord.Contract': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.List',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Plumbing.Protocol.Curation': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Types.Curation', 'Kyyn.Types.Evidence'],
-  'Kyyn.Plumbing.Protocol.EvolutionRecord.Document': ['Kyyn.Plumbing.Protocol.Curation', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
+  'Kyyn.Plumbing.Protocol.EvolutionRecord.Document': ['Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Domain.Curation', 'Kyyn.Plumbing.Protocol.Curation', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types',
     'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Plumbing.Protocol.EvolutionRecord.Contract',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport',
     'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact'],
-  'Kyyn.Plumbing.Protocol.Evolution': ['Kyyn.Plumbing.Protocol.Curation', 'Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
+  'Kyyn.Plumbing.Protocol.Evolution': ['Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Plumbing.Protocol.Curation', 'Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
     'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.Foldable',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Diagnostic', 'Kyyn.Plumbing.Protocol.Validation',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',

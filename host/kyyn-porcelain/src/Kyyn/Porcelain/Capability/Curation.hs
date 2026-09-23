@@ -4,19 +4,20 @@ import Control.Monad (foldM, unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Curation
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (pluginName)
 import qualified Kyyn.Types.Curation as Declaration
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore, resolveEvidenceCapture)
 
-resolveCuration :: EvidenceStore :> es => [Recipe] -> Maybe Declaration.Curation
+resolveCuration :: EvidenceStore :> es => [Fact Recipe] -> Maybe Declaration.Curation
   -> CurationRegister -> Eff es (Either [Diagnostic] CurationRegister)
 resolveCuration _ Nothing register = pure (Right register)
 resolveCuration recipes (Just (Declaration.Curation recipe@(RecipeId name) handled)) register = runExceptT $ do
   _ <- either (reject "curation.recipe-invalid") pure (recipeId name)
-  unless (recipe `elem` [identity | Recipe identity _ <- recipes])
-    (reject "curation.recipe-unknown" ("No recipe named " ++ name ++ " is declared in the target manifest"))
+  unless (name `elem` [identity | Fact (FactId identity) _ <- recipes])
+    (reject "curation.recipe-unknown" ("No recipe named " ++ name ++ " exists in the returned knowledge base"))
   foldM apply register handled
   where
     apply progress declaration = do

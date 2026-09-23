@@ -112,9 +112,9 @@ import qualified RootV2 as After
 import qualified Kyyn.Workspace.Before as BeforeCollections
 import qualified Kyyn.Workspace.After as AfterCollections
 
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution =
-  evolve (Rationale "Add review status" []) addReviewStatus
+  evolve (Rationale "Add review status" []) (onFacts addReviewStatus)
   >=> edit (Rationale "Complete the report" [])
     (within AfterCollections.todos $ update (FactId "todo-001") $
       modify (\todo -> todo { After.status = After.Done }))
@@ -123,7 +123,8 @@ evolution =
 ```
 
 `addReviewStatus` is an authored `Before.Root -> Either EvolutionFailure After.Root`
-function. `edit` takes a State action: use `get`, `gets`, `put` and `modify`, or
+function; `onFacts` preserves recipes while transforming domain data. `edit` takes
+a State action over the KB: use `zoom facts` for whole-domain `get`, `put` or `modify`, or
 `within` a generated collection handle to `current`, `update`, `remove` or `append`
 facts by ID. `update` focuses on a payload without changing its FactId. Missing or
 duplicate IDs report a located error. For nested updates, define a `Lens'` with
@@ -296,17 +297,32 @@ update before it can be checked with this development build.
 
 ## Recipe declarations and curation progress
 
-The root manifest now requires a `recipes` field. For a KB without recipes, add:
+Recipes are first-class data in `KnowledgeBase a`, alongside the authored domain
+Root. Add, edit and remove them through ordinary evolution steps:
 
-```dhall
-, recipes = [] : List { name : Text, instructions : Text }
+```haskell
+evolution = edit (Rationale "Teach the KB how to curate todos" []) $
+  within recipes $ append (Fact (FactId "syncTodos")
+    (Recipe "Inspect item/status evidence and update todos."))
 ```
 
-For a recipe, use a declaration such as
-`{ name = "syncTodos", instructions = "Inspect item/status evidence and update todos." }`.
-Names follow the connector-binding identifier rule and must be unique among recipes.
-New KBs include the empty field. Older manifests, including captured evolution
-inputs, need the field before checking with this build.
+Use `update` and `remove` with the same FactId to refine or remove the recipe.
+The ID is its name and follows the connector-binding identifier rule; IDs must
+be unique. Recipe changes appear distinctly in the evolution review.
+
+The host persists these values in `root/recipes.dhall`; an absent file means no
+recipes. Do not place this file in an evolution target: the evolution must return
+the recipe data. Queries and validators still receive the domain Root.
+
+For an older development KB, remove the `recipes` field from `root/kb.dhall` and
+move its entries to `root/recipes.dhall`, converting each
+`{ name = "syncTodos", instructions = "..." }` to
+`{ id = "syncTodos", value = { instructions = "..." } }` in a list. Commit that
+repair before creating a new evolution. Existing draft entries need the wrapped
+`Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)` signature;
+wrap domain migration functions with `onFacts`. Generated collection handles
+already focus through `facts`, so ordinary `within AfterCollections.todos` edits
+need no change.
 
 The host stores acknowledged evidence in `root/curation.dhall`; a missing file
 means no acknowledgements. It is not part of the guest Root schema or copied into
@@ -327,7 +343,8 @@ These names are exported by `Kyyn.Workspace.Evolution`. Replace `identityEvoluti
 with your fact/schema transformation, or keep it when no fact change is needed.
 Use the exact fetch ID you considered (`evidence history list PLUGIN INSTANCE`
 shows retained fetches). An individual ID absent at that fetch acknowledges its
-deletion. Declare the recipe in the target manifest before checking.
+deletion. The recipe must exist in the returned KB; adding it and acknowledging
+evidence for it in the same evolution is supported.
 
 `evolution check` resolves these declarations and saves the resulting progress;
 `evolution show` displays them. Acceptance publishes that saved progress even if

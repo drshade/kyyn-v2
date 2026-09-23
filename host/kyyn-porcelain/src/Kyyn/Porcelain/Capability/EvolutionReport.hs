@@ -9,23 +9,28 @@ import Data.Foldable (toList)
 import Data.List (nub, sort)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract
+import Kyyn.Domain.Curation (checkRecipes)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Domain.Root (CheckedValue)
-import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, checkRootValue)
 
 checkEvolutionReport :: RootStore :> es
-  => RootContract -> Value -> RootContract -> EvolutionObservation
-  -> Eff es (Either [Diagnostic] (CheckedValue, EvolutionReport))
+  => RootContract -> KnowledgeBase Value -> RootContract -> EvolutionObservation
+  -> Eff es (Either [Diagnostic] (KnowledgeBase CheckedValue, EvolutionReport))
 checkEvolutionReport source input target (EvolutionObservation output steps curation) =
   case resolveBoundaries of
     Left diagnostics -> pure (Left diagnostics)
     Right boundaries -> do
-      checked <- traverse (uncurry checkRootValue) boundaries
+      checked <- traverse (\(contract,KnowledgeBase value recipes) -> do
+        result <- checkRootValue contract value
+        pure (KnowledgeBase <$> result <*> checkRecipes recipes)) boundaries
       pure $ do
         values <- sequence checked
-        factSets <- traverse (uncurry identifiedFacts) boundaries
+        factSets <- traverse (\(contract,KnowledgeBase value recipes) ->
+          (,recipes) <$> identifiedFacts contract value) boundaries
         let first = ObservedRoot (identity source) input
             lastRoot = ObservedRoot (identity target) output
             starts = [before | StepObservation _ before _ <- steps] ++ [lastRoot]
@@ -54,7 +59,7 @@ checkEvolutionReport source input target (EvolutionObservation output steps cura
       pure ((source,input) : observed ++ [(target,output)])
     stepReports [] [_] = Right []
     stepReports (StepObservation rationale _ _ : rest) (before : after : remaining) =
-      (StepReport rationale (diff before after) :) <$> stepReports rest remaining
+      (StepReport rationale (diff (fst before) (fst after) ++ recipeDiff (snd before) (snd after)) :) <$> stepReports rest remaining
     stepReports _ _ = reject "Missing step boundaries"
 
 identity :: RootContract -> String
@@ -76,11 +81,20 @@ identifiedFacts contract value = either (reject . ("Invalid fact membership: " +
       unless (length keys == length (nub keys)) (Left ("Duplicate fact ID in collection " ++ name))
       pure identified
 
-diff :: IdentifiedFacts -> IdentifiedFacts -> [FactChange]
+diff :: IdentifiedFacts -> IdentifiedFacts -> [Change]
 diff before after =
   [FactChange collection (FactId identifier) old new |
     key@(collection,identifier) <- sort (nub (map fst before ++ map fst after)),
     let old = lookup key before, let new = lookup key after, old /= new]
+
+recipeDiff :: [Fact Recipe] -> [Fact Recipe] -> [Change]
+recipeDiff before after =
+  [RecipeChange (FactId name) old new |
+    name <- sort (nub (map fst earlier ++ map fst later)),
+    let old = lookup name earlier, let new = lookup name later, old /= new]
+  where
+    earlier = [(name,payload) | Fact (FactId name) payload <- before]
+    later = [(name,payload) | Fact (FactId name) payload <- after]
 
 reject :: String -> Either [Diagnostic] a
 reject = Left . pure . errorDiagnostic "evolution.observation"
