@@ -680,6 +680,11 @@ diagnostics do not suggest replay; only LoadCandidate converts incompatibility i
 `candidate.stale` with reapplication guidance. There is no version migration
 framework in this implementation.
 
+EvolutionRecord version 2 also carries the optional curation declaration defined
+by [ADR 0014](0014-evidence.md). Readers still accept version 1 with no declaration;
+writers emit version 2. Existing accepted step reports remain inspectable without
+rerunning archived code.
+
 The replacement is confined to the owning KB's `evolutions/<id>/`. It includes no
 materialized root facts, absolute candidate-store paths, validation marker or
 `.kyyn/` contents. RootStore independently exports the same Validated Root's files;

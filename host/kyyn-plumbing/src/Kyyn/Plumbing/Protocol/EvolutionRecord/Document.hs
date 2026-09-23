@@ -23,7 +23,7 @@ recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
 recordDocument identity before after (EvolutionReport steps curation) = do
   encoded <- traverse step steps
   pure (recordShape before after,
-    object ["version" .= ("1" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+    object ["version" .= ("2" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
       "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation])
   where
     endpoints = [("Before",before),("After",after)]
@@ -73,7 +73,7 @@ header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootCon
 header = withObject "Evolution record" $ \record -> do
   version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version /= "1" then pure (Left [errorDiagnostic "evolution.record-format"
+  if version /= "2" then pure (Left [errorDiagnostic "evolution.record-format"
     "Stored evolution record format is not supported by this kernel"])
   else do
     before <- record .: "before" >>= restoreSnapshot

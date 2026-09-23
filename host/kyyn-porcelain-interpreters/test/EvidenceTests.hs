@@ -86,6 +86,8 @@ main = do
   assert "changes not applied in order" (null sequential)
   (_,markers) <- right (recordChanges instanceA [] first)
   let state = EvidenceState (Just (FetchId "one")) initial [Fetch (FetchId "one") Nothing "2026-09-11" markers]
+  assert "incomplete scope history accepted" (isLeft (resolveCapture instanceA producer (FetchId "one")
+    [Fetch (FetchId "one") (Just (FetchId "lost")) "2026-09-11" markers] (FetchId "one")))
   assert "values without a fetch accepted" (isLeft (validateState (EvidenceState Nothing initial [])))
   assert "corrupt current metadata accepted" (isLeft (validateState
     (EvidenceState (Just (FetchId "one")) [] [Fetch (FetchId "one") Nothing "2026-09-11" markers])))
@@ -129,6 +131,19 @@ main = do
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
     latest <- load instanceA producer
+    oldCapture <- run (resolveEvidenceCapture instanceA (key f1)) >>= right
+    latestCapture <- run (resolveEvidenceCapture instanceA (key f2)) >>= right
+    assert "old fetch replaced by latest" (oldCapture == EvidenceCapture f1
+      [(itemA,EvidenceFingerprint "old"),(itemB,EvidenceFingerprint "removed")])
+    assert "metadata removal not reconstructed" (latestCapture == EvidenceCapture f2 [(itemA,EvidenceFingerprint "new")])
+    assert "unknown scope substituted latest" . (== Left CursorUnavailable) =<<
+      run (resolveEvidenceCapture instanceA (FetchId "missing"))
+    assert "foreign scope accepted" . (== Left CursorUnavailable) =<<
+      run (resolveEvidenceCapture instanceA (key independent))
+    (metadataHeader,metadataHistory) <- Bytes.readFile statePath >>= right . runPureEff . runDhallHandling . decodeHistory
+    assert "history projection lost header" (metadataHeader == EvidenceHeader (PackageIdentity "package-contents-one")
+      (contractFingerprint (contractId contract)) (key f2))
+    assert "history projection lost retained fetches" (length metadataHistory == 2)
     other <- load instanceB producer
     assert "current payload or removal incorrect" (latest == Just (CurrentEvidence f2 [(itemA,value "new")]))
     assert "loaded invocation input changed after publication" (saved == Just (CurrentEvidence f1 initial))

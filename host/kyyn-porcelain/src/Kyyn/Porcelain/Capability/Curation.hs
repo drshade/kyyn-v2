@@ -26,6 +26,10 @@ resolveCuration recipes (Just (Declaration.Curation recipe@(RecipeId name) handl
       selected <- either (reject "curation.scope-invalid") pure (pluginName plugin)
       unless (not (null instanceName || null fetch))
         (reject "curation.scope-invalid" "Evidence scope requires an instance and fetch")
+      case selection of
+        IndividualRecords ids -> unless (all (\(EvidenceId item) -> not (null item)) ids)
+          (reject "curation.scope-invalid" "Acknowledged evidence IDs must not be empty")
+        EntireBatch -> pure ()
       capture <- ExceptT $ fmap (either (Left . pure . scopeProblem) Right)
         (resolveEvidenceCapture (ConnectorInstanceRef selected instanceName) (FetchId fetch))
       either (reject "curation.progress" . problemMessage) pure (acknowledgeEvidence recipe selection capture progress)

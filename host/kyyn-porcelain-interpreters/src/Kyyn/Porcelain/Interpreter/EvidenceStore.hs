@@ -14,7 +14,7 @@ import Kyyn.Domain.Evidence
 import Kyyn.Domain.KnowledgeBase (cacheLocation)
 import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Path (DirectoryScope, scopePath, relativeName, directoryScope)
-import Kyyn.Domain.Plugin (pluginNameText)
+import Kyyn.Domain.Plugin (pluginNameText, PackageIdentity(..))
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence, DocumentAccess, DocumentStamp(..), withLockedDocument)
@@ -66,7 +66,8 @@ runEvidenceStore kb = interpret $ \_ -> \case
   ClearEvidence instanceRef -> locked instanceRef Document.clearCurrent
   ResolveEvidenceCapture instanceRef selected -> locked instanceRef $ runExceptT $ do
     contents <- readCurrent >>= maybe (throwE NotFetched) pure
-    (EvidenceHeader package fingerprint current, history) <- ExceptT (decodeHistory contents)
+    (EvidenceHeader package@(PackageIdentity identity) fingerprint current, history) <- ExceptT (decodeHistory contents)
+    unless (not (null identity)) (throwE (InvalidEvidence "Empty evidence producer"))
     contract <- either (throwE . InvalidEvidence) pure (parseContractFingerprint fingerprint)
     liftEither (resolveCapture instanceRef (EvidenceProducer package contract) current history selected)
   where

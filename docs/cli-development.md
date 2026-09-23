@@ -310,5 +310,26 @@ inputs, need the field before checking with this build.
 
 The host stores acknowledged evidence in `root/curation.dhall`; a missing file
 means no acknowledgements. It is not part of the guest Root schema or copied into
-evolution targets. Ordinary evolutions preserve it through acceptance. Recipe
-commands and guest acknowledgement declarations are not yet implemented.
+evolution targets. Ordinary evolutions preserve it through acceptance.
+
+An evolution can explicitly declare evidence handled for one recipe:
+
+```haskell
+evolution = withCuration
+  (Curation (RecipeId "syncTodos")
+    [ EntireBatch (EvidenceScope "local-file" "documents" "FETCH_ID")
+    , IndividualRecords (EvidenceScope "local-file" "other" "OTHER_FETCH_ID")
+        [EvidenceId "todo.txt"]
+    ]) identityEvolution
+```
+
+These names are exported by `Kyyn.Workspace.Evolution`. Replace `identityEvolution`
+with your fact/schema transformation, or keep it when no fact change is needed.
+Use the exact fetch ID you considered (`evidence history list PLUGIN INSTANCE`
+shows retained fetches). An individual ID absent at that fetch acknowledges its
+deletion. Declare the recipe in the target manifest before checking.
+
+`evolution check` resolves these declarations and saves the resulting progress;
+`evolution show` displays them. Acceptance publishes that saved progress even if
+evidence has since refreshed or been cleared. An unavailable fetch scope must be
+updated and checked again. Recipe/pending discovery commands are not yet available.

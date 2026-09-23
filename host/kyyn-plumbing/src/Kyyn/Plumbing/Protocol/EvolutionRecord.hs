@@ -11,6 +11,7 @@ import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, recordShape, headerShape, decodeHeader, decodeRecord)
+import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue)
 
 encodeEvolutionRecord :: DhallHandling :> es => EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Eff es (Either [Diagnostic] ByteString)
@@ -26,7 +27,12 @@ decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
     version <- decodeValue (Scalar IntegerScalar) ("(" <> contents <> "\n).version")
     case version of
       Left diagnostics -> pure (Left (show diagnostics))
-      Right (String "1") -> decodeContents contents
+      Right (String "1") -> do
+        empty <- encodeValue curationShape (curationValue Nothing)
+        case empty of
+          Left diagnostics -> pure (Left (show diagnostics))
+          Right declaration -> decodeContents ("(" <> contents <> "\n) // { version = +2, curation = " <> declaration <> " }")
+      Right (String "2") -> decodeContents contents
       Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
         "Stored evolution record format is not supported by this kernel"]))
   where

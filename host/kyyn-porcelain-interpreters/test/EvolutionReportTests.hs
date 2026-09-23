@@ -8,6 +8,8 @@ import Effectful (runPureEff)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.EvolutionReport
+import qualified Kyyn.Types.Curation as Curation
+import Kyyn.Plumbing.Protocol.Curation (curationValue)
 import Kyyn.Domain.Root (CheckedValue(..))
 import Kyyn.Types.Diagnostic
 import Kyyn.Types.Evolution
@@ -91,6 +93,12 @@ protocolTests = do
       output = object ["after" .= root [],"steps" .= ([] :: [Value]),"curation" .= object ["tag" .= ("None" :: String)]]
   result <- right (decode (success output))
   assert (result == Right (EvolutionObservation (root []) [] Nothing)) "Success decoding changed value"
+  let declaration = Just (Curation.Curation (Curation.RecipeId "syncTodos")
+        [Curation.EntireBatch (Curation.EvidenceScope "files" "documents" "f1"),
+         Curation.IndividualRecords (Curation.EvidenceScope "files" "documents" "f2") []])
+      declared = object ["after" .= root [],"steps" .= ([] :: [Value]),"curation" .= curationValue declaration]
+  acknowledged <- right (decode (success declared))
+  assert (acknowledged == Right (EvolutionObservation (root []) [] declaration)) "Curation protocol lost scope or order"
   let citation = object ["producer" .= ("graph" :: String),"connector" .= ("work" :: String),
         "source" .= ("email-λ" :: String),"references" .= (["https://example.test/λ","/tmp/email"] :: [String])]
       boundary = object ["contract" .= ("contract-id" :: String),"value" .= root []]

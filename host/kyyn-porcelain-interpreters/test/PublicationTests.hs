@@ -36,6 +36,7 @@ import Kyyn.Plumbing.Interpreter.Git (runGit)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution, acceptStoredEvolution)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.EvolutionExecution
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
 import Kyyn.Porcelain.Capability.EvolutionStore
@@ -58,7 +59,7 @@ import System.Directory (createDirectoryIfMissing, findExecutable, removeFile, d
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type Effects = '[RootPublication, RootExecution, EvolutionExecution, EvolutionAuthoring, EvolutionStore,
+type Effects = '[EvidenceStore, RootPublication, RootExecution, EvolutionExecution, EvolutionAuthoring, EvolutionStore,
   RootOpening, Schema.SchemaInspection, WorkspaceStore, RootStore, DhallHandling,
   Git.Git, Git.Git, Process.ProcessExecution, FileSystem, Failure, IOE]
 
@@ -105,7 +106,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
             . runWorkspaceStore . schemaMock contract
             . (if opening then runRootOpening (tree []) else noOpening)
             . runEvolutionStore . runEvolutionAuthoring . evaluationMock output . validationMock validation
-            . runRootPublication $ action
+            . runRootPublication . noEvidence $ action
           either (fail . show) pure result
         normal :: Eff Effects a -> IO a
         normal = run True (Just True) (const (pure ()))
@@ -315,6 +316,9 @@ validationMock mode = interpret $ \_ operation -> case mode of
 
 noOpening :: Eff (RootOpening : es) a -> Eff es a
 noOpening = interpret $ \_ _ -> error "Publication/recovery reopened source"
+
+noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
+noEvidence = interpret $ \_ _ -> error "Publication/recovery read evidence"
 
 schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case

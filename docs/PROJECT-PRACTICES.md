@@ -109,6 +109,14 @@ INSTALLED_EXECUTABLE` checks the real installed init/check/accept journey, targe
 register refusal and repeated preservation. It does not declare acknowledgements
 through guest code or claim pending-work CLI discovery.
 
+`node tools/test-curation-declarations.mjs INSTALLED_EXECUTABLE` exercises actual
+guest declarations against local-file fetches: older-scope resolution, failed
+preparation retaining the candidate, cache-free acceptance, archived declarations
+and selective deletion after a fresh refetch. It is included in the full installed
+check. Native `roots` and `evidence-store` checks cover declaration resolution,
+canonical report round trips (including version-one archives) and historical
+metadata replay without guest compilation.
+
 `cabal test evidence-store --test-show-details=direct` checks ordered delta application,
 real Dhall persistence, instance isolation, latest-only payloads and payload-free change
 summaries, concurrent expected-base publication, cursor refusal, scoped clear,
