@@ -339,9 +339,9 @@ contractDescriptions baseline = do
           (KeyMap.mapWithKey (\key value -> if key == "steps" then legacySteps value else value) fields))
         _ -> error "Expected record document"
   legacy <- right (runPureEff (runDhallHandling (encodeValue (legacyRecordShape baseline schema) legacyDocument)))
-  legacyDecoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 (Text.pack legacy))))) >>= right
+  legacyDecoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 legacy)))) >>= right
   unless (legacyDecoded == (identity,baseline,schema,report)) (fail "Version-two archive changed")
-  let oldRecord = "(" <> Text.encodeUtf8 (Text.pack legacy) <> ").{identity,before,after,steps} // { version = +1 }"
+  let oldRecord = "(" <> Text.encodeUtf8 legacy <> ").{identity,before,after,steps} // { version = +1 }"
   (_,_,_,EvolutionReport oldSteps oldCuration) <- right
     (runPureEff (runDhallHandling (decodeEvolutionRecord oldRecord))) >>= right
   let EvolutionReport expectedSteps _ = report

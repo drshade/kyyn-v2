@@ -301,6 +301,9 @@ Recipes are first-class data in `KnowledgeBase a`, alongside the authored domain
 Root. Add, edit and remove them through ordinary evolution steps:
 
 ```haskell
+import Kyyn.Workspace.Evolution
+import Kyyn.Schema (Fact(..), FactId(..))
+
 evolution = edit (Rationale "Teach the KB how to curate todos" []) $
   within recipes $ append (Fact (FactId "syncTodos")
     (Recipe "Inspect item/status evidence and update todos."))

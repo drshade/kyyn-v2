@@ -6,12 +6,12 @@ import qualified TodoSchemaV1 as Before
 import qualified TodoSchemaV2 as After
 import qualified Kyyn.Workspace.After as AfterCollections
 
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution =
   evolve (Rationale "Track completion only; unfinished work remains Open." [])
-    (\(Before.Root facts) -> Right (After.Root
+    (onFacts (\(Before.Root items) -> Right (After.Root
       [Fact identity (After.Todo title (case status of Before.Done -> After.Done; _ -> After.Open))
-      | Fact identity (Before.Todo title status) <- facts]))
+      | Fact identity (Before.Todo title status) <- items])))
   >=> edit (Rationale "The sales report is complete; make its title specific." [])
     (within AfterCollections.todos $ update (FactId "todo-001") $
       put (After.Todo "Write sales report λ" After.Done))

@@ -89,7 +89,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   }
   assert(!bindings.some(s => ['beforeRoot', 'afterRoot', 'evaluateEvolution'].includes(s.name)));
   const handle = discover('symbol', 'show', 'Kyyn.Workspace.After.todos').symbols[0];
-  assert.match(handle.declaration, /Collection RootV2.Root RootV2.Todo/);
+  assert.match(handle.declaration, /Collection \(KnowledgeBase RootV2.Root\) RootV2.Todo/);
   assert(handle.documentation.includes('todos'));
   for (const symbol of [...bindings, handle]) {
     assert(!symbol.declaration?.includes('.Internal.'), JSON.stringify(symbol));

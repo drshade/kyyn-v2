@@ -267,20 +267,20 @@ checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => Storag
 checkSavedReport operation (EvolutionReport steps _) = forM_ steps $ \(StepReport _ changes) ->
   forM_ changes check
   where
-   check (RecipeChange (FactId identity) before after) = do
-    _ <- stored operation "candidate.dhall" (recipeId identity)
-    unless (before /= Nothing || after /= Nothing)
-      (storageFailure operation "candidate.dhall" "Recipe change has neither a before nor an after value")
-   check (FactChange collection (FactId identity) before after) = do
-    unless (before /= Nothing || after /= Nothing)
-      (storageFailure operation "candidate.dhall" "Fact change has neither a before nor an after value")
-    forM_ [fact | Just fact <- [before,after]] $ \(RecordedFact schema value) -> do
-      shape <- case [shape | CollectionContract name _ _ shape <- collectionContracts (rootSchema schema), name == collection] of
-        [shape] -> pure (Record [("id", Scalar TextScalar), ("value", shape)])
-        _ -> storageFailure operation "candidate.dhall" "Recorded fact names an unknown collection"
-      _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.dhall"
-      recordedId <- stored operation "candidate.dhall" (parseEither (withObject "Fact" (.: "id")) value)
-      unless (recordedId == identity) (storageFailure operation "candidate.dhall" "Recorded fact ID disagrees with the change")
+    check (RecipeChange (FactId identity) before after) = do
+      _ <- stored operation "candidate.dhall" (recipeId identity)
+      unless (before /= Nothing || after /= Nothing)
+        (storageFailure operation "candidate.dhall" "Recipe change has neither a before nor an after value")
+    check (FactChange collection (FactId identity) before after) = do
+      unless (before /= Nothing || after /= Nothing)
+        (storageFailure operation "candidate.dhall" "Fact change has neither a before nor an after value")
+      forM_ [fact | Just fact <- [before,after]] $ \(RecordedFact schema value) -> do
+        shape <- case [shape | CollectionContract name _ _ shape <- collectionContracts (rootSchema schema), name == collection] of
+          [shape] -> pure (Record [("id", Scalar TextScalar), ("value", shape)])
+          _ -> storageFailure operation "candidate.dhall" "Recorded fact names an unknown collection"
+        _ <- DhallHandling.encodeValue shape value >>= stored operation "candidate.dhall"
+        recordedId <- stored operation "candidate.dhall" (parseEither (withObject "Fact" (.: "id")) value)
+        unless (recordedId == identity) (storageFailure operation "candidate.dhall" "Recorded fact ID disagrees with the change")
 
 candidateScope :: Failure :> es => KnowledgeBase -> Eff es DirectoryScope
 candidateScope kb@(KnowledgeBase (Repository scope) _) = stored ReadDirectoryTree ".kyyn/candidates" $ do

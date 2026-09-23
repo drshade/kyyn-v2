@@ -105,8 +105,9 @@ manifest/persistence integration.
 The `roots` suite also exercises the curation Dhall codec, canonical ordering,
 recipe declarations, nonempty candidate save/reload and register preservation
 through opening and Git export. `node tools/test-curation-persistence.mjs
-INSTALLED_EXECUTABLE` checks the real installed init/check/accept journey, target
-register refusal and repeated preservation. It does not declare acknowledgements
+INSTALLED_EXECUTABLE` checks recipe creation, edits, removal/reuse, invalid-ID
+candidate preservation, archived reports, target data refusal and register preservation.
+It does not declare acknowledgements
 through guest code or claim pending-work CLI discovery.
 
 `node tools/test-curation-declarations.mjs INSTALLED_EXECUTABLE` exercises actual
@@ -119,7 +120,7 @@ Native `roots` and `evidence-store` checks cover declaration resolution,
 canonical report round trips (including version-one archives) and historical
 metadata replay without guest compilation.
 The `roots` suite records the recipe reader's Git operations, checking explicit
-KB/revision selection, manifest-only list/show and absent/invalid registers without
+KB/revision selection, recipe-file-only list/show and absent/invalid registers without
 a schema or guest compiler.
 
 `cabal test evidence-store --test-show-details=direct` checks ordered delta application,

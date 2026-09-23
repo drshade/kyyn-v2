@@ -125,12 +125,12 @@ import Kyyn.Workspace.Evolution
 import qualified SchemaV1 as Before
 import qualified SchemaV2 as After
 
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = simplifyStatuses >=> completeReport >=> addReview
 
-simplifyStatuses :: Evolution Before.Root After.Root
-completeReport   :: Evolution After.Root After.Root
-addReview        :: Evolution After.Root After.Root
+simplifyStatuses :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
+completeReport   :: Evolution (KnowledgeBase After.Root) (KnowledgeBase After.Root)
+addReview        :: Evolution (KnowledgeBase After.Root) (KnowledgeBase After.Root)
 
 ```
 

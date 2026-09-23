@@ -64,6 +64,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
   fs.writeFileSync(path.join(setup.path, 'change/Evolution.hs'), `module Evolution where
 import Kyyn.Workspace.Evolution
+import Kyyn.Schema
 import qualified RootV1 as Before
 import qualified RootV2 as After
 evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
@@ -128,6 +129,12 @@ evolution = evolve (Rationale "Start tracking tasks" []) (onFacts (\\Before.Root
   assert.deepEqual(pending().result.changes, [], 'Deletion acknowledgement retained pending work');
   const human = invoke(executable, ['--kb', kb, 'root', 'recipe', 'pending', 'list', 'syncTodos', 'local-file', 'documents']);
   assert.match(human, /No unacknowledged changes/);
+  const teach = cli(['evolution', 'new', 'teach-and-curate']).result;
+  author(teach, `EntireBatch (${scope(empty)})`, 'newTask',
+    'edit (Rationale "Teach and perform a task" []) (within recipes (append (Fact (FactId "newTask") (Recipe "Inspect documents"))))');
+  cli(['evolution', 'check', teach.id]);
+  accept(teach.id);
+  assert.deepEqual(pending('newTask').result.changes, [], 'New recipe did not acknowledge in the same evolution');
   console.log('Installed recipe curation: discovery without runtime, net changes, independent recipes/instances, mixed acknowledgements with facts, fixed-scope cache-free acceptance and deletion passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });

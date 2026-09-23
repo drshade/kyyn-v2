@@ -17,9 +17,35 @@ function invoke(command, args, status = 0) {
   return result.stdout;
 }
 const cli = (...args) => invoke(executable, ['--kb', kb, '--json', ...args]);
+function edit(draft, action) {
+  const source = path.join(draft.path, 'change/Evolution.hs');
+  const scaffold = fs.readFileSync(source, 'utf8').replace('import Kyyn.Workspace.Evolution', 'import Kyyn.Workspace.Evolution\nimport Kyyn.Schema');
+  fs.writeFileSync(source, scaffold.replace(/^evolution = .*$/m,
+    `evolution = edit (Rationale "Maintain curation instructions" []) (within recipes $ ${action})`));
+}
+function accept(id) { cli('evolution', 'ready', id); cli('evolution', 'accept', id); }
 try {
   cli('kb', 'init');
-  fs.writeFileSync(path.join(kb, 'root/recipes.dhall'), `[{ id = "syncTodos", value = { instructions = "Inspect current evidence" } }]`);
+  const recipeFile = path.join(kb, 'root/recipes.dhall');
+  const add = JSON.parse(cli('evolution', 'new', 'teach-curation')).result;
+  const targetRecipes = path.join(add.path, 'target/recipes.dhall');
+  assert.equal(fs.existsSync(targetRecipes), false);
+  fs.copyFileSync(recipeFile, targetRecipes);
+  invoke(executable, ['--kb', kb, 'evolution', 'check', add.id], 1);
+  fs.unlinkSync(targetRecipes);
+  edit(add, 'append (Fact (FactId "syncTodos") (Recipe "Inspect current evidence"))');
+  cli('evolution', 'check', add.id);
+  const saved = cli('evolution', 'show', add.id);
+  assert.match(saved, /"kind":"Recipe"/);
+  edit(add, 'append (Fact (FactId "bad-name") (Recipe "Invalid"))');
+  const invalid = JSON.parse(invoke(executable, ['--kb', kb, '--json', 'evolution', 'check', add.id], 1));
+  assert.equal(invalid.diagnostics[0].code, 'recipe.invalid-id');
+  assert.equal(cli('evolution', 'show', add.id), saved, 'Rejected recipe replaced the candidate');
+  const source = path.join(add.path, 'change/Evolution.hs');
+  fs.writeFileSync(source, fs.readFileSync(source, 'utf8').replace('bad-name', 'syncTodos').replace('Invalid', 'Inspect current evidence'));
+  cli('evolution', 'check', add.id);
+  accept(add.id);
+  assert.equal(JSON.parse(cli('root', 'recipe', 'show', 'syncTodos')).result.instructions, 'Inspect current evidence');
   const register = path.join(kb, 'root/curation.dhall');
   fs.writeFileSync(register, `[{ recipe = "syncTodos", plugin = "files", instance = "documents", producer = "source", contract = "${'0'.repeat(64)}", acknowledged = [{ id = "milk", fingerprint = "v1" }] }]`);
   invoke('git', ['-C', kb, 'add', 'root']);
@@ -39,13 +65,28 @@ try {
   assert.match(accepted, /milk/);
   assert.match(accepted, /v1/);
   cli('root', 'check');
-  const second = JSON.parse(cli('evolution', 'new', 'preserve-again')).result.id;
+  const update = JSON.parse(cli('evolution', 'new', 'refine-instructions')).result;
+  edit(update, 'update (FactId "syncTodos") (put (Recipe "Read evidence and explain changes"))');
+  const second = update.id;
   assert.equal(fs.existsSync(path.join(kb, 'evolutions', second, 'target/curation.dhall')), false);
   cli('evolution', 'check', second);
   cli('evolution', 'ready', second);
   cli('evolution', 'accept', second);
   assert.equal(fs.readFileSync(register, 'utf8'), accepted);
-  console.log('Installed curation persistence: init, recipe check, target refusal, two acceptances and canonical register preservation passed.');
+  assert.equal(JSON.parse(cli('root', 'recipe', 'show', 'syncTodos')).result.instructions, 'Read evidence and explain changes');
+  const remove = JSON.parse(cli('evolution', 'new', 'remove-recipe')).result;
+  edit(remove, 'remove (FactId "syncTodos")');
+  cli('evolution', 'check', remove.id);
+  accept(remove.id);
+  assert.deepEqual(JSON.parse(cli('root', 'recipe', 'list')).result.recipes, []);
+  assert.equal(fs.readFileSync(register, 'utf8'), accepted, 'Removing recipe discarded its progress');
+  const restore = JSON.parse(cli('evolution', 'new', 'restore-recipe')).result;
+  edit(restore, 'append (Fact (FactId "syncTodos") (Recipe "Resume the same task"))');
+  cli('evolution', 'check', restore.id);
+  accept(restore.id);
+  assert.equal(fs.readFileSync(register, 'utf8'), accepted);
+  assert.match(cli('--runtime', path.join(temporary, 'absent'), 'evolution', 'show', add.id), /Inspect current evidence/);
+  console.log('Installed recipes: add/edit/remove/reuse, target refusal, invalid-ID candidate preservation, archived report and inert curation progress passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
