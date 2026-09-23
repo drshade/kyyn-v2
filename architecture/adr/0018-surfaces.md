@@ -510,7 +510,7 @@ instructions, and queries net pending changes for a recipe and connector instanc
 Results identify the selected fetch so authors can explicitly acknowledge that
 scope, not an unspecified latest capture. Keep raw acquisition history distinct
 from pending work. [ADR 0014](0014-evidence.md) owns the comparison, latest-only
-reads, unavailable-history behavior and acknowledgement semantics.
+reads, raw-history versus pending-work diagnostics and acknowledgement semantics.
 An empty result must not disable investigation/evolution actions or label a task
 complete. Evolution review presents the recipe and batch/individual declarations
 alongside fact changes, including acknowledgement-only proposals. Fetching and

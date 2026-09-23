@@ -72,9 +72,10 @@ withCuration
 ```
 
 These scopes name independent fetches; there is no global fetch watermark. The
-host maintains progress per recipe and instance. A later whole-batch declaration
-can cover earlier individual acknowledgements without the author implementing
-compaction. An older batch cannot erase a newer individual acknowledgement.
+host maintains an acknowledged ID/fingerprint map per recipe and instance. A batch
+replaces that map; individual declarations update or remove selected entries.
+Declarations apply in authored order. An explicitly older declaration can make
+evidence pending again; Kyyn does not enforce monotonic progress.
 
 The evolution may just declare evidence handled with no fact changes when the
 agent judges no update necessary. It can also change facts without acknowledging
@@ -98,11 +99,15 @@ current prices and populate the new todo. Kyyn neither blocks the work nor decid
 that running the recipe was unnecessary. Acknowledgements are declarations of
 processing, not permissions to use evidence.
 
-## 7. Reconcile missing local history
+## 7. Clone or clear the local cache
 
 Clearing the local evidence cache leaves accepted recipes, facts, rationale and
-the Git-tracked progress register intact. After refetch, an unresolvable baseline
-produces an unavailable-history diagnostic, not an empty pending result. The agent
-can inspect the current capture and acknowledge a fresh batch in a reconciliation
-evolution. Producer changes likewise require refetch/reconciliation, not comparing
-fingerprints across incompatible producers. This does not reconstruct old payloads.
+the Git-tracked progress register intact. Another clone has that register too.
+After a successful fetch with the same producer, pending discovery compares the
+two maps without any previous fetch history. An acknowledged item missing from
+the capture is Deleted; acknowledging that deletion removes its register entry.
+An unavailable source is an error, not an empty capture.
+
+Producer changes require refetch and explicit reconciliation rather than comparing
+incompatible fingerprints. The agent can inspect the new capture and acknowledge
+a whole batch under the new producer. This does not reconstruct old payloads.
