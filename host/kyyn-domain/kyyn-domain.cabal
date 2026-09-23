@@ -14,9 +14,18 @@ library
     Kyyn.Domain.Plugin
     Kyyn.Domain.Tool
     Kyyn.Domain.Evidence
+    Kyyn.Domain.Curation
     Kyyn.Domain.KnowledgeBase Kyyn.Domain.Evolution Kyyn.Domain.EvolutionReport Kyyn.Domain.Publication
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, deepseq, filepath, kyyn-types, bytestring,
     aeson ==2.2.5.0, cryptohash-sha256 ==0.11.102.1
+
+test-suite curation-core
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: CurationTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson

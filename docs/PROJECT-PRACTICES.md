@@ -95,6 +95,13 @@ no-checkout acquisition from a local Git remote. It uses real Dhall
 and Git handlers, without network access, a guest compiler or plugin invocation.
 It is included in the fast check.
 
+`cabal test curation-core --test-show-details=direct` checks pure recipe/instance
+acknowledgements and net pending comparison: batch/individual ordering, deletion,
+producer mismatch and reconciliation, independent recipes/instances and comparison
+without old fetch history. It runs in the fast check and needs no guest compiler,
+Git repository, evidence store or filesystem. This does not claim acceptance or
+manifest/persistence integration.
+
 `cabal test evidence-store --test-show-details=direct` checks ordered delta application,
 real Dhall persistence, instance isolation, latest-only payloads and payload-free change
 summaries, concurrent expected-base publication, cursor refusal, scoped clear,
