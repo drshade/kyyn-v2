@@ -317,6 +317,18 @@ its declarations after those already in the wrapped result. Composing different
 recipe contexts fails with `curation.recipe-conflict`; the host checks the selected
 recipe against the target manifest, allowing a new recipe and its first
 acknowledgements in the same evolution.
+
+Preparation diagnostics give the author a concrete repair:
+
+| Code | Repair |
+| --- | --- |
+| `curation.recipe-invalid` | Use a valid recipe identifier. |
+| `curation.recipe-unknown` | Declare the recipe in the target manifest or select an existing one. |
+| `curation.recipe-conflict` | Compose declarations for one recipe per evolution. |
+| `curation.scope-invalid` | Correct the plugin/instance/fetch fields or an empty evidence ID. |
+| `curation.scope-unavailable` | Inspect a fresh fetch and update the declaration to its scope. |
+| `curation.progress` | For a changed producer, reconcile an entire batch; for malformed captured IDs/fingerprints, repair or refetch the evidence as the message directs. |
+
 For an individual declaration, presence at the selected fetch supplies its
 fingerprint; absence removes its acknowledged entry. Absence can be established
 from a complete capture even after a fresh clone/refetch, without a historical

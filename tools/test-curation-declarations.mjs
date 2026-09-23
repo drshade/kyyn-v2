@@ -77,7 +77,7 @@ in [{ name = "documents", binding = "documents", connector = Connector.Folder { 
   fetch();
   cli(['evidence', 'clear', 'local-file', 'documents']);
   accept(draft.id);
-  assert.match(fs.readFileSync(register, 'utf8'), new RegExp(firstToken));
+  assert(fs.readFileSync(register, 'utf8').includes(JSON.stringify(firstToken)), 'Acceptance did not preserve the selected fetch fingerprint');
   assert.match(JSON.stringify(cli(['evolution', 'show', draft.id])), new RegExp(first));
   fs.unlinkSync(path.join(folder, 'todo.txt'));
   const empty = fetch();
