@@ -382,8 +382,7 @@ do not compare incompatible fingerprints or silently report no work. The agent
 can inspect the new capture and declare a whole batch to establish its acknowledged
 map under the new producer. Individual updates cannot mix producer contexts within
 one map. The register stores no payloads, tombstones, read log or review statuses.
-Its size is proportional to acknowledged present items. No baseline exceptions,
-compaction service or extension hooks are required.
+Its size is proportional to acknowledged present items.
 
 ### Effectful preparation remains separate from acceptance
 
