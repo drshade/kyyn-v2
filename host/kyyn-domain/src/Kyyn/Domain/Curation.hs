@@ -1,5 +1,5 @@
 module Kyyn.Domain.Curation
-  ( RecipeId(..), Recipe(..), EvidenceSelection(..), CurationRegister
+  ( RecipeId(..), Recipe(..), Acknowledgement(..), CurationRegister
   , PendingEvidence(..), CurationProblem(..)
   , emptyCurationRegister, acknowledgeEvidence, pendingEvidence
   ) where
@@ -9,7 +9,7 @@ import Kyyn.Domain.Evidence
 
 newtype RecipeId = RecipeId String deriving (Eq, Show)
 data Recipe = Recipe { name :: RecipeId, instructions :: String } deriving (Eq, Show)
-data EvidenceSelection = EntireBatch | IndividualRecords [EvidenceId] deriving (Eq, Show)
+data Acknowledgement = EntireBatch | IndividualRecords [EvidenceId] deriving (Eq, Show)
 
 data Progress = Progress EvidenceProducer [(EvidenceId, EvidenceFingerprint)] deriving (Eq, Show)
 newtype CurationRegister = CurationRegister [((RecipeId, ConnectorInstanceRef), Progress)] deriving (Eq, Show)
@@ -20,7 +20,7 @@ emptyCurationRegister :: CurationRegister
 emptyCurationRegister = CurationRegister []
 
 -- The supplied capture is the resolved declaration scope, not a lookup of latest.
-acknowledgeEvidence :: RecipeId -> EvidenceSelection -> CurrentEvidence
+acknowledgeEvidence :: RecipeId -> Acknowledgement -> CurrentEvidence
   -> CurationRegister -> Either CurationProblem CurationRegister
 acknowledgeEvidence recipe selection capture@(CurrentEvidence (EvidenceSnapshotRef instanceRef producer _) _) (CurationRegister entries) = do
   current <- fingerprints capture
