@@ -18,7 +18,9 @@ must not be disconnected workflows. Evaluation must be useful without acceptance
 ## Decision
 
 An evolution is one of the three KB entry-point kinds in ADR 0008. The authored
-entry is an `Evolution Before.Root After.Root` value. The generated adapter applies
+entry is an `Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)` value.
+The guest wrapper and recipe data are defined in [ADR 0014](0014-evidence.md).
+The generated adapter applies
 it to Before and returns After with annotated step observations; Kyyn materializes
 a candidate and derives its review report. It never implicitly accepts its result.
 
@@ -43,16 +45,17 @@ data Evolution before after  -- pure transformation with annotated boundaries
 
 -- Generated in Kyyn.Workspace.Evolution for this workspace:
 editBefore
-  :: Rationale -> Edit Before.Root ()
-  -> Evolution Before.Root Before.Root
+  :: Rationale -> Edit (KnowledgeBase Before.Root) ()
+  -> Evolution (KnowledgeBase Before.Root) (KnowledgeBase Before.Root)
 
 evolve
-  :: Rationale -> (Before.Root -> Either EvolutionFailure After.Root)
-  -> Evolution Before.Root After.Root
+  :: Rationale
+  -> (KnowledgeBase Before.Root -> Either EvolutionFailure (KnowledgeBase After.Root))
+  -> Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 
 edit
-  :: Rationale -> Edit After.Root ()
-  -> Evolution After.Root After.Root
+  :: Rationale -> Edit (KnowledgeBase After.Root) ()
+  -> Evolution (KnowledgeBase After.Root) (KnowledgeBase After.Root)
 
 (>=>) :: Evolution a b -> Evolution b c -> Evolution a c
 
@@ -80,9 +83,9 @@ entry in `pure . evaluateEvolution`. Generated step constructors use
 Public exports guide construction; they do not enforce observation completeness.
 The host's contract/value and chain checks below are the actual boundary checks.
 
-The proposed `curation` addition and its SDK attachment helper follow
+The `curation` field and its SDK attachment helper follow
 [ADR 0014](0014-evidence.md): one optional recipe context with explicit handled
-evidence, independent of step citations. It is not implemented yet. Candidate
+evidence, independent of step citations. Candidate
 preparation resolves its declarations into host-owned progress and saves both
 with the result for review/publication. An acknowledgement-only identity evolution
 is valid; an ordinary evolution can omit curation. Neither case adds a required
@@ -106,13 +109,24 @@ import qualified RootV2 as After
 import qualified Kyyn.Workspace.Before as BeforeCollections
 import qualified Kyyn.Workspace.After as AfterCollections
 
-evolution :: Evolution Before.Root After.Root
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution =
-  editBefore (Rationale "Correct the old title" []) correctTitle
-  >=> evolve (Rationale "Track review status" []) introduceReviewStatus
+  editBefore (Rationale "Correct the old title" []) (zoom facts correctTitle)
+  >=> evolve (Rationale "Track review status" []) (onFacts introduceReviewStatus)
   >=> edit (Rationale "Remove a cancelled task" [])
     (within AfterCollections.todos $ remove (FactId "todo-002"))
 ```
+
+There is one `edit`/`evolve` vocabulary over the complete guest value. Domain
+helpers remain ordinary typed functions or state actions; `onFacts` and `zoom facts`
+reuse them without manual recipe copying. Generated collection handles compose
+the facts lens internally: `AfterCollections.todos` has type
+`Collection (KnowledgeBase After.Root) After.Todo`. Ordinary `within` edits need
+no extra zoom, and recipe edits use the same syntax. An existing unaccepted
+draft using the former bare-Root entry must update its signature, wrap whole-root
+schema functions with `onFacts`, and focus manual root state actions with `zoom facts`;
+preparation diagnostics point to that repair. Do not add a second
+legacy entry adapter. Accepted archives remain readable without recompiling entries.
 
 Same-schema edits use standard strict StateT over Either. A refusal returns no
 partially modified root. One `edit` has one rationale and one observed boundary,
@@ -179,7 +193,8 @@ handoff. Naming something an evolution does not install every host capability.
 
 `StepObservation` is SDK-produced data, not a closure or a second authored wire
 format. Generated bindings retain the contract identity and encoded root values
-on both sides of each `evolve` boundary. The host decodes those observations and
+on both sides of each `evolve` boundary, including the recipe data under ADR 0014.
+The host decodes those observations and
 derives the actual changes while both sides are available. Boundary values use
 only Before or After's contract. There is no registry of intermediate schemas
 and no introspection of arbitrary helper values inside a step.
@@ -288,15 +303,16 @@ Propose a complete target copy, not a patch overlay on the current root:
 evolutions/<id>/
   manifest.dhall      Before revision, state, name, explanation
   before/            source schema/imports copied from the selected commit
-  target/            complete proposed non-fact contents of root/
+  target/            complete proposed code/config/example contents of root/
   change/            Evolution.hs and evolution-only helpers/input files
   notes/             review notes, excluded from evaluation inputs
 ```
 
 Creation copies the base root's code, configuration and examples into `target/`.
 Editing that copy proposes their replacement; removing a target file proposes its
-deletion. Facts are produced by `evolution`, not edited in a parallel `target/facts/`
-tree. RootStore combines the returned facts with this target code snapshot. This
+deletion. Domain facts and recipes are produced by `evolution`, not edited in a
+parallel `target/facts/` tree or `target/recipes.dhall` file. RootStore combines
+the returned data with this target code snapshot. This
 costs a copy of source/dependencies per workspace; begin there rather than invent
 overlay rules, tombstones or dependency-sharing machinery.
 
@@ -343,7 +359,7 @@ it from the snapshot and captured-input comparison, without parsing it; its pres
 does not establish acceptance. Re-encoding a WorkspaceSnapshot does not emit it;
 archive export supplies the fixed record separately. `result.dhall` is a file,
 not another captured subtree. Projection rejects other files
-outside the layout and any `target/facts` tree. Incomplete draft source is
+outside the layout, any `target/facts` tree and `target/recipes.dhall`. Incomplete draft source is
 capturable; projection does not promise that it compiles or matches the selected
 commit. Evolution capture performs that source-selection check separately.
 Input equality compares the parsed Before revision, name and explanation, and

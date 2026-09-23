@@ -39,6 +39,7 @@ data Root = Root
   { schema :: RootContract
   , facts  :: FactSnapshot
   , code   :: CodeSnapshot
+  , recipes :: [Fact Recipe]
   , curation :: CurationRegister
   }
 ```
@@ -50,8 +51,10 @@ owned by [contracts](0005-contracts.md). `FactSnapshot` and
 examples and supporting non-secret config files alongside code. Loading reads
 the bytes into the value; subsequent reads do not resolve editable paths or
 require a store-specific handle service. The guest receives decoded domain values.
-The separate host-owned curation register follows [ADR 0014](0014-evidence.md);
-it is neither guest domain data nor authored code.
+The recipe data and separate host-owned curation register follow
+[ADR 0014](0014-evidence.md). Recipes are authored knowledge; progress is
+bookkeeping. The guest evolution receives the typed KnowledgeBase wrapper
+defined there, not this host snapshot descriptor or repository locator.
 The explicit repository and KB-relative prefix let publication address the selected
 KB without guessing its location. `WholeTree` denotes the repository root;
 `Subtree` supplies a nonempty relative directory. Stores derive `root/` and

@@ -1,18 +1,14 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: accepted
+status: proposed
 date: 2026-09-23
 ---
 # Latest evidence and recipe-scoped declared curation
 
-Basis: owner-directed latest-only evidence and recipe-scoped acknowledgements.
-The interface and persistence mechanics were accepted in the design review.
-Latest-only storage, acquisition, typed plugin reads and composed KB tools are
-implemented. Recipe manifest declarations, register persistence/preservation and
-the pure host comparison/acknowledgement operations are implemented. Guest
-acknowledgement declarations, their preparation-time resolution and CLI recipe/pending
-discovery are implemented.
+Basis: latest-only evidence and recipe-scoped acknowledgements are implemented.
+The owner-directed revision making recipes typed evolution data is under design
+review; the existing implementation still authors them in the root manifest.
 
 ## Context
 
@@ -230,32 +226,113 @@ Repeatable processing may read current evidence through the same typed helpers.
 
 ### Recipes name the task, not an execution workflow
 
-A recipe is a KB-owned identity and agent instructions: for example, synchronize
-todos or update grocery prices. Its definition belongs to the accepted root and
-changes through evolutions. It is not a scheduled job, executable entry point or
-kernel-managed sequence of agent actions. An agent follows the instructions and
-uses ordinary investigation and evolution tools.
+A recipe is authored knowledge about how to interpret evidence and do useful
+work: for example, synchronize todos or update grocery prices. Its instructions
+are part of the KB's accumulated understanding, not tool configuration. Recipes
+are identified data in the accepted root, edited by the same typed evolution
+that edits domain facts. They are not scheduled jobs, executable entry points or
+kernel-managed sequences of agent actions. An agent follows their instructions
+and uses ordinary investigation and evolution tools.
 
 ```haskell
-newtype RecipeId = RecipeId Text
+-- Shared SDK data; the KB author still defines the domain facts type.
+data Recipe = Recipe { instructions :: String }
+data KnowledgeBase facts = KnowledgeBase facts [Fact Recipe]
 
-data Recipe = Recipe
-  { instructions :: Text
-  }
+-- Author-facing optics/edit handles; their implementation owns the wrapper.
+facts :: Lens (KnowledgeBase a) (KnowledgeBase b) a b
+recipes :: Collection (KnowledgeBase a) Recipe
 
-type Recipes = Map RecipeId Recipe
+onFacts
+  :: (a -> Either EvolutionFailure b)
+  -> KnowledgeBase a -> Either EvolutionFailure (KnowledgeBase b)
 ```
 
-Persist recipe declarations in `root/kb.dhall` as a required
-`recipes : List { name : Text, instructions : Text }` field. Names use the existing
-connector-binding identifier rule, are unique among recipes, and have their own
-namespace. Existing KBs without recipes
-add `recipes = [] : List { name : Text, instructions : Text }`; initialization and
-manifest diagnostics supply that shape.
+The guest wrapper is a materialized value, not the host repository locator named
+`KnowledgeBase` in ADR 0004. It contains no paths, code, closures or curation
+register. `onFacts` lifts an ordinary fallible domain transformation and preserves
+the recipes; it does not lift a previously observed Evolution or create another
+observation protocol. A failed domain transformation returns no changed wrapper.
+The SDK reexports this vocabulary through `Kyyn.Evolution` and the generated
+workspace facade. No new recipe editor or command family is needed.
+
+The recipe fact ID is its name. A `RecipeId` in a curation declaration refers to
+that same textual ID, not another ID stored in the payload. Names retain the
+connector-binding identifier rule, uniqueness and their own namespace. At the
+host boundary, reject invalid/duplicate recipe IDs with a diagnostic identifying
+the recipe. Ordinary fact IDs need not obey this additional addressability rule.
+
+For example, a recipe-only evolution uses the existing collection operations:
+
+```haskell
+evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
+evolution = edit (Rationale "Explain how to reconcile todos" []) $
+  within recipes $
+    append (Fact (FactId "syncTodos")
+      (Recipe "Read pending evidence and reconcile the corresponding todos."))
+```
+
+For this recipe-only edit, Before and After alias the same authored root type.
+`update (FactId "syncTodos")` focuses the Recipe payload, and `remove` removes
+that recipe. Generated domain collection handles already focus through the
+wrapper's facts lens, so the same `edit` action can edit either kind of collection.
+A facts-only edit is just:
+
+```haskell
+evolution = edit (Rationale "Remove the cancelled task" []) $
+  within AfterCollections.todos $ remove (FactId "todo-002")
+```
+
+Persist the recipes in `root/recipes.dhall` as the known type
+`List { id : Text, value : { instructions : Text } }`. The fixed codec follows
+the shared Recipe/Fact structure; it is not a second KB-authored schema.
+Initialization emits an empty list; absence reads as empty, malformed data fails.
+Recipes do not change the author's RootContract identity. Read them from the
+Before revision, send them with facts to the guest, validate the returned recipes
+and materialize them with the returned facts. Exclude them from source/config
+capture and reject `target/recipes.dhall`, like a parallel target fact edit.
+There is no target-manifest override of the evolved result.
+
+`root/kb.dhall` has no recipes field. Its ordinary exact-shape decoder rejects
+unexpected fields; do not add recognition of retired manifest fields or a second
+read path. The CLI guide explains the one-time repair for existing KBs: move
+entries to recipes.dhall and remove the field. An entry `{ name, instructions }` becomes
+`{ id = name, value = { instructions } }`. This is a one-time manual working-KB
+repair, not a versioned migration subsystem. Already accepted evolution archives
+remain readable without loading or rerunning their old source.
+
+Every observed boundary includes both domain facts and recipe data. The host
+checks their continuity from Before to the returned result and derives recipe
+additions, updates and removals by ID, beside domain fact changes under the same
+step rationale. Use a distinct recipe-change report case with typed before/after
+Recipe payloads, not a fake collection in the author's RootContract. Human and
+structured review display both:
+
+```haskell
+-- Host review data; FactChange retains the domain contract on its values.
+data Change
+  = DomainFactChange FactChange
+  | RecipeChange FactId (Maybe Recipe) (Maybe Recipe)
+
+data StepReport = StepReport Rationale [Change]
+```
+
+The two cases keep a recipe named `todos` distinct from a domain collection of
+that name; no reserved domain collection name is needed. Newly written archive records use version 3;
+readers retain versions 1 and 2 as reports with no recipe changes. Private
+candidates can be regenerated rather than carrying a compatibility migration.
+
+Resolve acknowledgements against the returned recipe set: an evolution can add a
+recipe and acknowledge evidence for it in the same result. Removing a recipe does
+not delete or mutate its host-maintained progress. Reusing its name restores that
+identity and its progress; a different task should use a different name. Queries
+and authored validators keep their existing domain-Root inputs; this change does
+not widen every guest entry point. Kernel recipe validation and discovery use the
+fixed shared type.
 
 CLI discovery is rooted at `root recipe list`, `root recipe show NAME`, and
 `root recipe pending list NAME PLUGIN INSTANCE`. List/show needs only the selected
-revision's manifest, not a schema or plugin compiler. The read-only `RecipeStore`
+revision's recipe data, not a schema or plugin compiler. The read-only `RecipeStore`
 capability exposes those selected root-document reads separately from schema opening:
 
 ```haskell
@@ -265,7 +342,7 @@ LoadCurationAt :: KnowledgeBase -> GitRevision
   -> RecipeStore m (Either [Diagnostic] CurationRegister)
 ```
 
-Its interpreter reads through Git and delegates manifest/register decoding to
+Its interpreter reads through Git and delegates recipe/register decoding to
 RootStore. It does not create another writer. Pending discovery prepares the
 selected connector, loads its current capture under that producer contract, reads
 the register from the same selected Git revision and performs the pure comparison.
@@ -336,7 +413,7 @@ handles used by KB tools. Scope data can be copied from evidence discovery;
 preparation checks its identity against retained evidence. `withCuration` appends
 its declarations after those already in the wrapped result. Composing different
 recipe contexts fails with `curation.recipe-conflict`; the host checks the selected
-recipe against the target manifest, allowing a new recipe and its first
+recipe against the returned recipe data, allowing a new recipe and its first
 acknowledgements in the same evolution.
 
 Preparation diagnostics give the author a concrete repair:
@@ -344,7 +421,7 @@ Preparation diagnostics give the author a concrete repair:
 | Code | Repair |
 | --- | --- |
 | `curation.recipe-invalid` | Use a valid recipe identifier. |
-| `curation.recipe-unknown` | Declare the recipe in the target manifest or select an existing one. |
+| `curation.recipe-unknown` | Add the recipe in this evolution or select a recipe present in its result. |
 | `curation.recipe-conflict` | Compose declarations for one recipe per evolution. |
 | `curation.scope-invalid` | Correct the plugin/instance/fetch fields or an empty evidence ID. |
 | `curation.scope-unavailable` | Inspect a fresh fetch and update the declaration to its scope. |
