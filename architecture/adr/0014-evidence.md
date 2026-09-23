@@ -293,10 +293,10 @@ and materialize them with the returned facts. Exclude them from source/config
 capture and reject `target/recipes.dhall`, like a parallel target fact edit.
 There is no target-manifest override of the evolved result.
 
-`root/kb.dhall` has no recipes field. For existing KBs, the decoder rejects that
-obsolete field with an actionable instruction to move entries to recipes.dhall
-and remove the field; it does not silently ignore them or choose between two
-authorities. An existing entry `{ name, instructions }` becomes
+`root/kb.dhall` has no recipes field. Its ordinary exact-shape decoder rejects
+unexpected fields; do not add recognition of retired manifest fields or a second
+read path. The CLI guide explains the one-time repair for existing KBs: move
+entries to recipes.dhall and remove the field. An entry `{ name, instructions }` becomes
 `{ id = name, value = { instructions } }`. This is a one-time manual working-KB
 repair, not a versioned migration subsystem. Already accepted evolution archives
 remain readable without loading or rerunning their old source.
