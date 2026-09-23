@@ -519,7 +519,7 @@ need not read the Kyyn repository or write MCP adapters to compose them.
 Change entries identify fetch/predecessor, change kind, evidence ID and citation;
 payload interpretation goes through plugin methods, not generic history payloads.
 
-The proposed recipe surface additionally lists/shows root-owned recipes and their
+The recipe surface lists/shows root-owned recipes and their
 instructions, and queries net pending changes for a recipe and connector instance.
 Results identify the selected fetch so authors can explicitly acknowledge that
 scope, not an unspecified latest capture. Keep raw acquisition history distinct
