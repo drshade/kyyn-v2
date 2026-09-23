@@ -327,7 +327,7 @@ evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvol
   CheckedValue _ input <- loadRootValueForChecking source >>= either (error . show) pure
   let fingerprint = contractFingerprint (contractId (rootSchema contract))
       observation = EvolutionObservation output [StepObservation (Rationale "Clear completed work" [])
-        (ObservedRoot fingerprint input) (ObservedRoot fingerprint output)]
+        (ObservedRoot fingerprint input) (ObservedRoot fingerprint output)] Nothing
   checked <- checkEvolutionReport contract input contract observation
   pure $ case checked of
     Left diagnostics -> Left (ProposedCodeRejected diagnostics)

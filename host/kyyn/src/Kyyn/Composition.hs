@@ -12,7 +12,11 @@ import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
 import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..))
-import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBaseScope)
+import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
+import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
+import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath, relativePath)
 import Kyyn.Domain.Plugin (pluginSource)
 import Kyyn.Domain.Publication (InitializationTarget(..))
@@ -74,7 +78,7 @@ import System.Directory (getCurrentDirectory)
 
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
 type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
-type Evaluation = EvolutionExecution ': Authoring
+type Evaluation = EvolutionExecution ': Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': EvidenceStore ': DocumentPersistence ': Runtime
 type Checking = RootExecution ': ToolPreparation ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
@@ -84,8 +88,9 @@ runAuthoring :: Host -> GuestToolchain -> FileTree -> Eff Authoring a -> IO (Eit
 runAuthoring host toolchain sdk = runRuntime host toolchain . runRootOpening sdk
   . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring
 
-runEvaluation :: Host -> GuestToolchain -> FileTree -> Eff Evaluation a -> IO (Either OperationalFailure a)
-runEvaluation host toolchain sdk = runAuthoring host toolchain sdk . runEvolutionExecution sdk
+runEvaluation :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Evaluation a -> IO (Either OperationalFailure a)
+runEvaluation host toolchain sdk scope = runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
+  . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
 
 runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)
 runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk
@@ -198,9 +203,11 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
         Right value -> case Store.workspaceLocation value of
           Left message -> refusal [errorDiagnostic "kb.path" message]
           Right path -> workspaceResult value (maybe revision id before) (scopedPath scope path)
-    Cli.CheckEvolution identity -> withRuntime host $ \toolchain sdk -> finish $
-      runEvaluation host toolchain sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
-        evolutionCheckResult identity <$> checkEvolution (workspace identity)
+    Cli.CheckEvolution identity -> case knowledgeBaseScope kb of
+      Left message -> pure (refusal [errorDiagnostic "kb.path" message])
+      Right kbScope -> withRuntime host $ \toolchain sdk -> finish $
+        runEvaluation host toolchain sdk kbScope . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
+          evolutionCheckResult identity <$> checkEvolution (workspace identity)
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached
       Just selected -> do

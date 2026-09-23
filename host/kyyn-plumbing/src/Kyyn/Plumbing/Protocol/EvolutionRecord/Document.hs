@@ -13,17 +13,18 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionId, evolutionId, evolutionIdName)
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
+import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
 
 recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Either [Diagnostic] (Shape, Value)
-recordDocument identity before after (EvolutionReport steps) = do
+recordDocument identity before after (EvolutionReport steps curation) = do
   encoded <- traverse step steps
   pure (recordShape before after,
     object ["version" .= ("1" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
-      "after" .= snapshotValue after, "steps" .= encoded])
+      "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation])
   where
     endpoints = [("Before",before),("After",after)]
     collections = collectionNames before after
@@ -52,7 +53,7 @@ headerShape :: Shape
 headerShape = Record headerFields
 
 recordShape :: RootContract -> RootContract -> Shape
-recordShape before after = Record (headerFields ++ [("steps",List step)])
+recordShape before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
   where
     fact collection = Union [(tag, Just (Record [("id",text),("value",shape)])) |
       (tag,contract) <- [("Before",before),("After",after)],
@@ -82,7 +83,8 @@ header = withObject "Evolution record" $ \record -> do
 decodeRecord :: RootContract -> RootContract -> Value -> Either String EvolutionReport
 decodeRecord before after = parseEither $ withObject "Evolution record" $ \record -> do
   steps <- record .: "steps" >>= traverse (step [("Before",before),("After",after)])
-  pure (EvolutionReport steps)
+  curation <- record .: "curation" >>= parseCuration
+  pure (EvolutionReport steps curation)
   where
     step :: [(String,RootContract)] -> Value -> Parser StepReport
     step endpoints = withObject "Step" $ \record -> do

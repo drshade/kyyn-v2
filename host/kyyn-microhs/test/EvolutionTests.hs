@@ -124,7 +124,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   replies <- traverse (right . decodeEvolutionReply . Text.encodeUtf8 . Text.pack)
     [line | line <- lines expected, take 1 line == "{"]
   case replies of
-    [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _)), Left refusal] -> do
+    [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _) _), Left refusal] -> do
       (_,EvolutionReport reports) <- right (runPureEff . runDhallHandling . runRootStore $
         checkEvolutionReport before input after observation)
       unless (length reports == 3 && all (\(StepReport _ changes) -> length changes == 1) reports)

@@ -74,7 +74,7 @@ main = do
       workspace = EvolutionWorkspace kb identity
       captured = EvolutionContext kb identity (Before revision schema)
         (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft) empty empty empty empty)
-      candidate = Candidate captured (EvolutionReport []) root
+      candidate = Candidate captured (EvolutionReport [] Nothing) root
       assert label condition = unless condition (fail label)
       runRoot :: RootCommand -> (Response, [String])
       runRoot request = runPureEff . runState ([] :: [String]) . storeRoot value . execution

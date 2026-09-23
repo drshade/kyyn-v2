@@ -1,5 +1,5 @@
 module Kyyn.Porcelain.Protocol.EvidencePersistence
-  ( encodeState, decodeState, decodeHeader, EvidenceHeader(..) ) where
+  ( encodeState, decodeState, decodeHeader, decodeHistory, EvidenceHeader(..) ) where
 
 import Data.Aeson (Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
@@ -25,10 +25,14 @@ stateShape payload = Record [("header",headerShape),("values",members),("history
   where
     evidence = Record [("fingerprint",text),("references",List text),("payload",payload)]
     members = List (Record [("id",text),("evidence",evidence)])
+    fetch = fetchShape
+
+fetchShape :: Shape
+fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker)]
+  where
     citation = Record ([(name,text) | name <- ["producer","connector","source"]] ++ [("references",List text)])
     marker = Record [("kind",Union [(name,Nothing) | name <- ["New","Updated","Removed"]]),
       ("id",text),("fingerprint",text),("citation",citation)]
-    fetch = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker)]
 
 text :: Shape
 text = Scalar TextScalar
@@ -54,6 +58,15 @@ decodeHeader :: DhallHandling :> es => ByteString -> Eff es (Either EvidenceProb
 decodeHeader bytes = case Text.decodeUtf8' bytes of
   Left problem -> pure (Left (InvalidEvidence (show problem)))
   Right source -> decode headerShape parseHeader ("let document = (\n" <> source <> "\n) in document.header")
+
+decodeHistory :: DhallHandling :> es => ByteString
+  -> Eff es (Either EvidenceProblem (EvidenceHeader, [Fetch]))
+decodeHistory bytes = case Text.decodeUtf8' bytes of
+  Left problem -> pure (Left (InvalidEvidence (show problem)))
+  Right source -> decode (Record [("header",headerShape),("history",List fetchShape)])
+    (withObject "Evidence history" $ \fields -> (,)
+      <$> (fields .: "header" >>= parseHeader) <*> (fields .: "history" >>= traverse parseFetch))
+    ("(" <> source <> "\n).{header,history}")
 
 encodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> EvidenceState CheckedValue
   -> Eff es (Either EvidenceProblem ByteString)
@@ -100,6 +113,19 @@ decodeState (EvidenceProducer producer identity) contract bytes
       <*> fields .: "references" <*> (CheckedValue identity <$> fields .: "payload")
     member = withObject "evidence member" $ \fields -> (,)
       <$> (EvidenceId <$> fields .: "id") <*> (fields .: "evidence" >>= evidence)
+    parseState = withObject "evidence state" $ \fields -> do
+      EvidenceHeader _ _ current <- fields .: "header" >>= parseHeader
+      values <- fields .: "values" >>= traverse member
+      history <- fields .: "history" >>= traverse parseFetch
+      let state = EvidenceState (Just current) values history
+      either (fail . show) pure (validateState state)
+      pure state
+
+parseFetch :: Value -> Parser Fetch
+parseFetch = withObject "fetch" $ \fields -> Fetch <$> (FetchId <$> fields .: "id")
+  <*> (fields .: "previous" >>= parseOptional) <*> fields .: "fetchedAt"
+  <*> (fields .: "changes" >>= traverse marker)
+  where
     kind = withObject "change kind" $ \fields -> do
       tag <- fields .: "tag"
       case tag :: String of
@@ -112,16 +138,6 @@ decodeState (EvidenceProducer producer identity) contract bytes
     marker = withObject "change marker" $ \fields -> EvidenceChangeMarker
       <$> (fields .: "kind" >>= kind) <*> (EvidenceId <$> fields .: "id")
       <*> (EvidenceFingerprint <$> fields .: "fingerprint") <*> (fields .: "citation" >>= citation)
-    fetch = withObject "fetch" $ \fields -> Fetch <$> (FetchId <$> fields .: "id")
-      <*> (fields .: "previous" >>= parseOptional) <*> fields .: "fetchedAt"
-      <*> (fields .: "changes" >>= traverse marker)
-    parseState = withObject "evidence state" $ \fields -> do
-      EvidenceHeader _ _ current <- fields .: "header" >>= parseHeader
-      values <- fields .: "values" >>= traverse member
-      history <- fields .: "history" >>= traverse fetch
-      let state = EvidenceState (Just current) values history
-      either (fail . show) pure (validateState state)
-      pure state
 
 decode :: DhallHandling :> es => Shape -> (Value -> Parser a) -> Text.Text -> Eff es (Either EvidenceProblem a)
 decode shape parser source = do

@@ -81,7 +81,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       report = EvolutionReport
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
-         StepReport (Rationale "No fact changes" []) []]
+         StepReport (Rationale "No fact changes" []) []] Nothing
       root = Root schema facts code sampleCuration
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
@@ -172,7 +172,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       migratedCapture = CapturedEvolution migratedContext (Root schema facts code sampleCuration) []
         (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] [] empty) [])
       migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
-        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
+        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]] Nothing
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
   migratedInput <- right migratedChecked
   migrated <- execute (evaluationMock migratedCapture
@@ -315,7 +315,7 @@ contractDescriptions baseline = do
         [FactChange "todos" (FactId "a") before after]
       report = EvolutionReport [step "Edit" (Just old) (Just changed),
         step "Migrate" (Just changed) (Just new), step "Delete" (Just new) Nothing,
-        step "Add" Nothing (Just new), StepReport (Rationale "No change" []) []]
+        step "Add" Nothing (Just new), StepReport (Rationale "No change" []) []] Nothing
   encoded <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema report)))
   decodedReport <- right (runPureEff (runDhallHandling (decodeEvolutionRecord encoded))) >>= right
   unless (decodedReport == (identity,baseline,schema,report))

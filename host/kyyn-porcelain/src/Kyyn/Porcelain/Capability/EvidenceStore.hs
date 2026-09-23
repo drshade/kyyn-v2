@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceStore
   ( EvidenceStore(..), evidenceHead, publishFetch, loadCurrentEvidence
-  , readFetchHistory, listEvidenceChanges, clearEvidence
+  , readFetchHistory, listEvidenceChanges, clearEvidence, resolveEvidenceCapture
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -21,6 +21,8 @@ data EvidenceStore :: Effect where
   ListEvidenceChanges :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
     -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
   ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m Bool
+  ResolveEvidenceCapture :: ConnectorInstanceRef -> FetchId
+    -> EvidenceStore m (Either EvidenceProblem EvidenceCapture)
 
 type instance DispatchOf EvidenceStore = Dynamic
 
@@ -40,3 +42,7 @@ listEvidenceChanges :: EvidenceStore :> es => ConnectorInstanceRef -> EvidencePr
 listEvidenceChanges instanceRef producer contract = send . ListEvidenceChanges instanceRef producer contract
 clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es Bool
 clearEvidence = send . ClearEvidence
+
+resolveEvidenceCapture :: EvidenceStore :> es => ConnectorInstanceRef -> FetchId
+  -> Eff es (Either EvidenceProblem EvidenceCapture)
+resolveEvidenceCapture instanceRef = send . ResolveEvidenceCapture instanceRef

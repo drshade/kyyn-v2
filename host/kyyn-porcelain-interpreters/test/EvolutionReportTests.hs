@@ -30,7 +30,7 @@ main = do
       observed c = ObservedRoot (contractFingerprint (contractId (rootSchema c)))
       step c a d b = StepObservation rationale (observed c a) (observed d b)
       check source value target steps output = runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport source value target (EvolutionObservation output steps)
+        checkEvolutionReport source value target (EvolutionObservation output steps Nothing)
       changed before after identifier = FactChange "todos" (FactId identifier) before after
       recorded c value = Just (RecordedFact c value)
   (checked, report) <- right (check old input old [step old input old edited] edited)
@@ -38,25 +38,25 @@ main = do
   assert (report == EvolutionReport [StepReport rationale
     [changed (recorded old (fact "a" "First")) (recorded old (fact "a" "Changed")) "a",
      changed (recorded old (fact "b" "Second")) Nothing "b",
-     changed Nothing (recorded old (fact "c" "New")) "c"]]) "Wrong identified additions/modifications/deletions"
-  (_,EvolutionReport reversed) <- right (check old input old
+     changed Nothing (recorded old (fact "c" "New")) "c"]] Nothing) "Wrong identified additions/modifications/deletions"
+  (_,EvolutionReport reversed _) <- right (check old input old
     [step old input old edited,step old edited old input] input)
   assert (length reversed == 2 && all (\(StepReport r cs) -> r == rationale && length cs == 3) reversed)
     "Cancelling edits or declared evidence disappeared"
   (_,empty) <- right (check old input old [] input)
-  assert (empty == EvolutionReport []) "Identity produced a report"
+  assert (empty == EvolutionReport [] Nothing) "Identity produced a report"
   let reordered = root [fact "b" "Second",fact "a" "First"]
   (_,reorderReport) <- right (check old input old [step old input old reordered] reordered)
-  assert (reorderReport == EvolutionReport [StepReport rationale []]) "Reordering became record edits"
+  assert (reorderReport == EvolutionReport [StepReport rationale []] Nothing) "Reordering became record edits"
   (_,metadataReport) <- right (check old input renamed [step old input renamed input] input)
   assert (metadataReport == EvolutionReport [StepReport rationale
-    [changed (recorded old f) (recorded renamed f) identifier | (identifier,f) <- [("a",fact "a" "First"),("b",fact "b" "Second")]]])
+    [changed (recorded old f) (recorded renamed f) identifier | (identifier,f) <- [("a",fact "a" "First"),("b",fact "b" "Second")]]] Nothing)
     "Metadata interpretation change disappeared"
   let migrated = root [object ["id" .= ("a" :: String),"value" .= object ["title" .= ("First" :: String),"done" .= False]]]
   (_,migration) <- right (check old input new [step old input new migrated] migrated)
   assert (migration == EvolutionReport [StepReport rationale
     [changed (recorded old (fact "a" "First")) (recorded new (object ["id" .= ("a" :: String),"value" .= object ["title" .= ("First" :: String),"done" .= False]])) "a",
-     changed (recorded old (fact "b" "Second")) Nothing "b"]]) "Migration lost old or new contract/value"
+     changed (recorded old (fact "b" "Second")) Nothing "b"]] Nothing) "Migration lost old or new contract/value"
   forM_
     [ check old input old [] edited
     , check old input renamed [] input
@@ -79,7 +79,7 @@ main = do
   let both = object ["todos" .= [fact "a" "First"],"other" .= [fact "a" "Second"]]
       moved = object ["todos" .= ([] :: [Value]),"other" .= [fact "a" "Second"]]
   (_,scoped) <- right (check two both two [step two both two moved] moved)
-  assert (scoped == EvolutionReport [StepReport rationale [changed (recorded two (fact "a" "First")) Nothing "a"]])
+  assert (scoped == EvolutionReport [StepReport rationale [changed (recorded two (fact "a" "First")) Nothing "a"]] Nothing)
     "Fact identity was not scoped to its collection"
   protocolTests
   putStrLn "Evolution chain, structural values, identity-based reports and protocol rejection checks passed."
@@ -88,19 +88,19 @@ protocolTests :: IO ()
 protocolTests = do
   let decode = decodeEvolutionReply . Lazy.toStrict . encode
       success value = object ["tag" .= ("Succeeded" :: String),"value" .= value]
-      output = object ["after" .= root [],"steps" .= ([] :: [Value])]
+      output = object ["after" .= root [],"steps" .= ([] :: [Value]),"curation" .= object ["tag" .= ("None" :: String)]]
   result <- right (decode (success output))
-  assert (result == Right (EvolutionObservation (root []) [])) "Success decoding changed value"
+  assert (result == Right (EvolutionObservation (root []) [] Nothing)) "Success decoding changed value"
   let citation = object ["producer" .= ("graph" :: String),"connector" .= ("work" :: String),
         "source" .= ("email-λ" :: String),"references" .= (["https://example.test/λ","/tmp/email"] :: [String])]
       boundary = object ["contract" .= ("contract-id" :: String),"value" .= root []]
       step evidence = object ["before" .= boundary,"after" .= boundary,
         "rationale" .= object ["explanation" .= ("Explain λ" :: String),"evidence" .= [evidence]]]
-      withStep value = success (object ["after" .= root [],"steps" .= [value]])
+      withStep value = success (object ["after" .= root [],"steps" .= [value],"curation" .= object ["tag" .= ("None" :: String)]])
   cited <- right (decode (withStep (step citation)))
   assert (cited == Right (EvolutionObservation (root [])
     [StepObservation (Rationale "Explain λ" [EvidenceRef "graph" "work" "email-λ" ["https://example.test/λ","/tmp/email"]])
-      (ObservedRoot "contract-id" (root [])) (ObservedRoot "contract-id" (root []))])) "Citation decoding lost identifiers or references"
+      (ObservedRoot "contract-id" (root [])) (ObservedRoot "contract-id" (root []))] Nothing)) "Citation decoding lost identifiers or references"
   rejected (decode (withStep (step (object ["producer" .= ("graph" :: String)]))))
   refusal <- right (decode (object ["tag" .= ("Rejected" :: String),"value" .=
     [object ["severity" .= object ["tag" .= ("Error" :: String)],"code" .= ("refused" :: String),

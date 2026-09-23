@@ -24,12 +24,29 @@ main = do
         [ StepObservation firstReason (recorded "old" 7) (recorded "old" 8)
         , StepObservation secondReason (recorded "old" 8) (recorded "old" 7)
         , StepObservation thirdReason (recorded "old" 7) (recorded "new" 7)
-        ]
+        ] Nothing
   assert "ordered observations/cancellation/metadata identity" (result == Right expected)
   assert "associativity" (evaluateEvolution ((a >=> b) >=> c) 7 == evaluateEvolution (a >=> (b >=> c)) 7)
   assert "left identity" (evaluateEvolution (identityEvolution >=> a) 7 == evaluateEvolution a 7)
   assert "right identity" (evaluateEvolution (a >=> identityEvolution) 7 == evaluateEvolution a 7)
-  assert "empty identity log" (evaluateEvolution identityEvolution (7 :: Integer) == Right (EvolutionOutput 7 []))
+  assert "empty identity log" (evaluateEvolution identityEvolution (7 :: Integer) == Right (EvolutionOutput 7 [] Nothing))
+  let recipe = RecipeId "syncTodos"
+      first = Curation recipe [EntireBatch (EvidenceScope "files" "todos" "f1")]
+      second = Curation recipe [IndividualRecords (EvidenceScope "files" "todos" "f2") [EvidenceId "one"]]
+      declared = withCuration first identityEvolution >=> withCuration second identityEvolution
+      expectedCuration = Curation recipe [EntireBatch (EvidenceScope "files" "todos" "f1"),
+        IndividualRecords (EvidenceScope "files" "todos" "f2") [EvidenceId "one"]]
+  assert "acknowledgement-only evolution and declaration order"
+    (evaluateEvolution declared (7 :: Integer) == Right (EvolutionOutput 7 [] (Just expectedCuration)))
+  assert "wrapping appends declarations"
+    (evaluateEvolution (withCuration second (withCuration first identityEvolution)) (7 :: Integer)
+      == evaluateEvolution declared 7)
+  assert "curation composition is associative"
+    (evaluateEvolution ((declared >=> a) >=> b) 7 == evaluateEvolution (declared >=> (a >=> b)) 7)
+  assert "different recipes refuse" (case evaluateEvolution
+    (declared >=> withCuration (Curation (RecipeId "prices") []) identityEvolution) (7 :: Integer) of
+      Left (EvolutionFailure [Diagnostic Error "curation.recipe-conflict" _ _]) -> True
+      _ -> False)
   let failure = EvolutionFailure [Diagnostic Error "test.refused" "No change" Nothing]
       refused = evolve old old firstReason (\_ -> Left failure)
       unreachable = evolve old new thirdReason (\_ -> error "Executed after failure")

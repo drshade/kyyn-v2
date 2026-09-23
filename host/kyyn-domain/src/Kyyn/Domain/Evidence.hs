@@ -5,6 +5,7 @@ module Kyyn.Domain.Evidence
   , EvidenceSnapshotRef(..), EvidenceProblem(..), ChangeKind(..), EvidenceChangeMarker(..), EvidenceChangeSummary(..)
   , applyChanges, recordChanges, fetchesSince, summarizeChanges, validateState
   , evidenceProblemDiagnostic, FetchSummary(..), summarizeFetch
+  , EvidenceCapture(..), captureEvidence, resolveCapture
   ) where
 
 import Control.Monad (foldM, unless)
@@ -33,6 +34,31 @@ data EvidenceState a = EvidenceState
 data CurrentEvidence = CurrentEvidence
   { snapshot :: EvidenceSnapshotRef, items :: [(EvidenceId, Evidence CheckedValue)]
   } deriving (Eq, Show)
+data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef [(EvidenceId, EvidenceFingerprint)] deriving (Eq, Show)
+
+captureEvidence :: CurrentEvidence -> EvidenceCapture
+captureEvidence (CurrentEvidence snapshot items) = EvidenceCapture snapshot
+  [(item,token) | (item,Evidence token _ _) <- items]
+
+resolveCapture :: ConnectorInstanceRef -> EvidenceProducer -> FetchId -> [Fetch] -> FetchId
+  -> Either EvidenceProblem EvidenceCapture
+resolveCapture instanceRef producer current history selected = do
+  values <- foldM applyMarker [] [marker | Fetch _ _ _ markers <- history, marker <- markers]
+  validateState (EvidenceState (Just current) values history)
+  prefix <- through history
+  selectedValues <- foldM applyMarker [] [marker | Fetch _ _ _ markers <- prefix, marker <- markers]
+  pure (EvidenceCapture (EvidenceSnapshotRef instanceRef producer selected)
+    [(item,token) | (item,Evidence token _ _) <- selectedValues])
+  where
+    through [] = Left CursorUnavailable
+    through (entry@(Fetch identity _ _ _) : rest)
+      | identity == selected = Right [entry]
+      | otherwise = (entry :) <$> through rest
+    applyMarker entries (EvidenceChangeMarker kind key token (EvidenceRef _ _ _ refs)) =
+      either (Left . InvalidEvidence . show) Right $ applyChanges entries [case kind of
+        New -> NewEvidence key (Evidence token refs ())
+        Updated -> UpdatedEvidence key (Evidence token refs ())
+        Removed -> RemovedEvidence key]
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
 data EvidenceProblem = CursorUnavailable | NotFetched | ProducerContractChanged
   | BaseSnapshotConflict | InvalidDelta String | InvalidEvidence String

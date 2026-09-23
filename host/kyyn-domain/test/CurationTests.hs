@@ -1,14 +1,12 @@
 module Main (main) where
 
 import Control.Monad (unless)
-import Data.Aeson (Value(Null))
 import Data.Either (isLeft)
 import Kyyn.Domain.Contract (ContractId, checkContract, contractId)
 import Kyyn.Domain.Curation
 import Kyyn.Domain.DataType (DataType(StringType))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName)
-import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 
 assert :: String -> Bool -> IO ()
@@ -32,18 +30,18 @@ instanceA, instanceB :: ConnectorInstanceRef
 instanceA = ConnectorInstanceRef (either error id (pluginName "files")) "a"
 instanceB = ConnectorInstanceRef (either error id (pluginName "files")) "b"
 
-capture :: ConnectorInstanceRef -> EvidenceProducer -> String -> [(String,String)] -> CurrentEvidence
-capture instanceRef source fetch entries = CurrentEvidence
+capture :: ConnectorInstanceRef -> EvidenceProducer -> String -> [(String,String)] -> EvidenceCapture
+capture instanceRef source fetch entries = EvidenceCapture
   (EvidenceSnapshotRef instanceRef source (FetchId fetch))
-  [(EvidenceId key, Evidence (EvidenceFingerprint token) [] (CheckedValue contract Null)) | (key,token) <- entries]
+  [(EvidenceId key, EvidenceFingerprint token) | (key,token) <- entries]
 
-at :: String -> [(String,String)] -> CurrentEvidence
+at :: String -> [(String,String)] -> EvidenceCapture
 at = capture instanceA producer
 
-expect :: String -> RecipeId -> CurationRegister -> CurrentEvidence -> [(String,ChangeKind)] -> IO ()
+expect :: String -> RecipeId -> CurationRegister -> EvidenceCapture -> [(String,ChangeKind)] -> IO ()
 expect label selected register current expected = do
   PendingEvidence scope actual <- right (pendingEvidence selected register current)
-  let CurrentEvidence original _ = current
+  let EvidenceCapture original _ = current
   assert (label ++ " scope") (scope == original)
   assert label (actual == [(EvidenceId key,kind) | (key,kind) <- expected])
 

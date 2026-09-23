@@ -261,7 +261,7 @@ introducingCommits kb@(KnowledgeBase repository _) identity before visited (revi
       pure (if introduced then revision:rest else rest)
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
-checkSavedReport operation (EvolutionReport steps) = forM_ steps $ \(StepReport _ changes) ->
+checkSavedReport operation (EvolutionReport steps _) = forM_ steps $ \(StepReport _ changes) ->
   forM_ changes $ \(FactChange collection (FactId identity) before after) -> do
     unless (before /= Nothing || after /= Nothing)
       (storageFailure operation "candidate.dhall" "Fact change has neither a before nor an after value")

@@ -71,7 +71,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       captured = capture target
   expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
   result <- execute identityEntry root captured
-  unless (result == Right (Right (EvaluatedEvolution captured (After contract) expected (EvolutionReport []))))
+  unless (result == Right (Right (EvaluatedEvolution captured (After contract) expected (EvolutionReport [] Nothing))))
     (fail ("Execution lost selected Before or captured context: " ++ show result))
   let errors = [errorDiagnostic "guest.compiler-rejected" "bad evolution type"]
   compilation <- execute (Left errors) root captured

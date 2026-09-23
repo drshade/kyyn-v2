@@ -9,7 +9,7 @@ import qualified Data.Text.Encoding as Text
 import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (CheckedContract, contractFingerprint)
+import Kyyn.Domain.Contract (CheckedContract, contractFingerprint, parseContractFingerprint)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.KnowledgeBase (cacheLocation)
 import qualified Kyyn.Domain.Failure as Failure
@@ -64,6 +64,11 @@ runEvidenceStore kb = interpret $ \_ -> \case
     selected <- liftEither (fetchesSince state since)
     pure (snapshot,summarizeChanges selected)
   ClearEvidence instanceRef -> locked instanceRef Document.clearCurrent
+  ResolveEvidenceCapture instanceRef selected -> locked instanceRef $ runExceptT $ do
+    contents <- readCurrent >>= maybe (throwE NotFetched) pure
+    (EvidenceHeader package fingerprint current, history) <- ExceptT (decodeHistory contents)
+    contract <- either (throwE . InvalidEvidence) pure (parseContractFingerprint fingerprint)
+    liftEither (resolveCapture instanceRef (EvidenceProducer package contract) current history selected)
   where
     locked :: ConnectorInstanceRef -> Eff (DocumentAccess : es) b -> Eff es b
     locked instanceRef action =
