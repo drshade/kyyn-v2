@@ -236,7 +236,7 @@ and uses ordinary investigation and evolution tools.
 
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.
-data Recipe = Recipe { instructions :: String }
+data Recipe = Recipe { recipeInstructions :: String }
 data KnowledgeBase facts = KnowledgeBase facts [Fact Recipe]
 
 -- Author-facing optics/edit handles; their implementation owns the wrapper.
