@@ -284,6 +284,15 @@ can investigate, then write literal fact edits with rationale in an evolution;
 that evolution need not replay the agent's investigation. An evolution can reuse
 the same helpers when the transformation itself should calculate from evidence.
 
+### Recipe-guided authoring
+
+[ADR 0014](0014-evidence.md) owns recipes, their agent instructions and declared
+curation progress. A recipe is not another executable registry entry alongside
+queries and tools. An agent uses those existing entries to investigate, then
+prepares an evolution following the selected recipe. Generated SDK helpers expose
+the acknowledgement vocabulary without requiring register or fingerprint plumbing
+in authored code. Recipe discovery does not launch an agent or prescribe its steps.
+
 ### Shared authoring vocabulary
 
 Pure calculations are reusable from validation, queries and views. Provide a

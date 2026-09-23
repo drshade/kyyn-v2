@@ -62,6 +62,7 @@ identityEvolution :: Evolution a a
 data EvolutionOutput a = EvolutionOutput
   { value        :: a
   , observations :: [StepObservation]
+  , curation     :: Maybe Curation
   }
 
 data StepObservation  -- rationale paired with encoded before/after root values
@@ -78,6 +79,14 @@ entry in `pure . evaluateEvolution`. Generated step constructors use
 `Kyyn.Evolution.Internal`, which an author can also import from the vendored source.
 Public exports guide construction; they do not enforce observation completeness.
 The host's contract/value and chain checks below are the actual boundary checks.
+
+The proposed `curation` addition and its SDK attachment helper follow
+[ADR 0014](0014-evidence.md): one optional recipe context with explicit handled
+evidence, independent of step citations. It is not implemented yet. Candidate
+preparation resolves its declarations into host-owned progress and saves both
+with the result for review/publication. An acknowledgement-only identity evolution
+is valid; an ordinary evolution can omit curation. Neither case adds a required
+entry-point function or exposes the progress register to the guest.
 
 One workspace has exactly two endpoint contracts: Before and After. Optional
 Before edits precede a transition to After; After edits follow it. Same-contract
