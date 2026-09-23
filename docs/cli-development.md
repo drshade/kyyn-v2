@@ -293,3 +293,22 @@ Existing KB manifests without tools need this field in `kb.dhall`:
 
 New KBs already include it. An older captured evolution may need the same manifest
 update before it can be checked with this development build.
+
+## Recipe declarations and curation progress
+
+The root manifest now requires a `recipes` field. For a KB without recipes, add:
+
+```dhall
+, recipes = [] : List { name : Text, instructions : Text }
+```
+
+For a recipe, use a declaration such as
+`{ name = "syncTodos", instructions = "Inspect item/status evidence and update todos." }`.
+Names follow the connector-binding identifier rule and must be unique among recipes.
+New KBs include the empty field. Older manifests, including captured evolution
+inputs, need the field before checking with this build.
+
+The host stores acknowledged evidence in `root/curation.dhall`; a missing file
+means no acknowledgements. It is not part of the guest Root schema or copied into
+evolution targets. Ordinary evolutions preserve it through acceptance. Recipe
+commands and guest acknowledgement declarations are not yet implemented.

@@ -2,6 +2,8 @@
 module RootExportTests (rootExportTests) where
 
 import Kyyn.Domain.Curation (emptyCurationRegister)
+import CurationPersistenceTests (sampleCuration)
+import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
 import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
@@ -54,14 +56,15 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
       manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, recipes = [] : List { name : Text, instructions : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       completeCode = tree ([(p,if relativeName p == "kb.dhall" then manifest else b) | (p,b) <- files code] ++ [(path "plugins/config/example.dhall","{ enabled = True }"),
         (path "assets/template.bin",Bytes.pack [0..255])])
-      root = Root contract facts completeCode emptyCurationRegister
+      root = Root contract facts completeCode sampleCuration
       storage action = runPureEff (runDhallHandling (runRootStore action))
       outcome = runPureEff . checkingMock root . runDhallHandling . runRootStore $ checkRoot root
   checked <- case outcome of
     Passed value _ -> pure value
     _ -> fail (show outcome)
   exported <- either (fail . show) pure (storage (exportRootFiles checked))
-  unless (exported == tree (files facts ++ files completeCode) && validatedValue checked == root)
+  progress <- either (fail . show) pure (runPureEff (runDhallHandling (encodeRegister sampleCuration)))
+  unless (exported == tree ((curationLocation,progress) : files facts ++ files completeCode) && validatedValue checked == root)
     (fail "Export substituted or rerendered the validated root")
   let process args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess

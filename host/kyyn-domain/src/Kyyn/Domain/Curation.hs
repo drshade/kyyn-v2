@@ -11,7 +11,7 @@ import Kyyn.Domain.Plugin (bindingName, pluginNameText, PackageIdentity(..))
 
 newtype RecipeId = RecipeId String deriving (Eq, Show)
 recipeId :: String -> Either String RecipeId
-recipeId value = RecipeId value <$ bindingName value
+recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId value))) (bindingName value)
 data Recipe = Recipe { name :: RecipeId, instructions :: String } deriving (Eq, Show)
 data Acknowledgement = EntireBatch | IndividualRecords [EvidenceId] deriving (Eq, Show)
 

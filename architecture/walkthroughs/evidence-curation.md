@@ -9,8 +9,8 @@ yet. Types/helper names below illustrate the intended author experience.
 
 A todo KB has two root-owned recipes:
 
-- `sync-todos`: interpret item/status documents and update todos.
-- `grocery-prices`: inspect supermarket prices and update relevant grocery todos.
+- `syncTodos`: interpret item/status documents and update todos.
+- `groceryPrices`: inspect supermarket prices and update relevant grocery todos.
 
 Their instructions explain the domain work to the agent. They do not define kernel
 execution steps. The KB configures a file connector and two supermarket connector
@@ -27,7 +27,7 @@ F1: New milk.txt, New temporary.txt
 F2: Updated milk.txt, Removed temporary.txt
 ```
 
-Only current payloads remain. Asking for pending evidence for `sync-todos`, which
+Only current payloads remain. Asking for pending evidence for `syncTodos`, which
 has no prior acknowledgements, returns milk as New at its F2 state. The temporary
 item has disappeared without being processed and is not pending. Raw fetch history
 still shows both batches; pending work is a different view.
@@ -53,7 +53,7 @@ host resolves the declared state while preparing the candidate and shows the
 acknowledgement with the fact diff. Acceptance commits facts, the progress update
 and the evolution archive together. A rejected candidate acknowledges nothing.
 
-If F3 removes milk after this acceptance, removal is pending for `sync-todos`.
+If F3 removes milk after this acceptance, removal is pending for `syncTodos`.
 That differs from temporary.txt: milk was acknowledged, even though no whole batch
 was handled. The recipe's instructions and agent reasoning determine whether the
 corresponding todo should be removed, retained or changed.
