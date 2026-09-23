@@ -114,7 +114,7 @@ data RootStore :: Effect where
     :: Validated Root -> RootStore m (Either [Diagnostic] FileTree)
   MaterializeRoot
     :: RootContract -> CodeSnapshot -> KnowledgeBase CheckedValue
-    -> RootStore m Root
+    -> RootStore m (Either [Diagnostic] Root)
 
 runRootStore
   :: DhallHandling :> es

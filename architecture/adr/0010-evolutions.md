@@ -935,7 +935,7 @@ Transformation code may change structure in ways no optic can infer automaticall
 On the host, derive a reviewable ordered report from the annotated boundaries:
 
 ```haskell
-newtype EvolutionReport = EvolutionReport [StepReport]
+data EvolutionReport = EvolutionReport [StepReport] (Maybe Curation)
 
 data StepReport = StepReport
   { rationale :: Rationale
@@ -979,10 +979,10 @@ descriptions supplied by the guest:
 ```haskell
 checkEvolutionReport
   :: RootStore :> es
-  => RootContract -> Value  -- selected Before and its decoded value
+  => RootContract -> KnowledgeBase Value  -- selected Before and its decoded value
   -> RootContract           -- inspected target
   -> EvolutionObservation   -- decoded guest After value and step observations
-  -> Eff es (Either [Diagnostic] (CheckedValue, EvolutionReport))
+  -> Eff es (Either [Diagnostic] (KnowledgeBase CheckedValue, EvolutionReport))
 ```
 
 This capability function checks every annotated boundary value through

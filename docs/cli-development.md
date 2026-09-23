@@ -107,6 +107,7 @@ An authored entry is the evolution itself, with a rationale for each step:
 ```haskell
 module Evolution where
 import Kyyn.Workspace.Evolution
+import Kyyn.Schema (FactId(..))
 import qualified RootV1 as Before
 import qualified RootV2 as After
 import qualified Kyyn.Workspace.Before as BeforeCollections
