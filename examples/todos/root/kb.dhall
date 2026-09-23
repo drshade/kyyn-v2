@@ -5,4 +5,9 @@
     { name : Text, description : Text, implementation : Text
     , inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text
     }
+, tools = [] : List
+    { name : Text, description : Text, implementation : Text
+    , inputType : Text, resultType : Text
+    }
+, recipes = [] : List { name : Text, instructions : Text }
 }
