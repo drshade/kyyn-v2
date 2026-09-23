@@ -1,18 +1,18 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: proposed
+status: accepted
 date: 2026-09-23
 ---
 # Latest evidence and recipe-scoped declared curation
 
 Basis: owner-directed latest-only evidence and recipe-scoped acknowledgements.
-This revision proposes their interface and persistence mechanics for review.
+The interface and persistence mechanics were accepted in the design review.
 Latest-only storage, acquisition, typed plugin reads and composed KB tools are
 implemented. Recipe manifest declarations, register persistence/preservation and
 the pure host comparison/acknowledgement operations are implemented. Guest
-acknowledgement declarations, their preparation-time resolution and recipe/pending
-surfaces are not yet implemented.
+acknowledgement declarations and their preparation-time resolution are implemented;
+recipe/pending discovery surfaces remain outstanding.
 
 ## Context
 
@@ -301,6 +301,34 @@ capture's retained identity/change metadata, including deletion states, and
 derives progress from the Before root's register. The guest does not construct
 register maps or look up fingerprints. Unknown scopes
 or insufficient history are explicit diagnostics, never a substitution of latest.
+The current implementation projects the stored header and history, validates the
+marker chain and reconstructs item states from its first fetch through the named
+fetch. Missing evidence or a chain which no longer contains that fetch gives
+`curation.scope-unavailable`. It does not reconstruct payloads. The resolved
+producer is the stored header's producer, not the currently installed plugin:
+acknowledging an older producer records that producer; pending comparison against
+a newer producer then requires reconciliation with an entire batch.
+
+The guest's `EvidenceScope` currently contains plugin name, instance name and
+fetch ID strings. Evolution entries do not yet receive the generated connector
+handles used by KB tools. Scope data can be copied from evidence discovery;
+preparation checks its identity against retained evidence. `withCuration` appends
+its declarations after those already in the wrapped result. Composing different
+recipe contexts fails with `curation.recipe-conflict`; the host checks the selected
+recipe against the target manifest, allowing a new recipe and its first
+acknowledgements in the same evolution.
+
+Preparation diagnostics give the author a concrete repair:
+
+| Code | Repair |
+| --- | --- |
+| `curation.recipe-invalid` | Use a valid recipe identifier. |
+| `curation.recipe-unknown` | Declare the recipe in the target manifest or select an existing one. |
+| `curation.recipe-conflict` | Compose declarations for one recipe per evolution. |
+| `curation.scope-invalid` | Correct the plugin/instance/fetch fields or an empty evidence ID. |
+| `curation.scope-unavailable` | Inspect a fresh fetch and update the declaration to its scope. |
+| `curation.progress` | For a changed producer, reconcile an entire batch; for malformed captured IDs/fingerprints, repair or refetch the evidence as the message directs. |
+
 For an individual declaration, presence at the selected fetch supplies its
 fingerprint; absence removes its acknowledged entry. Absence can be established
 from a complete capture even after a fresh clone/refetch, without a historical
@@ -485,4 +513,4 @@ and deletions without old fetch history. Cover acknowledgement of deletion after
 that refetch, failed fetch versus empty capture, and producer mismatch/reconciliation.
 
 The [curation walkthrough](../walkthroughs/evidence-curation.md) illustrates the
-proposed recipe journey; it does not claim curation bookkeeping is implemented.
+complete intended journey; recipe/pending CLI discovery is not yet implemented.

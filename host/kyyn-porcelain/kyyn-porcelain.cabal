@@ -29,6 +29,7 @@ library
     Kyyn.Porcelain.Capability.EvolutionReport
     Kyyn.Porcelain.Capability.EvolutionExecution
     Kyyn.Porcelain.Capability.Evolution
+    Kyyn.Porcelain.Capability.Curation
     Kyyn.Porcelain.Capability.RootExecution
     Kyyn.Porcelain.Capability.Validation
     Kyyn.Porcelain.Validated

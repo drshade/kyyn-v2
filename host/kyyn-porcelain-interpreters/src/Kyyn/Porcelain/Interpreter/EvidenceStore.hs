@@ -9,12 +9,12 @@ import qualified Data.Text.Encoding as Text
 import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (CheckedContract, contractFingerprint)
+import Kyyn.Domain.Contract (CheckedContract, contractFingerprint, parseContractFingerprint)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.KnowledgeBase (cacheLocation)
 import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Path (DirectoryScope, scopePath, relativeName, directoryScope)
-import Kyyn.Domain.Plugin (pluginNameText)
+import Kyyn.Domain.Plugin (pluginNameText, PackageIdentity(..))
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence, DocumentAccess, DocumentStamp(..), withLockedDocument)
@@ -64,6 +64,12 @@ runEvidenceStore kb = interpret $ \_ -> \case
     selected <- liftEither (fetchesSince state since)
     pure (snapshot,summarizeChanges selected)
   ClearEvidence instanceRef -> locked instanceRef Document.clearCurrent
+  ResolveEvidenceCapture instanceRef selected -> locked instanceRef $ runExceptT $ do
+    contents <- readCurrent >>= maybe (throwE NotFetched) pure
+    (EvidenceHeader package@(PackageIdentity identity) fingerprint current, history) <- ExceptT (decodeHistory contents)
+    unless (not (null identity)) (throwE (InvalidEvidence "Empty evidence producer"))
+    contract <- either (throwE . InvalidEvidence) pure (parseContractFingerprint fingerprint)
+    liftEither (resolveCapture instanceRef (EvidenceProducer package contract) current history selected)
   where
     locked :: ConnectorInstanceRef -> Eff (DocumentAccess : es) b -> Eff es b
     locked instanceRef action =

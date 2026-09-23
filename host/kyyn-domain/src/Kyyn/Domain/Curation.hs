@@ -8,8 +8,8 @@ module Kyyn.Domain.Curation
 import Data.List (nub, sortOn)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (bindingName, pluginNameText, PackageIdentity(..))
+import Kyyn.Types.Curation (RecipeId(..))
 
-newtype RecipeId = RecipeId String deriving (Eq, Show)
 recipeId :: String -> Either String RecipeId
 recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId value))) (bindingName value)
 data Recipe = Recipe { name :: RecipeId, instructions :: String } deriving (Eq, Show)
@@ -54,9 +54,9 @@ emptyCurationRegister :: CurationRegister
 emptyCurationRegister = CurationRegister []
 
 -- The supplied capture is the resolved declaration scope, not a lookup of latest.
-acknowledgeEvidence :: RecipeId -> Acknowledgement -> CurrentEvidence
+acknowledgeEvidence :: RecipeId -> Acknowledgement -> EvidenceCapture
   -> CurationRegister -> Either CurationProblem CurationRegister
-acknowledgeEvidence recipe selection capture@(CurrentEvidence (EvidenceSnapshotRef instanceRef producer _) _) (CurationRegister entries) = do
+acknowledgeEvidence recipe selection capture@(EvidenceCapture (EvidenceSnapshotRef instanceRef producer _) _) (CurationRegister entries) = do
   current <- fingerprints capture
   let key = (recipe, instanceRef)
       prior = lookup key entries
@@ -68,9 +68,9 @@ acknowledgeEvidence recipe selection capture@(CurrentEvidence (EvidenceSnapshotR
         ++ [(item, token) | (item, token) <- current, item `elem` ids])
   pure (CurationRegister (replace key (Progress producer next) entries))
 
-pendingEvidence :: RecipeId -> CurationRegister -> CurrentEvidence
+pendingEvidence :: RecipeId -> CurationRegister -> EvidenceCapture
   -> Either CurationProblem PendingEvidence
-pendingEvidence recipe (CurationRegister entries) capture@(CurrentEvidence snapshot@(EvidenceSnapshotRef instanceRef producer _) _) = do
+pendingEvidence recipe (CurationRegister entries) capture@(EvidenceCapture snapshot@(EvidenceSnapshotRef instanceRef producer _) _) = do
   current <- fingerprints capture
   old <- compatible producer (lookup (recipe, instanceRef) entries)
   let present = [(item, maybe New (const Updated) (lookup item old)) |
@@ -85,13 +85,12 @@ compatible producer (Just (Progress previous items))
   | producer == previous = Right items
   | otherwise = Left CurationProducerChanged
 
-fingerprints :: CurrentEvidence -> Either CurationProblem [(EvidenceId, EvidenceFingerprint)]
-fingerprints (CurrentEvidence _ items)
+fingerprints :: EvidenceCapture -> Either CurationProblem [(EvidenceId, EvidenceFingerprint)]
+fingerprints (EvidenceCapture _ values)
   | length keys /= length (nub keys) = Left (InvalidCurationCapture "Duplicate evidence IDs")
   | any invalid values = Left (InvalidCurationCapture "Empty evidence ID or fingerprint")
   | otherwise = Right values
   where
-    values = [(item, token) | (item, Evidence token _ _) <- items]
     keys = map fst values
     invalid (EvidenceId item, EvidenceFingerprint token) = null item || null token
 

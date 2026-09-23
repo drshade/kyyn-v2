@@ -27,6 +27,7 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (Rationale(..))
+import qualified Kyyn.Types.Curation as Curation
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
 import Kyyn.Types.SchemaMetadata
@@ -40,6 +41,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution, checkEvolution)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionStore
@@ -56,7 +58,7 @@ import System.Directory (listDirectory, removeFile, createDirectoryIfMissing, do
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
-type StoreEffects = '[EvolutionStore, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
+type StoreEffects = '[EvidenceStore, EvolutionStore, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
 
 candidateTests :: RootContract -> FileTree -> IO ()
 candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \directory -> do
@@ -81,12 +83,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       report = EvolutionReport
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
-         StepReport (Rationale "No fact changes" []) []]
+         StepReport (Rationale "No fact changes" []) []] Nothing
       root = Root schema facts code sampleCuration
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
       execute = runEff . runFailure . runFileSystemIO scope . runDhallHandling . runRootStore
-        . runWorkspaceStore . noGit . runEvolutionStore
+        . runWorkspaceStore . noGit . runEvolutionStore . noEvidence
       candidateDir = directory </> "nested/kb/.kyyn/candidates"
       cache = directory </> "nested/kb/.kyyn"
       ignoreFile = cache </> ".gitignore"
@@ -124,12 +126,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
     other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)
   Bytes.writeFile capturedManifest currentManifest
-  let futureRecord = "(" <> metadata <> ") // { version = +2 }"
+  let futureRecord = "(" <> metadata <> ") // { version = +3 }"
   case runPureEff (runDhallHandling (decodeEvolutionRecord futureRecord)) of
     Right (Left [Diagnostic Error "evolution.record-format" message _])
       | not ("apply" `isInfixOf` message) -> pure ()
     other -> fail ("Unsupported archive format was corruption or requested replay: " ++ show other)
-  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +2, content = True }")) of
+  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +3, content = True }")) of
     Right (Left [Diagnostic Error "evolution.record-format" _ _]) -> pure ()
     other -> fail ("Unsupported version required the current schema: " ++ show other)
   Bytes.writeFile metadataPath futureRecord
@@ -172,7 +174,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       migratedCapture = CapturedEvolution migratedContext (Root schema facts code sampleCuration) []
         (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] [] empty) [])
       migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
-        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
+        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]] Nothing
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
   migratedInput <- right migratedChecked
   migrated <- execute (evaluationMock migratedCapture
@@ -202,7 +204,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     other -> fail ("Invalid materialization returned a candidate: " ++ show other)
   let failure = StorageUnavailable (StorageDiagnostic ReplaceFile "latest/e001" "Cannot publish")
   failed <- runEff . runFailure . runFileSystemIO scope . failPublication failure . runDhallHandling
-    . runRootStore . runWorkspaceStore . noGit . runEvolutionStore $
+    . runRootStore . runWorkspaceStore . noGit . runEvolutionStore . noEvidence $
       evaluationMock captured (Right evaluated) (applyEvolution captured)
   unless (failed == Left failure) (fail "Failed save returned a successful candidate")
   afterFailure <- Char8.readFile pointer
@@ -316,10 +318,19 @@ contractDescriptions baseline = do
       report = EvolutionReport [step "Edit" (Just old) (Just changed),
         step "Migrate" (Just changed) (Just new), step "Delete" (Just new) Nothing,
         step "Add" Nothing (Just new), StepReport (Rationale "No change" []) []]
+        (Just (Curation.Curation (Curation.RecipeId "syncTodos")
+          [Curation.EntireBatch (Curation.EvidenceScope "files" "documents" "first"),
+           Curation.IndividualRecords (Curation.EvidenceScope "files" "other" "second") []]))
   encoded <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema report)))
   decodedReport <- right (runPureEff (runDhallHandling (decodeEvolutionRecord encoded))) >>= right
   unless (decodedReport == (identity,baseline,schema,report))
     (fail "Dhall record changed migration steps, typed payloads or optional fact sides")
+  let oldRecord = "(" <> encoded <> ").{identity,before,after,steps} // { version = +1 }"
+  (_,_,_,EvolutionReport oldSteps oldCuration) <- right
+    (runPureEff (runDhallHandling (decodeEvolutionRecord oldRecord))) >>= right
+  let EvolutionReport expectedSteps _ = report
+  unless (oldSteps == expectedSteps && oldCuration == Nothing)
+    (fail "Version-one archive did not remain readable without curation")
   forM_ [baseline,schema] $ \selected -> do
     source <- right (runPureEff (runDhallHandling (encodeValue snapshotShape (snapshotValue selected))))
     document <- right (runPureEff (runDhallHandling (decodeValue snapshotShape source)))
@@ -337,6 +348,9 @@ contractDescriptions baseline = do
 
 noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Candidate operation read Git"
+
+noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
+noEvidence = interpret $ \_ _ -> error "No declaration should access evidence"
 
 captureMock :: EvolutionWorkspace -> CapturedEvolution -> Eff (EvolutionAuthoring : es) a -> Eff es a
 captureMock expected captured = interpret $ \_ -> \case

@@ -67,18 +67,18 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
             (fail "Execution must consume the prepared target without inspecting again")
           _ -> pure ()
         pure result
-      identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")
+      identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[],\"curation\":{\"tag\":\"None\"}}}' \"$input\"")
       captured = capture target
   expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
   result <- execute identityEntry root captured
-  unless (result == Right (Right (EvaluatedEvolution captured (After contract) expected (EvolutionReport []))))
+  unless (result == Right (Right (EvaluatedEvolution captured (After contract) expected (EvolutionReport [] Nothing))))
     (fail ("Execution lost selected Before or captured context: " ++ show result))
   let errors = [errorDiagnostic "guest.compiler-rejected" "bad evolution type"]
   compilation <- execute (Left errors) root captured
   unless (compilation == Right (Left (ProposedCodeRejected errors))) (fail "Compile failure became guest refusal")
   refusal <- execute (Right (entry "printf '{\"tag\":\"Rejected\",\"value\":[]}'")) root captured
   unless (refusal == Right (Left (EvolutionRejected (EvolutionFailure [])))) (fail "Guest refusal lost its classification")
-  invalidOutput <- execute (Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":null,\"steps\":[]}}'")) root captured
+  invalidOutput <- execute (Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":null,\"steps\":[],\"curation\":{\"tag\":\"None\"}}}'")) root captured
   case invalidOutput of
     Right (Left (ProposedCodeRejected _)) -> pure ()
     _ -> fail "Host output rejection was misclassified as guest refusal"

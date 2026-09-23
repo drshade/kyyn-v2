@@ -2,8 +2,8 @@
 
 This illustrates the proposed [curation decision](../adr/0014-evidence.md), not
 a runnable script. Acquisition, latest-only storage, typed plugin reads and KB
-helpers exist; recipes, acknowledgement helpers and pending-work discovery do not
-yet. Types/helper names below illustrate the intended author experience.
+helpers, recipe declarations and acknowledgement helpers exist; pending-work
+discovery does not yet. Scope variables below stand for specific instance/fetch data.
 
 ## 1. Define the tasks and sources
 

@@ -91,7 +91,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       prepared <- openCapturedSource target >>= either (error . show) pure
       evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles emptyCurationRegister) closure prepared)
-  EvaluatedEvolution preserved (After afterContract) checked@(CheckedValue _ value) (EvolutionReport reports) <- right result >>= right
+  EvaluatedEvolution preserved (After afterContract) checked@(CheckedValue _ value) (EvolutionReport reports _) <- right result >>= right
   unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 3 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
     (fail ("Unexpected evaluated workspace: " ++ show result))
