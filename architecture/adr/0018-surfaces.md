@@ -499,16 +499,23 @@ or proposal-submission effect is needed. Plugin acquisition methods may be expos
 directly without implying a change to accepted knowledge.
 
 For evidence investigation, expose configured instance discovery, fetch history
-and the payload-free change index since a curation cursor, alongside each plugin's own documented read
-methods. Registered KB helpers have the same typed discovery/invocation experience;
-agents need not read the Kyyn repository or write MCP adapters to compose them.
+and the raw payload-free change index alongside plugin-specific read methods.
+Registered KB helpers have the same typed discovery/invocation experience; agents
+need not read the Kyyn repository or write MCP adapters to compose them.
 Change entries identify fetch/predecessor, change kind, evidence ID and citation;
-payload interpretation goes through plugin methods, not generic content dumped by
-the history endpoint. Plugin methods always read the latest captured evidence;
-a curation cursor does not select old contents. Latest-only reads and
-unavailable-change-history diagnostics follow ADR 0014. Distinguish
-fetching, reading captured evidence and accepting a curation evolution in the UI;
-reading or fetching does not imply progress in an accepted curation workflow.
+payload interpretation goes through plugin methods, not generic history payloads.
+
+The proposed recipe surface additionally lists/shows root-owned recipes and their
+instructions, and queries net pending changes for a recipe and connector instance.
+Results identify the selected fetch so authors can explicitly acknowledge that
+scope, not an unspecified latest capture. Keep raw acquisition history distinct
+from pending work. [ADR 0014](0014-evidence.md) owns the comparison, latest-only
+reads, raw-history versus pending-work diagnostics and acknowledgement semantics.
+An empty result must not disable investigation/evolution actions or label a task
+complete. Evolution review presents the recipe and batch/individual declarations
+alongside fact changes, including acknowledgement-only proposals. Fetching and
+reading never implicitly acknowledge anything. No agent launcher or workflow
+manager is required to expose these tools.
 The [curation walkthrough](../walkthroughs/evidence-curation.md) supplies the next
 journey. Final CLI spellings belong to its implementation slice, following the
 noun-path convention above, not a second generic command-string API.

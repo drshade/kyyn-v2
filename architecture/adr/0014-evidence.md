@@ -1,15 +1,16 @@
 ---
 id: 0014
-title: 'Latest evidence informs the KB; change markers support curation'
-status: accepted
-date: 2026-09-15
+title: 'Latest evidence and recipe-scoped declared curation'
+status: proposed
+date: 2026-09-23
 ---
-# Latest evidence informs the KB; change markers support curation
+# Latest evidence and recipe-scoped declared curation
 
-Basis: owner-directed latest-only evidence model. The accepted KB is our prior
-understanding; the latest successful acquisition supplies current external input.
-Accepted evolutions update the KB. Latest-only storage and plugin acquisition are
-implemented; typed plugin read discovery/KB helpers remain outstanding.
+Basis: owner-directed latest-only evidence and recipe-scoped acknowledgements.
+This revision proposes their interface and persistence mechanics for review.
+Latest-only storage, acquisition, typed plugin reads and composed KB tools are
+implemented. Recipes, acknowledgement bookkeeping and net pending-work discovery
+are not yet implemented.
 
 ## Context
 
@@ -147,7 +148,7 @@ A missing item in an available capture is an ordinary absent result.
 ### Payload-free change tracking
 
 Keep fetch identity, predecessor, acquisition time and lightweight item-change
-markers. These support independent KB-authored curation cursors:
+markers. These describe acquisition, independently of any recipe's processing:
 
 ```haskell
 data Fetch = Fetch
@@ -180,19 +181,20 @@ The initial implementation retains this lightweight metadata until the instance'
 evidence store is explicitly cleared; marker retention is unbounded for now.
 
 `Nothing` requests all available markers; `Just f` requests markers after that fetch
-through the latest fetch. A cursor identifies progress, not a payload version to
-read. Investigating any changed ID reads its latest contents, even if it changed
-several times since the cursor. A removed ID is absent; compare against the KB's
+through the latest fetch. This is an acquisition-history selector, not recipe
+progress or a payload version to read. Investigating any changed ID reads its latest
+contents, even if it changed several times since that fetch. A removed ID is absent; compare against the KB's
 prior understanding rather than loading deleted evidence.
 
-An unknown cursor or unavailable marker history is an error, never an empty result
-claiming nothing changed. The agent can reconcile the full current capture instead.
+An unknown fetch ID or unavailable marker history is an error for raw history
+requests, never an empty result claiming nothing changed. Recipe pending discovery
+does not require this history.
 Clearing evidence removes the local capture and marker history, not accepted facts,
-rationales or KB-owned curation state. No per-item review/dismissal queue, inferred
+rationales or accepted curation progress. No mandatory per-item review queue, inferred
 curation progress or automatic acceptance.
 
 Diagnostics distinguish `evidence.cursor-unavailable` for unknown/unavailable
-curation markers, `evidence.not-fetched` for an instance without a current capture,
+raw-history fetch selectors (not recipe progress), `evidence.not-fetched` for an instance without a current capture,
 `evidence.producer-changed` for incompatible producing code/contract,
 `evidence.base-conflict` for a concurrent publication, `evidence.invalid-delta` for
 inconsistent returned changes and `evidence.invalid-data` for malformed storage.
@@ -224,11 +226,165 @@ An agent investigates, reasons and authors an evolution with its proposed change
 rationale and citations. It need not express its investigation as evolution code.
 Repeatable processing may read current evidence through the same typed helpers.
 
-A curation cursor is ordinary KB data. An evolution updates facts and that cursor
-together; only acceptance advances accepted progress. Failed, rejected or abandoned
-work does not advance it. The cursor is the author's assertion that changes through
-that fetch were accounted for, not proof that every item was read or understood.
-Independent workflows may use independent cursors.
+### Recipes name the task, not an execution workflow
+
+A recipe is a KB-owned identity and agent instructions: for example, synchronize
+todos or update grocery prices. Its definition belongs to the accepted root and
+changes through evolutions. It is not a scheduled job, executable entry point or
+kernel-managed sequence of agent actions. An agent follows the instructions and
+uses ordinary investigation and evolution tools.
+
+```haskell
+newtype RecipeId = RecipeId Text
+
+data Recipe = Recipe
+  { instructions :: Text
+  }
+
+type Recipes = Map RecipeId Recipe
+```
+
+An evolution may name one recipe or none. A recipe may use many connector instances;
+different recipes may independently process the same evidence. Instructions can
+change without automatically resetting progress. Ordinary manual corrections and
+schema changes need no recipe. Acknowledgement declarations require a named recipe.
+
+### Declare what was handled; derive progress in the host
+
+An evolution's result may declare batches or individual items handled for its
+recipe. These are not inferred from reads, citations or changes to facts. The
+following sketches describe the boundary, not final SDK names:
+
+```haskell
+data EvidenceScope = EvidenceScope
+  { instanceRef :: ConnectorInstanceRef
+  , fetch :: FetchId
+  }
+
+data Acknowledgement
+  = EntireBatch EvidenceScope
+  | IndividualRecords EvidenceScope [EvidenceId]
+
+data Curation = Curation
+  { recipe :: RecipeId
+  , handled :: [Acknowledgement]
+  }
+
+withCuration :: Curation -> Evolution a b -> Evolution a b
+```
+
+Small SDK helpers attach this declaration to the existing evolution result; no
+second required guest entry point. One result has at most one recipe context;
+composition combines acknowledgements within that context, not across recipes.
+A single evolution can acknowledge a batch for one instance and selected items
+for another. Handling evidence without changing facts is valid. Rationale explains
+the author's decision; acknowledgements do not duplicate it or require an
+explanation per item. Citing evidence neither acknowledges it nor requires doing so.
+
+Discovery supplies ordinary scope data naming the fetch considered, not a moving
+reference to latest. No session, lease or server-side selection registry is needed.
+The agent can retain this scope while preparing literal edits; the guest need not
+replay the investigation. If it reads a later capture, it can declare that later
+scope instead. Kyyn does not prove what the agent actually read or understood.
+
+During candidate preparation the host resolves declarations against the named
+capture's retained identity/change metadata, including deletion states, and
+derives progress from the Before root's register. The guest does not construct
+register maps or look up fingerprints. Unknown scopes
+or insufficient history are explicit diagnostics, never a substitution of latest.
+For an individual declaration, presence at the selected fetch supplies its
+fingerprint; absence removes its acknowledged entry. Absence can be established
+from a complete capture even after a fresh clone/refetch, without a historical
+deletion marker. Removing an already absent register entry is a no-op.
+
+The prepared candidate contains the resolved register update and declarations for
+inspection. Acceptance publishes that fixed register with facts and the evolution
+archive in the same Git commit, through the existing expected-head operation.
+It neither looks up latest evidence nor reruns the guest. Failed, rejected or
+abandoned work leaves accepted progress unchanged. A refresh after preparation
+does not invalidate the declaration or acknowledge the new fetch; later changes
+remain discoverable. Cache loss after preparation does not prevent publishing an
+already resolved, otherwise acceptable candidate.
+
+### Accepted progress and net pending evidence
+
+The host owns a Git-tracked Dhall register within the accepted root's persisted
+material, separate from the guest's domain Root type and from the ignored evidence
+cache. Root capture/export preserves it. Git supplies its history; there is no
+second acknowledgement database. Store resolved states, not references into the
+checkout-local fetch history:
+
+```haskell
+data CurationProgress = CurationProgress
+  { producer :: EvidenceProducer
+  , acknowledged :: Map EvidenceId EvidenceFingerprint
+  }
+
+type CurationRegister =
+  Map RecipeId (Map ConnectorInstanceRef CurationProgress)
+```
+
+The exact file layout remains provisional. A batch replaces the instance's map
+with all IDs/fingerprints present at its selected fetch, not just pending rows.
+An individual declaration inserts/replaces selected present items and removes
+selected absent ones. Apply declarations in their authored list order; the last
+accepted declaration wins. An explicitly older state can make evidence pending
+again; there is no monotonic-progress enforcement. With no prior progress, use
+an empty map. Fetching never changes this register.
+
+Fetch identities are needed to resolve declarations during preparation, not to
+interpret accepted progress. Bare fingerprints are not comparable across producer
+replacements; retain the producing context with the map.
+
+Pending discovery compares each item's acknowledged state with the current capture,
+without consulting fetch history. It does not return every intervening
+acquisition event. No historical payload is required:
+
+```haskell
+data PendingEvidence = PendingEvidence
+  { scope :: EvidenceScope
+  , changes :: [(EvidenceId, ChangeKind)]
+  }
+
+-- Pure comparison after host capabilities load progress and evidence metadata.
+pendingEvidence
+  :: Maybe CurationProgress -> CurrentEvidence
+  -> Either EvidenceProblem PendingEvidence
+```
+
+The caller selects the recipe and instance before this comparison. Real discovery
+can include citations/descriptions; the sketch isolates scope and net change kinds.
+
+| Acknowledged state | Later acquisition changes | Pending result |
+| --- | --- | --- |
+| Absent/unseen | New, Updated | New with latest state |
+| Absent/unseen | New, Updated, Removed | None |
+| Present | Updated, Updated | Updated if fingerprint differs |
+| Present | Updated, Removed | Removed |
+| Present | Removed, New | Updated, or none if fingerprint matches |
+
+If the New state was individually acknowledged before removal, removal remains
+pending. Acknowledgements by another recipe have no effect on this comparison.
+Deleting evidence does not itself delete facts. Present/absent and fingerprint
+comparison are operational state comparisons, not judgments about meaning.
+
+An empty pending result means only no net unacknowledged evidence changes. It
+does not mean the task is complete or prohibit inspecting current evidence,
+revisiting acknowledged items, or preparing an evolution. New grocery items may
+need existing prices even when no prices have changed. The intelligence and task
+completion judgment belong to the agent, not Kyyn.
+
+A missing current capture requires fetching, not reconstructing old history.
+After a fresh clone or cache clear, a successful fetch from the same producer is
+enough to compare against the committed register, including detecting deletions.
+A failed/unavailable fetch is not an empty capture. Producer mismatch is explicit:
+do not compare incompatible fingerprints or silently report no work. The agent
+can inspect the new capture and declare a whole batch to establish its acknowledged
+map under the new producer. Individual updates cannot mix producer contexts within
+one map. The register stores no payloads, tombstones, read log or review statuses.
+Its size is proportional to acknowledged present items.
+
+### Effectful preparation remains separate from acceptance
 
 An evolution may explicitly acquire evidence and then read the resulting latest
 capture. Already-loaded invocation inputs do not change implicitly. Candidate
@@ -263,7 +419,7 @@ the provider may change or delete the source.
 
 The operational EvidenceFingerprint is separate from EvidenceRef. Citations do not
 need fingerprints, source versions or content hashes. The connector's change token
-supports refresh comparison only; it is not an immutable provenance proof and does
+supports operational refresh and curation comparison; it is not an immutable provenance proof and does
 not establish whether the external source has changed since a citation was made.
 
 ### Plugin changes and cache replacement
@@ -271,8 +427,9 @@ not establish whether the external source has changed since a citation was made.
 Current evidence is bound to its producing plugin source and payload contract.
 After a plugin update, do not reinterpret incompatible cached contents under the
 new producer. Refetch. A successful fetch replaces that instance's capture and
-marker history. Previous cursors report unavailable history
-and the agent reconciles the new current capture. A failed refetch publishes nothing.
+marker history. Raw history requests for old fetch IDs report unavailable history;
+recipe pending discovery instead checks the register's producer context and asks
+for reconciliation on mismatch. A failed refetch publishes nothing.
 
 `evidence clear PLUGIN INSTANCE` discards that instance's local capture and metadata.
 Accepted KB facts and curation progress remain owned by evolutions.
@@ -282,13 +439,23 @@ Accepted KB facts and curation progress remain owned by evolutions.
 Exercise new/updated/removed/unchanged files, stable content fingerprints, failed
 acquisition and stale-base publication. After several updates, inspect stored Dhall:
 only latest payloads remain; removed and superseded text is absent, and fetch
-markers still identify changes after a curation cursor.
+markers still identify acquisition changes after a retained fetch ID.
 
 Verify latest reads across separate invocations, consistent reads within one
 invocation during refresh, instance isolation, missing evidence and unavailable
-cursors. Verify complete capture replacement following a plugin change.
+raw-history fetch IDs. Verify complete capture replacement following a plugin change.
 Keep source citations and accepted KB facts intact after
 scoped evidence clearing. Prove the first-party connector under GHC and MicroHs.
 
-The [curation walkthrough](../walkthroughs/evidence-curation.md) illustrates this
-journey; it does not claim that typed KB helpers or curation are already implemented.
+Before implementing persistence, exercise the net-difference table as pure cases,
+including selective acknowledgement between fetches, independent recipes and
+instances, mixed batch/individual declarations, duplicate declarations and authored
+order/last-declaration semantics. Prove acknowledgement-only evolution,
+failed/rejected work leaving progress untouched, and acceptance after a newer fetch
+without skipping its changes. Reopen the register from Git without the evidence
+cache; refetch with the same producer and obtain correct pending additions, updates
+and deletions without old fetch history. Cover acknowledgement of deletion after
+that refetch, failed fetch versus empty capture, and producer mismatch/reconciliation.
+
+The [curation walkthrough](../walkthroughs/evidence-curation.md) illustrates the
+proposed recipe journey; it does not claim curation bookkeeping is implemented.

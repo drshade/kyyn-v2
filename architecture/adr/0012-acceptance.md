@@ -112,6 +112,13 @@ history from the final diff. Later history reads can therefore explain intermedi
 changes without running archived code. No separate provenance commit, receipt or
 database is required.
 
+Under the proposed [curation model](0014-evidence.md), root export also includes
+the candidate's resolved host-owned progress register. Facts, progress and the
+archive publish through this same conditional commit. Publication does not consult
+the evidence cache or resolve declarations against a newer fetch. Inspection shows
+the proposed acknowledgements even when the fact diff is empty. This extension
+does not change expected-head, readiness or recovery rules and is not implemented yet.
+
 Archive export is implemented as described in ADR 0010. Only its notes subtree is
 read from the live workspace; captured manifest fields, source and fixed report
 are not replaced by current files. The host-produced JSON record and its durable
