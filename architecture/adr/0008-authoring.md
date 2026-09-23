@@ -31,7 +31,8 @@ Group the installed author API by concept, with seven public SDK modules:
 - `Kyyn.Schema`: identified facts and schema metadata/roles.
 - `Kyyn.Validation`: diagnostics, locations, severities and validation reports.
 - `Kyyn.Query`: the abstract Query and CollectionBinding types plus collection/fact reads.
-- `Kyyn.Evolution`: evolution composition, rationale and evidence, reexporting editing vocabulary.
+- `Kyyn.Evolution`: evolution composition, the guest KnowledgeBase/recipe vocabulary,
+  rationale and evidence, reexporting editing vocabulary.
 - `Kyyn.Edit` and `Kyyn.Optics`: focused editing and optics sub-vocabularies.
 - `Kyyn.Plugin`: abstract Program and evidence-snapshot handles, evidence changes and typed acquisition failures.
 

@@ -54,7 +54,7 @@ role-only contract change therefore rejects an old checked value. Materializatio
 does not confer semantic validation, execute guest code or write files. Its
 porcelain interpreter requires only DhallHandling, with no IOE. Code and supporting
 files are preserved verbatim in a separate tree; code paths cannot overlap `facts/`
-or the host-owned curation material in [ADR 0014](0014-evidence.md).
+or the recipe and host-owned curation material in [ADR 0014](0014-evidence.md).
 
 Fact-tree paths are relative to `root/`. Reserved file `facts/root.dhall` retains
 non-collection root fields (an empty record when there are none). Each collection
@@ -96,6 +96,8 @@ data RootStore :: Effect where
     :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
   ReadRootCuration
     :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
+  ReadRootRecipes
+    :: FileTree -> RootStore m (Either [Diagnostic] [Fact Recipe])
   LoadRootValueForChecking
     :: Root -> RootStore m CheckedValue
   ListFacts
@@ -111,7 +113,7 @@ data RootStore :: Effect where
   ExportRootFiles
     :: Validated Root -> RootStore m (Either [Diagnostic] FileTree)
   MaterializeRoot
-    :: RootContract -> CodeSnapshot -> CheckedValue
+    :: RootContract -> CodeSnapshot -> CheckedValue -> [Fact Recipe]
     -> RootStore m Root
 
 runRootStore
@@ -119,7 +121,7 @@ runRootStore
   => Eff (RootStore : es) a -> Eff es a
 ```
 
-ExportRootFiles combines the validated root's captured fact and code trees,
+ExportRootFiles combines the validated root's domain facts, recipes, curation and code,
 including examples, configuration and supporting files, without reading disk or
 re-encoding content. FileTree rejects overlapping paths rather than choosing one
 silently. The exported paths remain root-relative; publication places this complete
