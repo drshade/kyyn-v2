@@ -7,6 +7,7 @@ import Kyyn.Domain.Git (gitRevision)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Domain.Curation (RecipeId(..))
+import Kyyn.Domain.Secret (secretName)
 import Kyyn.Surfaces.Cli
 import Options.Applicative (ParserResult(..), renderFailure)
 import System.Exit (ExitCode(..))
@@ -28,6 +29,15 @@ main = do
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
+  let key = either error id (secretName "JEV_TOKEN")
+  succeeds ["secret","set","JEV_TOKEN"] (Invocation selected Human (Secret (SetSecret key Nothing)))
+  succeeds ["secret","set","JEV_TOKEN","fixture-secret"]
+    (Invocation selected Human (Secret (SetSecret key (Just (SecretArgument "fixture-secret")))))
+  succeeds ["secret","list"] (Invocation selected Human (Secret ListSecrets))
+  succeeds ["secret","show","JEV_TOKEN"] (Invocation selected Human (Secret (ShowSecret key)))
+  succeeds ["secret","remove","JEV_TOKEN"] (Invocation selected Human (Secret (RemoveSecret key)))
+  assert "Show leaks secret" (not ("fixture-secret" `isInfixOf` show (SecretArgument "fixture-secret")))
+  forM_ [["secret","set","../escape","x"], ["secret","show"], ["secret","remove",""]] refuses
   succeeds ["root","recipe","list"] (Invocation selected Human (Root (RootRecipe ListRecipes)))
   succeeds ["root","recipe","show","syncTodos"]
     (Invocation selected Human (Root (RootRecipe (ShowRecipe (RecipeId "syncTodos")))))

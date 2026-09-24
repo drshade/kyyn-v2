@@ -2,6 +2,7 @@ module Kyyn.Surfaces.Cli
   ( Invocation(..), Selection(..), OutputMode(..), Command(..)
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
+  , SecretCommand(..), SecretArgument(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -10,6 +11,7 @@ import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Domain.Curation (RecipeId, recipeId)
 import Data.Coerce (coerce)
+import Kyyn.Domain.Secret (SecretName, secretName)
 import Options.Applicative
 
 data Invocation = Invocation
@@ -26,7 +28,10 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Evidence EvidenceCommand deriving (Eq, Show)
+data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Evidence EvidenceCommand | Secret SecretCommand deriving (Eq, Show)
+data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
+newtype SecretArgument = SecretArgument String deriving Eq
+instance Show SecretArgument where show _ = "<secret>"
 data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) | Connector ConnectorCommand deriving (Eq, Show)
 data ConnectorCommand
   = ListConnectors PluginName (Maybe EvolutionId)
@@ -97,7 +102,17 @@ invocation = Invocation <$> selectionParser
           <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
     <> group "evidence" "Fetch and inspect captured evidence history" (Evidence <$> evidenceParser)
+    <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
+
+secretParser :: Parser SecretCommand
+secretParser = hsubparser
+  (group "set" "Store a secret (omitted VALUE reads stdin or a hidden prompt)"
+    (SetSecret <$> name <*> optional (SecretArgument <$> strArgument (metavar "VALUE")))
+  <> group "list" "List secret names, never values" (pure ListSecrets)
+  <> group "show" "Show a masked secret and its length" (ShowSecret <$> name)
+  <> group "remove" "Remove a local secret" (RemoveSecret <$> name))
+  where name = argument (eitherReader secretName) (metavar "NAME")
 
 connectorParser :: Parser ConnectorCommand
 connectorParser = hsubparser

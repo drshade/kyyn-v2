@@ -6,6 +6,7 @@ import Kyyn.Composition.Runtime
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
 import Kyyn.Composition.Recipes (dispatchRecipes)
+import Kyyn.Composition.Secrets (executeSecrets)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
@@ -97,6 +98,7 @@ runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Eithe
 runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
+execute (Cli.Invocation (Cli.Selection path _ _) _ (Cli.Secret request)) = executeSecrets path request
 execute (Cli.Invocation (Cli.Selection _ _ runtimeOverride) _ (Cli.Guest Nothing request)) = do
   runtime <- runtimeDirectory runtimeOverride
   case directoryScope runtime of

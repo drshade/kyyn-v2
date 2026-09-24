@@ -19,6 +19,14 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test secret-store cli-arguments --test-show-details=direct` checks the
+typed secret store with recording and native Dhall/filesystem handlers and CLI
+parsing. `node tools/test-secrets.mjs INSTALLED_EXECUTABLE` checks local setup,
+masked display, isolation, failure redaction and ignored storage using a copied
+executable without a runtime bundle or valid schema. On Linux, `--terminal` adds
+a real hidden-prompt check using `script`. Neither check invokes MicroHs or a
+provider.
+
 Broad guest integration tests use the shipped native MicroHs compiler, not the
 self-hosted compiler. `tools/stage-microhs.sh` is shared by CLI packaging and
 `tools/test-guest.sh`: it builds `gmhs`, `mhseval` and `cpphs`, and stages `gmhs`
