@@ -8,6 +8,8 @@ import Data.Time.Clock.POSIX (getPOSIXTime)
 import Effectful (Eff, IOE, runEff)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Composition.Timings (Timings, newTimings)
+import Kyyn.Build (buildRevision)
+import Kyyn.MicroHs.Interpreter.InspectionCache (InspectionCache(..))
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path
@@ -26,7 +28,8 @@ import System.FilePath ((</>), takeDirectory)
 
 data Host = Host
   { gitExecutable :: FilePath, gitConfigurationEnvironment :: [(String,String)]
-  , temporary :: DirectoryScope, runtime :: FilePath, compilationCache :: Maybe DirectoryScope, timings :: Maybe Timings }
+  , temporary :: DirectoryScope, runtime :: FilePath, compilationCache :: Maybe DirectoryScope
+  , inspectionCache :: Maybe InspectionCache, timings :: Maybe Timings }
 data SelectedKb = SelectedKb
   { knowledgeBase :: KnowledgeBase, revision :: GitRevision, branch :: Maybe LocalBranch }
 
@@ -41,10 +44,13 @@ configure (Cli.Selection path gitOverride runtimeOverride) = runExceptT $ do
   runtime <- liftIO (runtimeDirectory runtimeOverride)
   hasKb <- liftIO (doesFileExist (kbPath </> "root/kb.dhall"))
   cache <- if hasKb then Just <$> either (invalid "kb.path") pure (directoryScope (kbPath </> ".kyyn/compiled")) else pure Nothing
+  inspection <- case (hasKb,buildRevision) of
+    (True,Just revision) -> Just . InspectionCache revision <$> either (invalid "kb.path") pure (directoryScope (kbPath </> ".kyyn/inspected"))
+    _ -> pure Nothing
   let keys = ["HOME", "XDG_CONFIG_HOME"]
   values <- liftIO (mapM lookupEnv keys)
   timings <- liftIO newTimings
-  pure (Host git [(key,value) | (key,Just value) <- zip keys values] temp runtime cache timings, scope)
+  pure (Host git [(key,value) | (key,Just value) <- zip keys values] temp runtime cache inspection timings, scope)
   where invalid code = throwE . refusal . pure . errorDiagnostic code
 
 runtimeDirectory :: Maybe FilePath -> IO FilePath
@@ -53,7 +59,7 @@ runtimeDirectory override = do
   canonicalizePath (maybe (takeDirectory (takeDirectory installed) </> "lib/kyyn") id override)
 
 runGitIO :: Host -> Eff '[Git.Git, ProcessExecution, Failure, IOE] a -> IO (Either OperationalFailure a)
-runGitIO (Host executable environment _ _ _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable environment
+runGitIO (Host executable environment _ _ _ _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable environment
 
 selectKnowledgeBase :: Host -> DirectoryScope -> IO (Either Response SelectedKb)
 selectKnowledgeBase host scope = do

@@ -16,6 +16,8 @@ library
     Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Protocol.Query
     Kyyn.Plumbing.Protocol.GuestApi
+    Kyyn.Plumbing.Protocol.DataType
+    Kyyn.Plumbing.Protocol.Inspection
     Kyyn.Plumbing.Protocol.Plugin
     Kyyn.Plumbing.Protocol.PluginInvocation
     Kyyn.Plumbing.Protocol.Tool

@@ -99,7 +99,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   selected <- either fail pure (schemaSource files "Authored.Root" "Authored.schemaMetadata")
   let sources = schemaSources selected
   result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-    . runSchemaInspectionIO toolchain $ inspectSchema selected
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing $ inspectSchema selected
   let expected = SchemaMetadata
         [RoleDecl "task-name" "Tasks in München 🦋" Title,
          RoleDecl "date" "When" Timeline, RoleDecl "status" "State" Badge]
@@ -113,7 +113,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   unsupported <- either fail pure (schemaSource ((path "Unsupported.hs", "module Unsupported where\ndata Root = Root { recursive :: Root }\n") : files)
     "Unsupported.Root" "Authored.schemaMetadata")
   rejectedSchema <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-    . runSchemaInspectionIO toolchain $ inspectSchema unsupported
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing $ inspectSchema unsupported
   case rejectedSchema of
     Right (Left _) -> pure ()
     _ -> fail ("recursive schema not rejected as diagnostics: " ++ show rejectedSchema)
@@ -171,7 +171,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     ((path "Empty.hs", utf8 emptySchema) : filter ((/= path "Authored.hs") . fst) files)
     "Empty.Root" "Empty.schemaMetadata")
   emptyInspected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-    . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runSchemaInspectionIO toolchain $ inspectSchema emptySource
+    . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runDhallHandling . runSchemaInspectionIO toolchain Nothing $ inspectSchema emptySource
   InspectedSchema emptyChecked _ <- either (fail . show) (either (fail . show) pure) emptyInspected
   emptyContract <- either (fail . show) pure (checkRootLayout emptyChecked)
   _ <- either fail pure (queryBindings emptyContract)
@@ -183,7 +183,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   emptyRoot <- either (fail . show) pure
     (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode (KB.KnowledgeBase emptyValue [])))))
   emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot emptyRoot
       either (pure . Left) validateRoot prepared
   unless (emptyResponse == Right (Right (ValidationReport [])))
@@ -195,7 +195,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode (KB.KnowledgeBase checkedFacts [])))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-      . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
+      . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
         prepared <- prepareRoot validationRoot
         either (pure . Left) validateRoot prepared
     report <- either (fail . show) (either (fail . show) pure) response

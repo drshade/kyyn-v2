@@ -14,6 +14,7 @@ const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-cache-measure-'));
 const kb = path.join(temporary, 'kb');
 const source = path.join(temporary, 'documents');
 const cache = path.join(kb, '.kyyn/compiled');
+const inspected = path.join(kb, '.kyyn/inspected');
 const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(temporary, 'gitconfig') };
 let lastTimings = [];
 function cli(args, timed = false) {
@@ -33,27 +34,32 @@ function cli(args, timed = false) {
   else assert.equal(lastTimings.length, 0, 'Timing emitted while disabled');
   return JSON.parse(result.stdout);
 }
-function entries() {
-  return fs.readdirSync(cache).filter(name => name.endsWith('.comb')).sort()
-    .map(name => [name, fs.statSync(path.join(cache, name), { bigint: true }).mtimeNs.toString()]);
+function entries(directory, suffix) {
+  return fs.readdirSync(directory).filter(name => name.endsWith(suffix)).sort()
+    .map(name => [name, fs.statSync(path.join(directory, name), { bigint: true }).mtimeNs.toString()]);
 }
 function measure(label, args) {
   fs.rmSync(cache, { recursive: true, force: true });
+  fs.rmSync(inspected, { recursive: true, force: true });
   const coldStart = performance.now();
   const cold = cli(args, timings);
   if (timings) assert(lastTimings.some(event => event.step === 'compile-miss'));
   const coldMs = performance.now() - coldStart;
-  const before = entries();
+  const before = entries(cache, '.comb');
+  const inspections = entries(inspected, '.dhall');
   assert(before.length > 0);
+  assert(inspections.length > 0, 'Use an installed build with embedded revision');
   const warmStart = performance.now();
   const warm = cli(args, timings);
   const warmMs = performance.now() - warmStart;
-  assert.deepEqual(entries(), before, 'Warm command rewrote compiled artifacts');
+  assert.deepEqual(entries(cache, '.comb'), before, 'Warm command rewrote compiled artifacts');
+  assert.deepEqual(entries(inspected, '.dhall'), inspections, 'Warm command rewrote inspection results');
   console.log(JSON.stringify({ command: label, coldMs: Math.round(coldMs), warmMs: Math.round(warmMs), artifacts: before.length }));
   if (timings) {
-    for (const step of ['inspection', 'compile-hit', 'plugin-registration', 'guest-execution'])
+    for (const step of ['inspection-hit', 'compile-hit', 'plugin-registration', 'guest-execution'])
       assert(lastTimings.some(event => event.step === step), `Missing ${step}`);
     assert(!lastTimings.some(event => event.step === 'compile-miss'), 'Warm run compiled again');
+    assert(!lastTimings.some(event => event.step === 'inspection'), 'Warm run inspected again');
     console.log(JSON.stringify({ command: label, warmTimings: lastTimings }));
   }
   return [cold,warm];
@@ -98,6 +104,9 @@ assess name = do
   if (timings) {
     cli(['guest', 'module', 'show', 'Kyyn.Judgement', '--evolution', draft.id], true);
     assert(lastTimings.some(event => event.step === 'api-inspection' && event.label.includes('Kyyn.Judgement')));
+    cli(['guest', 'module', 'show', 'Kyyn.Judgement', '--evolution', draft.id], true);
+    assert(lastTimings.some(event => event.step === 'api-inspection-hit'));
+    assert(!lastTimings.some(event => event.step === 'api-inspection'));
   }
   measure('evolution check', ['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);

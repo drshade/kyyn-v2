@@ -13,6 +13,7 @@ library
     Kyyn.MicroHs.Interpreter.GuestExecution
     Kyyn.MicroHs.CompilerDiagnostic
     Kyyn.MicroHs.Timing
+    Kyyn.MicroHs.Interpreter.InspectionCache
   default-language: Haskell2010
   default-extensions: ScopedTypeVariables TypeSynonymInstances MultiParamTypeClasses FlexibleInstances FlexibleContexts
   ghc-options: -Wall -Wno-unrecognised-warning-flags -Wno-x-partial -Wno-deprecations
@@ -36,6 +37,15 @@ executable kyyn-api-catalogue
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-plumbing,
     kyyn-plumbing-interpreters, bytestring, filepath, directory, Cabal, effectful-core ==2.6.1.0
+
+test-suite inspection-cache
+  type: exitcode-stdio-1.0
+  main-is: InspectionCacheTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain, kyyn-plumbing,
+    bytestring, directory, filepath, temporary ==1.3, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0
 
 test-suite compilation-cache
   type: exitcode-stdio-1.0

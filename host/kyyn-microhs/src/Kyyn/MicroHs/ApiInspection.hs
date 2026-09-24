@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..)) where
+module Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..), apiInspectionSettings) where
 
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
@@ -27,6 +27,13 @@ import qualified MicroHs.IdentMap as IdentMap
 data ApiError = ApiCompilerError String | ApiSourceError String | ApiNativeError String
   deriving (Eq, Show)
 
+apiFlags :: FilePath -> [FilePath] -> Flags
+apiFlags compiler sources = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"],
+  cppArgs = ["-DMIN_VERSION_base(x,y,z)=1"] }
+
+apiInspectionSettings :: FilePath -> [String] -> String
+apiInspectionSettings compiler selected = show (selected, apiFlags compiler ["<captured>"])
+
 inspectApi :: FilePath -> [FilePath] -> [String] -> IO (Either ApiError [ApiModule])
 inspectApi compiler sources selected = withTimingIO "api-inspection" (intercalate ", " selected) (inspect `catch` failure)
   where
@@ -34,8 +41,7 @@ inspectApi compiler sources selected = withTimingIO "api-inspection" (intercalat
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
       | Just (_ :: ErrorCall) <- fromException err = pure (Left (ApiCompilerError (compilerMessage (displayException err))))
       | otherwise = pure (Left (ApiNativeError (displayException err)))
-    flags = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"],
-      cppArgs = ["-DMIN_VERSION_base(x,y,z)=1"] }
+    flags = apiFlags compiler sources
     inspect = do
       (modules,cache) <- foldM compile ([],emptyCache) (nub selected)
       let cached = cachedModules cache

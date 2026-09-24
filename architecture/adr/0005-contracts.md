@@ -303,6 +303,26 @@ ill-typed source is diagnostic output; native frontend infrastructure failures u
 Source graphs and dependencies are supplied explicitly, not discovered through
 arbitrary ambient module paths inside the inspector. This does not establish
 preprocessor isolation or release packaging on every platform.
+
+The native schema and API interpreters reuse successful inspection results from
+checkout-local `.kyyn/inspected/<hash>.dhall` files. The key covers the Kyyn Git
+commit embedded by installation, every captured source path and byte, selected
+type or modules, inspection kind and effective compiler settings. The installed
+commit identifies the pinned compiler, bundled libraries and Kyyn's projection
+code.
+
+Structural entries contain only the raw `DataType` and captured relative closure;
+metadata evaluation and `checkContract` still run on every schema request. API
+entries contain the discovered declarations and documentation. Neither compiler
+state nor failed inspections are cached. Writes replace entries atomically;
+missing/empty entries are misses, malformed entries request cache deletion, and
+storage failures retain their operational failure category. Deleting this cache
+never deletes accepted knowledge.
+
+Builds without an embedded commit disable this reuse. Dirty development builds or
+manually replaced runtime files under the same commit may require deleting the
+cache; this is an accepted development convention.
+
 Under the [repository layout](0026-repository-layout.md), this native interpreter
 belongs to `kyyn-microhs`, behind the plumbing API. The pure projections below
 remain capability-owned helpers outside that native compiler integration package;

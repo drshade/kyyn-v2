@@ -9,16 +9,21 @@ import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path (scopePath)
-import Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..))
+import Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..), apiInspectionSettings)
+import Kyyn.MicroHs.Interpreter.InspectionCache (InspectionCache, cachedInspection)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import Kyyn.Plumbing.Protocol.GuestApi (encodeCatalogue, decodeCatalogue)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, withTemporaryScope, writeBytes)
 
 runApiInspectionIO
-  :: (IOE :> es, FileSystem :> es, Failure :> es)
-  => GuestToolchain -> Eff (ApiInspection : es) a -> Eff es a
-runApiInspectionIO (GuestToolchain compiler) = interpret $ \_ (InspectApiModules sources selected) ->
+  :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :> es)
+  => GuestToolchain -> Maybe InspectionCache -> Eff (ApiInspection : es) a -> Eff es a
+runApiInspectionIO (GuestToolchain compiler) cache = interpret $ \_ (InspectApiModules sources selected) ->
+  cachedInspection cache "api-inspection" (show selected) (apiInspectionSettings (scopePath compiler) selected) (files sources)
+    encodeCatalogue decodeCatalogue $
   withTemporaryScope $ \scope -> do
     forM_ (files sources) $ \(path,bytes) -> writeBytes scope path bytes
     inspected <- liftIO (inspectApi (scopePath compiler) [scopePath scope] selected)

@@ -14,6 +14,7 @@ import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.ApiInspection (runApiInspectionIO)
 import Kyyn.Plumbing.Capability.ApiInspection (inspectApiModules)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
+import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import System.Environment (getEnv, setEnv)
 import System.Directory (createDirectoryIfMissing, listDirectory, doesDirectoryExist, copyFile)
@@ -103,8 +104,8 @@ main = do
   compilerScope <- either fail pure (directoryScope compiler)
   let throughCapability selected = withSystemTempDirectory "kyyn-api-capability-" $ \temporary -> do
         temporaryScope <- either fail pure (directoryScope temporary)
-        result <- runEff . runFailure . runFileSystemIO temporaryScope
-          . runApiInspectionIO (GuestToolchain compilerScope) $ inspectApiModules fixtureTree selected
+        result <- runEff . runFailure . runFileSystemIO temporaryScope . runDhallHandling
+          . runApiInspectionIO (GuestToolchain compilerScope) Nothing $ inspectApiModules fixtureTree selected
         remaining <- listDirectory temporary
         assert "API temporary sources cleaned up" (null remaining)
         pure result

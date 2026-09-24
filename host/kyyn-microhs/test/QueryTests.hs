@@ -111,7 +111,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   root <- either (fail . show) pure (runPureEff . runDhallHandling . runRootStore $
     materializeRoot contract code (KB.KnowledgeBase (CheckedValue (contractId (rootSchema contract)) values) []))
   discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ prepareRoot root
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ prepareRoot root
   prepared <- either (fail . show) (either (fail . show) pure) discovery
   descriptor@(QueryDescriptor _ _ input result) <- case preparedQueries prepared of
     [d] -> pure d
@@ -121,7 +121,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   unless (metadataOf result == SchemaMetadata [RoleDecl "label" "Person's name" Title]
     [FieldRole "Schema.Person" "name" "label"] []) (fail "Query result metadata lost or copied from Root")
   response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-    . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
       queryRoot prepared descriptor (CheckedValue (contractId input) (String "Review"))
   let expected = QueryResult (CheckedValue (contractId result)
         (object ["tag" .= ("Some" :: String), "value" .= object ["name" .= ("Ada 🦋" :: String)]]))
