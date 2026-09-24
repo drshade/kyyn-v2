@@ -10,6 +10,7 @@ executable kyyn-v2
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
     Kyyn.Composition.Tools Kyyn.Composition.Recipes
+    Kyyn.Composition.Secrets
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror -threaded -rtsopts

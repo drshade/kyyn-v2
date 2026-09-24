@@ -13,6 +13,7 @@ library
     Kyyn.Plumbing.Interpreter.DhallHandling
     Kyyn.Plumbing.Interpreter.Git
     Kyyn.Plumbing.Interpreter.DocumentPersistence
+    Kyyn.Plumbing.Interpreter.SecretStore
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror

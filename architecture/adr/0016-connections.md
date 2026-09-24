@@ -83,6 +83,7 @@ key use ordinary last-writer-wins local configuration semantics.
 ```text
 kyyn-v2 --kb PATH secret set NAME [VALUE]
 kyyn-v2 --kb PATH secret list
+kyyn-v2 --kb PATH secret show NAME
 kyyn-v2 --kb PATH secret remove NAME
 ```
 
@@ -97,13 +98,18 @@ it does not validate provider-specific credential formats.
 An argument value can appear in shell history and process listings; stdin is the
 alternative when that matters. Empty values are refused on all three CLI paths.
 `list` returns sorted names
-only; there is no CLI read/show operation. `remove` reports whether a key existed.
+only. `show` returns a masked value: preserve the first four characters for values
+longer than eight characters and replace each remaining character with `*`;
+fully mask shorter values. The displayed length is the actual character count,
+useful for spotting truncated input. Human and JSON results use the same masking;
+neither prints the complete secret. `remove` reports whether a key existed.
 These operations require a selected KB directory, not a valid schema, a guest
 compiler, an installed plugin or an evolution.
 
 Storage decoding errors must not print the malformed document or parser excerpts;
 report the operation and key instead. Routine success output likewise contains
-only names. Do not derive a logging representation that prints a stored value.
+only names, except for the explicit masked `show` result. Do not derive a logging
+representation that prints a stored value.
 The host capability can be interpreted by a recording handler without filesystem
 access. Install it only in compositions that need secret access; no ambient store
 or universal handler is introduced.
