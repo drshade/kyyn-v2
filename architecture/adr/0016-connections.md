@@ -2,7 +2,7 @@
 id: 0016
 title: 'Local secrets, typed configuration and named connector bindings'
 status: proposed
-date: 2026-09-11
+date: 2026-09-24
 ---
 # Local secrets, typed configuration and named connector bindings
 
@@ -35,40 +35,28 @@ Different clones/worktrees of the same KB require their own local setup; logical
 KB identity does not make their secret stores shared. If one repository contains
 several KBs, scope each store by its KB directory within that checkout.
 
-The **guest SDK** exposes a typed request, interpreted by the host:
-
-```haskell
-data Secrets a where
-  GetSecret :: Text -> Secrets (Either SecretError Text)
-
-data SecretError = SecretNotFound Text
-
-getSecret :: Text -> Program Secrets (Either SecretError Text)
-```
-
-Compose `Secrets` with HTTP through the request-algebra composition in ADR 0009.
-The value returned by `GetSecret` is ordinary text in guest memory. The plugin
-constructs the appropriate header, token-exchange request or other provider-specific
-authentication data and requests HTTP through its host capability. The host does
-not infer how to inject it, classify the provider or select an authentication flow.
-
 On the **host**, secret access belongs to plumbing. Its runner receives an explicit
 local store scope for the explicitly selected KB from the composition root; the
 SDK caller need not know a path or pass a second KB identity with every lookup:
 
 ```haskell
 data SecretStore :: Effect where
-  ReadSecret :: Text -> SecretStore m (Either SecretError Text)
+  ReadSecret :: SecretName -> SecretStore m (Either SecretError Text)
+  WriteSecret :: SecretName -> Text -> SecretStore m ()
+  ListSecretNames :: SecretStore m [SecretName]
+  RemoveSecret :: SecretName -> SecretStore m Bool
+
+data SecretError = SecretNotFound SecretName
 
 runSecretStoreIO
   :: (IOE :> es, Failure :> es)
   => DirectoryScope -> Eff (SecretStore : es) a -> Eff es a
 ```
 
-The generated adapter routes guest `GetSecret` to host `ReadSecret`. Missing keys
+Missing keys
 produce `SecretNotFound name` and an actionable setup message naming the key, never
-the value. Authored code may handle this result; the normal convention is to
-propagate a missing-key diagnostic through its declared plugin error rather than
+the value. Calling code may handle this result; the normal convention is to
+propagate a missing-key diagnostic through its declared error rather than
 swallow it or substitute an empty credential. Inaccessible/corrupt storage is an operational failure, not a missing
 secret or empty successful value. Do not introduce per-plugin secret grants,
 opaque credential handles or a provider-connection registry. The backing store
@@ -77,10 +65,50 @@ automatic secret synchronization or enrollment state machine is implied.
 The store lives in an ignored local directory belonging to the KB checkout,
 never in tracked root/config files or captured evolution material. Removing that
 checkout removes its locally stored secrets; another clone does not restore them.
-The exact directory name, backing encoding/protection and setup-command spellings
-remain implementation choices. Checkout-local scope does not itself select a
-plaintext-at-rest policy or require a keychain integration. No cross-checkout
-sharing or synchronization mechanism is part of this implementation.
+
+### Local storage and CLI
+
+Store each value as a hermetic Dhall `Text` literal at
+`.kyyn/secrets/<name>.dhall`, relative to the selected KB directory. This is
+**plaintext at rest**, protected by the local user's filesystem permissions, not
+encrypted storage or an OS keychain. Use owner-only directory access and
+owner-read/write files, including temporary files used for atomic replacement.
+Install an ignore rule before writing any value. Root and evolution capture must
+not include this directory. A Git clone does not back up secrets.
+
+`SecretName` is a nonempty ASCII name containing letters, digits, hyphens and
+underscores. It identifies one file component, never a relative path. Per-key
+replacement makes unrelated keys independent; simultaneous writes to the same
+key use ordinary last-writer-wins local configuration semantics.
+
+```text
+kyyn-v2 --kb PATH secret set NAME
+kyyn-v2 --kb PATH secret list
+kyyn-v2 --kb PATH secret remove NAME
+```
+
+`set` reads a hidden single line from an interactive terminal, or UTF-8 text from
+standard input when piped. Remove one final LF (and its preceding CR, if present)
+so ordinary line-oriented shell input does not add a credential character;
+preserve all other whitespace. Empty text is a stored value, distinct from an
+absent key. Values are never command-line arguments. `list` returns sorted names
+only; there is no CLI read/show operation. `remove` reports whether a key existed.
+These operations require a selected KB directory, not a valid schema, a guest
+compiler, an installed plugin or an evolution.
+
+Storage decoding errors must not print the malformed document or parser excerpts;
+report the operation and key instead. Routine success output likewise contains
+only names. Do not derive a logging representation that prints a stored value.
+The host capability can be interpreted by a recording handler without filesystem
+access. Install it only in compositions that need secret access; no ambient store
+or universal handler is introduced.
+
+The first implementation exposes this host store and local setup commands.
+Guest request algebras are introduced with their actual consumers, not as unused
+SDK constructors. An integration implemented in a host handler reads its credential
+there; an integration implemented in trusted guest plugin code may receive the
+text through an explicit capability. Neither requires automatic credential
+injection or a kernel-owned authentication workflow.
 
 ### Configuration remains ordinary typed root data
 
@@ -181,13 +209,11 @@ data MailConfig = MailConfig
   }
 ```
 
-The plugin requests `getSecret config.secretKey` and constructs its authenticated
+The integration reads the named secret and constructs its authenticated
 request. No special `SecretRef` type or kernel-understood connection schema is
 required. Reusing account configuration is ordinary plugin data/composition, not
 a mandatory kernel concept. Changing a local secret does not mutate accepted
-knowledge. An effectful evolution entry can invoke an acquisition plugin that
-uses Secrets, but pure validation and transformation helpers cannot request live
-secrets or providers. Secret values are not implicit candidate capture inputs.
+knowledge. Secret values are not implicit candidate capture inputs.
 
 Generic Web configuration display/editing can consume the checked record/list/
 union/scalar structure without understanding `MailConfig`. It is not a prerequisite
@@ -196,8 +222,8 @@ in root configuration or automatically capture secret responses into proposals.
 
 ### Authentication belongs to the integration
 
-Plugin code implements provider-specific authentication and response handling
-using Secrets, HTTP and other demonstrated host capabilities. Native libraries
+Integration code implements provider-specific authentication and response handling
+using the secret store, HTTP and other demonstrated host capabilities. Native libraries
 still handle TLS, transport, filesystem access and document parsing. Authored
 code never needs to implement those IO mechanisms itself. A static credential
 lookup does not prove login or refresh support; test the actual flow before
@@ -221,6 +247,13 @@ provider-authentication taxonomy and raw native IO in plugins. Host capability
 boundaries remain explicit even when their results include sensitive values.
 
 ## Verification
+
+Check the local store with real Dhall/filesystem handling and a separate recording
+handler. Cover set/replace/remove, sorted names, absent versus empty, invalid
+names, corrupt/inaccessible storage, permissions and cancellation cleanup. Exercise
+the installed CLI without a runtime bundle, including piped and hidden-terminal
+input, JSON name-only output and ignored storage. Assert that diagnostics and
+routine output contain none of the fixture secret values.
 
 Use fake secret/HTTP interpreters to prove retrieval, actionable missing-key errors,
 storage failure, request construction and provider-error handling. Two connector

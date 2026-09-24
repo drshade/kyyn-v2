@@ -123,7 +123,7 @@ before the first slice. Avoid combining unrelated methods solely to shorten rows
 | RootStore | Snapshot loading/materialization, plugin-scoped named connector instances/configs, identified fact reads, stable pages | Local secrets, business validation, accepted-ref update |
 | EvolutionAuthoring | Create drafts and capture them against an inspected Before source root | Evolution execution, candidate validation, accepted-ref update |
 | EvolutionStore | Workspace list/removal, snapshots and lifecycle, candidates, review notes, archived step reports and record-history reads | Source inspection, local secrets, provider effects or accepted-root update |
-| RootExecution | Validate selected roots/configs, execute snapshot queries/examples, prepare typed output inputs through renderers | Live acquisition, effectful evolution entries, sink invocation, publication |
+| RootExecution | Validate selected roots/configs, execute snapshot queries/examples, prepare typed output inputs through renderers | Live acquisition, evolution execution, sink invocation, publication |
 | EvolutionExecution | Compile/evaluate evolution entries, dispatch declared snapshot/plugin calls, derive step reports from annotated before/after values | Accepted-ref publication, inferred evidence provenance, implicit delivery or nested proposals |
 | RootPublication | Commit a checked evolution and conditionally advance from its Before revision | Conflict resolution, remote coordination, delivery |
 | EvidenceStore | Latest captured payloads, fingerprints, payload-free change markers and source references (ADR 0014) | Domain classification, accepted curation progress or inferred provider changes |
@@ -175,7 +175,7 @@ directory for file sinks. Plugins supply paths/data, not native filesystem code.
 | What can the schema-agnostic host check? | [0005](adr/0005-contracts.md): contract algebra, CheckedValue and projections |
 | Which reads require validation? | [0006](adr/0006-storage.md): RootStore operations, explicit checking read and pages |
 | How is a request result typed? | [0008](adr/0008-authoring.md): guest methods/host descriptors; [0009](adr/0009-capabilities.md): Program and request algebras; [0007](adr/0007-wire.md): private envelopes |
-| How are changes evaluated and checked? | [0010](adr/0010-evolutions.md): effectful entry, pure Evolution helper, EvolutionExecution; [0011](adr/0011-validation.md): RootExecution, reports and typed data examples |
+| How are changes evaluated and checked? | [0010](adr/0010-evolutions.md): pure Evolution composition, EvolutionExecution; [0011](adr/0011-validation.md): RootExecution, reports and typed data examples |
 | What precisely gets accepted? | [0012](adr/0012-acceptance.md): checked candidate, conditional Git update and outcomes |
 | How do integrations and outputs differ? | [0014](adr/0014-evidence.md): evidence snapshots; [0015](adr/0015-plugins.md): source/sink connectors and config inputs; [0016](adr/0016-connections.md): Secrets/SecretStore and plugin-owned authentication; [0017](adr/0017-outputs.md): multi-query renderers, typed sink bindings and prepared invocation |
 | What do clients share? | [0018](adr/0018-surfaces.md): adapter boundary; [0023](adr/0023-interaction.md): review notes and saved examples |
@@ -243,16 +243,15 @@ table interaction. Per-KB process composition and lifecycle are in ADR 0025.
 
 Follow [authoring](adr/0008-authoring.md) for typed method registration and a
 reporting calculation; [capabilities](adr/0009-capabilities.md) for explicit
-snapshot/plugin requests; [evolution](adr/0010-evolutions.md) for effectful entries,
-pure typed composition and named-entry arguments; and
+snapshot/plugin requests; [evolution](adr/0010-evolutions.md) for
+pure typed composition and workspace entries; and
 [validation](adr/0011-validation.md) for the pure validator.
 
 The authored program has no JSON/Dhall transport parsing, method-string dispatch
 or native IO entry point. Registered KB tools compose captured-evidence plugin reads
-under ADR 0008; queries retain their snapshot-only boundary. An evolution entry can
-request evidence and return a proposed
-root; checking consumes its materialized candidate and cannot fetch a different
-report or rerun acquisition. Validation remains a pure KB entry point.
+under ADR 0008; queries retain their snapshot-only boundary.
+[ADR 0010](adr/0010-evolutions.md#pure-evolution-execution) owns evolution execution;
+validation remains a pure KB entry point.
 A guest method descriptor is not itself a serialized function.
 
 ## Review questions this map deliberately leaves visible

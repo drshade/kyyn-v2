@@ -543,15 +543,6 @@ map under the new producer. Individual updates cannot mix producer contexts with
 one map. The register stores no payloads, tombstones, read log or review statuses.
 Its size is proportional to acknowledged present items.
 
-### Effectful preparation remains separate from acceptance
-
-An evolution may explicitly acquire evidence and then read the resulting latest
-capture. Already-loaded invocation inputs do not change implicitly. Candidate
-checking uses its computed result and captured checking inputs, not a fresh fetch
-or replay of acquisition. Re-evaluation starts from current inputs and produces a
-new candidate. Accepted evolution history records our changing understanding,
-not versions of the external evidence store.
-
 ### Declared provenance
 
 Each evolution step's Rationale carries explanation and declared EvidenceRefs

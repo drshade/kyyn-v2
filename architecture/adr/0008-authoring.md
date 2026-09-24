@@ -68,15 +68,14 @@ KB-authored code has these entry-point kinds:
 | Entry point | Result and boundary |
 | --- | --- |
 | Query | Answer or view over the selected snapshot, without proposing a change |
-| Evolution | Use declared capabilities to obtain inputs and produce a candidate, never implicitly accept it |
+| Evolution | Produce a candidate through the [pure transformation contract](0010-evolutions.md#pure-evolution-execution), never implicitly accept it |
 | Validation | Pure checks of supplied root/config values, returning diagnostics |
 | KB tool (proposed addition) | Compose declared selected-root and captured-evidence reads for investigation, without acquisition, sink calls or root mutation |
 
 A report is a query result. Agent-facing operations expose queries, KB tools,
 plugin methods and evolution workspaces. A KB tool is an authored function, not a
 second proposal-authoring workflow. Plugin methods remain integration operations;
-acquisition need not propose knowledge. ADR 0010 defines the
-effectful evolution entry and the pure transformation helpers usable inside it.
+acquisition need not propose knowledge. ADR 0010 defines evolution composition.
 An output declaration binds an ordinary renderer function to a typed plugin sink,
 as defined in [outputs](0017-outputs.md). Renderer execution is selected-snapshot
 computation, like a query, not an effectful KB tool. It can compose

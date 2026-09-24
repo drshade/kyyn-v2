@@ -188,10 +188,14 @@ composition at compilation. When metadata changes without changing the Haskell
 type, the generated bindings still carry distinct contract identities; the host's
 continuity checks reject incorrect ordering. No extra phase type is introduced.
 
-The current guest execution is pure. Host/plugin requests, when implemented, belong
-inside the Evolution computation with an explicit request algebra, not in a second
-author-written Program entry surrounding it. The generated adapter owns the runtime
-handoff. Naming something an evolution does not install every host capability.
+### Pure evolution execution
+
+An evolution is a pure transformation of its supplied knowledge base. It does not
+request host or plugin effects. Agents investigate using tools while authoring,
+then express the chosen changes, rationale and evidence references in evolution
+source. Evaluation and checking do not invoke external models or acquire evidence.
+The generated adapter owns the runtime handoff, not an author-written effectful
+entry surrounding the transformation.
 
 `StepObservation` is SDK-produced data, not a closure or a second authored wire
 format. Generated bindings retain the contract identity and encoded root values
