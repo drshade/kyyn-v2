@@ -48,9 +48,12 @@ toolBindings interfaces bindings = do
   judgementModule <- source "Kyyn.Judgement" (unlines
     ["module Kyyn.Judgement (module Kyyn.Judgement.Question, judge) where",
      "import Kyyn.Judgement.Question", "import Kyyn.Judgement.Internal (judgeWith)",
-     "import Kyyn.Types.Program (Program, request)", "import qualified KyynToolCalls as Calls",
+     "import Kyyn.Types.Program (request)", "import Kyyn.Connectors (Tool)", "import qualified KyynToolCalls as Calls",
      "-- | Send an applicative batch over one context, returning all answers or one failure.",
-     "judge :: Context -> Questions a -> Program Calls.Calls (Either JudgementFailure a)",
+     "-- Set up the checkout-local credential with: kyyn-v2 --kb PATH secret set JEV_TOKEN",
+     "-- Example: judge (Context body) (ask (yesNo \"Does this need a reply?\" describe))",
+     "-- where describe True = \"Reply requested\"; describe False = \"No reply needed\".",
+     "judge :: Context -> Questions a -> Tool (Either JudgementFailure a)",
      "judge = judgeWith (request . Calls.JudgementCall)"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",
@@ -65,7 +68,11 @@ toolBindings interfaces bindings = do
      "import Kyyn.Types.Program (Program)","import Kyyn.Types.Plugin (ConnectorInstance(..))",
      "import qualified KyynToolCalls as Calls"] ++
     ["import qualified " ++ proxyModule p k | ConnectorInterface p k _ <- interfaces] ++
-    ["type Tool a = Program Calls.Calls a"] ++ concat
+    ["-- | Effectful KB helper. Import Tool from Kyyn.Connectors and FetchError from Kyyn.Plugin.",
+     "-- A registered implementation has type: Input -> Tool (Either FetchError Result).",
+     "-- Register name, description, implementation, inputType and resultType in kb.dhall's tools list.",
+     "-- Input and Result are the authored Haskell types named by that registration.",
+     "type Tool a = Program Calls.Calls a"] ++ concat
     [[coerce n ++ " :: " ++ proxyModule p k ++ ".Instance",
       coerce n ++ " = ConnectorInstance " ++ show (coerce instanceName :: String)] | InstanceBinding n p k instanceName <- bindings])
   pure (core:connectorModule:judgementModule:proxies)

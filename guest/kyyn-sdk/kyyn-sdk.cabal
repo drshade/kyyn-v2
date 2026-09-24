@@ -9,9 +9,8 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Plugin
-    Kyyn.Judgement.Question
   other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal
-    Kyyn.Judgement.Internal
+    Kyyn.Judgement.Internal Kyyn.Judgement.Question
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1

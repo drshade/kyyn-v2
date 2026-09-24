@@ -101,6 +101,19 @@ main = do
       apiModule = Api.ApiModule "Kyyn.Workspace.Evolution" [reexport,local]
       catalogue = Api.WorkspaceCatalogue workspace revision [apiModule]
       rendered = GuestApi.moduleResult (Right apiModule)
+      unavailable = refusal [errorDiagnostic "plugin.config" "Repair connector configuration"]
+  case GuestApi.availableCatalogue True [apiModule] unavailable of
+    Response outcome payload _ diagnostics -> do
+      assert "Unavailable bindings erased the fixed catalogue" (outcome == Succeeded &&
+        payload == object ["modules" .= (["Kyyn.Workspace.Evolution"] :: [String])])
+      assert "Partial catalogue lacks warning" (case diagnostics of
+        Diagnostic Warning "guest.bindings-unavailable" _ _ : Diagnostic Warning "plugin.config" _ _ : [] -> True
+        _ -> False)
+  assert "Unavailable requested module succeeded"
+    (exitStatus (GuestApi.availableCatalogue False [apiModule] unavailable) == 1)
+  let unknown = refusal [errorDiagnostic "guest.module-not-found" "Unknown module"]
+  assert "Unknown module misreported as broken bindings" (GuestApi.availableCatalogue False [apiModule] unknown == unknown)
+  assert "Successful discovery changed" (GuestApi.availableCatalogue True [apiModule] rendered == rendered)
   case rendered of
     Response _ _ messages _ ->
       assert "Workspace local declarations precede reexports"

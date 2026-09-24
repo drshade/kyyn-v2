@@ -4,12 +4,15 @@ module Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation) where
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (stripPrefix)
+import Data.Bifunctor (first)
+import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (rootType)
-import Kyyn.Domain.Diagnostic (errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath, relativeName)
+import Kyyn.Domain.Plugin (QualifiedTypeName(..))
 import Kyyn.Domain.Root (RootDefinition(..))
 import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
@@ -21,9 +24,29 @@ import Kyyn.Porcelain.Capability.Tool
 
 runToolPreparation :: (RootStore :> es, SchemaInspection :> es, GuestCompilation :> es)
   => FileTree -> Eff (ToolPreparation : es) a -> Eff es a
-runToolPreparation sdk = interpret $ \_ (PrepareTools code plugins) -> runExceptT $ do
+runToolPreparation sdk = interpret $ \_ operation -> case operation of
+  PrepareToolBindings code plugins -> runExceptT $ do
+    (_,_,_,_,sources,names) <- environment sdk code plugins
+    pure (sources,names)
+  PrepareTools code plugins -> runExceptT $ do
+    (declarations,allSources,interfaces,bindings,inspectionSources,_) <- environment sdk code plugins
+    forM declarations $ \(ToolDefinition name description inputName outputName implementation) -> do
+      let expected = errorDiagnostic "tool.signature"
+            ("Expected " ++ implementation ++ " :: " ++ coerce inputName ++ " -> Tool (Either FetchError " ++ coerce outputName ++
+             "); import Tool from Kyyn.Connectors and FetchError from Kyyn.Plugin. " ++
+             "Use guest module show Kyyn.Connectors for the tool entry contract.")
+          withSignature :: Either [Diagnostic] a -> Either [Diagnostic] a
+          withSignature = first (expected :)
+      InspectedSchema input _ <- ExceptT (withSignature <$> inspectType inspectionSources inputName)
+      InspectedSchema output _ <- ExceptT (withSignature <$> inspectType inspectionSources outputName)
+      source <- checked (toolSources interfaces bindings (rootType input) (rootType output) implementation (files allSources))
+      compiled <- ExceptT (withSignature <$> compileGuest source)
+      pure (PreparedTool (ToolDescriptor name description input output) compiled plugins)
+
+environment :: RootStore :> es => FileTree -> FileTree -> [PreparedPlugin]
+  -> ExceptT [Diagnostic] (Eff es) ([ToolDefinition],FileTree,[ConnectorInterface],[InstanceBinding],FileTree,[String])
+environment sdk code plugins = do
   RootDefinition _ _ _ _ declarations authored <- ExceptT (readRootDefinition code)
-  let checked = either (throwE . pure . errorDiagnostic "tool.preparation") pure
   pluginSources <- traverse (\(name,bytes) -> (,) <$> checked (relativePath name) <*> pure bytes)
     [(name,bytes) | (path,bytes) <- files code,
       Just package <- [stripPrefix "plugins/packages/" (relativeName path)],
@@ -35,9 +58,9 @@ runToolPreparation sdk = interpret $ \_ (PrepareTools code plugins) -> runExcept
         ConfiguredConnector name binding (PreparedConnector kind _ _ _ _ _) _ <- instances]
   generated <- checked (toolBindings interfaces bindings)
   inspectionSources <- checked (fileTree (files allSources ++ generated))
-  forM declarations $ \(ToolDefinition name description inputName outputName implementation) -> do
-    InspectedSchema input _ <- ExceptT (inspectType inspectionSources inputName)
-    InspectedSchema output _ <- ExceptT (inspectType inspectionSources outputName)
-    source <- checked (toolSources interfaces bindings (rootType input) (rootType output) implementation (files allSources))
-    compiled <- ExceptT (compileGuest source)
-    pure (PreparedTool (ToolDescriptor name description input output) compiled plugins)
+  let names = [map (\c -> if c == '/' then '.' else c) (take (length name - 3) name)
+        | (path,_) <- generated, let name = relativeName path, name /= "KyynToolCalls.hs"]
+  pure (declarations,allSources,interfaces,bindings,inspectionSources,names)
+
+checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
+checked = either (throwE . pure . errorDiagnostic "tool.preparation") pure

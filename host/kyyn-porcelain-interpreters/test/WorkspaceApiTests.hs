@@ -25,6 +25,8 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import Kyyn.Porcelain.Capability.WorkspaceApi (inspectWorkspaceApi)
+import qualified Kyyn.Porcelain.Capability.Tool as Tool
+import qualified Kyyn.Porcelain.Capability.PluginPreparation as Plugin
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceApi (runWorkspaceApi)
@@ -83,6 +85,13 @@ workspaceApiTests = do
           . interpret (\_ -> \case
               Store.ReadWorkspace selected | selected == workspace -> record "workspace" >> pure (Right material)
               _ -> error "Discovery accessed candidates, lifecycle or persistence")
+          . interpret (\_ -> \case
+              Tool.PrepareTools {} -> error "Evolution bindings compiled tools"
+              Tool.PrepareToolBindings {} -> error "Unexpected tool bindings")
+          . interpret (\_ -> \case
+              Plugin.PreparePackages {} -> error "Unexpected packages"
+              Plugin.PreparePlugins {} -> error "Unexpected plugins"
+              Plugin.ValidatePlugins {} -> error "Unexpected plugin validation")
           . runDhallHandling . runRootStore . runRootOpening sdk . runWorkspaceApi sdk $
               inspectWorkspaceApi workspace
         events <- readIORef trace
