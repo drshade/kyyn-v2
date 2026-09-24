@@ -206,8 +206,8 @@ History and change inspection currently prepare plugin declarations and contract
 including compiled adapters; separating inspection from entry compilation is a
 later refinement, not a reason to add another registry or cache.
 
-`guest module list/show` and `guest symbol show` describe the installed public SDK,
-independently of KB selection. Public modules come from kyyn-sdk's exposed
+`guest module list/show` and `guest symbol show` describe the installed public SDK
+and, when a KB is selected, its generated public tool modules. Public modules come from kyyn-sdk's exposed
 facade declarations under [ADR 0008](0008-authoring.md), not the shared wire-profile
 package's exports; checked MicroHs exports determine symbol membership, including
 reexports and their defining module. Display authored signatures and type aliases
@@ -235,8 +235,10 @@ catalogue and expose it in human and JSON output; ordinary implementation commen
 are not documentation. This does not promise full Haddock parsing or rendering.
 
 Generate this fixed catalogue from the staged SDK during the build and ship it
-as Dhall in the runtime bundle. Discovery reads the catalogue through filesystem
-and Dhall plumbing; it does not select a KB, invoke Git or compile guest code.
+as Dhall in the runtime bundle. Outside a KB (no `root/kb.dhall` at the selected path), discovery reads only the
+catalogue through filesystem and Dhall plumbing, without Git or guest compilation.
+Within a KB it adds generated modules from the accepted root, or the evolution
+target selected by `--evolution ID`.
 Human output supports selective exploration and `--json` returns the same symbols
 as structured data. A missing module or symbol is a refusal with a navigation hint.
 
@@ -250,8 +252,7 @@ kyyn-v2 --kb PATH guest module show Kyyn.Workspace.Evolution --evolution 000001-
 kyyn-v2 --kb PATH guest symbol show Kyyn.Workspace.After.todos --evolution 000001-add-todos
 ```
 
-Without that option, discovery remains the installed, KB-independent catalogue.
-With it, the catalogue additionally contains exactly `Kyyn.Workspace.Evolution`,
+With `--evolution`, the catalogue also contains `Kyyn.Workspace.Evolution`,
 `Kyyn.Workspace.Before` and `Kyyn.Workspace.After`, as generated for the selected
 workspace's current source. The first exposes the typed `evolve`, `editBefore`
 and `edit` combinators; the other two expose collection handles. Use the existing
@@ -266,12 +267,35 @@ candidate materialization, facts, semantic validation, query execution or readin
 In contrast, endpoint schemas and their metadata must be valid: the generated
 handles depend on their types and collection declarations. An invalid endpoint
 produces an actionable diagnostic, not a stale catalogue or placeholder types.
-The author can still inspect the installed SDK by omitting `--evolution`.
+The author can inspect the fixed installed SDK from a directory outside a KB.
 
 Workspace-scoped discovery is a runtime command: it loads the installed SDK source
 tree and native compiler integration, honours `--runtime`, and uses an
 ApiInspection interpreter in `kyyn-microhs`, alongside SchemaInspection.
-Unscoped discovery remains catalogue-only.
+Discovery outside a KB remains catalogue-only.
+
+#### Tool authoring discovery
+
+For the accepted root and an evolution target, expose `Kyyn.Connectors`,
+`Kyyn.Judgement` and each generated `Kyyn.Plugins.P_*.*` facade in the same
+list/show/symbol commands. Omit internal request rows such as `KyynToolCalls`.
+The public judgement facade reexports the question vocabulary alongside `judge`;
+it is not advertised as a separate runner-less module.
+
+Tool bindings are generated from the selected plugin declarations and configured
+instances, even before a tool is registered. Discovery inspects these bindings,
+not the tool implementation; an incomplete or incorrectly typed helper must not
+prevent the author from learning the contract. Selected schema/plugin declarations
+and configuration must be valid where the generated types depend on them.
+Use the same binding generator for discovery and execution.
+
+`Kyyn.Connectors.Tool` documentation states the entry signature
+`Input -> Tool (Either FetchError Result)`, its imports and manifest registration
+fields. `Kyyn.Judgement.judge` documentation names `JEV_TOKEN`, gives
+`kyyn-v2 --kb PATH secret set JEV_TOKEN`, and includes a short `judge`/`ask`
+example. CLI output must suffice to write a first tool without reading kernel
+source. A tool-compilation refusal includes `tool.signature` with the expected
+authored input/output types and imports, alongside compiler details.
 
 Keep the two capabilities separate so fixed discovery does not acquire compiler
 or repository dependencies. The host contracts are:
@@ -281,6 +305,9 @@ data WorkspaceApi :: Effect where
   InspectWorkspaceApi
     :: EvolutionWorkspace
     -> WorkspaceApi m (Either [Diagnostic] WorkspaceCatalogue)
+  InspectToolApi
+    :: FileTree
+    -> WorkspaceApi m (Either [Diagnostic] [ApiModule])
 
 data WorkspaceCatalogue = WorkspaceCatalogue
   { workspace      :: EvolutionWorkspace
@@ -468,8 +495,8 @@ installed layout, with `--runtime` and `--git` development overrides.
 Before installing compiler interpreters, the composition root configures the
 unpatched compiler's `MHSCPPHS` environment variable once from the resolved runtime;
 Kyyn's declaration reader uses that toolchain's preprocessor path directly.
-Workspace-scoped guest discovery loads the SDK and compiler integration; unscoped
-guest discovery reads only the installed catalogue. Evolution listing,
+KB-scoped guest discovery loads the SDK and compiler integration; discovery
+outside a KB reads only the installed catalogue. Evolution listing,
 state changes, archived inspection, recovery, plugin installation and already-accepted diagnosis do
 not load the SDK. Host configuration/path resolution and interpretation live in
 `kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
@@ -491,8 +518,8 @@ neither acquires evidence nor edits the root.
 with `--evolution ID`. `root tool execute NAME --input DHALL` invokes only the
 accepted declaration. Input and output follow the same Dhall/JSON conventions
 as connector methods. Listing and showing compile/check declarations but do not
-run the helper or read evidence. Generated proxy source catalogue integration
-remains separate from this registered input/result discovery.
+run the helper or read evidence. Guest discovery exposes the generated authoring facades independently of this
+registered input/result discovery.
 
 Tool diagnostics use `tool.unknown` for a missing registered name,
 `tool.preparation` for invalid source assembly, and `tool.failed` for the helper's

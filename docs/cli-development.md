@@ -225,7 +225,8 @@ creation, inspect the reported directory before removing the partial copy and re
 
 ## Discover the guest SDK
 
-These commands work anywhere; no KB or source checkout is needed:
+Outside a KB these commands show the installed SDK without needing a source
+checkout. Inside a KB they also show its generated tool bindings:
 
 ```sh
 kyyn-v2 guest module list
@@ -284,11 +285,26 @@ This adds `Kyyn.Workspace.Evolution`, `Kyyn.Workspace.Before` and
 `Kyyn.Workspace.After` to the SDK catalogue. Results identify the workspace and
 its declared Before revision (`result.context` in JSON). The schema and metadata
 must compile, but the evolution body can be missing or unfinished. Fix invalid
-target schemas and repeat the command; omit the option to inspect the SDK alone.
+target schemas and repeat the command; run from outside a KB to inspect the SDK alone.
 Human module output places workspace-defined operations before reexports.
 `--runtime DIRECTORY` selects the runtime for either form of discovery.
 
 If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.
+
+For tool authoring, inspect these modules on an accepted root or add
+`--evolution ID` to inspect its target:
+
+```sh
+kyyn-v2 --kb PATH guest module show Kyyn.Connectors
+kyyn-v2 --kb PATH guest module show Kyyn.Judgement
+kyyn-v2 --kb PATH guest module show Kyyn.Plugins.P_local_file.Folder
+```
+
+`Kyyn.Connectors` documents `Tool` and the expected entry signature;
+`Kyyn.Judgement` includes question builders, `judge`, credential setup and a short
+example. Installed plugin declarations determine the proxy modules shown by
+`guest module list`. Discovery does not compile your tool implementation, so it
+also works while that function is incomplete or has the wrong type.
 
 ## KB investigation helpers
 
@@ -354,7 +370,7 @@ kyyn-v2 --kb PATH root tool execute assess --input '"Please approve the revised 
 See [typed judgement authoring](../architecture/adr/0027-judgement.md#authoring-is-typed)
 for combining different question types into a single request. Shared question
 types and combinators are discoverable with
-`kyyn-v2 guest module show Kyyn.Judgement.Question`.
+`kyyn-v2 --kb PATH guest module show Kyyn.Judgement`.
 
 ## Recipe declarations and curation progress
 

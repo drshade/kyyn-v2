@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, GADTs, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.Tool
-  ( ToolPreparation(..), ToolExecution(..), PreparedTool(..), prepareTools, executeTool ) where
+  ( ToolPreparation(..), ToolExecution(..), PreparedTool(..), prepareTools, prepareToolBindings, executeTool ) where
 
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -16,6 +16,7 @@ data PreparedTool = PreparedTool ToolDescriptor CompiledProgram [PreparedPlugin]
 
 data ToolPreparation :: Effect where
   PrepareTools :: FileTree -> [PreparedPlugin] -> ToolPreparation m (Either [Diagnostic] [PreparedTool])
+  PrepareToolBindings :: FileTree -> [PreparedPlugin] -> ToolPreparation m (Either [Diagnostic] (FileTree,[String]))
 type instance DispatchOf ToolPreparation = Dynamic
 
 data ToolExecution :: Effect where
@@ -24,5 +25,7 @@ type instance DispatchOf ToolExecution = Dynamic
 
 prepareTools :: ToolPreparation :> es => FileTree -> [PreparedPlugin] -> Eff es (Either [Diagnostic] [PreparedTool])
 prepareTools code = send . PrepareTools code
+prepareToolBindings :: ToolPreparation :> es => FileTree -> [PreparedPlugin] -> Eff es (Either [Diagnostic] (FileTree,[String]))
+prepareToolBindings code = send . PrepareToolBindings code
 executeTool :: ToolExecution :> es => PreparedTool -> Value -> Eff es (Either [Diagnostic] CheckedValue)
 executeTool tool = send . ExecuteTool tool
