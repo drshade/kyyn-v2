@@ -316,6 +316,46 @@ Existing KB manifests without tools need this field in `kb.dhall`:
 New KBs already include it. An older captured evolution may need the same manifest
 update before it can be checked with this development build.
 
+### Model-assisted questions
+
+A registered helper can import generated `Kyyn.Judgement` and compose typed
+questions. For example, `assess` below has input type `Helpers.Input` and result
+type `Helpers.Output` when saved in `Helpers.hs`:
+
+```haskell
+module Helpers where
+import Kyyn.Connectors (Tool)
+import Kyyn.Plugin (FetchError(..))
+import Kyyn.Judgement
+
+type Input = String
+type Output = Integer
+
+assess :: Input -> Tool (Either FetchError Output)
+assess body = do
+  result <- judge (Context body)
+    (ask (yesNo "Does this require a reply?" describe))
+  pure $ case result of
+    Left failure -> Left (FetchError (judgementFailureMessage failure))
+    Right (YesNoAnswer probability) -> Right (round (probability * 10000))
+  where
+    describe True = "The message asks for a response or decision"
+    describe False = "The message is informational; no reply is needed"
+```
+
+This example returns probability in integer basis points. Register, check and
+accept it as above; then configure the local key and invoke it:
+
+```sh
+kyyn-v2 --kb PATH secret set JEV_TOKEN
+kyyn-v2 --kb PATH root tool execute assess --input '"Please approve the revised budget"'
+```
+
+See [typed judgement authoring](../architecture/adr/0027-judgement.md#authoring-is-typed)
+for combining different question types into a single request. Shared question
+types and combinators are discoverable with
+`kyyn-v2 guest module show Kyyn.Judgement.Question`.
+
 ## Recipe declarations and curation progress
 
 Recipes are first-class data in `KnowledgeBase a`, alongside the authored domain

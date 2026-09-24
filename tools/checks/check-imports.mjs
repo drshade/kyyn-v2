@@ -14,7 +14,7 @@ const allowed = {
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
     'Kyyn.Composition.Secrets', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.SecretStore',
-    'Kyyn.Plumbing.Interpreter.SecretStore', 'Control.Exception', 'Data.Aeson', 'Data.ByteString.Char8', 'Data.Text.Encoding', 'System.IO',
+    'Kyyn.Plumbing.Interpreter.SecretStore', 'Kyyn.Plumbing.Interpreter.Judgement', 'Control.Exception', 'Data.Aeson', 'Data.ByteString.Char8', 'Data.Text.Encoding', 'System.IO',
     'Data.Coerce', 'Data.Text', 'Kyyn.Domain.Value', 'Kyyn.Composition.Runtime', 'Kyyn.Composition.Connectors',
     'Kyyn.Composition.Tools', 'Kyyn.Domain.Tool', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Interpreter.ToolPreparation', 'Kyyn.Porcelain.Interpreter.ToolExecution', 'Kyyn.Surfaces.Tools',
@@ -53,7 +53,7 @@ const allowed = {
     'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Evolution.KnowledgeBase', 'Kyyn.Types.Curation', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
-    'Kyyn.Types.Plugin', 'Kyyn.Types.Program',
+    'Kyyn.Types.Plugin', 'Kyyn.Types.Program', 'Kyyn.Types.Judgement', 'Kyyn.Judgement.Internal',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
@@ -140,9 +140,12 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.Judgement': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Types.Judgement'],
+  'Kyyn.Plumbing.Capability.Judgement.Jev': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Types.Judgement'],
+  'Kyyn.Plumbing.Protocol.Judgement': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Types.Judgement'],
   'Kyyn.Plumbing.Capability.SecretStore': ['Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Secret'],
   'Kyyn.Plumbing.Protocol.Recipes': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Types.Fact', 'Kyyn.Types.KnowledgeBase'],
-  'Kyyn.Plumbing.Protocol.Tool': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.KeyMap', 'Data.ByteString',
+  'Kyyn.Plumbing.Protocol.Tool': ['Kyyn.Plumbing.Protocol.Judgement', 'Kyyn.Types.Judgement', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.KeyMap', 'Data.ByteString',
     'Data.Coerce', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
     'Kyyn.Plumbing.Capability.SchemaInspection.Codecs', 'Kyyn.Plumbing.Protocol.PluginMessages'],
@@ -218,6 +221,11 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Runtime.Judgement': ['Kyyn.Runtime.Json', 'Kyyn.Runtime.Plugin', 'Kyyn.Types.Judgement', 'Text.JSON.Types'],
+  'Kyyn.Plumbing.Interpreter.Judgement': ['Control.Exception', 'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text.Encoding',
+    'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.Judgement',
+    'Kyyn.Plumbing.Capability.Judgement.Jev', 'Kyyn.Plumbing.Capability.SecretStore', 'Kyyn.Types.Judgement',
+    'Network.HTTP.Client', 'Network.HTTP.Client.TLS', 'Network.HTTP.Types.Status'],
   'Kyyn.Plumbing.Interpreter.SecretStore': ['Control.Exception', 'Data.ByteString', 'Data.Aeson', 'Data.List', 'Data.Text.Encoding',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Failure',
     'Kyyn.Domain.Path', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.Failure',
@@ -228,7 +236,7 @@ const interpreterModules = {
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path', 'Kyyn.Domain.Root', 'Kyyn.Domain.Tool',
     'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.SchemaInspection', 'Kyyn.Plumbing.Protocol.Tool',
     'Kyyn.Porcelain.Capability.PluginPreparation', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Capability.Tool'],
-  'Kyyn.Porcelain.Interpreter.ToolExecution': ['Control.Monad.Trans.Except', 'Data.Aeson', 'Data.ByteString.Lazy',
+  'Kyyn.Porcelain.Interpreter.ToolExecution': ['Kyyn.Plumbing.Capability.Judgement', 'Kyyn.Plumbing.Protocol.Judgement', 'Kyyn.Types.Judgement', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.ByteString.Lazy',
     'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.State.Static.Local',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Tool',
     'Kyyn.Domain.Value', 'Kyyn.Types.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling',

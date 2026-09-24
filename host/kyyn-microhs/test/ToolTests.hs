@@ -28,6 +28,7 @@ import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..), compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
+import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
 import Kyyn.Plumbing.Protocol.Tool (ConnectorInterface(..), InstanceBinding(..), toolSources, decodeToolFrame)
@@ -51,6 +52,9 @@ import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Exit (ExitCode(..))
 import System.Info (compilerVersion)
 import System.Process (readProcessWithExitCode)
+
+noJudgement :: Eff (Judgement : es) a -> Eff es a
+noJudgement = interpret $ \_ _ -> error "Captured-read fixture unexpectedly requested judgement"
 
 testTools :: DirectoryScope -> GuestToolchain -> FileTree -> FileTree -> [PreparedPlugin] -> IO ()
 testTools scope toolchain sdk pluginCode plugins = do
@@ -93,13 +97,13 @@ testTools scope toolchain sdk pluginCode plugins = do
           "arguments" .= object ["plugin" .= ("local-file" :: String), "instance" .= (instanceName :: String),
             "connectorType" .= (kind :: String), "method" .= (method :: String), "input" .= ("one.txt" :: String)]]))
         response = runPureEff (runFailure (runDhallHandling (emitFrame frame (noReads
-          (runToolExecution (executeTool selected (toJSON (["one.txt"] :: [String]))))))))
+          ((noJudgement . runToolExecution) (executeTool selected (toJSON (["one.txt"] :: [String]))))))))
     assert "Impossible generated request became a user diagnostic" (case response of
       Left (RuntimeUnavailable (ProcessDiagnostic ReadOutput _)) -> True
       _ -> False)
   let invoke input = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
         (runGuestExecution toolchain (runDocumentPersistenceIO (runEvidenceStore scope (runPluginRead
-          (countReads (runToolExecution (executeTool selected input))))))))))) >>= right
+          (countReads ((noJudgement . runToolExecution) (executeTool selected input))))))))))) >>= right
   (response,loads) <- invoke (toJSON (["one.txt","one.txt"] :: [String]))
   value <- right response
   assert "Tool did not compose instances or catch the typed missing-ID failure"

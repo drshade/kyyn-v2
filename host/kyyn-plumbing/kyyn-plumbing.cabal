@@ -34,6 +34,9 @@ library
     Kyyn.Plumbing.Capability.DhallHandling
     Kyyn.Plumbing.Capability.DocumentPersistence
     Kyyn.Plumbing.Capability.SecretStore
+    Kyyn.Plumbing.Capability.Judgement
+    Kyyn.Plumbing.Capability.Judgement.Jev
+    Kyyn.Plumbing.Protocol.Judgement
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
