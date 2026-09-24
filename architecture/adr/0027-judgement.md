@@ -93,8 +93,7 @@ KB/tool input/result contract subset in [ADR 0005](0005-contracts.md). A tool
 returning a judgement to an agent currently projects it into that subset, for
 example a decision constructor and an explicitly computed integer basis-point
 value. Raw `Judged` results containing `Double` are not currently registerable
-tool result contracts. Fractional contract support is a separate decision, not
-silently introduced through this capability.
+tool result contracts.
 
 ### One provider interpreter and a local secret
 
@@ -144,8 +143,8 @@ without credentials or network access.
 
 Each `judge` call makes one provider request containing one question. An authored
 tool can compose calls normally. No batch scheduler, persistent response cache,
-automatic retry policy or asynchronous job mechanism is needed for this first
-journey. A provider refusal returns to the caller, who can decide whether to retry.
+automatic retry policy or asynchronous job mechanism. A provider refusal returns
+to the caller, who can decide whether to retry.
 
 The private guest protocol retains [ADR 0007](0007-wire.md)'s numeric-string
 profile. Finite doubles travel as round-trippable decimal strings in fixed SDK
