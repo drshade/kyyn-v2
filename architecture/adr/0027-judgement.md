@@ -214,7 +214,7 @@ call. Never return a default probability or success-shaped empty distribution.
 At the provider boundary check the answer kind, exact option/level coverage,
 selected option membership, finite numbers, probability/confidence range and
 score range. Check distribution totals with a documented floating-point tolerance,
-not exact equality or silent normalization (the initial tolerance is `1e-3`,
+not exact equality or silent normalization (the tolerance is `1e-3`,
 allowing small rounding differences). The [Score answer contract](https://docs.typesafe.ai/api#score-answer)
 requires a `legend` mapping level indices to descriptions; check it against the
 submitted scale. Diagnostics do not echo credentials,
