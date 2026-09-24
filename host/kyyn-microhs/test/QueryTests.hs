@@ -110,7 +110,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
         "people" .= [object ["id" .= ("person-001" :: String), "value" .= object ["name" .= ("Ada 🦋" :: String)]]]]
   root <- either (fail . show) pure (runPureEff . runDhallHandling . runRootStore $
     materializeRoot contract code (KB.KnowledgeBase (CheckedValue (contractId (rootSchema contract)) values) []))
-  discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+  discovery <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ prepareRoot root
   prepared <- either (fail . show) (either (fail . show) pure) discovery
   descriptor@(QueryDescriptor _ _ input result) <- case preparedQueries prepared of
@@ -120,7 +120,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
     (fail "Named query types were not inspected")
   unless (metadataOf result == SchemaMetadata [RoleDecl "label" "Person's name" Title]
     [FieldRole "Schema.Person" "name" "label"] []) (fail "Query result metadata lost or copied from Root")
-  response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+  response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
       queryRoot prepared descriptor (CheckedValue (contractId input) (String "Review"))
   let expected = QueryResult (CheckedValue (contractId result)
@@ -132,7 +132,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
       ["module Queries where", "import KyynQueryBindings", "import Kyyn.Query (readCollection)",
        "import Kyyn.Schema", "import qualified Schema", "ownerOf :: String -> Query [Fact Schema.Person]",
        "ownerOf _ = readCollection tasks"]) else b) | (p,b) <- authored] ++ files sdk))
-  rejected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $ compileGuest badSources
+  rejected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain Nothing $ compileGuest badSources
   case rejected of
     Right (Left _) -> pure ()
     Left failure -> fail (show failure)

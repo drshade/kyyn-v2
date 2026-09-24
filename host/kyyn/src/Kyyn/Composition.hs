@@ -148,7 +148,7 @@ executeGuest selection@(Cli.Selection path _ runtimeOverride) workspace request 
 
 dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
 dispatchPlugin host (Cli.Connector command) kb = dispatchConnectors host command kb
-dispatchPlugin (Host executable environment temp _) (Cli.InstallPlugin identity source subdirectory) (SelectedKb kb _ _) = do
+dispatchPlugin (Host executable environment temp _ _) (Cli.InstallPlugin identity source subdirectory) (SelectedKb kb _ _) = do
   cwd <- getCurrentDirectory
   let selected = do
         current <- either (Left . errorDiagnostic "plugin.source-invalid") Right (directoryScope cwd)
@@ -170,12 +170,12 @@ guestResult request = case request of
 type Discovery = '[WorkspaceApi.WorkspaceApi, ToolPreparation, PluginPreparation, Store.EvolutionStore, WorkspaceStore, RootOpening, ApiInspection, SchemaInspection, GuestCompilation, GuestExecution, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host toolchain sdk catalogue = runBase host . runGuestApi catalogue . runGuestExecution toolchain . runGuestCompilation toolchain
+runDiscovery host@(Host _ _ _ _ cache) toolchain sdk catalogue = runBase host . runGuestApi catalogue . runGuestExecution toolchain . runGuestCompilation toolchain cache
   . runSchemaInspectionIO toolchain . runApiInspectionIO toolchain . runRootOpening sdk
   . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runWorkspaceApi sdk
 
 dispatchRootApi :: Host -> Cli.GuestCommand -> SelectedKb -> IO Response
-dispatchRootApi host@(Host _ _ _ runtime) request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk ->
+dispatchRootApi host@(Host _ _ _ runtime _) request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk ->
   case directoryScope runtime of
     Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
     Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do
@@ -188,7 +188,7 @@ dispatchRootApi host@(Host _ _ _ runtime) request (SelectedKb kb revision _) = w
         (Right modules,Right bindings) -> runGuestApiFromCatalogue (Right (modules ++ bindings)) (guestResult request)
 
 dispatchWorkspaceApi :: Host -> EvolutionWorkspace -> Cli.GuestCommand -> IO Response
-dispatchWorkspaceApi host@(Host _ _ _ runtime) workspace request = withRuntime host $ \toolchain sdk ->
+dispatchWorkspaceApi host@(Host _ _ _ runtime _) workspace request = withRuntime host $ \toolchain sdk ->
   case directoryScope runtime of
     Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
     Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do

@@ -84,7 +84,7 @@ testTools scope toolchain sdk pluginCode plugins = do
                             | otherwise = (path,bytes)
   code <- right (fileTree (map manifest (files initial) ++ files pluginCode ++ [(helperPath,helper)]))
   (prepared,sources) <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestExecution toolchain (runGuestCompilation toolchain (runSchemaInspectionIO toolchain (runRootStore
+    (runGuestExecution toolchain (runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain (runRootStore
       (captureCompilation (runToolPreparation sdk (prepareTools code plugins))))))))))) >>= right
   tools <- right prepared
   forM_ sources $ \source -> compileGhc scope source True
@@ -150,7 +150,7 @@ testBindingShapes scope toolchain sdk = do
   path <- right (relativePath "Probe.hs")
   let source body = (path,Text.encodeUtf8 (Text.pack body))
       compile sources = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
-        (runGuestCompilation toolchain (compileGuest sources))))) >>= right
+        (runGuestCompilation toolchain Nothing (compileGuest sources))))) >>= right
   empty <- right (toolSources [] [] StringType StringType "Probe.helper" (files sdk ++ [source
     "module Probe where\nhelper x = pure (Right x)\n"]))
   compileGhc scope empty True

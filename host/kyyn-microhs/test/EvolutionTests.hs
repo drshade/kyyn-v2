@@ -103,7 +103,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
       captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings ++ files metadataBindings ++ files sameBindings
       compileGuestFiles entries = do
         sources <- right (guestSources (path "Proof.hs") entries)
-        runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $ compileGuest sources
+        runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain Nothing $ compileGuest sources
       native label entries = do
         let directory = temporary </> label
         forM_ entries $ \(relative,bytes) -> do

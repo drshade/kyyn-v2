@@ -66,7 +66,7 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   scope <- right (directoryScope temporary)
   compiler <- GuestToolchain <$> right (directoryScope toolchain)
   artifact <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
-    (runGuestCompilation compiler (compileGuest sources))))) >>= right >>= right
+    (runGuestCompilation compiler Nothing (compileGuest sources))))) >>= right >>= right
   let CompiledProgram _ (_,bytes) = artifact
       bytecode = temporary </> "program.comb"
   Bytes.writeFile bytecode bytes
@@ -95,7 +95,7 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
         temporary </> relativeName (selectedEntry invalid)] ""
       assert ("GHC accepted " ++ label) (invalidStatus /= ExitSuccess)
       refused <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
-        (runGuestCompilation compiler (compileGuest invalid))))) >>= right
+        (runGuestCompilation compiler Nothing (compileGuest invalid))))) >>= right
       assert ("MicroHs accepted " ++ label) (case refused of Left _ -> True; Right _ -> False)
   putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, applicative batch, refusals, fixed-point codec and query/validation/Monad exclusions."
 

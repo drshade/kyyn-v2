@@ -26,7 +26,7 @@ testCompilation temporary toolchain = do
       make = guestSources (path "Program.hs")
       files = [(path "Program.hs", "{-# LANGUAGE CPP #-}\nmodule Program where\nimport Helper\n#define MESSAGE message\nmain :: IO ()\nmain = putStrLn MESSAGE\n"),
                (path "Helper.hs", "module Helper where\nmessage :: String\nmessage = \"captured\"\n")]
-      compileWith selected sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation selected $
+      compileWith selected sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation selected Nothing $
         compileGuest sources
       compile = compileWith toolchain
       invoke entry = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestExecution toolchain $
@@ -64,7 +64,7 @@ testCompilation temporary toolchain = do
     Left (RuntimeUnavailable ProcessDiagnostic{operation = StartProcess}) -> pure ()
     _ -> fail "missing compiler must be an operational failure"
   forM_ [(-11, "terminated"), (2, "unexpected status"), (1, Bytes.pack [255])] $ \(status, bytes) -> do
-    outcome <- runEff . runFailure . compilerExit status bytes . runFileSystemIO temporary . runGuestCompilation toolchain $
+    outcome <- runEff . runFailure . compilerExit status bytes . runFileSystemIO temporary . runGuestCompilation toolchain Nothing $
       compileGuest sources
     case outcome of
       Left (RuntimeUnavailable ProcessDiagnostic{operation = WaitForExit}) -> pure ()

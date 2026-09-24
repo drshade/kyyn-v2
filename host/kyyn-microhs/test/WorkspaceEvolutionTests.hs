@@ -87,7 +87,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
         before target (tree [entry]) (tree [])
       context = EvolutionContext kb identifier (Before revision beforeContract) snapshot
       acceptedTree = tree (files beforeCode ++ files factFiles)
-  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runSchemaInspectionIO toolchain . gitMock repository revision acceptedTree
     . runDhallHandling . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure

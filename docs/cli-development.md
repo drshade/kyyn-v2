@@ -24,6 +24,10 @@ paths under your chosen prefix). KBs stored elsewhere are untouched.
 
 Plain `cabal install exe:kyyn-v2` installs only the host executable, not the
 MicroHs/runtime/SDK bundle it needs. Use the script for a usable local installation.
+
+Guest compilation is cached per KB under `.kyyn/compiled`. If a local compiled
+artifact is damaged, delete that directory and rerun the command; accepted facts
+and source are unaffected. Native schema/API inspection still runs normally.
 It reuses the staging helper and existing Cabal/Make build, without custom Cabal hooks.
 
 ```sh
