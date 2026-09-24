@@ -104,16 +104,16 @@ author's actual constructors:
 newtype Probability = Probability { basisPoints :: Integer }
 newtype Score = Score { milliLevels :: Integer }
 data OptionProbability a = OptionProbability
-  { option :: a, probability :: Probability }
+  { optionValue :: a, optionProbability :: Probability }
 
 data YesNoAnswer = YesNoAnswer { probabilityYes :: Probability }
 data ChoiceAnswer a = ChoiceAnswer
   { selected :: a, choiceProbabilities :: [OptionProbability a], choiceConfidence :: Probability }
 data ScaleAnswer a = ScaleAnswer
-  { score :: Score, scaleProbabilities :: [OptionProbability a], scaleConfidence :: Probability }
+  { scaleScore :: Score, scaleProbabilities :: [OptionProbability a], scaleConfidence :: Probability }
 ```
 
-`score` is on the zero-based ordinal scale supplied to the provider, not the
+`scaleScore` is on the zero-based ordinal scale supplied to the provider, not the
 author's numeric `Enum` representation. No implicit threshold, winner selection
 for a scale, abstention rule or knowledge mutation. The tool can inspect the
 distribution and apply its own policy. Results contain only answers; provider

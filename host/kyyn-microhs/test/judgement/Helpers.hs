@@ -24,7 +24,7 @@ run key = do
         Left failure -> Right (show failure)
         Right (Assessment (YesNoAnswer probability) (ChoiceAnswer winner distribution confidence) (ScaleAnswer value levels _)) ->
           Right (contents ++ "|" ++ show (winner, basisPoints probability, basisPoints confidence,
-            milliLevels value, map option distribution, map option levels,
+            milliLevels value, map optionValue distribution, map optionValue levels,
             probabilityText confidence, scoreText value, atLeast (Probability 9000) probability))
   where
     describe :: Priority -> String

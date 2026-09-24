@@ -108,8 +108,8 @@ returned _ = pure (Right (Returned
   const typed = cli(['root', 'tool', 'execute', 'returned', '--input', '"fixture"']).result;
   assert.equal(typed.confidence.basisPoints, '8000');
   assert.equal(typed.decision.choiceConfidence.basisPoints, '8000');
-  assert.equal(typed.decision.choiceProbabilities[1].probability.basisPoints, '9500');
-  assert.equal(typed.rating.score.milliLevels, '750');
+  assert.equal(typed.decision.choiceProbabilities[1].optionProbability.basisPoints, '9500');
+  assert.equal(typed.rating.scaleScore.milliLevels, '750');
   const dhall = spawnSync(executable, ['--kb', kb, 'root', 'tool', 'execute', 'returned', '--input', '"fixture"'],
     { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
   assert.equal(dhall.status, 0, dhall.stderr);

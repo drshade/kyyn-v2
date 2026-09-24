@@ -18,7 +18,7 @@ import Kyyn.Plumbing.Capability.Judgement
 import Kyyn.Plumbing.Capability.Judgement.Jev
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore(..))
 import Kyyn.Plumbing.Interpreter.Judgement (runJudgementWithTransport)
-import Kyyn.Types.Judgement hiding (probability)
+import Kyyn.Types.Judgement
 import qualified Network.HTTP.Client as Http
 import Network.HTTP.Types.Status (statusCode)
 import qualified Network.Socket as Socket

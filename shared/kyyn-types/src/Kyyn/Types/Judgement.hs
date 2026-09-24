@@ -14,7 +14,7 @@ newtype Probability = Probability { basisPoints :: Integer } deriving (Eq, Ord, 
 -- | A weighted scale score in thousandths of a level: 1250 means 1.250 levels.
 newtype Score = Score { milliLevels :: Integer } deriving (Eq, Ord, Show)
 -- | One option or scale level and its probability.
-data OptionProbability a = OptionProbability { option :: a, probability :: Probability } deriving (Eq, Show)
+data OptionProbability a = OptionProbability { optionValue :: a, optionProbability :: Probability } deriving (Eq, Show)
 -- | Test whether a probability meets a threshold: atLeast (Probability 9500) value.
 atLeast :: Probability -> Probability -> Bool
 atLeast threshold value = value >= threshold
@@ -36,7 +36,7 @@ data ChoiceAnswer a = ChoiceAnswer
   { selected :: a, choiceProbabilities :: [OptionProbability a], choiceConfidence :: Probability }
   deriving (Eq, Show)
 data ScaleAnswer a = ScaleAnswer
-  { score :: Score, scaleProbabilities :: [OptionProbability a], scaleConfidence :: Probability }
+  { scaleScore :: Score, scaleProbabilities :: [OptionProbability a], scaleConfidence :: Probability }
   deriving (Eq, Show)
 
 data JudgementFailure
