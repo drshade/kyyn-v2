@@ -12,44 +12,50 @@ import Kyyn.Types.Judgement
 jevModel :: String
 jevModel = "jev-1.13.0"
 
-requestBody :: JudgementRequest a -> Value
-requestBody request = case request of
-  YesNoRequest context question -> body context (object ["type" .= ("noul" :: String), "instructions" .= question])
-  ChoiceRequest context question options -> body context (object
-    ["type" .= ("choice" :: String), "instructions" .= question,
-     "criteria" .= object [Key.fromString label .= description | (label,description) <- options]])
-  ScaleRequest context question descriptions -> body context (object
-    ["type" .= ("score" :: String), "instructions" .= question, "criteria" .= descriptions])
-  where
-    body (Context context) question = object
-      ["model" .= jevModel, "state" .= context, "questions" .= object ["judgement" .= question]]
+requestBody :: JudgementRequest -> Value
+requestBody (JudgementRequest (Context context) questions) = object
+  ["model" .= jevModel, "state" .= context,
+   "questions" .= object [Key.fromString label .= questionValue question | (label,question) <- named questions]]
 
-decodeResponse :: JudgementRequest a -> Value -> Either JudgementFailure (Judged a)
-decodeResponse request value = case parseEither (withObject "response" $ \response -> do
-  identity <- response .: "model"
-  unless (not (null identity)) (fail "Missing model identity")
+questionValue :: QuestionSpec -> Value
+questionValue request = case request of
+  YesNoRequest question yes no -> object
+    ["type" .= ("noul" :: String), "instructions" .= question,
+     "criteria" .= object ["true" .= yes, "false" .= no]]
+  ChoiceRequest question options -> object
+    ["type" .= ("choice" :: String), "instructions" .= question,
+     "criteria" .= object [Key.fromString label .= description | (label,description) <- options]]
+  ScaleRequest question descriptions -> object
+    ["type" .= ("score" :: String), "instructions" .= question, "criteria" .= descriptions]
+
+named :: [a] -> [(String,a)]
+named = zip ["q" ++ show n | n <- [0 :: Integer ..]]
+
+decodeResponse :: JudgementRequest -> Value -> Either JudgementFailure [JudgementAnswer]
+decodeResponse (JudgementRequest _ questions) value = case parseEither (withObject "response" $ \response -> do
   answers <- response .: "answers"
-  unless (Keys.keys answers == ["judgement"]) (fail "Unexpected answer identities")
-  result <- answers .: "judgement" >>= decodeAnswer request
-  pure (Judged identity result)) value of
+  let entries = named questions
+  unless (sort (map Key.toString (Keys.keys answers)) == sort (map fst entries))
+    (fail "Unexpected answer identities")
+  mapM (\(label,question) -> answers .: Key.fromString label >>= decodeAnswer question) entries) value of
     Left _ -> Left InvalidProviderResponse
     Right result -> Right result
 
-decodeAnswer :: JudgementRequest a -> Value -> Parser a
+decodeAnswer :: QuestionSpec -> Value -> Parser JudgementAnswer
 decodeAnswer request = withObject "answer" $ \answerValue -> do
   kind <- answerValue .: "type" :: Parser String
   case request of
-    YesNoRequest _ _ -> do
+    YesNoRequest _ _ _ -> do
       unless (kind == ("noul" :: String)) (fail "Incorrect answer kind")
-      YesNoAnswer <$> (answerValue .: "noul" >>= probability)
-    ChoiceRequest _ _ options -> do
+      YesNoResult . YesNoAnswer <$> (answerValue .: "noul" >>= probability)
+    ChoiceRequest _ options -> do
       unless (kind == "choice") (fail "Incorrect answer kind")
       winner <- answerValue .: "choice"
       unless (winner `elem` map fst options) (fail "Unknown selected option")
       probabilities <- answerValue .: "probabilities" >>= distribution (map fst options)
       confidence <- answerValue .: "confidence" >>= probability
-      pure (ChoiceAnswer winner probabilities confidence)
-    ScaleRequest _ _ descriptions -> do
+      pure (ChoiceResult (ChoiceAnswer winner probabilities confidence))
+    ScaleRequest _ descriptions -> do
       unless (kind == "score") (fail "Incorrect answer kind")
       value <- answerValue .: "score"
       unless (finite value && value >= 0 && value <= fromIntegral (length descriptions - 1))
@@ -62,7 +68,7 @@ decodeAnswer request = withObject "answer" $ \answerValue -> do
         unless (actual == description) (fail "Incorrect level description")) (zip labels descriptions)
       probabilities <- answerValue .: "probabilities" >>= distribution labels
       confidence <- answerValue .: "confidence" >>= probability
-      pure (ScaleAnswer value (zip [0..] (map snd probabilities)) confidence)
+      pure (ScaleResult (ScaleAnswer value (zip [0..] (map snd probabilities)) confidence))
 
 distribution :: [String] -> Value -> Parser [(String,Double)]
 distribution labels = withObject "distribution" $ \values -> do

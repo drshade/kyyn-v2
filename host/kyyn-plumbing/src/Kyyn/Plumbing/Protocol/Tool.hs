@@ -17,12 +17,12 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSourc
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame, decodeFrameWith)
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
-import Kyyn.Types.Judgement (SomeJudgementRequest)
+import Kyyn.Types.Judgement (JudgementRequest)
 
 data ConnectorInterface = ConnectorInterface PluginName ConnectorTypeName [(MethodName,DataType,DataType)]
 data InstanceBinding = InstanceBinding BindingName PluginName ConnectorTypeName ConnectorName
 data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName Value
-  | ToolJudgement SomeJudgementRequest
+  | ToolJudgement JudgementRequest
 
 proxyModule :: PluginName -> ConnectorTypeName -> String
 proxyModule plugin kind = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then '_' else c) (pluginNameText plugin) ++ "." ++ coerce kind
@@ -39,9 +39,9 @@ toolBindings interfaces bindings = do
       calls = unlines $ ["{-# LANGUAGE GADTs, EmptyDataDecls #-}",
         "module KyynToolCalls (Calls(..)" ++ concat [", Connector" ++ show i | (i,_) <- indexed] ++ ") where",
         "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)",
-        "import Kyyn.Types.Judgement (JudgementRequest, JudgementFailure, Judged)"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
+        "import Kyyn.Types.Judgement (JudgementRequest, JudgementFailure, JudgementAnswer)"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
         ["data Connector" ++ show i | (i,_) <- indexed] ++
-        ["data Calls a where", "  JudgementCall :: JudgementRequest a -> Calls (Either JudgementFailure (Judged a))"] ++
+        ["data Calls a where", "  JudgementCall :: JudgementRequest -> Calls (Either JudgementFailure [JudgementAnswer])"] ++
         ["  " ++ requestName i n ++ " :: ConnectorInstance Connector" ++ show i ++ " -> " ++ haskellType a ++
           " -> Calls (Either FetchError " ++ haskellType b ++ ")" | (i,_,_,n,a,b) <- requests]
   core <- source "KyynToolCalls" calls
@@ -49,7 +49,8 @@ toolBindings interfaces bindings = do
     ["module Kyyn.Judgement (module Kyyn.Judgement.Question, judge) where",
      "import Kyyn.Judgement.Question", "import Kyyn.Judgement.Internal (judgeWith)",
      "import Kyyn.Types.Program (Program, request)", "import qualified KyynToolCalls as Calls",
-     "judge :: Context -> Question a -> Program Calls.Calls (Either JudgementFailure (Judged a))",
+     "-- | Send an applicative batch over one context, returning all answers or one failure.",
+     "judge :: Context -> Questions a -> Program Calls.Calls (Either JudgementFailure a)",
      "judge = judgeWith (request . Calls.JudgementCall)"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",

@@ -25,12 +25,12 @@ runJudgementIO action = do
 
 runJudgementWithTransport :: (IOE :> es, SecretStore :> es)
   => (Http.Request -> IO (Int, Bytes.ByteString)) -> Eff (Judgement : es) a -> Eff es a
-runJudgementWithTransport transport = interpret $ \_ (Judge question) -> case validateQuestion question of
+runJudgementWithTransport transport = interpret $ \_ (Judge question) -> case validateRequest question of
   Left failure -> pure (Left failure)
   Right () -> do
     credential <- readSecret (either error id (secretName "JEV_TOKEN"))
     case credential of
-      Left _ -> pure (Left (MissingSecret "JEV_TOKEN; use kyyn-v2 --kb PATH secret set JEV_TOKEN"))
+      Left _ -> pure (Left (MissingSecret "JEV_TOKEN"))
       Right key -> do
         let request = Http.defaultRequest
               { Http.host = "api.typesafe.ai", Http.port = 443, Http.secure = True

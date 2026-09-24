@@ -21,7 +21,6 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import qualified Kyyn.Plumbing.Capability.Judgement as Judgement
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
-import Kyyn.Types.Judgement (SomeJudgementRequest(..))
 import Kyyn.Plumbing.Protocol.PluginMessages (success, failure)
 import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), decodeToolFrame)
 import Kyyn.Porcelain.Capability.PluginPreparation
@@ -35,7 +34,7 @@ runToolExecution = interpret $ \_ (ExecuteTool (PreparedTool (ToolDescriptor _ _
   _ <- ExceptT (encodeValue (contractShape input) arguments)
   result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState ([] :: [(ConnectorInstanceRef,CurrentEvidence)]) $
     conversation decodeToolFrame program (Lazy.toStrict (encode arguments)) $ \case
-      ToolJudgement (SomeJudgementRequest request) -> Judgement.encodeReply request <$> Judgement.judge request
+      ToolJudgement request -> Judgement.encodeReply <$> Judgement.judge request
       ToolCall plugin kind instanceName methodName value -> answerPlugin plugins plugin kind instanceName methodName value
   value <- either (\(FetchError message) -> throwE [errorDiagnostic "tool.failed" message]) pure result
   _ <- ExceptT (encodeValue (contractShape output) value)

@@ -1,4 +1,3 @@
-{-# LANGUAGE GADTs #-}
 module Kyyn.Runtime.Judgement (exchangeJudgement) where
 
 import Kyyn.Runtime.Json
@@ -6,20 +5,26 @@ import Kyyn.Runtime.Plugin (exchange)
 import Kyyn.Types.Judgement
 import Text.JSON.Types (JSValue)
 
-exchangeJudgement :: Integer -> JudgementRequest a -> IO (Either JudgementFailure (Judged a))
-exchangeJudgement identity request = exchange identity "judgement" "evaluate" (requestValue request) (replyCodec request)
+exchangeJudgement :: Integer -> JudgementRequest -> IO (Either JudgementFailure [JudgementAnswer])
+exchangeJudgement identity request = exchange identity "judgement" "evaluate" (requestValue request) replyCodec
 
-requestValue :: JudgementRequest a -> JSValue
-requestValue request = case request of
-  YesNoRequest context question -> base "yesNo" context question []
-  ChoiceRequest context question options -> base "choice" context question
-    [("options", encodeWith (listCodec optionCodec) options)]
-  ScaleRequest context question levels -> base "scale" context question
-    [("levels", encodeWith (listCodec stringCodec) levels)]
+requestValue :: JudgementRequest -> JSValue
+requestValue (JudgementRequest (Context context) questions) = record
+  [("context",encodeWith stringCodec context),
+   ("questions",encodeWith (listCodec questionCodec) questions)]
+
+questionCodec :: Codec QuestionSpec
+questionCodec = Codec encode (const (Left "Questions are outbound only"))
   where
-    base kind (Context context) question extra = record
-      ([("kind",encodeWith stringCodec kind),("context",encodeWith stringCodec context),
-        ("question",encodeWith stringCodec question)] ++ extra)
+    encode request = case request of
+      YesNoRequest question yes no -> base "yesNo" question
+        [("yes",encodeWith stringCodec yes),("no",encodeWith stringCodec no)]
+      ChoiceRequest question options -> base "choice" question
+        [("options",encodeWith (listCodec optionCodec) options)]
+      ScaleRequest question levels -> base "scale" question
+        [("levels",encodeWith (listCodec stringCodec) levels)]
+    base kind question extra = record
+      ([("kind",encodeWith stringCodec kind),("question",encodeWith stringCodec question)] ++ extra)
 
 optionCodec :: Codec (String,String)
 optionCodec = Codec
@@ -28,30 +33,39 @@ optionCodec = Codec
     values <- fields ["label","description"] value
     (,) <$> field "label" stringCodec values <*> field "description" stringCodec values)
 
-replyCodec :: JudgementRequest a -> Codec (Either JudgementFailure (Judged a))
-replyCodec request = Codec encode decode
+replyCodec :: Codec (Either JudgementFailure [JudgementAnswer])
+replyCodec = Codec encode decode
   where
     encode (Left failure) = tagged "Left" (Just (encodeWith failureCodec failure))
-    encode (Right value) = tagged "Right" (Just (encodeWith (judgedCodec (answerCodec request)) value))
+    encode (Right answers) = tagged "Right" (Just (encodeWith (listCodec answerCodec) answers))
     decode value = do
       (tag,payload) <- variant value
       case (tag,payload) of
         ("Left",Just failure) -> Left <$> decodeWith failureCodec failure
-        ("Right",Just result) -> Right <$> decodeWith (judgedCodec (answerCodec request)) result
+        ("Right",Just result) -> Right <$> decodeWith (listCodec answerCodec) result
         _ -> Left "Invalid judgement response"
 
-judgedCodec :: Codec a -> Codec (Judged a)
-judgedCodec codec = Codec
-  (\(Judged identity value) -> record [("model",encodeWith stringCodec identity),("answer",encodeWith codec value)])
-  (\value -> do
-    values <- fields ["model","answer"] value
-    Judged <$> field "model" stringCodec values <*> field "answer" codec values)
+answerCodec :: Codec JudgementAnswer
+answerCodec = Codec encode decode
+  where
+    encode (YesNoResult value) = tagged "yesNo" (Just (encodeWith yesNoCodec value))
+    encode (ChoiceResult value) = tagged "choice" (Just (encodeWith choiceCodec value))
+    encode (ScaleResult value) = tagged "scale" (Just (encodeWith scaleCodec value))
+    decode value = do
+      (tag,payload) <- variant value
+      case (tag,payload) of
+        ("yesNo",Just answer) -> YesNoResult <$> decodeWith yesNoCodec answer
+        ("choice",Just answer) -> ChoiceResult <$> decodeWith choiceCodec answer
+        ("scale",Just answer) -> ScaleResult <$> decodeWith scaleCodec answer
+        _ -> Left "Invalid judgement answer"
 
-answerCodec :: JudgementRequest a -> Codec a
-answerCodec (YesNoRequest _ _) = Codec
+yesNoCodec :: Codec YesNoAnswer
+yesNoCodec = Codec
   (\(YesNoAnswer value) -> record [("probabilityYes",encodeWith doubleCodec value)])
   (\value -> fields ["probabilityYes"] value >>= fmap YesNoAnswer . field "probabilityYes" doubleCodec)
-answerCodec (ChoiceRequest _ _ _) = Codec
+
+choiceCodec :: Codec (ChoiceAnswer String)
+choiceCodec = Codec
   (\(ChoiceAnswer winner probabilities confidence) -> record
     [("selected",encodeWith stringCodec winner),("probabilities",encodeWith (distributionCodec stringCodec) probabilities),
      ("confidence",encodeWith doubleCodec confidence)])
@@ -59,7 +73,9 @@ answerCodec (ChoiceRequest _ _ _) = Codec
     values <- fields ["selected","probabilities","confidence"] value
     ChoiceAnswer <$> field "selected" stringCodec values
       <*> field "probabilities" (distributionCodec stringCodec) values <*> field "confidence" doubleCodec values)
-answerCodec (ScaleRequest _ _ _) = Codec
+
+scaleCodec :: Codec (ScaleAnswer Integer)
+scaleCodec = Codec
   (\(ScaleAnswer scoreValue probabilities confidence) -> record
     [("score",encodeWith doubleCodec scoreValue),("probabilities",encodeWith (distributionCodec integerCodec) probabilities),
      ("confidence",encodeWith doubleCodec confidence)])
