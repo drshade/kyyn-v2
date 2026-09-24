@@ -9,6 +9,7 @@ import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate, find
 import System.FilePath ((</>))
 import System.Process (readProcess)
 import Kyyn.Domain.GuestApi
+import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
 import MicroHs.Expr
@@ -30,7 +31,7 @@ inspectApi compiler sources selected = inspect `catch` failure
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
-      | Just (_ :: ErrorCall) <- fromException err = pure (Left (ApiCompilerError (displayException err)))
+      | Just (_ :: ErrorCall) <- fromException err = pure (Left (ApiCompilerError (compilerMessage (displayException err))))
       | otherwise = pure (Left (ApiNativeError (displayException err)))
     flags = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"],
       cppArgs = ["-DMIN_VERSION_base(x,y,z)=1"] }

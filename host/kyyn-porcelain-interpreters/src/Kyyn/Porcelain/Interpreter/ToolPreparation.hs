@@ -9,7 +9,7 @@ import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (rootType)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic, compilerContext)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.Plugin (QualifiedTypeName(..))
@@ -36,7 +36,7 @@ runToolPreparation sdk = interpret $ \_ operation -> case operation of
              "); import Tool from Kyyn.Connectors and FetchError from Kyyn.Plugin. " ++
              "Use guest module show Kyyn.Connectors for the tool entry contract.")
           withSignature :: Either [Diagnostic] a -> Either [Diagnostic] a
-          withSignature = first (expected :)
+          withSignature = first ((expected :) . map (compilerContext "tool"))
       InspectedSchema input _ <- ExceptT (withSignature <$> inspectType inspectionSources inputName)
       InspectedSchema output _ <- ExceptT (withSignature <$> inspectType inspectionSources outputName)
       source <- checked (toolSources interfaces bindings (rootType input) (rootType output) implementation (files allSources))

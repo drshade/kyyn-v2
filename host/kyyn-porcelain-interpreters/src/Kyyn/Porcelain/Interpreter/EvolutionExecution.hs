@@ -4,10 +4,11 @@ module Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution) whe
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode)
+import Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic, compilerContext)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..))
@@ -39,7 +40,7 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
   old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` closure])
   combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,change,sdk])
   prepared <- checked "evolution.prepare" (evolutionSources expected after combined)
-  compiled <- proposed (compileGuest prepared)
+  compiled <- proposed (first (map (compilerContext "evolution")) <$> compileGuest prepared)
   let knowledge = Value.KnowledgeBase input recipes
   output <- ExceptT (Right <$> executeCompiledEntry "Evolution.evolution" compiled (Bytes.toStrict (encode (knowledgeBaseValue knowledge))))
   reply <- case decodeEvolutionReply output of

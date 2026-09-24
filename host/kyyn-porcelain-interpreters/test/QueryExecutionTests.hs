@@ -71,12 +71,12 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
     case response of Right (Left _) -> pure (); _ -> fail "Invalid query/arguments reached compilation"
   let rejected = [errorDiagnostic "guest.compiler-rejected" "bad query"]
   rejection <- execute (Left rejected) descriptor args
-  unless (rejection == Right (Left rejected)) (fail "Compiler rejection lost diagnostics")
+  unless (rejection == Right (Left [errorDiagnostic "query.compiler-rejected" "bad query"])) (fail "Compiler rejection lost diagnostics")
   let checkCode compilation = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
         . runFixtureExecution shell . gateCompiler (entry "exit 97") compilation . schemaMock input output
         . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ fmap preparedQueries <$> prepareRoot root
   unusedQuery <- checkCode (Left rejected)
-  unless (unusedQuery == Right (Left rejected)) (fail "Unused registered query escaped compilation checking")
+  unless (unusedQuery == Right (Left [errorDiagnostic "query.compiler-rejected" "bad query"])) (fail "Unused registered query escaped compilation checking")
   checkedCode <- checkCode (Right (entry "exit 97"))
   unless (checkedCode == Right (Right [descriptor])) (fail "Code checking executed a validator/query or failed to check it")
   (reused, calls) <- runEff . runState ([] :: [String]) . runFailure . runProcessExecutionIO . runFileSystemIO scope

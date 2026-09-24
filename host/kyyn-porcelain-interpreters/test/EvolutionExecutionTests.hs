@@ -76,7 +76,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
     (fail ("Execution lost selected Before or captured context: " ++ show result))
   let errors = [errorDiagnostic "guest.compiler-rejected" "bad evolution type"]
   compilation <- execute (Left errors) root captured
-  unless (compilation == Right (Left (ProposedCodeRejected errors))) (fail "Compile failure became guest refusal")
+  unless (compilation == Right (Left (ProposedCodeRejected [errorDiagnostic "evolution.compiler-rejected" "bad evolution type"]))) (fail "Compile failure became guest refusal")
   refusal <- execute (Right (entry "printf '{\"tag\":\"Rejected\",\"value\":[]}'")) root captured
   unless (refusal == Right (Left (EvolutionRejected (EvolutionFailure [])))) (fail "Guest refusal lost its classification")
   invalidOutput <- execute (Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":{\"facts\":null,\"recipes\":[]},\"steps\":[],\"curation\":{\"tag\":\"None\"}}}'")) root captured
