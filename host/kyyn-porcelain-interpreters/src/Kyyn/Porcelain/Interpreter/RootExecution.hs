@@ -4,12 +4,13 @@ module Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution) where
 import Control.Monad (unless, forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode, object, (.=))
+import Data.Bifunctor (first)
 import qualified Data.ByteString as Strict
 import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (rootType, rootSchema, contractShape, contractId)
-import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic, compilerContext)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Root (Root(..), RootDefinition(..), CheckedValue(..))
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
@@ -40,12 +41,12 @@ runRootExecution sdk = interpret $ \_ -> \case
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"
       (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))
-    validatorEntry <- ExceptT (compileGuest validation)
+    validatorEntry <- ExceptT (first (map (compilerContext "validator")) <$> compileGuest validation)
     queries <- forM declarations $ \declaration@(QueryDefinition _ _ selected _ _ _ _) -> do
       descriptor@(QueryDescriptor _ _ input result) <- inspectQuery (bindings : files authored ++ files sdk) declaration
       sources <- checked "query.source"
         (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
-      entry <- ExceptT (compileGuest sources)
+      entry <- ExceptT (first (map (compilerContext "query")) <$> compileGuest sources)
       pure (PreparedQuery descriptor selected entry)
     pure (PreparedRoot root validator validatorEntry queries plugins)
   ValidateRoot (PreparedRoot root selected entry _ plugins) -> runExceptT $ do
@@ -83,8 +84,8 @@ inspectQuery :: Schema.SchemaInspection :> es
 inspectQuery sources (QueryDefinition name description _ input inputMetadata result resultMetadata) = do
   inputSource <- checked "query.input-contract" (Schema.schemaSource sources input inputMetadata)
   resultSource <- checked "query.result-contract" (Schema.schemaSource sources result resultMetadata)
-  Schema.InspectedSchema inputContract _ <- ExceptT (Schema.inspectSchema inputSource)
-  Schema.InspectedSchema resultContract _ <- ExceptT (Schema.inspectSchema resultSource)
+  Schema.InspectedSchema inputContract _ <- ExceptT (first (map (compilerContext "query")) <$> Schema.inspectSchema inputSource)
+  Schema.InspectedSchema resultContract _ <- ExceptT (first (map (compilerContext "query")) <$> Schema.inspectSchema resultSource)
   pure (QueryDescriptor name description inputContract resultContract)
 
 protocolFailure :: Failure :> es => String -> String -> ExceptT [Diagnostic] (Eff es) a

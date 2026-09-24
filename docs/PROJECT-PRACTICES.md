@@ -19,6 +19,12 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test compiler-diagnostics roots --test-show-details=direct`, with the
+guest toolchain selected below, checks compiler-message preservation, stack
+removal and contextual rejection codes. `node tools/test-compiler-diagnostics.mjs
+INSTALLED_EXECUTABLE` checks authored schema and tool type errors through the
+installed evolution-check command.
+
 `cabal test judgement-provider --test-show-details=direct` checks Jev request and
 response mapping, fixed-point conversion/display, batch ordering, refusal and native handler behavior without a
 live provider. `cabal test judgements --test-show-details=direct`, with the guest

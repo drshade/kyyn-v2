@@ -11,6 +11,7 @@ library
     Kyyn.MicroHs.Interpreter.SchemaInspection Kyyn.MicroHs.ApiInspection
     Kyyn.MicroHs.Interpreter.ApiInspection
     Kyyn.MicroHs.Interpreter.GuestExecution
+    Kyyn.MicroHs.CompilerDiagnostic
   default-language: Haskell2010
   default-extensions: ScopedTypeVariables TypeSynonymInstances MultiParamTypeClasses FlexibleInstances FlexibleContexts
   ghc-options: -Wall -Wno-unrecognised-warning-flags -Wno-x-partial -Wno-deprecations
@@ -34,6 +35,17 @@ executable kyyn-api-catalogue
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-plumbing,
     kyyn-plumbing-interpreters, bytestring, filepath, directory, Cabal, effectful-core ==2.6.1.0
+
+test-suite compiler-diagnostics
+  type: exitcode-stdio-1.0
+  main-is: CompilerDiagnosticTests.hs
+  other-modules: CompilationTests
+  hs-source-dirs: test
+  default-language: GHC2021
+  default-extensions: NoFieldSelectors
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain, kyyn-plumbing,
+    bytestring, directory, temporary ==1.3, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0
 
 test-suite guest-api
   type: exitcode-stdio-1.0

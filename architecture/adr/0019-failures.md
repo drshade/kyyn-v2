@@ -57,7 +57,11 @@ error channel. The compiler helper returns diagnostics so the caller can disting
 proposed-work rejection from failure of installed code. `RuntimeUnavailable`
 means the runtime could not execute normally, such as a missing or crashed compiler.
 
-For MicroHs compiler errors, initially preserve the original message and use
+For MicroHs compiler errors, preserve the compiler's full source diagnostic,
+including textual file/line/column and multi-line explanation, but remove the
+compiler's internal `CallStack (from HasCallStack)` and `HasCallStack backtrace`
+blocks. Operational failures retain their existing detail; this is not a general
+exception filter. Use
 `location = Nothing` when the compiler supplies only exception text. Give the
 diagnostic a host-owned category code; do not claim a parsed compiler subcategory
 or manufacture a source span. The message may already contain a useful filename
@@ -68,6 +72,17 @@ Do not parse the compiler's prose for control flow or clickable positions, and
 do not make an upstream structured-diagnostic API a prerequisite for the initial
 implementation. Generated-source diagnostics remain honestly identified if an
 authored-source mapping is unavailable.
+
+Compiler rejection codes identify the operation preparing the code, not an
+inferred role for a filename. Root contract inspection uses
+`schema.compiler-rejected`; known tool, validator, query and evolution-entry
+preparation use `tool.compiler-rejected`, `validator.compiler-rejected`,
+`query.compiler-rejected` and `evolution.compiler-rejected` respectively.
+Generic type inspection and compilation use `guest.compiler-rejected` when no
+such context is known. API discovery uses `guest.api-compiler-rejected`.
+An imported dependency may be the source of an error in any of these operations;
+the compiler's filename identifies it. Do not guess roles from module names or
+label all type inspection as schema failure.
 
 After a commit or possible external write, preserve the meaningful outcome in
 normal returned results rather than replacing it with a generic failure. Local

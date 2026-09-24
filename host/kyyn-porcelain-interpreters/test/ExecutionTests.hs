@@ -49,7 +49,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
   unless (success == Right (Right (ValidationReport []))) (fail (show success))
   let compilerErrors = [errorDiagnostic "guest.compiler-rejected" "wrong validator type"]
   rejected <- execute sdk (Left compilerErrors) root
-  unless (rejected == Right (Left compilerErrors)) (fail "Compilation rejection became a semantic report")
+  unless (rejected == Right (Left [errorDiagnostic "validator.compiler-rejected" "wrong validator type"])) (fail "Compilation rejection became a semantic report")
   crashed <- execute sdk (Right (entry "exit 17")) root
   case crashed of
     Left (RuntimeUnavailable (ProcessDiagnostic WaitForExit _)) -> pure ()

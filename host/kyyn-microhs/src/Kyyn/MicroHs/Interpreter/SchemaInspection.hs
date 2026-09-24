@@ -3,13 +3,14 @@
 module Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO) where
 
 import Control.Monad (forM_)
+import Data.Bifunctor (first)
 import Data.Coerce (coerce)
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (checkContract)
 import Kyyn.Domain.DataType (DataType)
-import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, compilerContext)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Domain.Path (scopePath, scopedPath, RelativePath)
@@ -33,10 +34,10 @@ runSchemaInspectionIO toolchain = interpret $ \_ -> \case
   InspectSchema source -> do
     inspected <- inspect toolchain (sourceFiles (schemaSources source)) (selectedType source)
     case inspected of
-      Left diagnostics -> pure (Left diagnostics)
+      Left diagnostics -> pure (Left (map (compilerContext "schema") diagnostics))
       Right (structure,closure) -> do
         metadata <- evaluateMetadata (schemaSources source)
-        pure ((\contract -> InspectedSchema contract closure) <$> (metadata >>= checkContract structure))
+        pure (first (map (compilerContext "schema")) ((\contract -> InspectedSchema contract closure) <$> (metadata >>= checkContract structure)))
   InspectType source selected -> do
     inspected <- inspect toolchain (files source) (coerce selected)
     pure (inspected >>= \(structure,closure) ->
@@ -51,7 +52,7 @@ inspect (GuestToolchain compiler) sources selected =
     inspected <- liftIO (inspectDataType (scopePath compiler) [scopePath scope] selected)
     case inspected of
       Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
-      Left (CompilerError message) -> pure (Left [errorDiagnostic "schema.compiler-rejected" message])
+      Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.compiler-rejected" message])
       Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "schema.unsupported" message])
       Right (structure,loaded) -> do
         let closure = [path | (path,_) <- sources, scopedPath scope path `elem` loaded]

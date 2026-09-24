@@ -2,6 +2,7 @@
 module CompilationTests (testCompilation) where
 
 import Control.Monad (unless, forM_)
+import Data.List (isInfixOf)
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, runEff)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
@@ -54,7 +55,7 @@ testCompilation temporary toolchain = do
     rejected <- compile invalid
     case rejected of
       Right (Left [Diagnostic{code = "guest.compiler-rejected", message}]) ->
-        assert "empty compiler diagnostic" (not (null message))
+        assert "compiler diagnostic must retain message without stacks" (not (null message) && not ("CallStack" `isInfixOf` message) && not ("backtrace:" `isInfixOf` message))
       Left err -> fail ("source rejection became operational failure: " ++ show err)
       _ -> fail "invalid captured code compiled"
   absentScope <- either fail pure (directoryScope (scopePath temporary ++ "/absent-toolchain"))

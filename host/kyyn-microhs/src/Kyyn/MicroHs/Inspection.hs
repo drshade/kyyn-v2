@@ -7,6 +7,7 @@ import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, e
 import Control.Monad (unless)
 import Data.List (nubBy, nub)
 import Kyyn.Domain.DataType
+import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
 import MicroHs.Expr hiding (subst)
@@ -28,7 +29,7 @@ inspectDataType compiler sources selected = inspect `catch` failure
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
-      | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (displayException err)))
+      | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (compilerMessage (displayException err))))
       | otherwise = pure (Left (NativeError (displayException err)))
     inspect = do
       let flags = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"] }
