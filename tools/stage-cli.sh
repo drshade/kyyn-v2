@@ -12,9 +12,16 @@ if [[ -e "$stage_prefix" || -L "$stage_prefix" ]]; then
   exit 1
 fi
 cd "$(dirname "$0")/.."
-cabal build exe:kyyn-api-catalogue
 build_revision=$(git rev-parse HEAD)
-cabal build exe:kyyn-v2 --ghc-options="-DKYYN_BUILD_REVISION=\"$build_revision\""
+build_project=$(mktemp "$PWD/.kyyn-stage-project.XXXXXXXX")
+trap 'rm -f -- "$build_project"' EXIT
+{
+  echo 'import: cabal.project'
+  if [[ -f cabal.project.local ]]; then echo 'import: cabal.project.local'; fi
+  echo 'package kyyn'
+  printf '  ghc-options: "-DKYYN_BUILD_REVISION=\\"%s\\""\n' "$build_revision"
+} > "$build_project"
+cabal build --project-file="$build_project" exe:kyyn-v2 exe:kyyn-api-catalogue
 bash tools/stage-microhs.sh "$stage_prefix/lib/kyyn/microhs"
 mkdir -p "$stage_prefix/bin" "$stage_prefix/lib/kyyn/sdk/Text/JSON" "$stage_prefix/share/kyyn/licenses"
 cp "$(cabal list-bin exe:kyyn-v2)" "$stage_prefix/bin/kyyn-v2"

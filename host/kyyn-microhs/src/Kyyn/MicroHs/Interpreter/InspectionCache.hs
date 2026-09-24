@@ -46,7 +46,7 @@ cachedInspection (Just (InspectionCache revision directory)) kind label settings
       result <- decode bytes
       case result of
         Left _ -> pure (Left [errorDiagnostic "inspection.cache-invalid"
-          ("Cannot read inspection cache; delete " ++ scopePath directory ++ " and retry.")])
+          ("Cannot decode " ++ scopedPath directory key ++ "; delete this cache entry and retry.")])
         Right value -> do
           if timed then liftIO (emitTiming (kind ++ "-hit") label start) else pure ()
           pure (Right value)

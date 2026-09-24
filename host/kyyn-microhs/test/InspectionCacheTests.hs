@@ -1,15 +1,28 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, GADTs, LambdaCase, DataKinds #-}
 module Main where
 
 import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
 import Data.IORef
-import Effectful (liftIO, runEff)
+import Effectful (liftIO, runEff, Eff, IOE, (:>))
+import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.CompiledProgram
+import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.GuestApi
 import Kyyn.Domain.Path
 import Kyyn.MicroHs.Interpreter.InspectionCache
+import Kyyn.MicroHs.Interpreter.SchemaInspection
+import Kyyn.MicroHs.Inspection (inspectionSettings)
+import Kyyn.MicroHs.Toolchain
+import Kyyn.Plumbing.Capability.SchemaInspection
+import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestExecution
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -18,6 +31,8 @@ import Kyyn.Plumbing.Protocol.GuestApi
 import System.Directory (createDirectory, removeFile)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+
+type CacheEffects = '[DhallHandling,FileSystem,Failure,IOE]
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
@@ -29,6 +44,7 @@ main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
         [Constructor "A.Root" [(Just "items",ListType (OptionalType IntegerType)),(Just "name",StringType)]]
       value = (structure,[path "A.hs",path "B.hs"])
       assert label success = unless success (fail label)
+      run :: Eff CacheEffects a -> IO (Either OperationalFailure a)
       run action = runEff . runFailure . runFileSystemIO (scope temporary) . runDhallHandling $ action
   calls <- newIORef (0 :: Int)
   let inspect selectedCache settings input outcome = run $ cachedInspection selectedCache "inspection" "A.Root" settings input
@@ -71,4 +87,39 @@ main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
   apiFirst <- apiInspect (Right api)
   apiSecond <- apiInspect (Left [])
   assert "API namespace separate, declarations and docs preserved" (apiFirst == Right (Right api) && apiSecond == apiFirst)
+  metadataOnHit temporary
   putStrLn "Inspection cache roundtrips, hits, invalidation, disabled mode, refusals and corruption checks passed."
+
+metadataOnHit :: FilePath -> IO ()
+metadataOnHit temporary = do
+  let path = either error id . relativePath
+      scope = either error id . directoryScope
+      compiler = scope (temporary </> "absent-compiler")
+      cache = Just (InspectionCache "test" (scope (temporary </> "metadata-cache")))
+      selected = either error id (schemaSource [(path "A.hs","captured fixture")] "A.Root" "A.metadata")
+      sources = sourceFiles (schemaSources selected)
+      run :: Eff CacheEffects a -> IO (Either OperationalFailure a)
+      run action = runEff . runFailure . runFileSystemIO (scope temporary) . runDhallHandling $ action
+      cached = cachedInspection cache "inspection" "A.Root" (inspectionSettings (scopePath compiler) "A.Root") sources
+        encodeInspection decodeInspection
+  seeded <- run (cached (pure (Right (StringType,[path "A.hs"]))))
+  unless (seeded == Right (Right (StringType,[path "A.hs"]))) (fail "seed raw inspection")
+  executions <- newIORef (0 :: Int)
+  let check reply = run . metadataExecution executions reply . metadataCompiler
+        . runSchemaInspectionIO (GuestToolchain compiler) cache $ inspectSchema selected
+  valid <- check "{\"roles\":[],\"fieldRoles\":[],\"collections\":[]}"
+  unless (case valid of Right (Right _) -> True; _ -> False) (fail (show valid))
+  invalid <- check "{\"roles\":[],\"fieldRoles\":[{\"recordType\":\"Missing\",\"field\":\"missing\",\"role\":\"missing\"}],\"collections\":[]}"
+  unless (case invalid of Right (Left (_:_)) -> True; _ -> False) (fail "cached structure bypassed contract checking")
+  readIORef executions >>= \count -> unless (count == 2) (fail "metadata was not evaluated on each hit")
+
+metadataCompiler :: Eff (GuestCompilation : es) a -> Eff es a
+metadataCompiler = interpret $ \_ (CompileGuest _) -> pure (Right
+  (CompiledProgram (BuildIdentity "fixture" "fixture") (either error id (relativePath "program.comb"),"fixture")))
+
+metadataExecution :: IOE :> es => IORef Int -> Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
+metadataExecution calls reply = interpret $ \_ -> \case
+  ExecuteCompiled _ _ -> do
+    liftIO (modifyIORef' calls (+1))
+    pure (reply,ProcessExit 0 "")
+  ExecuteGuest _ _ _ -> error "Metadata should use one-shot execution"
