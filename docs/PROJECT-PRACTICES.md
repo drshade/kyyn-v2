@@ -19,6 +19,13 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test compilation-cache --test-show-details=direct` uses a recording compiler
+and real filesystem to check artifact reuse, changed-input misses, empty-entry
+repair, uncached mode and storage failures without running MicroHs.
+`node tools/measure-compile-cache.mjs INSTALLED_EXECUTABLE` measures cold/warm
+evolution checks and tool execution on a disposable local-file/judgement KB,
+verifies warm artifacts are not rewritten and uses no live provider.
+
 `cabal test compiler-diagnostics roots --test-show-details=direct`, with the
 guest toolchain selected below, checks compiler-message preservation, stack
 removal and contextual rejection codes. `node tools/test-compiler-diagnostics.mjs

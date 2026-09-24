@@ -37,7 +37,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
   toolchain <- GuestToolchain <$> either fail pure (directoryScope compiler)
   testEmptyRoot temporaryScope toolchain compiler fixtures guest json
   testCompilation temporaryScope toolchain
-  let compile sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain $
+  let compile sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporaryScope . runGuestCompilation toolchain Nothing $
         compileGuest sources
   forM_ [("FunctionField", "function-valued"), ("Recursive", "recursive"),
          ("IllTyped", "IllTyped.hs"), ("Hidden", "opaque"), ("Positional", "positional"),
@@ -111,7 +111,7 @@ testEmptyRoot temporary toolchain compiler fixtures guest json = do
     (captured ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),
                     (checkedPath "KyynSecondCodec.hs", B.toStrict (utf8 second))]))
   compiled <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO temporary
-    (runGuestCompilation toolchain (compileGuest sources))))) >>= either (fail . show) (either (fail . show) pure)
+    (runGuestCompilation toolchain Nothing (compileGuest sources))))) >>= either (fail . show) (either (fail . show) pure)
   forM_ [("{}", A.object [], True), ("{\"extra\":true}", A.object ["error" A..= True], False),
     ("{\"tag\":\"Root\"}", A.object ["error" A..= True], False)] $ \(input,expected,valid) -> do
       result <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO temporary

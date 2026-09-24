@@ -98,7 +98,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
      ("vendor/json", "Text/JSON/Types.hs"), ("vendor/json", "Text/JSON/String.hs")]
   selected <- either fail pure (schemaSource files "Authored.Root" "Authored.schemaMetadata")
   let sources = schemaSources selected
-  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+  result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runSchemaInspectionIO toolchain $ inspectSchema selected
   let expected = SchemaMetadata
         [RoleDecl "task-name" "Tasks in München 🦋" Title,
@@ -112,7 +112,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   unless (metadataOf checked == expected) (fail (show result))
   unsupported <- either fail pure (schemaSource ((path "Unsupported.hs", "module Unsupported where\ndata Root = Root { recursive :: Root }\n") : files)
     "Unsupported.Root" "Authored.schemaMetadata")
-  rejectedSchema <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+  rejectedSchema <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runSchemaInspectionIO toolchain $ inspectSchema unsupported
   case rejectedSchema of
     Right (Left _) -> pure ()
@@ -124,7 +124,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
         "  output <- either fail pure (printValue (encodeWith rootCodec value))", "  putStrLn output"]
   roundTripSources <- either fail pure (guestSources (path "FactRoundTrip.hs")
     (sourceFiles sources ++ [(path "FactRoundTrip.hs", utf8 entrySource), (path "KyynFactCodec.hs", utf8 generated)]))
-  compiled <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain $
+  compiled <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain Nothing $
     compileGuest roundTripSources
   entry <- either (fail . show) (either (fail . show) pure) compiled
   let input = "{\"todos\":[{\"id\":\"todo-001\",\"value\":{\"title\":\"A task\",\"owner\":\"todo-001\"}}],\"people\":[]}"
@@ -171,7 +171,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     ((path "Empty.hs", utf8 emptySchema) : filter ((/= path "Authored.hs") . fst) files)
     "Empty.Root" "Empty.schemaMetadata")
   emptyInspected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-    . runGuestExecution toolchain . runGuestCompilation toolchain . runSchemaInspectionIO toolchain $ inspectSchema emptySource
+    . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runSchemaInspectionIO toolchain $ inspectSchema emptySource
   InspectedSchema emptyChecked _ <- either (fail . show) (either (fail . show) pure) emptyInspected
   emptyContract <- either (fail . show) pure (checkRootLayout emptyChecked)
   _ <- either fail pure (queryBindings emptyContract)
@@ -182,7 +182,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     (runPureEff (runDhallHandling (runRootStore (checkRootValue emptyContract (Aeson.object [])))))
   emptyRoot <- either (fail . show) pure
     (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode (KB.KnowledgeBase emptyValue [])))))
-  emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+  emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot emptyRoot
       either (pure . Left) validateRoot prepared
@@ -194,7 +194,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     factValue <- either fail pure (Aeson.eitherDecodeStrict inputBytes)
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode (KB.KnowledgeBase checkedFacts [])))))
-    response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain
+    response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
       . runSchemaInspectionIO toolchain . runDhallHandling . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
         prepared <- prepareRoot validationRoot
         either (pure . Left) validateRoot prepared

@@ -79,7 +79,7 @@ data GuestToolchain  -- resolved installed compiler/evaluator, preprocessor and 
 
 runGuestCompilation
   :: (FileSystem :> es, ProcessExecution :> es, Failure :> es)
-  => GuestToolchain -> Eff (GuestCompilation : es) a -> Eff es a
+  => GuestToolchain -> Maybe DirectoryScope -> Eff (GuestCompilation : es) a -> Eff es a
 ```
 
 The interpreter writes source/build artifacts through FileSystem and invokes the
@@ -140,8 +140,29 @@ executeCompiledEntry
 ```
 
 The revision identifies the selected pinned MicroHs source; it is not an
-attestation of arbitrary installed binaries. There is no persistent artifact cache
-in this increment. Reuse the immutable `CompiledProgram` for multiple runtime inputs.
+attestation of arbitrary installed binaries. The compilation interpreter reuses
+successful artifacts from a per-KB `.kyyn/compiled/<hash>.comb` cache. Composition
+supplies that directory for a selected KB; without a KB it supplies `Nothing`
+and compilation is uncached. No caller of `compileGuest` handles caching.
+
+The cache key hashes the existing `BuildIdentity` (pinned compiler revision and
+all captured source bytes/paths, including the selected entry), the exact compiler
+arguments (including fixed CPP defines) and explicit compiler environment. The
+bundled library/preprocessor are part of the pinned toolchain; replacing installed
+binaries or libraries in place without changing their revision is not supported.
+Fact values and invocation arguments are not compiler inputs. Hits return the
+same identity and bytes without materializing sources or starting the compiler.
+Misses compile normally and atomically publish successful bytes using a temporary
+file and rename. Rejections are not cached. The cache directory ignores its own
+contents in Git and has no eviction or invalidation mechanism: changed inputs
+select a different key.
+
+Missing or empty entries are misses. Unreadable entries and failed cache writes
+remain ordinary storage failures. Nonempty local artifacts are trusted, without
+a second checksum or bytecode-validation format; if corrupt, normal execution
+reports the failure. Deleting `.kyyn/compiled` is always safe and rebuilds it on
+demand. Native in-process schema/API inspection is not cached by this mechanism.
+Reuse the immutable `CompiledProgram` for multiple runtime inputs.
 Its representation belongs to the domain package so porcelain can carry prepared
 code without depending on plumbing. ExecuteCompiled materializes the artifact in
 a fresh temporary scope; its interpreter supplies the evaluator and launch

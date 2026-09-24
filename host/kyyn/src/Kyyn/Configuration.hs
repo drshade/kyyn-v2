@@ -19,13 +19,13 @@ import Kyyn.Plumbing.Interpreter.Git (runGit)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result (Response, refusal, operationalFailure)
-import System.Directory (canonicalizePath, doesDirectoryExist, findExecutable, getTemporaryDirectory)
+import System.Directory (canonicalizePath, doesDirectoryExist, doesFileExist, findExecutable, getTemporaryDirectory)
 import System.Environment (getExecutablePath, lookupEnv)
 import System.FilePath ((</>), takeDirectory)
 
 data Host = Host
   { gitExecutable :: FilePath, gitConfigurationEnvironment :: [(String,String)]
-  , temporary :: DirectoryScope, runtime :: FilePath }
+  , temporary :: DirectoryScope, runtime :: FilePath, compilationCache :: Maybe DirectoryScope }
 data SelectedKb = SelectedKb
   { knowledgeBase :: KnowledgeBase, revision :: GitRevision, branch :: Maybe LocalBranch }
 
@@ -38,9 +38,11 @@ configure (Cli.Selection path gitOverride runtimeOverride) = runExceptT $ do
   git <- liftIO (canonicalizePath executable)
   temp <- liftIO getTemporaryDirectory >>= either (invalid "setup.temporary") pure . directoryScope
   runtime <- liftIO (runtimeDirectory runtimeOverride)
+  hasKb <- liftIO (doesFileExist (kbPath </> "root/kb.dhall"))
+  cache <- if hasKb then Just <$> either (invalid "kb.path") pure (directoryScope (kbPath </> ".kyyn/compiled")) else pure Nothing
   let keys = ["HOME", "XDG_CONFIG_HOME"]
   values <- liftIO (mapM lookupEnv keys)
-  pure (Host git [(key,value) | (key,Just value) <- zip keys values] temp runtime, scope)
+  pure (Host git [(key,value) | (key,Just value) <- zip keys values] temp runtime cache, scope)
   where invalid code = throwE . refusal . pure . errorDiagnostic code
 
 runtimeDirectory :: Maybe FilePath -> IO FilePath
@@ -49,7 +51,7 @@ runtimeDirectory override = do
   canonicalizePath (maybe (takeDirectory (takeDirectory installed) </> "lib/kyyn") id override)
 
 runGitIO :: Host -> Eff '[Git.Git, ProcessExecution, Failure, IOE] a -> IO (Either OperationalFailure a)
-runGitIO (Host executable environment _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable environment
+runGitIO (Host executable environment _ _ _) = runEff . runFailure . runProcessExecutionIO . runGit executable environment
 
 selectKnowledgeBase :: Host -> DirectoryScope -> IO (Either Response SelectedKb)
 selectKnowledgeBase host scope = do

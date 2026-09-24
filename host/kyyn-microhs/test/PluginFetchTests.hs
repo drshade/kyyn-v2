@@ -123,7 +123,7 @@ compileMicroHs :: FilePath -> FilePath -> GuestSources -> IO (Either [Diagnostic
 compileMicroHs temporary toolchain sources = do
   scope <- right (directoryScope temporary)
   compiler <- GuestToolchain <$> right (directoryScope toolchain)
-  runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runGuestCompilation compiler (compileGuest sources))))) >>= right
+  runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runGuestCompilation compiler Nothing (compileGuest sources))))) >>= right
 
 rejectBoth :: FilePath -> FilePath -> FilePath -> GuestSources -> IO ()
 rejectBoth temporary toolchain ghc sources = do
