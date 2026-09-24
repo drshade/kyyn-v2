@@ -49,7 +49,7 @@ data SecretStore :: Effect where
 data SecretError = SecretNotFound SecretName
 
 runSecretStoreIO
-  :: (IOE :> es, Failure :> es)
+  :: (IOE :> es, Failure :> es, DhallHandling :> es)
   => DirectoryScope -> Eff (SecretStore : es) a -> Eff es a
 ```
 

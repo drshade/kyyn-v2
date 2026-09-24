@@ -170,6 +170,25 @@ saved examples using the host's existing encoder. Run it with
 `bash tools/test-installed.sh`; this is a slower integration check, not necessary
 for each edit to your own evolution.
 
+## Local secrets
+
+```sh
+kyyn-v2 --kb /path/to/kb secret set JEV_TOKEN "$JEV_TOKEN"
+kyyn-v2 --kb /path/to/kb secret set JEV_TOKEN  # hidden prompt, or stdin when piped
+kyyn-v2 --kb /path/to/kb secret list
+kyyn-v2 --kb /path/to/kb secret show JEV_TOKEN
+kyyn-v2 --kb /path/to/kb secret remove JEV_TOKEN
+```
+
+`show` displays a masked value with its original character count; `list` displays
+names only. These commands also support `--json`. An empty value is refused without
+changing an existing secret. Argument values can appear in shell history or process
+listings; use stdin or the hidden prompt when that matters.
+
+Secrets are plaintext in the selected checkout's ignored `.kyyn/secrets` directory.
+They are not copied by Git; configure each checkout separately. Setup does not need
+a compiled schema or a guest runtime.
+
 ## Install plugin source
 
 Create an evolution, then copy a committed plugin package into its target:

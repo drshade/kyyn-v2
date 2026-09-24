@@ -23,6 +23,15 @@ library
     containers, prettyprinter, transformers, random ==1.3.1, time, filelock ==0.1.1.8,
     cryptohash-sha256 ==0.11.102.1
 
+test-suite secret-store
+  type: exitcode-stdio-1.0
+  main-is: SecretTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, text, directory, filepath, temporary ==1.3
+
 test-suite file-acquisition
   type: exitcode-stdio-1.0
   main-is: FileAcquisitionTests.hs

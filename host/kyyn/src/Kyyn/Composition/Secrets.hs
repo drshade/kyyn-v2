@@ -45,7 +45,7 @@ executeSecrets selected command = do
                   ("No secret named " ++ secretNameText name ++ "; use secret set to configure it.")]
                 Right contents -> let masked = maskSecret contents in
                   success (object ["name" .= secretNameText name, "masked" .= masked])
-                    [secretNameText name ++ ": " ++ Text.unpack masked]
+                    [secretNameText name ++ ": " ++ show (Text.unpack masked)]
             Cli.RemoveSecret name -> do
               removed <- Store.removeSecret name
               pure (success (object ["name" .= secretNameText name, "removed" .= removed])
