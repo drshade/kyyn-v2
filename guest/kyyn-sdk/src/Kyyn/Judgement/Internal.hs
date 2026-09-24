@@ -39,7 +39,7 @@ choice question describe = Question (ChoiceRequest question descriptions) conver
     descriptions = [(show value, describe value) | value <- values]
     find label = maybe (Left InvalidProviderResponse) Right (lookup label labels)
     convert (ChoiceResult (ChoiceAnswer winner probabilities confidence)) =
-      ChoiceAnswer <$> find winner <*> mapM (\(label,p) -> (\value -> (value,p)) <$> find label) probabilities <*> pure confidence
+      ChoiceAnswer <$> find winner <*> mapM (\(OptionProbability label p) -> (\value -> OptionProbability value p) <$> find label) probabilities <*> pure confidence
     convert _ = Left InvalidProviderResponse
 
 -- | Score on the zero-based levels of a finite enumeration, preserving fractional scores.
@@ -51,7 +51,7 @@ scale question describe = Question (ScaleRequest question (map describe values))
     levels = zip [0 :: Integer ..] values
     find index = maybe (Left InvalidProviderResponse) Right (lookup index levels)
     convert (ScaleResult (ScaleAnswer value probabilities confidence)) =
-      ScaleAnswer value <$> mapM (\(index,p) -> (\level -> (level,p)) <$> find index) probabilities <*> pure confidence
+      ScaleAnswer value <$> mapM (\(OptionProbability index p) -> (\level -> OptionProbability level p) <$> find index) probabilities <*> pure confidence
     convert _ = Left InvalidProviderResponse
 
 judgeWith :: (JudgementRequest -> Program calls (Either JudgementFailure [JudgementAnswer]))

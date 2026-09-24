@@ -72,13 +72,13 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   Bytes.writeFile bytecode bytes
   forM_ [proc executable [],proc (toolchain </> "bin/mhseval") ["+RTS","-r" ++ bytecode,"-RTS"]] $ \program -> do
     (result,trace,code) <- broker Normal program
-    let expected = "captured 雪|" ++ "(Urgent,9500,8000,12500,[Routine,Important,Urgent],[Routine,Important,Urgent])"
+    let expected = "captured 雪|" ++ "(Urgent,9500,8000,1250,[Routine,Important,Urgent],[Routine,Important,Urgent],\"80.00%\",\"1.250\",True)"
     assert "typed results or continuation differed" (result == Just (success (String (Text.pack expected))) && code == ExitSuccess)
     assert "wrong composition trace" (trace == ["read","judge"])
     (refused,refusalTrace,refusalCode) <- broker Refused program
     assert "typed refusal not handled" (refused == Just (success (String "RateLimited")) && refusalTrace == ["read","judge"] && refusalCode == ExitSuccess)
-    (malformed,_,malformedCode) <- broker NonFinite program
-    assert "non-finite wire probability accepted" (malformed == Nothing && malformedCode /= ExitSuccess)
+    (malformed,_,malformedCode) <- broker OutOfRange program
+    assert "out-of-range wire probability accepted" (malformed == Nothing && malformedCode /= ExitSuccess)
     forM_ [MissingAnswer,ExtraAnswer,WrongAnswer] $ \scenario -> do
       (bad,_,badCode) <- broker scenario program
       assert "malformed batch assembled" (bad == Just (success (String "InvalidProviderResponse")) && badCode == ExitSuccess)
@@ -97,9 +97,9 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
       refused <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
         (runGuestCompilation compiler (compileGuest invalid))))) >>= right
       assert ("MicroHs accepted " ++ label) (case refused of Left _ -> True; Right _ -> False)
-  putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, applicative batch, refusals, finite codec and query/validation/Monad exclusions."
+  putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, applicative batch, refusals, fixed-point codec and query/validation/Monad exclusions."
 
-data Scenario = Normal | Refused | NonFinite | MissingAnswer | ExtraAnswer | WrongAnswer deriving Eq
+data Scenario = Normal | Refused | OutOfRange | MissingAnswer | ExtraAnswer | WrongAnswer deriving Eq
 
 recording :: Scenario -> Eff (Judgement : es) a -> Eff es a
 recording scenario = interpret $ \_ (Judge (JudgementRequest _ questions)) -> pure $
@@ -111,9 +111,9 @@ recording scenario = interpret $ \_ (Judge (JudgementRequest _ questions)) -> pu
       ExtraAnswer -> values ++ values
       WrongAnswer -> reverse values
       _ -> values
-    answer (YesNoRequest _ _ _) = YesNoResult (YesNoAnswer (if scenario == NonFinite then 0/0 else 0.95))
-    answer (ChoiceRequest _ options) = ChoiceResult (ChoiceAnswer "Urgent" (zip (map fst options) [0.05,0.05,0.9]) 0.8)
-    answer (ScaleRequest _ levels) = ScaleResult (ScaleAnswer 1.25 (zip [0 .. toInteger (length levels) - 1] [0,0.75,0.25]) 0.7)
+    answer (YesNoRequest _ _ _) = YesNoResult (YesNoAnswer (Probability (if scenario == OutOfRange then 10001 else 9500)))
+    answer (ChoiceRequest _ options) = ChoiceResult (ChoiceAnswer "Urgent" (zipWith OptionProbability (map fst options) (map Probability [500,500,9000])) (Probability 8000))
+    answer (ScaleRequest _ levels) = ScaleResult (ScaleAnswer (Score 1250) (zipWith OptionProbability [0 .. toInteger (length levels) - 1] (map Probability [0,7500,2500])) (Probability 7000))
 
 broker :: Scenario -> CreateProcess -> IO (Maybe Value,[String],ExitCode)
 broker scenario program = do

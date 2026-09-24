@@ -1,5 +1,6 @@
 module Kyyn.Judgement.Question
   ( Question, Questions, ask, Context(..), yesNo, choice, scale
+  , Probability(..), Score(..), OptionProbability(..), atLeast, probabilityText, scoreText
   , YesNoAnswer(..), ChoiceAnswer(..), ScaleAnswer(..), JudgementFailure(..)
   , judgementFailureMessage
   ) where

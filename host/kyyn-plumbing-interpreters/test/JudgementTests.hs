@@ -18,7 +18,7 @@ import Kyyn.Plumbing.Capability.Judgement
 import Kyyn.Plumbing.Capability.Judgement.Jev
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore(..))
 import Kyyn.Plumbing.Interpreter.Judgement (runJudgementWithTransport)
-import Kyyn.Types.Judgement
+import Kyyn.Types.Judgement hiding (probability)
 import qualified Network.HTTP.Client as Http
 import Network.HTTP.Types.Status (statusCode)
 import qualified Network.Socket as Socket
@@ -27,11 +27,16 @@ import System.Timeout (timeout)
 
 main :: IO ()
 main = do
+  assert "probability threshold" (atLeast (Probability 9500) (Probability 9500) && not (atLeast (Probability 9500) (Probability 9499)))
+  assert "probability display" (map (probabilityText . Probability) [0,1,9500,10000] == ["0.00%","0.01%","95.00%","100.00%"])
+  assert "score display" (map (scoreText . Score) [0,1,1250,9000] == ["0.000","0.001","1.250","9.000"])
   let yes = JudgementRequest (Context "private state 雪") [YesNoRequest "Is this urgent?" "Needs action" "Can wait"]
       choice = JudgementRequest (Context "text") [ChoiceRequest "Which?" [("First","first description"),("Second","second description")]]
       scale = JudgementRequest (Context "text") [ScaleRequest "How much?" ["low","mid","high"]]
       yesResponse probability = response (object ["type" .= ("noul" :: String),"noul" .= probability])
-  assert "yes probability" (decodeResponse yes (yesResponse (0.95 :: Double)) == Right [YesNoResult (YesNoAnswer 0.95)])
+  assert "yes probability" (decodeResponse yes (yesResponse (0.95 :: Double)) == Right [YesNoResult (YesNoAnswer (Probability 9500))])
+  forM_ [(0,0),(1,10000),(0.12344,1234),(0.12346,1235)] $ \(input,expected) ->
+    assert "host basis-point conversion" (decodeResponse yes (yesResponse (input :: Double)) == Right [YesNoResult (YesNoAnswer (Probability expected))])
   forM_ [-0.1,1.1 :: Double] $ \value -> assert "out-of-range yes accepted"
     (decodeResponse yes (yesResponse value) == Left InvalidProviderResponse)
   let choiceResponse probabilities winner = response (object
@@ -39,10 +44,10 @@ main = do
          "confidence" .= (0.8 :: Double)])
       distribution = object ["First" .= (0.1 :: Double),"Second" .= (0.9 :: Double)]
   assert "choice identity/distribution" (decodeResponse choice (choiceResponse distribution "Second") ==
-    Right [ChoiceResult (ChoiceAnswer "Second" [("First",0.1),("Second",0.9)] 0.8)])
+    Right [ChoiceResult (ChoiceAnswer "Second" [OptionProbability "First" (Probability 1000),OptionProbability "Second" (Probability 9000)] (Probability 8000))])
   assert "small rounding difference refused" (decodeResponse choice
     (choiceResponse (object ["First" .= (0.4999 :: Double),"Second" .= (0.5 :: Double)]) "Second") ==
-    Right [ChoiceResult (ChoiceAnswer "Second" [("First",0.4999),("Second",0.5)] 0.8)])
+    Right [ChoiceResult (ChoiceAnswer "Second" [OptionProbability "First" (Probability 4999),OptionProbability "Second" (Probability 5000)] (Probability 8000))])
   forM_ [choiceResponse distribution "Other", choiceResponse (object ["First" .= (1 :: Double)]) "First",
     choiceResponse (object ["First" .= (0.2 :: Double),"Second" .= (0.9 :: Double)]) "First"] $ \value ->
       assert "invalid choice accepted" (decodeResponse choice value == Left InvalidProviderResponse)
@@ -51,7 +56,10 @@ main = do
         "probabilities" .= object ["0" .= (0 :: Double),"1" .= (0.75 :: Double),"2" .= (0.25 :: Double)],
         "confidence" .= (0.7 :: Double)])
   assert "weighted score not rounded" (decodeResponse scale (scored (1.25 :: Double)) ==
-    Right [ScaleResult (ScaleAnswer 1.25 [(0,0),(1,0.75),(2,0.25)] 0.7)])
+    Right [ScaleResult (ScaleAnswer (Score 1250) [OptionProbability 0 (Probability 0),OptionProbability 1 (Probability 7500),OptionProbability 2 (Probability 2500)] (Probability 7000))])
+  forM_ [(1.2344,1234),(1.2346,1235)] $ \(input,expected) ->
+    assert "host score conversion" (decodeResponse scale (scored (input :: Double)) ==
+      Right [ScaleResult (ScaleAnswer (Score expected) [OptionProbability 0 (Probability 0),OptionProbability 1 (Probability 7500),OptionProbability 2 (Probability 2500)] (Probability 7000))])
   assert "wrong answer kind" (decodeResponse yes (scored (1.25 :: Double)) == Left InvalidProviderResponse)
   assert "score outside supplied levels" (decodeResponse scale (scored (3 :: Double)) == Left InvalidProviderResponse)
   forM_ [ChoiceRequest "x" [], ChoiceRequest "x" [("same","a"),("same","b")]] $ \q ->
@@ -61,7 +69,7 @@ main = do
       entries = [(Key.fromString ("q" ++ show n), object ["type" .= ("noul" :: String), "noul" .= (fromIntegral n / 20 :: Double)]) | n <- [0 :: Int .. 11]]
       batchResponse values = object ["answers" .= object [key .= value | (key,value) <- values]]
   assert "numeric question order" (decodeResponse batch (batchResponse (reverse entries)) ==
-    Right [YesNoResult (YesNoAnswer (fromIntegral n / 20)) | n <- [0 :: Int .. 11]])
+    Right [YesNoResult (YesNoAnswer (Probability (toInteger n * 500))) | n <- [0 :: Int .. 11]])
   assert "partial batch accepted" (decodeResponse batch (batchResponse (drop 1 entries)) == Left InvalidProviderResponse)
   assert "extra answer accepted" (decodeResponse batch (batchResponse (("other",object []):entries)) == Left InvalidProviderResponse)
   assert "one invalid answer accepted" (decodeResponse batch (batchResponse (("q0",object ["type" .= ("noul" :: String),"noul" .= (2 :: Double)]):drop 1 entries)) == Left InvalidProviderResponse)
@@ -81,7 +89,7 @@ main = do
         pure (200, encode (yesResponse (0.95 :: Double)))
       invoke key action = runEff (secrets key (runJudgementWithTransport transport action))
   actual <- invoke (Just "fixture-token") (judge yes)
-  assert "native typed dispatch" (actual == Right [YesNoResult (YesNoAnswer 0.95)])
+  assert "native typed dispatch" (actual == Right [YesNoResult (YesNoAnswer (Probability 9500))])
   missing <- invoke Nothing (judge yes)
   assert "missing key is typed" (missing == Left (MissingSecret "JEV_TOKEN"))
   count <- readIORef calls
@@ -133,7 +141,7 @@ localExchange question reply = do
               Http.secure = False, Http.proxy = Nothing } manager
             pure (statusCode (Http.responseStatus responseValue), Http.responseBody responseValue)
       result <- runEff . secrets (Just "fixture-token") . runJudgementWithTransport transport $ judge question
-      assert "local HTTP result" (result == Right [YesNoResult (YesNoAnswer 0.95)])
+      assert "local HTTP result" (result == Right [YesNoResult (YesNoAnswer (Probability 9500))])
       takeMVar finished >>= either throwIO pure
   assert "local HTTP fixture timed out" (case outcome of Just () -> True; Nothing -> False)
 

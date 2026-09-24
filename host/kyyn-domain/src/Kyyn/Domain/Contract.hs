@@ -69,7 +69,8 @@ checkContract root meta = either (Left . pure . errorDiagnostic "schema.incohere
   forM_ (roleNames ++ collectionNames) $ \name ->
     unless (not (null name)) (Left "role and collection names must not be empty")
   assigned <- mapM (checkRole root roles) assignments
-  unique "affordance assignments per record" assigned
+  unique "role assignments per record" [(record,role) | FieldRole record _ role <- assignments]
+  unique "singular affordance assignments per record" [(record,affordance) | (record,affordance) <- assigned, affordance /= Badge]
   collections <- mapM (checkCollection rootFields collectionNames) declarations
   originalShape <- shapeOf root
   collectionShapes <- mapM (\c@(CollectionContract _ f _ _) -> (,) f <$> collectionShape c) collections

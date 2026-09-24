@@ -40,14 +40,14 @@ encodeReply (Left failure) = tagged "Left" (failureValue failure)
 encodeReply (Right answers) = tagged "Right" (map answerValue answers)
 
 answerValue :: JudgementAnswer -> Value
-answerValue (YesNoResult (YesNoAnswer value)) = tagged "yesNo" (object ["probabilityYes" .= show value])
+answerValue (YesNoResult (YesNoAnswer (Probability value))) = tagged "yesNo" (object ["probabilityYes" .= show value])
 answerValue (ChoiceResult (ChoiceAnswer winner probabilities confidence)) = tagged "choice" (object
-  ["selected" .= winner, "probabilities" .= distribution id probabilities, "confidence" .= show confidence])
+  ["selected" .= winner, "probabilities" .= distribution id probabilities, "confidence" .= show (basisPoints confidence)])
 answerValue (ScaleResult (ScaleAnswer value probabilities confidence)) = tagged "scale" (object
-  ["score" .= show value, "probabilities" .= distribution show probabilities, "confidence" .= show confidence])
+  ["score" .= show (milliLevels value), "probabilities" .= distribution show probabilities, "confidence" .= show (basisPoints confidence)])
 
-distribution :: (a -> String) -> [(a,Double)] -> [Value]
-distribution label = map (\(value,p) -> object ["label" .= label value,"probability" .= show p])
+distribution :: (a -> String) -> [OptionProbability a] -> [Value]
+distribution label = map (\(OptionProbability value p) -> object ["label" .= label value,"probability" .= show (basisPoints p)])
 
 failureValue :: JudgementFailure -> Value
 failureValue failure = case failure of

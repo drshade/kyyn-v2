@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Kyyn.Types.Judgement
-  ( Context(..), YesNoAnswer(..), ChoiceAnswer(..), ScaleAnswer(..)
+  ( Context(..), Probability(..), Score(..), OptionProbability(..), atLeast, probabilityText, scoreText
+  , YesNoAnswer(..), ChoiceAnswer(..), ScaleAnswer(..)
   , JudgementFailure(..), JudgementRequest(..), QuestionSpec(..), JudgementAnswer(..)
   , validateQuestion, validateRequest, judgementFailureMessage
   ) where
@@ -8,12 +9,34 @@ module Kyyn.Types.Judgement
 import Data.List (nub)
 
 newtype Context = Context String deriving (Eq, Show)
-data YesNoAnswer = YesNoAnswer { probabilityYes :: Double } deriving (Eq, Show)
+-- | Probability in basis points: 0 is impossible and 10000 is certain.
+newtype Probability = Probability { basisPoints :: Integer } deriving (Eq, Ord, Show)
+-- | A weighted scale score in thousandths of a level: 1250 means 1.250 levels.
+newtype Score = Score { milliLevels :: Integer } deriving (Eq, Ord, Show)
+-- | One option or scale level and its probability.
+data OptionProbability a = OptionProbability { option :: a, probability :: Probability } deriving (Eq, Show)
+-- | Test whether a probability meets a threshold: atLeast (Probability 9500) value.
+atLeast :: Probability -> Probability -> Bool
+atLeast threshold value = value >= threshold
+-- | Display a probability as a percentage with two decimal places.
+probabilityText :: Probability -> String
+probabilityText (Probability value) = fixedText 2 value ++ "%"
+-- | Display a score in levels with three decimal places.
+scoreText :: Score -> String
+scoreText (Score value) = fixedText 3 value
+
+fixedText :: Int -> Integer -> String
+fixedText places value = (if value < 0 then "-" else "") ++ show whole ++ "." ++ replicate (places - length digits) '0' ++ digits
+  where
+    (whole,fraction) = abs value `divMod` (10 ^ places)
+    digits = show fraction
+
+data YesNoAnswer = YesNoAnswer { probabilityYes :: Probability } deriving (Eq, Show)
 data ChoiceAnswer a = ChoiceAnswer
-  { selected :: a, choiceProbabilities :: [(a, Double)], choiceConfidence :: Double }
+  { selected :: a, choiceProbabilities :: [OptionProbability a], choiceConfidence :: Probability }
   deriving (Eq, Show)
 data ScaleAnswer a = ScaleAnswer
-  { score :: Double, scaleProbabilities :: [(a, Double)], scaleConfidence :: Double }
+  { score :: Score, scaleProbabilities :: [OptionProbability a], scaleConfidence :: Probability }
   deriving (Eq, Show)
 
 data JudgementFailure

@@ -24,11 +24,10 @@ run key = do
         Left failure -> Right (show failure)
         Right (Assessment (YesNoAnswer probability) (ChoiceAnswer winner distribution confidence) (ScaleAnswer value levels _)) ->
           Right (contents ++ "|" ++ show (winner, basisPoints probability, basisPoints confidence,
-            basisPoints value, map fst distribution, map fst levels))
+            milliLevels value, map option distribution, map option levels,
+            probabilityText confidence, scoreText value, atLeast (Probability 9000) probability))
   where
     describe :: Priority -> String
     describe Routine = "low"
     describe Important = "mid"
     describe Urgent = "high"
-    basisPoints :: Double -> Integer
-    basisPoints value = round (value * 10000)

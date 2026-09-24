@@ -79,7 +79,18 @@ assess body = do
 judgeAnswer :: String -> Tool (Either JudgementFailure YesNoAnswer)
 judgeAnswer body = judge (Context body) (ask (yesNo "Does this require a reply?" describe))
   where describe yes = if body == "blank" then "" else if yes then "Reply requested" else "No reply requested"
+
+data Urgency = Routine | Urgent deriving (Eq, Show, Enum, Bounded)
+data Returned = Returned { decision :: ChoiceAnswer Urgency, rating :: ScaleAnswer Urgency, confidence :: Probability }
+returned :: Input -> Tool (Either FetchError Returned)
+returned _ = pure (Right (Returned
+  (ChoiceAnswer Urgent [OptionProbability Routine (Probability 500), OptionProbability Urgent (Probability 9500)] (Probability 8000))
+  (ScaleAnswer (Score 750) [OptionProbability Routine (Probability 2500), OptionProbability Urgent (Probability 7500)] (Probability 7000))
+  (Probability 8000)))
 `);
+  fs.writeFileSync(manifestPath, fs.readFileSync(manifestPath, 'utf8').replace(
+    'resultType = "Helpers.Output" }]',
+    'resultType = "Helpers.Output" }, { name = "returned", description = "Return typed SDK answers", implementation = "Helpers.returned", inputType = "Helpers.Input", resultType = "Helpers.Returned" }]'));
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
@@ -94,6 +105,16 @@ judgeAnswer body = judge (Context body) (ask (yesNo "Does this require a reply?"
   assert.match(missing, /secret set/);
   assert.match(JSON.stringify(execute('empty')), /At least one question/);
   assert.match(JSON.stringify(execute('blank')), /descriptions must not be empty/);
+  const typed = cli(['root', 'tool', 'execute', 'returned', '--input', '"fixture"']).result;
+  assert.equal(typed.confidence.basisPoints, '8000');
+  assert.equal(typed.decision.choiceConfidence.basisPoints, '8000');
+  assert.equal(typed.decision.choiceProbabilities[1].probability.basisPoints, '9500');
+  assert.equal(typed.rating.score.milliLevels, '750');
+  const dhall = spawnSync(executable, ['--kb', kb, 'root', 'tool', 'execute', 'returned', '--input', '"fixture"'],
+    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+  assert.equal(dhall.status, 0, dhall.stderr);
+  assert.match(dhall.stdout, /basisPoints = \+8000/);
+  assert.match(dhall.stdout, /milliLevels = \+750/);
   assert.equal(git('rev-parse', 'HEAD'), head);
   assert.equal(git('status', '--porcelain'), '');
   console.log('Installed judgement tool: compilation without credentials, typed missing-key and invalid-batch outcomes, unchanged root. No live provider contacted.');
