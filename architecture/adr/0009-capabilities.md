@@ -165,24 +165,6 @@ under both compilers with recording responses. The native MicroHs broker additio
 exercises live filesystem acquisition and EvidenceStore publication, including
 invocation-local reads and failed acquisitions that leave the previous head unchanged.
 
-Caller-to-plugin composition remains a separate integration boundary:
-
-```haskell
--- Illustrative generated proxy for a registered Microsoft method.
-data MicrosoftCalls a where
-  ReadEmail :: Mail.Instance -> EmailId -> MicrosoftCalls Email
-
-type EvolutionHost root = SnapshotRead root :+: MicrosoftCalls
-```
-
-This particular `EvolutionHost` is an illustrative evolution entry's
-context, not an all-purpose permanent role. [Storage](0006-storage.md) owns the
-guest `Fact` envelope. The generated instance value selects the configured Mail
-instance; the invocation context resolves its fixed `EvidenceSnapshotRef` under
-ADR 0014. The plugin reads that captured evidence through its own host capabilities.
-Another registered method can explicitly acquire fresh evidence. The generated
-proxy carries a method identity and checked types, not arbitrary code over JSON.
-
 ### KB-tool read composition
 
 The initial generated `Tool a` is `Program Calls a`, where `Calls` is a closed
@@ -205,17 +187,13 @@ A method's declared `FetchError` remains a typed value that the helper may handl
 Not-fetched, incompatible-producer and invalid stored evidence stop the invocation
 with a diagnostic naming the instance; these are not converted into catchable
 method failures. Acquisition and sink requests are absent from this caller row.
-Selected-root reads and evolution reuse remain separate implementation work;
-the first tool slice proves captured-read composition only.
 
 Acquisition and captured reads have distinct request algebras. A KB tool may compose
-`SnapshotRead root :+: (MailReads :+: CalendarReads)`, but its interpreter supplies neither acquisition nor
+`MailReads :+: CalendarReads`, but its interpreter supplies neither acquisition nor
 sink handlers. Plugin read implementations likewise receive captured-store reads,
 not HTTP/Secrets. Calling a read method therefore does not hide a fresh fetch in
 browsing. Pure helpers can be shared by both kinds of plugin implementation.
-An evolution may declare acquisition separately; selecting its returned fetch is
-explicit and does not silently replace an already selected snapshot. Role labels
-do not enforce this: the generated signatures and installed handler rows must agree.
+The generated signatures and installed handler rows must agree.
 
 ### Typed dispatch
 
@@ -231,10 +209,10 @@ as its ordinary API. No native accepted-ref capability is exported to guests.
 
 A generated plugin-call capability is also a typed request in the **caller's**
 algebra. The host routes it to a separately interpreted plugin invocation. The
-plugin's HTTP/Secrets requirements do not become requirements available to the
+plugin's implementation requirements do not become requirements available to the
 caller. The generated caller proxy, plugin registration and host dispatch must be
 proved together; registering a `Method PluginHost input output` does not by itself
-make that method callable as `Program EvolutionHost output`.
+make that method callable through the generated `Tool` interface.
 
 On the host, the broker requires GuestExecution plus precisely the capabilities
 it dispatches, not GuestCompilation. For example:
