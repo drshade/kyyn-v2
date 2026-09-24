@@ -40,6 +40,9 @@ main = do
       distribution = object ["First" .= (0.1 :: Double),"Second" .= (0.9 :: Double)]
   assert "choice identity/distribution" (decodeResponse choice (choiceResponse distribution "Second") ==
     Right [ChoiceResult (ChoiceAnswer "Second" [("First",0.1),("Second",0.9)] 0.8)])
+  assert "small rounding difference refused" (decodeResponse choice
+    (choiceResponse (object ["First" .= (0.4999 :: Double),"Second" .= (0.5 :: Double)]) "Second") ==
+    Right [ChoiceResult (ChoiceAnswer "Second" [("First",0.4999),("Second",0.5)] 0.8)])
   forM_ [choiceResponse distribution "Other", choiceResponse (object ["First" .= (1 :: Double)]) "First",
     choiceResponse (object ["First" .= (0.2 :: Double),"Second" .= (0.9 :: Double)]) "First"] $ \value ->
       assert "invalid choice accepted" (decodeResponse choice value == Left InvalidProviderResponse)

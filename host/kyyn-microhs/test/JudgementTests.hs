@@ -42,8 +42,8 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
   common <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Judgement","Program","Evidence","Plugin"]] ++
-     [load "guest/kyyn-sdk/src" file | file <- ["Kyyn/Plugin.hs","Kyyn/Judgement/Internal.hs","Kyyn/Judgement/Question.hs"]] ++
+    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Judgement","Program","Evidence","Plugin","Query","Fact"]] ++
+     [load "guest/kyyn-sdk/src" file | file <- ["Kyyn/Plugin.hs","Kyyn/Judgement/Internal.hs","Kyyn/Judgement/Question.hs","Kyyn/Query.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","Judgement"]] ++
      [load "vendor/json" file | file <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
      [load "host/kyyn-microhs/test/judgement" "Helpers.hs"])
@@ -82,7 +82,22 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
     forM_ [MissingAnswer,ExtraAnswer,WrongAnswer] $ \scenario -> do
       (bad,_,badCode) <- broker scenario program
       assert "malformed batch assembled" (bad == Just (success (String "InvalidProviderResponse")) && badCode == ExitSuccess)
-  putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, typed questions, applicative batch continuation, refusal and finite-number codec."
+  forM_ [
+    ("query", "invalid :: Query.Query () (Either JudgementFailure YesNoAnswer)\ninvalid = judge (Context \"x\") (ask (yesNo \"q\" show))\n"),
+    ("pure validator", "invalid :: () -> Bool\ninvalid _ = judge (Context \"x\") (ask (yesNo \"q\" show))\n"),
+    ("dependent question", "invalid :: Questions YesNoAnswer\ninvalid = ask (yesNo \"q\" show) >>= pure\n")
+    ] $ \(label,extra) -> do
+      let files = [(file, if relativeName file == "Helpers.hs" then content <> Text.encodeUtf8 (Text.pack ("\n" ++ extra)) else content)
+            | (file,content) <- sourceFiles sources]
+      invalid <- right (guestSources (selectedEntry sources) files)
+      forM_ files $ \(file,content) -> Bytes.writeFile (temporary </> relativeName file) content
+      (invalidStatus,_,_) <- readProcessWithExitCode ghc ["-v0","-fno-code","-fforce-recomp","-i","-i" ++ temporary,
+        temporary </> relativeName (selectedEntry invalid)] ""
+      assert ("GHC accepted " ++ label) (invalidStatus /= ExitSuccess)
+      refused <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
+        (runGuestCompilation compiler (compileGuest invalid))))) >>= right
+      assert ("MicroHs accepted " ++ label) (case refused of Left _ -> True; Right _ -> False)
+  putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, applicative batch, refusals, finite codec and query/validation/Monad exclusions."
 
 data Scenario = Normal | Refused | NonFinite | MissingAnswer | ExtraAnswer | WrongAnswer deriving Eq
 

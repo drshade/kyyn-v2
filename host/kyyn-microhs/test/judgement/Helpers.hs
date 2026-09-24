@@ -3,6 +3,7 @@ module Helpers where
 import Kyyn.Connectors (Tool)
 import qualified Kyyn.Connectors as Connectors
 import Kyyn.Judgement
+import qualified Kyyn.Query as Query
 import Kyyn.Plugin (FetchError(..))
 import qualified Kyyn.Plugins.P_fixture.Folder as Files
 

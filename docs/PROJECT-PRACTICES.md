@@ -24,8 +24,9 @@ response mapping, batch ordering, refusal and native handler behavior without a
 live provider. `cabal test judgements --test-show-details=direct`, with the guest
 toolchain selected below, compiles one captured-read/applicative-judgement tool
 under GHC and MicroHs and exchanges real pipe frames with a recording host.
-It checks heterogeneous answer assembly, whole-request refusal and malformed
-replies. Neither test uses a real credential or calls Jev.
+It checks heterogeneous answer assembly, whole-request refusal, malformed
+replies and query/validation/dependent-question compile refusals. Neither test
+uses a real credential or calls Jev.
 `node tools/test-judgement.mjs INSTALLED_EXECUTABLE` accepts a tool definition,
 then checks missing-secret and invalid-batch outcomes with no change to the
 accepted root. This is not a live model-quality or provider-availability test.

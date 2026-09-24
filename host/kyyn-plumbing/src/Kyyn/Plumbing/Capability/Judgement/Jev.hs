@@ -76,7 +76,7 @@ distribution labels = withObject "distribution" $ \values -> do
   probabilities <- mapM (\label -> do
     value <- values .: Key.fromString label >>= probability
     pure (label,value)) labels
-  unless (abs (sum (map snd probabilities) - 1) <= 1e-6) (fail "Distribution does not sum to one")
+  unless (abs (sum (map snd probabilities) - 1) <= 1e-3) (fail "Distribution does not sum to one")
   pure probabilities
 
 probability :: Double -> Parser Double

@@ -1,7 +1,7 @@
 ---
 id: 0027
 title: 'Typed model judgements in KB tools'
-status: proposed
+status: implemented
 date: 2026-09-24
 ---
 
@@ -214,7 +214,10 @@ call. Never return a default probability or success-shaped empty distribution.
 At the provider boundary check the answer kind, exact option/level coverage,
 selected option membership, finite numbers, probability/confidence range and
 score range. Check distribution totals with a documented floating-point tolerance,
-not exact equality or silent normalization (the initial tolerance is `1e-6`). Diagnostics do not echo credentials,
+not exact equality or silent normalization (the initial tolerance is `1e-3`,
+allowing small rounding differences). The [Score answer contract](https://docs.typesafe.ai/api#score-answer)
+requires a `legend` mapping level indices to descriptions; check it against the
+submitted scale. Diagnostics do not echo credentials,
 request state, prompts or provider bodies; model calls can contain private evidence.
 
 ### Where the capability belongs
@@ -235,7 +238,8 @@ remain the KB owner's responsibility, not a new runtime approval workflow.
 Prove a real MicroHs tool calls the host and resumes with typed Bool-space,
 choice and scale results. Compile the same SDK example with GHC, including derived
 Enum/Bounded alternatives. Compose a captured-evidence read with judgement in the
-same tool. Verify generated interfaces are absent from query/validation contexts.
+same tool. Verify query/validation types reject judgement calls and `Questions`
+does not support monadic composition.
 
 Recording tests cover success, missing secret, invalid question, provider
 failure, wrong labels, non-finite/out-of-range values, empty batches, yes/no
