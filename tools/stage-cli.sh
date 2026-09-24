@@ -12,7 +12,9 @@ if [[ -e "$stage_prefix" || -L "$stage_prefix" ]]; then
   exit 1
 fi
 cd "$(dirname "$0")/.."
-cabal build exe:kyyn-v2 exe:kyyn-api-catalogue
+cabal build exe:kyyn-api-catalogue
+build_revision=$(git rev-parse HEAD)
+cabal build exe:kyyn-v2 --ghc-options="-DKYYN_BUILD_REVISION=\"$build_revision\""
 bash tools/stage-microhs.sh "$stage_prefix/lib/kyyn/microhs"
 mkdir -p "$stage_prefix/bin" "$stage_prefix/lib/kyyn/sdk/Text/JSON" "$stage_prefix/share/kyyn/licenses"
 cp "$(cabal list-bin exe:kyyn-v2)" "$stage_prefix/bin/kyyn-v2"

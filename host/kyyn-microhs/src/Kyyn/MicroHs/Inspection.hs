@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Werror #-}
-module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType) where
+module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectionSettings) where
 
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
@@ -25,6 +25,12 @@ data InspectionError
   deriving (Eq, Show)
 
 -- Native compiler integration, not a porcelain operation or a complete KB contract.
+inspectionFlags :: FilePath -> [FilePath] -> Flags
+inspectionFlags compiler sources = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"] }
+
+inspectionSettings :: FilePath -> String -> String
+inspectionSettings compiler selected = show (selected, inspectionFlags compiler ["<captured>"])
+
 inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either InspectionError (DataType, [FilePath]))
 inspectDataType compiler sources selected = withTimingIO "inspection" selected (inspect `catch` failure)
   where
@@ -33,7 +39,7 @@ inspectDataType compiler sources selected = withTimingIO "inspection" selected (
       | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (compilerMessage (displayException err))))
       | otherwise = pure (Left (NativeError (displayException err)))
     inspect = do
-      let flags = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"] }
+      let flags = inspectionFlags compiler sources
           witness = addPreludeImport (EModule (mkIdent "KyynTypeWitness")
             [ExpTypeSome (mkIdent "Selected") [mkIdent ".."]]
             [Import (ImportSpec ImpNormal True (mkIdent (definingModule selected)) Nothing Nothing),

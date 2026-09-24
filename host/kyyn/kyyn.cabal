@@ -11,6 +11,7 @@ executable kyyn-v2
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
     Kyyn.Composition.Tools Kyyn.Composition.Recipes
     Kyyn.Composition.Secrets Kyyn.Composition.Timings
+    Kyyn.Build
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror -threaded -rtsopts

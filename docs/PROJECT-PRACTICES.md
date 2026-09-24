@@ -19,6 +19,14 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test inspection-cache roots --test-show-details=direct` checks persistent
+Dhall inspection results, source/selection/settings/build invalidation, refusal
+and storage behavior, and the shared type codec's existing contract round trips.
+The installed cache measurement below clears both compilation and inspection
+caches; warm timing must show inspection hits without compiler reinspection.
+`tools/stage-cli.sh` embeds the checkout's Git commit for this cache. Plain
+`cabal build` has no such identity and disables inspection caching.
+
 `cabal test compilation-cache --test-show-details=direct` uses a recording compiler
 and real filesystem to check artifact reuse, changed-input misses, empty-entry
 repair, uncached mode and storage failures without running MicroHs.

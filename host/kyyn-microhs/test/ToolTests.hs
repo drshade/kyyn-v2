@@ -84,7 +84,7 @@ testTools scope toolchain sdk pluginCode plugins = do
                             | otherwise = (path,bytes)
   code <- right (fileTree (map manifest (files initial) ++ files pluginCode ++ [(helperPath,helper)]))
   (prepared,sources) <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestExecution toolchain (runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain (runRootStore
+    (runGuestExecution toolchain (runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore
       (captureCompilation (runToolPreparation sdk (prepareTools code plugins))))))))))) >>= right
   tools <- right prepared
   forM_ sources $ \source -> compileGhc scope source True
