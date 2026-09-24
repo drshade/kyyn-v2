@@ -124,7 +124,7 @@ before the first slice. Avoid combining unrelated methods solely to shorten rows
 | EvolutionAuthoring | Create drafts and capture them against an inspected Before source root | Evolution execution, candidate validation, accepted-ref update |
 | EvolutionStore | Workspace list/removal, snapshots and lifecycle, candidates, review notes, archived step reports and record-history reads | Source inspection, local secrets, provider effects or accepted-root update |
 | RootExecution | Validate selected roots/configs, execute snapshot queries/examples, prepare typed output inputs through renderers | Live acquisition, evolution execution, sink invocation, publication |
-| EvolutionExecution | Compile/evaluate evolution entries, dispatch declared snapshot/plugin calls, derive step reports from annotated before/after values | Accepted-ref publication, inferred evidence provenance, implicit delivery or nested proposals |
+| EvolutionExecution | Compile/evaluate evolution entries and derive step reports from annotated before/after values under ADR 0010 | Accepted-ref publication, inferred evidence provenance, implicit delivery or nested proposals |
 | RootPublication | Commit a checked evolution and conditionally advance from its Before revision | Conflict resolution, remote coordination, delivery |
 | EvidenceStore | Latest captured payloads, fingerprints, payload-free change markers and source references (ADR 0014) | Domain classification, accepted curation progress or inferred provider changes |
 | PluginInvocation | Invoke locally built source-plugin methods with declared typed capabilities | Raw `call bytes`, separate connection-plugin runtime |
@@ -138,7 +138,8 @@ need them. Exact implementation rows may be narrower than the capability table.
 Plumbing examples: FileSystem (scoped paths and file/tree primitives),
 DocumentPersistence (scoped locked documents under ADR 0003), Git
 (objects, trees, refs and transport), ProcessExecution (typed lifecycle/pipe
-operations), DhallHandling (real library schema/value functions), HTTP, SecretStore
+operations), DhallHandling (real library schema/value functions), Judgement
+([ADR 0027](adr/0027-judgement.md)), HTTP, SecretStore
 (local named values, independent of plugins), document decoding, clock/entropy and
 transport codecs. [ADR 0016](adr/0016-connections.md) owns secret access and
 integration authentication. Pure serialization
@@ -249,7 +250,7 @@ pure typed composition and workspace entries; and
 
 The authored program has no JSON/Dhall transport parsing, method-string dispatch
 or native IO entry point. Registered KB tools compose captured-evidence plugin reads
-under ADR 0008; queries retain their snapshot-only boundary.
+under ADR 0008 and judgements under ADR 0027; queries retain their snapshot-only boundary.
 [ADR 0010](adr/0010-evolutions.md#pure-evolution-execution) owns evolution execution;
 validation remains a pure KB entry point.
 A guest method descriptor is not itself a serialized function.

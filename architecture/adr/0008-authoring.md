@@ -70,7 +70,7 @@ KB-authored code has these entry-point kinds:
 | Query | Answer or view over the selected snapshot, without proposing a change |
 | Evolution | Produce a candidate through the [pure transformation contract](0010-evolutions.md#pure-evolution-execution), never implicitly accept it |
 | Validation | Pure checks of supplied root/config values, returning diagnostics |
-| KB tool (proposed addition) | Compose declared selected-root and captured-evidence reads for investigation, without acquisition, sink calls or root mutation |
+| KB tool | Compose captured-evidence reads and [model judgements](0027-judgement.md), without evidence acquisition, sink calls or root mutation |
 
 A report is a query result. Agent-facing operations expose queries, KB tools,
 plugin methods and evolution workspaces. A KB tool is an authored function, not a
@@ -193,10 +193,7 @@ CLI/Web/MCP browsing operations use that validated boundary, not the raw checkin
 operation directly. Those surface wrappers are not implemented yet.
 
 KB helpers call generated bindings for registered plugin methods. Provider interpretation belongs inside the
-plugin or its generated provider client, not in the KB. A tool evaluating a
-prepared evolution invokes its fixed entry point. Kyyn turns its returned root into a candidate;
-the authored function does not call a nested `propose` operation or silently update
-accepted fact files. Generated plugin proxies expose concrete input/output types
+plugin or its generated provider client, not in the KB. Generated plugin proxies expose concrete input/output types
 while routing calls through the host and the plugin's own capability context.
 
 ### Composed KB investigation tools
@@ -270,19 +267,17 @@ owns selection of their captured evidence. The same composition can cross plugin
 packages. Register `getActivity` as a KB tool to expose its checked input/result
 contracts and documentation to agents; unregistered helpers remain ordinary private
 functions. The initial manifest registry generates a typed entry signature with
-the read-only capabilities in ADR 0009, not another registry of structural
+the capabilities in ADR 0009, not another registry of structural
 schemas or an author-written MCP wrapper. Discovery checks exports and contracts
 without invoking the tool. A KB tool is not a snapshot `Query`: adding this entry
 point must not give queries, validators or renderers access to plugin calls.
 
-These tools may also declare `SnapshotRead root` to compare captured evidence with
-the explicitly selected root. Query remains the snapshot-only entry point; a tool
-does not extend Query's algebra or give renderers plugin access.
-Initially plugin calls from these tools read captured evidence only. Fresh acquisition is a separate
+Plugin calls from these tools read captured evidence only. Fresh acquisition is a separate
 explicit operation, and external writes use the sink path in ADR 0017. The agent
 can investigate, then write literal fact edits with rationale in an evolution;
-that evolution need not replay the agent's investigation. An evolution can reuse
-the same helpers when the transformation itself should calculate from evidence.
+that evolution follows [ADR 0010](0010-evolutions.md#pure-evolution-execution).
+[ADR 0027](0027-judgement.md) defines model-assisted investigation through the
+same tool entry point.
 
 ### Recipe-guided authoring
 

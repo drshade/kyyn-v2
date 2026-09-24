@@ -1,16 +1,16 @@
 ---
 id: 0009
 title: 'Typed capability rows describe program effects'
-status: accepted
-date: 2026-09-11
+status: proposed
+date: 2026-09-24
 ---
 # Typed capability rows describe program effects
 
 Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
 captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch connects
 filesystem and snapshot reads to evidence publication. Source registration and
-configured instances and CLI acquisition are implemented; KB-tool composition
-remains to be integrated.
+configured instances, CLI acquisition and captured-read KB-tool composition are
+implemented. Judgement extends the tool row under ADR 0027.
 
 ## Context
 
@@ -24,12 +24,12 @@ The capability row is the contract; role names are useful descriptions, not a
 separate product permission taxonomy. Retain these explicit boundaries:
 
 - Validators and pure transformation helpers calculate over supplied inputs.
-- Evolution entry points may use declared snapshot/evidence/plugin capabilities
-  while producing a candidate; they do not accept it or start a nested proposal.
+- Evolution execution follows [ADR 0010](0010-evolutions.md#pure-evolution-execution).
 - Snapshot queries and output renderers may read their selected immutable snapshot,
   not live providers. A renderer can compose multiple queries in that context.
-- The proposed KB tools compose selected-root and captured-evidence plugin reads; they do not fetch from providers,
-  invoke sinks or propose/accept roots.
+- KB tools compose captured-evidence plugin reads and
+  [model judgements](0027-judgement.md); they do not acquire evidence, invoke sinks
+  or propose/accept roots.
 - Accepted-root publication is not a guest capability.
 - Delivery invokes a configured plugin sink with its prepared typed input under
   ADR 0017; it does not implicitly render or accept knowledge.
@@ -40,8 +40,8 @@ Illustrative capability sets, not a closed list of mandatory roles:
 | --- | --- | --- |
 | Validator / pure transformation helper | Pure input-to-result calculation | Host calls, current time, provider access |
 | Snapshot query/output renderer | Typed reads of one selected immutable snapshot; pure computation and query composition | Proposal writes, live providers, sink invocation |
-| Evolution entry point | Selected snapshot/evidence reads and declared plugin acquisition/read calls | Accepted-root publication, nested proposal authoring, delivery |
-| KB tool (proposed addition) | Declared SnapshotRead root and typed plugin reads against selected captured evidence; pure composition | Live acquisition, sinks, proposal/accepted-root writes |
+| Evolution entry point | [ADR 0010's transformation contract](0010-evolutions.md#pure-evolution-execution) | Accepted-root publication, nested proposal authoring, delivery |
+| KB tool | Typed plugin captured reads and model judgements under ADR 0027 | Evidence acquisition, sinks, proposal/accepted-root writes |
 | Source acquisition method | HTTP/filesystem acquisition, secret lookup, prior evidence snapshot reads | KB acceptance, sink invocation |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
 | Sink connector method | Prepared typed input and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
@@ -168,7 +168,8 @@ invocation-local reads and failed acquisitions that leave the previous head unch
 ### KB-tool read composition
 
 The initial generated `Tool a` is `Program Calls a`, where `Calls` is a closed
-GADT with one typed constructor per advertised captured-read method. Its input
+GADT with one typed constructor per advertised captured-read method, plus the
+judgement operations specified in [ADR 0027](0027-judgement.md). Its input
 and output refer to the plugin's actual Haskell types. Generated proxy functions
 hide these constructors and wire codecs from authors:
 
@@ -247,7 +248,6 @@ not speculative stubs for every possible integration.
 
 Compile ordinary composition and examples with missing required capabilities under pinned MicroHs.
 Script host responses and test a live continuation across several requests.
-Reject an unexpected capability before dispatch. Prove a KB acquisition call
-routes through a plugin's own host context without granting the caller that
-plugin's HTTP/Secrets capabilities or causing a broker deadlock. The plugin itself
-can receive raw secret values under ADR 0016; this is not credential containment.
+Reject an unexpected capability before dispatch. Prove a captured-read method call
+routes through the plugin's own context without granting acquisition capabilities
+to the caller or causing a broker deadlock. ADR 0027 owns judgement-specific proofs.
