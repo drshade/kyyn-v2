@@ -305,6 +305,9 @@ kyyn-v2 --kb PATH guest module show Kyyn.Plugins.P_local_file.Folder
 example. Installed plugin declarations determine the proxy modules shown by
 `guest module list`. Discovery does not compile your tool implementation, so it
 also works while that function is incomplete or has the wrong type.
+Fixed SDK module/symbol lookups remain catalogue-only, even with a broken KB or
+an `--evolution` selection. If generated bindings cannot be inspected, listing
+still shows the fixed SDK with a diagnostic explaining the missing bindings.
 
 ## KB investigation helpers
 

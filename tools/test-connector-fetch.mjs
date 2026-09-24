@@ -63,6 +63,14 @@ try {
   const configPath = path.join(draft.path, 'target/plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, 'not valid Dhall');
+  if (toolChecks) {
+    const started = performance.now();
+    assert(cli(['--git', '/not-a-git-executable', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
+    console.log(`Fixed SDK discovery with broken plugin config: ${Math.round(performance.now() - started)} ms`);
+    const partial = cli(['guest', 'module', 'list', '--evolution', draft.id]);
+    assert(partial.result.modules.includes('Kyyn.Schema'));
+    assert(partial.diagnostics.some(diagnostic => diagnostic.code === 'guest.bindings-unavailable'));
+  }
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'local-file', '--evolution', draft.id]).result.schema;
   assert.match(schema, /directory/);
   assert.match(schema, /recursive/);
@@ -74,6 +82,15 @@ try {
   // The emitted schema is directly usable as the configuration's annotation.
   fs.writeFileSync(configPath, `(${configuration([['sales', sales], ['support', support]])}) : (${schema})\n`);
   if (toolChecks) {
+    const discoveryStarted = performance.now();
+    const modules = cli(['guest', 'module', 'list', '--evolution', draft.id]).result.modules;
+    console.log(`Generated local-file guest discovery: ${Math.round(performance.now() - discoveryStarted)} ms`);
+    assert(modules.includes('Kyyn.Plugins.P_local_file.Folder'));
+    assert(!modules.includes('KyynToolCalls'));
+    const bindings = cli(['guest', 'module', 'show', 'Kyyn.Connectors', '--evolution', draft.id]).result.symbols;
+    for (const name of ['Tool', 'sales', 'support']) assert(bindings.some(symbol => symbol.name === name));
+    const proxy = cli(['guest', 'module', 'show', 'Kyyn.Plugins.P_local_file.Folder', '--evolution', draft.id]).result.symbols;
+    assert(proxy.some(symbol => symbol.name === 'content' && /Instance/.test(symbol.declaration)));
     const manifestPath = path.join(draft.path, 'target/kb.dhall');
     const manifest = fs.readFileSync(manifestPath, 'utf8');
     const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
@@ -130,6 +147,7 @@ bulk ids = do
   }
   const other = fetch('support');
   if (toolChecks) {
+    assert(cli(['guest', 'module', 'list']).result.modules.includes('Kyyn.Plugins.P_local_file.Folder'));
     fs.renameSync(sales, sales + '-offline');
     const args = ['root', 'tool', 'execute', 'bulk', '--input', '["updated.txt", "unchanged.txt"]'];
     assert.deepEqual(cli(args).result, ['Original sales evidence Ω', 'Stable sales evidence', 'Independent support evidence']);

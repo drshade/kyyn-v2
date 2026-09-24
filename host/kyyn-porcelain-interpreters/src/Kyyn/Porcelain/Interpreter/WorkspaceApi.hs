@@ -36,6 +36,6 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
     modules <- ExceptT (inspectApiModules sources
       ["Kyyn.Workspace.Evolution", "Kyyn.Workspace.Before", "Kyyn.Workspace.After"])
     pure (WorkspaceCatalogue workspace revision modules)
-  
+
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "guest.workspace-sources") pure

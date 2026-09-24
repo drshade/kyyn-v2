@@ -27,13 +27,45 @@ try {
   fs.mkdirSync(kb);
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'add-judgement-tool']).result;
+  const modules = cli(['guest', 'module', 'list', '--evolution', draft.id]).result.modules;
+  assert(modules.includes('Kyyn.Connectors') && modules.includes('Kyyn.Judgement'));
+  assert(!modules.includes('KyynToolCalls') && !modules.includes('Kyyn.Judgement.Question'));
+  const showModule = name => cli(['guest', 'module', 'show', name, '--evolution', draft.id]).result;
+  const connectors = showModule('Kyyn.Connectors');
+  const tool = connectors.symbols.find(symbol => symbol.name === 'Tool');
+  assert.match(tool.documentation, /Input -> Tool \(Either FetchError Result\)/);
+  const judgement = showModule('Kyyn.Judgement');
+  const judge = judgement.symbols.find(symbol => symbol.name === 'judge');
+  assert.match(judge.declaration, /Context -> Questions a -> Tool \(Either JudgementFailure a\)/);
+  assert.match(judge.documentation, /secret set JEV_TOKEN/);
+  assert.match(judge.documentation, /judge \(Context body\) \(ask/);
+  for (const name of ['ask', 'yesNo', 'choice', 'scale', 'Questions', 'YesNoAnswer', 'judgementFailureMessage'])
+    assert(judgement.symbols.some(symbol => symbol.name === name), `Missing ${name}`);
+  const targetManifestPath = path.join(draft.path, 'target/kb.dhall');
+  const targetManifest = fs.readFileSync(targetManifestPath, 'utf8');
+  fs.writeFileSync(targetManifestPath, 'not valid Dhall');
+  assert(cli(['--git', '/no-git', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
+  const partial = cli(['guest', 'module', 'list', '--evolution', draft.id]);
+  assert(partial.result.modules.includes('Kyyn.Schema'));
+  assert(partial.diagnostics.some(diagnostic => diagnostic.code === 'guest.bindings-unavailable'));
+  const unavailable = cli(['guest', 'module', 'show', 'Kyyn.Judgement', '--evolution', draft.id], 1);
+  assert(unavailable.result.modules.includes('Kyyn.Schema'));
+  fs.writeFileSync(targetManifestPath, targetManifest);
   const manifestPath = path.join(draft.path, 'target/kb.dhall');
   const manifest = fs.readFileSync(manifestPath, 'utf8');
   const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
   assert(manifest.includes(emptyTools));
   fs.writeFileSync(manifestPath, manifest.replace(emptyTools,
     '[{ name = "assess", description = "Assess a supplied message", implementation = "Helpers.assess", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));
-  fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `module Helpers where
+  const helper = path.join(draft.path, 'target/src/Helpers.hs');
+  fs.writeFileSync(helper, 'module Helpers where\ntype Input = String\ntype Output = String\nassess :: Input -> Output\nassess = id\n');
+  assert(showModule('Kyyn.Judgement').symbols.some(symbol => symbol.name === 'judge'));
+  const rejected = cli(['evolution', 'check', draft.id], 1);
+  const expected = rejected.diagnostics.find(diagnostic => diagnostic.code === 'tool.signature');
+  assert.match(expected.message, /Helpers.assess :: Helpers.Input -> Tool \(Either FetchError Helpers.Output\)/);
+  assert.match(expected.message, /Kyyn.Connectors/);
+  // The imports, entry contract and judgement vocabulary were inspected above.
+  fs.writeFileSync(helper, `module Helpers where
 import Kyyn.Plugin (FetchError)
 import Kyyn.Connectors (Tool)
 import Kyyn.Judgement
@@ -52,6 +84,9 @@ judgeAnswer body = judge (Context body) (ask (yesNo "Does this require a reply?"
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   const head = git('rev-parse', 'HEAD');
+  const acceptedModules = cli(['guest', 'module', 'list']).result.modules;
+  assert(acceptedModules.includes('Kyyn.Judgement') && acceptedModules.includes('Kyyn.Connectors'));
+  assert(cli(['guest', 'symbol', 'show', 'Kyyn.Judgement.judge']).result.symbols.some(symbol => symbol.name === 'judge'));
   assert.deepEqual(cli(['secret', 'list']).result.names, []);
   const execute = body => cli(['root', 'tool', 'execute', 'assess', '--input', JSON.stringify(body)]);
   const missing = JSON.stringify(execute('message'));

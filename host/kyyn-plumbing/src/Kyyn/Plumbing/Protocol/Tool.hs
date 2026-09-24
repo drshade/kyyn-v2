@@ -48,12 +48,12 @@ toolBindings interfaces bindings = do
   judgementModule <- source "Kyyn.Judgement" (unlines
     ["module Kyyn.Judgement (module Kyyn.Judgement.Question, judge) where",
      "import Kyyn.Judgement.Question", "import Kyyn.Judgement.Internal (judgeWith)",
-     "import Kyyn.Types.Program (Program, request)", "import qualified KyynToolCalls as Calls",
+     "import Kyyn.Types.Program (request)", "import Kyyn.Connectors (Tool)", "import qualified KyynToolCalls as Calls",
      "-- | Send an applicative batch over one context, returning all answers or one failure.",
      "-- Set up the checkout-local credential with: kyyn-v2 --kb PATH secret set JEV_TOKEN",
      "-- Example: judge (Context body) (ask (yesNo \"Does this need a reply?\" describe))",
      "-- where describe True = \"Reply requested\"; describe False = \"No reply needed\".",
-     "judge :: Context -> Questions a -> Program Calls.Calls (Either JudgementFailure a)",
+     "judge :: Context -> Questions a -> Tool (Either JudgementFailure a)",
      "judge = judgeWith (request . Calls.JudgementCall)"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",

@@ -1,17 +1,31 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Surfaces.GuestApi (modulesResult, moduleResult, symbolResult, workspaceResult) where
+module Kyyn.Surfaces.GuestApi (modulesResult, moduleResult, symbolResult, workspaceResult, availableCatalogue) where
 
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Char (isAlpha)
 import Data.List (intercalate, partition, isPrefixOf)
-import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..))
 import Kyyn.Domain.GuestApi
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
 import Kyyn.Domain.Git (revisionName, Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (scopePath, scopedPath)
-import Kyyn.Surfaces.Result (Response(..), success, refusal)
+import Kyyn.Surfaces.Result (Response(..), Outcome(..), success, refusal)
+
+availableCatalogue :: Bool -> [ApiModule] -> Response -> Response
+availableCatalogue listing modules response@(Response outcome _ _ diagnostics)
+  | outcome == Succeeded = response
+  | any missingSymbol diagnostics = response
+  | otherwise = case modulesResult (Right [name | ApiModule name _ <- modules]) of
+      Response _ value messages _ -> Response (if listing then Succeeded else outcome) value messages
+        (Diagnostic (if listing then Warning else Error) "guest.bindings-unavailable"
+          "Generated bindings are unavailable; the installed SDK catalogue is shown. Fix the reported problem and retry."
+          Nothing : map severity diagnostics)
+  where
+    missingSymbol (Diagnostic _ code _ _) = code == "guest.module-not-found" || code == "guest.symbol-not-found"
+    severity (Diagnostic level code message location) =
+      Diagnostic (if listing then Warning else level) code message location
 
 workspaceResult :: WorkspaceCatalogue -> Response -> Response
 workspaceResult (WorkspaceCatalogue (EvolutionWorkspace (KnowledgeBase (Repository scope) prefix) identity) revision _) (Response outcome value text diagnostics) =

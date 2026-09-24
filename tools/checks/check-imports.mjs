@@ -31,7 +31,7 @@ const allowed = {
     'Kyyn.Porcelain.Capability.GuestApi', 'Kyyn.Porcelain.Interpreter.GuestApi', 'Kyyn.Surfaces.GuestApi',
     'Kyyn.Domain.Publication', 'Kyyn.Porcelain.Capability.KnowledgeBaseInitialization',
     'Kyyn.Porcelain.Interpreter.KnowledgeBaseInitialization',
-    'Data.Time.Clock.POSIX', 'Effectful', 'Kyyn.Configuration', 'Kyyn.Domain.Diagnostic',
+    'Data.Time.Clock.POSIX', 'Data.List', 'Effectful', 'Kyyn.Configuration', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.Evolution', 'Kyyn.Domain.Failure', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace',
     'Kyyn.MicroHs.Toolchain', 'Kyyn.MicroHs.Interpreter.GuestCompilation', 'Kyyn.MicroHs.Interpreter.SchemaInspection',

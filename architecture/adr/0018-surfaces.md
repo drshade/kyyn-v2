@@ -202,9 +202,8 @@ Unavailable cursors, unfetched instances, incompatible producers, publication co
 deltas remain distinct: `evidence.cursor-unavailable`, `evidence.not-fetched`, `evidence.producer-changed`,
 `evidence.base-conflict`, `evidence.invalid-delta` and `evidence.invalid-data`
 (corrupt stored data). ADR 0014 owns their semantics.
-History and change inspection currently prepare plugin declarations and contracts,
-including compiled adapters; separating inspection from entry compilation is a
-later refinement, not a reason to add another registry or cache.
+History and change inspection prepare plugin declarations and contracts,
+including compiled adapters.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK
 and, when a KB is selected, its generated public tool modules. Public modules come from kyyn-sdk's exposed
@@ -256,7 +255,7 @@ With `--evolution`, the catalogue also contains `Kyyn.Workspace.Evolution`,
 `Kyyn.Workspace.Before` and `Kyyn.Workspace.After`, as generated for the selected
 workspace's current source. The first exposes the typed `evolve`, `editBefore`
 and `edit` combinators; the other two expose collection handles. Use the existing
-public-export projection, documentation and human/JSON renderers. The response
+public-export projection, documentation and human/JSON renderers. A generated-module response
 identifies the selected workspace and its declared Before revision; it does not
 claim that a checked candidate or accepted result exists.
 
@@ -288,6 +287,14 @@ not the tool implementation; an incomplete or incorrectly typed helper must not
 prevent the author from learning the contract. Selected schema/plugin declarations
 and configuration must be valid where the generated types depend on them.
 Use the same binding generator for discovery and execution.
+
+Looking up a fixed SDK module or symbol reads only the installed catalogue,
+including inside a KB or with `--evolution`. Listing adds generated modules when
+their source context is buildable. If generation fails, list still returns the
+fixed catalogue with `guest.bindings-unavailable` and the cause as diagnostics;
+it does not claim to be a complete list. Showing an unavailable generated module
+remains a refusal and includes the available catalogue for navigation. Broken
+schema or configuration must not hide the documentation needed to repair it.
 
 `Kyyn.Connectors.Tool` documentation states the entry signature
 `Input -> Tool (Either FetchError Result)`, its imports and manifest registration
