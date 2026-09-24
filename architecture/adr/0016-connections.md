@@ -103,7 +103,9 @@ longer than eight characters and replace each remaining character with `*`;
 fully mask shorter values. The displayed length is the actual character count,
 useful for spotting truncated input. Human and JSON results use the same masking;
 neither prints the complete secret. `remove` reports whether a key existed.
-These operations require a selected KB directory, not a valid schema, a guest
+These operations require `root/kb.dhall` to exist in the selected directory, so a
+mistaken working directory does not silently acquire secrets. They do not require
+a valid schema, a guest
 compiler, an installed plugin or an evolution.
 
 Storage decoding errors must not print the malformed document or parser excerpts;

@@ -15,6 +15,10 @@ copyFileSync(executable, cli);
 chmodSync(cli, 0o755);
 mkdirSync(kb);
 mkdirSync(other);
+for (const directory of [kb, other]) {
+  mkdirSync(path.join(directory, 'root'));
+  writeFileSync(path.join(directory, 'root/kb.dhall'), 'deliberately invalid schema: secret commands do not parse this');
+}
 
 function invoke(args, options = {}, status = 0) {
   const { selectedKb = kb, ...processOptions } = options;
@@ -27,6 +31,9 @@ function stored(name) { return readFileSync(path.join(kb, '.kyyn/secrets', `${na
 function shellQuote(value) { return `'${value.replaceAll("'", "'\\''")}'`; }
 
 try {
+  const misplaced = invoke(['secret', 'set', 'JEV_TOKEN', fixture], { selectedKb: scratch }, 1);
+  assert.equal(misplaced.diagnostics[0].code, 'kb.directory');
+  assert(!existsSync(path.join(scratch, '.kyyn')), 'Wrong directory received a secret');
   assert.deepEqual(invoke(['secret', 'list']).result.names, []);
   assert(!existsSync(path.join(kb, '.kyyn')), 'Read created local store');
   const command = `${shellQuote(cli)} --kb ${shellQuote(kb)} secret set JEV_TOKEN "$JEV_TOKEN"`;
@@ -45,6 +52,9 @@ try {
   assert.equal(invoke(['secret', 'show', 'SHORT']).result.masked, '********');
   invoke(['secret', 'set', 'UNICODE'], { input: '雪éabcdefghi\r\n' });
   assert.equal(invoke(['secret', 'show', 'UNICODE']).result.masked, '雪éab*******');
+  const human = spawnSync(cli, ['--kb', kb, 'secret', 'show', 'UNICODE'], { encoding: 'utf8' });
+  assert.equal(human.status, 0);
+  assert.equal(human.stdout, 'UNICODE: 雪éab*******\n');
   invoke(['secret', 'set', 'LINES'], { input: 'first\nsecond\n\n' });
   assert(stored('LINES').includes('second'), 'Multiline value was lost');
   invoke(['secret', 'set', 'ARG_NEWLINE', 'verbatim\n']);
@@ -52,7 +62,7 @@ try {
   const git = (...args) => spawnSync('git', ['-C', kb, ...args], { encoding: 'utf8' });
   assert.equal(git('init', '-q').status, 0);
   assert.equal(git('check-ignore', '.kyyn/secrets/JEV_TOKEN.dhall').status, 0);
-  assert.equal(git('status', '--porcelain', '--untracked-files=all').stdout, '');
+  assert.equal(git('status', '--porcelain', '--untracked-files=all', '--', '.kyyn').stdout, '');
   writeFileSync(path.join(kb, '.kyyn/secrets/JEV_TOKEN.dhall'), `"${fixture}" : Natural`);
   const invalid = invoke(['secret', 'show', 'JEV_TOKEN'], {}, 3);
   assert.equal(invalid.outcome, 'Failed');

@@ -17,16 +17,17 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
-import System.Directory (canonicalizePath, doesDirectoryExist)
+import System.Directory (canonicalizePath, doesFileExist)
+import System.FilePath ((</>))
 import System.IO (stdin, stderr, hIsTerminalDevice, hGetEcho, hSetEcho, hPutStr, hPutStrLn, hFlush)
 
 executeSecrets :: FilePath -> Cli.SecretCommand -> IO Response
 executeSecrets selected command = do
   directory <- canonicalizePath selected
-  exists <- doesDirectoryExist directory
+  exists <- doesFileExist (directory </> "root" </> "kb.dhall")
   case directoryScope directory of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right _ | not exists -> pure (refusal [errorDiagnostic "kb.directory" "Select an existing KB directory with --kb PATH."])
+    Right _ | not exists -> pure (refusal [errorDiagnostic "kb.directory" "No root/kb.dhall found; select a KB directory with --kb PATH."])
     Right scope -> do
       input <- case command of
         Cli.SetSecret _ argument -> fmap Just <$> readInput argument
@@ -45,7 +46,7 @@ executeSecrets selected command = do
                   ("No secret named " ++ secretNameText name ++ "; use secret set to configure it.")]
                 Right contents -> let masked = maskSecret contents in
                   success (object ["name" .= secretNameText name, "masked" .= masked])
-                    [secretNameText name ++ ": " ++ show (Text.unpack masked)]
+                    [secretNameText name ++ ": " ++ Text.unpack masked]
             Cli.RemoveSecret name -> do
               removed <- Store.removeSecret name
               pure (success (object ["name" .= secretNameText name, "removed" .= removed])

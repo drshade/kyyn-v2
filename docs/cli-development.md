@@ -187,7 +187,8 @@ listings; use stdin or the hidden prompt when that matters.
 
 Secrets are plaintext in the selected checkout's ignored `.kyyn/secrets` directory.
 They are not copied by Git; configure each checkout separately. Setup does not need
-a compiled schema or a guest runtime.
+a compiled schema or a guest runtime; the selected directory must contain
+`root/kb.dhall`.
 
 ## Install plugin source
 
