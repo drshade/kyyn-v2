@@ -70,9 +70,8 @@ checkout removes its locally stored secrets; another clone does not restore them
 
 Store each value as a hermetic Dhall `Text` literal at
 `.kyyn/secrets/<name>.dhall`, relative to the selected KB directory. This is
-**plaintext at rest**, protected by the local user's filesystem permissions, not
-encrypted storage or an OS keychain. Use owner-only directory access and
-owner-read/write files, including temporary files used for atomic replacement.
+**plaintext at rest**, with ordinary filesystem permissions, not encrypted storage
+or an OS keychain. Kyyn does not manage permissions or impose owner-only modes.
 Install an ignore rule before writing any value. Root and evolution capture must
 not include this directory. A Git clone does not back up secrets.
 
@@ -82,19 +81,22 @@ replacement makes unrelated keys independent; simultaneous writes to the same
 key use ordinary last-writer-wins local configuration semantics.
 
 ```text
-kyyn-v2 --kb PATH secret set NAME
+kyyn-v2 --kb PATH secret set NAME [VALUE]
 kyyn-v2 --kb PATH secret list
 kyyn-v2 --kb PATH secret remove NAME
 ```
 
-`set` reads a hidden single line from an interactive terminal, or UTF-8 text from
-standard input when piped. Remove one final LF (and its preceding CR, if present)
+`set` uses the supplied argument verbatim. When omitted, it reads a hidden single
+line from an interactive terminal, or UTF-8 text from standard input when piped.
+For stdin, remove one final LF (and its preceding CR, if present)
 so ordinary line-oriented shell input does not add a credential character;
 preserve all other whitespace. The CLI refuses empty input without replacing an
 existing value, so accidentally pressing Enter does not install a broken
 credential. The store itself distinguishes an empty value from an absent key;
 it does not validate provider-specific credential formats.
-Values are never command-line arguments. `list` returns sorted names
+An argument value can appear in shell history and process listings; stdin is the
+alternative when that matters. Empty values are refused on all three CLI paths.
+`list` returns sorted names
 only; there is no CLI read/show operation. `remove` reports whether a key existed.
 These operations require a selected KB directory, not a valid schema, a guest
 compiler, an installed plugin or an evolution.
@@ -252,9 +254,9 @@ boundaries remain explicit even when their results include sensitive values.
 
 Check the local store with real Dhall/filesystem handling and a separate recording
 handler. Cover set/replace/remove, sorted names, absent versus empty, invalid
-names, corrupt/inaccessible storage, permissions and cancellation cleanup. Exercise
+names, corrupt/inaccessible storage and cancellation cleanup. Exercise
 the installed CLI without a runtime bundle, including piped and hidden-terminal
-input, JSON name-only output and ignored storage. Assert that diagnostics and
+input, argument input, JSON name-only output and ignored storage. Assert that diagnostics and
 routine output contain none of the fixture secret values.
 
 Use fake secret/HTTP interpreters to prove retrieval, actionable missing-key errors,
