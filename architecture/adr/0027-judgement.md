@@ -62,7 +62,7 @@ author's value. A single question uses `judge context (ask question)`. Reject
 an empty batch before looking up a secret or calling the provider. Any failure
 fails the whole request, with no partially assembled result.
 
- The finite alternatives come from
+The finite alternatives come from
 `[minBound .. maxBound]`; the author provides their descriptions. Choice uses
 constructor labels from `Show`; scale uses the enumeration order as its level
 order. These are ordinary Haskell types and instances, not a second schema
@@ -97,30 +97,54 @@ assessment body = judge (Context body)
     replyDescription False = "The message is informational; no reply is needed"
 ```
 
-The result preserves the provider's information and labels distributions with the
+Results use contract-safe fixed-point values and label distributions with the
 author's actual constructors:
 
 ```haskell
-data YesNoAnswer = YesNoAnswer { probabilityYes :: Double }
+newtype Probability = Probability { basisPoints :: Integer }
+newtype Score = Score { milliLevels :: Integer }
+data OptionProbability a = OptionProbability
+  { optionValue :: a, optionProbability :: Probability }
+
+data YesNoAnswer = YesNoAnswer { probabilityYes :: Probability }
 data ChoiceAnswer a = ChoiceAnswer
-  { selected :: a, choiceProbabilities :: [(a, Double)], choiceConfidence :: Double }
+  { selected :: a, choiceProbabilities :: [OptionProbability a], choiceConfidence :: Probability }
 data ScaleAnswer a = ScaleAnswer
-  { score :: Double, scaleProbabilities :: [(a, Double)], scaleConfidence :: Double }
+  { scaleScore :: Score, scaleProbabilities :: [OptionProbability a], scaleConfidence :: Probability }
 ```
 
-`score` is on the zero-based ordinal scale supplied to the provider, not the
+`scaleScore` is on the zero-based ordinal scale supplied to the provider, not the
 author's numeric `Enum` representation. No implicit threshold, winner selection
 for a scale, abstention rule or knowledge mutation. The tool can inspect the
 distribution and apply its own policy. Results contain only answers; provider
 and model selection are host constants, not part of the guest result.
 
-SDK-owned finite `Double` values serve these approximate model outputs; no new
-arithmetic implementation is needed. This does **not** extend the supported
-KB/tool input/result contract subset in [ADR 0005](0005-contracts.md). A tool
-returning a judgement to an agent currently projects it into that subset, for
-example a decision constructor and an explicitly computed integer basis-point
-value. Raw judgement results containing `Double` are not currently registerable
-tool result contracts.
+Probabilities and confidences use integer basis points: `0` to `10000`.
+Scores use thousandths of a level: `Score 1250` represents `1.250` on the
+supplied zero-based scale. A score is not a probability. The host validates the
+provider's finite `Double` values first, then rounds once to these units using
+nearest-integer rounding with halfway cases to even. Each distribution entry is
+rounded independently; do not renormalize it to force an exact fixed-point sum.
+
+These are ordinary SDK records/newtypes in the existing
+[contract subset](0005-contracts.md), not new scalar kinds. Distributions use named
+records, not unsupported tuples. A tool can return a complete
+`ChoiceAnswer Urgency` or `ScaleAnswer Urgency`, instantiated with its own enum,
+without projecting or rounding the answer. `Double` is private to provider
+validation and conversion, not part of authored answer types.
+
+```haskell
+atLeast :: Probability -> Probability -> Bool
+probabilityText :: Probability -> String
+scoreText :: Score -> String
+
+-- atLeast (Probability 9500) observed
+-- probabilityText (Probability 9500) == "95.00%"
+-- scoreText (Score 1250) == "1.250"
+```
+
+Thresholds compare exact basis points. Authors choose thresholds and may use the
+display helpers; the SDK does not turn uncertainty into an implicit decision.
 
 ### One provider interpreter and a local secret
 
@@ -185,10 +209,10 @@ or asynchronous job mechanism. A provider refusal returns to the caller, who
 can decide whether to retry.
 
 The private guest protocol retains [ADR 0007](0007-wire.md)'s numeric-string
-profile. Finite doubles travel as round-trippable decimal strings in fixed SDK
-codecs; native provider JSON numbers are decoded by the host's maintained JSON
-library. Verify host/guest conversion with both compilers rather than relying on
-matching pretty-printer spelling. None of these codecs are authored by the KB.
+profile. Probability basis points and score milli-levels travel as integer
+strings in fixed SDK codecs; native provider JSON numbers are decoded by the
+host's maintained JSON library and converted after validation. Verify host/guest
+conversion with both compilers. None of these codecs are authored by the KB.
 
 ### Expected failure is data, not fabricated judgement
 
@@ -243,7 +267,9 @@ does not support monadic composition.
 
 Recording tests cover success, missing secret, invalid question, provider
 failure, wrong labels, non-finite/out-of-range values, empty batches, yes/no
-criteria, heterogeneous batches and whole-request refusal.
+criteria, heterogeneous batches, rounding, threshold/display helpers and whole-request
+refusal. Inspect and round-trip a returned parameterised SDK answer using a
+KB-authored enum through installed JSON and Dhall tool results.
 Exercise the native HTTP exchange against a loopback server through a test-only
 transport function; production uses the provider's fixed HTTPS origin and the
 maintained client's TLS implementation. The loopback fixture does not establish

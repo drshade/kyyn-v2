@@ -47,14 +47,14 @@ decodeAnswer request = withObject "answer" $ \answerValue -> do
   case request of
     YesNoRequest _ _ _ -> do
       unless (kind == ("noul" :: String)) (fail "Incorrect answer kind")
-      YesNoResult . YesNoAnswer <$> (answerValue .: "noul" >>= probability)
+      YesNoResult . YesNoAnswer . toProbability <$> (answerValue .: "noul" >>= checkedProbability)
     ChoiceRequest _ options -> do
       unless (kind == "choice") (fail "Incorrect answer kind")
       winner <- answerValue .: "choice"
       unless (winner `elem` map fst options) (fail "Unknown selected option")
       probabilities <- answerValue .: "probabilities" >>= distribution (map fst options)
-      confidence <- answerValue .: "confidence" >>= probability
-      pure (ChoiceResult (ChoiceAnswer winner probabilities confidence))
+      confidence <- answerValue .: "confidence" >>= checkedProbability
+      pure (ChoiceResult (ChoiceAnswer winner (map (\(label,p) -> OptionProbability label (toProbability p)) probabilities) (toProbability confidence)))
     ScaleRequest _ descriptions -> do
       unless (kind == "score") (fail "Incorrect answer kind")
       value <- answerValue .: "score"
@@ -67,20 +67,24 @@ decodeAnswer request = withObject "answer" $ \answerValue -> do
         actual <- legend .: Key.fromString label
         unless (actual == description) (fail "Incorrect level description")) (zip labels descriptions)
       probabilities <- answerValue .: "probabilities" >>= distribution labels
-      confidence <- answerValue .: "confidence" >>= probability
-      pure (ScaleResult (ScaleAnswer value (zip [0..] (map snd probabilities)) confidence))
+      confidence <- answerValue .: "confidence" >>= checkedProbability
+      pure (ScaleResult (ScaleAnswer (Score (round (value * 1000)))
+        [OptionProbability index (toProbability p) | (index,(_,p)) <- zip [0..] probabilities] (toProbability confidence)))
 
 distribution :: [String] -> Value -> Parser [(String,Double)]
 distribution labels = withObject "distribution" $ \values -> do
   unless (sort (map Key.toString (Keys.keys values)) == sort labels) (fail "Incorrect distribution labels")
   probabilities <- mapM (\label -> do
-    value <- values .: Key.fromString label >>= probability
+    value <- values .: Key.fromString label >>= checkedProbability
     pure (label,value)) labels
   unless (abs (sum (map snd probabilities) - 1) <= 1e-3) (fail "Distribution does not sum to one")
   pure probabilities
 
-probability :: Double -> Parser Double
-probability value
+toProbability :: Double -> Probability
+toProbability value = Probability (round (value * 10000))
+
+checkedProbability :: Double -> Parser Double
+checkedProbability value
   | finite value && value >= 0 && value <= 1 = pure value
   | otherwise = fail "Invalid probability"
 

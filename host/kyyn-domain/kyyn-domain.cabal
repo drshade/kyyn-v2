@@ -23,6 +23,14 @@ library
   build-depends: base >=4.20 && <4.21, deepseq, filepath, kyyn-types, bytestring,
     aeson ==2.2.5.0, cryptohash-sha256 ==0.11.102.1
 
+test-suite contract-roles
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: ContractRoleTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types
+
 test-suite curation-core
   type: exitcode-stdio-1.0
   hs-source-dirs: test

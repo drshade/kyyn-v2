@@ -188,7 +188,11 @@ explicit names checked against the compiler's resolved declarations; they are
 not claimed to be statically typed field handles. Arbitrary Haskell accessor
 functions do not expose their meaning to the inspector. Reject missing types,
 fields, roles and reference targets, incompatible affordance shapes, and ambiguous
-affordance assignments. Optional scalar fields may adopt compatible roles; lists
+affordance assignments. A record has at most one Title assignment and one
+Timeline assignment. It may have multiple Badge assignments with distinct role
+names, such as status and priority. Each role is assigned at most once per record;
+duplicate assignments, including assigning the same role to two fields, are
+ambiguous and rejected. Optional scalar fields may adopt compatible roles; lists
 are not scalar titles or dates. Derive badge alternatives from the checked enum,
 not a manually duplicated variant schema. Neither titles nor dates redefine identity.
 Collection membership and links belong in the same metadata export, but their

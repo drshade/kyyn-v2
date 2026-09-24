@@ -61,42 +61,43 @@ answerCodec = Codec encode decode
 
 yesNoCodec :: Codec YesNoAnswer
 yesNoCodec = Codec
-  (\(YesNoAnswer value) -> record [("probabilityYes",encodeWith doubleCodec value)])
-  (\value -> fields ["probabilityYes"] value >>= fmap YesNoAnswer . field "probabilityYes" doubleCodec)
+  (\(YesNoAnswer value) -> record [("probabilityYes",encodeWith probabilityCodec value)])
+  (\value -> fields ["probabilityYes"] value >>= fmap YesNoAnswer . field "probabilityYes" probabilityCodec)
 
 choiceCodec :: Codec (ChoiceAnswer String)
 choiceCodec = Codec
   (\(ChoiceAnswer winner probabilities confidence) -> record
     [("selected",encodeWith stringCodec winner),("probabilities",encodeWith (distributionCodec stringCodec) probabilities),
-     ("confidence",encodeWith doubleCodec confidence)])
+     ("confidence",encodeWith probabilityCodec confidence)])
   (\value -> do
     values <- fields ["selected","probabilities","confidence"] value
     ChoiceAnswer <$> field "selected" stringCodec values
-      <*> field "probabilities" (distributionCodec stringCodec) values <*> field "confidence" doubleCodec values)
+      <*> field "probabilities" (distributionCodec stringCodec) values <*> field "confidence" probabilityCodec values)
 
 scaleCodec :: Codec (ScaleAnswer Integer)
 scaleCodec = Codec
   (\(ScaleAnswer scoreValue probabilities confidence) -> record
-    [("score",encodeWith doubleCodec scoreValue),("probabilities",encodeWith (distributionCodec integerCodec) probabilities),
-     ("confidence",encodeWith doubleCodec confidence)])
+    [("score",encodeWith scoreCodec scoreValue),("probabilities",encodeWith (distributionCodec integerCodec) probabilities),
+     ("confidence",encodeWith probabilityCodec confidence)])
   (\value -> do
     values <- fields ["score","probabilities","confidence"] value
-    ScaleAnswer <$> field "score" doubleCodec values
-      <*> field "probabilities" (distributionCodec integerCodec) values <*> field "confidence" doubleCodec values)
+    ScaleAnswer <$> field "score" scoreCodec values
+      <*> field "probabilities" (distributionCodec integerCodec) values <*> field "confidence" probabilityCodec values)
 
-distributionCodec :: Codec a -> Codec [(a,Double)]
+distributionCodec :: Codec a -> Codec [OptionProbability a]
 distributionCodec labelCodec = listCodec (Codec
-  (\(label,probability) -> record [("label",encodeWith labelCodec label),("probability",encodeWith doubleCodec probability)])
+  (\(OptionProbability label p) -> record [("label",encodeWith labelCodec label),("probability",encodeWith probabilityCodec p)])
   (\value -> do
     values <- fields ["label","probability"] value
-    (,) <$> field "label" labelCodec values <*> field "probability" doubleCodec values))
+    OptionProbability <$> field "label" labelCodec values <*> field "probability" probabilityCodec values))
 
-doubleCodec :: Codec Double
-doubleCodec = Codec (encodeWith stringCodec . show) (\value -> do
-  text <- decodeWith stringCodec value
-  case reads text of
-    [(number,"")] | not (isNaN number || isInfinite number) -> Right number
-    _ -> Left "Expected finite double string")
+probabilityCodec :: Codec Probability
+probabilityCodec = Codec (\(Probability value) -> encodeWith integerCodec value) (\value -> do
+  number <- decodeWith integerCodec value
+  if number >= 0 && number <= 10000 then Right (Probability number) else Left "Expected probability basis points in 0..10000")
+
+scoreCodec :: Codec Score
+scoreCodec = Codec (\(Score value) -> encodeWith integerCodec value) (fmap Score . decodeWith integerCodec)
 
 failureCodec :: Codec JudgementFailure
 failureCodec = Codec encode decode

@@ -348,7 +348,7 @@ import Kyyn.Plugin (FetchError(..))
 import Kyyn.Judgement
 
 type Input = String
-type Output = Integer
+type Output = YesNoAnswer
 
 assess :: Input -> Tool (Either FetchError Output)
 assess body = do
@@ -356,13 +356,16 @@ assess body = do
     (ask (yesNo "Does this require a reply?" describe))
   pure $ case result of
     Left failure -> Left (FetchError (judgementFailureMessage failure))
-    Right (YesNoAnswer probability) -> Right (round (probability * 10000))
+    Right answer -> Right answer
   where
     describe True = "The message asks for a response or decision"
     describe False = "The message is informational; no reply is needed"
 ```
 
-This example returns probability in integer basis points. Register, check and
+This example returns the SDK answer directly. Its `Probability` contains integer
+basis points (`9500` means 95%). Use `atLeast (Probability 9500)` for a threshold
+or `probabilityText` for display. Scale answers contain `Score` in thousandths of
+a level; `scoreText (Score 1250)` displays `1.250`. Register, check and
 accept it as above; then configure the local key and invoke it:
 
 ```sh
