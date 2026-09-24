@@ -11,6 +11,7 @@ library
     Kyyn.Types.Program Kyyn.Types.Query
     Kyyn.Types.Evidence Kyyn.Types.Evolution
     Kyyn.Types.Plugin Kyyn.Types.Curation Kyyn.Types.KnowledgeBase
+    Kyyn.Types.Judgement
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21

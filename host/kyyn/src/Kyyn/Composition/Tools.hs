@@ -16,6 +16,8 @@ import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.MicroHs.Toolchain (GuestToolchain)
 import Kyyn.Plumbing.Capability.DhallHandling (renderType, decodeValue, encodeValue)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
+import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
+import Kyyn.Plumbing.Interpreter.Judgement (runJudgementIO)
 import Kyyn.Porcelain.Capability.Tool
 import Kyyn.Porcelain.Capability.Root (listRootTools, selectRootTool)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
@@ -54,7 +56,8 @@ dispatchTools host command (SelectedKb kb revision _) = withRuntime host $ \tool
   Cli.ExecuteTool name arguments -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> finish $ fmap (fmap (either refusal id)) $
-      runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
+      runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO
+        . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
         . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk
         . runToolPreparation sdk . runToolExecution $ runExceptT $ do
           selected@(PreparedTool (ToolDescriptor _ _ input output) _ _) <- ExceptT (selectRootTool kb revision Nothing name)

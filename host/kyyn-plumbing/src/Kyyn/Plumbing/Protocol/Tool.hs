@@ -3,6 +3,7 @@ module Kyyn.Plumbing.Protocol.Tool
 
 import Control.Monad (unless)
 import Data.Aeson (Value, withObject, (.:))
+import Data.Aeson.Types (Parser)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
 import Data.Coerce (coerce)
@@ -15,10 +16,13 @@ import Kyyn.Domain.Plugin
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame, decodeFrameWith)
+import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
+import Kyyn.Types.Judgement (SomeJudgementRequest)
 
 data ConnectorInterface = ConnectorInterface PluginName ConnectorTypeName [(MethodName,DataType,DataType)]
 data InstanceBinding = InstanceBinding BindingName PluginName ConnectorTypeName ConnectorName
 data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName Value
+  | ToolJudgement SomeJudgementRequest
 
 proxyModule :: PluginName -> ConnectorTypeName -> String
 proxyModule plugin kind = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then '_' else c) (pluginNameText plugin) ++ "." ++ coerce kind
@@ -34,12 +38,19 @@ toolBindings interfaces bindings = do
       requests = [(i,p,k,n,a,b) | (i,ConnectorInterface p k methods) <- indexed, (n,a,b) <- methods]
       calls = unlines $ ["{-# LANGUAGE GADTs, EmptyDataDecls #-}",
         "module KyynToolCalls (Calls(..)" ++ concat [", Connector" ++ show i | (i,_) <- indexed] ++ ") where",
-        "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
+        "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)",
+        "import Kyyn.Types.Judgement (JudgementRequest, JudgementFailure, Judged)"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
         ["data Connector" ++ show i | (i,_) <- indexed] ++
-        [if null requests then "data Calls a" else "data Calls a where"] ++
+        ["data Calls a where", "  JudgementCall :: JudgementRequest a -> Calls (Either JudgementFailure (Judged a))"] ++
         ["  " ++ requestName i n ++ " :: ConnectorInstance Connector" ++ show i ++ " -> " ++ haskellType a ++
           " -> Calls (Either FetchError " ++ haskellType b ++ ")" | (i,_,_,n,a,b) <- requests]
   core <- source "KyynToolCalls" calls
+  judgementModule <- source "Kyyn.Judgement" (unlines
+    ["module Kyyn.Judgement (module Kyyn.Judgement.Question, judge) where",
+     "import Kyyn.Judgement.Question", "import Kyyn.Judgement.Internal (judgeWith)",
+     "import Kyyn.Types.Program (Program, request)", "import qualified KyynToolCalls as Calls",
+     "judge :: Context -> Question a -> Program Calls.Calls (Either JudgementFailure (Judged a))",
+     "judge = judgeWith (request . Calls.JudgementCall)"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",
      "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)","import Kyyn.Types.Program (Program)",
@@ -56,7 +67,7 @@ toolBindings interfaces bindings = do
     ["type Tool a = Program Calls.Calls a"] ++ concat
     [[coerce n ++ " :: " ++ proxyModule p k ++ ".Instance",
       coerce n ++ " = ConnectorInstance " ++ show (coerce instanceName :: String)] | InstanceBinding n p k instanceName <- bindings])
-  pure (core:connectorModule:proxies)
+  pure (core:connectorModule:judgementModule:proxies)
 
 toolSources :: [ConnectorInterface] -> [InstanceBinding] -> DataType -> DataType -> String
   -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
@@ -72,14 +83,16 @@ toolSources interfaces bindings input output implementation authored = do
      "import qualified " ++ implementationModule,"import qualified Kyyn.Connectors as Connectors",
      "import qualified KyynToolCalls as Calls","import Kyyn.Types.Plugin (ConnectorInstance(..), FetchError)",
      "import Kyyn.Runtime.Json","import Kyyn.Runtime.Plugin (execute, exchange, eitherCodec)",
+     "import Kyyn.Runtime.Judgement (exchangeJudgement)",
      "import qualified KyynToolInputCodec as Input","import qualified KyynToolResultCodec as Output"] ++
     ["import qualified " ++ m | (i,_,_,n,_,_) <- methods, m <- [inputCodec i n,resultCodec i n]] ++ imports [input,output] ++
     ["selected :: " ++ haskellType input ++ " -> Connectors.Tool (Either FetchError " ++ haskellType output ++ ")",
      "selected = " ++ implementation,"main :: IO ()","main = do","  line <- getLine",
      "  arguments <- either fail pure (parseValue line >>= decodeWith Input.rootCodec)",
      "  execute (eitherCodec Output.rootCodec) dispatch (selected arguments)",
-     "dispatch :: Integer -> Calls.Calls a -> IO a"] ++
-    (if null methods then ["dispatch _ call = case call of {}"] else concat
+     "dispatch :: Integer -> Calls.Calls a -> IO a",
+     "dispatch requestId (Calls.JudgementCall request) = exchangeJudgement requestId request"] ++
+    concat
       [["dispatch requestId (Calls." ++ requestName i n ++ " (ConnectorInstance instanceName) arguments) =",
         "  exchange requestId \"plugin\" \"read\" (record [",
         "    (\"plugin\", encodeWith stringCodec " ++ show (pluginNameText p) ++ "),",
@@ -87,7 +100,7 @@ toolSources interfaces bindings input output implementation authored = do
         "    (\"instance\", encodeWith stringCodec instanceName),",
         "    (\"method\", encodeWith stringCodec " ++ show (coerce n :: String) ++ "),",
         "    (\"input\", encodeWith " ++ inputCodec i n ++ ".rootCodec arguments)])",
-        "    (eitherCodec " ++ resultCodec i n ++ ".rootCodec)"] | (i,p,k,n,_,_) <- methods]))
+        "    (eitherCodec " ++ resultCodec i n ++ ".rootCodec)"] | (i,p,k,n,_,_) <- methods])
   guestSources (fst entry) (authored ++ generated ++ codecs ++ [entry])
 
 requestName :: Int -> MethodName -> String
@@ -101,7 +114,13 @@ imports types = ["import qualified " ++ name | name <- nub
   [definingModule name | datatype <- types, Algebraic name _ _ <- reachableTypes datatype]]
 
 decodeToolFrame :: Bytes.ByteString -> Either String (PluginFrame ToolCall)
-decodeToolFrame = decodeFrameWith $ \capability operation -> withObject "tool call" $ \fields -> do
+decodeToolFrame = decodeFrameWith $ \capability operation arguments ->
+  if capability == "judgement" && operation == "evaluate"
+  then ToolJudgement <$> Judgement.decodeRequest arguments
+  else decodePlugin capability operation arguments
+
+decodePlugin :: String -> String -> Value -> Parser ToolCall
+decodePlugin capability operation = withObject "tool call" $ \fields -> do
   unless (capability == "plugin" && operation == "read") (fail "Unsupported tool capability or method")
   unless (sort (Keys.keys fields) == ["connectorType","input","instance","method","plugin"])
     (fail "Unexpected or missing tool call fields")
