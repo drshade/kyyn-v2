@@ -23,11 +23,11 @@ types: do not invent a Boolean decision, rounded level or missing confidence.
 
 ## Decision
 
-### Authoring is typed; configuration is explicit
+### Authoring is typed
 
 Expose `Judgement` through the existing generated KB-tool request row. An author
-uses it by writing a tool that calls it and configuring the provider and local
-secret. No per-tool permission flag, registration ceremony or grant registry.
+uses it by writing a tool that calls it and setting the local secret. No per-tool
+permission flag, registration ceremony or grant registry.
 Unused judgement functions cause no provider call or secret lookup. Every tool's
 generated row includes the same judgement operations; ordinary types still
 separate tools from queries and validators.
@@ -78,15 +78,14 @@ data ChoiceAnswer a = ChoiceAnswer
   { selected :: a, probabilities :: [(a, Double)], confidence :: Double }
 data ScaleAnswer a = ScaleAnswer
   { score :: Double, probabilities :: [(a, Double)], confidence :: Double }
-data Judged a = Judged { provider :: Provider, model :: String, answer :: a }
-data Provider = Jev
+data Judged a = Judged { model :: String, answer :: a }
 ```
 
 `score` is on the zero-based ordinal scale supplied to the provider, not the
 author's numeric `Enum` representation. No implicit threshold, winner selection
 for a scale, abstention rule or knowledge mutation. The tool can inspect the
 distribution and apply its own policy. Model identity is the response's actual
-identity, not a copy of the configured alias.
+identity, not a copy of the requested model name.
 
 SDK-owned finite `Double` values serve these approximate model outputs; no new
 arithmetic implementation is needed. This does **not** extend the supported
@@ -97,29 +96,20 @@ value. Raw `Judged` results containing `Double` are not currently registerable
 tool result contracts. Fractional contract support is a separate decision, not
 silently introduced through this capability.
 
-### Root configuration and local secrets
+### One provider interpreter and a local secret
 
-One optional `root/judgement.dhall` document selects the provider:
+The host interpreter uses the fixed endpoint
+`https://api.typesafe.ai/v1/systemone`, the model `jev-1.13.0`, and the secret
+name `JEV_TOKEN`. The versioned request identifier is supported by the
+[provider's model API](https://docs.typesafe.ai/models). These are host implementation
+constants, not a provider registry, configuration document or KB manifest field.
 
-```dhall
-{ provider = < Jev >.Jev
-, model = "jev-latest"
-, secret = "JEV_TOKEN"
-}
-```
-
-The host owns this small configuration type; provider is a closed union. The
-file belongs to the captured code/configuration tree and changes through the
-normal evolution workflow. It is not another required `kb.dhall` field. Missing
-configuration means judgement is unavailable, not a broken KB. Present but
-malformed configuration fails whole-root preparation with a located diagnostic;
-checking never probes the model or reads credentials.
-
-Execution uses configuration from the selected root, not a changing ambient
-file. The secret name is resolved against that KB checkout's
-[local store](0016-connections.md) at invocation time. The provider handler reads
-the value and authenticates its own HTTP request. The guest receives neither
-the key nor the provider configuration's storage path.
+Resolve the key against the explicitly selected KB checkout's
+[local store](0016-connections.md) at invocation time. A missing key returns a
+typed failure naming `JEV_TOKEN` and the setup command
+`kyyn-v2 --kb PATH secret set JEV_TOKEN`. The handler reads the value and
+authenticates its own HTTP request; the guest never receives the key. Root
+checking compiles tools without reading credentials or probing the provider.
 
 ### Host interpretation and the existing continuation
 
@@ -143,7 +133,7 @@ data Judgement :: Effect where
 
 runJudgementIO
   :: (IOE :> es, SecretStore :> es, Failure :> es)
-  => Maybe JudgementConfig -> Eff (Judgement : es) a -> Eff es a
+  => Eff (Judgement : es) a -> Eff es a
 ```
 
 The provider interpreter uses a maintained native HTTPS client; it is the first
@@ -167,8 +157,7 @@ matching pretty-printer spelling. None of these codecs are authored by the KB.
 
 ```haskell
 data JudgementFailure
-  = NotConfigured
-  | MissingSecret String
+  = MissingSecret String
   | InvalidQuestion String
   | AuthenticationRejected
   | RateLimited
@@ -177,7 +166,7 @@ data JudgementFailure
   | InvalidProviderResponse
 ```
 
-Missing setup, invalid questions, authentication/rate-limit refusals, transport
+Missing secrets, invalid questions, authentication/rate-limit refusals, transport
 unavailability/timeouts and malformed provider replies are typed outcomes. A
 tool may handle them or return its own declared error. Local store access/corruption
 remains an operational failure under ADR 0019; it is not `MissingSecret`.
@@ -211,7 +200,7 @@ choice and scale results. Compile the same SDK example with GHC, including deriv
 Enum/Bounded alternatives. Compose a captured-evidence read with judgement in the
 same tool. Verify generated interfaces are absent from query/validation contexts.
 
-Recording tests cover success, missing config/secret, invalid question, provider
+Recording tests cover success, missing secret, invalid question, provider
 failure, wrong labels, non-finite/out-of-range values and model-identity forwarding.
 Exercise the native HTTPS adapter against a local test server through a test-only
 transport configuration; production uses the provider's fixed HTTPS origin.
