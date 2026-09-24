@@ -25,6 +25,10 @@ repair, uncached mode and storage failures without running MicroHs.
 `node tools/measure-compile-cache.mjs INSTALLED_EXECUTABLE` measures cold/warm
 evolution checks and tool execution on a disposable local-file/judgement KB,
 verifies warm artifacts are not rewritten and uses no live provider.
+With `--timings`, it checks cold misses, warm hits, named inspection/execution
+events and stderr-only output, then prints the warm trace for analysis.
+`node tools/test-timings.mjs INSTALLED_EXECUTABLE` checks opt-in semantics,
+unchanged help/JSON/diagnostics and preserved exit statuses without compilation.
 
 `cabal test compiler-diagnostics roots --test-show-details=direct`, with the
 guest toolchain selected below, checks compiler-message preservation, stack

@@ -6,6 +6,7 @@ import Control.Monad (when)
 import Data.Aeson (Value(Null), encode)
 import qualified Data.ByteString.Lazy.Char8 as Bytes
 import Kyyn.Composition (execute)
+import Kyyn.MicroHs.Timing (withTimingIO)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
@@ -14,7 +15,7 @@ import System.Exit (ExitCode(..), exitWith)
 import System.IO (hPutStrLn, stderr)
 
 main :: IO ()
-main = do
+main = withTimingIO "total" "command" $ do
   invocation@(Cli.Invocation _ output command) <- customExecParser Cli.cliPrefs Cli.cliInfo
   mapM_ (hPutStrLn stderr) (Cli.progressMessage command)
   result <- tryJust (\exception -> case exception of UserInterrupt -> Just (); _ -> Nothing)

@@ -5,7 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-assert.equal(process.argv.length, 3, 'Usage: node tools/measure-compile-cache.mjs INSTALLED_EXECUTABLE');
+const timings = process.argv[3] === '--timings';
+assert(process.argv.length === 3 || (process.argv.length === 4 && timings),
+  'Usage: node tools/measure-compile-cache.mjs INSTALLED_EXECUTABLE [--timings]');
 const executable = path.resolve(process.argv[2]);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-cache-measure-'));
@@ -13,10 +15,22 @@ const kb = path.join(temporary, 'kb');
 const source = path.join(temporary, 'documents');
 const cache = path.join(kb, '.kyyn/compiled');
 const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(temporary, 'gitconfig') };
-function cli(args) {
+let lastTimings = [];
+function cli(args, timed = false) {
+  const selectedEnv = { ...env };
+  delete selectedEnv.KYYN_TIMINGS;
+  if (timed) selectedEnv.KYYN_TIMINGS = '1';
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 180000 });
+    { cwd: temporary, env: selectedEnv, encoding: 'utf8', timeout: 180000 });
   assert.equal(result.status, 0, JSON.stringify({ args, ...result }));
+  assert(!result.stdout.includes('[kyyn timing]'), 'Timing leaked into stdout');
+  lastTimings = result.stderr.split('\n').filter(line => line.startsWith('[kyyn timing]')).map(line => {
+    const match = /^\[kyyn timing\] ([a-z-]+) (.+) ([0-9.]+)ms$/.exec(line);
+    assert(match, line);
+    return { step: match[1], label: match[2], ms: Number(match[3]) };
+  });
+  if (timed) assert.equal(lastTimings.filter(event => event.step === 'total').length, 1);
+  else assert.equal(lastTimings.length, 0, 'Timing emitted while disabled');
   return JSON.parse(result.stdout);
 }
 function entries() {
@@ -26,15 +40,22 @@ function entries() {
 function measure(label, args) {
   fs.rmSync(cache, { recursive: true, force: true });
   const coldStart = performance.now();
-  const cold = cli(args);
+  const cold = cli(args, timings);
+  if (timings) assert(lastTimings.some(event => event.step === 'compile-miss'));
   const coldMs = performance.now() - coldStart;
   const before = entries();
   assert(before.length > 0);
   const warmStart = performance.now();
-  const warm = cli(args);
+  const warm = cli(args, timings);
   const warmMs = performance.now() - warmStart;
   assert.deepEqual(entries(), before, 'Warm command rewrote compiled artifacts');
   console.log(JSON.stringify({ command: label, coldMs: Math.round(coldMs), warmMs: Math.round(warmMs), artifacts: before.length }));
+  if (timings) {
+    for (const step of ['inspection', 'compile-hit', 'plugin-registration', 'guest-execution'])
+      assert(lastTimings.some(event => event.step === step), `Missing ${step}`);
+    assert(!lastTimings.some(event => event.step === 'compile-miss'), 'Warm run compiled again');
+    console.log(JSON.stringify({ command: label, warmTimings: lastTimings }));
+  }
   return [cold,warm];
 }
 try {
@@ -74,6 +95,10 @@ assess name = do
       pure (Right (text ++ " | " ++ either judgementFailureMessage show answer))
   where describe yes = if yes then "Reply requested" else "No reply requested"
 `);
+  if (timings) {
+    cli(['guest', 'module', 'show', 'Kyyn.Judgement', '--evolution', draft.id], true);
+    assert(lastTimings.some(event => event.step === 'api-inspection' && event.label.includes('Kyyn.Judgement')));
+  }
   measure('evolution check', ['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);

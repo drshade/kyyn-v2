@@ -5,6 +5,7 @@ import Effectful (Eff, IOE, runEff)
 import System.Environment (setEnv)
 import System.FilePath ((</>))
 import Kyyn.Configuration (Host(..))
+import Kyyn.Composition.Timings
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
@@ -34,17 +35,19 @@ type Base = '[RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failu
 type Runtime = SchemaInspection ': GuestCompilation ': GuestExecution ': Base
 
 runBase :: Host -> Eff Base a -> IO (Either OperationalFailure a)
-runBase (Host executable environment temp _ _) = runEff . runFailure . runProcessExecutionIO
+runBase (Host executable environment temp _ _ timings) = runEff . runFailure . runProcessExecutionIO . observeProcesses timings
   . runFileSystemIO temp . runGit executable environment . runDhallHandling . runRootStore
 
 runRuntime :: Host -> GuestToolchain -> Eff Runtime a -> IO (Either OperationalFailure a)
-runRuntime host@(Host _ _ _ _ cache) toolchain = runBase host . runGuestExecution toolchain . runGuestCompilation toolchain cache . runSchemaInspectionIO toolchain
+runRuntime host@(Host _ _ _ _ cache timings) toolchain = runBase host
+  . runGuestExecution toolchain . observeExecutions timings
+  . runGuestCompilation toolchain cache . observeCompilations timings . runSchemaInspectionIO toolchain
 
 finish :: IO (Either OperationalFailure Response) -> IO Response
 finish action = either operationalFailure id <$> action
 
 withRuntime :: Host -> (GuestToolchain -> FileTree -> IO Response) -> IO Response
-withRuntime (Host _ _ temp runtime _) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
+withRuntime (Host _ _ temp runtime _ _) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
   (Right toolchain,Right sdkScope) -> do
     setEnv "MHSCPPHS" (runtime </> "microhs/bin/cpphs")
     loaded <- runEff . runFailure . runFileSystemIO temp $ readTree sdkScope
