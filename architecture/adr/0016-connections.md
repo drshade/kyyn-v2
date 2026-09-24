@@ -90,8 +90,11 @@ kyyn-v2 --kb PATH secret remove NAME
 `set` reads a hidden single line from an interactive terminal, or UTF-8 text from
 standard input when piped. Remove one final LF (and its preceding CR, if present)
 so ordinary line-oriented shell input does not add a credential character;
-preserve all other whitespace. Empty text is a stored value, distinct from an
-absent key. Values are never command-line arguments. `list` returns sorted names
+preserve all other whitespace. The CLI refuses empty input without replacing an
+existing value, so accidentally pressing Enter does not install a broken
+credential. The store itself distinguishes an empty value from an absent key;
+it does not validate provider-specific credential formats.
+Values are never command-line arguments. `list` returns sorted names
 only; there is no CLI read/show operation. `remove` reports whether a key existed.
 These operations require a selected KB directory, not a valid schema, a guest
 compiler, an installed plugin or an evolution.
@@ -106,9 +109,8 @@ or universal handler is introduced.
 The first implementation exposes this host store and local setup commands.
 Guest request algebras are introduced with their actual consumers, not as unused
 SDK constructors. An integration implemented in a host handler reads its credential
-there; an integration implemented in trusted guest plugin code may receive the
-text through an explicit capability. Neither requires automatic credential
-injection or a kernel-owned authentication workflow.
+there, without automatic credential injection or a kernel-owned authentication
+workflow.
 
 ### Configuration remains ordinary typed root data
 
@@ -222,8 +224,8 @@ in root configuration or automatically capture secret responses into proposals.
 
 ### Authentication belongs to the integration
 
-Integration code implements provider-specific authentication and response handling
-using the secret store, HTTP and other demonstrated host capabilities. Native libraries
+Integration code implements provider-specific authentication and response handling.
+Native libraries
 still handle TLS, transport, filesystem access and document parsing. Authored
 code never needs to implement those IO mechanisms itself. A static credential
 lookup does not prove login or refresh support; test the actual flow before

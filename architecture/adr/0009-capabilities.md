@@ -165,24 +165,6 @@ under both compilers with recording responses. The native MicroHs broker additio
 exercises live filesystem acquisition and EvidenceStore publication, including
 invocation-local reads and failed acquisitions that leave the previous head unchanged.
 
-Caller-to-plugin composition remains a separate integration boundary:
-
-```haskell
--- Illustrative generated proxy for a registered Microsoft method.
-data MicrosoftCalls a where
-  ReadEmail :: Mail.Instance -> EmailId -> MicrosoftCalls Email
-
-type ToolCalls root = SnapshotRead root :+: MicrosoftCalls
-```
-
-This particular `ToolCalls` is an illustrative KB tool's
-context, not an all-purpose permanent role. [Storage](0006-storage.md) owns the
-guest `Fact` envelope. The generated instance value selects the configured Mail
-instance; the invocation context resolves its fixed `EvidenceSnapshotRef` under
-ADR 0014. The plugin reads that captured evidence through its own host capabilities.
-Another registered method can explicitly acquire fresh evidence. The generated
-proxy carries a method identity and checked types, not arbitrary code over JSON.
-
 ### KB-tool read composition
 
 The initial generated `Tool a` is `Program Calls a`, where `Calls` is a closed
@@ -205,10 +187,9 @@ A method's declared `FetchError` remains a typed value that the helper may handl
 Not-fetched, incompatible-producer and invalid stored evidence stop the invocation
 with a diagnostic naming the instance; these are not converted into catchable
 method failures. Acquisition and sink requests are absent from this caller row.
-The first tool slice proves captured-read composition only.
 
 Acquisition and captured reads have distinct request algebras. A KB tool may compose
-`SnapshotRead root :+: (MailReads :+: CalendarReads)`, but its interpreter supplies neither acquisition nor
+`MailReads :+: CalendarReads`, but its interpreter supplies neither acquisition nor
 sink handlers. Plugin read implementations likewise receive captured-store reads,
 not HTTP/Secrets. Calling a read method therefore does not hide a fresh fetch in
 browsing. Pure helpers can be shared by both kinds of plugin implementation.
