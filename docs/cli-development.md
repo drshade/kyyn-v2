@@ -28,6 +28,14 @@ MicroHs/runtime/SDK bundle it needs. Use the script for a usable local installat
 Guest compilation is cached per KB under `.kyyn/compiled`. If a local compiled
 artifact is damaged, delete that directory and rerun the command; accepted facts
 and source are unaffected. Native schema/API inspection still runs normally.
+
+To inspect command costs, set `KYYN_TIMINGS=1`, for example
+`KYYN_TIMINGS=1 kyyn-v2 evolution check 000001-update`. Timing lines go only to
+stderr; normal output and `--json` results are unchanged. They identify native
+type/API inspection, compiler cache hits/misses, guest execution (including plugin
+registration), and command wall time. Durations are inclusive: a guest that calls
+another guest includes that nested execution, so do not blindly sum every line.
+No timing lines are emitted unless the variable is exactly `1`.
 It reuses the staging helper and existing Cabal/Make build, without custom Cabal hooks.
 
 ```sh

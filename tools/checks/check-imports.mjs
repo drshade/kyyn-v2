@@ -13,6 +13,7 @@ const allowed = {
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
   'kyyn': ['Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+    'Kyyn.Composition.Timings', 'Kyyn.MicroHs.Timing', 'Data.IORef', 'GHC.Clock', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.CompiledProgram',
     'Kyyn.Composition.Secrets', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.SecretStore',
     'Kyyn.Plumbing.Interpreter.SecretStore', 'Kyyn.Plumbing.Interpreter.Judgement', 'Control.Exception', 'Data.Aeson', 'Data.ByteString.Char8', 'Data.Text.Encoding', 'System.IO',
     'Data.Coerce', 'Data.Text', 'Kyyn.Domain.Value', 'Kyyn.Composition.Runtime', 'Kyyn.Composition.Connectors',
@@ -311,7 +312,8 @@ const interpreterModules = {
 
 const compilerModules = {
   'Kyyn.MicroHs.CompilerDiagnostic': ['Data.List'],
-  'Kyyn.MicroHs.Inspection': [...allowed['kyyn-microhs'], 'Kyyn.MicroHs.CompilerDiagnostic'],
+  'Kyyn.MicroHs.Inspection': [...allowed['kyyn-microhs'], 'Kyyn.MicroHs.CompilerDiagnostic', 'Kyyn.MicroHs.Timing'],
+  'Kyyn.MicroHs.Timing': ['Control.Exception', 'Data.Word', 'GHC.Clock', 'System.Environment', 'System.IO', 'Text.Printf'],
   'Kyyn.MicroHs.Interpreter.GuestExecution': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.MicroHs.Toolchain',
     'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.GuestExecution', 'Kyyn.Plumbing.Capability.Failure',
@@ -320,7 +322,7 @@ const compilerModules = {
     'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
     'Kyyn.MicroHs.ApiInspection', 'Kyyn.MicroHs.Toolchain', 'Kyyn.Plumbing.Capability.ApiInspection',
     'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.FileSystem'],
-  'Kyyn.MicroHs.ApiInspection': ['Kyyn.MicroHs.CompilerDiagnostic', 'Control.DeepSeq', 'Control.Exception', 'Control.Monad',
+  'Kyyn.MicroHs.ApiInspection': ['Kyyn.MicroHs.Timing', 'Kyyn.MicroHs.CompilerDiagnostic', 'Control.DeepSeq', 'Control.Exception', 'Control.Monad',
     'System.FilePath', 'System.Process',
     'Data.Char', 'Data.List', 'Kyyn.Domain.GuestApi', 'MicroHs.Compile', 'MicroHs.CompileCache',
     'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Ident', 'MicroHs.StateIO', 'MicroHs.TypeCheck',

@@ -12,6 +12,7 @@ library
     Kyyn.MicroHs.Interpreter.ApiInspection
     Kyyn.MicroHs.Interpreter.GuestExecution
     Kyyn.MicroHs.CompilerDiagnostic
+    Kyyn.MicroHs.Timing
   default-language: Haskell2010
   default-extensions: ScopedTypeVariables TypeSynonymInstances MultiParamTypeClasses FlexibleInstances FlexibleContexts
   ghc-options: -Wall -Wno-unrecognised-warning-flags -Wno-x-partial -Wno-deprecations

@@ -8,6 +8,7 @@ import Control.Monad (unless)
 import Data.List (nubBy, nub)
 import Kyyn.Domain.DataType
 import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
+import Kyyn.MicroHs.Timing (withTimingIO)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
 import MicroHs.Expr hiding (subst)
@@ -25,7 +26,7 @@ data InspectionError
 
 -- Native compiler integration, not a porcelain operation or a complete KB contract.
 inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either InspectionError (DataType, [FilePath]))
-inspectDataType compiler sources selected = inspect `catch` failure
+inspectDataType compiler sources selected = withTimingIO "inspection" selected (inspect `catch` failure)
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err

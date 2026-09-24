@@ -10,6 +10,7 @@ import System.FilePath ((</>))
 import System.Process (readProcess)
 import Kyyn.Domain.GuestApi
 import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
+import Kyyn.MicroHs.Timing (withTimingIO)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
 import MicroHs.Expr
@@ -27,7 +28,7 @@ data ApiError = ApiCompilerError String | ApiSourceError String | ApiNativeError
   deriving (Eq, Show)
 
 inspectApi :: FilePath -> [FilePath] -> [String] -> IO (Either ApiError [ApiModule])
-inspectApi compiler sources selected = inspect `catch` failure
+inspectApi compiler sources selected = withTimingIO "api-inspection" (intercalate ", " selected) (inspect `catch` failure)
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
