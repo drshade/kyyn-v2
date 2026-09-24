@@ -790,12 +790,10 @@ data PreviewRejection
 ```
 
 EvolutionExecution owns source/adapter preparation, entry/schema compilation and
-effectful entry evaluation, including typed dispatch to declared plugin methods.
+execution of the compiled transformation.
 It delegates compilation to [GuestCompilation](0002-runtime.md), not a locally
 assembled MicroHs command. ProcessExecution remains necessary for the compiled
 entry's execution and protocol, separately from compiler invocation.
-PluginInvocation installs the plugin's
-own HTTP/Secrets requirements; these do not become authored entry capabilities.
 The row is a lowering contract, not IO in porcelain. RootExecution in ADR 0011
 retains validation and snapshot queries without acquiring plugin/acquisition
 handlers merely to check a root. Source, dependency and config bytes are fixed

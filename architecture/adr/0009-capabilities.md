@@ -209,10 +209,10 @@ as its ordinary API. No native accepted-ref capability is exported to guests.
 
 A generated plugin-call capability is also a typed request in the **caller's**
 algebra. The host routes it to a separately interpreted plugin invocation. The
-plugin's HTTP/Secrets requirements do not become requirements available to the
+plugin's implementation requirements do not become requirements available to the
 caller. The generated caller proxy, plugin registration and host dispatch must be
 proved together; registering a `Method PluginHost input output` does not by itself
-make that method callable as `Program EvolutionHost output`.
+make that method callable through the generated `Tool` interface.
 
 On the host, the broker requires GuestExecution plus precisely the capabilities
 it dispatches, not GuestCompilation. For example:

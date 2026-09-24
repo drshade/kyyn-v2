@@ -140,8 +140,8 @@ DocumentPersistence (scoped locked documents under ADR 0003), Git
 (objects, trees, refs and transport), ProcessExecution (typed lifecycle/pipe
 operations), DhallHandling (real library schema/value functions), HTTP, SecretStore
 (local named values, independent of plugins), document decoding, clock/entropy and
-transport codecs. Guest Secrets requests return raw values through SecretStore;
-plugins own authentication, not a ConnectionUse handler. Pure serialization
+transport codecs. [ADR 0016](adr/0016-connections.md) owns secret access and
+integration authentication. Pure serialization
 need not be an effect; it is a helper within its capability. Native process and
 filesystem details stay out of porcelain signatures.
 SchemaInspection owns checked-type extraction and checking the selected Haskell
