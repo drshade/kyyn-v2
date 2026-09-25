@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const configurationSmoke = process.argv[3] === '--configuration-smoke';
 const readSmoke = process.argv[3] === '--read-smoke';
@@ -43,6 +44,15 @@ const fetch = name => cli(['evidence', 'fetch', 'local-file', name]).result.fetc
 const history = (name, options = []) => cli(['evidence', 'history', 'list', 'local-file', name, ...options]).result;
 const changes = (name, options = []) => cli(['evidence', 'change', 'list', 'local-file', name, ...options]).result;
 const current = name => cli(['evidence', 'list', 'local-file', name]).result;
+function fileFingerprint(filename) {
+  const framed = bytes => {
+    const length = Buffer.alloc(8);
+    length.writeBigUInt64BE(BigInt(bytes.length));
+    return Buffer.concat([length, bytes]);
+  };
+  return createHash('sha256').update(Buffer.concat([
+    framed(Buffer.from(filename, 'utf8')), framed(fs.readFileSync(filename))])).digest('hex');
+}
 const content = (name, id, expected = 0) => cli(['plugin', 'connector', 'method', 'execute', 'local-file', name,
   'content', '--input', JSON.stringify(id)], expected);
 function main() {
@@ -138,6 +148,12 @@ bulk ids = do
   const first = fetch('sales');
   const listedFirst = current('sales');
   assert.equal(listedFirst.selection.fetch, first);
+  assert.equal(listedFirst.selection.instance, 'sales');
+  assert.deepEqual(Object.keys(listedFirst.selection).sort(), ['fetch', 'instance', 'plugin']);
+  for (const item of listedFirst.items) {
+    assert.match(item.fingerprint, /^[0-9a-f]{64}$/);
+    assert.equal(item.fingerprint, fileFingerprint(path.join(sales, item.id)));
+  }
   assert.deepEqual(listedFirst.items.map(item => item.id).sort(), ['removed.txt', 'unchanged.txt', 'updated.txt']);
   assert(listedFirst.items.every(item => item.fingerprint.length > 0 && Object.keys(item).sort().join(',') === 'fingerprint,id'));
   assert(!JSON.stringify(listedFirst).includes('sales evidence'));
@@ -214,7 +230,7 @@ bulk ids = do
     assert.equal(change.previous, first);
     assert.equal(typeof change.fingerprint, 'string');
     assert(change.fingerprint.length > 0);
-    assert.equal(change.citation.connector, 'sales');
+    assert.equal(change.citation.instance, 'sales');
     assert(change.citation.references.includes(path.join(sales, change.id)));
   }
   assert.deepEqual(history('sales').fetches.map(entry => entry.id), [first, second]);

@@ -225,7 +225,7 @@ reportJson (EvolutionReport steps curation) = object
     recipeJson (Recipe instructions) = object ["instructions" .= instructions]
     recorded (RecordedFact contract value) = object ["schema" .= describeRootContract contract, "value" .= value]
     evidenceJson (EvidenceRef producer connector source references) = object
-      ["producer" .= producer, "connector" .= connector, "source" .= source, "references" .= references]
+      ["producer" .= producer, "instance" .= connector, "source" .= source, "references" .= references]
 
 reportText :: EvolutionReport -> [String]
 reportText (EvolutionReport steps curation) = concatMap step steps ++ maybe [] declaration curation

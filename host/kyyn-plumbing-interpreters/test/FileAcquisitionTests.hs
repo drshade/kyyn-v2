@@ -16,17 +16,21 @@ main = withSystemTempDirectory "kyyn-file-acquisition-" $ \directory -> do
       path = either error id (relativePath "source.txt")
       capture = runEff (runFileAcquisitionIO (readSourceText scope path))
       write = Bytes.writeFile (directory </> "source.txt")
-      expected = CapturedText "abc" (EvidenceFingerprint
-        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
   write "abc"
   first <- capture
   repeated <- capture
-  unless (first == Right expected && repeated == first) (fail "Stable content capture or SHA-256 vector failed")
+  unless (repeated == first) (fail "Stable file capture changed")
+  case first of
+    Right (CapturedText "abc" (EvidenceFingerprint token))
+      | length token == 64 && all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
+    _ -> fail "Expected captured content and lowercase SHA-256 fingerprint"
+  Bytes.writeFile (directory </> "other.txt") "abc"
+  moved <- runEff (runFileAcquisitionIO (readSourceText scope (either error id (relativePath "other.txt"))))
+  unless (moved /= first) (fail "Changed path did not change fingerprint")
   write "abcd"
   changed <- capture
   case changed of
-    Right (CapturedText "abcd" token) | token /= EvidenceFingerprint
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" -> pure ()
+    Right (CapturedText "abcd" token) | first /= Right (CapturedText "abc" token) -> pure ()
     _ -> fail "Changed bytes did not change captured text and fingerprint"
   write (Bytes.pack [255,254])
   invalid <- capture

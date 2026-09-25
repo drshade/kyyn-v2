@@ -7,8 +7,8 @@ Symbolic links and non-UTF-8 files are unsupported; a failed fetch publishes no 
 Evidence IDs are relative paths. Changing a file produces an update; adding or
 removing a path produces an addition or removal. Unchanged files are omitted.
 Source references are absolute file paths, and payloads contain the captured text.
-The plugin's fingerprint combines the source path with the host-provided content
-digest, so changing either produces an update. Changing the configured directory
+The host-provided fingerprint covers the source path and file contents, so
+changing either produces an update. Changing the configured directory
 retains relative IDs; matching files at a new source path therefore update their
 references too.
 

@@ -58,16 +58,16 @@ changesResult snapshot changes = success (object ["selection" .= context snapsho
     value (EvidenceChangeSummary identity previous kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef producer connector source refs)) = object
       ["fetch" .= fetchName identity,"previous" .= fmap fetchName previous,"kind" .= show kind,"id" .= key,
        "fingerprint" .= fingerprint,
-       "citation" .= object ["producer" .= producer,"connector" .= connector,"source" .= source,"references" .= refs]]
+       "citation" .= object ["producer" .= producer,"instance" .= connector,"source" .= source,"references" .= refs]]
 
 clearResult :: PluginName -> ConnectorName -> Bool -> Response
 clearResult plugin name existed = success
-  (object ["plugin" .= pluginNameText plugin,"connector" .= text name,"cleared" .= existed])
+  (object ["plugin" .= pluginNameText plugin,"instance" .= text name,"cleared" .= existed])
   [(if existed then "Cleared evidence for " else "No cached evidence for ") ++ pluginNameText plugin ++ "/" ++ text name]
 
 context :: EvidenceSnapshotRef -> Value
 context (EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ identity) = object
-  ["plugin" .= pluginNameText plugin,"connector" .= name,"fetch" .= fetchName identity]
+  ["plugin" .= pluginNameText plugin,"instance" .= name,"fetch" .= fetchName identity]
 fetchName :: FetchId -> String
 fetchName (FetchId name) = name
 text :: Coercible a String => a -> String

@@ -271,7 +271,7 @@ const interpreterModules = {
     'Kyyn.Plumbing.Protocol.ConnectorConfig', 'Kyyn.Plumbing.Protocol.Plugin', 'Kyyn.Plumbing.Protocol.PluginRegistration',
     'Kyyn.Plumbing.Protocol.PluginInvocation', 'Kyyn.Plumbing.Protocol.Validation',
     'Kyyn.Porcelain.Capability.PluginPreparation'],
-  'Kyyn.Plumbing.Interpreter.FileAcquisition': ['Control.Exception', 'Control.Monad', 'Crypto.Hash.SHA256', 'Numeric', 'Data.ByteString', 'Data.List',
+  'Kyyn.Plumbing.Interpreter.FileAcquisition': ['Control.Exception', 'Control.Monad', 'Crypto.Hash.SHA256', 'Numeric', 'Data.ByteString', 'Data.ByteString.Builder', 'Data.ByteString.Lazy', 'Data.List',
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.FileAcquisition', 'System.Directory', 'System.FilePath'],
   'Kyyn.Porcelain.Interpreter.EvidenceAcquisition': ['Control.Monad.Trans.Except', 'Effectful', 'Effectful.Dispatch.Dynamic',
