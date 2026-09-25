@@ -10,7 +10,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
-import Kyyn.Domain.Value (CheckedValue)
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
@@ -21,7 +21,7 @@ import Kyyn.Plumbing.Protocol.PluginMessages
 import System.FilePath (takeDirectory, takeFileName)
 
 executeAcquisition :: (GuestExecution :> es, Failure :> es, Files.FileAcquisition :> es)
-  => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
+  => CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
 executeAcquisition program config prior = fmap (either (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" message]) Right) $
   conversation decodeFrame program (initialInput config) $ \call -> case call of
   ListFiles directory recursive -> case directoryScope directory of
@@ -36,7 +36,7 @@ executeAcquisition program config prior = fmap (either (\(FetchError message) ->
 executeCapturedRead :: (GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => CompiledProgram -> CheckedValue -> CurrentEvidence -> CheckedContract
   -> Eff es (Either [Diagnostic] (Either FetchError Value))
-executeCapturedRead program arguments current result = do
+executeCapturedRead program (CheckedValue _ arguments) current result = do
   output <- conversation decodeFrame program (initialInput arguments) (answerEvidence (Just current))
   case output of
     Left problem -> pure (Right (Left problem))

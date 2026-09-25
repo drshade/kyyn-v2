@@ -28,7 +28,7 @@ stateShape payload = Record [("header",headerShape),("values",members),("history
     fetch = fetchShape
 
 fetchShape :: Shape
-fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker)]
+fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker),("options",Optional text)]
   where
     citation = Record ([(name,text) | name <- ["producer","connector","source"]] ++ [("references",List text)])
     marker = Record [("kind",Union [(name,Nothing) | name <- ["New","Updated","Removed"]]),
@@ -37,16 +37,16 @@ fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),(
 text :: Shape
 text = Scalar TextScalar
 
-optional :: Maybe FetchId -> Value
+optional :: Maybe String -> Value
 optional Nothing = object ["tag" .= ("None" :: String)]
-optional (Just (FetchId value)) = object ["tag" .= ("Some" :: String),"value" .= value]
+optional (Just value) = object ["tag" .= ("Some" :: String),"value" .= value]
 
-parseOptional :: Value -> Parser (Maybe FetchId)
-parseOptional = withObject "fetch cursor" $ \fields -> do
+parseOptional :: Value -> Parser (Maybe String)
+parseOptional = withObject "optional text" $ \fields -> do
   tag <- fields .: "tag"
   case tag :: String of
     "None" -> pure Nothing
-    "Some" -> Just . FetchId <$> fields .: "value"
+    "Some" -> Just <$> fields .: "value"
     _ -> fail "Unknown optional tag"
 
 parseHeader :: Value -> Parser EvidenceHeader
@@ -92,8 +92,9 @@ encodeState (EvidenceProducer (PackageIdentity producer) identity) contract stat
     marker (EvidenceChangeMarker kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef plugin connector source refs)) =
       object ["kind" .= object ["tag" .= show kind],"id" .= key,"fingerprint" .= fingerprint,
         "citation" .= object ["producer" .= plugin,"connector" .= connector,"source" .= source,"references" .= refs]]
-    fetch (Fetch (FetchId key) previous at changes) = object
-      ["id" .= key,"previous" .= optional previous,"fetchedAt" .= at,"changes" .= map marker changes]
+    fetch (Fetch (FetchId key) previous at changes options) = object
+      ["id" .= key,"previous" .= optional ((\(FetchId value) -> value) <$> previous),"fetchedAt" .= at,"changes" .= map marker changes,
+       "options" .= optional options]
 
 decodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> ByteString
   -> Eff es (Either EvidenceProblem (EvidenceState CheckedValue))
@@ -123,8 +124,9 @@ decodeState (EvidenceProducer producer identity) contract bytes
 
 parseFetch :: Value -> Parser Fetch
 parseFetch = withObject "fetch" $ \fields -> Fetch <$> (FetchId <$> fields .: "id")
-  <*> (fields .: "previous" >>= parseOptional) <*> fields .: "fetchedAt"
+  <*> (fmap FetchId <$> (fields .: "previous" >>= parseOptional)) <*> fields .: "fetchedAt"
   <*> (fields .: "changes" >>= traverse marker)
+  <*> (fields .: "options" >>= parseOptional)
   where
     kind = withObject "change kind" $ \fields -> do
       tag <- fields .: "tag"

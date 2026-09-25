@@ -284,9 +284,9 @@ typed method boundary; they do not need their own executable/plugin framework.
 Health is explicit and may fail; opening a KB must not probe every provider.
 Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
-Source registration is a plugin entry module's `connectors` value. The proposed
-Graph extension adds acquisition-context selection, optional fetch options and login to the
-existing declaration:
+Source registration is a plugin entry module's `connectors` value. Optional fetch
+options are implemented; acquisition-context selection and login remain proposed
+Graph extensions in the following sketch:
 
 ```haskell
 data AcquisitionContext = FileSource | NetworkSource

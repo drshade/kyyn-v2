@@ -9,36 +9,40 @@ import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
-acquisitionSources :: DataType -> DataType -> String -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-acquisitionSources config payload = sources config payload Nothing
+acquisitionSources :: DataType -> DataType -> Maybe DataType -> String -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
+acquisitionSources config payload options = sources config payload Nothing options
 
 capturedReadSources :: DataType -> DataType -> DataType -> String
   -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-capturedReadSources arguments payload result = sources arguments payload (Just result)
+capturedReadSources arguments payload result = sources arguments payload (Just result) Nothing
 
-sources :: DataType -> DataType -> Maybe DataType -> String
+sources :: DataType -> DataType -> Maybe DataType -> Maybe DataType -> String
   -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-sources arguments payload result implementation authored = do
+sources arguments payload result options implementation authored = do
   implementationModule <- bindingModule implementation
   codecs <- traverse (\(name,datatype) -> do
     path <- relativePath (name ++ ".hs")
     body <- generateCodecs name datatype
     pure (path,utf8 body))
     ([("KyynPluginArgumentsCodec",arguments),("KyynPluginPayloadCodec",payload)] ++
-      [("KyynPluginResultCodec",r) | Just r <- [result]])
+      [("KyynPluginResultCodec",r) | Just r <- [result]] ++
+      [("KyynPluginOptionsCodec",o) | Just o <- [options]])
   entryPath <- relativePath "KyynPluginEntry.hs"
   bindingsPath <- relativePath "KyynPluginBindings.hs"
   let mode = case result of Nothing -> "Acquisition"; Just _ -> "CapturedRead"
       resultType = case result of Nothing -> "[SDK.EvidenceChange " ++ haskellType payload ++ "]"; Just r -> haskellType r
       runtime = case result of
-        Nothing -> "executeAcquisition Arguments.rootCodec Payload.rootCodec selected"
+        Nothing -> case options of
+          Nothing -> "executeAcquisition Arguments.rootCodec Payload.rootCodec selected"
+          Just _ -> "executeAcquisition (withOptionsCodec Arguments.rootCodec Options.rootCodec) Payload.rootCodec (uncurry selected)"
         Just _ -> "executeCapturedRead Arguments.rootCodec Payload.rootCodec Result.rootCodec selected"
       entry = unlines $ ["module KyynPluginEntry where","import qualified " ++ implementationModule,
         "import qualified Kyyn.Plugin as SDK","import qualified KyynPluginBindings as Bindings",
         "import qualified KyynPluginArgumentsCodec as Arguments","import qualified KyynPluginPayloadCodec as Payload",
-        "import Kyyn.Runtime.Plugin"] ++ imports (arguments:payload:maybe [] pure result) ++
+        "import Kyyn.Runtime.Plugin"] ++ imports (arguments:payload:maybe [] pure result ++ maybe [] pure options) ++
+        ["import qualified KyynPluginOptionsCodec as Options" | Just _ <- [options]] ++
         ["import qualified KyynPluginResultCodec as Result" | Just _ <- [result]] ++
-        ["selected :: " ++ haskellType arguments ++ " -> SDK.EvidenceSnapshot " ++ haskellType payload ++
+        ["selected :: " ++ haskellType arguments ++ maybe "" (\o -> " -> Maybe (" ++ haskellType o ++ ")") options ++ " -> SDK.EvidenceSnapshot " ++ haskellType payload ++
           " -> Bindings." ++ mode ++ " (Either SDK.FetchError " ++ resultType ++ ")",
          "selected = " ++ implementation,"main :: IO ()","main = " ++ runtime]
       bindings = unlines $ ["{-# LANGUAGE TypeOperators #-}",

@@ -56,12 +56,25 @@ main = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   writeSources schemaDirectory common
   (config,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.Config" >>= right
   (payload,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.Document" >>= right
+  (options,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.FetchOptions" >>= right
   folder <- load "host/kyyn-microhs/test/plugin" "Folder.hs"
   view <- load "host/kyyn-microhs/test/plugin" "ReadDocument.hs"
-  acquisition <- right (acquisitionSources config payload "Folder.fetch" (folder:common))
+  optionFixture <- load "host/kyyn-microhs/test/plugin" "Options.hs"
+  optionSources <- right (acquisitionSources config payload (Just options) "Options.fetch" (optionFixture:common))
+  (optionPrograms,_) <- compileBoth temporary toolchain nativeCompiler "options" optionSources
+  forM_ optionPrograms $ \program -> forM_
+    [(object ["tag" .= ("None" :: String)],"default options"),
+     (object ["tag" .= ("Some" :: String),"value" .= object ["label" .= ("scoped 🦋" :: String)]],"scoped 🦋")] $
+    \(selected,message) -> do
+      (result,trace,status) <- broker Normal program (object
+        ["arguments" .= object ["config" .= object ["directory" .= ("/folder" :: String),"recursive" .= True],
+          "options" .= selected],"snapshot" .= ("prior" :: String)])
+      assert "typed options/default did not reach acquisition unchanged"
+        (result == Just (failure message) && null trace && status == ExitSuccess)
+  acquisition <- right (acquisitionSources config payload Nothing "Folder.fetch" (folder:common))
   captured <- right (capturedReadSources StringType payload StringType "ReadDocument.view" (view:common))
   forM_ ["KyynPluginBindings.hs","KyynPluginEntry.hs","KyynPluginPayloadCodec.hs"] $ \name ->
-    assert "generated adapter overwrote authored source" (case acquisitionSources config payload "Folder.fetch" ((path name,"collision"):folder:common) of
+    assert "generated adapter overwrote authored source" (case acquisitionSources config payload Nothing "Folder.fetch" ((path name,"collision"):folder:common) of
       Left _ -> True; Right _ -> False)
   (fetchPrograms,artifact) <- compileBoth temporary toolchain nativeCompiler "fetch" acquisition
   (readPrograms,_) <- compileBoth temporary toolchain nativeCompiler "read" captured

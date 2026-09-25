@@ -334,6 +334,25 @@ kyyn-v2 --kb PATH root tool show bulkContent --evolution ID
 kyyn-v2 --kb PATH root tool execute bulkContent --input '["notes.txt", "summary.txt"]'
 ```
 
+### Per-fetch options
+
+`plugin connector show PLUGIN INSTANCE` displays the instance's optional Dhall
+fetch-options type. Add `--evolution ID` to inspect a draft target. Supply a value
+with `evidence fetch PLUGIN INSTANCE --options 'DHALL'`; the host checks its type
+before acquisition. Omit the option to use the connector's own default. A connector
+without an options type refuses supplied options; local-file has no options.
+`evidence history list PLUGIN INSTANCE` includes supplied options as normalized
+Dhall, or an absent value when omitted. These are visible non-secret arguments;
+credentials belong in the local secret store.
+
+For existing vendored plugins, add `fetchOptionsType = Nothing` to each
+`SourceConnector` declaration; its fetch function remains unchanged. An options-aware
+connector instead names its options type and accepts `Maybe Options` between config
+and snapshot. Existing ignored evidence caches without the options history field
+must be cleared with `evidence clear PLUGIN INSTANCE` and refetched. Accepted facts
+and recipe progress are unaffected by clearing; retain any pending curation scopes
+until they have been resolved before discarding their local fetch history.
+
 Execution uses the accepted helper and latest fetched evidence. Fetch the named
 instances first with `evidence fetch PLUGIN INSTANCE`. Use
 `kyyn-v2 --kb PATH evidence list PLUGIN INSTANCE` to discover current IDs and

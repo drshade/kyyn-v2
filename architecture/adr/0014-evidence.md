@@ -9,8 +9,8 @@ date: 2026-09-25
 Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
 recipe evolution data are implemented. Recipes persist separately from the root
 manifest and use the ordinary evolution editing and review surfaces.
-The fetch-options and Microsoft Graph calendar sections propose an extension;
-they are not implemented by the existing file acquisition path.
+Typed fetch options are implemented through discovery, acquisition and history.
+The Microsoft Graph calendar section remains an unimplemented provider design.
 
 ## Context
 

@@ -287,11 +287,13 @@ it dispatches, not GuestCompilation. For example:
 ```haskell
 executeAcquisition
   :: (GuestExecution :> es, FileAcquisition :> es, Failure :> es)
-  => CompiledProgram -> CheckedValue -> Maybe CurrentEvidence
+  => CompiledProgram -> Value -> Maybe CurrentEvidence
   -> Eff es (Either [Diagnostic] Value)
 ```
 
 The acquisition workflow loads current evidence before entering the broker.
+Its argument value is assembled from checked config and typed fetch options;
+the envelope is wire data, not a value stamped with the config-only contract.
 Guest evidence reads use that immutable input directly; the broker has no
 EvidenceStore requirement. Publication uses the loaded fetch as its expected base.
 When the producer has changed, acquisition instead starts empty and uses the

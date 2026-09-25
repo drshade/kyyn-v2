@@ -46,6 +46,10 @@ dispatchConnectors :: Host -> Cli.ConnectorCommand -> SelectedKb -> IO Response
 dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
   Cli.ListConnectors plugin workspace -> respond $ runDiscovery host toolchain sdk $
     fmap (fmap (connectorListResult plugin)) (listConfiguredConnectors kb revision workspace plugin)
+  Cli.ShowConnector plugin name workspace -> respond $ runDiscovery host toolchain sdk $ runExceptT $ do
+    options <- ExceptT (connectorFetchOptions kb revision workspace plugin name)
+    schema <- traverse (ExceptT . fmap Right . renderType . contractShape) options
+    pure (connectorResult plugin name schema)
   Cli.ShowConnectorSchema plugin workspace -> respond $ runDiscovery host toolchain sdk $ runExceptT $ do
     shape <- ExceptT (connectorConfigurationSchema kb revision workspace plugin)
     schema <- ExceptT (Right <$> renderType shape)
@@ -76,11 +80,11 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     Right scope -> finish $ runBase host . runDocumentPersistenceIO . runEvidenceStore scope $ do
       existed <- clearConnectorEvidence plugin name
       pure (clearResult plugin name existed)
-  Cli.FetchConnector plugin name -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
+  Cli.FetchConnector plugin name options -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
       . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
-        (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name)
+        (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $

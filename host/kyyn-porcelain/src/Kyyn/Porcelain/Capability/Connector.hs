@@ -1,7 +1,7 @@
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
   , connectorCurrentEvidence, connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
-  , listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
+  , connectorFetchOptions, listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
@@ -36,7 +36,7 @@ listConfiguredConnectors kb revision workspace plugin = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   PreparedPlugin _ instances <- checked (selectedPlugin plugin plugins)
-  pure [(name,binding,kind) | ConfiguredConnector name binding (PreparedConnector kind _ _ _ _ _) _ <- instances]
+  pure [(name,binding,kind) | ConfiguredConnector name binding (PreparedConnector kind _ _ _ _ _ _) _ <- instances]
 
 connectorConfigurationSchema :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> Eff es (Either [Diagnostic] Shape)
@@ -44,15 +44,24 @@ connectorConfigurationSchema kb revision workspace plugin = runExceptT $ do
   code <- sourceAt kb revision workspace
   packages <- ExceptT (preparePackages code)
   PreparedPackage _ _ connectors <- checked (selectedPackage plugin packages)
-  pure (instanceShape [(name,contractShape config) | PreparedConnector name config _ _ _ _ <- connectors])
+  pure (instanceShape [(name,contractShape config) | PreparedConnector name config _ _ _ _ _ <- connectors])
 
 listConnectorMethods :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> Eff es (Either [Diagnostic] [PreparedMethod])
 listConnectorMethods kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (_,ConfiguredConnector _ _ (PreparedConnector _ _ _ _ _ methods) _) <- checked (selectedInstance plugin name plugins)
+  (_,ConfiguredConnector _ _ (PreparedConnector _ _ _ _ _ methods _) _) <- checked (selectedInstance plugin name plugins)
   pure methods
+
+connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName
+  -> Eff es (Either [Diagnostic] (Maybe CheckedContract))
+connectorFetchOptions kb revision workspace plugin name = runExceptT $ do
+  code <- sourceAt kb revision workspace
+  plugins <- ExceptT (preparePlugins code)
+  (_,ConfiguredConnector _ _ (PreparedConnector _ _ _ _ _ _ options) _) <- checked (selectedInstance plugin name plugins)
+  pure options
 
 selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> MethodName
@@ -60,7 +69,7 @@ selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, Plu
 selectConnectorMethod kb revision workspace plugin name method = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ methods) _) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ methods _) _) <-
     checked (selectedInstance plugin name plugins)
   case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
     [selected] -> pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload,selected)
@@ -93,15 +102,15 @@ selectConnectorEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, P
 selectConnectorEvidence kb revision plugin name = runExceptT $ do
   code <- sourceAt kb revision Nothing
   plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ _) _) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ _ _) _) <-
     checked (selectedInstance plugin name plugins)
   pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload)
 
 fetchConfiguredConnector
   :: (RootOpening :> es, RootExecution :> es, RootStore :> es, EvidenceAcquisition :> es)
-  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Maybe String
   -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, ValidationReport))
-fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name = runExceptT $ do
+fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name supplied = runExceptT $ do
   location <- checked (pathResult (rootLocation kb))
   root <- ExceptT (loadRootAt repository revision (Subtree location))
   prepared <- ExceptT (prepareRoot root)
@@ -109,9 +118,9 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name = 
   report <- case validation of
     Rejected (ValidationReport diagnostics) -> throwE diagnostics
     Passed _ diagnostics -> pure diagnostics
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload entry _ _) config) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload entry _ _ options) config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
-  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config)
+  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options supplied)
   pure (snapshot,report)
 
 sourceAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)

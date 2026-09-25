@@ -22,11 +22,12 @@ data EvidenceProducer = EvidenceProducer PackageIdentity ContractId deriving (Eq
 data Fetch = Fetch
   { identity :: FetchId, previous :: Maybe FetchId, fetchedAt :: String
   , changes :: [EvidenceChangeMarker]
+  , suppliedOptions :: Maybe String
   } deriving (Eq, Show)
-data FetchSummary = FetchSummary FetchId (Maybe FetchId) String Int deriving (Eq, Show)
+data FetchSummary = FetchSummary FetchId (Maybe FetchId) String Int (Maybe String) deriving (Eq, Show)
 
 summarizeFetch :: Fetch -> FetchSummary
-summarizeFetch (Fetch identity previous at changes) = FetchSummary identity previous at (length changes)
+summarizeFetch (Fetch identity previous at changes options) = FetchSummary identity previous at (length changes) options
 
 data EvidenceState a = EvidenceState
   { current :: Maybe FetchId, values :: [(EvidenceId, Evidence a)], history :: [Fetch]
@@ -43,15 +44,15 @@ captureEvidence (CurrentEvidence snapshot items) = EvidenceCapture snapshot
 resolveCapture :: ConnectorInstanceRef -> EvidenceProducer -> FetchId -> [Fetch] -> FetchId
   -> Either EvidenceProblem EvidenceCapture
 resolveCapture instanceRef producer current history selected = do
-  values <- foldM applyMarker [] [marker | Fetch _ _ _ markers <- history, marker <- markers]
+  values <- foldM applyMarker [] [marker | Fetch _ _ _ markers _ <- history, marker <- markers]
   validateState (EvidenceState (Just current) values history)
   prefix <- through history
-  selectedValues <- foldM applyMarker [] [marker | Fetch _ _ _ markers <- prefix, marker <- markers]
+  selectedValues <- foldM applyMarker [] [marker | Fetch _ _ _ markers _ <- prefix, marker <- markers]
   pure (EvidenceCapture (EvidenceSnapshotRef instanceRef producer selected)
     [(item,token) | (item,Evidence token _ _) <- selectedValues])
   where
     through [] = Left CursorUnavailable
-    through (entry@(Fetch identity _ _ _) : rest)
+    through (entry@(Fetch identity _ _ _ _) : rest)
       | identity == selected = Right [entry]
       | otherwise = (entry :) <$> through rest
     applyMarker entries (EvidenceChangeMarker kind key token (EvidenceRef _ _ _ refs)) =
@@ -129,30 +130,30 @@ fetchesSince (EvidenceState _ _ history) = maybe (Right history) after
     after key = go history
       where
         go [] = Left CursorUnavailable
-        go (Fetch identity _ _ _:rest) | identity == key = Right rest
+        go (Fetch identity _ _ _ _:rest) | identity == key = Right rest
                                      | otherwise = go rest
 
 summarizeChanges :: [Fetch] -> [EvidenceChangeSummary]
 summarizeChanges fetches =
   [EvidenceChangeSummary identity previous kind key fingerprint citation |
-    Fetch identity previous _ markers <- fetches,
+    Fetch identity previous _ markers _ <- fetches,
     EvidenceChangeMarker kind key fingerprint citation <- markers]
 
 validateState :: EvidenceState a -> Either EvidenceProblem ()
 validateState (EvidenceState current values history) = do
-  let ids = [key | Fetch key _ _ _ <- history]
+  let ids = [key | Fetch key _ _ _ _ <- history]
       memberIds = map fst values
       validMember (EvidenceId key,Evidence (EvidenceFingerprint token) _ _) = not (null key || null token)
       validMarker (EvidenceChangeMarker _ (EvidenceId key) (EvidenceFingerprint token) _) = not (null key || null token)
   unless (length ids == length (nub ids) && all (\(FetchId key) -> not (null key)) ids &&
     length memberIds == length (nub memberIds) && all validMember values &&
-    all (\(Fetch _ _ _ markers) -> all validMarker markers) history)
+    all (\(Fetch _ _ _ markers _) -> all validMarker markers) history)
     (Left (InvalidEvidence "Invalid or duplicate evidence/fetch identities or fingerprints"))
-  latest <- foldM (\expected (Fetch identity previous _ _) ->
+  latest <- foldM (\expected (Fetch identity previous _ _ _) ->
     if previous == expected then Right (Just identity) else Left (InvalidEvidence "Broken fetch marker chain")) Nothing history
   unless (current == latest && (current /= Nothing || null values))
     (Left (InvalidEvidence "Current evidence and fetch marker head disagree"))
-  recorded <- foldM applyMarker [] [marker | Fetch _ _ _ markers <- history, marker <- markers]
+  recorded <- foldM applyMarker [] [marker | Fetch _ _ _ markers _ <- history, marker <- markers]
   unless (recorded == [(key,metadata value) | (key,value) <- values])
     (Left (InvalidEvidence "Current evidence identities/fingerprints disagree with change markers"))
   where

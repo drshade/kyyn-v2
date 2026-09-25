@@ -26,12 +26,13 @@ registrationSources entryModule sources = do
 decodeConnectors :: Bytes.ByteString -> Either String [ConnectorDeclaration]
 decodeConnectors bytes = do
   declarations <- eitherDecodeStrict bytes >>= parseEither (withArray "connectors" (traverse connector . toList))
-  let names = [name | SourceConnector name _ _ _ _ _ <- declarations]
+  let names = [name | SourceConnector name _ _ _ _ _ _ <- declarations]
   unless (length names == length (nub names)) (Left "Connector type names must be unique within a plugin")
-  forM declarations $ \(SourceConnector name config payload fetch validate methods) -> do
+  forM declarations $ \(SourceConnector name config payload fetch validate methods options) -> do
     checkedName <- connectorTypeName name
     checkedConfig <- either (Left . ((name ++ ": configType: ") ++)) Right (qualifiedTypeName config)
     checkedPayload <- either (Left . ((name ++ ": payloadType: ") ++)) Right (qualifiedTypeName payload)
+    checkedOptions <- traverse (either (Left . ((name ++ ": fetchOptionsType: ") ++)) Right . qualifiedTypeName) options
     _ <- either (Left . ((name ++ ": fetch: ") ++)) Right (bindingModule fetch)
     _ <- either (Left . ((name ++ ": validateConfig: ") ++)) Right (bindingModule validate)
     let methodNames = [n | CapturedMethod n _ _ _ _ <- methods]
@@ -43,13 +44,19 @@ decodeConnectors bytes = do
       output <- located (qualifiedTypeName result)
       _ <- located (bindingModule implementation)
       pure (CapturedMethodDeclaration checkedMethod description arguments output implementation)
-    pure (ConnectorDeclaration checkedName checkedConfig checkedPayload fetch validate checkedMethods)
+    pure (ConnectorDeclaration checkedName checkedConfig checkedPayload fetch validate checkedMethods checkedOptions)
   where
     connector = withObject "source connector" $ \fields -> do
-      unless (sort (Keys.keys fields) == ["configType","fetch","methods","name","payloadType","validateConfig"])
+      unless (sort (Keys.keys fields) == ["configType","fetch","fetchOptionsType","methods","name","payloadType","validateConfig"])
         (fail "Unexpected or missing source connector fields")
       SourceConnector <$> fields .: "name" <*> fields .: "configType" <*> fields .: "payloadType"
         <*> fields .: "fetch" <*> fields .: "validateConfig" <*> (fields .: "methods" >>= traverse method)
+        <*> (fields .: "fetchOptionsType" >>= withObject "optional fetch options" (\value -> do
+          tag <- value .: "tag"
+          case tag :: String of
+            "None" -> pure Nothing
+            "Some" -> Just <$> value .: "value"
+            _ -> fail "Invalid optional fetch options type"))
     method = withObject "captured method" $ \fields -> do
       unless (sort (Keys.keys fields) == ["description","implementation","inputType","name","resultType"])
         (fail "Unexpected or missing captured method fields")
