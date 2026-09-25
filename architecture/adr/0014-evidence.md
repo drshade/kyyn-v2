@@ -161,7 +161,7 @@ merely because those items fall outside the bounds.
 Paginate the calendar's events collection and filter by modified time in plugin
 code. This initial choice requires no undocumented server-side timestamp-filter
 support and makes no remote-query efficiency claim. Every fetch reads the whole
-calendar: the range narrows what is captured, not what is downloaded. Follow every
+calendar: supplied options narrow captured upserts, not what is downloaded. Follow every
 returned next page before publishing a batch; a page failure publishes nothing. The payload
 retains the provider modification time. There is no separate persisted fetch clock.
 
@@ -170,7 +170,7 @@ the opaque change token. Keep returned source links for citations. Graph describ
 these fields in its [event resource contract](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
 Capture a stable projection of the event, without fetch-time fields. Emit New for
 an absent ID, Updated for a different token, and nothing for an unchanged token.
-A range re-fetch reads current provider values, not historical versions.
+A scoped re-fetch reads current provider values, not historical versions.
 
 After the full listing succeeds, emit Removed for previously captured IDs absent
 from that complete, unfiltered listing, even when upsert options were supplied.
