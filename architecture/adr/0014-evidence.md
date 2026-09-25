@@ -153,8 +153,9 @@ earlier `--from`.
 
 Paginate the calendar's events collection and filter by modified time in plugin
 code. This initial choice requires no undocumented server-side timestamp-filter
-support and makes no remote-query efficiency claim. Follow every returned next
-page before publishing a batch; a page failure publishes nothing. The payload
+support and makes no remote-query efficiency claim. Every fetch reads the whole
+calendar: the range narrows what is captured, not what is downloaded. Follow every
+returned next page before publishing a batch; a page failure publishes nothing. The payload
 retains the provider modification time used for defaulting. No separate persisted
 fetch clock is needed, and an empty successful fetch does not advance a clock.
 
