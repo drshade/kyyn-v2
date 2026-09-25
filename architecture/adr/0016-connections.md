@@ -2,7 +2,7 @@
 id: 0016
 title: 'Local secrets, typed configuration and named connector bindings'
 status: proposed
-date: 2026-09-24
+date: 2026-09-25
 ---
 # Local secrets, typed configuration and named connector bindings
 
@@ -122,6 +122,10 @@ SDK constructors. An integration implemented in a host handler reads its credent
 there, without automatic credential injection or a kernel-owned authentication
 workflow.
 
+The Graph extension below introduces the guest secret read/write consumers and
+explicit login. It is a design proposal; the existing local store does not by
+itself implement these plugin flows.
+
 ### Configuration remains ordinary typed root data
 
 Plugins advertise each connector type's configuration through a Haskell type in
@@ -239,9 +243,82 @@ Native libraries
 still handle TLS, transport, filesystem access and document parsing. Authored
 code never needs to implement those IO mechanisms itself. A static credential
 lookup does not prove login or refresh support; test the actual flow before
-claiming it. Additional secret operations need a concrete integration use case,
-not speculative lifecycle constructors. Required user actions must be explicit,
-not hidden interactive prompts inside scheduled work.
+claiming it. Required user actions must be explicit, not hidden interactive
+prompts inside scheduled work.
+
+A connector may advertise an optional login entry, inspected against the same
+configuration type as its acquisition entry:
+
+```haskell
+login :: Config -> PluginLogin (Either LoginError ())
+```
+
+Registration carries an optional qualified entry name, not an OAuth description
+for the host to interpret. Host dispatch compiles/checks it against the selected
+connector's config and ADR 0009's login row. `plugin connector login PLUGIN INSTANCE`
+explicitly invokes it using accepted configuration. A connector without an entry
+reports that login is unsupported. Login does not fetch evidence, validate a root
+or create an evolution. Its secret writes are local setup, not accepted-root writes.
+
+### Microsoft Graph authentication
+
+One vendored `microsoft-graph` plugin shares ordinary authentication code among
+its connector types. Start with a user-calendar connector. Mail, Teams and files
+belong to this plugin too, but each API needs its own permission/support proof;
+sharing token code does not prove an API supports both authentication modes.
+The plugin, not Kyyn core, owns this configuration type:
+
+```haskell
+data GraphAuth
+  = ClientSecret { tenant :: String, clientId :: String, secretKey :: String }
+  | DeviceCode { tenant :: String, clientId :: String, tokenKey :: String }
+
+data CalendarConfig = CalendarConfig
+  { auth :: GraphAuth, mailbox :: String, calendarId :: Maybe String }
+```
+
+`Nothing` selects the mailbox's default calendar. An explicit mailbox works
+with both delegated and application tokens; do not rely on `/me` for app-only
+access. Configuration names secret keys, never credential values. Pure config
+validation checks required fields and names, not consent or remote connectivity.
+
+Client-secret acquisition reads the configured secret and requests a fresh access
+token for Graph's `.default` scope. This mode uses application permissions and
+administrator consent; it has no refresh token. The calendar connector requests
+`Calendars.Read`, with the app registration configured accordingly. `login` in
+this mode checks token acquisition without persisting the access token.
+See Microsoft's [client-credentials protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow).
+
+Delegated access to the signed-in user's own calendar uses `Calendars.Read`.
+Another user's shared/delegated calendar requires `Calendars.Read.Shared` and
+actual sharing/delegation to that user; consent alone does not grant mailbox
+access. See Microsoft's [shared calendar access](https://learn.microsoft.com/en-us/graph/outlook-get-shared-events-calendars).
+The calendar plugin requests the shared-read scope when supporting that access,
+not application permissions in a delegated token.
+
+Device-code login requests the applicable delegated calendar scope and `offline_access`,
+displays the verification URI and user code, and polls using the provider's
+interval. Pending responses continue; denial/expiry stop with an actionable
+diagnostic. The app registration must support public-client device authorization
+and the tenant must permit it. Store the returned refresh token at `tokenKey`
+before reporting success. The device code itself stays in the running invocation;
+there is no durable login session or background process.
+See Microsoft's [device-authorization protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code).
+
+Subsequent acquisition reads that refresh token and exchanges it for an access
+token. Save a replacement refresh token when returned, before proceeding; if none
+is returned retain the existing one. Do not erase a usable stored value before
+the replacement succeeds. Revocation or missing credentials instructs the user
+to run login explicitly; fetch never starts an interactive flow. Access tokens
+live only for the invocation. The same configured token key may be shared by
+compatible instances; provider consent still determines permitted access.
+See Microsoft's [refresh-token exchange](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow#refresh-the-access-token).
+
+These flows use the HTTP/secret/login request rows in ADR 0009. The host does not
+know tenants, scopes, token expiry, refresh-token format or provider endpoints.
+Acquisition failure leaves evidence unchanged, but does not roll back a successful
+refresh-token replacement: external authentication and local secret setup are
+not part of evidence publication's transaction.
 
 ## Trust and consequences
 
@@ -278,3 +355,12 @@ a fresh clone retains config and reports the absent local secret when requested.
 Routine host logs and field traces must omit secret response values and HTTP
 headers, URLs and bodies, including query strings that may contain credentials.
 Real integration tests use opt-in local credentials, never committed fixtures.
+
+For Graph, exercise client-secret exchange, device-code pending/success/denial/
+expiry, cancellation, refresh rotation, missing/revoked credentials and failed
+secret replacement with recording handlers. Check URI/code output without token
+leakage, JSON stdout integrity and no interactive requests from fetch. An installed
+journey against a fake HTTP server must prove generated dispatch, pagination and
+publication; a fake token endpoint does not prove tenant consent. Verify both auth
+modes separately against an explicitly selected live test calendar before claiming
+provider support. Keep credentials and captured private data outside fixtures.

@@ -2,7 +2,7 @@
 id: 0015
 title: 'Locally built plugins group source and sink connectors'
 status: proposed
-date: 2026-09-14
+date: 2026-09-25
 ---
 # Locally built plugins group source and sink connectors
 
@@ -284,15 +284,22 @@ typed method boundary; they do not need their own executable/plugin framework.
 Health is explicit and may fail; opening a KB must not probe every provider.
 Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
-The first source registration is a plugin entry module's `connectors` value:
+Source registration is a plugin entry module's `connectors` value. The proposed
+Graph extension adds acquisition-context selection, optional fetch options and login to the
+existing declaration:
 
 ```haskell
+data AcquisitionContext = FileSource | NetworkSource
+
 connectors :: [SourceConnector]
 connectors = [SourceConnector
   { name = "Folder"
   , configType = "LocalFile.Types.FolderConfig"
   , payloadType = "LocalFile.Types.Document"
   , fetch = "LocalFile.Folder.fetch"
+  , fetchOptionsType = Nothing
+  , acquisitionContext = FileSource
+  , login = Nothing
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
       { methodName = "content"
@@ -310,6 +317,32 @@ the derived Dhall configuration union. Qualified names refer to Haskell declarat
 not duplicated structural schemas. A fixed adapter evaluates the registration;
 the compiler inspects the named types and generated adapters typecheck the selected
 fetch and pure `Config -> ValidationReport` validator against those same types.
+`FileSource` selects ADR 0009's file/evidence row; `NetworkSource` selects its
+HTTP/secret/evidence row. This selects generated signatures and native dispatch,
+not a permission-grant system. A missing capability cannot be obtained by an
+untyped callback. The optional `login` qualified entry is checked and dispatched
+under [ADR 0016](0016-connections.md#authentication-belongs-to-the-integration).
+Graph advertises `NetworkSource` and its login entry; the folder needs no login.
+Discovery exposes this declaration without executing authentication or fetching.
+
+`fetchOptionsType :: Maybe QualifiedTypeName` optionally names a plugin-authored
+options type. Inspect it by the same schema path as `configType`; expose its
+contract through `plugin connector show`. The generated adapter selects the
+signature according to this declaration:
+
+```haskell
+-- No advertised options type: existing connectors keep this signature.
+fetch :: Config -> EvidenceSnapshot Payload
+      -> Program calls (Either FetchError [EvidenceChange Payload])
+
+-- An advertised Options type: absence of CLI options is represented explicitly.
+fetch :: Config -> Maybe Options -> EvidenceSnapshot Payload
+      -> Program calls (Either FetchError [EvidenceChange Payload])
+```
+
+The folder connector advertises no options and its acquisition function is
+unchanged. The host checks supplied options before guest execution, while the
+connector owns their meaning and defaults. ADR 0014 owns invocation and history.
 Native `ConnectorTypeName`, `BindingName`, `ConnectorName` and `QualifiedTypeName`
 distinguish the declared names after decoding. Type names have at least a module
 and type component, each an uppercase Haskell identifier. Bindings match

@@ -1,14 +1,16 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: implemented
-date: 2026-09-23
+status: proposed
+date: 2026-09-25
 ---
 # Latest evidence and recipe-scoped declared curation
 
 Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
 recipe evolution data are implemented. Recipes persist separately from the root
 manifest and use the ordinary evolution editing and review surfaces.
+The fetch-options and Microsoft Graph calendar sections propose an extension;
+they are not implemented by the existing file acquisition path.
 
 ## Context
 
@@ -112,6 +114,73 @@ evolution's configuration can be inspected but cannot acquire evidence before
 acceptance. Config and payloads are plugin-authored Haskell types; the host supplies
 typed bindings and capabilities as described in ADRs 0008, 0009 and 0016.
 
+### Connector-owned fetch options
+
+`evidence fetch PLUGIN INSTANCE [--options DHALL]` accepts a value of the
+connector's advertised options type, inspected and checked as specified in
+[ADR 0015](0015-plugins.md#one-plugin-several-connectors). The host checks the
+supplied hermetic Dhall against that contract before executing the plugin.
+It refuses supplied options when the connector advertises no options type.
+Omission reaches an options-aware connector as `Nothing`; the connector owns
+defaulting and semantic validation. Options are non-secret invocation data, not
+persisted instance configuration. Use named secrets for credentials.
+
+A fetch returns changes applied to the prior capture, not an implicit replacement
+listing. Absence from a partial result never means deletion. Removals require
+the source to establish absence. The host has no timestamp semantics or generic
+watermark, and fetching remains independent of accepted recipe progress.
+
+### Microsoft Graph calendar acquisition
+
+The first calendar connector captures event resources from one configured user
+calendar, not a calendarView of expanded recurring occurrences. Graph's
+[events collection](https://learn.microsoft.com/en-us/graph/api/calendar-list-events?view=graph-rest-1.0)
+contains single events and recurring-series masters. A
+[calendarView](https://learn.microsoft.com/en-us/graph/api/calendar-list-calendarview?view=graph-rest-1.0)
+instead expands occurrences in an event-time window. Its required start/end dates
+cannot implement a modified-time window. The connector must not claim that series
+master acquisition covers every occurrence exception or cancellation.
+
+Default acquisition paginates the full events collection and compares all returned
+items, with no timestamp cutoff derived from previous captures. The connector
+advertises optional per-fetch scope:
+
+```haskell
+data CalendarFetch = CalendarFetch
+  { modifiedFrom :: Maybe String, modifiedTo :: Maybe String }
+```
+
+Supplied bounds are timezone-qualified ISO 8601 instants compared inclusively
+against `lastModifiedDateTime`, independently of meeting start/end dates. Reject
+malformed or inverted bounds. Missing bounds are unbounded; `Nothing` options
+and an options record with both bounds absent select all upserts. Compare parsed
+instants, not arbitrary timestamp strings. These options limit additions/updates
+only; they do not restrict removal detection or discard already captured items
+merely because those items fall outside the bounds.
+
+Paginate the calendar's events collection and filter by modified time in plugin
+code. This initial choice requires no undocumented server-side timestamp-filter
+support and makes no remote-query efficiency claim. Every fetch reads the whole
+calendar: supplied options narrow captured upserts, not what is downloaded. Follow every
+returned next page before publishing a batch; a page failure publishes nothing. The payload
+retains the provider modification time. There is no separate persisted fetch clock.
+
+Use the provider event ID within the configured instance and its `changeKey` as
+the opaque change token. Keep returned source links for citations. Graph describes
+these fields in its [event resource contract](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
+Capture a stable projection of the event, without fetch-time fields. Emit New for
+an absent ID, Updated for a different token, and nothing for an unchanged token.
+A scoped re-fetch reads current provider values, not historical versions.
+
+After the full listing succeeds, emit Removed for previously captured IDs absent
+from that complete, unfiltered listing, even when upsert options were supplied.
+Never compare captured IDs against only the option-selected subset. A returned
+cancellation field is an update. This mirrors the selected event-resource
+collection, not expanded recurring occurrences or a transactionally frozen view
+of the remote calendar. Provider ID behavior and changes during pagination need
+live verification; fake-server tests do not establish those properties.
+Authentication is owned by ADR 0016, not this fetch contract.
+
 ### Atomic refresh and invocation-local reads
 
 Publish one complete successful batch atomically. Failure leaves the current
@@ -155,6 +224,7 @@ data Fetch = Fetch
   { identity :: FetchId
   , previous :: Maybe FetchId
   , fetchedAt :: String
+  , suppliedOptions :: Maybe DhallText
   , changes :: [EvidenceChangeMarker]
   }
 
@@ -172,6 +242,13 @@ listEvidenceChanges
   => ConnectorInstanceRef -> Maybe FetchId
   -> Eff es (Either EvidenceProblem [EvidenceChangeSummary])
 ```
+
+`suppliedOptions` records the supplied checked value as normalized hermetic Dhall
+text, not an unevaluated expression with imports. Omission remains absent; do not
+invent or record plugin defaults in the host. Persist it with the successful fetch
+and display it in `evidence history list`, including for an unchanged fetch.
+The history reader does not need the currently installed plugin's options schema
+to display that text. Options are non-secret by convention, not host-redacted data.
 
 The marker records the supplied fingerprint for additions/updates, and the last
 known fingerprint and source references for a removal. The fingerprint does not
@@ -595,6 +672,17 @@ for reconciliation on mismatch. A failed refetch publishes nothing.
 Accepted KB facts and curation progress remain owned by evolutions.
 
 ## Verification
+
+For Graph acquisition, cover initial/empty captures, default full comparison,
+inclusive equal-time bounds, edits to old meetings, invalid options, pagination
+failure, unchanged tokens and real removals. Check that an item outside supplied
+bounds is not falsely removed, while an ID absent from the unfiltered listing is
+removed. Verify option discovery, pre-execution type refusal, unchanged no-options
+connector signatures and supplied-option history round trips. Failed batches leave
+evidence and history unchanged. Exercise throttling waits and cancellation. Run
+the same guest under GHC and MicroHs with recording HTTP/secret handlers, then the
+installed CLI against a fake server. Live calendar checks must distinguish series
+masters from occurrences and verify the advertised modified-time behavior.
 
 Exercise new/updated/removed/unchanged files, stable content fingerprints, failed
 acquisition and stale-base publication. After several updates, inspect stored Dhall:
