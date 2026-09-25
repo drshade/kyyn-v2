@@ -12,14 +12,17 @@ import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
+import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..))
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Domain.Git
 import qualified Kyyn.Domain.GuestApi as Api
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (pluginName, connectorName)
-import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult)
+import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult, changesResult, historyResult)
+import Kyyn.Types.Evolution (Rationale(..))
+import Kyyn.Types.Evidence (EvidenceRef(..))
+import qualified Data.Aeson.KeyMap as KeyMap
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (PackageIdentity(..))
 import Kyyn.Domain.Publication
@@ -43,7 +46,7 @@ main = do
       instanceName = either error id (connectorName "sales")
   mapM_ (\(existed,expected) -> case clearResult plugin instanceName existed of
     Response _ payload messages _ -> unless
-      (payload == object ["plugin" .= ("local-file" :: String),"connector" .= ("sales" :: String),"cleared" .= existed]
+      (payload == object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"cleared" .= existed]
         && messages == [expected ++ "local-file/sales"])
       (fail "Clear output did not distinguish existing and absent evidence"))
     [(True,"Cleared evidence for "),(False,"No cached evidence for ")]
@@ -52,11 +55,22 @@ main = do
         (EvidenceProducer (PackageIdentity "fixture") (contractId evidenceContract)) (FetchId "latest")
   case evidenceListResult (EvidenceCapture snapshot [(EvidenceId "notes.txt",EvidenceFingerprint "abc")]) of
     Response _ payload messages _ -> unless
-      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"connector" .= ("sales" :: String),"fetch" .= ("latest" :: String)],
+      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)],
         "items" .= [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String)]]]
         && messages == ["notes.txt  abc"]) (fail "Current listing output must contain only selection and IDs/fingerprints")
   case evidenceListResult (EvidenceCapture snapshot []) of
     Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
+  let citation = EvidenceRef "local-file" "sales" "notes.txt" []
+      checkInstanceKeys (Object fields) =
+        not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)
+      checkInstanceKeys (Array values) = all checkInstanceKeys values
+      checkInstanceKeys _ = True
+      hasInstance (Object fields) = KeyMap.lookup "instance" fields == Just (String "sales") || any hasInstance (KeyMap.elems fields)
+      hasInstance (Array values) = any hasInstance values
+      hasInstance _ = False
+      results = [historyResult snapshot [], changesResult snapshot
+        [EvidenceChangeSummary (FetchId "latest") Nothing New (EvidenceId "notes.txt") (EvidenceFingerprint "abc") citation]]
+  mapM_ (\(Response _ payload _ _) -> unless (checkInstanceKeys payload) (fail "Evidence output mislabeled instance")) results
   let render name namespace origin signature = case GuestApi.symbolResult
         (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of
         Response _ _ messages _ -> unlines messages
@@ -87,6 +101,7 @@ main = do
       captured = EvolutionContext kb identity (Before revision schema)
         (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft) empty empty empty empty)
       candidate = Candidate captured (EvolutionReport [] Nothing) root
+      citedCandidate = Candidate captured (EvolutionReport [StepReport (Rationale "Because" [citation]) []] Nothing) root
       assert label condition = unless condition (fail label)
       runRoot :: RootCommand -> (Response, [String])
       runRoot request = runPureEff . runState ([] :: [String]) . storeRoot value . execution
@@ -102,6 +117,9 @@ main = do
       (checked, checkCalls) = runRoot CheckRoot
       (candidateChecked, candidateCalls) = runCandidate (Just candidate)
       (missing, missingCalls) = runCandidate Nothing
+  case candidateResult citedCandidate of
+    Response _ payload _ _ -> unless (checkInstanceKeys payload && hasInstance payload)
+      (fail "Evolution citation must label its instance")
   assert "Root show bypassed checks or used wrong selection"
     (showCalls == ["open","prepare","examples","validate","value"] && exitStatus shown == 0)
   assert "Root check decoded a browsing value" (checkCalls == ["open","prepare","examples","validate"] && exitStatus checked == 0)

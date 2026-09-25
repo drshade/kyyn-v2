@@ -5,6 +5,8 @@ import Control.Exception (IOException, displayException, try)
 import Control.Monad (forM, when)
 import qualified Crypto.Hash.SHA256 as SHA256
 import qualified Data.ByteString as Bytes
+import qualified Data.ByteString.Builder as Builder
+import qualified Data.ByteString.Lazy as Lazy
 import Data.List (sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -27,8 +29,11 @@ runFileAcquisitionIO = interpret $ \_ -> \case
     bytes <- Bytes.readFile source
     contents <- either (ioError . userError . show) (pure . Text.unpack) (Text.decodeUtf8' bytes)
     let fingerprint = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
-          (Bytes.unpack (SHA256.hash bytes))
+          (Bytes.unpack (SHA256.hash (Lazy.toStrict (Builder.toLazyByteString
+            (framed (Text.encodeUtf8 (Text.pack source)) <> framed bytes)))))
     pure (CapturedText contents (EvidenceFingerprint fingerprint))
+  where
+    framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes
 
 native :: IOE :> es => IO a -> Eff es (Either String a)
 native action = liftIO $ either (Left . displayException @IOException) Right <$> try action

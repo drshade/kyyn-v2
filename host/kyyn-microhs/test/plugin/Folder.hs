@@ -18,8 +18,8 @@ fetch (Schema.Config directory recursive) prior
               pure $ do
                 texts <- sequence contents
                 let old = [(key,value) | (key,Just value) <- zip previousIds previous]
-                    current = [(EvidenceId path,Evidence (EvidenceFingerprint (show (fullPath path,digest)))
-                      [fullPath path] (Schema.Document text)) | (path,CapturedText text (EvidenceFingerprint digest)) <- zip paths texts]
+                    current = [(EvidenceId path,Evidence token
+                      [fullPath path] (Schema.Document text)) | (path,CapturedText text token) <- zip paths texts]
                     changes = concatMap (changed old) current
                     removed = [RemovedEvidence key | key <- previousIds, key `notElem` map fst current]
                 pure (changes ++ removed)

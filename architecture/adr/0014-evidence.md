@@ -70,9 +70,11 @@ producer. An unchanged captured representation has the same token; changed conte
 has a different token. Item IDs identify items; fingerprints compare their captured
 content. The host does not attempt to infer business equivalence.
 
-For local files, use a content hash. The first-party folder connector combines the
-source path with that digest, so changing its directory updates matching items and
-their source references too. A connector may instead use a suitable provider
+For local files, host acquisition returns lowercase hexadecimal SHA-256 over the
+UTF-8 source path and captured bytes, each prefixed by its unsigned 64-bit
+big-endian byte length. The first-party folder connector uses that token directly,
+so changing its directory updates matching items and their source references too.
+A connector may instead use a suitable provider
 revision or hash of a deliberately chosen stable representation. Exclude fetch
 timestamps and other incidental acquisition metadata from that representation.
 Plugins own this choice; there is no requirement to canonicalize arbitrary external

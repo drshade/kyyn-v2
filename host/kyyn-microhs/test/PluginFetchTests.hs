@@ -205,7 +205,7 @@ success value = object ["tag" .= ("Right" :: String),"value" .= value]
 failure :: String -> Value
 failure message = object ["tag" .= ("Left" :: String),"value" .= message]
 evidence :: String -> Text.Text -> Value
-evidence key contents = object ["fingerprint" .= show ("/folder/" ++ key,"recorded-" <> contents),
+evidence key contents = object ["fingerprint" .= ("recorded-" <> contents),
   "references" .= ["/folder/" ++ key],"payload" .= object ["text" .= contents]]
 change :: String -> String -> Text.Text -> Value
 change kind key contents = object ["tag" .= kind,"value" .= object ["id" .= key,"evidence" .= evidence key contents]]
