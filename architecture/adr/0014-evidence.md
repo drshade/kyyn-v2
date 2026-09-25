@@ -1,14 +1,16 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: implemented
-date: 2026-09-23
+status: proposed
+date: 2026-09-25
 ---
 # Latest evidence and recipe-scoped declared curation
 
 Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
 recipe evolution data are implemented. Recipes persist separately from the root
 manifest and use the ordinary evolution editing and review surfaces.
+The fetch-range and Microsoft Graph calendar sections propose an extension;
+they are not implemented by the existing file acquisition path.
 
 ## Context
 
@@ -59,8 +61,10 @@ data EvidenceChange a
   | UpdatedEvidence EvidenceId (Evidence a)
   | RemovedEvidence EvidenceId
 
+data FetchRange = FetchRange { from :: Maybe String, to :: Maybe String }
+
 fetch
-  :: Config -> EvidenceSnapshot Payload
+  :: Config -> FetchRange -> EvidenceSnapshot Payload
   -> Program calls (Either FetchError [EvidenceChange Payload])
 ```
 
@@ -111,6 +115,63 @@ Acquisition uses a configured instance from the checked accepted root. A draft
 evolution's configuration can be inspected but cannot acquire evidence before
 acceptance. Config and payloads are plugin-authored Haskell types; the host supplies
 typed bindings and capabilities as described in ADRs 0008, 0009 and 0016.
+
+### Connector-owned fetch ranges
+
+`evidence fetch PLUGIN INSTANCE [--from VALUE] [--to VALUE]` supplies optional
+text bounds to the connector. The host transports them unchanged; the connector
+validates their syntax, meaning and defaulting. No host timestamp watermark,
+provider cursor register or curation-derived acquisition boundary is introduced.
+The first-party folder connector rejects supplied bounds instead of ignoring them.
+
+A range result is a sequence of changes applied to the prior capture, not a
+complete replacement listing. Items outside the range remain present. Absence
+from a partial listing never means deletion. The plugin may emit removals when
+its source actually establishes them; the host does not infer them from bounds.
+Fetching and accepted recipe progress remain independent.
+
+### Microsoft Graph calendar acquisition
+
+The first calendar connector captures event resources from one configured user
+calendar, not a calendarView of expanded recurring occurrences. Graph's
+[events collection](https://learn.microsoft.com/en-us/graph/api/calendar-list-events?view=graph-rest-1.0)
+contains single events and recurring-series masters. A
+[calendarView](https://learn.microsoft.com/en-us/graph/api/calendar-list-calendarview?view=graph-rest-1.0)
+instead expands occurrences in an event-time window. Its required start/end dates
+cannot implement a modified-time window. The connector must not claim that series
+master acquisition covers every occurrence exception or cancellation.
+
+For this connector, bounds are timezone-qualified ISO 8601 instants compared
+against `lastModifiedDateTime`, independently of the meeting's start/end dates.
+Use inclusive bounds; reject malformed or inverted explicit ranges. An omitted
+`from` defaults to the greatest captured item's modified time, or is unbounded
+when no items exist. Omitted `to` is unbounded. Compare parsed instants, not
+arbitrary timestamp strings. Re-reading the boundary deliberately permits equal
+timestamps; fingerprints suppress unchanged items. This default is a convenience,
+not a lossless synchronization cursor: delayed visibility can require an explicit
+earlier `--from`.
+
+Paginate the calendar's events collection and filter by modified time in plugin
+code. This initial choice requires no undocumented server-side timestamp-filter
+support and makes no remote-query efficiency claim. Follow every returned next
+page before publishing a batch; a page failure publishes nothing. The payload
+retains the provider modification time used for defaulting. No separate persisted
+fetch clock is needed, and an empty successful fetch does not advance a clock.
+
+Use the provider event ID within the configured instance and its `changeKey` as
+the opaque change token. Keep returned source links for citations. Graph describes
+these fields in its [event resource contract](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
+Capture a stable projection of the event, without fetch-time fields. Emit New for
+an absent ID, Updated for a different token, and nothing for an unchanged token.
+A range re-fetch reads current provider values, not historical versions.
+
+This connector reports additions and updates only. Hard-deleted events remain
+in its capture until cleared/refetched; a returned cancellation field is an
+update, not evidence that absent IDs were deleted. It is not a complete calendar
+mirror. Changes to recurring exceptions, provider ID behavior and modification
+visibility require live verification; do not advertise broader guarantees based
+solely on fake-server tests. Authentication is owned by ADR 0016, not this fetch
+contract.
 
 ### Atomic refresh and invocation-local reads
 
@@ -595,6 +656,14 @@ for reconciliation on mismatch. A failed refetch publishes nothing.
 Accepted KB facts and curation progress remain owned by evolutions.
 
 ## Verification
+
+For ranged Graph acquisition, cover initial/empty captures, inclusive equal-time
+boundaries, edits to old meetings, explicit earlier ranges, invalid bounds,
+pagination failure, unchanged tokens and absence without deletion. Show that a
+failed batch leaves evidence and its next default lower bound unchanged. Exercise
+the same guest under GHC and MicroHs with recording HTTP/secret handlers, then the
+installed CLI against a fake server. Live calendar checks must distinguish series
+masters from occurrences and verify the advertised modified-time behavior.
 
 Exercise new/updated/removed/unchanged files, stable content fingerprints, failed
 acquisition and stale-base publication. After several updates, inspect stored Dhall:

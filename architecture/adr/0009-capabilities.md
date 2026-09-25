@@ -2,7 +2,7 @@
 id: 0009
 title: 'Typed capability rows describe program effects'
 status: proposed
-date: 2026-09-24
+date: 2026-09-25
 ---
 # Typed capability rows describe program effects
 
@@ -11,6 +11,8 @@ captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch conne
 filesystem and snapshot reads to evidence publication. Source registration and
 configured instances, CLI acquisition and captured-read KB-tool composition are
 implemented. Judgement extends the tool row under ADR 0027.
+HTTP, plugin secret access and explicit login below are proposed extensions,
+not capabilities already available to installed plugins.
 
 ## Context
 
@@ -42,7 +44,8 @@ Illustrative capability sets, not a closed list of mandatory roles:
 | Snapshot query/output renderer | Typed reads of one selected immutable snapshot; pure computation and query composition | Proposal writes, live providers, sink invocation |
 | Evolution entry point | [ADR 0010's transformation contract](0010-evolutions.md#pure-evolution-execution) | Accepted-root publication, nested proposal authoring, delivery |
 | KB tool | Typed plugin captured reads and model judgements under ADR 0027 | Evidence acquisition, sinks, proposal/accepted-root writes |
-| Source acquisition method | HTTP/filesystem acquisition, secret lookup, prior evidence snapshot reads | KB acceptance, sink invocation |
+| Source acquisition method | HTTP/filesystem acquisition, secret read/write, prior evidence snapshot reads | Interactive login, KB acceptance, sink invocation |
+| Explicit connector login | HTTP, secret read/write, user instructions and cancellable waits | Evidence publication, KB acceptance |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
 | Sink connector method | Prepared typed input and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
 
@@ -164,6 +167,59 @@ directory. The generated adapters and request/response transport are exercised
 under both compilers with recording responses. The native MicroHs broker additionally
 exercises live filesystem acquisition and EvidenceStore publication, including
 invocation-local reads and failed acquisitions that leave the previous head unchanged.
+
+### Provider acquisition and explicit login
+
+Microsoft Graph supplies the concrete consumer for HTTP and secret requests.
+Keep these ordinary typed guest algebras; the broker delegates to host plumbing
+interpreters rather than performing IO itself. These sketches describe the first
+text-based HTTP boundary, sufficient for JSON Graph and form-encoded token requests:
+
+```haskell
+data HttpRequest = HttpRequest
+  { method :: String, url :: String
+  , headers :: [(String, String)], body :: String
+  }
+data HttpResponse = HttpResponse
+  { status :: Int, headers :: [(String, String)], body :: String }
+
+data Http a where
+  SendHttp :: HttpRequest -> Http (Either HttpError HttpResponse)
+
+data Secrets a where
+  GetSecret :: String -> Secrets (Either SecretError String)
+  PutSecret :: String -> String -> Secrets ()
+
+data LoginInteraction a where
+  DisplayInstructions :: String -> LoginInteraction ()
+  WaitSeconds :: Int -> LoginInteraction ()
+
+type NetworkAcquisition payload a =
+  Program (Http :+: (Secrets :+: EvidenceRead payload)) a
+type PluginLogin a = Program (Http :+: (Secrets :+: LoginInteraction)) a
+```
+
+Native HTTP handles TLS and UTF-8 transport. HTTP status responses remain values
+for provider code to interpret; transport failures have sanitized diagnostics,
+not a serialized native exception containing request details. Secret storage
+failures and cancellation remain invocation failures. Validate secret names at
+the host boundary using ADR 0016's existing rule. Waits require nonnegative
+durations and remain cancellable. No host OAuth implementation is introduced.
+
+Generated helpers hide sum injections and protocol codecs. Acquisition can save
+a rotated credential without gaining interactive display/wait operations. Login
+can guide a user but cannot publish evidence. The registration's checked context
+selects the row; absent capabilities fail compilation or protocol dispatch.
+Neither row is added to captured-read methods, KB tools, validators or evolutions.
+The existing file connector retains its file/evidence row.
+
+`DisplayInstructions` is deliberate output of a selected login operation, not
+generic logging of an HTTP response. The CLI writes those instructions to stderr
+so `--json` stdout remains the final structured result. Routine traces follow
+[ADR 0016's secret/transport omission rule](0016-connections.md#trust-and-consequences).
+Provider code chooses the user-facing instructions and safe errors; token response
+bodies are not echoed. [ADR 0016](0016-connections.md#authentication-belongs-to-the-integration)
+owns login registration and authentication behavior.
 
 ### KB-tool read composition
 
