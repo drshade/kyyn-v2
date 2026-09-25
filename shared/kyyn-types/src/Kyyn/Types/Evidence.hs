@@ -14,10 +14,10 @@ data Evidence a = Evidence EvidenceFingerprint [String] a deriving (Eq, Show)
 data EvidenceChange a = NewEvidence EvidenceId (Evidence a)
   | UpdatedEvidence EvidenceId (Evidence a) | RemovedEvidence EvidenceId deriving (Eq, Show)
 
--- | Identify evidence supporting a rationale, including its producer, connector, source and item references.
+-- | Declare supporting evidence by producer, connector instance, source and item references.
 data EvidenceRef = EvidenceRef
   { producer :: String
-  , connector :: String
+  , instanceName :: String
   , source :: String
   , references :: [String]
   } deriving (Eq, Show)

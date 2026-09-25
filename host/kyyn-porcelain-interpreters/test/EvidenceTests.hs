@@ -266,7 +266,10 @@ recordDocument operation = do
   case operation of
     ReadCurrent -> State.put (document,trace ++ ["read"]) >> pure document
     ReplaceCurrent bytes -> State.put (Just bytes,trace ++ ["replace"])
-    FreshStamp -> State.put (document,trace ++ ["stamp"]) >> pure (DocumentStamp "recorded" "2026-09-14T00:00:00Z")
+    FreshStamp -> do
+      State.put (document,trace ++ ["stamp"])
+      let identity = if length (filter (== "stamp") trace) < 2 then "00000001" else "00000002"
+      pure (DocumentStamp identity "2026-09-14T00:00:00Z")
     _ -> error "Unexpected persistence operation in semantic publication proof"
 
 recordingProof :: IO ()
@@ -279,8 +282,11 @@ recordingProof = do
         . runDhallHandling . recordDocuments . runEvidenceStore scope $ do
           first <- publishFetch instanceA producer contract Nothing [NewEvidence itemA (value "recorded")]
           conflict <- publishFetch instanceA producer contract Nothing []
-          pure (first,conflict)
-  (first,conflict) <- right result
+          second <- publishFetch instanceA producer contract (Just (FetchId "00000001")) []
+          pure (first,conflict,second)
+  (first,conflict,second) <- right result
   _ <- right first
   assert "recorded semantic store lost CAS refusal" (conflict == Left BaseSnapshotConflict)
-  assert "conflict wrote or allocated a revision" (trace == ["read","stamp","replace","read"])
+  assert "collision was not redrawn" (second == Right (EvidenceSnapshotRef instanceA producer (FetchId "00000002")))
+  assert "conflict wrote or collision reused an ID"
+    (trace == ["read","stamp","replace","read","read","stamp","stamp","replace"])

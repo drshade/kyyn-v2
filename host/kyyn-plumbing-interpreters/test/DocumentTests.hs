@@ -42,6 +42,8 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   stamp <- execute scope freshStamp
   let DocumentStamp identity timestamp = stamp
   assert "stamp missing fields" (not (null identity) && not (null timestamp))
+  assert "stamp identity is not eight lowercase hex digits"
+    (length identity == 8 && all (`elem` ("0123456789abcdef" :: String)) identity)
   entered <- newEmptyMVar
   blocked <- newEmptyMVar
   worker <- async (execute scope (liftIO (putMVar entered () >> takeMVar blocked)))

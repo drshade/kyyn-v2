@@ -81,6 +81,10 @@ evolution = evolve (Rationale "Start tracking tasks" []) (onFacts (\\Before.Root
   assert.equal(cli([...noRuntime, 'show', 'unknown'], 1).diagnostics[0].code, 'curation.recipe-unknown');
   assert.equal(pending('syncTodos', 'documents', 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch();
+  assert.match(first, /^[0-9a-f]{8}$/);
+  const pendingHuman = invoke(executable, ['--kb', kb, 'root', 'recipe', 'pending', 'list', 'syncTodos', 'local-file', 'documents']);
+  const copiedScope = pendingHuman.split('\n').find(line => line.startsWith('Scope: '))?.slice('Scope: '.length);
+  assert.equal(copiedScope, scope(first));
   const prices = fetch('prices');
   console.log('Fetching updates and preparing an acknowledgement of the older fetch...');
   const firstToken = cli(['evidence', 'change', 'list', 'local-file', 'documents']).result.changes.find(c => c.id === 'todo.txt').fingerprint;
@@ -91,10 +95,12 @@ evolution = evolve (Rationale "Start tracking tasks" []) (onFacts (\\Before.Root
   assert.deepEqual(unseen.scope, { plugin: 'local-file', instance: 'documents', fetch: second });
   assert.deepEqual(unseen.changes, [{ id: 'todo.txt', kind: 'New' }]);
   const draft = cli(['evolution', 'new', 'handle-first-fetch']).result;
-  const source = author(draft, `EntireBatch (${scope(first)}), IndividualRecords (${scope(prices, 'prices')}) [EvidenceId "todo.txt"]`,
-    'syncTodos', 'edit (Rationale "Track the document task" [EvidenceRef "local-file" "documents" "todo.txt" []]) (within AfterCollections.todos (append (Fact (FactId "task") (After.Todo "Review document"))))');
+  const source = author(draft, `EntireBatch (${copiedScope}), IndividualRecords (${scope(prices, 'prices')}) [EvidenceId "todo.txt"]`,
+    'syncTodos', 'edit (Rationale "Track the document task" [EvidenceRef { producer = "local-file", instanceName = "documents", source = "todo.txt", references = [] }]) (within AfterCollections.todos (append (Fact (FactId "task") (After.Todo "Review document"))))');
   const authored = fs.readFileSync(source, 'utf8');
   cli(['evolution', 'check', draft.id]);
+  const humanReport = invoke(executable, ['--kb', kb, 'evolution', 'show', draft.id]);
+  assert.match(humanReport, /Declared citations:/);
   const report = cli(['evolution', 'show', draft.id]);
   assert.match(JSON.stringify(report), new RegExp(first));
   assert.match(JSON.stringify(report), /EntireBatch/);

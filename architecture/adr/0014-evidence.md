@@ -179,6 +179,8 @@ encode the content. An unchanged fetch can have an empty change list. Change
 summaries associate markers with their fetch/predecessor; they contain no payload.
 The initial implementation retains this lightweight metadata until the instance's
 evidence store is explicitly cleared; marker retention is unbounded for now.
+New fetch IDs are eight lowercase hexadecimal digits from 32 random bits, redrawn
+on collision with an ID in that instance's retained history; existing IDs remain valid.
 
 `Nothing` requests all available markers; `Just f` requests markers after that fetch
 through the latest fetch. This is an acquisition-history selector, not recipe
@@ -414,7 +416,7 @@ acknowledging an older producer records that producer; pending comparison agains
 a newer producer then requires reconciliation with an entire batch.
 
 The guest's `EvidenceScope` currently contains plugin name, instance name and
-fetch ID strings. Evolution entries do not yet receive the generated connector
+fetch ID strings. Evolution entries do not receive the generated connector
 handles used by KB tools. Scope data can be copied from evidence discovery;
 preparation checks its identity against retained evidence. `withCuration` appends
 its declarations after those already in the wrapped result. Composing different
@@ -557,13 +559,13 @@ curate it. The host does not infer support from observed calls.
 ```haskell
 data EvidenceRef = EvidenceRef
   { producer :: String
-  , connector :: String
+  , instanceName :: String
   , source :: String
   , references :: [String]
   }
 ```
 
-Producer and connector identify the integration and instance; source is the
+Producer and instanceName identify the integration and instance; source is the
 plugin-supplied item ID. References should use good source identifiers: stable URIs
 where available, provider IDs with useful account/mailbox/organization scope, or
 file paths with an explicit base. They need not be publicly accessible URLs.
@@ -571,6 +573,9 @@ file paths with an explicit base. They need not be publicly accessible URLs.
 A citation means "this source supports the change". It remains useful independently
 of Kyyn's transient cache. Following it accesses the provider as available now;
 the provider may change or delete the source.
+Human evolution reports label these as declared citations, not verified evidence.
+Citation storage and evolution-wire codecs encode the instance name under the
+`connector` key; human/agent-facing JSON uses `instance`.
 
 The operational EvidenceFingerprint is separate from EvidenceRef. Citations do not
 need fingerprints, source versions or content hashes. The connector's change token

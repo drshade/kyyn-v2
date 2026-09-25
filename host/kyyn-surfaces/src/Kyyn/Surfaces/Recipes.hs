@@ -23,5 +23,6 @@ pendingResult (RecipeId recipe) (PendingEvidence (EvidenceSnapshotRef (Connector
   success (object ["recipe" .= recipe,
     "scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
     "changes" .= [object ["id" .= item,"kind" .= show kind] | (EvidenceId item,kind) <- changes]])
-    (["Recipe: " ++ recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch] ++
+    (["Recipe: " ++ recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch,
+      "Scope: EvidenceScope " ++ unwords (map show [pluginNameText plugin,instanceName,fetch])] ++
       if null changes then ["No unacknowledged changes."] else [show kind ++ "  " ++ item | (EvidenceId item,kind) <- changes])
