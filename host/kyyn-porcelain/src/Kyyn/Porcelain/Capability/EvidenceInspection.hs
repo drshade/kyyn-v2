@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceInspection
-  ( EvidenceInspection(..), fetchHistory, evidenceChanges ) where
+  ( EvidenceInspection(..), currentEvidence, fetchHistory, evidenceChanges ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -9,11 +9,18 @@ import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence
 
 data EvidenceInspection :: Effect where
+  ListCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+    -> EvidenceInspection m (Either [Diagnostic] EvidenceCapture)
   FetchHistory :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
     -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, [FetchSummary]))
   EvidenceChanges :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
     -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, [EvidenceChangeSummary]))
 type instance DispatchOf EvidenceInspection = Dynamic
+
+currentEvidence :: EvidenceInspection :> es
+  => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  -> Eff es (Either [Diagnostic] EvidenceCapture)
+currentEvidence instanceRef producer = send . ListCurrentEvidence instanceRef producer
 
 fetchHistory :: EvidenceInspection :> es
   => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract

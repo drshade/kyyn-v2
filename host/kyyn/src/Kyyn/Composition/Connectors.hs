@@ -83,6 +83,8 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
+  Cli.ListCurrentEvidence plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
+    fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
   Cli.ListFetchHistory plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
     fmap (fmap (uncurry historyResult)) (connectorFetchHistory kb revision plugin name)
   Cli.ListEvidenceChanges plugin name since -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $

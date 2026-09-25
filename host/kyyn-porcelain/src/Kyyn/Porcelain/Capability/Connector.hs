@@ -1,6 +1,6 @@
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
-  , connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
+  , connectorCurrentEvidence, connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
   , listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
@@ -9,14 +9,14 @@ import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), CheckResult(..), errorDiagnostic)
 import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
 import Kyyn.Domain.DataType (Shape)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), FetchId, FetchSummary, EvidenceChangeSummary)
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, FetchId, FetchSummary, EvidenceChangeSummary)
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Plugin
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetchEvidence)
-import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, fetchHistory, evidenceChanges)
+import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, currentEvidence, fetchHistory, evidenceChanges)
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.PluginPreparation
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
@@ -65,6 +65,13 @@ selectConnectorMethod kb revision workspace plugin name method = runExceptT $ do
   case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
     [selected] -> pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload,selected)
     _ -> throwE [errorDiagnostic "plugin.method-unknown" ("No captured method named " ++ coerce method)]
+
+connectorCurrentEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
+  -> Eff es (Either [Diagnostic] EvidenceCapture)
+connectorCurrentEvidence kb revision plugin name = runExceptT $ do
+  (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
+  ExceptT (currentEvidence instanceRef producer payload)
 
 connectorFetchHistory :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName

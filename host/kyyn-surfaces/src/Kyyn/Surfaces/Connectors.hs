@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult,
-  methodListResult, methodResult, methodOutputResult) where
+  evidenceListResult, methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -36,6 +36,13 @@ methodOutputResult value rendered = success value [Text.unpack (Text.stripEnd re
 fetchResult :: EvidenceSnapshotRef -> Response
 fetchResult snapshot@(EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ identity) = success (context snapshot)
   ["Fetched " ++ pluginNameText plugin ++ "/" ++ name, "Fetch: " ++ fetchName identity]
+
+evidenceListResult :: EvidenceCapture -> Response
+evidenceListResult (EvidenceCapture snapshot items) = success
+  (object ["selection" .= context snapshot, "items" .=
+    [object ["id" .= key,"fingerprint" .= fingerprint] | (EvidenceId key,EvidenceFingerprint fingerprint) <- items]])
+  (if null items then ["No current evidence."] else
+    [key ++ "  " ++ fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
 
 historyResult :: EvidenceSnapshotRef -> [FetchSummary] -> Response
 historyResult snapshot fetches = success (object ["selection" .= context snapshot,"fetches" .=

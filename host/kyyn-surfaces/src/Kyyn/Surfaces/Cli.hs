@@ -42,6 +42,7 @@ data ConnectorCommand
   deriving (Eq, Show)
 data EvidenceCommand
   = FetchConnector PluginName ConnectorName
+  | ListCurrentEvidence PluginName ConnectorName
   | ListFetchHistory PluginName ConnectorName
   | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
   | ClearEvidence PluginName ConnectorName
@@ -101,7 +102,7 @@ invocation = Invocation <$> selectionParser
           <*> strOption (long "from" <> metavar "SOURCE" <> help "Local Git checkout directory or Git URL")
           <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
-    <> group "evidence" "Fetch and inspect captured evidence history" (Evidence <$> evidenceParser)
+    <> group "evidence" "Fetch and inspect current evidence and history" (Evidence <$> evidenceParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
 
@@ -137,6 +138,7 @@ pluginArgument = argument (eitherReader pluginName) (metavar "PLUGIN")
 evidenceParser :: Parser EvidenceCommand
 evidenceParser = hsubparser
   (group "fetch" "Fetch evidence from an accepted connector instance" (FetchConnector <$> plugin <*> instanceName)
+  <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
   <> group "history" "Inspect retained fetch history" (hsubparser
       (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))
   <> group "change" "Inspect evidence changes" (hsubparser

@@ -42,6 +42,7 @@ const configuration = entries => 'let Connector = < Folder : { directory : Text,
 const fetch = name => cli(['evidence', 'fetch', 'local-file', name]).result.fetch;
 const history = (name, options = []) => cli(['evidence', 'history', 'list', 'local-file', name, ...options]).result;
 const changes = (name, options = []) => cli(['evidence', 'change', 'list', 'local-file', name, ...options]).result;
+const current = name => cli(['evidence', 'list', 'local-file', name]).result;
 const content = (name, id, expected = 0) => cli(['plugin', 'connector', 'method', 'execute', 'local-file', name,
   'content', '--input', JSON.stringify(id)], expected);
 function main() {
@@ -131,9 +132,15 @@ bulk ids = do
   cli(['evolution', 'accept', draft.id]);
   const accepted = git(checkout, 'rev-parse', 'HEAD');
   assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
+  assert.equal(cli(['evidence', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
   if (methodChecks)
     assert.equal(content('sales', 'updated.txt', 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch('sales');
+  const listedFirst = current('sales');
+  assert.equal(listedFirst.selection.fetch, first);
+  assert.deepEqual(listedFirst.items.map(item => item.id).sort(), ['removed.txt', 'unchanged.txt', 'updated.txt']);
+  assert(listedFirst.items.every(item => item.fingerprint.length > 0 && Object.keys(item).sort().join(',') === 'fingerprint,id'));
+  assert(!JSON.stringify(listedFirst).includes('sales evidence'));
   if (configurationSmoke) {
     assert.equal(history('sales').selection.fetch, first);
     assert(fs.existsSync(path.join(kb, '.kyyn/evidence')));
@@ -178,6 +185,13 @@ bulk ids = do
   fs.unlinkSync(path.join(sales, 'removed.txt'));
   fs.writeFileSync(path.join(sales, 'added.txt'), 'New sales evidence');
   const second = fetch('sales');
+  const listedSecond = current('sales');
+  assert.equal(listedSecond.selection.fetch, second);
+  assert.deepEqual(listedSecond.items.map(item => item.id).sort(), ['added.txt', 'unchanged.txt', 'updated.txt']);
+  const fingerprint = (listing, id) => listing.items.find(item => item.id === id).fingerprint;
+  assert.equal(fingerprint(listedFirst, 'unchanged.txt'), fingerprint(listedSecond, 'unchanged.txt'));
+  assert.notEqual(fingerprint(listedFirst, 'updated.txt'), fingerprint(listedSecond, 'updated.txt'));
+  assert.deepEqual(current('support').items.map(item => item.id), ['ticket.txt']);
   if (methodChecks) {
     assert.equal(content('sales', 'updated.txt').result, 'Changed sales evidence λ');
     assert.equal(content('sales', 'removed.txt', 1).diagnostics[0].code, 'plugin.read-failed');
