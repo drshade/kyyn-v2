@@ -574,9 +574,8 @@ A citation means "this source supports the change". It remains useful independen
 of Kyyn's transient cache. Following it accesses the provider as available now;
 the provider may change or delete the source.
 Human evolution reports label these as declared citations, not verified evidence.
-The existing explicit citation storage and evolution-wire codecs retain the
-`connector` key for this field; renaming the Haskell field does not change stored
-Dhall reports, evidence markers or their readers.
+Citation storage and evolution-wire codecs encode the instance name under the
+`connector` key; human/agent-facing JSON uses `instance`.
 
 The operational EvidenceFingerprint is separate from EvidenceRef. Citations do not
 need fingerprints, source versions or content hashes. The connector's change token
