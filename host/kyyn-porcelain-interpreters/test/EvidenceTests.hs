@@ -96,6 +96,23 @@ main = do
   bytes <- right (runPureEff (runDhallHandling (encodeState producer contract state)))
   restored <- right (runPureEff (runDhallHandling (decodeState producer contract bytes)))
   assert "Dhall state round trip differs" (state == restored)
+  let legacy = Bytes.pack $ unlines
+        [ "{ header = { producer = \"package-contents-one\", contract = \"" ++ contractFingerprint (contractId contract) ++ "\", current = \"old\" }"
+        , ", values = [] : List { id : Text, evidence : { fingerprint : Text, references : List Text, payload : Text } }"
+        , ", history = [ { id = \"old\", previous = None Text, fetchedAt = \"2026-09-01\""
+        , "  , changes = [] : List { kind : < New | Updated | Removed >, id : Text, fingerprint : Text"
+        , "    , citation : { producer : Text, connector : Text, source : Text, references : List Text } } } ] }"
+        ]
+      legacyState = EvidenceState (Just (FetchId "old")) [] [Fetch (FetchId "old") Nothing "2026-09-01" [] Nothing]
+  legacyRead <- right (runPureEff (runDhallHandling (decodeState producer contract legacy)))
+  assert "prior fetch history without options was refused" (legacyRead == legacyState)
+  (_,legacyHistory) <- right (runPureEff (runDhallHandling (decodeHistory legacy)))
+  assert "prior history cannot resolve curation scopes" (resolveCapture instanceA producer (FetchId "old") legacyHistory (FetchId "old") ==
+    Right (EvidenceCapture (EvidenceSnapshotRef instanceA producer (FetchId "old")) []))
+  rewritten <- right (runPureEff (runDhallHandling (encodeState producer contract legacyRead)))
+  assert "prior history did not acquire explicit absent options on write" (Bytes.isInfixOf "options" rewritten)
+  let malformed = Bytes.pack (Text.unpack (Text.replace "previous = None Text" "previous = None Text, options = True" (Text.pack (Bytes.unpack legacy))))
+  assert "malformed present options fell back to absent" (isLeft (runPureEff (runDhallHandling (decodeState producer contract malformed))))
   assert "state is not Dhall" (Bytes.isInfixOf "New" bytes && Bytes.isInfixOf "payload" bytes)
   header <- right (runPureEff (runDhallHandling (decodeHeader bytes)))
   assert "header loses current" (header == EvidenceHeader (PackageIdentity "package-contents-one")

@@ -87,6 +87,15 @@ fetch config options snapshot = case options of
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'configure-local-folders']).result;
   cli(['plugin', 'install', '--evolution', draft.id, '--from', source]);
+  if (optionsSmoke) {
+    const installedDeclaration = path.join(draft.path, 'target/plugins/packages/local-file/source/src/LocalFile/Plugin.hs');
+    const declared = fs.readFileSync(installedDeclaration, 'utf8');
+    fs.writeFileSync(installedDeclaration, declared.replace(/^.*fetchOptionsType.*\n/m, ''));
+    const outdated = cli(['plugin', 'connector', 'schema', 'show', 'local-file', '--evolution', draft.id], 1);
+    assert(outdated.diagnostics.some(diagnostic => diagnostic.code === 'plugin.preparation'
+      && diagnostic.message.includes('fetchOptionsType')), JSON.stringify(outdated));
+    fs.writeFileSync(installedDeclaration, declared);
+  }
   const configPath = path.join(draft.path, 'target/plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, 'not valid Dhall');

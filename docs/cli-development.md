@@ -348,10 +348,8 @@ credentials belong in the local secret store.
 For existing vendored plugins, add `fetchOptionsType = Nothing` to each
 `SourceConnector` declaration; its fetch function remains unchanged. An options-aware
 connector instead names its options type and accepts `Maybe Options` between config
-and snapshot. Existing ignored evidence caches without the options history field
-must be cleared with `evidence clear PLUGIN INSTANCE` and refetched. Accepted facts
-and recipe progress are unaffected by clearing; retain any pending curation scopes
-until they have been resolved before discarding their local fetch history.
+and snapshot. Existing fetch history without the options field reads as no supplied
+options; no cache clearing is needed for this history extension.
 
 Execution uses the accepted helper and latest fetched evidence. Fetch the named
 instances first with `evidence fetch PLUGIN INSTANCE`. Use

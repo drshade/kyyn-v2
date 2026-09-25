@@ -21,7 +21,8 @@ import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
-import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry, executeCompiled)
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIdentity)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSchema(..), inspectType)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
@@ -66,7 +67,11 @@ prepare sdk code = do
       [(rest,bytes) | (path,bytes) <- packageFiles, Just rest <- [stripPrefix "src/" path]]
     registration <- checked label (registrationSources (entryModule manifest) (authored ++ files sdk))
     registrationEntry <- located label (compileGuest registration)
-    encoded <- ExceptT (Right <$> executeCompiledEntry label registrationEntry Bytes.empty)
+    (encoded,registrationExit) <- ExceptT (Right <$> executeCompiled registrationEntry Bytes.empty)
+    case registrationExit of
+      ProcessExit 0 _ -> pure ()
+      ProcessExit _ _ -> bad label
+        "Could not evaluate connector registration. Check that every SourceConnector field is initialized, including fetchOptionsType = Nothing for connectors without fetch options."
     declarations <- checked label (decodeConnectors encoded)
     let sources = authored ++ files sdk
     sourceTree <- checked label (fileTree sources)
