@@ -289,7 +289,14 @@ administrator consent; it has no refresh token. The calendar connector requests
 this mode checks token acquisition without persisting the access token.
 See Microsoft's [client-credentials protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow).
 
-Device-code login requests delegated `Calendars.Read` and `offline_access`,
+Delegated access to the signed-in user's own calendar uses `Calendars.Read`.
+Another user's shared/delegated calendar requires `Calendars.Read.Shared` and
+actual sharing/delegation to that user; consent alone does not grant mailbox
+access. See Microsoft's [shared calendar access](https://learn.microsoft.com/en-us/graph/outlook-get-shared-events-calendars).
+The calendar plugin requests the shared-read scope when supporting that access,
+not application permissions in a delegated token.
+
+Device-code login requests the applicable delegated calendar scope and `offline_access`,
 displays the verification URI and user code, and polls using the provider's
 interval. Pending responses continue; denial/expiry stop with an actionable
 diagnostic. The app registration must support public-client device authorization

@@ -192,11 +192,14 @@ data Secrets a where
 
 data LoginInteraction a where
   DisplayInstructions :: String -> LoginInteraction ()
-  WaitSeconds :: Int -> LoginInteraction ()
+
+data Waiting a where
+  WaitSeconds :: Int -> Waiting ()
 
 type NetworkAcquisition payload a =
-  Program (Http :+: (Secrets :+: EvidenceRead payload)) a
-type PluginLogin a = Program (Http :+: (Secrets :+: LoginInteraction)) a
+  Program (Http :+: (Secrets :+: (Waiting :+: EvidenceRead payload))) a
+type PluginLogin a =
+  Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) a
 ```
 
 Native HTTP handles TLS and UTF-8 transport. HTTP status responses remain values
@@ -207,11 +210,18 @@ the host boundary using ADR 0016's existing rule. Waits require nonnegative
 durations and remain cancellable. No host OAuth implementation is introduced.
 
 Generated helpers hide sum injections and protocol codecs. Acquisition can save
-a rotated credential without gaining interactive display/wait operations. Login
+a rotated credential and wait without gaining interactive display operations. Login
 can guide a user but cannot publish evidence. The registration's checked context
 selects the row; absent capabilities fail compilation or protocol dispatch.
 Neither row is added to captured-read methods, KB tools, validators or evolutions.
 The existing file connector retains its file/evidence row.
+
+Graph acquisition honours valid `Retry-After` delays on 429/503 responses through
+`WaitSeconds` before retrying the failed request. Without a usable delay it returns
+an actionable retry-later error, not a tight retry loop. Cancellation interrupts
+the wait and abandons acquisition without publishing a partial batch. Retry policy
+belongs to the plugin; HTTP transport does not hide retries of arbitrary requests.
+This follows [Graph's throttling guidance](https://learn.microsoft.com/en-us/graph/throttling).
 
 `DisplayInstructions` is deliberate output of a selected login operation, not
 generic logging of an HTTP response. The CLI writes those instructions to stderr
