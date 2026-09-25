@@ -76,6 +76,11 @@ main = do
   refuses ["plugin","connector","method","show","local-file","sales","case"]
   succeeds ["evidence","history","list","local-file","sales"]
     (Invocation selected Human (Evidence (ListFetchHistory localFile sales)))
+  succeeds ["evidence","list","local-file","sales"]
+    (Invocation selected Human (Evidence (ListCurrentEvidence localFile sales)))
+  forM_ [["evidence","list"], ["evidence","list","local-file"],
+    ["evidence","list","local-file","sales","--since","first"],
+    ["evidence","list","local-file","sales","--evolution","abc123"]] refuses
   succeeds ["evidence","change","list","local-file","sales","--since","first"]
     (Invocation selected Human (Evidence (ListEvidenceChanges localFile sales (Just (FetchId "first")))))
   succeeds ["evidence","clear","local-file","sales"]

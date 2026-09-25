@@ -19,7 +19,9 @@ import qualified Kyyn.Domain.GuestApi as Api
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (pluginName, connectorName)
-import Kyyn.Surfaces.Connectors (clearResult)
+import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult)
+import Kyyn.Domain.Evidence
+import Kyyn.Domain.Plugin (PackageIdentity(..))
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
@@ -45,6 +47,16 @@ main = do
         && messages == [expected ++ "local-file/sales"])
       (fail "Clear output did not distinguish existing and absent evidence"))
     [(True,"Cleared evidence for "),(False,"No cached evidence for ")]
+  let evidenceContract = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
+      snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "sales")
+        (EvidenceProducer (PackageIdentity "fixture") (contractId evidenceContract)) (FetchId "latest")
+  case evidenceListResult (EvidenceCapture snapshot [(EvidenceId "notes.txt",EvidenceFingerprint "abc")]) of
+    Response _ payload messages _ -> unless
+      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"connector" .= ("sales" :: String),"fetch" .= ("latest" :: String)],
+        "items" .= [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String)]]]
+        && messages == ["notes.txt  abc"]) (fail "Current listing output must contain only selection and IDs/fingerprints")
+  case evidenceListResult (EvidenceCapture snapshot []) of
+    Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
   let render name namespace origin signature = case GuestApi.symbolResult
         (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of
         Response _ _ messages _ -> unlines messages

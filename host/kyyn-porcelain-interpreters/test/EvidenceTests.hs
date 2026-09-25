@@ -22,6 +22,8 @@ import Kyyn.Types.Evidence (EvidenceRef(EvidenceRef))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
 import Kyyn.Porcelain.Capability.EvidenceStore
+import qualified Kyyn.Porcelain.Capability.EvidenceInspection as Inspection
+import Kyyn.Porcelain.Interpreter.EvidenceInspection (runEvidenceInspection)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -112,16 +114,26 @@ main = do
     let run :: Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
         run = execute scope
         load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
+        listing instanceRef owner = run (runEvidenceInspection (Inspection.currentEvidence instanceRef owner contract))
         storePath = directory </> ".kyyn/evidence/folder-73616c6573"
         statePath = storePath </> "state.dhall"
     empty <- load instanceA producer
     assert "new store has current evidence" (empty == Nothing)
     missing <- run (readFetchHistory instanceA producer contract)
     assert "missing fetch looks like an empty successful fetch" (missing == Left NotFetched)
+    absentListing <- listing instanceA producer
+    assert "listing unfetched evidence succeeded" (absentListing == Left [evidenceProblemDiagnostic NotFetched])
     let ignorePath = directory </> ".kyyn/.gitignore"
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
     f1 <- run (publishFetch instanceA producer contract Nothing first) >>= right
+    listedFirst <- listing instanceA producer >>= right
+    assert "listing lost first IDs or fingerprints" (listedFirst == EvidenceCapture f1
+      [(itemA,EvidenceFingerprint "old"),(itemB,EvidenceFingerprint "removed")])
+    let emptyInstance = ConnectorInstanceRef (either error id (pluginName "folder")) "empty"
+    emptyFetch <- run (publishFetch emptyInstance producer contract Nothing []) >>= right
+    listedEmpty <- listing emptyInstance producer >>= right
+    assert "fetched empty capture refused" (listedEmpty == EvidenceCapture emptyFetch [])
     saved <- load instanceA producer
     ignore <- Bytes.readFile ignorePath
     assert "first publication did not ignore local evidence" (ignore == "*\n")
@@ -131,6 +143,10 @@ main = do
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
     latest <- load instanceA producer
+    listedLatest <- listing instanceA producer >>= right
+    assert "listing retained removed item or old fingerprint" (listedLatest == EvidenceCapture f2 [(itemA,EvidenceFingerprint "new")])
+    listedOther <- listing instanceB producer >>= right
+    assert "listing mixed instances" (listedOther == EvidenceCapture independent [(itemA,EvidenceFingerprint "independent")])
     oldCapture <- run (resolveEvidenceCapture instanceA (key f1)) >>= right
     latestCapture <- run (resolveEvidenceCapture instanceA (key f2)) >>= right
     assert "old fetch replaced by latest" (oldCapture == EvidenceCapture f1
@@ -190,6 +206,8 @@ main = do
     let changedProducer = EvidenceProducer (PackageIdentity "package-contents-two") (contractId contract)
     incompatible <- run (loadCurrentEvidence instanceA changedProducer contract)
     assert "same-schema producer change accepted" (incompatible == Left ProducerContractChanged)
+    incompatibleListing <- listing instanceA changedProducer
+    assert "listing swallowed producer refusal" (incompatibleListing == Left [evidenceProblemDiagnostic ProducerContractChanged])
     failedReset <- run (publishFetch instanceA changedProducer contract (Just (key f3)) [RemovedEvidence itemA])
     assert "invalid new-producer batch accepted" (isLeft failedReset)
     retained <- load instanceA producer

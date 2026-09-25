@@ -335,7 +335,10 @@ kyyn-v2 --kb PATH root tool execute bulkContent --input '["notes.txt", "summary.
 ```
 
 Execution uses the accepted helper and latest fetched evidence. Fetch the named
-instances first with `evidence fetch PLUGIN INSTANCE`. Results are Dhall by default;
+instances first with `evidence fetch PLUGIN INSTANCE`. Use
+`kyyn-v2 --kb PATH evidence list PLUGIN INSTANCE` to discover current IDs and
+fingerprints before passing IDs to a helper; add `--json` for structured listing output.
+Helper results are Dhall by default;
 add `--json` for structured JSON. Discovery does not execute the helper.
 
 Existing KB manifests without tools need this field in `kb.dhall`:

@@ -187,6 +187,9 @@ prior understanding rather than loading deleted evidence.
 An unknown fetch ID or unavailable marker history is an error for raw history
 requests, never an empty result claiming nothing changed. Recipe pending discovery
 does not require this history.
+`evidence list PLUGIN INSTANCE` lists the latest capture's current IDs and
+fingerprints, without payloads or recipe filtering; it changes no curation progress.
+An unfetched instance returns `evidence.not-fetched`; a fetched empty set lists no items.
 Clearing evidence removes the local capture and marker history, not accepted facts,
 rationales or accepted curation progress. No mandatory per-item review queue, inferred
 curation progress or automatic acceptance.
