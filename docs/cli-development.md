@@ -444,6 +444,8 @@ evolution = withCuration
 
 These names are exported by `Kyyn.Workspace.Evolution`. Replace `identityEvolution`
 with your fact/schema transformation, or keep it when no fact change is needed.
+Pending human output includes a ready-to-paste `Scope: EvidenceScope ...` line;
+copy the expression after `Scope:` into the acknowledgement.
 Use the exact fetch ID you considered (`evidence history list PLUGIN INSTANCE`
 shows retained fetches). An individual ID absent at that fetch acknowledges its
 deletion. The recipe must exist in the returned KB; adding it and acknowledging

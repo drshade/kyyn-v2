@@ -236,7 +236,8 @@ reportText (EvolutionReport steps curation) = concatMap step steps ++ maybe [] d
     acknowledgement (IndividualRecords selected ids) = "  Handled records: " ++ scope selected
       ++ " [" ++ unwords [item | EvidenceId item <- ids] ++ "]"
     step (StepReport (Rationale explanation evidence) changes) = [explanation]
-      ++ ["  Evidence: " ++ source ++ " " ++ unwords references | EvidenceRef _ _ source references <- evidence]
+      ++ ["  Declared citations:" | not (null evidence)]
+      ++ ["    " ++ source ++ " " ++ unwords references | EvidenceRef _ _ source references <- evidence]
       ++ concatMap change changes
     change (FactChange collection (FactId identity) before after) =
       ["  " ++ collection ++ "/" ++ identity]

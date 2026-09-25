@@ -5,7 +5,7 @@ import Control.Exception (IOException, displayException, try)
 import qualified Data.ByteString as Bytes
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show)
-import Data.Word (Word64)
+import Data.Word (Word32)
 import Numeric (showHex)
 import Effectful (Eff, IOE, (:>), liftIO, UnliftStrategy(..))
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
@@ -53,9 +53,9 @@ handleDocument directory = \case
 
 freshIdentity :: IO String
 freshIdentity = do
-  first <- randomIO :: IO Word64
-  second <- randomIO :: IO Word64
-  pure (showHex first "-" ++ showHex second "")
+  value <- randomIO :: IO Word32
+  let digits = showHex value ""
+  pure (replicate (8 - length digits) '0' ++ digits)
 
 removeOptional :: FilePath -> IO Bool
 removeOptional path = do

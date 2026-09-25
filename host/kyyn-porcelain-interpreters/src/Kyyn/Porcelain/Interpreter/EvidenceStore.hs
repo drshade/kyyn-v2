@@ -41,7 +41,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
       _ -> pure (EvidenceState Nothing [] [])
     let EvidenceState previous values history = state
     (next,markers) <- liftEither (recordChanges instanceRef values changes)
-    DocumentStamp key at <- ExceptT (Right <$> Document.freshStamp)
+    DocumentStamp key at <- ExceptT (Right <$> freshFetchStamp history)
     let identity = FetchId key
         updated = EvidenceState (Just identity) next (history ++ [Fetch identity previous at markers])
     encoded <- ExceptT (encodeState producer contract updated)
@@ -79,6 +79,12 @@ runEvidenceStore kb = interpret $ \_ -> \case
         Right scope -> withLockedDocument scope action
 
 type Result es = ExceptT EvidenceProblem (Eff es)
+
+freshFetchStamp :: DocumentAccess :> es => [Fetch] -> Eff es DocumentStamp
+freshFetchStamp history = do
+  stamp@(DocumentStamp key _) <- Document.freshStamp
+  if any (\(Fetch identity _ _ _) -> identity == FetchId key) history
+    then freshFetchStamp history else pure stamp
 
 liftEither :: Either EvidenceProblem a -> Result es a
 liftEither = either throwE pure

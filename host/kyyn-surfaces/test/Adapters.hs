@@ -1,7 +1,8 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
+import Kyyn.Domain.Curation (emptyCurationRegister, RecipeId(..), PendingEvidence(..))
+import Kyyn.Surfaces.Recipes (pendingResult)
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=))
 import Data.List (isInfixOf, elemIndex)
@@ -60,6 +61,10 @@ main = do
         && messages == ["notes.txt  abc"]) (fail "Current listing output must contain only selection and IDs/fingerprints")
   case evidenceListResult (EvidenceCapture snapshot []) of
     Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
+  case pendingResult (RecipeId "review") (PendingEvidence snapshot []) of
+    Response _ _ messages _ -> unless
+      ("Scope: EvidenceScope \"local-file\" \"sales\" \"latest\"" `elem` messages)
+      (fail "Pending output must supply a pasteable scope even when empty")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []
       checkInstanceKeys (Object fields) =
         not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)
@@ -118,7 +123,8 @@ main = do
       (candidateChecked, candidateCalls) = runCandidate (Just candidate)
       (missing, missingCalls) = runCandidate Nothing
   case candidateResult citedCandidate of
-    Response _ payload _ _ -> unless (checkInstanceKeys payload && hasInstance payload)
+    Response _ payload messages _ -> unless (checkInstanceKeys payload && hasInstance payload
+      && "  Declared citations:" `elem` messages)
       (fail "Evolution citation must label its instance")
   assert "Root show bypassed checks or used wrong selection"
     (showCalls == ["open","prepare","examples","validate","value"] && exitStatus shown == 0)
