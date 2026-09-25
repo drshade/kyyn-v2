@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeAcquisition, executeCapturedRead, execute, exchange, eitherCodec) where
+module Kyyn.Runtime.Plugin (executeAcquisition, executeCapturedRead, execute, exchange, eitherCodec, withOptionsCodec) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
@@ -7,6 +7,15 @@ import Kyyn.Types.Plugin
 import Kyyn.Types.Program
 import System.IO (hFlush, stdout)
 import Text.JSON.Types (JSValue)
+
+withOptionsCodec :: Codec config -> Codec options -> Codec (config, Maybe options)
+withOptionsCodec configCodec optionsCodec = Codec encode decode
+  where
+    encode (config,options) = record [("config",encodeWith configCodec config),
+      ("options",encodeWith (optionalCodec optionsCodec) options)]
+    decode value = do
+      values <- fields ["config","options"] value
+      (,) <$> field "config" configCodec values <*> field "options" (optionalCodec optionsCodec) values
 
 executeAcquisition :: forall config payload. Codec config -> Codec payload
   -> (config -> EvidenceSnapshot payload -> Program (FileRead :+: EvidenceRead payload)

@@ -3,6 +3,7 @@ module Kyyn.Porcelain.Protocol.EvidencePersistence
 
 import Data.Aeson (Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
+import qualified Data.Aeson.KeyMap as Keys
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -21,14 +22,21 @@ headerShape :: Shape
 headerShape = Record [("producer",text),("contract",text),("current",text)]
 
 stateShape :: Shape -> Shape
-stateShape payload = Record [("header",headerShape),("values",members),("history",List fetch)]
+stateShape = stateShapeWith fetchShape
+
+stateShapeWith :: Shape -> Shape -> Shape
+stateShapeWith fetch payload = Record [("header",headerShape),("values",members),("history",List fetch)]
   where
     evidence = Record [("fingerprint",text),("references",List text),("payload",payload)]
     members = List (Record [("id",text),("evidence",evidence)])
-    fetch = fetchShape
+
+legacyFetchShape :: Shape
+legacyFetchShape = case fetchShape of
+  Record fields -> Record (filter ((/= "options") . fst) fields)
+  shape -> shape
 
 fetchShape :: Shape
-fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker)]
+fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),("changes",List marker),("options",Optional text)]
   where
     citation = Record ([(name,text) | name <- ["producer","connector","source"]] ++ [("references",List text)])
     marker = Record [("kind",Union [(name,Nothing) | name <- ["New","Updated","Removed"]]),
@@ -37,16 +45,16 @@ fetchShape = Record [("id",text),("previous",Optional text),("fetchedAt",text),(
 text :: Shape
 text = Scalar TextScalar
 
-optional :: Maybe FetchId -> Value
+optional :: Maybe String -> Value
 optional Nothing = object ["tag" .= ("None" :: String)]
-optional (Just (FetchId value)) = object ["tag" .= ("Some" :: String),"value" .= value]
+optional (Just value) = object ["tag" .= ("Some" :: String),"value" .= value]
 
-parseOptional :: Value -> Parser (Maybe FetchId)
-parseOptional = withObject "fetch cursor" $ \fields -> do
+parseOptional :: Value -> Parser (Maybe String)
+parseOptional = withObject "optional text" $ \fields -> do
   tag <- fields .: "tag"
   case tag :: String of
     "None" -> pure Nothing
-    "Some" -> Just . FetchId <$> fields .: "value"
+    "Some" -> Just <$> fields .: "value"
     _ -> fail "Unknown optional tag"
 
 parseHeader :: Value -> Parser EvidenceHeader
@@ -63,7 +71,7 @@ decodeHistory :: DhallHandling :> es => ByteString
   -> Eff es (Either EvidenceProblem (EvidenceHeader, [Fetch]))
 decodeHistory bytes = case Text.decodeUtf8' bytes of
   Left problem -> pure (Left (InvalidEvidence (show problem)))
-  Right source -> decode (Record [("header",headerShape),("history",List fetchShape)])
+  Right source -> decodeFetchDocument (\fetch -> Record [("header",headerShape),("history",List fetch)])
     (withObject "Evidence history" $ \fields -> (,)
       <$> (fields .: "header" >>= parseHeader) <*> (fields .: "history" >>= traverse parseFetch))
     ("(" <> source <> "\n).{header,history}")
@@ -92,8 +100,9 @@ encodeState (EvidenceProducer (PackageIdentity producer) identity) contract stat
     marker (EvidenceChangeMarker kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef plugin connector source refs)) =
       object ["kind" .= object ["tag" .= show kind],"id" .= key,"fingerprint" .= fingerprint,
         "citation" .= object ["producer" .= plugin,"connector" .= connector,"source" .= source,"references" .= refs]]
-    fetch (Fetch (FetchId key) previous at changes) = object
-      ["id" .= key,"previous" .= optional previous,"fetchedAt" .= at,"changes" .= map marker changes]
+    fetch (Fetch (FetchId key) previous at changes options) = object
+      ["id" .= key,"previous" .= optional ((\(FetchId value) -> value) <$> previous),"fetchedAt" .= at,"changes" .= map marker changes,
+       "options" .= optional options]
 
 decodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> ByteString
   -> Eff es (Either EvidenceProblem (EvidenceState CheckedValue))
@@ -107,7 +116,7 @@ decodeState (EvidenceProducer producer identity) contract bytes
           pure (Left ProducerContractChanged)
         Right _ -> case Text.decodeUtf8' bytes of
           Left problem -> pure (Left (InvalidEvidence (show problem)))
-          Right source -> decode (stateShape (contractShape contract)) parseState source
+          Right source -> decodeFetchDocument (\fetch -> stateShapeWith fetch (contractShape contract)) parseState source
   where
     evidence = withObject "evidence" $ \fields -> Evidence <$> (EvidenceFingerprint <$> fields .: "fingerprint")
       <*> fields .: "references" <*> (CheckedValue identity <$> fields .: "payload")
@@ -123,8 +132,9 @@ decodeState (EvidenceProducer producer identity) contract bytes
 
 parseFetch :: Value -> Parser Fetch
 parseFetch = withObject "fetch" $ \fields -> Fetch <$> (FetchId <$> fields .: "id")
-  <*> (fields .: "previous" >>= parseOptional) <*> fields .: "fetchedAt"
+  <*> (fmap FetchId <$> (fields .: "previous" >>= parseOptional)) <*> fields .: "fetchedAt"
   <*> (fields .: "changes" >>= traverse marker)
+  <*> maybe (pure Nothing) parseOptional (Keys.lookup "options" fields)
   where
     kind = withObject "change kind" $ \fields -> do
       tag <- fields .: "tag"
@@ -145,3 +155,13 @@ decode shape parser source = do
   pure $ case result of
     Left problems -> Left (InvalidEvidence (show problems))
     Right value -> either (Left . InvalidEvidence) Right (parseEither parser value)
+
+decodeFetchDocument :: DhallHandling :> es => (Shape -> Shape) -> (Value -> Parser a)
+  -> Text.Text -> Eff es (Either EvidenceProblem a)
+decodeFetchDocument shape parser source = do
+  current <- decode (shape fetchShape) parser source
+  case current of
+    Right value -> pure (Right value)
+    Left problem -> do
+      legacy <- decode (shape legacyFetchShape) parser source
+      pure (either (const (Left problem)) Right legacy)

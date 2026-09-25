@@ -87,15 +87,32 @@ main = do
   sequential <- right (applyChanges [] [NewEvidence itemA (value "a"),UpdatedEvidence itemA (value "b"),RemovedEvidence itemA])
   assert "changes not applied in order" (null sequential)
   (_,markers) <- right (recordChanges instanceA [] first)
-  let state = EvidenceState (Just (FetchId "one")) initial [Fetch (FetchId "one") Nothing "2026-09-11" markers]
+  let state = EvidenceState (Just (FetchId "one")) initial [Fetch (FetchId "one") Nothing "2026-09-11" markers Nothing]
   assert "incomplete scope history accepted" (isLeft (resolveCapture instanceA producer (FetchId "one")
-    [Fetch (FetchId "one") (Just (FetchId "lost")) "2026-09-11" markers] (FetchId "one")))
+    [Fetch (FetchId "one") (Just (FetchId "lost")) "2026-09-11" markers Nothing] (FetchId "one")))
   assert "values without a fetch accepted" (isLeft (validateState (EvidenceState Nothing initial [])))
   assert "corrupt current metadata accepted" (isLeft (validateState
-    (EvidenceState (Just (FetchId "one")) [] [Fetch (FetchId "one") Nothing "2026-09-11" markers])))
+    (EvidenceState (Just (FetchId "one")) [] [Fetch (FetchId "one") Nothing "2026-09-11" markers Nothing])))
   bytes <- right (runPureEff (runDhallHandling (encodeState producer contract state)))
   restored <- right (runPureEff (runDhallHandling (decodeState producer contract bytes)))
   assert "Dhall state round trip differs" (state == restored)
+  let legacy = Bytes.pack $ unlines
+        [ "{ header = { producer = \"package-contents-one\", contract = \"" ++ contractFingerprint (contractId contract) ++ "\", current = \"old\" }"
+        , ", values = [] : List { id : Text, evidence : { fingerprint : Text, references : List Text, payload : Text } }"
+        , ", history = [ { id = \"old\", previous = None Text, fetchedAt = \"2026-09-01\""
+        , "  , changes = [] : List { kind : < New | Updated | Removed >, id : Text, fingerprint : Text"
+        , "    , citation : { producer : Text, connector : Text, source : Text, references : List Text } } } ] }"
+        ]
+      legacyState = EvidenceState (Just (FetchId "old")) [] [Fetch (FetchId "old") Nothing "2026-09-01" [] Nothing]
+  legacyRead <- right (runPureEff (runDhallHandling (decodeState producer contract legacy)))
+  assert "prior fetch history without options was refused" (legacyRead == legacyState)
+  (_,legacyHistory) <- right (runPureEff (runDhallHandling (decodeHistory legacy)))
+  assert "prior history cannot resolve curation scopes" (resolveCapture instanceA producer (FetchId "old") legacyHistory (FetchId "old") ==
+    Right (EvidenceCapture (EvidenceSnapshotRef instanceA producer (FetchId "old")) []))
+  rewritten <- right (runPureEff (runDhallHandling (encodeState producer contract legacyRead)))
+  assert "prior history did not acquire explicit absent options on write" (Bytes.isInfixOf "options" rewritten)
+  let malformed = Bytes.pack (Text.unpack (Text.replace "previous = None Text" "previous = None Text, options = True" (Text.pack (Bytes.unpack legacy))))
+  assert "malformed present options fell back to absent" (isLeft (runPureEff (runDhallHandling (decodeState producer contract malformed))))
   assert "state is not Dhall" (Bytes.isInfixOf "New" bytes && Bytes.isInfixOf "payload" bytes)
   header <- right (runPureEff (runDhallHandling (decodeHeader bytes)))
   assert "header loses current" (header == EvidenceHeader (PackageIdentity "package-contents-one")
@@ -126,20 +143,21 @@ main = do
     let ignorePath = directory </> ".kyyn/.gitignore"
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
-    f1 <- run (publishFetch instanceA producer contract Nothing first) >>= right
+    f1 <- run (publishFetch instanceA producer contract Nothing Nothing first) >>= right
     listedFirst <- listing instanceA producer >>= right
     assert "listing lost first IDs or fingerprints" (listedFirst == EvidenceCapture f1
       [(itemA,EvidenceFingerprint "old"),(itemB,EvidenceFingerprint "removed")])
     let emptyInstance = ConnectorInstanceRef (either error id (pluginName "folder")) "empty"
-    emptyFetch <- run (publishFetch emptyInstance producer contract Nothing []) >>= right
+    emptyFetch <- run (publishFetch emptyInstance producer contract Nothing Nothing []) >>= right
     listedEmpty <- listing emptyInstance producer >>= right
     assert "fetched empty capture refused" (listedEmpty == EvidenceCapture emptyFetch [])
     saved <- load instanceA producer
     ignore <- Bytes.readFile ignorePath
     assert "first publication did not ignore local evidence" (ignore == "*\n")
     Bytes.writeFile ignorePath "*\n# preserve local comment\n"
-    independent <- run (publishFetch instanceB producer contract Nothing [NewEvidence itemA (value "independent")]) >>= right
-    f2 <- run (publishFetch instanceA producer contract (Just (key f1)) second) >>= right
+    independent <- run (publishFetch instanceB producer contract Nothing Nothing [NewEvidence itemA (value "independent")]) >>= right
+    let suppliedOptions = Just "{ label = \"scoped\" }"
+    f2 <- run (publishFetch instanceA producer contract (Just (key f1)) suppliedOptions second) >>= right
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
     latest <- load instanceA producer
@@ -178,17 +196,18 @@ main = do
        EvidenceChangeSummary (key f2) (Just (key f1)) Removed itemB (EvidenceFingerprint "removed") (EvidenceRef "folder" "sales" "b.txt" ["/source/removed"])])
     (at,batches) <- run (readFetchHistory instanceA producer contract) >>= right
     assert "history is not metadata through the current fetch" (at == f2 && length batches == 2)
-    assert "fetch timestamp is not ISO 8601 UTC" (all (\(FetchSummary _ _ time _) ->
+    assert "history lost supplied fetch options" ([options | FetchSummary _ _ _ _ options <- batches] == [Nothing,suppliedOptions])
+    assert "fetch timestamp is not ISO 8601 UTC" (all (\(FetchSummary _ _ time _ _) ->
       case iso8601ParseM time :: Maybe UTCTime of Just _ -> last time == 'Z'; Nothing -> False) batches)
     foreignBase <- run (listEvidenceChanges instanceA producer contract (Just (key independent)))
     assert "foreign cursor treated as empty" (foreignBase == Left CursorUnavailable)
     currentSpan <- run (listEvidenceChanges instanceA producer contract (Just (key f2))) >>= right
     assert "current cursor did not produce an empty span" (currentSpan == (f2,[]))
-    stale <- run (publishFetch instanceA producer contract (Just (key f1)) [])
+    stale <- run (publishFetch instanceA producer contract (Just (key f1)) Nothing [])
     assert "stale base accepted" (stale == Left BaseSnapshotConflict)
-    wrong <- run (publishFetch instanceA producer contract (Just (key f2)) [NewEvidence itemA (value "bad")])
+    wrong <- run (publishFetch instanceA producer contract (Just (key f2)) Nothing [NewEvidence itemA (value "bad")])
     assert "invalid batch accepted" (isLeft wrong)
-    invalidPayload <- run (publishFetch instanceA producer contract (Just (key f2))
+    invalidPayload <- run (publishFetch instanceA producer contract (Just (key f2)) Nothing
       [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (CheckedValue (contractId contract) (Bool True)))])
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
     let boolContract = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
@@ -197,8 +216,8 @@ main = do
     tip <- run (evidenceHead instanceA) >>= right
     assert "refusal changed head" (tip == Just (key f2))
     (left,rightResult) <- concurrently
-      (run (publishFetch instanceA producer contract (Just (key f2)) []))
-      (run (publishFetch instanceA producer contract (Just (key f2)) []))
+      (run (publishFetch instanceA producer contract (Just (key f2)) Nothing []))
+      (run (publishFetch instanceA producer contract (Just (key f2)) Nothing []))
     f3 <- case (left,rightResult) of
       (Right result,Left BaseSnapshotConflict) -> pure result
       (Left BaseSnapshotConflict,Right result) -> pure result
@@ -208,15 +227,15 @@ main = do
     assert "same-schema producer change accepted" (incompatible == Left ProducerContractChanged)
     incompatibleListing <- listing instanceA changedProducer
     assert "listing swallowed producer refusal" (incompatibleListing == Left [evidenceProblemDiagnostic ProducerContractChanged])
-    failedReset <- run (publishFetch instanceA changedProducer contract (Just (key f3)) [RemovedEvidence itemA])
+    failedReset <- run (publishFetch instanceA changedProducer contract (Just (key f3)) Nothing [RemovedEvidence itemA])
     assert "invalid new-producer batch accepted" (isLeft failedReset)
     retained <- load instanceA producer
     assert "failed producer refetch changed evidence" (retained == Just (CurrentEvidence f3 [(itemA,value "new")]))
-    changed <- run (publishFetch instanceA changedProducer contract (Just (key f3)) [NewEvidence itemA (value "refetched")]) >>= right
+    changed <- run (publishFetch instanceA changedProducer contract (Just (key f3)) Nothing [NewEvidence itemA (value "refetched")]) >>= right
     oldProducer <- run (loadCurrentEvidence instanceA producer contract)
     assert "old producer reinterpreted" (oldProducer == Left ProducerContractChanged)
     (_,reset) <- run (readFetchHistory instanceA changedProducer contract) >>= right
-    assert "new producer carried previous change base" (case reset of [FetchSummary _ Nothing _ _] -> True; _ -> False)
+    assert "new producer carried previous change base" (case reset of [FetchSummary _ Nothing _ _ _] -> True; _ -> False)
     lostCursor <- run (listEvidenceChanges instanceA changedProducer contract (Just (key f3)))
     assert "reset producer retained old cursor" (lostCursor == Left CursorUnavailable)
     replaced <- Bytes.readFile statePath
@@ -232,7 +251,7 @@ main = do
     assert "clear failed or crossed instance boundary" (absent == Nothing && otherStill == other)
     absentClear <- run (clearEvidence instanceA)
     assert "clearing absent evidence reported a cache" (not absentClear)
-    fresh <- run (publishFetch instanceA changedProducer contract Nothing []) >>= right
+    fresh <- run (publishFetch instanceA changedProducer contract Nothing Nothing []) >>= right
     emptyCapture <- load instanceA changedProducer
     assert "empty capture confused with not fetched" (emptyCapture == Just (CurrentEvidence fresh []))
     unavailable <- run (listEvidenceChanges instanceA changedProducer contract (Just (key changed)))
@@ -240,7 +259,7 @@ main = do
     Bytes.writeFile statePath "{ malformed = True }"
     bad <- run (loadCurrentEvidence instanceA changedProducer contract)
     assert "malformed evidence became absent" (case bad of Left (InvalidEvidence _) -> True; _ -> False)
-    badFetch <- run (publishFetch instanceA changedProducer contract (Just (key fresh)) [])
+    badFetch <- run (publishFetch instanceA changedProducer contract (Just (key fresh)) Nothing [])
     assert "fetch silently replaced unreadable data" (isLeft badFetch)
     _ <- run (clearEvidence instanceA)
     _ <- load instanceA changedProducer
@@ -280,9 +299,9 @@ recordingProof = do
         _ -> error "Semantic publication requested unexpected filesystem work"
       (result,(_,trace)) = runPureEff . State.runState ((Nothing,[]) :: Recording) . runFailure . files
         . runDhallHandling . recordDocuments . runEvidenceStore scope $ do
-          first <- publishFetch instanceA producer contract Nothing [NewEvidence itemA (value "recorded")]
-          conflict <- publishFetch instanceA producer contract Nothing []
-          second <- publishFetch instanceA producer contract (Just (FetchId "00000001")) []
+          first <- publishFetch instanceA producer contract Nothing Nothing [NewEvidence itemA (value "recorded")]
+          conflict <- publishFetch instanceA producer contract Nothing Nothing []
+          second <- publishFetch instanceA producer contract (Just (FetchId "00000001")) Nothing []
           pure (first,conflict,second)
   (first,conflict,second) <- right result
   _ <- right first

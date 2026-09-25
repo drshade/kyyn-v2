@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult,
-  evidenceListResult, methodListResult, methodResult, methodOutputResult) where
+  evidenceListResult, connectorResult, methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -19,6 +19,11 @@ connectorListResult plugin connectors = success
 
 schemaResult :: PluginName -> Text.Text -> Response
 schemaResult plugin schema = success (object ["plugin" .= pluginNameText plugin,"schema" .= schema]) [Text.unpack (Text.stripEnd schema)]
+
+connectorResult :: PluginName -> ConnectorName -> Maybe Text.Text -> Response
+connectorResult plugin name options = success
+  (object ["plugin" .= pluginNameText plugin,"instance" .= text name,"fetchOptionsType" .= options])
+  [pluginNameText plugin ++ "/" ++ text name, maybe "Fetch options: none" (("Fetch options:\n" ++) . Text.unpack) options]
 
 methodListResult :: [(MethodName,String)] -> Response
 methodListResult methods = success
@@ -46,9 +51,10 @@ evidenceListResult (EvidenceCapture snapshot items) = success
 
 historyResult :: EvidenceSnapshotRef -> [FetchSummary] -> Response
 historyResult snapshot fetches = success (object ["selection" .= context snapshot,"fetches" .=
-  [object ["id" .= fetchName identity,"previous" .= fmap fetchName previous,"fetchedAt" .= at,"changeCount" .= count]
-    | FetchSummary identity previous at count <- fetches]])
-  [fetchName identity ++ "  " ++ at ++ "  " ++ show count ++ " changes" | FetchSummary identity _ at count <- fetches]
+  [object ["id" .= fetchName identity,"previous" .= fmap fetchName previous,"fetchedAt" .= at,"changeCount" .= count,"options" .= options]
+    | FetchSummary identity previous at count options <- fetches]])
+  [fetchName identity ++ "  " ++ at ++ "  " ++ show count ++ " changes" ++ maybe "" ("  options=" ++) options
+    | FetchSummary identity _ at count options <- fetches]
 
 changesResult :: EvidenceSnapshotRef -> [EvidenceChangeSummary] -> Response
 changesResult snapshot changes = success (object ["selection" .= context snapshot,"changes" .= map value changes])

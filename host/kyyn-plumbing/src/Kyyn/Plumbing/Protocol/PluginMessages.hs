@@ -51,8 +51,8 @@ exact expected parse = withObject "plugin value" $ \o -> exactFields expected o 
 exactFields :: [Key] -> Object -> Parser ()
 exactFields expected o = unless (sort (Keys.keys o) == sort expected) (fail "Unexpected or missing plugin fields")
 
-initialInput :: CheckedValue -> Bytes.ByteString
-initialInput (CheckedValue _ value) = Lazy.toStrict (encode (object ["arguments" .= value,"snapshot" .= ("selected" :: String)]))
+initialInput :: Value -> Bytes.ByteString
+initialInput value = Lazy.toStrict (encode (object ["arguments" .= value,"snapshot" .= ("selected" :: String)]))
 
 encodeResponse :: Integer -> Value -> Bytes.ByteString
 encodeResponse identity value = Lazy.toStrict (encode (object

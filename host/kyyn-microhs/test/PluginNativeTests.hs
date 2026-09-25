@@ -62,7 +62,7 @@ nativeTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ runEvidenceAcquisition $
-        fetchEvidence instanceRef package payload program (config (path :: String))
+        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
@@ -139,7 +139,7 @@ nativeTests temporary toolchain configType payloadType program = do
       inspectBetween action = exchangeFrames requests expected completed action $
         executeCapturedRead program (config directory) currentThird payload
       advance = do
-        result <- publishFetch instanceRef producer payload (Just thirdId) [UpdatedEvidence key changed]
+        result <- publishFetch instanceRef producer payload (Just thirdId) Nothing [UpdatedEvidence key changed]
         case result of Right _ -> pure (); Left problem -> error (show problem)
   stable <- runStore kb (inspectBetween advance) >>= right >>= right
   assert "captured read changed after concurrent publication" (stable == completed)
@@ -151,11 +151,20 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noFiles $ recordAcquisition firstId currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory))
+            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
     (result == third && trace == ["head","load","publish"])
+  let noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
+      noEvidence = interpret $ \_ _ -> error "Invalid options accessed evidence"
+      noGuest :: Eff (GuestExecution : es) a -> Eff es a
+      noGuest = interpret $ \_ _ -> error "Invalid options executed a guest"
+  forM_ [Nothing,Just payload] $ \optionsContract -> do
+    refused <- right $ runPureEff $ runFailure $ runDhallHandling $
+      noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
+        (fetchEvidence instanceRef package payload program (config directory) optionsContract (Just "True"))
+    assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
 
 recordAcquisition :: State.State [String] :> es => FetchId -> CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
@@ -163,7 +172,7 @@ recordAcquisition earlier current@(CurrentEvidence snapshot@(EvidenceSnapshotRef
   interpret $ \_ -> \case
     EvidenceHead _ -> State.modify @[String] (++ ["head"]) >> pure (Right (Just earlier))
     LoadCurrentEvidence _ _ _ -> State.modify @[String] (++ ["load"]) >> pure (Right (Just current))
-    PublishFetch _ _ _ expected [] | expected == Just identity ->
+    PublishFetch _ _ _ expected _ [] | expected == Just identity ->
       State.modify @[String] (++ ["publish"]) >> pure (Right snapshot)
     _ -> error "Acquisition reopened evidence or published against a head other than its loaded input"
 

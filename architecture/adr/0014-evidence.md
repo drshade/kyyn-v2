@@ -9,8 +9,8 @@ date: 2026-09-25
 Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
 recipe evolution data are implemented. Recipes persist separately from the root
 manifest and use the ordinary evolution editing and review surfaces.
-The fetch-options and Microsoft Graph calendar sections propose an extension;
-they are not implemented by the existing file acquisition path.
+Typed fetch options are implemented through discovery, acquisition and history.
+The Microsoft Graph calendar section remains an unimplemented provider design.
 
 ## Context
 
@@ -249,6 +249,9 @@ invent or record plugin defaults in the host. Persist it with the successful fet
 and display it in `evidence history list`, including for an unchanged fetch.
 The history reader does not need the currently installed plugin's options schema
 to display that text. Options are non-secret by convention, not host-redacted data.
+Fetch records written without the options field read as absent options; malformed
+present options remain an error. Both evidence loading and historical curation
+resolution use this rule.
 
 The marker records the supplied fingerprint for additions/updates, and the last
 known fingerprint and source references for a removal. The fingerprint does not

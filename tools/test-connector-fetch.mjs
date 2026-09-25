@@ -9,10 +9,11 @@ import { createHash } from 'node:crypto';
 const configurationSmoke = process.argv[3] === '--configuration-smoke';
 const readSmoke = process.argv[3] === '--read-smoke';
 const toolSmoke = process.argv[3] === '--tool-smoke';
-const methodChecks = readSmoke || (!configurationSmoke && !toolSmoke);
-const toolChecks = toolSmoke || (!configurationSmoke && !readSmoke);
-if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke || toolSmoke)))
-  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke|--tool-smoke]');
+const optionsSmoke = process.argv[3] === '--options-smoke';
+const methodChecks = readSmoke || (!configurationSmoke && !toolSmoke && !optionsSmoke);
+const toolChecks = toolSmoke || (!configurationSmoke && !readSmoke && !optionsSmoke);
+if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke || toolSmoke || optionsSmoke)))
+  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke|--tool-smoke|--options-smoke]');
 const executable = path.resolve(process.argv[2]);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-connector-fetch-'));
@@ -61,6 +62,21 @@ try {
   git(temporary, 'config', '--global', 'user.email', 'evidence@example.invalid');
   git(checkout, 'init', '-q', '-b', 'main');
   fs.cpSync(path.join(repository, 'plugins/local-file'), source, { recursive: true });
+  if (optionsSmoke) {
+    const declaration = path.join(source, 'src/LocalFile/Plugin.hs');
+    fs.writeFileSync(declaration, fs.readFileSync(declaration, 'utf8')
+      .replace('fetchOptionsType = Nothing', 'fetchOptionsType = Just "LocalFile.Types.FetchOptions"'));
+    fs.appendFileSync(path.join(source, 'src/LocalFile/Types.hs'), '\ndata FetchOptions = FetchOptions { skip :: Bool }\n');
+    const implementation = path.join(source, 'src/LocalFile/Folder.hs');
+    fs.writeFileSync(implementation, fs.readFileSync(implementation, 'utf8')
+      .replace('fetch ::', 'fetchDefault ::').replace('fetch (Schema.', 'fetchDefault (Schema.') + `
+fetch :: Schema.FolderConfig -> Maybe Schema.FetchOptions -> EvidenceSnapshot Schema.Document
+  -> Acquisition (Either FetchError [EvidenceChange Schema.Document])
+fetch config options snapshot = case options of
+  Just (Schema.FetchOptions True) -> pure (Right [])
+  _ -> fetchDefault config snapshot
+`);
+  }
   git(source, 'init', '-q', '-b', 'main');
   git(source, 'add', '.');
   git(source, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Plugin fixture');
@@ -71,6 +87,15 @@ try {
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'configure-local-folders']).result;
   cli(['plugin', 'install', '--evolution', draft.id, '--from', source]);
+  if (optionsSmoke) {
+    const installedDeclaration = path.join(draft.path, 'target/plugins/packages/local-file/source/src/LocalFile/Plugin.hs');
+    const declared = fs.readFileSync(installedDeclaration, 'utf8');
+    fs.writeFileSync(installedDeclaration, declared.replace(/^.*fetchOptionsType.*\n/m, ''));
+    const outdated = cli(['plugin', 'connector', 'schema', 'show', 'local-file', '--evolution', draft.id], 1);
+    assert(outdated.diagnostics.some(diagnostic => diagnostic.code === 'plugin.preparation'
+      && diagnostic.message.includes('fetchOptionsType')), JSON.stringify(outdated));
+    fs.writeFileSync(installedDeclaration, declared);
+  }
   const configPath = path.join(draft.path, 'target/plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, 'not valid Dhall');
@@ -143,6 +168,27 @@ bulk ids = do
   const accepted = git(checkout, 'rev-parse', 'HEAD');
   assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
   assert.equal(cli(['evidence', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
+  if (optionsSmoke) {
+    const descriptor = cli(['plugin', 'connector', 'show', 'local-file', 'sales']).result;
+    assert.match(descriptor.fetchOptionsType, /skip\s*:\s*Bool/);
+    cli(['evidence', 'fetch', 'local-file', 'sales', '--options', 'True'], 1);
+    assert.equal(cli(['evidence', 'history', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
+    cli(['evidence', 'fetch', 'local-file', 'sales', '--options', 'let flag = True in { skip = flag }']);
+    assert.deepEqual(current('sales').items, []);
+    const scopedHistory = history('sales').fetches;
+    assert.equal(scopedHistory.length, 1);
+    assert.match(scopedHistory[0].options, /skip\s*=\s*True/);
+    assert(!scopedHistory[0].options.includes('let flag'));
+    fetch('sales');
+    assert.equal(current('sales').items.length, 3);
+    assert.equal(history('sales').fetches[1].options, null);
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    console.log('Typed fetch options: discovery, refusal, guest defaults and Dhall history passed.');
+    return;
+  }
+  assert.equal(cli(['plugin', 'connector', 'show', 'local-file', 'sales']).result.fetchOptionsType, null);
+  assert.equal(cli(['evidence', 'fetch', 'local-file', 'sales', '--options', '{}'], 1)
+    .diagnostics[0].code, 'plugin.fetch-options-unsupported');
   if (methodChecks)
     assert.equal(content('sales', 'updated.txt', 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch('sales');

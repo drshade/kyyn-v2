@@ -35,13 +35,14 @@ instance Show SecretArgument where show _ = "<secret>"
 data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) | Connector ConnectorCommand deriving (Eq, Show)
 data ConnectorCommand
   = ListConnectors PluginName (Maybe EvolutionId)
+  | ShowConnector PluginName ConnectorName (Maybe EvolutionId)
   | ShowConnectorSchema PluginName (Maybe EvolutionId)
   | ListConnectorMethods PluginName ConnectorName (Maybe EvolutionId)
   | ShowConnectorMethod PluginName ConnectorName MethodName (Maybe EvolutionId)
   | ExecuteConnectorMethod PluginName ConnectorName MethodName String
   deriving (Eq, Show)
 data EvidenceCommand
-  = FetchConnector PluginName ConnectorName
+  = FetchConnector PluginName ConnectorName (Maybe String)
   | ListCurrentEvidence PluginName ConnectorName
   | ListFetchHistory PluginName ConnectorName
   | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
@@ -79,7 +80,7 @@ progressMessage :: Command -> Maybe String
 progressMessage request = case request of
   Kb InitKb -> Just "Checking and initializing the knowledge base..."
   Plugin (InstallPlugin selectedId _ _) -> Just ("Installing plugin source into evolution " ++ evolutionIdName selectedId ++ "...")
-  Evidence (FetchConnector plugin connector) -> Just
+  Evidence (FetchConnector plugin connector _) -> Just
     ("Checking the root and fetching " ++ pluginNameText plugin ++ "/" ++ coerce connector ++ "...")
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
@@ -118,6 +119,7 @@ secretParser = hsubparser
 connectorParser :: Parser ConnectorCommand
 connectorParser = hsubparser
   (group "list" "List a plugin's configured instances" (ListConnectors <$> plugin <*> evolution)
+  <> group "show" "Show an instance's fetch options type" (ShowConnector <$> plugin <*> instanceName <*> evolution)
   <> group "schema" "Discover connector configuration schemas" (hsubparser
       (group "show" "Print the derived Dhall type for a plugin's configuration file" (ShowConnectorSchema <$> pluginArgument <*> evolution)))
   <> group "method" "Discover and invoke captured-evidence methods" (hsubparser
@@ -137,7 +139,8 @@ pluginArgument = argument (eitherReader pluginName) (metavar "PLUGIN")
 
 evidenceParser :: Parser EvidenceCommand
 evidenceParser = hsubparser
-  (group "fetch" "Fetch evidence from an accepted connector instance" (FetchConnector <$> plugin <*> instanceName)
+  (group "fetch" "Fetch evidence from an accepted connector instance" (FetchConnector <$> plugin <*> instanceName
+    <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Connector-specific fetch options as hermetic Dhall")))
   <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
   <> group "history" "Inspect retained fetch history" (hsubparser
       (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))

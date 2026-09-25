@@ -21,6 +21,8 @@ data SourceConnector = SourceConnector
     validateConfig :: String
   , -- | Typed methods for reading this connector's captured evidence.
     methods :: [CapturedMethod]
+  , -- | Optional qualified type of per-fetch arguments. Nothing keeps the config/snapshot signature.
+    fetchOptionsType :: Maybe String
   } deriving (Eq, Show)
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.

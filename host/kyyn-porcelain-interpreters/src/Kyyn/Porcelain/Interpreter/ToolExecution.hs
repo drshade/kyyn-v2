@@ -42,7 +42,7 @@ runToolExecution = interpret $ \_ (ExecuteTool (PreparedTool (ToolDescriptor _ _
   where
     answerPlugin configured plugin kind instanceName methodName value = do
       let label = pluginNameText plugin ++ "/" ++ coerce instanceName
-      (PreparedPackage _ identity _, ConfiguredConnector _ _ (PreparedConnector actual _ payload _ _ methods) _) <-
+      (PreparedPackage _ identity _, ConfiguredConnector _ _ (PreparedConnector actual _ payload _ _ methods _) _) <-
         either (protocolFailure . ((label ++ ": ") ++) . show) pure (selectedInstance plugin instanceName configured)
       if actual /= kind then protocolFailure (label ++ ": connector type differs from the requested method") else pure ()
       method <- case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == methodName] of

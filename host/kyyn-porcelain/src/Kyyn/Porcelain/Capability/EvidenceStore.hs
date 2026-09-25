@@ -13,6 +13,7 @@ import Kyyn.Domain.Value (CheckedValue)
 data EvidenceStore :: Effect where
   EvidenceHead :: ConnectorInstanceRef -> EvidenceStore m (Either EvidenceProblem (Maybe FetchId))
   PublishFetch :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
+    -> Maybe String
     -> [EvidenceChange CheckedValue] -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   LoadCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
     -> EvidenceStore m (Either EvidenceProblem (Maybe CurrentEvidence))
@@ -29,8 +30,8 @@ type instance DispatchOf EvidenceStore = Dynamic
 evidenceHead :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es (Either EvidenceProblem (Maybe FetchId))
 evidenceHead = send . EvidenceHead
 publishFetch :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-  -> Maybe FetchId -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
-publishFetch instanceRef producer contract base = send . PublishFetch instanceRef producer contract base
+  -> Maybe FetchId -> Maybe String -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishFetch instanceRef producer contract base options = send . PublishFetch instanceRef producer contract base options
 loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
 loadCurrentEvidence instanceRef producer = send . LoadCurrentEvidence instanceRef producer

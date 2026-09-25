@@ -21,12 +21,13 @@ import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
-import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry, executeCompiled)
+import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIdentity)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSchema(..), inspectType)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
-import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors)
+import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure)
 import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Porcelain.Capability.PluginPreparation
@@ -39,7 +40,7 @@ runPluginPreparation sdk = interpret $ \_ -> \case
   ValidatePlugins plugins -> runExceptT $ do
     reports <- forM [(plugin,instanceName,entry,config) |
       PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
-      ConfiguredConnector instanceName _ (PreparedConnector _ _ _ _ entry _) config <- instances] $
+      ConfiguredConnector instanceName _ (PreparedConnector _ _ _ _ entry _ _) config <- instances] $
       \(plugin,instanceName,entry,CheckedValue _ config) -> do
         let label = pluginNameText plugin ++ "/" ++ coerce instanceName
         bytes <- ExceptT (Right <$> executeCompiledEntry label entry (Lazy.toStrict (encode config)))
@@ -66,18 +67,22 @@ prepare sdk code = do
       [(rest,bytes) | (path,bytes) <- packageFiles, Just rest <- [stripPrefix "src/" path]]
     registration <- checked label (registrationSources (entryModule manifest) (authored ++ files sdk))
     registrationEntry <- located label (compileGuest registration)
-    encoded <- ExceptT (Right <$> executeCompiledEntry label registrationEntry Bytes.empty)
+    (encoded,registrationExit) <- ExceptT (Right <$> executeCompiled registrationEntry Bytes.empty)
+    case registrationExit of
+      ProcessExit 0 _ -> pure ()
+      ProcessExit _ stderr -> bad label (registrationFailure stderr)
     declarations <- checked label (decodeConnectors encoded)
     let sources = authored ++ files sdk
     sourceTree <- checked label (fileTree sources)
     let inspect selected = do
           InspectedSchema contract _ <- located label (inspectType sourceTree selected)
           pure contract
-    connectors <- forM declarations $ \(ConnectorDeclaration connector configType payloadType fetch validate declaredMethods) -> do
+    connectors <- forM declarations $ \(ConnectorDeclaration connector configType payloadType fetch validate declaredMethods optionsType) -> do
       let connectorLabel = label ++ "/" ++ coerce connector
       config <- inspect configType
       payload <- inspect payloadType
-      acquisition <- checked connectorLabel (acquisitionSources (rootType config) (rootType payload) fetch sources)
+      options <- traverse inspect optionsType
+      acquisition <- checked connectorLabel (acquisitionSources (rootType config) (rootType payload) (rootType <$> options) fetch sources)
       fetchEntry <- located connectorLabel (compileGuest acquisition)
       validation <- checked connectorLabel (validationSources (rootType config) validate sources)
       validationEntry <- located connectorLabel (compileGuest validation)
@@ -87,7 +92,7 @@ prepare sdk code = do
         adapter <- checked connectorLabel (capturedReadSources (rootType input) (rootType payload) (rootType output) implementation sources)
         methodEntry <- located (connectorLabel ++ "/" ++ coerce selectedName) (compileGuest adapter)
         pure (PreparedMethod selectedName description input output methodEntry)
-      pure (PreparedConnector connector config payload fetchEntry validationEntry methods)
+      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options)
     pure (PreparedPackage (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]
@@ -97,7 +102,7 @@ configure code packages = do
     let name = pluginNameText plugin
         label = "plugin " ++ name
         configFile = "plugins/config/" ++ name ++ ".dhall"
-        configContracts = [(connector,contract) | PreparedConnector connector contract _ _ _ _ <- connectors]
+        configContracts = [(connector,contract) | PreparedConnector connector contract _ _ _ _ _ <- connectors]
     instances <- case lookup configFile entries of
       Nothing -> pure []
       Just bytes -> do
@@ -105,8 +110,8 @@ configure code packages = do
         value <- located label (decodeValue (instanceShape [(n,contractShape c) | (n,c) <- configContracts]) text)
         selected <- checked label (decodeInstances value)
         forM selected $ \(instanceName,binding,kind,configuration) -> case
-          [c | c@(PreparedConnector n _ _ _ _ _) <- connectors, n == kind] of
-            [c@(PreparedConnector _ contract _ _ _ _)] -> pure
+          [c | c@(PreparedConnector n _ _ _ _ _ _) <- connectors, n == kind] of
+            [c@(PreparedConnector _ contract _ _ _ _ _)] -> pure
               (ConfiguredConnector instanceName binding c (CheckedValue (contractId contract) configuration))
             _ -> bad (label ++ "/" ++ coerce instanceName) "Unknown connector type"
     pure (PreparedPlugin package instances)

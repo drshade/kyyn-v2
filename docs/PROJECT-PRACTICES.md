@@ -123,6 +123,10 @@ fetch signature. This is a focused native integration check, not an installed CL
 producer journey in a disposable nested KB: discover the emitted Dhall schema,
 configure and accept two instances, fetch and change real files, inspect retained
 history and payload-free deltas, and preserve the head after acquisition failures.
+`--options-smoke` checks an options-aware fixture: schema discovery, an outdated
+registration diagnostic, type refusal without publication, explicit versus omitted
+guest options and normalized Dhall history. The `plugin-fetch` dual-compiler test
+also covers typed record options and refusal before any store or guest access.
 It checks superseded/removed payload absence, invalid-data repair and scoped
 clear/refetch without a runtime bundle, without adding a generic evidence-view endpoint.
 It belongs to the full installed check and can be run independently for changes

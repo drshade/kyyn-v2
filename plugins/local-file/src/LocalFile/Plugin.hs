@@ -11,6 +11,7 @@ connectors = [SourceConnector
   , configType = "LocalFile.Types.FolderConfig"
   , payloadType = "LocalFile.Types.Document"
   , fetch = "LocalFile.Folder.fetch"
+  , fetchOptionsType = Nothing
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
       { methodName = "content"

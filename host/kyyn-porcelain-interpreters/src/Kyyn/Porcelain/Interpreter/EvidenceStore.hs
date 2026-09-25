@@ -31,7 +31,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
   EvidenceHead instanceRef -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
     traverse (fmap (\(EvidenceHeader _ _ current) -> current) . ExceptT . decodeHeader) bytes
-  PublishFetch instanceRef producer contract expected changes -> locked instanceRef $ runExceptT $ do
+  PublishFetch instanceRef producer contract expected options changes -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
     header <- traverse (ExceptT . decodeHeader) bytes
     let current = case header of Just (EvidenceHeader _ _ key) -> Just key; Nothing -> Nothing
@@ -43,7 +43,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
     (next,markers) <- liftEither (recordChanges instanceRef values changes)
     DocumentStamp key at <- ExceptT (Right <$> freshFetchStamp history)
     let identity = FetchId key
-        updated = EvidenceState (Just identity) next (history ++ [Fetch identity previous at markers])
+        updated = EvidenceState (Just identity) next (history ++ [Fetch identity previous at markers options])
     encoded <- ExceptT (encodeState producer contract updated)
     ExceptT $ Right <$> FileSystem.ensureIgnoredDirectory kb cacheLocation
     ExceptT $ Right <$> Document.replaceCurrent encoded
@@ -83,7 +83,7 @@ type Result es = ExceptT EvidenceProblem (Eff es)
 freshFetchStamp :: DocumentAccess :> es => [Fetch] -> Eff es DocumentStamp
 freshFetchStamp history = do
   stamp@(DocumentStamp key _) <- Document.freshStamp
-  if any (\(Fetch identity _ _ _) -> identity == FetchId key) history
+  if any (\(Fetch identity _ _ _ _) -> identity == FetchId key) history
     then freshFetchStamp history else pure stamp
 
 liftEither :: Either EvidenceProblem a -> Result es a
