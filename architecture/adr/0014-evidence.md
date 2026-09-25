@@ -251,7 +251,7 @@ The history reader does not need the currently installed plugin's options schema
 to display that text. Options are non-secret by convention, not host-redacted data.
 Fetch records written without the options field read as absent options; malformed
 present options remain an error. Both evidence loading and historical curation
-resolution use this rule, so adding the field does not discard prior fetch scopes.
+resolution use this rule.
 
 The marker records the supplied fingerprint for additions/updates, and the last
 known fingerprint and source references for a removal. The fingerprint does not

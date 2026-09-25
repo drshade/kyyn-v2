@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors) where
+module Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure) where
 
 import Control.Monad (unless, forM)
 import Data.Aeson (eitherDecodeStrict, withArray, withObject, (.:))
@@ -6,13 +6,24 @@ import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
 import Data.Foldable (toList)
-import Data.List (nub, sort)
+import Data.List (nub, sort, isInfixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Plugin (ConnectorDeclaration(..), CapturedMethodDeclaration(..), connectorTypeName, qualifiedTypeName, methodName)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Types.Plugin (SourceConnector(SourceConnector), CapturedMethod(CapturedMethod))
+
+registrationFailure :: Bytes.ByteString -> String
+registrationFailure bytes = "Could not evaluate connector registration.\n" ++ message ++ hint
+  where
+    message = case Text.decodeUtf8' bytes of
+      Left _ -> "Guest returned non-UTF-8 diagnostics.\n"
+      Right value -> unlines (takeWhile (\line -> line /= "CallStack (from HasCallStack):" &&
+        line /= "HasCallStack backtrace:") (lines (Text.unpack value)))
+    hint | "Missing field" `isInfixOf` message || "fetchOptionsType" `isInfixOf` message =
+             "Initialize every SourceConnector field, including fetchOptionsType = Nothing for connectors without fetch options."
+         | otherwise = "Check the plugin's connectors declaration."
 
 registrationSources :: String -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
 registrationSources entryModule sources = do

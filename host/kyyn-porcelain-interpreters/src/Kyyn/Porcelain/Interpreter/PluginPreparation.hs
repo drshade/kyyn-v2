@@ -27,7 +27,7 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIden
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSchema(..), inspectType)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
-import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors)
+import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure)
 import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Porcelain.Capability.PluginPreparation
@@ -70,8 +70,7 @@ prepare sdk code = do
     (encoded,registrationExit) <- ExceptT (Right <$> executeCompiled registrationEntry Bytes.empty)
     case registrationExit of
       ProcessExit 0 _ -> pure ()
-      ProcessExit _ _ -> bad label
-        "Could not evaluate connector registration. Check that every SourceConnector field is initialized, including fetchOptionsType = Nothing for connectors without fetch options."
+      ProcessExit _ stderr -> bad label (registrationFailure stderr)
     declarations <- checked label (decodeConnectors encoded)
     let sources = authored ++ files sdk
     sourceTree <- checked label (fileTree sources)
