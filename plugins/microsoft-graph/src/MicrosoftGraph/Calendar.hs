@@ -10,7 +10,7 @@ import MicrosoftGraph.Timestamp (timestamp)
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
-import Text.JSON.Types (JSValue)
+import Text.JSON.Types (JSValue(..), fromJSObject)
 
 fetch :: CalendarConfig -> Maybe CalendarFetch -> EvidenceSnapshot Event -> Acquisition (Either FetchError [EvidenceChange Event])
 fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
@@ -64,19 +64,25 @@ within (Just (lower,upper)) (Event _ _ _ _ _ _ _ _ _ _ _ modified _) = do
 eventValue :: JSValue -> Either String (String,String,Event)
 eventValue value = do
   key <- fieldText "id"
-  version <- fieldText "changeKey"
-  if null key || null version then Left "Graph event has no ID or changeKey" else pure ()
-  event <- Event <$> fieldText "subject" <*> fieldText "bodyPreview"
-    <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
-    <*> (Json.member "organizer" value >>= person)
-    <*> (Json.member "attendees" value >>= Json.array >>= mapM person)
-    <*> (Json.member "location" value >>= Json.member "displayName" >>= Json.text)
-    <*> (Json.member "isAllDay" value >>= Json.boolean) <*> (Json.member "isCancelled" value >>= Json.boolean)
-    <*> fieldText "type" <*> fieldText "iCalUId" <*> fieldText "lastModifiedDateTime" <*> fieldText "webLink"
-  pure (key,version,event)
+  either (Left . (("Graph event " ++ key ++ ": ") ++)) Right (decodeEvent key)
   where
+    decodeEvent key = do
+      version <- fieldText "changeKey"
+      if null key || null version then Left "Graph event has no ID or changeKey" else pure ()
+      event <- Event <$> descriptive ["subject"] value <*> descriptive ["bodyPreview"] value
+        <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
+        <*> (Json.member "organizer" value >>= person)
+        <*> (Json.member "attendees" value >>= Json.array >>= mapM person)
+        <*> descriptive ["location","displayName"] value
+        <*> (Json.member "isAllDay" value >>= Json.boolean) <*> (Json.member "isCancelled" value >>= Json.boolean)
+        <*> fieldText "type" <*> descriptive ["iCalUId"] value <*> fieldText "lastModifiedDateTime" <*> descriptive ["webLink"] value
+      pure (key,version,event)
     fieldText key = Json.member key value >>= Json.text
     eventTime item = EventTime <$> (Json.member "dateTime" item >>= Json.text) <*> (Json.member "timeZone" item >>= Json.text)
-    person item = do
-      email <- Json.member "emailAddress" item
-      Person <$> (Json.member "name" email >>= Json.text) <*> (Json.member "address" email >>= Json.text)
+    person item = Person <$> descriptive ["emailAddress","name"] item <*> descriptive ["emailAddress","address"] item
+
+descriptive :: [String] -> JSValue -> Either String String
+descriptive _ JSNull = Right ""
+descriptive [] value = Json.text value
+descriptive (key:rest) (JSObject fields) = descriptive rest (maybe JSNull id (lookup key (fromJSObject fields)))
+descriptive _ _ = Left "Expected descriptive response object"

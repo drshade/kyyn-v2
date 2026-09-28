@@ -70,6 +70,8 @@ token and persists any replacement refresh token. It never starts an interactive
 login. `sharedCalendar = True` requests `Calendars.Read.Shared` instead; the signed-in
 user must also have access to the configured mailbox/calendar. Changing delegated
 scope requires running login again.
+`sharedCalendar` only affects delegated DeviceCode authentication; ClientSecret
+uses the application's consented permissions.
 
 For **ClientSecret**, grant and consent the app's application `Calendars.Read`
 permission and replace `auth` with:

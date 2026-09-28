@@ -4,6 +4,7 @@ module Main (main) where
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), FromJSON, object, (.=), (.:), encode, toJSON)
 import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types (parseEither, withObject)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text.Encoding as Text
@@ -79,6 +80,22 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
     let optionsValue = some (object ["modifiedFrom" .= some (String "2026-09-01T02:00:00+02:00"),"modifiedTo" .= none])
     (filtered,_,_) <- brokerWith Normal respond program (input False optionsValue)
     assert "filtered fetch lost full-list removals or missed inclusive offset" (tags filtered == Right ["Updated","Removed"])
+    (nullableResponder,_) <- provider False
+    let nullable capability method args = if capability == "http" then do
+          url <- get "url" args
+          if "graph.microsoft.com" `isInfixOf` url then pure (http 200 [] (object ["value" .= [nullableEvent]]))
+            else nullableResponder capability method args
+          else nullableResponder capability method args
+    (nullableResult,_,_) <- brokerWith Normal nullable program (input False none)
+    assert ("nullable descriptive event fields failed fetch: " ++ show nullableResult) (case tags nullableResult of Right ("Updated":_) -> True; _ -> False)
+    (strictResponder,_) <- provider False
+    let invalidEvent capability method args = if capability == "http" then do
+          url <- get "url" args
+          if "graph.microsoft.com" `isInfixOf` url then pure (http 200 [] (object ["value" .= [setField "changeKey" Null nullableEvent]]))
+            else strictResponder capability method args
+          else strictResponder capability method args
+    (invalidEventResult,_,_) <- brokerWith Normal invalidEvent program (input False none)
+    assert "invalid identity lost event context" (case resultError invalidEventResult of Right message -> "Graph event nullable:" `isInfixOf` message; _ -> False)
     (failedResponder,_) <- provider True
     (failed,_,_) <- brokerWith Normal failedResponder program (input False none)
     assert "partial page produced delta" (case failed >>= either (const Nothing) Just . parseEither (withObject "result" (.: "tag")) of Just ("Left" :: String) -> True; _ -> False)
@@ -174,6 +191,15 @@ eventTime :: Value
 eventTime = object ["dateTime" .= ("2026-09-01T10:00:00" :: String),"timeZone" .= ("UTC" :: String)]
 person :: Value
 person = object ["name" .= ("Person" :: String),"address" .= ("person@example.test" :: String)]
+setField :: Key.Key -> Value -> Value -> Value
+setField key value (Object fields) = Object (KeyMap.insert key value fields)
+setField _ _ value = value
+
+nullableEvent :: Value
+nullableEvent = foldr (uncurry setField) (event "nullable" "key" "2026-09-01T00:00:00Z")
+  [("subject",Null),("bodyPreview",Null),("location",Null),("webLink",Null),("iCalUId",Null),
+   ("organizer",object ["emailAddress" .= object []]),("attendees",toJSON [object ["emailAddress" .= Null]])]
+
 event :: String -> String -> String -> Value
 event key version modified = object ["id" .= key,"changeKey" .= version,"subject" .= ("Subject" :: String),"bodyPreview" .= ("Preview" :: String),
   "start" .= eventTime,"end" .= eventTime,"organizer" .= object ["emailAddress" .= person],"attendees" .= [object ["emailAddress" .= person]],
