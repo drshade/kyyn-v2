@@ -263,7 +263,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
     (result,trace,status) <- brokerWith Normal respondTo program (object [])
     assert "network guest result" (result == Just (success (String "complete")) && status == ExitSuccess)
     assert "network guest order" (trace == [("secrets","get"),("login","display"),("waiting","seconds"),
-      ("secrets","put"),("secrets","get"),("http","send")])
+      ("secrets","put"),("secrets","get")] ++ replicate 4 ("http","send"))
     messages <- readIORef displays
     assert "explicit instructions" (messages == ["Open the fixture URL; code 雪"])
     forM_ [WrongId,WrongPayload] $ \scenario -> do
@@ -285,7 +285,10 @@ recordHttp :: Eff (Http.HttpTransport : es) a -> Eff es a
 recordHttp = interpret $ \_ (Http.SendHttp request) ->
   if request == Http.HttpRequest "POST" "https://fixture.test/token" [("Authorization","rotated 雪")] "body 雪"
   then pure (Right (Http.HttpResponse 429 [("Retry-After","2")] "response 雪"))
-  else error "Unexpected HTTP request"
+  else case [problem | problem <- [Http.HttpTimedOut,Http.HttpConnectionFailed,Http.HttpUnavailable],
+        request == Http.HttpRequest "GET" ("https://fixture.test/" ++ show problem) [] ""] of
+    [problem] -> pure (Left problem)
+    _ -> error "Unexpected HTTP request"
 
 recordSecrets :: IOE :> es => IORef (Maybe Text.Text) -> Eff (Secrets.SecretStore : es) a -> Eff es a
 recordSecrets saved = interpret $ \_ call -> case call of

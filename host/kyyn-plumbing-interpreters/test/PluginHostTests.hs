@@ -3,9 +3,10 @@ module Main (main) where
 
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, cancel, waitCatch, withAsync, wait)
-import Control.Exception (AsyncException(UserInterrupt), bracket, throwIO, try)
+import Control.Exception (AsyncException(UserInterrupt), bracket, throwIO, try, toException)
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.ByteString.Char8 as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runEff)
@@ -43,8 +44,12 @@ main = do
     assert "status treated as data" (response == Right (HttpResponse status [] "body"))
   invalidText <- runEff . runHttpTransportWith (\_ -> pure (200,[],Lazy.pack [255])) $ sendHttp request
   assert "invalid UTF-8" (invalidText == Left InvalidHttpResponse)
-  unavailable <- runEff . runHttpTransportWith (\native -> throwIO (Http.HttpExceptionRequest native Http.ConnectionTimeout)) $ sendHttp request
-  assert "transport exception sanitized" (unavailable == Left HttpUnavailable)
+  forM_ [(Http.ConnectionTimeout,HttpTimedOut),(Http.ResponseTimeout,HttpTimedOut),
+    (Http.ConnectionFailure (toException (userError "private socket details")),HttpConnectionFailed),
+    (Http.ConnectionClosed,HttpConnectionFailed),
+    (Http.InternalException (toException (userError "private TLS details")),HttpUnavailable)] $ \(cause,expected) -> do
+    failed <- runEff . runHttpTransportWith (\native -> throwIO (Http.HttpExceptionRequest native cause)) $ sendHttp request
+    assert "transport category and redaction" (failed == Left expected)
   interrupted <- try @AsyncException (runEff . runHttpTransportWith (\_ -> throwIO UserInterrupt) $ sendHttp request)
   assert "HTTP cancellation propagated" (case interrupted of Left UserInterrupt -> True; _ -> False)
   zero <- timeout 100000 (runEff . runWaitingIO $ waitSeconds 0)
@@ -67,7 +72,13 @@ localExchange = do
     address <- Socket.getSocketName listener
     port <- case address of Socket.SockAddrInet value _ -> pure (show value); _ -> fail "Expected IPv4"
     let server = bracket (fst <$> Socket.accept listener) Socket.close $ \connection -> do
-          _ <- Socket.recv connection 4096
+          let readHeaders accumulated = do
+                chunk <- Socket.recv connection 4096
+                assert "request ended before headers" (not (Bytes.null chunk))
+                let received = accumulated <> chunk
+                if "\r\n\r\n" `Bytes.isInfixOf` received then pure received else readHeaders received
+          received <- readHeaders Bytes.empty
+          assert "empty GET sent a Content-Length header" (not ("content-length:" `Bytes.isInfixOf` Bytes.map lowerAscii received))
           Socket.sendAll connection "HTTP/1.1 302 Found\r\nLocation: /must-not-follow\r\nRetry-After: 2\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody"
     withAsync server $ \worker -> do
       response <- runEff . runHttpTransportIO $ sendHttp (HttpRequest "GET" ("http://127.0.0.1:" ++ port ++ "/") [] "")
@@ -76,3 +87,7 @@ localExchange = do
         _ -> False)
       wait worker
   assert "native HTTP loopback timed out" (completed == Just ())
+
+lowerAscii :: Char -> Char
+lowerAscii c | c >= 'A' && c <= 'Z' = toEnum (fromEnum c + 32)
+             | otherwise = c

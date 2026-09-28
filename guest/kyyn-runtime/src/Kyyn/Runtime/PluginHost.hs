@@ -52,6 +52,8 @@ httpErrorCodec = Codec encode decode
       pair <- variant value
       case pair of
         ("InvalidHttpRequest",Nothing) -> Right InvalidHttpRequest
+        ("HttpTimedOut",Nothing) -> Right HttpTimedOut
+        ("HttpConnectionFailed",Nothing) -> Right HttpConnectionFailed
         ("HttpUnavailable",Nothing) -> Right HttpUnavailable
         ("InvalidHttpResponse",Nothing) -> Right InvalidHttpResponse
         _ -> Left "Unknown HTTP error"

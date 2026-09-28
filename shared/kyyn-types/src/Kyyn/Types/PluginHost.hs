@@ -15,7 +15,7 @@ data HttpResponse = HttpResponse
   deriving Eq
 
 -- | Transport failures contain no request or response values.
-data HttpError = InvalidHttpRequest | HttpUnavailable | InvalidHttpResponse
+data HttpError = InvalidHttpRequest | HttpTimedOut | HttpConnectionFailed | HttpUnavailable | InvalidHttpResponse
   deriving (Eq, Show)
 
 data Http a where

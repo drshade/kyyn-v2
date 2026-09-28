@@ -21,8 +21,11 @@ login = do
       case saved of
         Right token -> do
           response <- sendHttp (HttpRequest "POST" "https://fixture.test/token" [("Authorization",token)] "body 雪")
+          errors <- mapM (\problem -> sendHttp (HttpRequest "GET" ("https://fixture.test/" ++ show problem) [] ""))
+            [HttpTimedOut,HttpConnectionFailed,HttpUnavailable]
           pure $ case response of
-            Right (HttpResponse 429 [("Retry-After","2")] "response 雪") -> Right "complete"
+            Right (HttpResponse 429 [("Retry-After","2")] "response 雪")
+              | errors == map Left [HttpTimedOut,HttpConnectionFailed,HttpUnavailable] -> Right "complete"
             _ -> Left (FetchError "Unexpected HTTP response")
         _ -> pure (Left (FetchError "Secret write was not visible"))
     _ -> pure (Left (FetchError "Expected a missing secret"))

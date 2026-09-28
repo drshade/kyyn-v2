@@ -42,10 +42,20 @@ runHttpTransportWith transport = interpret $ \_ (SendHttp (HttpRequest method ur
             , Http.redirectCount = 0, Http.checkResponse = \_ _ -> pure () }
       response <- liftIO (try @Http.HttpException (transport request))
       pure $ case response of
-        Left _ -> Left HttpUnavailable
+        Left exception -> Left (transportError exception)
         Right (status,fields,bytes) -> case Text.decodeUtf8' (Lazy.toStrict bytes) of
           Left _ -> Left InvalidHttpResponse
           Right text -> Right (HttpResponse status fields (Text.unpack text))
+
+transportError :: Http.HttpException -> HttpError
+transportError (Http.InvalidUrlException _ _) = InvalidHttpRequest
+transportError (Http.HttpExceptionRequest _ cause) = case cause of
+  Http.ConnectionTimeout -> HttpTimedOut
+  Http.ResponseTimeout -> HttpTimedOut
+  Http.ConnectionFailure _ -> HttpConnectionFailed
+  Http.ConnectionClosed -> HttpConnectionFailed
+  Http.InvalidRequestHeader _ -> InvalidHttpRequest
+  _ -> HttpUnavailable
 
 validToken :: String -> Bool
 validToken value = not (null value) && all (\c ->
