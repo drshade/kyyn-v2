@@ -1,7 +1,9 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, privateConversation, answerEvidence, protocolFailure) where
+module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, answerEvidence, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
@@ -61,17 +63,6 @@ conversation :: (GuestExecution :> es, Failure :> es)
   => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
   -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
 conversation decode program arguments respond = do
-  conversationWith False decode program arguments respond
-
-privateConversation :: (GuestExecution :> es, Failure :> es)
-  => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
-  -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
-privateConversation decode = conversationWith True (either (const (Left "Invalid network plugin frame")) Right . decode)
-
-conversationWith :: (GuestExecution :> es, Failure :> es)
-  => Bool -> (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
-  -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
-conversationWith private decode program arguments respond = do
   (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program arguments $ \bytes -> do
     frame <- either protocolFailure pure (decode bytes)
     case frame of
@@ -82,7 +73,7 @@ conversationWith private decode program arguments respond = do
         pure (Just (encodeResponse identity value))
       Completed _ -> pure Nothing
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
-    ("Plugin exited " ++ show status ++ if private then "" else ": " ++ show stderr))) else do
+    ("Plugin exited " ++ show status ++ ": " ++ diagnostics stderr))) else do
     frame <- either protocolFailure pure (decode output)
     case frame of
       Completed value -> case parseResult value of
@@ -90,6 +81,12 @@ conversationWith private decode program arguments respond = do
         Right (Left message) -> pure (Left (FetchError message))
         Right (Right result) -> pure (Right result)
       _ -> protocolFailure "Guest did not complete"
+
+diagnostics :: ByteString -> String
+diagnostics bytes = case Text.decodeUtf8' bytes of
+  Left _ -> "Non-UTF-8 guest diagnostics"
+  Right message -> unlines (takeWhile (\line -> line /= "CallStack (from HasCallStack):" &&
+    line /= "HasCallStack backtrace:") (lines (Text.unpack message)))
 
 protocolFailure :: Failure :> es => String -> Eff es a
 protocolFailure message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput message))
