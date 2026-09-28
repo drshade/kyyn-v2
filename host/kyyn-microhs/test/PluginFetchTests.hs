@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, GADTs #-}
-module Main (main) where
+module PluginFetchTests (main, compileBoth, brokerWith, Scenario(..)) where
 
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value(..), eitherDecodeStrict, encode, object, (.=), (.:), toJSON)
@@ -32,7 +32,7 @@ import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import System.Directory (createDirectoryIfMissing, findExecutable)
 import System.Environment (getEnv, getArgs)
 import System.Exit (ExitCode(..))
-import System.FilePath ((</>), takeDirectory)
+import System.FilePath ((</>), takeDirectory, dropExtension)
 import System.Info (compilerVersion)
 import System.IO (hGetLine, hPutStrLn, hFlush, hClose, hIsEOF, hGetContents)
 import System.IO.Temp (withSystemTempDirectory)
@@ -136,7 +136,7 @@ compileBoth temporary toolchain ghc label sources = do
       executable = directory </> "native"
   writeSources directory (sourceFiles sources)
   (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fforce-recomp","-i" ++ directory,
-    "-outputdir",directory </> "objects","-main-is","KyynPluginEntry.main",
+    "-outputdir",directory </> "objects","-main-is",dropExtension (relativeName (selectedEntry sources)) ++ ".main",
     directory </> relativeName (selectedEntry sources),"-o",executable] ""
   assert ("GHC rejected generated plugin: " ++ out ++ err) (status == ExitSuccess)
   artifact <- compileMicroHs temporary toolchain sources >>= right

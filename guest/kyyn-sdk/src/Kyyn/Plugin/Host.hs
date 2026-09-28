@@ -1,14 +1,15 @@
 {-# LANGUAGE TypeOperators, DuplicateRecordFields #-}
 module Kyyn.Plugin.Host
-  ( NetworkAcquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
+  ( NetworkHost, NetworkAcquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
   , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions ) where
 
 import Kyyn.Types.Program
 import Kyyn.Types.Plugin (EvidenceRead)
 import Kyyn.Types.PluginHost
 
-type NetworkAcquisition payload = Program (Http :+: (Secrets :+: (Waiting :+: EvidenceRead payload)))
-type PluginLogin = Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction)))
+type NetworkHost rest = Program (Http :+: (Secrets :+: (Waiting :+: rest)))
+type NetworkAcquisition payload = NetworkHost (EvidenceRead payload)
+type PluginLogin = NetworkHost LoginInteraction
 
 -- | Send a text request; the caller handles HTTP status codes and retry policy.
 sendHttp :: HttpRequest -> Program (Http :+: rest) (Either HttpError HttpResponse)

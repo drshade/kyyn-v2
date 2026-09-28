@@ -10,7 +10,9 @@ Basis: latest-only evidence, recipe-scoped acknowledgements and first-class type
 recipe evolution data are implemented. Recipes persist separately from the root
 manifest and use the ordinary evolution editing and review surfaces.
 Typed fetch options are implemented through discovery, acquisition and history.
-The Microsoft Graph calendar section remains an unimplemented provider design.
+The Microsoft Graph calendar connector implements the full-listing/changeKey model
+below. Authentication, pagination and scoped comparison have deterministic
+GHC/MicroHs proofs; live provider behavior remains an opt-in verification.
 
 ## Context
 
