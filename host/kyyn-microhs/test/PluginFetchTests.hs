@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, GADTs #-}
 module Main (main) where
 
 import Control.Monad (forM_, unless)
@@ -9,7 +9,15 @@ import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Version (showVersion)
-import Effectful (runEff)
+import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
+import Effectful (runEff, Eff, IOE, (:>), liftIO)
+import Effectful.Dispatch.Dynamic (interpret)
+import qualified Kyyn.Domain.Secret as Secret
+import qualified Kyyn.Plumbing.Capability.SecretStore as Secrets
+import qualified Kyyn.Plumbing.Capability.HttpTransport as Http
+import qualified Kyyn.Plumbing.Capability.PluginInteraction as Interaction
+import qualified Kyyn.Plumbing.Protocol.PluginHost as Host
+import qualified Kyyn.Porcelain.Protocol.PluginHost as Host
 import Kyyn.Domain.DataType (DataType(..))
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Path
@@ -22,7 +30,7 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import System.Directory (createDirectoryIfMissing, findExecutable)
-import System.Environment (getEnv)
+import System.Environment (getEnv, getArgs)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>), takeDirectory)
 import System.Info (compilerVersion)
@@ -39,7 +47,12 @@ right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
 
 main :: IO ()
-main = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
+main = do
+  args <- getArgs
+  if args == ["--network-only"] then networkTests else folderTests >> networkTests
+
+folderTests :: IO ()
+folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
   nativeCompiler <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe
@@ -144,14 +157,17 @@ rejectBoth temporary toolchain ghc sources = do
   writeSources directory (sourceFiles sources)
   (status,_,_) <- readProcessWithExitCode ghc ["-v0","-fno-code","-i" ++ directory,
     "-outputdir",directory </> "objects",directory </> relativeName (selectedEntry sources)] ""
-  assert "GHC granted filesystem calls to captured reads" (status /= ExitSuccess)
+  assert "GHC granted a capability outside the declared row" (status /= ExitSuccess)
   rejected <- compileMicroHs temporary toolchain sources
-  assert "MicroHs granted filesystem calls to captured reads" (case rejected of Left _ -> True; Right _ -> False)
+  assert "MicroHs granted a capability outside the declared row" (case rejected of Left _ -> True; Right _ -> False)
 
 data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload deriving (Eq)
 
 broker :: Scenario -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
-broker scenario program input = do
+broker scenario = brokerWith scenario (respond scenario)
+
+brokerWith :: Scenario -> (String -> String -> Value -> IO Value) -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
+brokerWith scenario respondTo program input = do
   result <- timeout 20000000 $ withCreateProcess program {std_in = CreatePipe,std_out = CreatePipe,std_err = CreatePipe} $ \stdin stdout stderr process ->
     case (stdin,stdout,stderr) of
       (Just toGuest,Just fromGuest,Just errors) -> do
@@ -170,7 +186,7 @@ broker scenario program input = do
                     (identity,capability,method,args) <- right (parseEither (withObject "request" $ \fields ->
                       (,,,) <$> fields .: "id" <*> fields .: "capability" <*> fields .: "method" <*> fields .: "arguments") message)
                     assert "request IDs are not sequential" (identity == show (length trace + 1))
-                    answer <- respond scenario capability method args
+                    answer <- respondTo capability method args
                     emit (object ["tag" .= ("HostResponse" :: String),"id" .=
                       (if scenario == WrongId then "wrong" else identity),"result" .=
                       (if scenario == WrongPayload then success (Bool True) else answer)])
@@ -222,3 +238,66 @@ evidence key contents = object ["fingerprint" .= ("recorded-" <> contents),
   "references" .= ["/folder/" ++ key],"payload" .= object ["text" .= contents]]
 change :: String -> String -> Text.Text -> Value
 change kind key contents = object ["tag" .= kind,"value" .= object ["id" .= key,"evidence" .= evidence key contents]]
+
+networkTests :: IO ()
+networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
+  repo <- getEnv "KYYN_TEST_ROOT"
+  toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
+  compiler <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe (fail "Matching GHC required") pure
+  let path = either error id . relativePath
+      load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
+  common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
+      name <- ["Evidence","Program","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-sdk/src" "Kyyn/Plugin/Host.hs"] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","PluginHost"]] ++
+    [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
+  fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin/Network.hs")
+  sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
+  (programs,_) <- compileBoth temporary toolchain compiler "network" sources
+  forM_ programs $ \program -> do
+    secret <- newIORef Nothing
+    displays <- newIORef []
+    let respondTo capability method arguments = do
+          call <- right (parseEither (Host.decodePluginHostCall capability method) arguments)
+          runEff (runFailure (recordHttp (recordSecrets secret (recordWait (recordLogin displays (Host.answerLogin call)))))) >>= right
+    (result,trace,status) <- brokerWith Normal respondTo program (object [])
+    assert "network guest result" (result == Just (success (String "complete")) && status == ExitSuccess)
+    assert "network guest order" (trace == [("secrets","get"),("login","display"),("waiting","seconds"),
+      ("secrets","put"),("secrets","get"),("http","send")])
+    messages <- readIORef displays
+    assert "explicit instructions" (messages == ["Open the fixture URL; code 雪"])
+    forM_ [WrongId,WrongPayload] $ \scenario -> do
+      (invalid,_,exit) <- brokerWith scenario respondTo program (object [])
+      assert "bad network reply resumed" (invalid == Nothing && exit /= ExitSuccess)
+    denied <- runEff (runFailure (recordHttp (recordSecrets secret (recordWait
+      (Host.answerNetwork (Host.DisplayInstructions "must not display"))))))
+    assert "acquisition permitted interaction" (case denied of Left _ -> True; _ -> False)
+  forM_ ["-1","01","1.0","99999999999999999999999999"] $ \seconds ->
+    assert "invalid wait accepted" (case parseEither (Host.decodePluginHostCall "waiting" "seconds")
+      (object ["seconds" .= (seconds :: String)]) of Left _ -> True; Right _ -> False)
+  let forbidden = Text.encodeUtf8 (Text.unlines ["module KyynPluginEntry where","import Kyyn.Plugin.Host",
+        "main :: IO ()","main = pure ()","bad :: NetworkAcquisition String ()","bad = displayInstructions \"no\""])
+  rejectBoth temporary toolchain compiler =<< right
+    (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",forbidden):common))
+  putStrLn "Network requests, secret rotation and explicit login passed under GHC and MicroHs."
+
+recordHttp :: Eff (Http.HttpTransport : es) a -> Eff es a
+recordHttp = interpret $ \_ (Http.SendHttp request) ->
+  if request == Http.HttpRequest "POST" "https://fixture.test/token" [("Authorization","rotated 雪")] "body 雪"
+  then pure (Right (Http.HttpResponse 429 [("Retry-After","2")] "response 雪"))
+  else error "Unexpected HTTP request"
+
+recordSecrets :: IOE :> es => IORef (Maybe Text.Text) -> Eff (Secrets.SecretStore : es) a -> Eff es a
+recordSecrets saved = interpret $ \_ call -> case call of
+  Secrets.ReadSecret name -> do
+    value <- liftIO (readIORef saved)
+    pure (if Secret.secretNameText name == "refresh" then maybe (Left (Secret.SecretNotFound name)) Right value
+      else Left (Secret.SecretNotFound name))
+  Secrets.WriteSecret _ value -> liftIO (writeIORef saved (Just value))
+  _ -> error "Unexpected secret operation"
+
+recordWait :: Eff (Interaction.Waiting : es) a -> Eff es a
+recordWait = interpret $ \_ (Interaction.WaitSeconds n) -> if n == 0 then pure () else error "Unexpected wait"
+
+recordLogin :: IOE :> es => IORef [String] -> Eff (Interaction.LoginInteraction : es) a -> Eff es a
+recordLogin messages = interpret $ \_ (Interaction.DisplayInstructions value) -> liftIO (modifyIORef' messages (++ [value]))

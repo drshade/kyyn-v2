@@ -19,6 +19,16 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test plugin-host --test-show-details=direct` checks the native text HTTP
+handler with recording and loopback transports, sanitized failures, rejected
+method/header injection, UTF-8, redirect refusal and cancellable waits.
+`cabal test plugin-fetch --test-options=--network-only --test-show-details=direct`,
+with the guest toolchain selected below, checks HTTP, secret read/write, waiting
+and explicit login instructions across real GHC and MicroHs pipes. It also rejects
+malformed replies and login interaction in the acquisition row. These are transport
+proofs, not connector registration, CLI login or live Graph authentication tests.
+The default `plugin-fetch` suite includes this proof alongside file acquisition.
+
 `cabal test inspection-cache roots --test-show-details=direct` checks persistent
 Dhall inspection results, source/selection/settings/build invalidation, refusal
 and storage behavior, and the shared type codec's existing contract round trips.

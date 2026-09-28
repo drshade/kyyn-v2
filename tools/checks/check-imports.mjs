@@ -54,7 +54,7 @@ const allowed = {
     'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
   'kyyn-types': ['Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Evolution.KnowledgeBase', 'Kyyn.Types.Curation', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
-    'Kyyn.Types.Plugin', 'Kyyn.Types.Program', 'Kyyn.Types.Judgement', 'Kyyn.Judgement.Internal',
+    'Kyyn.Types.Plugin', 'Kyyn.Types.PluginHost', 'Kyyn.Types.Program', 'Kyyn.Types.Judgement', 'Kyyn.Judgement.Internal',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
@@ -141,6 +141,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.HttpTransport': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Types.PluginHost'],
+  'Kyyn.Plumbing.Capability.PluginInteraction': ['Effectful', 'Effectful.Dispatch.Dynamic'],
+  'Kyyn.Plumbing.Protocol.PluginHost': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.Secret', 'Kyyn.Types.PluginHost'],
   'Kyyn.Plumbing.Capability.Judgement': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Types.Judgement'],
   'Kyyn.Plumbing.Capability.Judgement.Jev': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Types.Judgement'],
   'Kyyn.Plumbing.Protocol.Judgement': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Types.Judgement'],
@@ -225,6 +228,10 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Runtime.PluginHost': ['Kyyn.Runtime.Json', 'Kyyn.Runtime.Plugin', 'Kyyn.Types.PluginHost'],
+  'Kyyn.Porcelain.Protocol.PluginHost': ['Data.Aeson', 'Data.Text', 'Effectful', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.HttpTransport', 'Kyyn.Plumbing.Capability.SecretStore', 'Kyyn.Plumbing.Capability.PluginInteraction', 'Kyyn.Plumbing.Protocol.PluginHost', 'Kyyn.Porcelain.Protocol.PluginBroker'],
+  'Kyyn.Plumbing.Interpreter.HttpTransport': ['Control.Exception', 'Data.Char', 'Data.ByteString.Char8', 'Data.ByteString.Lazy', 'Data.CaseInsensitive', 'Data.String', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Plumbing.Capability.HttpTransport', 'Network.HTTP.Client', 'Network.HTTP.Client.TLS', 'Network.HTTP.Types.Status'],
+  'Kyyn.Plumbing.Interpreter.PluginInteraction': ['Control.Concurrent', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Plumbing.Capability.PluginInteraction', 'System.IO'],
   'Kyyn.Runtime.Judgement': ['Kyyn.Runtime.Json', 'Kyyn.Runtime.Plugin', 'Kyyn.Types.Judgement', 'Text.JSON.Types'],
   'Kyyn.Plumbing.Interpreter.Judgement': ['Control.Exception', 'Data.Aeson', 'Data.ByteString.Lazy', 'Data.Text.Encoding',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.Judgement',
