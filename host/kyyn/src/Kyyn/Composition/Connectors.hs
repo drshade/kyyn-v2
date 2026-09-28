@@ -19,6 +19,10 @@ import Kyyn.Plumbing.Capability.DhallHandling (renderType, decodeValue, encodeVa
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
+import Kyyn.Plumbing.Interpreter.HttpTransport (runHttpTransportIO)
+import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
+import Kyyn.Plumbing.Interpreter.PluginInteraction (runWaitingIO, runLoginInteractionIO)
+import Kyyn.Porcelain.Interpreter.PluginLogin (runPluginLogin)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, PreparedMethod(..))
 import Kyyn.Porcelain.Capability.PluginRead (callCapturedMethod)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
@@ -44,6 +48,14 @@ runDiscovery host toolchain sdk = runRuntime host toolchain . runRootOpening sdk
 
 dispatchConnectors :: Host -> Cli.ConnectorCommand -> SelectedKb -> IO Response
 dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
+  Cli.LoginConnector plugin name -> case knowledgeBaseScope kb of
+    Left message -> pure (refusal [errorDiagnostic "kb.path" message])
+    Right scope -> respond $ runRuntime host toolchain . runHttpTransportIO . runSecretStoreIO scope
+      . runWaitingIO . runLoginInteractionIO . runRootOpening sdk . runWorkspaceStore
+      . runEvolutionStore . runPluginPreparation sdk . runPluginLogin $ runExceptT $ do
+        ValidationReport warnings <- ExceptT (loginConfiguredConnector kb revision plugin name)
+        let Response outcome result humanLines diagnostics = loginResult plugin name
+        pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListConnectors plugin workspace -> respond $ runDiscovery host toolchain sdk $
     fmap (fmap (connectorListResult plugin)) (listConfiguredConnectors kb revision workspace plugin)
   Cli.ShowConnector plugin name workspace -> respond $ runDiscovery host toolchain sdk $ runExceptT $ do
@@ -83,6 +95,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
   Cli.FetchConnector plugin name options -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
+      . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
       . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options)
         let Response outcome result humanLines diagnostics = fetchResult snapshot

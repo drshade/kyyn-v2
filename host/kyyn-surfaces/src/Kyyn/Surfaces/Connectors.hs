@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult,
-  evidenceListResult, connectorResult, methodListResult, methodResult, methodOutputResult) where
+  evidenceListResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -24,6 +24,10 @@ connectorResult :: PluginName -> ConnectorName -> Maybe Text.Text -> Response
 connectorResult plugin name options = success
   (object ["plugin" .= pluginNameText plugin,"instance" .= text name,"fetchOptionsType" .= options])
   [pluginNameText plugin ++ "/" ++ text name, maybe "Fetch options: none" (("Fetch options:\n" ++) . Text.unpack) options]
+
+loginResult :: PluginName -> ConnectorName -> Response
+loginResult plugin name = success (object ["plugin" .= pluginNameText plugin,"instance" .= text name])
+  ["Logged in: " ++ pluginNameText plugin ++ "/" ++ text name]
 
 methodListResult :: [(MethodName,String)] -> Response
 methodListResult methods = success

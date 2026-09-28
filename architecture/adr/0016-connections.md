@@ -122,9 +122,9 @@ SDK constructors. An integration implemented in a host handler reads its credent
 there, without automatic credential injection or a kernel-owned authentication
 workflow.
 
-The Graph extension below introduces the guest secret read/write consumers and
-explicit login. It is a design proposal; the existing local store does not by
-itself implement these plugin flows.
+Network connectors can read and replace secrets through the guest request row;
+explicit connector login uses the same per-KB store. Provider-specific Graph
+authentication below still requires its integration implementation and tests.
 
 ### Configuration remains ordinary typed root data
 

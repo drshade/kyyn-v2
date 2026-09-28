@@ -1,11 +1,13 @@
 {-# LANGUAGE GADTs #-}
 module Kyyn.Types.Plugin
-  ( SourceConnector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
+  ( SourceConnector(..), AcquisitionContext(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
 
 import Kyyn.Types.Evidence (EvidenceId, Evidence, EvidenceFingerprint)
 
 -- | A configured instance of one connector type.
 newtype ConnectorInstance connector = ConnectorInstance String
+
+data AcquisitionContext = FileSource | NetworkSource deriving (Eq, Show)
 
 -- | Register a source connector in the plugin entry module's connectors value.
 data SourceConnector = SourceConnector
@@ -23,6 +25,10 @@ data SourceConnector = SourceConnector
     methods :: [CapturedMethod]
   , -- | Optional qualified type of per-fetch arguments. Nothing keeps the config/snapshot signature.
     fetchOptionsType :: Maybe String
+  , -- | Requests available to the fetch function.
+    acquisitionContext :: AcquisitionContext
+  , -- | Optional qualified Config -> PluginLogin (Either LoginError ()) function.
+    login :: Maybe String
   } deriving (Eq, Show)
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.

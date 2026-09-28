@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, protocolFailure) where
+module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, privateConversation, answerEvidence, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
@@ -61,6 +61,17 @@ conversation :: (GuestExecution :> es, Failure :> es)
   => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
   -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
 conversation decode program arguments respond = do
+  conversationWith False decode program arguments respond
+
+privateConversation :: (GuestExecution :> es, Failure :> es)
+  => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
+privateConversation decode = conversationWith True (either (const (Left "Invalid network plugin frame")) Right . decode)
+
+conversationWith :: (GuestExecution :> es, Failure :> es)
+  => Bool -> (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
+conversationWith private decode program arguments respond = do
   (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program arguments $ \bytes -> do
     frame <- either protocolFailure pure (decode bytes)
     case frame of
@@ -71,7 +82,7 @@ conversation decode program arguments respond = do
         pure (Just (encodeResponse identity value))
       Completed _ -> pure Nothing
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
-    ("Plugin exited " ++ show status ++ ": " ++ show stderr))) else do
+    ("Plugin exited " ++ show status ++ if private then "" else ": " ++ show stderr))) else do
     frame <- either protocolFailure pure (decode output)
     case frame of
       Completed value -> case parseResult value of

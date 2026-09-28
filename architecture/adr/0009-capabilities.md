@@ -11,10 +11,10 @@ captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch conne
 filesystem and snapshot reads to evidence publication. Source registration and
 configured instances, CLI acquisition and captured-read KB-tool composition are
 implemented. Judgement extends the tool row under ADR 0027.
-HTTP, plugin secret access, waits and explicit login requests pass a GHC/MicroHs
-transport proof with recording host handlers. Native HTTP and wait interpreters
-are implemented. Registration and CLI integration remain outstanding: these are
-not yet capabilities available to installed plugins.
+Installed network connectors receive HTTP, plugin secret access and cancellable
+waits. Explicit connector login additionally receives user instructions on stderr.
+Registration checks the selected context and login signature; compilation and
+discovery do not execute login. File and captured-read contexts remain separate.
 
 ## Context
 

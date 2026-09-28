@@ -285,8 +285,7 @@ Health is explicit and may fail; opening a KB must not probe every provider.
 Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
 Source registration is a plugin entry module's `connectors` value. Optional fetch
-options are implemented; acquisition-context selection and login remain proposed
-Graph extensions in the following sketch:
+options, acquisition-context selection and explicit login are implemented:
 
 ```haskell
 data AcquisitionContext = FileSource | NetworkSource

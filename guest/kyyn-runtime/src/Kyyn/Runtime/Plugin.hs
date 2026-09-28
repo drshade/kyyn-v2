@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeAcquisition, executeCapturedRead, execute, exchange, eitherCodec, withOptionsCodec) where
+module Kyyn.Runtime.Plugin (executeAcquisition, executeCapturedRead, execute, exchange, eitherCodec, withOptionsCodec, input, evidenceRequest, changeCodec) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))

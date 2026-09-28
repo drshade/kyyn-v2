@@ -1,6 +1,6 @@
 {-# LANGUAGE TypeOperators, DuplicateRecordFields #-}
 module Kyyn.Plugin.Host
-  ( NetworkAcquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..)
+  ( NetworkAcquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
   , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions ) where
 
 import Kyyn.Types.Program

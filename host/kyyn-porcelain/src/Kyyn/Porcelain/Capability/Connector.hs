@@ -1,12 +1,12 @@
 module Kyyn.Porcelain.Capability.Connector
-  ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector
+  ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector, loginConfiguredConnector
   , connectorCurrentEvidence, connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
   , connectorFetchOptions, listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
-import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), CheckResult(..), errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
 import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
 import Kyyn.Domain.DataType (Shape)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, FetchId, FetchSummary, EvidenceChangeSummary)
@@ -19,6 +19,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetch
 import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, currentEvidence, fetchHistory, evidenceChanges)
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.PluginPreparation
+import Kyyn.Porcelain.Capability.PluginLogin (PluginLogin, loginPlugin)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt)
 import Kyyn.Porcelain.Capability.Root (sourceCodeAt)
@@ -29,6 +30,21 @@ import Kyyn.Porcelain.Capability.Validation (checkPreparedRoot)
 clearConnectorEvidence :: Store.EvidenceStore :> es => PluginName -> ConnectorName -> Eff es Bool
 clearConnectorEvidence plugin name = Store.clearEvidence (ConnectorInstanceRef plugin (coerce name))
 
+loginConfiguredConnector :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, PluginLogin :> es)
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Eff es (Either [Diagnostic] ValidationReport)
+loginConfiguredConnector kb revision plugin name = runExceptT $ do
+  code <- sourceAt kb revision Nothing
+  plugins <- ExceptT (preparePlugins code)
+  (package,instanceValue@(ConfiguredConnector _ _ PreparedConnector {loginEntry = entry} config)) <-
+    checked (selectedInstance plugin name plugins)
+  selected <- maybe (throwE [errorDiagnostic "plugin.login-unsupported" "This connector does not provide a login operation."]) pure entry
+  report <- ExceptT (validatePlugins [PreparedPlugin package [instanceValue]])
+  case checkReport () report of
+    Rejected (ValidationReport diagnostics) -> throwE diagnostics
+    Passed _ _ -> pure ()
+  _ <- ExceptT (loginPlugin selected config)
+  pure report
+
 listConfiguredConnectors :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName
   -> Eff es (Either [Diagnostic] [(ConnectorName,BindingName,ConnectorTypeName)])
@@ -36,7 +52,7 @@ listConfiguredConnectors kb revision workspace plugin = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   PreparedPlugin _ instances <- checked (selectedPlugin plugin plugins)
-  pure [(name,binding,kind) | ConfiguredConnector name binding (PreparedConnector kind _ _ _ _ _ _) _ <- instances]
+  pure [(name,binding,kind) | ConfiguredConnector name binding (PreparedConnector {connectorType = kind}) _ <- instances]
 
 connectorConfigurationSchema :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> Eff es (Either [Diagnostic] Shape)
@@ -44,14 +60,14 @@ connectorConfigurationSchema kb revision workspace plugin = runExceptT $ do
   code <- sourceAt kb revision workspace
   packages <- ExceptT (preparePackages code)
   PreparedPackage _ _ connectors <- checked (selectedPackage plugin packages)
-  pure (instanceShape [(name,contractShape config) | PreparedConnector name config _ _ _ _ _ <- connectors])
+  pure (instanceShape [(name,contractShape config) | PreparedConnector {connectorType = name, configContract = config} <- connectors])
 
 listConnectorMethods :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> Eff es (Either [Diagnostic] [PreparedMethod])
 listConnectorMethods kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (_,ConfiguredConnector _ _ (PreparedConnector _ _ _ _ _ methods _) _) <- checked (selectedInstance plugin name plugins)
+  (_,ConfiguredConnector _ _ (PreparedConnector {methods = methods}) _) <- checked (selectedInstance plugin name plugins)
   pure methods
 
 connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
@@ -60,7 +76,7 @@ connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, Plu
 connectorFetchOptions kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (_,ConfiguredConnector _ _ (PreparedConnector _ _ _ _ _ _ options) _) <- checked (selectedInstance plugin name plugins)
+  (_,ConfiguredConnector _ _ (PreparedConnector {fetchOptionsContract = options}) _) <- checked (selectedInstance plugin name plugins)
   pure options
 
 selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
@@ -69,7 +85,7 @@ selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, Plu
 selectConnectorMethod kb revision workspace plugin name method = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ methods _) _) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, methods = methods}) _) <-
     checked (selectedInstance plugin name plugins)
   case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
     [selected] -> pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload,selected)
@@ -102,7 +118,7 @@ selectConnectorEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, P
 selectConnectorEvidence kb revision plugin name = runExceptT $ do
   code <- sourceAt kb revision Nothing
   plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload _ _ _ _) _) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload}) _) <-
     checked (selectedInstance plugin name plugins)
   pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload)
 
@@ -118,9 +134,9 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name su
   report <- case validation of
     Rejected (ValidationReport diagnostics) -> throwE diagnostics
     Passed _ diagnostics -> pure diagnostics
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector _ _ payload entry _ _ options) config) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options, acquisitionContext = context}) config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
-  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options supplied)
+  snapshot <- ExceptT (fetchEvidence context (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options supplied)
   pure (snapshot,report)
 
 sourceAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)

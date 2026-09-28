@@ -1,6 +1,6 @@
 module LocalFile.Plugin (description, connectors) where
 
-import Kyyn.Plugin (SourceConnector(..), CapturedMethod(..))
+import Kyyn.Plugin (SourceConnector(..), AcquisitionContext(..), CapturedMethod(..))
 
 description :: String
 description = "Local folder text evidence"
@@ -12,6 +12,8 @@ connectors = [SourceConnector
   , payloadType = "LocalFile.Types.Document"
   , fetch = "LocalFile.Folder.fetch"
   , fetchOptionsType = Nothing
+  , acquisitionContext = FileSource
+  , login = Nothing
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
       { methodName = "content"
