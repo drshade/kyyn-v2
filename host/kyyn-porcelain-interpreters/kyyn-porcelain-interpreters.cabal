@@ -16,6 +16,7 @@ library
     Kyyn.Porcelain.Protocol.CurationPersistence
     Kyyn.Porcelain.Protocol.RecipePersistence
     Kyyn.Porcelain.Protocol.PluginBroker
+    Kyyn.Porcelain.Protocol.PluginHost
     Kyyn.Porcelain.Interpreter.PluginPreparation
     Kyyn.Porcelain.Interpreter.PluginRead
     Kyyn.Porcelain.Interpreter.ToolPreparation
