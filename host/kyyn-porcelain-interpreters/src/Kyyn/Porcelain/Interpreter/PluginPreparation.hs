@@ -7,12 +7,13 @@ import Data.Aeson (encode)
 import Data.Coerce (coerce)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
-import Data.List (nub, stripPrefix, isPrefixOf)
+import Data.List (nub, stripPrefix, isPrefixOf, isInfixOf)
 import qualified Data.Text.Encoding as Text
 import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (rootType, contractShape, contractId)
+import Kyyn.Domain.Contract (rootType, contractShape, contractId, checkContract)
+import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path (relativePath, relativeName)
@@ -24,7 +25,7 @@ import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry, executeCompiled)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIdentity)
-import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSchema(..), inspectType)
+import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, inspectPluginFunction)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure)
@@ -74,27 +75,35 @@ prepare sdk code = do
     declarations <- checked label (decodeConnectors encoded)
     let sources = authored ++ files sdk
     sourceTree <- checked label (fileTree sources)
-    let inspect selected = do
-          InspectedSchema contract _ <- located label (inspectType sourceTree selected)
-          pure contract
-    connectors <- forM declarations $ \(ConnectorDeclaration connector configType payloadType fetch validate declaredMethods optionsType login) -> do
+    let contract structure = either throwE pure (checkContract structure (SchemaMetadata [] [] []))
+    connectors <- forM declarations $ \(ConnectorDeclaration connector fetch validate declaredMethods login) -> do
       let connectorLabel = label ++ "/" ++ coerce connector
-      config <- inspect configType
-      payload <- inspect payloadType
-      options <- traverse inspect optionsType
+      signature <- located connectorLabel (inspectPluginFunction sourceTree AcquisitionEntry fetch)
+      (configType,optionsType,payloadType) <- case signature of
+        FetchSignature c o p -> pure (c,o,p)
+        _ -> bad connectorLabel "Expected acquisition signature"
+      config <- contract configType
+      payload <- contract payloadType
+      options <- traverse contract optionsType
       acquisition <- checked connectorLabel (acquisitionSources (rootType config) (rootType payload) (rootType <$> options) fetch sources)
       fetchEntry <- located connectorLabel (compileGuest acquisition)
       validation <- checked connectorLabel (validationSources (rootType config) validate sources)
-      validationEntry <- located connectorLabel (compileGuest validation)
-      methods <- forM declaredMethods $ \(CapturedMethodDeclaration selectedName description inputType resultType implementation) -> do
-        input <- inspect inputType
-        output <- inspect resultType
+      validationEntry <- located (connectorLabel ++ " " ++ validate ++ " (expected Config -> ValidationReport)") (compileGuest validation)
+      methods <- forM declaredMethods $ \(CapturedMethodDeclaration selectedName description implementation) -> do
+        let methodLabel = connectorLabel ++ "/" ++ coerce selectedName
+        methodSignature <- located methodLabel (inspectPluginFunction sourceTree CapturedReadEntry implementation)
+        (inputType,resultType) <- case methodSignature of
+          ReadSignature i p r | p == payloadType -> pure (i,r)
+          ReadSignature{} -> bad methodLabel (implementation ++ ": captured reader Payload differs from fetch Payload")
+          _ -> bad methodLabel "Expected captured-read signature"
+        input <- contract inputType
+        output <- contract resultType
         adapter <- checked connectorLabel (capturedReadSources (rootType input) (rootType payload) (rootType output) implementation sources)
         methodEntry <- located (connectorLabel ++ "/" ++ coerce selectedName) (compileGuest adapter)
         pure (PreparedMethod selectedName description input output methodEntry)
       loginEntry <- traverse (\selected -> do
         adapter <- checked connectorLabel (loginSources (rootType config) selected sources)
-        located connectorLabel (compileGuest adapter)) login
+        located (connectorLabel ++ " " ++ selected ++ " (expected Config -> PluginLogin (Either LoginError ()))") (compileGuest adapter)) login
       pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry)
     pure (PreparedPackage (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors)
 
@@ -128,7 +137,11 @@ configure code packages = do
 located :: String -> Eff es (Either [Diagnostic] a) -> ExceptT [Diagnostic] (Eff es) a
 located label action = ExceptT (fmap (either (Left . map (locate label)) Right) action)
 locate :: String -> Diagnostic -> Diagnostic
-locate label (Diagnostic severity code message location) = Diagnostic severity code (label ++ ": " ++ message) location
+locate label (Diagnostic severity code message location) = Diagnostic severity selectedCode (label ++ ": " ++ message ++ hint) location
+  where
+    legacy = "KyynPluginBindings" `isInfixOf` message
+    selectedCode = if legacy then "plugin.preparation" else code
+    hint = if legacy then "\nImport Kyyn.Plugin / Kyyn.Plugin.Host instead; use Acquisition Payload and CapturedRead Payload signatures." else ""
 checked :: String -> Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked label = either (bad label) pure
 bad :: String -> String -> ExceptT [Diagnostic] (Eff es) a

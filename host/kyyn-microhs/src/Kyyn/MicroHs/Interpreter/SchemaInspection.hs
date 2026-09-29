@@ -15,12 +15,12 @@ import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
 import Kyyn.Domain.Path (scopePath, scopedPath, RelativePath)
 import Kyyn.Domain.FileTree (files)
-import Kyyn.Domain.Plugin (QualifiedTypeName(..))
+import Kyyn.Domain.Plugin (QualifiedTypeName(..), PluginEntryKind, PluginSignature)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectionSettings)
+import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectPluginSignature, inspectionSettings)
 import Kyyn.MicroHs.Interpreter.InspectionCache (InspectionCache, cachedInspection)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
-import Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection)
+import Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, withTemporaryScope, writeBytes)
@@ -45,6 +45,27 @@ runSchemaInspectionIO toolchain cache = interpret $ \_ -> \case
     inspected <- inspect toolchain cache (files source) (coerce selected)
     pure (inspected >>= \(structure,closure) ->
       (\contract -> InspectedSchema contract closure) <$> checkContract structure (SchemaMetadata [] [] []))
+  InspectPluginFunction source kind selected -> fmap (fmap fst) (inspectFunction toolchain cache (files source) kind selected)
+
+inspectFunction :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :> es)
+  => GuestToolchain -> Maybe InspectionCache -> [(RelativePath,Bytes.ByteString)] -> PluginEntryKind -> String
+  -> Eff es (Either [Diagnostic] (PluginSignature,[RelativePath]))
+inspectFunction (GuestToolchain compiler) cache sources kind selected =
+  cachedInspection cache "plugin-signature" (show kind ++ ":" ++ selected)
+    (show kind ++ inspectionSettings (scopePath compiler) selected) sources encodePluginSignature decode $
+  withTemporaryScope $ \scope -> do
+    forM_ sources $ \(path,bytes) -> writeBytes scope path bytes
+    inspected <- liftIO (inspectPluginSignature (scopePath compiler) [scopePath scope] kind selected)
+    case inspected of
+      Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
+      Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.compiler-rejected" (selected ++ ": " ++ message)])
+      Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "plugin.signature-invalid" message])
+      Right (signature,loaded) -> pure (Right (signature,[path | (path,_) <- sources, scopedPath scope path `elem` loaded]))
+  where
+    decode bytes = do
+      result <- decodePluginSignature bytes
+      pure (result >>= \value@(_,closure) -> if all (`elem` map fst sources) closure
+        then Right value else Left [errorDiagnostic "inspection.cache-invalid" "Closure is outside captured sources"])
 
 inspect :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :> es)
   => GuestToolchain -> Maybe InspectionCache -> [(RelativePath,Bytes.ByteString)] -> String

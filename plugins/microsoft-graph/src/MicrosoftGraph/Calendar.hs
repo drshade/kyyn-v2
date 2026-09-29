@@ -3,7 +3,8 @@ module MicrosoftGraph.Calendar (fetch) where
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (isPrefixOf, nub)
-import KyynPluginBindings
+import Kyyn.Plugin
+import Kyyn.Plugin.Host
 import MicrosoftGraph.Types
 import MicrosoftGraph.Config (scope)
 import MicrosoftGraph.Timestamp (timestamp)
@@ -12,7 +13,7 @@ import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
 import Text.JSON.Types (JSValue(..), fromJSObject)
 
-fetch :: CalendarConfig -> Maybe CalendarFetch -> EvidenceSnapshot Event -> Acquisition (Either FetchError [EvidenceChange Event])
+fetch :: CalendarConfig -> Maybe CalendarFetch -> EvidenceSnapshot Event -> Acquisition Event (Either FetchError [EvidenceChange Event])
 fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
   bounds <- either throwE pure (traverse checkedBounds options)
   token <- ExceptT (Auth.accessToken auth (scope config))

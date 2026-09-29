@@ -19,6 +19,16 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test plugin-fetch plugin-registration graph-calendar inspection-cache --test-show-details=direct`
+with the selected guest toolchain checks signature-derived registration: concrete
+entry contracts, aliases and applied data, malformed signatures, validator/login
+Config mismatches, reader Payload mismatches and obsolete import diagnostics.
+The generic `ReadsEvidence` class/helpers compile under GHC and MicroHs in both
+acquisition and captured-read programs. Run these signature proofs when changing
+the pinned MicroHs compiler; inspection matches its resolved type identities.
+The installed Graph and mixed-connector journeys below exercise derived schemas
+through the packaged CLI without live provider credentials.
+
 `cabal test plugin-host --test-show-details=direct` checks the native text HTTP
 handler with recording and loopback transports, sanitized failures, rejected
 method/header injection, UTF-8, redirect refusal and cancellable waits.

@@ -1,9 +1,9 @@
 module LocalFile.Read (content) where
 
-import KyynPluginBindings
+import Kyyn.Plugin
 import LocalFile.Types (ContentId, Content, Document(..))
 
-content :: ContentId -> EvidenceSnapshot Document -> CapturedRead (Either FetchError Content)
+content :: ContentId -> EvidenceSnapshot Document -> CapturedRead Document (Either FetchError Content)
 content key snapshot = do
   found <- readEvidence snapshot (EvidenceId key)
   pure $ case found of

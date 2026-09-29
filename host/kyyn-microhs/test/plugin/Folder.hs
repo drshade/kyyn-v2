@@ -1,10 +1,11 @@
 module Folder (fetch) where
 
-import KyynPluginBindings
+import Kyyn.Plugin
+import Kyyn.Plugin.Host
 import qualified FolderSchema as Schema
 
 fetch :: Schema.Config -> EvidenceSnapshot Schema.Document
-  -> Acquisition (Either FetchError [EvidenceChange Schema.Document])
+  -> Acquisition Schema.Document (Either FetchError [EvidenceChange Schema.Document])
 fetch (Schema.Config directory recursive) prior
   | null directory || head directory /= '/' = pure (Left (FetchError "Folder directory must be absolute"))
   | otherwise = listFiles directory recursive `andThen` \paths ->

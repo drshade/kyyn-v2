@@ -1,9 +1,9 @@
 module ReadDocument (view) where
 
-import KyynPluginBindings
+import Kyyn.Plugin
 import qualified FolderSchema as Schema
 
-view :: String -> EvidenceSnapshot Schema.Document -> CapturedRead (Either FetchError String)
+view :: String -> EvidenceSnapshot Schema.Document -> CapturedRead Schema.Document (Either FetchError String)
 view identity snapshot = do
   result <- readEvidence snapshot (EvidenceId identity)
   pure $ case result of

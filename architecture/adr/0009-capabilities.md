@@ -160,7 +160,7 @@ change that evidence. ADR 0015 owns registration and checked native dispatch.
 The snapshot argument is explicit. `Host.Acquisition` is the SDK row defined below;
 captured readers have only the two snapshot questions above. Native text
 acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
-from the same captured bytes. The generated `readTextFile` returns both together.
+from the same captured bytes. The SDK's `readTextFile` returns both together.
 The folder
 proof requires an absolute directory and returns a typed error before requesting
 effects for a relative path. Enumeration failure is a typed error, never an empty
@@ -232,9 +232,9 @@ readEvidence snapshot key = request (injectEvidence (ReadEvidence snapshot key))
 The concrete entry-point row selects the instance. No generated helper module or
 recursive sum-membership search is required. Reusable helpers may retain this
 constraint; registered entries supply concrete data contracts and the supported
-row under ADR 0015. Verify these instances and their helper use under both GHC and
-MicroHs as part of the signature-derived registration implementation; these
-signatures do not themselves establish compiler support.
+row under ADR 0015. The signature-registration proof compiles these instances and
+their helper use under both GHC and MicroHs, and rejects a registered entry that
+leaves the helper's row/payload constraint unresolved.
 
 Native HTTP handles TLS and UTF-8 transport. HTTP status responses remain values
 for provider code to interpret; transport failures have sanitized diagnostics,

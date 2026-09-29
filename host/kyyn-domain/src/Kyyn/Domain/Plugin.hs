@@ -4,11 +4,13 @@ module Kyyn.Domain.Plugin
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
   , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..)
   , CapturedMethodDeclaration(..), MethodName(..), methodName, connectorTypeName, bindingName, connectorName, qualifiedTypeName
+  , PluginEntryKind(..), PluginSignature(..), expectedPluginSignature
   ) where
 
 import Data.Char (isAlphaNum, isUpper, isAsciiLower, isAsciiUpper, isDigit)
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Kyyn.Domain.Git (TreePath, GitRevision, GitUrl, gitUrl)
+import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath)
 import System.FilePath (isAbsolute, (</>))
 
@@ -19,8 +21,17 @@ newtype BindingName = BindingName String deriving (Eq, Show)
 newtype MethodName = MethodName String deriving (Eq, Show)
 newtype ConnectorName = ConnectorName String deriving (Eq, Show)
 newtype QualifiedTypeName = QualifiedTypeName String deriving (Eq, Show)
-data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String [CapturedMethodDeclaration] (Maybe QualifiedTypeName) (Maybe String) deriving (Eq, Show)
-data CapturedMethodDeclaration = CapturedMethodDeclaration MethodName String QualifiedTypeName QualifiedTypeName String deriving (Eq, Show)
+data PluginEntryKind = AcquisitionEntry | CapturedReadEntry deriving (Eq, Show)
+data PluginSignature
+  = FetchSignature DataType (Maybe DataType) DataType
+  | ReadSignature DataType DataType DataType
+  deriving (Eq, Show)
+
+expectedPluginSignature :: PluginEntryKind -> String
+expectedPluginSignature AcquisitionEntry = "Config -> [Maybe Options ->] EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError [EvidenceChange Payload])"
+expectedPluginSignature CapturedReadEntry = "Input -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Result)"
+data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName String String [CapturedMethodDeclaration] (Maybe String) deriving (Eq, Show)
+data CapturedMethodDeclaration = CapturedMethodDeclaration MethodName String String deriving (Eq, Show)
 
 methodName :: String -> Either String MethodName
 methodName value = (\(BindingName name) -> MethodName name) <$> bindingName value

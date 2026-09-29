@@ -73,21 +73,18 @@ type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, Gues
 main :: IO ()
 main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   let declaration name = withMethods name []
-      withMethods name methods = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
-        "payloadType" .= ("LocalFile.Types.Document" :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
+      withMethods name methods = object ["name" .= (name :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
         "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= (methods :: [Value]),
-        "fetchOptionsType" .= object ["tag" .= ("None" :: String)],
         "login" .= object ["tag" .= ("None" :: String)]]
-      methodValue name input = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
-        "inputType" .= (input :: String),"resultType" .= ("LocalFile.Types.Content" :: String),
-        "implementation" .= ("LocalFile.Read.content" :: String)]
+      methodValue name implementation = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
+        "implementation" .= (implementation :: String)]
       rejected :: Either e a -> Bool
       rejected (Left _) = True
       rejected _ = False
   forM_ [[declaration "Folder",declaration "Folder"],[declaration "folder"],[object ["name" .= ("Folder" :: String)]]] $
     \value -> assert "Invalid connector registration accepted" (rejected (decodeConnectors (Lazy.toStrict (encode value))))
-  let validMethod = methodValue "content" "LocalFile.Types.ContentId"
-  forM_ [[validMethod,validMethod],[methodValue "case" "LocalFile.Types.ContentId"],[methodValue "content" "String"]] $ \methods ->
+  let validMethod = methodValue "content" "LocalFile.Read.content"
+  forM_ [[validMethod,validMethod],[methodValue "case" "LocalFile.Read.content"],[methodValue "content" "unqualified"]] $ \methods ->
     assert "Invalid method registration accepted" (case decodeConnectors (Lazy.toStrict (encode [withMethods "Folder" methods])) of
       Left message -> "Folder" `isInfixOf` message
       Right _ -> False)
@@ -99,7 +96,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   runtime <- getEnv "KYYN_TEST_TOOLCHAIN"
   api <- inspectApi runtime (map (repo </>) ["shared/kyyn-types/src","guest/kyyn-sdk/src"]) ["Kyyn.Plugin"] >>= right
-  forM_ ["name","configType","payloadType","fetch","validateConfig"] $ \field ->
+  forM_ ["name","fetch","validateConfig","login"] $ \field ->
     assert ("Missing reflected connector field documentation: " ++ field)
       (not (null [() | ApiModule _ symbols <- api, ApiSymbol name ValueNamespace origin _ _ (Just doc) <- symbols,
         name == field, "SourceConnector" `isInfixOf` origin, not (null doc)]))
@@ -191,6 +188,26 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
     Left diagnostics -> assert "Wrong fetch type diagnostic lost connector context"
       (any (\(Diagnostic _ _ message _) -> "local-file/Folder" `isInfixOf` message) diagnostics)
     Right _ -> fail "Registration accepted a config validator as its fetch function"
+  let packagePath file = "plugins/packages/local-file/source/src/LocalFile/" ++ file
+      replaceFile file source = map (\(path,bytes) ->
+        (path,if relativeName path == packagePath file then Text.encodeUtf8 (Text.pack source) else bytes)) installed
+      expectProblem label fragments entries = do
+        tree <- right (fileTree entries)
+        result <- runPreparation scope toolchain sdk (preparePlugins tree)
+        assert label (case result of
+          Left diagnostics -> all (\fragment -> any (\(Diagnostic _ _ message _) -> fragment `isInfixOf` message) diagnostics) fragments
+          Right _ -> False)
+  expectProblem "validator Config mismatch accepted" ["LocalFile.Config.validate","expected Config"] $
+    replaceFile "Config.hs" "module LocalFile.Config where\nimport Kyyn.Validation\nvalidate :: String -> ValidationReport\nvalidate _ = ValidationReport []\n"
+  expectProblem "captured Payload mismatch accepted" ["LocalFile.Read.content","Payload differs"] $
+    replaceFile "Read.hs" "module LocalFile.Read where\nimport Kyyn.Plugin\ncontent :: String -> EvidenceSnapshot String -> CapturedRead String (Either FetchError String)\ncontent _ _ = pure (Right \"x\")\n"
+  expectProblem "legacy bindings import lacks repair hint" ["Kyyn.Plugin / Kyyn.Plugin.Host"] $
+    replaceFile "Folder.hs" "module LocalFile.Folder where\nimport KyynPluginBindings\nfetch = undefined\n"
+  loginPath <- right (relativePath (packagePath "Login.hs"))
+  let withLogin = map (\(path,bytes) -> (path,if relativeName path == packagePath "Plugin.hs"
+        then Text.encodeUtf8 (Text.replace "login = Nothing" "login = Just \"LocalFile.Login.login\"" (Text.decodeUtf8 bytes)) else bytes)) installed
+  expectProblem "login Config mismatch accepted" ["LocalFile.Login.login","expected Config"] $
+    withLogin ++ [(loginPath,"module LocalFile.Login where\nimport Kyyn.Plugin.Host\nlogin :: String -> PluginLogin (Either LoginError ())\nlogin _ = pure (Right ())\n")]
   putStrLn "Plugin registration: inspected real package, two independent configured fetches and pure per-instance validation passed."
 
 compileFirstParty :: FilePath -> GuestSources -> IO ()

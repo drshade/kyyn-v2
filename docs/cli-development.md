@@ -345,11 +345,9 @@ without an options type refuses supplied options; local-file has no options.
 Dhall, or an absent value when omitted. These are visible non-secret arguments;
 credentials belong in the local secret store.
 
-For existing vendored plugins, add `fetchOptionsType = Nothing` to each
-`SourceConnector` declaration; its fetch function remains unchanged. An options-aware
-connector instead names its options type and accepts `Maybe Options` between config
-and snapshot. Existing fetch history without the options field reads as no supplied
-options; no cache clearing is needed for this history extension.
+An options-aware fetch accepts `Maybe Options` between config and snapshot. Kyyn
+derives this contract from the checked function signature; registration names the
+function, without repeating its input or result types.
 
 Execution uses the accepted helper and latest fetched evidence. Fetch the named
 instances first with `evidence fetch PLUGIN INSTANCE`. Use

@@ -1,7 +1,8 @@
 module Fixture.Fetch where
 import Fixture.Types
-import KyynPluginBindings
-fetch :: Config -> EvidenceSnapshot Payload -> Acquisition (Either FetchError [EvidenceChange Payload])
+import Kyyn.Plugin
+import Kyyn.Plugin.Host
+fetch :: Config -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 fetch (Config endpoint key localPath) snapshot = do
   secret <- getSecret key
   case secret of

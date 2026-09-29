@@ -1,7 +1,7 @@
 module MicrosoftGraph.Read (event) where
-import KyynPluginBindings
+import Kyyn.Plugin
 import MicrosoftGraph.Types
-event :: EventId -> EvidenceSnapshot Event -> CapturedRead (Either FetchError Event)
+event :: EventId -> EvidenceSnapshot Event -> CapturedRead Event (Either FetchError Event)
 event key snapshot = do
   result <- readEvidence snapshot (EvidenceId key)
   pure $ case result of
