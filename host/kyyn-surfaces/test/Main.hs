@@ -53,6 +53,11 @@ main = do
   forM_ [["root","tool","execute","content"], ["root","tool","show","case"],
     ["root","tool","execute","content","--input","[]","--evolution","abc123"]] refuses
   succeeds ["kb","init"] (Invocation selected Human (Kb InitKb))
+  succeeds ["plugin", "list"] (Invocation selected Human (Plugin (ListPlugins Nothing)))
+  succeeds ["plugin", "show", "local-file", "--evolution", "abc123"]
+    (Invocation selected Human (Plugin (ShowPlugin localFile (Just identity))))
+  succeeds ["plugin", "guide", "local-file"] (Invocation selected Human (Plugin (ReadPluginGuide localFile Nothing)))
+  refuses ["plugin", "guide", "../bad"]
   succeeds ["plugin","install","--evolution","abc123","--from","./plugins/local-file"]
     (Invocation selected Human (Plugin (InstallPlugin identity "./plugins/local-file" Nothing)))
   succeeds ["--kb","nested/kb","--json","plugin","install","--evolution","abc123","--from","file:///repo","--path","plugins/local-file"]

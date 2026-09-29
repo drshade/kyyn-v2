@@ -9,6 +9,9 @@ import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
 import Kyyn.Composition.Recipes (dispatchRecipes)
 import Kyyn.Composition.Secrets (executeSecrets)
+import qualified Kyyn.Porcelain.Capability.PluginDocumentation as Documentation
+import Kyyn.Porcelain.Interpreter.PluginDocumentation (runPluginDocumentation)
+import Kyyn.Surfaces.Plugins (pluginListResult, pluginDescriptionResult, pluginGuideResult)
 import Kyyn.Configuration
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
@@ -149,6 +152,24 @@ executeGuest selection@(Cli.Selection path _ runtimeOverride) workspace request 
 
 dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
 dispatchPlugin host (Cli.Connector command) kb = dispatchConnectors host command kb
+dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ListPlugins evolution) (SelectedKb kb revision _) =
+  finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
+    . runGit executable environment . runDhallHandling . runPluginDocumentation $
+      either refusal pluginListResult <$> Documentation.listPlugins
+        (maybe (Documentation.AcceptedPlugins kb revision)
+          (Documentation.EvolutionPlugins . EvolutionWorkspace kb) evolution)
+dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ShowPlugin name evolution) (SelectedKb kb revision _) =
+  finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
+    . runGit executable environment . runDhallHandling . runPluginDocumentation $
+      either refusal (pluginDescriptionResult evolution revision) <$> Documentation.describePlugin
+        (maybe (Documentation.AcceptedPlugins kb revision)
+          (Documentation.EvolutionPlugins . EvolutionWorkspace kb) evolution) name
+dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ReadPluginGuide name evolution) (SelectedKb kb revision _) =
+  finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
+    . runGit executable environment . runDhallHandling . runPluginDocumentation $
+      either refusal (pluginGuideResult evolution revision) <$> Documentation.readPluginGuide
+        (maybe (Documentation.AcceptedPlugins kb revision)
+          (Documentation.EvolutionPlugins . EvolutionWorkspace kb) evolution) name
 dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.InstallPlugin identity source subdirectory) (SelectedKb kb _ _) = do
   cwd <- getCurrentDirectory
   let selected = do
@@ -160,7 +181,7 @@ dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.InstallPlugin ide
     Left diagnostic -> pure (refusal [diagnostic])
     Right value -> finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
       . runGit executable environment . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore . runPluginInstallation $
-        either refusal pluginResult <$> Plugin.installPlugin (EvolutionWorkspace kb identity) value
+        either refusal (pluginResult identity) <$> Plugin.installPlugin (EvolutionWorkspace kb identity) value
 
 guestResult :: Api.GuestApi :> es => Cli.GuestCommand -> Eff es Response
 guestResult request = case request of

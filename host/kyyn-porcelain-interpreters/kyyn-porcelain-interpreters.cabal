@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.PluginInstallation
+    Kyyn.Porcelain.Interpreter.PluginDocumentation
     Kyyn.Porcelain.Interpreter.EvidenceAcquisition
     Kyyn.Porcelain.Interpreter.EvidenceInspection
     Kyyn.Porcelain.Interpreter.EvidenceStore

@@ -32,7 +32,11 @@ data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Gu
 data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
 newtype SecretArgument = SecretArgument String deriving Eq
 instance Show SecretArgument where show _ = "<secret>"
-data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) | Connector ConnectorCommand deriving (Eq, Show)
+data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath)
+  | ListPlugins (Maybe EvolutionId)
+  | ShowPlugin PluginName (Maybe EvolutionId)
+  | ReadPluginGuide PluginName (Maybe EvolutionId)
+  | Connector ConnectorCommand deriving (Eq, Show)
 data ConnectorCommand
   = ListConnectors PluginName (Maybe EvolutionId)
   | ShowConnector PluginName ConnectorName (Maybe EvolutionId)
@@ -103,6 +107,11 @@ invocation = Invocation <$> selectionParser
         (InstallPlugin <$> option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Evolution to receive the plugin")
           <*> strOption (long "from" <> metavar "SOURCE" <> help "Local Git checkout directory or Git URL")
           <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))
+       <> group "list" "List installed plugin names" (ListPlugins <$> pluginEvolution)
+       <> group "show" "Show vendored package details without compiling the plugin"
+          (ShowPlugin <$> pluginArgument <*> pluginEvolution)
+       <> group "guide" "Read the plugin's packaged guide without compiling it"
+          (ReadPluginGuide <$> pluginArgument <*> pluginEvolution)
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
     <> group "evidence" "Fetch and inspect current evidence and history" (Evidence <$> evidenceParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
@@ -138,6 +147,10 @@ connectorParser = hsubparser
 
 pluginArgument :: Parser PluginName
 pluginArgument = argument (eitherReader pluginName) (metavar "PLUGIN")
+
+pluginEvolution :: Parser (Maybe EvolutionId)
+pluginEvolution = optional (option (eitherReader evolutionId)
+  (long "evolution" <> metavar "ID" <> help "Read an evolution target instead of the accepted root"))
 
 evidenceParser :: Parser EvidenceCommand
 evidenceParser = hsubparser

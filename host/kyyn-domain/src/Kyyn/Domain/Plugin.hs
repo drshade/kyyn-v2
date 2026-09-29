@@ -2,6 +2,7 @@ module Kyyn.Domain.Plugin
   ( PluginName, pluginName, pluginNameText, PackageIdentity(..)
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
+  , PluginDescription(..), PluginGuide(..)
   , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..)
   , CapturedMethodDeclaration(..), MethodName(..), methodName, connectorTypeName, bindingName, connectorName, qualifiedTypeName
   , PluginEntryKind(..), PluginSignature(..), expectedPluginSignature
@@ -71,6 +72,8 @@ data PluginManifest = PluginManifest PluginName String deriving (Eq, Show)
 data PluginRepository = LocalRepository DirectoryScope | RemoteRepository GitUrl deriving (Eq, Show)
 data PluginOrigin = PluginOrigin PluginRepository TreePath GitRevision deriving (Eq, Show)
 data InstalledPlugin = InstalledPlugin PluginName DirectoryScope PluginOrigin deriving (Eq, Show)
+data PluginDescription = PluginDescription PluginManifest PluginOrigin Bool deriving (Eq, Show)
+data PluginGuide = PluginGuide PluginDescription String deriving (Eq, Show)
 
 pluginNameText :: PluginName -> String
 pluginNameText (PluginName value) = value
