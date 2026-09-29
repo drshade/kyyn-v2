@@ -390,24 +390,20 @@ typed method boundary; they do not need their own executable/plugin framework.
 Health is explicit and may fail; opening a KB must not probe every provider.
 Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
-Source registration is a plugin entry module's `connectors` value. Optional fetch
-options and explicit login are supported:
+Source registration is a plugin entry module's `connectors` value. Registration
+names implementations; checked function signatures determine their data contracts.
+Owner decision (2026-09-29); signature-derived preparation is not yet implemented.
 
 ```haskell
 connectors :: [SourceConnector]
 connectors = [SourceConnector
   { name = "Folder"
-  , configType = "LocalFile.Types.FolderConfig"
-  , payloadType = "LocalFile.Types.Document"
   , fetch = "LocalFile.Folder.fetch"
-  , fetchOptionsType = Nothing
   , login = Nothing
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
       { methodName = "content"
       , methodDescription = "Read the latest fetched text of a file by its evidence ID."
-      , inputType = "LocalFile.Types.ContentId"
-      , resultType = "LocalFile.Types.Content"
       , implementation = "LocalFile.Read.content"
       }]
   }]
@@ -417,8 +413,10 @@ connectors = [SourceConnector
 `[A-Z][A-Za-z0-9_]*` and be unique within the plugin; it becomes an alternative in
 the derived Dhall configuration union. Qualified names refer to Haskell declarations,
 not duplicated structural schemas. A fixed adapter evaluates the registration;
-the compiler inspects the named types and generated adapters typecheck the selected
-fetch and pure `Config -> ValidationReport` validator against those same types.
+the compiler inspects each selected function's checked signature. It derives Config,
+Payload and optional Options from fetch, lowering those data types through ADR 0005's
+existing algebra. Generated adapters check the pure `Config -> ValidationReport`
+validator and optional login against the same derived Config.
 All source connectors use [ADR 0009's acquisition row](0009-capabilities.md#provider-acquisition-and-explicit-login).
 The optional `login` qualified entry is checked and dispatched
 under [ADR 0016](0016-connections.md#authentication-belongs-to-the-integration).
@@ -426,37 +424,56 @@ Graph advertises its login entry; the folder needs no login. Login is present or
 absent independently of which capabilities a fetch happens to use.
 Discovery exposes this declaration without executing authentication or fetching.
 
-`fetchOptionsType :: Maybe QualifiedTypeName` optionally names a plugin-authored
-options type. Inspect it by the same schema path as `configType`; expose its
-contract through `plugin connector show`. The generated adapter selects the
-signature according to this declaration:
+The supported fetch signatures determine whether per-invocation options exist;
+expose the derived contract through `plugin connector show`:
 
 ```haskell
--- No advertised options type: existing connectors keep this signature.
 fetch :: Config -> EvidenceSnapshot Payload
-      -> Program calls (Either FetchError [EvidenceChange Payload])
+      -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 
--- An advertised Options type: absence of CLI options is represented explicitly.
 fetch :: Config -> Maybe Options -> EvidenceSnapshot Payload
-      -> Program calls (Either FetchError [EvidenceChange Payload])
+      -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 ```
 
-The folder connector advertises no options and its acquisition function is
-unchanged. The host checks supplied options before guest execution, while the
+Authored functions import ordinary SDK types and helpers, not a generated
+payload-specific bindings module. `Acquisition payload a` and `CapturedRead payload a`
+are parameterised SDK types; helpers preserve that payload parameter. This lets the
+compiler inspect a function before the host knows its Payload. Generated execution
+entries and codecs remain private runtime plumbing, built after inspection.
+
+Inspection uses checked compiler types, including expanded aliases, not source-text
+parsing or pretty-printed signatures. Config, Payload, Options, Input and Result must
+be concrete supported data types. Check the complete entry shape: arity, effect row,
+typed failure, result wrapper and agreement of Payload wherever it occurs. Reject
+unresolved polymorphic data, unsupported constraints or mismatched types rather than
+guessing contracts. The host checks supplied options before guest execution, while the
 connector owns their meaning and defaults. ADR 0014 owns invocation and history.
-Native `ConnectorTypeName`, `BindingName`, `ConnectorName` and `QualifiedTypeName`
-distinguish the declared names after decoding. Type names have at least a module
-and type component, each an uppercase Haskell identifier. Bindings match
+Native `ConnectorTypeName`, `BindingName` and `ConnectorName`
+distinguish declared names after decoding. Registered implementations are qualified
+Haskell value exports. Bindings match
 `[a-z][A-Za-z0-9_']*` and exclude Haskell keywords; instance names are nonempty text.
-`SchemaInspection.inspectType` inspects a captured source tree directly and
-returns a contract without authored metadata; no synthetic metadata module is
-compiled for plugin config or payload types.
+Inspection takes a captured source tree and selected function export, returning
+the derived data contracts without authored metadata. No synthetic metadata module
+is compiled for plugin config or payload types.
 The `methods` list extends this declaration with captured-evidence readers.
 `CapturedMethod` supplies a name, agent-facing description and qualified Haskell
-input/result/implementation exports. The compiler inspects those types and the
-generated adapter checks the selected implementation against ADR 0009's
-`CapturedRead` signature. Descriptions belong to registration, not a second API
+implementation export. The compiler derives Input and Result from
+`Input -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Result)`
+and verifies that Payload matches the containing source connector. Descriptions belong to registration, not a second API
 documentation registry. No method is executed during discovery.
+
+Misfit diagnostics name the plugin, connector or method, the selected export, and
+the expected signature shape. A compiler failure caused by an authored import of
+`KyynPluginBindings` additionally points to the ordinary SDK imports; do not supply
+a compatibility bindings module. Compiler diagnostics retain their useful source
+locations. Registration/data-shape errors and operational compiler failures remain
+distinct under ADR 0019.
+
+Verification must derive the local-file and Graph contracts without type-name
+declarations, exercise fetches with and without options, aliases and parameterised
+data, and reject wrong rows, arities, wrappers and inconsistent Config/Payload.
+Generated adapters must compile under GHC and MicroHs. Installed discovery must
+continue exposing exact schemas, and a mixed-capability fetch must still work.
 
 Native `MethodName` uses the same identifier rule as `BindingName`. Method names
 must be unique within a connector; a malformed or duplicate declaration is a

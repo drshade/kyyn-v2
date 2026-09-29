@@ -142,19 +142,18 @@ data FileRead a where
 
 data CapturedText = CapturedText String EvidenceFingerprint
 
--- Generated for the plugin's inspected Payload type.
-type Acquisition a = Host.Acquisition Payload a
-type CapturedRead a = Program (EvidenceRead Payload) a
+type CapturedRead payload a = Program (EvidenceRead payload) a
 ```
 
 A registered captured method implements:
 
 ```haskell
-content :: Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result)
+content :: Input -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Result)
 ```
 
-The generated adapter fixes `Input`, `Payload` and `Result` from the inspected
-declarations. The author writes neither an IO entry nor a codec. The host supplies
+The compiler derives `Input`, `Payload` and `Result` from the authored signature
+under ADR 0015, then generates the execution adapter. SDK types/helpers are generic
+in payload, so inspection needs no pre-generated bindings. The author writes neither an IO entry nor a codec. The host supplies
 the latest captured evidence at invocation start; method failure does not fetch or
 change that evidence. ADR 0015 owns registration and checked native dispatch.
 
