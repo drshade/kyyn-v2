@@ -28,6 +28,18 @@ and explicit login instructions across real GHC and MicroHs pipes. It also rejec
 malformed replies and login interaction in the acquisition row. These are transport
 proofs, not connector registration, CLI login or live Graph authentication tests.
 The default `plugin-fetch` suite includes this proof alongside file acquisition.
+`node tools/test-network-connector.mjs INSTALLED_EXECUTABLE` exercises registration,
+accepted configuration, explicit login, per-KB secret storage, successive fetches
+and failed-fetch preservation against a loopback HTTP fixture. One fetch combines
+HTTP, file, secret, waiting and evidence requests through the same adapter/dispatcher. It does not use
+real credentials or claim live Graph authentication coverage.
+`cabal test graph-calendar --test-show-details=direct`, with the selected guest
+toolchain, compiles actual Graph fetch/login adapters with both GHC and MicroHs.
+A recording provider exercises both auth modes, polling, rotation, throttling,
+pagination, scoped upserts/full-list removals and failure paths without credentials.
+`node tools/test-graph-install.mjs INSTALLED_EXECUTABLE` checks the actual plugin's
+vendoring, discovered contracts, accepted configuration and missing-secret failures
+without provider calls. Live consent/mailbox behavior is a separate user opt-in.
 
 `cabal test inspection-cache roots --test-show-details=direct` checks persistent
 Dhall inspection results, source/selection/settings/build invalidation, refusal

@@ -1,12 +1,14 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, protocolFailure) where
+module Kyyn.Porcelain.Protocol.PluginBroker (answerAcquisition, executeCapturedRead, conversation, answerEvidence, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
@@ -20,10 +22,9 @@ import qualified Kyyn.Plumbing.Capability.FileAcquisition as Files
 import Kyyn.Plumbing.Protocol.PluginMessages
 import System.FilePath (takeDirectory, takeFileName)
 
-executeAcquisition :: (GuestExecution :> es, Failure :> es, Files.FileAcquisition :> es)
-  => CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
-executeAcquisition program config prior = fmap (either (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" message]) Right) $
-  conversation decodeFrame program (initialInput config) $ \call -> case call of
+answerAcquisition :: (Failure :> es, Files.FileAcquisition :> es)
+  => Maybe CurrentEvidence -> PluginCall -> Eff es Value
+answerAcquisition prior call = case call of
   ListFiles directory recursive -> case directoryScope directory of
     Left message -> pure (failure message)
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive
@@ -71,7 +72,7 @@ conversation decode program arguments respond = do
         pure (Just (encodeResponse identity value))
       Completed _ -> pure Nothing
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
-    ("Plugin exited " ++ show status ++ ": " ++ show stderr))) else do
+    ("Plugin exited " ++ show status ++ ": " ++ diagnostics stderr))) else do
     frame <- either protocolFailure pure (decode output)
     case frame of
       Completed value -> case parseResult value of
@@ -79,6 +80,12 @@ conversation decode program arguments respond = do
         Right (Left message) -> pure (Left (FetchError message))
         Right (Right result) -> pure (Right result)
       _ -> protocolFailure "Guest did not complete"
+
+diagnostics :: ByteString -> String
+diagnostics bytes = case Text.decodeUtf8' bytes of
+  Left _ -> "Non-UTF-8 guest diagnostics"
+  Right message -> unlines (takeWhile (\line -> line /= "CallStack (from HasCallStack):" &&
+    line /= "HasCallStack backtrace:") (lines (Text.unpack message)))
 
 protocolFailure :: Failure :> es => String -> Eff es a
 protocolFailure message = raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput message))

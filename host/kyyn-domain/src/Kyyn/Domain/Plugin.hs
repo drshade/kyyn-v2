@@ -19,7 +19,7 @@ newtype BindingName = BindingName String deriving (Eq, Show)
 newtype MethodName = MethodName String deriving (Eq, Show)
 newtype ConnectorName = ConnectorName String deriving (Eq, Show)
 newtype QualifiedTypeName = QualifiedTypeName String deriving (Eq, Show)
-data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String [CapturedMethodDeclaration] (Maybe QualifiedTypeName) deriving (Eq, Show)
+data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String [CapturedMethodDeclaration] (Maybe QualifiedTypeName) (Maybe String) deriving (Eq, Show)
 data CapturedMethodDeclaration = CapturedMethodDeclaration MethodName String QualifiedTypeName QualifiedTypeName String deriving (Eq, Show)
 
 methodName :: String -> Either String MethodName

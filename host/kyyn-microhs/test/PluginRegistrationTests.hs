@@ -6,6 +6,7 @@ import Data.List (isInfixOf, stripPrefix)
 import Data.Version (showVersion)
 import Data.Coerce (coerce)
 import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..), PackageIdentity(..))
+import PluginNativeTests (noNetwork)
 import Data.Aeson (Value, encode, object, (.=), toJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
@@ -75,7 +76,8 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
       withMethods name methods = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
         "payloadType" .= ("LocalFile.Types.Document" :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
         "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= (methods :: [Value]),
-        "fetchOptionsType" .= object ["tag" .= ("None" :: String)]]
+        "fetchOptionsType" .= object ["tag" .= ("None" :: String)],
+        "login" .= object ["tag" .= ("None" :: String)]]
       methodValue name input = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
         "inputType" .= (input :: String),"resultType" .= ("LocalFile.Types.Content" :: String),
         "implementation" .= ("LocalFile.Read.content" :: String)]
@@ -126,7 +128,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
   case prepared of
-    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector kind configContract payloadContract _ _ methods _]) instances] -> do
+    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector {connectorType = kind, configContract = configContract, payloadContract = payloadContract, methods = methods}]) instances] -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
       authored <- traverse (\(p,b) -> (,) <$> right (relativePath p) <*> pure b)
         [(p,b) | (path,b) <- files package, Just p <- [stripPrefix "src/" (relativeName path)]]
@@ -140,7 +142,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
       readAdapter <- right (capturedReadSources (rootType input) (rootType payloadContract) (rootType output)
         "LocalFile.Read.content" (authored ++ files sdk))
       compileFirstParty (temporary </> "ghc-read") readAdapter
-      mapM_ (\(ConfiguredConnector name _ (PreparedConnector _ _ payload entry _ _ _) config) -> do
+      mapM_ (\(ConfiguredConnector name _ (PreparedConnector {payloadContract = payload, fetchEntry = entry}) config) -> do
         let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
               (runDocumentPersistenceIO $ runEvidenceStore scope (runGuestExecution toolchain (runPluginRead
                 (callCapturedMethod (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer producerIdentity (contractId payload)) payload selected value)))))))) >>= right
@@ -151,7 +153,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         absent <- invoke identity method (arguments "one.txt")
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-          (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (runEvidenceAcquisition
+          (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ runEvidenceAcquisition
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right

@@ -122,9 +122,10 @@ SDK constructors. An integration implemented in a host handler reads its credent
 there, without automatic credential injection or a kernel-owned authentication
 workflow.
 
-The Graph extension below introduces the guest secret read/write consumers and
-explicit login. It is a design proposal; the existing local store does not by
-itself implement these plugin flows.
+Source connectors can read and replace secrets through the guest request row;
+explicit connector login uses the same per-KB store. Graph client-secret and
+device-code flows are implemented and tested against a recording provider under
+GHC and MicroHs. Real tenant consent/policy remains an opt-in live verification.
 
 ### Configuration remains ordinary typed root data
 
@@ -274,7 +275,8 @@ data GraphAuth
   | DeviceCode { tenant :: String, clientId :: String, tokenKey :: String }
 
 data CalendarConfig = CalendarConfig
-  { auth :: GraphAuth, mailbox :: String, calendarId :: Maybe String }
+  { auth :: GraphAuth, mailbox :: String, calendarId :: Maybe String
+  , sharedCalendar :: Bool }
 ```
 
 `Nothing` selects the mailbox's default calendar. An explicit mailbox works
@@ -293,7 +295,7 @@ Delegated access to the signed-in user's own calendar uses `Calendars.Read`.
 Another user's shared/delegated calendar requires `Calendars.Read.Shared` and
 actual sharing/delegation to that user; consent alone does not grant mailbox
 access. See Microsoft's [shared calendar access](https://learn.microsoft.com/en-us/graph/outlook-get-shared-events-calendars).
-The calendar plugin requests the shared-read scope when supporting that access,
+The calendar plugin requests the shared-read scope when `sharedCalendar` is true,
 not application permissions in a delegated token.
 
 Device-code login requests the applicable delegated calendar scope and `offline_access`,

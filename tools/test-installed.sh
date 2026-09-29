@@ -16,6 +16,8 @@ node tools/test-curation-declarations.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-plugin-install.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-plugin-evolution.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-connector-fetch.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-network-connector.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-graph-install.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-initialization.mjs "$journey_stage/install/bin/kyyn-v2"
 make -C vendor/MicroHs bin/mhs
 export MHSDIR="$journey_stage/install/lib/kyyn-v2/lib/kyyn/microhs"

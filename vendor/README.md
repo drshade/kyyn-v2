@@ -16,7 +16,7 @@ guest builds use the compiler built from the same source revision. The guest
 runtime imports only json's `Text.JSON.Types` and `Text.JSON.String` modules.
 
 The transformers copy contains only `Control.Monad.Signatures`,
-`Control.Monad.Trans.Class`, `Control.Monad.Trans.Reader` and
+`Control.Monad.Trans.Class`, `Control.Monad.Trans.Except`, `Control.Monad.Trans.Reader` and
 `Control.Monad.Trans.State.Strict`, with the upstream LICENSE. Native SDK builds
 use the same package version through Cabal; the bundled guest receives these
 unmodified sources. Their CPP tests ask about base versions up to 4.13; the
@@ -24,7 +24,8 @@ GuestCompilation interpreter supplies `MIN_VERSION_base(x,y,z)=1` to select the
 modern APIs supported by MicroHs. This is not a claim that MicroHs implements
 every API of every base version. Reassess this definition when adding dependencies
 or updating these sources. The dual-compiler evolution proof compiles this source
-subset under both GHC and MicroHs; other transformers modules are not covered.
+state/reader subset under both GHC and MicroHs; the Graph connector proof covers
+ExceptT under both compilers. Other transformers modules are not covered.
 
 To update a source copy, replace it from the explicitly selected upstream archive,
 retain its notices, update this provenance and rerun the complete gate. Source

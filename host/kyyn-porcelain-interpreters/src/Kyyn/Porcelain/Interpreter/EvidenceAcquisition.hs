@@ -15,11 +15,14 @@ import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition)
+import Kyyn.Porcelain.Protocol.PluginHost (executeAcquisition)
+import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
+import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
+import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
 import Kyyn.Plumbing.Protocol.PluginMessages (changesShape, parseChanges)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
-runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es,
+runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
 runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config

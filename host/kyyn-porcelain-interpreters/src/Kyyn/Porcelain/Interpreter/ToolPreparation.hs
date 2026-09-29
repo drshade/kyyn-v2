@@ -53,9 +53,9 @@ environment sdk code plugins = do
       Just name <- [stripPrefix "/source/src/" (dropWhile (/= '/') package)]]
   allSources <- checked (fileTree (files authored ++ pluginSources ++ files sdk))
   let interfaces = [ConnectorInterface plugin kind [(name,rootType input,rootType output) | PreparedMethod name _ input output _ <- methods]
-        | PreparedPlugin (PreparedPackage plugin _ connectors) _ <- plugins, PreparedConnector kind _ _ _ _ methods _ <- connectors]
+        | PreparedPlugin (PreparedPackage plugin _ connectors) _ <- plugins, PreparedConnector {connectorType = kind, methods = methods} <- connectors]
       bindings = [InstanceBinding binding plugin kind name | PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
-        ConfiguredConnector name binding (PreparedConnector kind _ _ _ _ _ _) _ <- instances]
+        ConfiguredConnector name binding (PreparedConnector {connectorType = kind}) _ <- instances]
   generated <- checked (toolBindings interfaces bindings)
   inspectionSources <- checked (fileTree (files allSources ++ generated))
   let names = [map (\c -> if c == '/' then '.' else c) (take (length name - 3) name)

@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.PluginMessages
-  ( PluginFrame(..), PluginCall(..), decodeFrame, decodeFrameWith, encodeResponse, initialInput
+  ( PluginFrame(..), PluginCall(..), decodeFrame, decodeCall, decodeFrameWith, encodeResponse, initialInput
   , parseResult, parseChanges, changesShape, evidenceValue, success, failure ) where
 
 import Control.Monad (unless)
@@ -21,7 +21,10 @@ data PluginCall = ListFiles FilePath Bool | ReadText FilePath
 data PluginFrame call = HostRequest Integer call | Completed Value deriving (Eq, Show)
 
 decodeFrame :: Bytes.ByteString -> Either String (PluginFrame PluginCall)
-decodeFrame = decodeFrameWith $ \capability method arguments -> case (capability, method) of
+decodeFrame = decodeFrameWith decodeCall
+
+decodeCall :: String -> String -> Value -> Parser PluginCall
+decodeCall capability method arguments = case (capability, method) of
   ("files","list") -> exact ["directory","recursive"] (\a -> ListFiles <$> a .: "directory" <*> a .: "recursive") arguments
   ("files","read") -> exact ["path"] (fmap ReadText . (.: "path")) arguments
   ("evidence","list") -> exact ["snapshot"] (fmap ListEvidence . (.: "snapshot")) arguments
@@ -29,7 +32,7 @@ decodeFrame = decodeFrameWith $ \capability method arguments -> case (capability
   _ -> fail "Unsupported plugin capability or method"
 
 decodeFrameWith :: (String -> String -> Value -> Parser call) -> Bytes.ByteString -> Either String (PluginFrame call)
-decodeFrameWith decodeCall bytes = eitherDecodeStrict bytes >>= parseEither (withObject "plugin frame" $ \o -> do
+decodeFrameWith parseCall bytes = eitherDecodeStrict bytes >>= parseEither (withObject "plugin frame" $ \o -> do
   tag <- o .: "tag"
   case tag :: String of
     "Completed" -> exactFields ["tag","result"] o >> Completed <$> o .: "result"
@@ -42,7 +45,7 @@ decodeFrameWith decodeCall bytes = eitherDecodeStrict bytes >>= parseEither (wit
       capability <- o .: "capability"
       method <- o .: "method"
       arguments <- o .: "arguments"
-      call <- decodeCall capability method arguments
+      call <- parseCall capability method arguments
       pure (HostRequest identity call)
     _ -> fail "Unknown plugin frame tag")
 

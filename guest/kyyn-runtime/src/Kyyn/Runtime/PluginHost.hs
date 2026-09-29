@@ -1,9 +1,41 @@
-{-# LANGUAGE GADTs #-}
-module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest) where
+{-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
+module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeLogin) where
 
 import Kyyn.Runtime.Json
-import Kyyn.Runtime.Plugin (exchange)
+import Kyyn.Runtime.Plugin (exchange, execute, input, eitherCodec, changeCodec, fileRequest, evidenceRequest)
 import Kyyn.Types.PluginHost
+import Kyyn.Types.Plugin (EvidenceSnapshot, FileRead, EvidenceRead, FetchError)
+import Kyyn.Types.Program
+import Kyyn.Types.Evidence (EvidenceChange)
+
+executeAcquisition :: forall config payload. Codec config -> Codec payload
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
+        (Either FetchError [EvidenceChange payload])) -> IO ()
+executeAcquisition configCodec payloadCodec selected = do
+  (config,snapshot) <- input configCodec
+  execute (eitherCodec (listCodec (changeCodec payloadCodec))) handler (selected config snapshot)
+  where
+    handler :: Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))) a -> IO a
+    handler identity (InLeft call) = httpRequest identity call
+    handler identity (InRight (InLeft call)) = secretRequest identity call
+    handler identity (InRight (InRight (InLeft call))) = waitingRequest identity call
+    handler identity (InRight (InRight (InRight (InLeft call)))) = fileRequest identity call
+    handler identity (InRight (InRight (InRight (InRight call)))) = evidenceRequest payloadCodec identity call
+
+executeLogin :: Codec config
+  -> (config -> Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) (Either LoginError ())) -> IO ()
+executeLogin configCodec selected = do
+  line <- getLine
+  config <- either fail pure (parseValue line >>= decodeWith configCodec)
+  execute (resultCodec loginErrorCodec unitCodec) handler (selected config)
+  where
+    handler :: Integer -> (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) a -> IO a
+    handler identity (InLeft call) = httpRequest identity call
+    handler identity (InRight (InLeft call)) = secretRequest identity call
+    handler identity (InRight (InRight (InLeft call))) = waitingRequest identity call
+    handler identity (InRight (InRight (InRight call))) = loginRequest identity call
+    loginErrorCodec = Codec (\(LoginError message) -> encodeWith stringCodec message)
+      (fmap LoginError . decodeWith stringCodec)
 
 httpRequest :: Integer -> Http a -> IO a
 httpRequest identity (SendHttp (HttpRequest method url headers body)) = exchange identity "http" "send"

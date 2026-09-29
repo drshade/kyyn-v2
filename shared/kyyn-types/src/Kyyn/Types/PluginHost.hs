@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, DuplicateRecordFields #-}
 module Kyyn.Types.PluginHost
   ( HttpRequest(..), HttpResponse(..), HttpError(..), Http(..)
-  , SecretError(..), Secrets(..), Waiting(..), LoginInteraction(..)
+  , SecretError(..), Secrets(..), Waiting(..), LoginInteraction(..), LoginError(..)
   ) where
 
 -- | A text HTTP request. Headers and body may contain credentials.
@@ -32,3 +32,5 @@ data Waiting a where
 
 data LoginInteraction a where
   DisplayInstructions :: String -> LoginInteraction ()
+
+newtype LoginError = LoginError String deriving (Eq, Show)

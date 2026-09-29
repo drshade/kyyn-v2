@@ -28,7 +28,7 @@ import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSch
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure)
-import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources)
+import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources, loginSources)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Porcelain.Capability.PluginPreparation
 
@@ -40,7 +40,7 @@ runPluginPreparation sdk = interpret $ \_ -> \case
   ValidatePlugins plugins -> runExceptT $ do
     reports <- forM [(plugin,instanceName,entry,config) |
       PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
-      ConfiguredConnector instanceName _ (PreparedConnector _ _ _ _ entry _ _) config <- instances] $
+      ConfiguredConnector instanceName _ (PreparedConnector {validationEntry = entry}) config <- instances] $
       \(plugin,instanceName,entry,CheckedValue _ config) -> do
         let label = pluginNameText plugin ++ "/" ++ coerce instanceName
         bytes <- ExceptT (Right <$> executeCompiledEntry label entry (Lazy.toStrict (encode config)))
@@ -77,7 +77,7 @@ prepare sdk code = do
     let inspect selected = do
           InspectedSchema contract _ <- located label (inspectType sourceTree selected)
           pure contract
-    connectors <- forM declarations $ \(ConnectorDeclaration connector configType payloadType fetch validate declaredMethods optionsType) -> do
+    connectors <- forM declarations $ \(ConnectorDeclaration connector configType payloadType fetch validate declaredMethods optionsType login) -> do
       let connectorLabel = label ++ "/" ++ coerce connector
       config <- inspect configType
       payload <- inspect payloadType
@@ -92,7 +92,10 @@ prepare sdk code = do
         adapter <- checked connectorLabel (capturedReadSources (rootType input) (rootType payload) (rootType output) implementation sources)
         methodEntry <- located (connectorLabel ++ "/" ++ coerce selectedName) (compileGuest adapter)
         pure (PreparedMethod selectedName description input output methodEntry)
-      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options)
+      loginEntry <- traverse (\selected -> do
+        adapter <- checked connectorLabel (loginSources (rootType config) selected sources)
+        located connectorLabel (compileGuest adapter)) login
+      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry)
     pure (PreparedPackage (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]
@@ -102,7 +105,7 @@ configure code packages = do
     let name = pluginNameText plugin
         label = "plugin " ++ name
         configFile = "plugins/config/" ++ name ++ ".dhall"
-        configContracts = [(connector,contract) | PreparedConnector connector contract _ _ _ _ _ <- connectors]
+        configContracts = [(connector,contract) | PreparedConnector {connectorType = connector, configContract = contract} <- connectors]
     instances <- case lookup configFile entries of
       Nothing -> pure []
       Just bytes -> do
@@ -110,8 +113,8 @@ configure code packages = do
         value <- located label (decodeValue (instanceShape [(n,contractShape c) | (n,c) <- configContracts]) text)
         selected <- checked label (decodeInstances value)
         forM selected $ \(instanceName,binding,kind,configuration) -> case
-          [c | c@(PreparedConnector n _ _ _ _ _ _) <- connectors, n == kind] of
-            [c@(PreparedConnector _ contract _ _ _ _ _)] -> pure
+          [c | c@(PreparedConnector {connectorType = n}) <- connectors, n == kind] of
+            [c@(PreparedConnector {configContract = contract})] -> pure
               (ConfiguredConnector instanceName binding c (CheckedValue (contractId contract) configuration))
             _ -> bad (label ++ "/" ++ coerce instanceName) "Unknown connector type"
     pure (PreparedPlugin package instances)

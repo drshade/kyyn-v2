@@ -69,6 +69,9 @@ main = do
     (Invocation selected Human (Evidence (FetchConnector localFile sales (Just "{ limit = 3 }"))))
   succeeds ["plugin","connector","show","local-file","sales"]
     (Invocation selected Human (Plugin (Connector (ShowConnector localFile sales Nothing))))
+  succeeds ["plugin","connector","login","local-file","sales"]
+    (Invocation selected Human (Plugin (Connector (LoginConnector localFile sales))))
+  refuses ["plugin","connector","login","local-file","sales","--evolution","abc123"]
   refuses ["evidence","fetch","local-file","sales","--options"]
   succeeds ["plugin","connector","method","list","local-file","sales","--evolution","abc123"]
     (Invocation selected Human (Plugin (Connector (ListConnectorMethods localFile sales (Just identity)))))

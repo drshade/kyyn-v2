@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
-module PluginNativeTests (nativeTests) where
+module PluginNativeTests (nativeTests, noNetwork) where
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value, object, (.=), encode, eitherDecodeStrict, toJSON)
@@ -13,6 +13,9 @@ import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName)
+import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
+import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
+import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
@@ -61,7 +64,7 @@ nativeTests temporary toolchain configType payloadType program = do
   let instanceRef = ConnectorInstanceRef plugin "documents"
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
-      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ runEvidenceAcquisition $
+      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
         fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
@@ -149,7 +152,7 @@ nativeTests temporary toolchain configType payloadType program = do
   let noFiles :: Eff (FileAcquisition : es) a -> Eff es a
       noFiles = interpret $ \_ _ -> error "Acquisition fixture unexpectedly read source files"
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
-        noFiles $ recordAcquisition firstId currentThird $
+        noNetwork $ noFiles $ recordAcquisition firstId currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
             runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing)
       (outer,trace) = recorded
@@ -162,10 +165,13 @@ nativeTests temporary toolchain configType payloadType program = do
       noGuest = interpret $ \_ _ -> error "Invalid options executed a guest"
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
-      noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
+      noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
         (fetchEvidence instanceRef package payload program (config directory) optionsContract (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
+
+noNetwork :: Eff (HttpTransport : SecretStore : Waiting : es) a -> Eff es a
+noNetwork = interpret (\_ _ -> error "Unexpected waiting") . interpret (\_ _ -> error "Unexpected secret access") . interpret (\_ _ -> error "Unexpected HTTP")
 
 recordAcquisition :: State.State [String] :> es => FetchId -> CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
 recordAcquisition earlier current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _) =

@@ -22,6 +22,7 @@ data PreparedConnector = PreparedConnector
   , validationEntry :: CompiledProgram
   , methods :: [PreparedMethod]
   , fetchOptionsContract :: Maybe CheckedContract
+  , loginEntry :: Maybe CompiledProgram
   }
   deriving (Eq, Show)
 data PreparedMethod = PreparedMethod MethodName String CheckedContract CheckedContract CompiledProgram deriving (Eq, Show)

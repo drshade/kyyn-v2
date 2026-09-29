@@ -36,6 +36,7 @@ data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath) | Connect
 data ConnectorCommand
   = ListConnectors PluginName (Maybe EvolutionId)
   | ShowConnector PluginName ConnectorName (Maybe EvolutionId)
+  | LoginConnector PluginName ConnectorName
   | ShowConnectorSchema PluginName (Maybe EvolutionId)
   | ListConnectorMethods PluginName ConnectorName (Maybe EvolutionId)
   | ShowConnectorMethod PluginName ConnectorName MethodName (Maybe EvolutionId)
@@ -119,6 +120,7 @@ secretParser = hsubparser
 connectorParser :: Parser ConnectorCommand
 connectorParser = hsubparser
   (group "list" "List a plugin's configured instances" (ListConnectors <$> plugin <*> evolution)
+  <> group "login" "Authenticate a configured connector" (LoginConnector <$> plugin <*> instanceName)
   <> group "show" "Show an instance's fetch options type" (ShowConnector <$> plugin <*> instanceName <*> evolution)
   <> group "schema" "Discover connector configuration schemas" (hsubparser
       (group "show" "Print the derived Dhall type for a plugin's configuration file" (ShowConnectorSchema <$> pluginArgument <*> evolution)))

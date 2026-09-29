@@ -13,6 +13,7 @@ cabal test codecs --test-show-details=direct
 cabal test metadata --test-show-details=direct
 cabal test queries --test-show-details=direct
 cabal test plugin-fetch --test-show-details=direct
+cabal test graph-calendar --test-show-details=direct
 cabal test plugin-registration --test-show-details=direct
 cabal test judgements --test-show-details=direct
 cabal test evolutions --test-show-details=direct

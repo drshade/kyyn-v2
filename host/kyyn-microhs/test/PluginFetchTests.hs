@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, GADTs #-}
-module Main (main) where
+module PluginFetchTests (main, compileBoth, brokerWith, Scenario(..)) where
 
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value(..), eitherDecodeStrict, encode, object, (.=), (.:), toJSON)
@@ -32,7 +32,7 @@ import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import System.Directory (createDirectoryIfMissing, findExecutable)
 import System.Environment (getEnv, getArgs)
 import System.Exit (ExitCode(..))
-import System.FilePath ((</>), takeDirectory)
+import System.FilePath ((</>), takeDirectory, dropExtension)
 import System.Info (compilerVersion)
 import System.IO (hGetLine, hPutStrLn, hFlush, hClose, hIsEOF, hGetContents)
 import System.IO.Temp (withSystemTempDirectory)
@@ -60,9 +60,9 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
-      name <- ["Evidence","Program","Plugin"]] ++
-    [load "guest/kyyn-sdk/src" "Kyyn/Plugin.hs"] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin"]] ++
+      name <- ["Evidence","Program","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
     [load "host/kyyn-microhs/test/plugin" "FolderSchema.hs"])
   let schemaDirectory = temporary </> "schema"
@@ -136,7 +136,7 @@ compileBoth temporary toolchain ghc label sources = do
       executable = directory </> "native"
   writeSources directory (sourceFiles sources)
   (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fforce-recomp","-i" ++ directory,
-    "-outputdir",directory </> "objects","-main-is","KyynPluginEntry.main",
+    "-outputdir",directory </> "objects","-main-is",dropExtension (relativeName (selectedEntry sources)) ++ ".main",
     directory </> relativeName (selectedEntry sources),"-o",executable] ""
   assert ("GHC rejected generated plugin: " ++ out ++ err) (status == ExitSuccess)
   artifact <- compileMicroHs temporary toolchain sources >>= right
@@ -276,7 +276,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
     assert "invalid wait accepted" (case parseEither (Host.decodePluginHostCall "waiting" "seconds")
       (object ["seconds" .= (seconds :: String)]) of Left _ -> True; Right _ -> False)
   let forbidden = Text.encodeUtf8 (Text.unlines ["module KyynPluginEntry where","import Kyyn.Plugin.Host",
-        "main :: IO ()","main = pure ()","bad :: NetworkAcquisition String ()","bad = displayInstructions \"no\""])
+        "main :: IO ()","main = pure ()","bad :: Acquisition String ()","bad = displayInstructions \"no\""])
   rejectBoth temporary toolchain compiler =<< right
     (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",forbidden):common))
   putStrLn "Network requests, secret rotation and explicit login passed under GHC and MicroHs."
