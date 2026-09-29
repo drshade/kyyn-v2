@@ -55,7 +55,7 @@ try {
   assert.equal(emptyApi.context.evolution, created.id);
   assert.equal(emptyApi.context.kb, kb);
   const catalogue = discover('module', 'list');
-  assert.deepEqual(catalogue.modules.slice(-3),
+  assert.deepEqual(catalogue.modules.filter(name => name.startsWith('Kyyn.Workspace.')),
     ['Kyyn.Workspace.Evolution', 'Kyyn.Workspace.Before', 'Kyyn.Workspace.After']);
   git(kb, 'switch', '-c', 'discovery-other-head');
   git(kb, 'commit', '--allow-empty', '-m', 'Unrelated head advance');
