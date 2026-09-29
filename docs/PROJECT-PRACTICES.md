@@ -247,6 +247,11 @@ source and destination refusals, exclusions, independent copies and unchanged HE
 It runs in the installed integration check; the source fixture is committed in a
 disposable repository, so the developer checkout need not be clean.
 
+`node tools/test-plugin-guides.mjs EXECUTABLE` checks installed plugin list/show/guide
+without a runtime bundle, valid root schema or compilable plugin source. It covers
+accepted Git material versus live evolution targets, source identity, Unicode,
+missing/invalid guides and symlink refusal. It is included in the installed gate.
+
 Guest API discovery has two focused checks: `cabal test guest-catalogue
 --test-show-details=direct` exercises the read-only catalogue capability and real
 Dhall codec, and `KYYN_TEST_ROOT="$PWD"

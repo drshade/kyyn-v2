@@ -48,8 +48,8 @@ responseJson (Response outcome result _ diagnostics) = object
 success :: Value -> [String] -> Response
 success result text = Response Succeeded result text []
 
-pluginResult :: InstalledPlugin -> Response
-pluginResult (InstalledPlugin name location (PluginOrigin repository path revision)) =
+pluginResult :: EvolutionId -> InstalledPlugin -> Response
+pluginResult evolution (InstalledPlugin name location (PluginOrigin repository path revision)) =
   let (kind, source) = case repository of
         LocalRepository scope -> ("Local" :: String, scopePath scope)
         RemoteRepository url -> ("Git", gitUrlText url)
@@ -60,7 +60,9 @@ pluginResult (InstalledPlugin name location (PluginOrigin repository path revisi
         "path" .= subdirectory, "revision" .= revisionName revision]])
     ["Installed plugin " ++ pluginNameText name, "Location: " ++ scopePath location,
       "Source: " ++ source ++ maybe "" (\selected -> " (" ++ selected ++ ")") subdirectory,
-      "Revision: " ++ revisionName revision]
+      "Revision: " ++ revisionName revision,
+      "Guide: kyyn-v2 plugin guide " ++ pluginNameText name ++ " --evolution " ++ evolutionIdName evolution,
+      "Configuration: kyyn-v2 plugin connector schema show " ++ pluginNameText name ++ " --evolution " ++ evolutionIdName evolution]
 
 initializationResult :: CheckResult InitializationResult -> Response
 initializationResult (Rejected report) = validationResult "Initialization" report False

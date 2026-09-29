@@ -201,8 +201,9 @@ acquisition integration test, avoiding network-dependent tests. The first-party
 
 ### Discover packages through KB-local taps
 
-Owner decision (2026-09-29); tap and guide commands below are proposed, not
-implemented. A tap is a Git repository with a Dhall catalogue, not a dependency
+Owner decision (2026-09-29); tap commands and preinstallation guide access below
+are not yet implemented. Installed-package list/show/guide commands are implemented.
+A tap is a Git repository with a Dhall catalogue, not a dependency
 resolver or runtime registry. First- and third-party catalogues use the same
 interface; no central approval service is involved. The first discovery slice
 lists plugins.
