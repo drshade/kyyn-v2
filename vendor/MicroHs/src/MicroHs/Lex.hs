@@ -9,7 +9,7 @@ module MicroHs.Lex(
 import qualified Prelude(); import MHSPrelude hiding(lex)
 import Data.Char
 import Data.List
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import MicroHs.Ident
 import Text.ParserComb(TokenMachine(..))
 import Text.PrettyPrint.HughesPJLiteClass(prettyShow)
@@ -64,6 +64,13 @@ showToken (TPragma _ s) = "{-# " ++ s ++ " #-}"
 showToken (TEnd _) = "EOF"
 showToken (TRaw _) = "TRaw"
 
+-- Lex an operator (a sequence of operator characters)
+lexOper :: SLoc -> String -> [Token]
+lexOper loc (d:cs) =
+  case span isOperChar cs of
+    (ds, rs) -> TIdent loc [] (d:ds) : lex (addCol loc $ 1 + length ds) rs
+lexOper loc [] = lex loc []
+
 incrLine :: SLoc -> SLoc
 incrLine (SLoc f l _) = let l' = l+1 in seq l' (SLoc f l' 1)
 
@@ -108,17 +115,44 @@ lex loc ('0':x:cs)
 lex loc cs@(d:_) | isDigit d = readNum isDigit 10 0 loc cs
 lex loc ('.':cs@(d:_)) | isLower_ d =
   TSpec loc '.' : lex (addCol loc 1) cs
-lex loc ('(':dcs@(d:cs)) | d == '#'  = TSpec loc 'L' : lex (addCol loc 2) cs
-                         | otherwise = TSpec loc '(' : lex (addCol loc 1) dcs
-lex loc ('#':')':cs) = TSpec loc 'R' : lex (addCol loc 2) cs
+-- '(#' starts an unboxed tuple when its bracket is closed by '#)', as in
+-- (# a, b #), (# #), (##) or (#-1, x #): the body is then lexed on its own,
+-- so a '#)' met anywhere else is the operator '#' and ')', as in the section
+-- (x #).  Otherwise '(#' is '(' followed by an operator whose name begins
+-- with '#': (#), (#>), or a section like (#> 1) or (# x).
+lex loc ('(':dcs@(d:cs))
+  | d == '#', Just k <- hashClose (0::Int) (0::Int) cs =
+      let (body, rest) = splitAt k cs          -- rest starts with "#)"
+          loc' = advance (addCol loc 2) body
+      in  TSpec loc 'L' : noEnd (lex (addCol loc 2) body) ++ TSpec loc' 'R' : lex (addCol loc' 2) (drop 2 rest)
+  | d == '#'  = TSpec loc '(' : lexOper (addCol loc 1) dcs
+  | otherwise = TSpec loc '(' : lex (addCol loc 1) dcs
+  where -- The position of the '#)' that closes the bracket, if any.  Nested
+        -- parentheses are counted; string and character literals are skipped.
+        hashClose n i ('#':')':_) | n == 0 = Just i
+        hashClose n i (')':r) = if n > 0 then hashClose (n - 1) (i + 1) r else Nothing
+        hashClose n i ('(':r) = hashClose (n + 1) (i + 1) r
+        hashClose n i ('"':r) = let (j, r') = skipString (i + 1) r in hashClose n j r'
+        hashClose n i ('\'':'\\':_:'\'':r) = hashClose n (i + 4) r
+        hashClose n i ('\'':_:'\'':r) = hashClose n (i + 3) r
+        hashClose n i (_:r) = hashClose n (i + 1) r
+        hashClose _ _ [] = Nothing
+        skipString i ('\\':_:r) = skipString (i + 2) r
+        skipString i ('"':r) = (i + 1, r)
+        skipString i (_:r) = skipString (i + 1) r
+        skipString i [] = (i, [])
+        -- The position after a piece of text
+        advance l ('\n':r) = advance (incrLine l) r
+        advance l (_:r) = advance (addCol l 1) r
+        advance l [] = l
+        -- The tokens of the body, without the end marker lex adds
+        noEnd (TEnd _ : _) = []
+        noEnd (t : ts) = t : noEnd ts
+        noEnd [] = []
 -- Recognize #line 123 "file/name.hs"
 lex loc ('#':xcs) | (SLoc _ _ 1) <- loc, Just cs <- stripPrefix "line " xcs =
   case span (/= '\n') cs of
-    (line, rs) ->        -- rs will contain the '\n', so subtract 1 below
-      let ws = words line
-          file = tail $ init $ ws!!1   -- strip the initial and final '"'
-          loc' = SLoc file (readInt (ws!!0) - 1) 1
-      in  lex loc' rs
+    (line, rs) -> lex (fromMaybe loc (lineDirective loc line)) rs
                   | (SLoc _ 1 1) <- loc, take 1 xcs == "!" =
   -- It's a shebang (#!), ignore the rest of the line
   skipLine loc xcs
@@ -128,9 +162,7 @@ lex loc (c:cs@(d:_)) | isSpecSing c && not (isOperChar d) = -- handle reserved
   TSpec loc c :
     let ts = lex (addCol loc 1) cs
     in  if c == '\\' then tLam ts else ts
-lex loc (d:cs) | isOperChar d =
-  case span isOperChar cs of
-    (ds, rs) -> TIdent loc [] (d:ds) : lex (addCol loc $ 1 + length ds) rs
+lex loc dcs@(d:_) | isOperChar d = lexOper loc dcs
 lex loc (d:cs) | isSpec d =
   TSpec loc d : lex (addCol loc 1) cs
 lex loc ('"':'"':'"':cs) = lexLitStr loc (addCol loc 3) (\ _ s -> [TString loc s]) isTrip   multiLine (\ _ _ -> Nothing) cs
@@ -449,14 +481,34 @@ readInt = foldl (\ r c -> r * 10 + digitToInt c) 0
 pragma :: SLoc -> [Char] -> [Token]
 pragma loc cs =
   let skip = skipNest loc 1 ('#':cs)
-  in  case words cs of
-        p : _ | map toUpper p == "SOURCE" -> TPragma loc p : skip
+      (p, rest) = break isSpace (dropWhile isSpace cs)
+  in  case map toUpper p of
+        "SOURCE" -> TPragma loc p : skip
         -- hsc2hs generates LINE pragmas
-        p : ln@(_:_) : fn : _ | map toUpper p == "LINE", all isDigit ln ->
-          let f = tail (init fn)
-              l = readInt ln - 1
-          in  seq l $ skipNest (SLoc f l 1) 1 ('#':cs)
+        "LINE" | Just loc' <- lineDirective loc rest -> skipNest loc' 1 ('#':cs)
         _ -> skip
+
+-- Parse the arguments of a '#line 123 "file/name.hs"' directive or a LINE pragma.
+-- The directive describes the following line, and the '\n' that ends it
+-- will increment the line number, so subtract 1 here.
+-- The file name is everything between the first and the last '"', taken
+-- verbatim: the tools that generate these directives (cpphs, hsc2hs, and
+-- runCPPString) write the name without any escaping, so it may contain spaces.
+-- Without a quoted file name the current file name is kept.
+-- Only the directive's own line is examined.
+lineDirective :: SLoc -> String -> Maybe SLoc
+lineDirective (SLoc file _ _) cs =
+  case span isDigit (dropWhile isSpace (takeWhile (/= '\n') cs)) of
+    (ln@(_:_), rs) ->
+      let l = readInt ln - 1
+          f = fromMaybe file (quoted rs)
+      in  seq l $ Just (SLoc f l 1)
+    _ -> Nothing
+  where
+    quoted rs =
+      case break (== '"') rs of
+        (_, '"':qs) | (_, '"':nm) <- break (== '"') (reverse qs) -> Just (reverse nm)
+        _ -> Nothing
 
 -- | This is the magical layout resolver, straight from the Haskell report.
 -- https://www.haskell.org/onlinereport/haskell2010/haskellch10.html#x17-17800010.3
