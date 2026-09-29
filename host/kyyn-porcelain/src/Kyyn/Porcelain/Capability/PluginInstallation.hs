@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.PluginInstallation
-  ( PluginInstallation(..), installPlugin, preparePlugin ) where
+  ( PluginInstallation(..), installPlugin, installNamedPlugin, preparePlugin ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -13,14 +13,18 @@ import Kyyn.Domain.Plugin
 import Kyyn.Domain.Root (pluginSourceLocation, pluginOriginLocation)
 
 data PluginInstallation :: Effect where
-  InstallPlugin :: EvolutionWorkspace -> PluginSource
+  InstallPlugin :: EvolutionWorkspace -> PluginSource -> Maybe PluginName
     -> PluginInstallation m (Either [Diagnostic] InstalledPlugin)
 
 type instance DispatchOf PluginInstallation = Dynamic
 
 installPlugin :: PluginInstallation :> es => EvolutionWorkspace -> PluginSource
   -> Eff es (Either [Diagnostic] InstalledPlugin)
-installPlugin workspace = send . InstallPlugin workspace
+installPlugin workspace source = send (InstallPlugin workspace source Nothing)
+
+installNamedPlugin :: PluginInstallation :> es => EvolutionWorkspace -> PluginName -> PluginSource
+  -> Eff es (Either [Diagnostic] InstalledPlugin)
+installNamedPlugin workspace name source = send (InstallPlugin workspace source (Just name))
 
 preparePlugin :: PluginManifest -> FileTree -> ByteString -> Either [Diagnostic] FileTree
 preparePlugin manifest source origin = do

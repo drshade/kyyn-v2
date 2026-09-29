@@ -25,7 +25,7 @@ import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 runPluginInstallation :: (FS.FileSystem :> es, Git.Git :> es, DhallHandling :> es, Evolution.EvolutionStore :> es)
   => Eff (PluginInstallation : es) a -> Eff es a
 runPluginInstallation = interpret $ \_ -> \case
-  InstallPlugin workspace@(EvolutionWorkspace (KnowledgeBase (Repository destination) _) _) source -> runExceptT $ do
+  InstallPlugin workspace@(EvolutionWorkspace (KnowledgeBase (Repository destination) _) _) source expected -> runExceptT $ do
     state <- ExceptT (Evolution.readEvolutionState workspace)
     when (state == Accepted) (reject "plugin.evolution-accepted" "Create a new evolution to change accepted plugins")
     workspacePath <- pathChecked (Evolution.workspaceLocation workspace)
@@ -42,6 +42,8 @@ runPluginInstallation = interpret $ \_ -> \case
           manifestBytes <- maybe (reject "plugin.manifest-missing" "Package root has no kyyn-plugin.dhall") pure
             (lookup pluginManifestLocation (files tree))
           manifest <- ExceptT (Protocol.decodeManifest manifestBytes)
+          forM_ expected $ \name -> unless (manifestName manifest == name)
+            (reject "tap.package-mismatch" "Catalogue and package names disagree; no plugin was installed")
           let origin = PluginOrigin originRepository selected revision
               name = manifestName manifest
           originBytes <- ExceptT (Protocol.encodeOrigin origin)

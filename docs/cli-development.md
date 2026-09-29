@@ -204,6 +204,23 @@ a compiled schema or a guest runtime; the selected directory must contain
 
 ## Install plugin source
 
+Discover available packages and read their guides before installing:
+
+```sh
+kyyn-v2 --kb /path/to/kb tap list
+kyyn-v2 --kb /path/to/kb tap update
+kyyn-v2 --kb /path/to/kb plugin search
+kyyn-v2 --kb /path/to/kb plugin guide first-party/microsoft-graph
+kyyn-v2 --kb /path/to/kb plugin install first-party/microsoft-graph --evolution ID
+```
+
+New KBs include the first-party tap declaration. For an existing KB, add it with
+`tap add first-party --from https://github.com/drshade/kyyn-v2`. Search uses the
+downloaded catalogue; use `tap update [NAME]` to refresh it. `tap add/remove` edits
+`taps.dhall` without committing it. `plugin list`, `plugin show NAME` and
+`plugin guide NAME` inspect installed packages; add `--evolution ID` for a draft.
+Guides and discovery work even when the KB or plugin code cannot compile.
+
 Create an evolution, then copy a committed plugin package into its target:
 
 ```sh

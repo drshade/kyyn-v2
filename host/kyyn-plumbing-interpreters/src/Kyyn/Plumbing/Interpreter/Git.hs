@@ -26,6 +26,11 @@ runGit :: forall es a. (Process.ProcessExecution :> es, Failure :> es)
 runGit executable configurationEnvironment = interpret $ \_ -> \case
   ReadUserIdentity repo -> runExceptT $ GitUser <$> configured repo "user.name" <*> configured repo "user.email"
   DiscoverRepository scope -> discover scope
+  FetchRevision repository url -> do
+    (_, Process.ProcessExit status message) <- commandInput repository [("GIT_TERMINAL_PROMPT","0")]
+      ["fetch", "--depth=1", "--no-tags", "--", gitUrlText url, "HEAD"] Bytes.empty
+    if status == 0 then resolve repository "FETCH_HEAD"
+      else pure (Left [errorDiagnostic "git.fetch-failed" (Char8.unpack message)])
   CloneRepository url scope -> do
     let repository = Repository scope
     (_, Process.ProcessExit status message) <- commandInput repository [("GIT_TERMINAL_PROMPT","0")]
@@ -100,10 +105,11 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
     let headers = takeWhile (not . Bytes.null) (Char8.lines commit)
     traverse (either (rejected "git.invalid-commit") pure . gitRevision . Char8.unpack . Bytes.drop 7)
       (filter ("parent " `Bytes.isPrefixOf`) headers)
-  CreateCommit repo (GitTree replacements) parent (CommitMetadata author committer message) -> do
-    let components WholeTree = []
+  CreateCommit repo selected parent (CommitMetadata author committer message) -> do
+    let (replacements,fileUpdates) = case selected of GitTree trees -> (trees,[]); GitTreeWithFiles trees updates -> (trees,updates)
+        components WholeTree = []
         components (Subtree prefix) = Char8.split '/' (utf8 (relativeName prefix))
-        prefixes = map (components . fst) replacements
+        prefixes = map (components . fst) replacements ++ map (components . Subtree . fst) fileUpdates
     unless (and [not (a `isPrefixOf` b || b `isPrefixOf` a) | a:rest <- tails prefixes, b <- rest])
       (broken "Overlapping Git subtree replacements")
     base <- case parent of
@@ -111,11 +117,15 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
       Just revision -> do
         _ <- resolve repo (revisionName revision) >>= either (broken . show) pure
         checked repo [] ["rev-parse", revisionName revision ++ "^{tree}"] Bytes.empty
-    tree <- foldM (\old (location, replacement) -> do
+    trees <- foldM (\old (location, replacement) -> do
       replacementTree <- build repo [(Char8.split '/' (utf8 (relativeName path)), bytes) | (path,bytes) <- files replacement]
       changed <- replace repo (Just (oid old)) (components location)
-        (if null (files replacement) then Nothing else Just replacementTree)
+        (if null (files replacement) then Nothing else Just replacementTree) True
       maybe (makeTree repo []) (pure . Char8.pack) changed) base replacements
+    tree <- foldM (\old (path,bytes) -> do
+      object <- checked repo [] ["hash-object", "-w", "--stdin", "--no-filters"] bytes
+      changed <- replace repo (Just (oid old)) (components (Subtree path)) (Just (oid object)) False
+      maybe (broken "File update removed the Git root") (pure . Char8.pack) changed) trees fileUpdates
     output <- checked repo (identity "AUTHOR" author ++ identity "COMMITTER" committer)
       (["-c", "commit.gpgsign=false", "commit-tree", oid tree]
         ++ maybe [] (\revision -> ["-p", revisionName revision]) parent)
@@ -244,9 +254,9 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
           ((name:_, _):_) -> treeEntry name <$> build repo [(drop 1 path,bytes) | (path,bytes) <- group]
           _ -> broken "Invalid replacement file tree"
       oid <$> makeTree repo records
-    replace :: Repository -> Maybe String -> [Bytes.ByteString] -> Maybe String -> Eff es (Maybe String)
-    replace _ _ [] replacement = pure replacement
-    replace repo old (name:rest) replacement = do
+    replace :: Repository -> Maybe String -> [Bytes.ByteString] -> Maybe String -> Bool -> Eff es (Maybe String)
+    replace _ _ [] replacement _ = pure replacement
+    replace repo old (name:rest) replacement isTree = do
       output <- maybe (pure Bytes.empty) (\object -> checked repo [] ["ls-tree", "-z", object] Bytes.empty) old
       let entries = if Bytes.null output then [] else Char8.split '\0' (Bytes.init output)
           entryName = Bytes.drop 1 . Char8.dropWhile (/= '\t')
@@ -258,8 +268,9 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
           _ | null rest -> pure Nothing
           _ -> broken "Replacement traverses a non-directory Git entry"
         _ -> broken "Duplicate Git tree entries"
-      updated <- replace repo child rest replacement
-      let entries' = filter ((/= name) . entryName) entries ++ maybe [] (\object -> [treeEntry name object]) updated
+      updated <- replace repo child rest replacement isTree
+      let render object = if null rest && not isTree then "100644 blob " <> Char8.pack object <> "\t" <> name else treeEntry name object
+          entries' = filter ((/= name) . entryName) entries ++ maybe [] (\object -> [render object]) updated
       if null entries' then pure Nothing else Just . oid <$> makeTree repo entries'
     checked :: Repository -> [(String,String)] -> [String] -> Bytes.ByteString -> Eff es Bytes.ByteString
     checked repo env args input = do

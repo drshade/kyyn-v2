@@ -3,7 +3,8 @@ module Main (main) where
 import Control.Monad (forM_, unless)
 import Data.List (isInfixOf)
 import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionId)
-import Kyyn.Domain.Git (gitRevision)
+import Kyyn.Domain.Git (gitRevision, gitUrl)
+import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Domain.Curation (RecipeId(..))
@@ -56,7 +57,20 @@ main = do
   succeeds ["plugin", "list"] (Invocation selected Human (Plugin (ListPlugins Nothing)))
   succeeds ["plugin", "show", "local-file", "--evolution", "abc123"]
     (Invocation selected Human (Plugin (ShowPlugin localFile (Just identity))))
-  succeeds ["plugin", "guide", "local-file"] (Invocation selected Human (Plugin (ReadPluginGuide localFile Nothing)))
+  succeeds ["plugin", "guide", "local-file"] (Invocation selected Human (Plugin (ReadPluginGuide (InstalledGuide localFile) Nothing)))
+  let community = either error id (tapName "community")
+      source = either error id (gitUrl "file:///catalogue")
+  succeeds ["tap", "list"] (Invocation selected Human (Tap ListTaps))
+  succeeds ["tap", "add", "community", "--from", "file:///catalogue"] (Invocation selected Human (Tap (AddTap community source)))
+  succeeds ["tap", "update"] (Invocation selected Human (Tap (UpdateTaps Nothing)))
+  succeeds ["tap", "update", "community"] (Invocation selected Human (Tap (UpdateTaps (Just community))))
+  succeeds ["plugin", "search", "calendar"] (Invocation selected Human (Plugin (SearchPlugins "calendar")))
+  succeeds ["plugin", "install", "community/local-file", "--evolution", "abc123"]
+    (Invocation selected Human (Plugin (InstallAvailablePlugin identity community localFile)))
+  succeeds ["plugin", "guide", "community/local-file"]
+    (Invocation selected Human (Plugin (ReadPluginGuide (AvailableGuide community localFile) Nothing)))
+  forM_ [["tap","add","../bad","--from","file:///catalogue"], ["plugin","install","community/local-file"],
+    ["plugin","install","community/local-file","--from","file:///catalogue","--evolution","abc123"]] refuses
   refuses ["plugin", "guide", "../bad"]
   succeeds ["plugin","install","--evolution","abc123","--from","./plugins/local-file"]
     (Invocation selected Human (Plugin (InstallPlugin identity "./plugins/local-file" Nothing)))

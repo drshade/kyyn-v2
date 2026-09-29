@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
+  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, fetchRevision, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
   , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, sourceChanges, synchronizeCheckout, indexPaths
   ) where
 
@@ -17,6 +17,7 @@ data Git :: Effect where
   DiscoverRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   InitializeRepository :: DirectoryScope -> Git m (Either [Diagnostic] (Repository, TreePath))
   CloneRepository :: GitUrl -> DirectoryScope -> Git m (Either [Diagnostic] Repository)
+  FetchRevision :: Repository -> GitUrl -> Git m (Either [Diagnostic] GitRevision)
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
@@ -43,6 +44,9 @@ initializeRepository = send . InitializeRepository
 
 cloneRepository :: Git :> es => GitUrl -> DirectoryScope -> Eff es (Either [Diagnostic] Repository)
 cloneRepository url = send . CloneRepository url
+
+fetchRevision :: Git :> es => Repository -> GitUrl -> Eff es (Either [Diagnostic] GitRevision)
+fetchRevision repository = send . FetchRevision repository
 
 resolveRevision :: Git :> es => Repository -> String -> Eff es (Either [Diagnostic] GitRevision)
 resolveRevision repo = send . ResolveRevision repo

@@ -38,6 +38,7 @@ library
     Kyyn.Plumbing.Capability.SecretStore
     Kyyn.Plumbing.Capability.HttpTransport
     Kyyn.Plumbing.Protocol.PluginHost
+    Kyyn.Plumbing.Protocol.Tap
     Kyyn.Plumbing.Capability.PluginInteraction
     Kyyn.Plumbing.Capability.Judgement
     Kyyn.Plumbing.Capability.Judgement.Jev

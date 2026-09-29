@@ -201,8 +201,8 @@ acquisition integration test, avoiding network-dependent tests. The first-party
 
 ### Discover packages through KB-local taps
 
-Owner decision (2026-09-29); tap commands and preinstallation guide access below
-are not yet implemented. Installed-package list/show/guide commands are implemented.
+Owner decision (2026-09-29); CLI tap discovery and installed/preinstallation
+guide access are implemented.
 A tap is a Git repository with a Dhall catalogue, not a dependency
 resolver or runtime registry. First- and third-party catalogues use the same
 interface; no central approval service is involved. The first discovery slice
@@ -233,7 +233,7 @@ Deleting the cache loses no declarations or installed source. Updating or removi
 a tap never updates or removes an installed plugin. A cloned KB retains its
 discovery setup without inheriting another checkout's cache.
 
-A catalogue entry supplies a plugin name, short description, source repository
+The repository-root `kyyn-tap.dhall` catalogue supplies a plugin name, short description, source repository
 and package-relative path. The description is the catalogue's offline-search
 summary, not a replacement for the plugin's own description. Illustratively:
 
@@ -309,8 +309,7 @@ KB caches, cache deletion/reconstruction, qualified-name resolution through the
 existing installer, and unchanged installed packages after tap updates/removal.
 Read guides before installation and from accepted/draft packages whose Haskell
 does not compile, without invoking the guest. Check missing/invalid guide paths
-and source identity in results. These are required implementation proofs, not
-claims that the proposed commands already exist.
+and source identity in results.
 
 Evidence-producing methods should supply useful source identifiers as described
 in [evidence](0014-evidence.md): a stable URI where available, a scoped provider

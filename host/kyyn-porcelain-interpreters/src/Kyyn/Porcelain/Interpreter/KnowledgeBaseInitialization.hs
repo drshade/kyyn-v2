@@ -12,13 +12,16 @@ import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path
 import Kyyn.Domain.Publication
+import Kyyn.Domain.Tap (tapsPath, firstPartyTap)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import qualified Kyyn.Plumbing.Protocol.Tap as Tap
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
 import qualified Kyyn.Porcelain.Capability.RootStore as Store
 import System.FilePath (takeDirectory, takeFileName, makeRelative)
 
-runKnowledgeBaseInitialization :: (FS.FileSystem :> es, Git.Git :> es, Store.RootStore :> es)
+runKnowledgeBaseInitialization :: (FS.FileSystem :> es, Git.Git :> es, Store.RootStore :> es, DhallHandling :> es)
   => Eff (KnowledgeBaseInitialization : es) a -> Eff es a
 runKnowledgeBaseInitialization = interpret $ \_ -> \case
   PrepareKnowledgeBase scope -> prepare scope
@@ -37,14 +40,17 @@ runKnowledgeBaseInitialization = interpret $ \_ -> \case
         when (isJust parent) (reject "kb.initialization-changed" "A repository appeared during initialization; retry kb init.")
         pure (KnowledgeBase repository prefix, branch, parent)
     rootPath <- checkedPath (Store.rootLocation kb)
-    revision <- liftEff (Git.createCommit repository (GitTree [(Subtree rootPath,rootFiles)]) parent metadata)
+    existingTaps <- liftEff (FS.readOptionalBytes scope tapsPath)
+    tapBytes <- maybe (ExceptT (Tap.encodeTaps [firstPartyTap])) pure existingTaps
+    tapPath <- checkedPath (knowledgeBasePath kb tapsPath)
+    revision <- liftEff (Git.createCommit repository (GitTreeWithFiles [(Subtree rootPath,rootFiles)] [(tapPath,tapBytes)]) parent metadata)
     actualBranch <- liftEff (Git.checkedOutBranch repository)
     unless (actualBranch == Just branch) (reject "git.detached-head" "The checked-out branch changed; initialization was not published.")
     updated <- liftEff (Git.compareAndSwapRef repository branch parent revision)
     case updated of
       RefNotUpdated _ -> reject "kb.initialization-changed" "The branch advanced; initialization was not published. Retry kb init."
       RefUpdated -> do
-        synchronized <- liftEff (Git.synchronizeCheckout repository branch revision [rootPath])
+        synchronized <- liftEff (Git.synchronizeCheckout repository branch revision [rootPath,tapPath])
         pure (InitializedRoot revision branch kb (either WorkingTreeUpdateIncomplete (const WorkingTreeUpdated) synchronized))
 
 prepare :: (FS.FileSystem :> es, Git.Git :> es)

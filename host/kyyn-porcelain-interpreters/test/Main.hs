@@ -199,6 +199,7 @@ schemaMock contract = interpret $ \_ -> \case
 
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
 gitMock captured = interpret $ \_ -> \case
+  Git.FetchRevision {} -> error "Root opening must not refresh remote packages"
   Git.CloneRepository {} -> error "Root opening must not acquire remote packages"
   Git.SourceChanges {} -> error "Root opening must not inspect plugin source changes"
   Git.ReadUserIdentity _ -> error "Root opening must not read commit identity"

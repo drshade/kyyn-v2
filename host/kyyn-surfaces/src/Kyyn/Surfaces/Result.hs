@@ -71,6 +71,7 @@ initializationResult (Passed (InitializedRoot revision (LocalBranch branch) (Kno
       diagnostics = case checkout of WorkingTreeUpdated -> []; WorkingTreeUpdateIncomplete values -> values
       location = case prefix of WholeTree -> scopePath repository; Subtree path -> scopedPath repository path
       rootPath = case prefix of WholeTree -> "root"; Subtree path -> relativeName path ++ "/root"
+      tapsPath = case prefix of WholeTree -> "taps.dhall"; Subtree path -> relativeName path ++ "/taps.dhall"
       quote value = "'" ++ concatMap (\c -> if c == '\'' then "'\\''" else [c]) value ++ "'"
   in Response (if complete then Succeeded else Incomplete)
     (object ["revision" .= revisionName revision, "branch" .= branch, "path" .= location, "checkoutSynchronized" .= complete])
@@ -78,7 +79,7 @@ initializationResult (Passed (InitializedRoot revision (LocalBranch branch) (Kno
       if complete then ["Next, from the KB directory: kyyn-v2 evolution new NAME"] else [])
     (warnings ++ diagnostics ++ if complete then [] else [errorDiagnostic "kb.checkout-incomplete"
       ("The root is committed. Restore its checkout with: git -C " ++ quote (scopePath repository) ++
-       " restore --source=" ++ revisionName revision ++ " --staged --worktree -- " ++ quote rootPath ++
+       " restore --source=" ++ revisionName revision ++ " --staged --worktree -- " ++ quote rootPath ++ " " ++ quote tapsPath ++
        "\nRe-running kb init will refuse the existing root.")])
 
 refusal :: [Diagnostic] -> Response
