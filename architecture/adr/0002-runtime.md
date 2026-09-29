@@ -277,9 +277,8 @@ used by schema inspection. A fact-only change must reuse an unchanged code build
 changed source, compiler, SDK or build options must not reuse an incompatible one.
 
 MicroHs compatibility is a release gate, not inferred from valid GHC code.
-The pinned `3322c60` identifies version 0.16.6.0 and includes upstream's
-preprocessor path-quoting fix, verified on 21 September 2026. It is one commit
-after the previous pin; the later unrelated type-variable change is excluded.
+The pinned `8bf3d4d` identifies version 0.16.7.0 and includes upstream's
+preprocessor invocation quoting and source-location filename fixes.
 Probes reject type-family syntax used by microlens
 and dhall-haskell even after bundled preprocessing. Updating a pin is deliberate.
 
