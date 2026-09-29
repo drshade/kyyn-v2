@@ -55,7 +55,7 @@ try {
   assert.equal(emptyApi.context.evolution, created.id);
   assert.equal(emptyApi.context.kb, kb);
   const catalogue = discover('module', 'list');
-  assert.deepEqual(catalogue.modules.slice(-3),
+  assert.deepEqual(catalogue.modules.filter(name => name.startsWith('Kyyn.Workspace.')),
     ['Kyyn.Workspace.Evolution', 'Kyyn.Workspace.Before', 'Kyyn.Workspace.After']);
   git(kb, 'switch', '-c', 'discovery-other-head');
   git(kb, 'commit', '--allow-empty', '-m', 'Unrelated head advance');
@@ -77,8 +77,12 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   const schemaPath = path.join(target, 'src', 'RootV2.hs');
   const validSchema = fs.readFileSync(schemaPath, 'utf8');
   fs.writeFileSync(schemaPath, 'module RootV2 where\nthis is invalid\n');
-  const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id], 1);
-  assert.equal(badSchema.outcome, 'Refused');
+  const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id]);
+  assert.equal(badSchema.outcome, 'Succeeded');
+  assert(badSchema.diagnostics.some(diagnostic => diagnostic.code === 'guest.bindings-unavailable'));
+  assert(badSchema.diagnostics.some(diagnostic => diagnostic.code === 'schema.compiler-rejected'));
+  assert(badSchema.result.modules.includes('Kyyn.Evolution'));
+  assert(!badSchema.result.modules.some(name => name.startsWith('Kyyn.Workspace.')));
   fs.writeFileSync(schemaPath, validSchema);
   const bindings = discover('module', 'show', 'Kyyn.Workspace.Evolution').symbols;
   for (const name of ['edit', 'evolve', 'editBefore']) {

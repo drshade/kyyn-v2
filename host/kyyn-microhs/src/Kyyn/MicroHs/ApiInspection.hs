@@ -112,6 +112,7 @@ project declarations (selected,checked,fixities) = do
             (TypeNamespace,Type (n,_) _) -> [n]
             (TypeNamespace,Data (n,_) _ _) -> [n]
             (TypeNamespace,Newtype (n,_) _ _) -> [n]
+            (TypeNamespace,Class _ (n,_) _ _) -> [n]
             _ -> []) defs
           fieldNames = [field | (lhs,cs) <- algebraic, Constr _ _ _ _ (Right fs) <- cs,
             (field,_) <- fs, ns == ValueNamespace,

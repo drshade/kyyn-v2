@@ -168,7 +168,6 @@ compileModuleCached flags impt mn = do
                 putStrLn ""
               dumpIf flags Dpreproc $
                 liftIO $ putStrLn $ "preprocessed:\n" ++ file
-              modify $ addWorking mn
               compileModule flags ImpNormal mn pathfn file
     Just tm -> do
       when (verbosityGT flags 1) $
@@ -198,7 +197,6 @@ compileBootModule flags mn = do
     Just (pathfn, file) -> do
       dumpIf flags Dpreproc $
         liftIO $ putStrLn $ "preprocessed:\n" ++ file
-      modify $ addBoot mn
       compileModule flags ImpBoot mn pathfn file
 
 compileModule :: Flags -> ImpType -> IdentModule -> FilePath -> String -> CM (TModule [LDef], Symbols, Time)
@@ -210,6 +208,10 @@ compileModule flags impt mn pathfn file = do
   when (verbosityGT flags 4) $
     liftIO $ putStrLn $ "parsing: " ++ pathfn
   let pmdl@(EModule mnn _ _) = parseDie pTop pathfn file
+  -- Remember the module under the name from the parsed file.
+  modify $ case impt of
+             ImpNormal -> addWorking mnn
+             ImpBoot   -> addBoot    mnn
   t2 <- liftIO (seq pmdl getTimeMilli)
   dumpIf flags Dparse $
     liftIO $ putStrLn $ "parsed:\n" ++ prettyShow pmdl
@@ -434,8 +436,9 @@ runCPPString flags fn ifile = do
   hClose hi
   writeFile fni $ "#line 1 \"" ++ fn ++ "\"\n" ++ ifile
   (fno, ho) <- openTmpFile "mhsout.hs"
+  hClose ho
   runCPP flags fni fno
-  ofile <- hGetContents ho
+  ofile <- hGetContents =<< openFile fno ReadMode
   removeFile fni
   removeFile fno
   return ofile
@@ -448,11 +451,12 @@ runPreString flags pgm args fn ifile = do
   hClose hi
   writeFile fni ifile
   (fno, ho) <- openTmpFile "mhspreout.hs"
+  hClose ho
   let cmd = unwords $ map quote $ pgm : fn : fni : fno : args
   when (verbosityGT flags 1) $
     putStrLn $ "Run preprocessor: " ++ show cmd
   callCommand cmd
-  ofile <- hGetContents ho
+  ofile <- hGetContents =<< openFile fno ReadMode
   removeFile fni
   removeFile fno
   return ofile
@@ -483,6 +487,7 @@ quote s = "'" ++ concatMap escape s ++ "'"
 runHsc2hs :: Flags -> FilePath -> IO String
 runHsc2hs flags fni = do
   (fno, ho) <- openTmpFile "mhshsc2hs.hs"
+  hClose ho
   mhsc2hs <- lookupEnv "MHSHSC2HS"
   let datadir = mhsdir flags
       hsc2hs = fromMaybe "hsc2hs" mhsc2hs
@@ -493,7 +498,7 @@ runHsc2hs flags fni = do
   when (verbosityGT flags 1) $
     putStrLn $ "Run hsc2hs: " ++ show cmd
   callCommand cmd
-  ofile <- hGetContents ho
+  ofile <- hGetContents =<< openFile fno ReadMode
   removeFile fno
   return ofile
 

@@ -9,8 +9,10 @@ import Kyyn.Types.Plugin (EvidenceRead(..), FileRead)
 import Kyyn.Types.Plugin (SourceConnector(..), CapturedMethod(..), EvidenceSnapshot, FetchError(..), CapturedText(..))
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
 
+-- | A plugin method that reads captured evidence without acquiring new source data.
 type CapturedRead payload = Program (EvidenceRead payload)
 
+-- | Evidence-reading operations shared by acquisition and captured-read programs.
 class ReadsEvidence row payload where
   injectEvidence :: EvidenceRead payload a -> row a
 

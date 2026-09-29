@@ -16,7 +16,7 @@ Bundled `cpphs` builds from MicroHs's generated C using `make bin/cpphs`; the
 prototype bootstrap now includes it. Retried imports get beyond preprocessing:
 microlens 0.5.0.0 rejects `type family Index`; dhall-haskell 1.42.3 reaches the
 associated `type Item` in `Dhall.Map` and is rejected. These are bounded import
-probes, not proof that a port is impossible. The pinned compiler is 0.16.6.0,
+probes, not proof that a port is impossible. The compiler used for these probes was 0.16.6.0,
 revision `455782164e75998b140d869c1b7cdde0c8a21508`.
 
 The prototype also exposed a UTF-8 assumption in its pinned ByteString handle IO.

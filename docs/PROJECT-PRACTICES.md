@@ -477,9 +477,8 @@ for native schema/API inspection and guest compilation with CPP enabled. It copi
 the runtime into a path containing spaces, single quotes and Unicode, and uses
 a similarly named KB directory. It is included in the full
 installed check and can be run independently for compiler updates.
-This fixture uses a space-free compiler temporary directory; CPP source-location
-handling under space-containing temporary paths is tracked in
-[issue #109](https://github.com/drshade/kyyn-v2/issues/109).
+Its compiler temporary directory also contains spaces and single quotes;
+workspace discovery must retain the CPP schema's `RootV1.Root` source identity.
 
 The installed check also runs `tools/test-initialization.mjs`: an empty KB is
 initialized through the CLI and evolved into its first collection. It checks

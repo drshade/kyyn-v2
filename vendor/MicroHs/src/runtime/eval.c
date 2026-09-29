@@ -4751,6 +4751,13 @@ headutf8(struct bytestring bs, void **ret)
 #endif  /* WANT_UTF8 */
 }
 
+/* Evaluate to a Bool */
+static INLINE value_t
+evalbool(NODEPTR n)
+{
+  return GETTAG(evali(n)) == T_A;
+}
+
 /* Evaluate to an INT */
 static INLINE value_t
 evalint(NODEPTR n)
@@ -7422,6 +7429,9 @@ MHS_FROM(mhs_from_Double, SETDBL, flt64_t);
 MHS_FROM(mhs_from_Float, SETFLT, flt32_t);
 #endif
 MHS_FROM(mhs_from_Int, SETINT, value_t);
+/* A Bool is the K (False) or A (True) combinator, not an int node. */
+#define SETBOOL(n, x) SETINDIR((n), (x) ? combTrue : combFalse)
+MHS_FROM(mhs_from_Bool, SETBOOL, value_t);
 #if WANT_INT64
 MHS_FROM(mhs_from_Int64, SETINT64, int64_t);
 #endif
@@ -7471,6 +7481,7 @@ MHS_TO(mhs_to_Float, evalflt, flt32_t);
 MHS_TO(mhs_to_Double, evaldbl, flt64_t);
 #endif
 MHS_TO(mhs_to_Int, evalint, value_t);
+MHS_TO(mhs_to_Bool, evalbool, value_t);
 #if WANT_INT64
 MHS_TO(mhs_to_Int64, evalint64, int64_t);
 #endif
@@ -7754,8 +7765,8 @@ print_mpz(mpz_ptr p)
 }
 #endif
 
-#if WANT_INT64 && WORD_SIZE < 64
-/* GMP lacks 64 bit support on 32 bit platforms */
+#if WANT_INT64 && (WORD_SIZE < 64 || LONG_MAX < INT64_MAX)
+/* GMP lacks 64 bit support on 32 bit platforms, and where long is 32 bits (LLP64) */
 void
 mpz_init_set_ui64(mpz_t rop, uint64_t op)
 {
@@ -7789,7 +7800,7 @@ mpz_get_si64(mpz_t op)
   return r;
 }
 #endif  /* WANT_INT64 */
-#if WORD_SIZE == 64
+#if WORD_SIZE == 64 && LONG_MAX >= INT64_MAX
 #define mpz_init_set_ui64 mpz_init_set_ui
 #define mpz_init_set_si64 mpz_init_set_si
 #define mpz_get_si64 mpz_get_si_
@@ -7808,9 +7819,16 @@ from_t mhs_mpz_get_d(int s) { return mhs_from_Double(s, 1, mpz_get_d(mhs_to_Ptr(
 #if WANT_FLOAT32
 from_t mhs_mpz_get_f(int s) { return mhs_from_Float(s, 1, (float)mpz_get_d(mhs_to_Ptr(s, 0))); }
 #endif  /* WANT_FLOAT32 */
+#if WANT_INT64 && WORD_SIZE == 64 && LONG_MAX < INT64_MAX
+/* LLP64: Int and Word are wider than the long the GMP interface takes. */
+from_t mhs_mpz_get_si(int s) { return mhs_from_Int(s, 1, mpz_get_si64(mhs_to_Ptr(s, 0))); }
+from_t mhs_mpz_init_set_si(int s) { mpz_init_set_si64(mhs_to_Ptr(s, 0), mhs_to_Int(s, 1)); return mhs_from_Unit(s, 2); }
+from_t mhs_mpz_init_set_ui(int s) { mpz_init_set_ui64(mhs_to_Ptr(s, 0), mhs_to_Word(s, 1)); return mhs_from_Unit(s, 2); }
+#else
 from_t mhs_mpz_get_si(int s) { return mhs_from_Int(s, 1, mpz_get_si_(mhs_to_Ptr(s, 0))); }
 from_t mhs_mpz_init_set_si(int s) { mpz_init_set_si(mhs_to_Ptr(s, 0), mhs_to_Int(s, 1)); return mhs_from_Unit(s, 2); }
 from_t mhs_mpz_init_set_ui(int s) { mpz_init_set_ui(mhs_to_Ptr(s, 0), mhs_to_Word(s, 1)); return mhs_from_Unit(s, 2); }
+#endif
 from_t mhs_mpz_ior(int s) { mpz_ior(mhs_to_Ptr(s, 0), mhs_to_Ptr(s, 1), mhs_to_Ptr(s, 2)); return mhs_from_Unit(s, 3); }
 from_t mhs_mpz_mul(int s) { mpz_mul(mhs_to_Ptr(s, 0), mhs_to_Ptr(s, 1), mhs_to_Ptr(s, 2)); return mhs_from_Unit(s, 3); }
 from_t mhs_mpz_mul_2exp(int s) { mpz_mul_2exp(mhs_to_Ptr(s, 0), mhs_to_Ptr(s, 1), mhs_to_Int(s, 2)); return mhs_from_Unit(s, 3); }

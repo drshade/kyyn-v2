@@ -42,7 +42,7 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
   common <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Judgement","Program","Evidence","Plugin","Query","Fact"]] ++
+    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Judgement","Program","Evidence","Plugin","PluginHost","Query","Fact"]] ++
      [load "guest/kyyn-sdk/src" file | file <- ["Kyyn/Plugin.hs","Kyyn/Judgement/Internal.hs","Kyyn/Judgement/Question.hs","Kyyn/Query.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","Judgement"]] ++
      [load "vendor/json" file | file <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++

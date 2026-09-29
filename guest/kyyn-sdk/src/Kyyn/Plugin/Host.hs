@@ -7,8 +7,11 @@ import Kyyn.Types.Program
 import Kyyn.Types.Plugin (FileRead(..), EvidenceRead, FetchError, CapturedText)
 import Kyyn.Types.PluginHost
 
+-- | HTTP, secret storage and waiting, combined with an additional capability row.
 type NetworkHost rest = Program (Http :+: (Secrets :+: (Waiting :+: rest)))
+-- | Fetch source data using HTTP, files, secrets, waiting and prior captured evidence.
 type Acquisition payload = NetworkHost (FileRead :+: EvidenceRead payload)
+-- | An explicit login program that can display instructions to the user.
 type PluginLogin = NetworkHost LoginInteraction
 
 -- | Enumerate source files relative to the selected absolute directory.

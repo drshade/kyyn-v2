@@ -6,7 +6,7 @@ notices; Kyyn's proprietary policy does not replace them.
 
 | Directory | Source | Archive SHA-256 | License |
 | --- | --- | --- | --- |
-| MicroHs | [3322c60aad59da83fee9f870c37dab56e56238b5](https://github.com/augustss/MicroHs/archive/3322c60aad59da83fee9f870c37dab56e56238b5.tar.gz), version 0.16.6.0 | `61071ca5330bfd6f53769794095a474427f6c616deb81cedbe30e26f42b1cc61` | Apache-2.0; retain included notices |
+| MicroHs | [8bf3d4d4242c8707b31c2338716977d24a95ad39](https://github.com/augustss/MicroHs/archive/8bf3d4d4242c8707b31c2338716977d24a95ad39.tar.gz), version 0.16.7.0 | `528f4669dc5e406a6a67f068e0ef4bfe50b4f3be00d8bc8381beaf2783b48351` | Apache-2.0; retain included notices |
 | json | [json-0.11](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz) | `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690` | BSD-3-Clause |
 | transformers | [transformers-0.6.1.1](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) | `81d2548e0f100a174fba36b332c0efd7c960e79d3c21ad6e1ff5f538b992d725` | BSD-3-Clause |
 

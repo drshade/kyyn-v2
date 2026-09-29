@@ -50,7 +50,7 @@ contractTests = do
     ("incompatible Title", root, SchemaMetadata roles [FieldRole "Model.Todo" "status" "title"] collections),
     ("incompatible Badge", root, SchemaMetadata roles [FieldRole "Model.Todo" "title" "badge"] collections),
     ("incompatible Timeline", root, SchemaMetadata [RoleDecl "time" "date" Timeline] [FieldRole "Model.Todo" "title" "time"] collections),
-    ("duplicate affordance", root, SchemaMetadata roles (fields ++ fields) collections),
+    ("duplicate role assignments", root, SchemaMetadata roles (fields ++ fields) collections),
     ("missing root field", root, SchemaMetadata roles fields [CollectionDecl "todos" "absent" []]),
     ("duplicate collection names", root, SchemaMetadata roles fields (collections ++ collections)),
     ("unknown target collection", root, SchemaMetadata roles fields [CollectionDecl "todos" "todos" [("owner","absent")]]),
