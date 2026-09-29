@@ -143,7 +143,7 @@ data FileRead a where
 data CapturedText = CapturedText String EvidenceFingerprint
 
 -- Generated for the plugin's inspected Payload type.
-type Acquisition a = Program (FileRead :+: EvidenceRead Payload) a
+type Acquisition a = Host.Acquisition Payload a
 type CapturedRead a = Program (EvidenceRead Payload) a
 ```
 
@@ -158,8 +158,8 @@ declarations. The author writes neither an IO entry nor a codec. The host suppli
 the latest captured evidence at invocation start; method failure does not fetch or
 change that evidence. ADR 0015 owns registration and checked native dispatch.
 
-The snapshot argument is explicit. Acquisition may enumerate the source and read
-files; captured readers have only the two snapshot questions above. Native text
+The snapshot argument is explicit. `Host.Acquisition` is the SDK row defined below;
+captured readers have only the two snapshot questions above. Native text
 acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
 from the same captured bytes. The generated `readTextFile` returns both together.
 The folder
@@ -198,8 +198,8 @@ data LoginInteraction a where
 data Waiting a where
   WaitSeconds :: Int -> Waiting ()
 
-type NetworkAcquisition payload a =
-  Program (Http :+: (Secrets :+: (Waiting :+: EvidenceRead payload))) a
+type Acquisition payload a =
+  Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))) a
 type PluginLogin a =
   Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) a
 ```
@@ -211,12 +211,13 @@ failures and cancellation remain invocation failures. Validate secret names at
 the host boundary using ADR 0016's existing rule. Waits require nonnegative
 durations and remain cancellable. No host OAuth implementation is introduced.
 
-Generated helpers hide sum injections and protocol codecs. Acquisition can save
-a rotated credential and wait without gaining interactive display operations. Login
-can guide a user but cannot publish evidence. The registration's checked context
-selects the row; absent capabilities fail compilation or protocol dispatch.
+Every source connector uses this one acquisition row, generated adapter and host
+dispatcher. Generated helpers hide sum injections and protocol codecs; a fetch can
+combine file, HTTP, secret, waiting and evidence requests without another registration
+declaration. Acquisition can save a rotated credential and wait, but cannot display
+interactive instructions. Optional login uses its separate row and can guide a user
+but cannot publish evidence. Absent capabilities fail compilation or protocol dispatch.
 Neither row is added to captured-read methods, KB tools, validators or evolutions.
-The existing file connector retains its file/evidence row.
 
 Graph acquisition honours valid `Retry-After` delays on 429/503 responses through
 `WaitSeconds` before retrying the failed request. Without a usable delay it returns

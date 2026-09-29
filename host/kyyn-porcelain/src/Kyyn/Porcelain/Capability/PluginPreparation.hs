@@ -11,7 +11,7 @@ import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity, ConnectorTypeName(..), ConnectorName(..), BindingName, MethodName, AcquisitionContext)
+import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity, ConnectorTypeName(..), ConnectorName(..), BindingName, MethodName)
 import Kyyn.Domain.Value (CheckedValue)
 
 data PreparedConnector = PreparedConnector
@@ -22,7 +22,6 @@ data PreparedConnector = PreparedConnector
   , validationEntry :: CompiledProgram
   , methods :: [PreparedMethod]
   , fetchOptionsContract :: Maybe CheckedContract
-  , acquisitionContext :: AcquisitionContext
   , loginEntry :: Maybe CompiledProgram
   }
   deriving (Eq, Show)

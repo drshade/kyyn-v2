@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, networkAcquisitionSources, capturedReadSources, loginSources) where
+module Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources, loginSources) where
 
 import qualified Data.ByteString as Bytes
 import Data.List (nub)
@@ -10,18 +10,15 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSourc
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
 acquisitionSources :: DataType -> DataType -> Maybe DataType -> String -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-acquisitionSources config payload options = sources False config payload Nothing options
-
-networkAcquisitionSources :: DataType -> DataType -> Maybe DataType -> String -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-networkAcquisitionSources config payload options = sources True config payload Nothing options
+acquisitionSources config payload options = sources config payload Nothing options
 
 capturedReadSources :: DataType -> DataType -> DataType -> String
   -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-capturedReadSources arguments payload result = sources False arguments payload (Just result) Nothing
+capturedReadSources arguments payload result = sources arguments payload (Just result) Nothing
 
-sources :: Bool -> DataType -> DataType -> Maybe DataType -> Maybe DataType -> String
+sources :: DataType -> DataType -> Maybe DataType -> Maybe DataType -> String
   -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-sources network arguments payload result options implementation authored = do
+sources arguments payload result options implementation authored = do
   implementationModule <- bindingModule implementation
   codecs <- traverse (\(name,datatype) -> do
     path <- relativePath (name ++ ".hs")
@@ -34,16 +31,15 @@ sources network arguments payload result options implementation authored = do
   bindingsPath <- relativePath "KyynPluginBindings.hs"
   let mode = case result of Nothing -> "Acquisition"; Just _ -> "CapturedRead"
       resultType = case result of Nothing -> "[SDK.EvidenceChange " ++ haskellType payload ++ "]"; Just r -> haskellType r
-      executor = if network then "executeNetworkAcquisition" else "executeAcquisition"
       runtime = case result of
         Nothing -> case options of
-          Nothing -> executor ++ " Arguments.rootCodec Payload.rootCodec selected"
-          Just _ -> executor ++ " (withOptionsCodec Arguments.rootCodec Options.rootCodec) Payload.rootCodec (uncurry selected)"
+          Nothing -> "executeAcquisition Arguments.rootCodec Payload.rootCodec selected"
+          Just _ -> "executeAcquisition (withOptionsCodec Arguments.rootCodec Options.rootCodec) Payload.rootCodec (uncurry selected)"
         Just _ -> "executeCapturedRead Arguments.rootCodec Payload.rootCodec Result.rootCodec selected"
       entry = unlines $ ["module KyynPluginEntry where","import qualified " ++ implementationModule,
         "import qualified Kyyn.Plugin as SDK","import qualified KyynPluginBindings as Bindings",
         "import qualified KyynPluginArgumentsCodec as Arguments","import qualified KyynPluginPayloadCodec as Payload",
-        "import Kyyn.Runtime.Plugin"] ++ ["import Kyyn.Runtime.PluginHost" | network] ++ imports (arguments:payload:maybe [] pure result ++ maybe [] pure options) ++
+        "import Kyyn.Runtime.Plugin","import Kyyn.Runtime.PluginHost"] ++ imports (arguments:payload:maybe [] pure result ++ maybe [] pure options) ++
         ["import qualified KyynPluginOptionsCodec as Options" | Just _ <- [options]] ++
         ["import qualified KyynPluginResultCodec as Result" | Just _ <- [result]] ++
         ["selected :: " ++ haskellType arguments ++ maybe "" (\o -> " -> Maybe (" ++ haskellType o ++ ")") options ++ " -> SDK.EvidenceSnapshot " ++ haskellType payload ++
@@ -51,14 +47,12 @@ sources network arguments payload result options implementation authored = do
          "selected = " ++ implementation,"main :: IO ()","main = " ++ runtime]
       bindings = unlines $ ["{-# LANGUAGE TypeOperators, DuplicateRecordFields #-}",
         "module KyynPluginBindings (Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..), " ++ mode ++ ", listEvidenceIds, readEvidence" ++
-          (case result of Nothing | network -> ", HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), sendHttp, getSecret, putSecret, waitSeconds"
-                          Nothing -> ", CapturedText(..), listFiles, readTextFile"; Just _ -> "") ++ ") where",
+          (case result of Nothing -> ", HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), sendHttp, getSecret, putSecret, waitSeconds, CapturedText(..), listFiles, readTextFile"; Just _ -> "") ++ ") where",
         "import Kyyn.Plugin","import qualified Kyyn.Types.Program as P","import qualified Kyyn.Types.Plugin as Calls"] ++
-        ["import Kyyn.Plugin.Host" | network] ++
+        ["import Kyyn.Plugin.Host hiding (Acquisition)","import qualified Kyyn.Plugin.Host as Host"] ++
         imports [payload] ++
         ["type " ++ mode ++ " a = " ++ (case result of
-          Nothing | network -> "NetworkAcquisition " ++ haskellType payload
-          Nothing -> "Program (Calls.FileRead P.:+: Calls.EvidenceRead " ++ haskellType payload ++ ")"
+          Nothing -> "Host.Acquisition " ++ haskellType payload
           Just _ -> "Program (Calls.EvidenceRead " ++ haskellType payload ++ ")") ++ " a",
          "listEvidenceIds :: EvidenceSnapshot " ++ haskellType payload ++ " -> " ++ mode ++ " (Either FetchError [EvidenceId])",
          "listEvidenceIds snapshot = " ++ inject "Calls.ListEvidenceIds snapshot",
@@ -66,14 +60,14 @@ sources network arguments payload result options implementation authored = do
            " (Either FetchError (Maybe (Evidence " ++ haskellType payload ++ ")))",
          "readEvidence snapshot key = " ++ inject "Calls.ReadEvidence snapshot key"] ++
         (case result of
-          Nothing | not network -> ["listFiles :: FilePath -> Bool -> Acquisition (Either FetchError [FilePath])",
-            "listFiles directory recursive = P.request (P.InLeft (Calls.ListFiles directory recursive))",
+          Nothing -> ["listFiles :: FilePath -> Bool -> Acquisition (Either FetchError [FilePath])",
+            "listFiles directory recursive = P.request (P.InRight (P.InRight (P.InRight (P.InLeft (Calls.ListFiles directory recursive)))))",
             "readTextFile :: FilePath -> Acquisition (Either FetchError CapturedText)",
-            "readTextFile path = P.request (P.InLeft (Calls.ReadTextFile path))"]
+            "readTextFile path = P.request (P.InRight (P.InRight (P.InRight (P.InLeft (Calls.ReadTextFile path)))))"]
           _ -> [])
       inject operation = "P.request (" ++ (case result of
-        Nothing | network -> "P.InRight (P.InRight (P.InRight (" ++ operation ++ ")))"
-        Nothing -> "P.InRight (" ++ operation ++ ")"; Just _ -> operation) ++ ")"
+        Nothing -> "P.InRight (P.InRight (P.InRight (P.InRight (" ++ operation ++ "))))"
+        Just _ -> operation) ++ ")"
   guestSources entryPath (authored ++ codecs ++ [(entryPath,utf8 entry),(bindingsPath,utf8 bindings)])
 
 loginSources :: DataType -> String -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources

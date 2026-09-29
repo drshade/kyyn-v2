@@ -30,7 +30,8 @@ proofs, not connector registration, CLI login or live Graph authentication tests
 The default `plugin-fetch` suite includes this proof alongside file acquisition.
 `node tools/test-network-connector.mjs INSTALLED_EXECUTABLE` exercises registration,
 accepted configuration, explicit login, per-KB secret storage, successive fetches
-and failed-fetch preservation against a loopback HTTP fixture. It does not use
+and failed-fetch preservation against a loopback HTTP fixture. One fetch combines
+HTTP, file, secret, waiting and evidence requests through the same adapter/dispatcher. It does not use
 real credentials or claim live Graph authentication coverage.
 `cabal test graph-calendar --test-show-details=direct`, with the selected guest
 toolchain, compiles actual Graph fetch/login adapters with both GHC and MicroHs.

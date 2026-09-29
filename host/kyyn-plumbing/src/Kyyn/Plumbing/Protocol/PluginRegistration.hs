@@ -12,7 +12,7 @@ import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Plugin (ConnectorDeclaration(..), CapturedMethodDeclaration(..), connectorTypeName, qualifiedTypeName, methodName)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
-import Kyyn.Types.Plugin (SourceConnector(SourceConnector), AcquisitionContext(..), CapturedMethod(CapturedMethod))
+import Kyyn.Types.Plugin (SourceConnector(SourceConnector), CapturedMethod(CapturedMethod))
 
 registrationFailure :: Bytes.ByteString -> String
 registrationFailure bytes = "Could not evaluate connector registration.\n" ++ message ++ hint
@@ -22,7 +22,7 @@ registrationFailure bytes = "Could not evaluate connector registration.\n" ++ me
       Right value -> unlines (takeWhile (\line -> line /= "CallStack (from HasCallStack):" &&
         line /= "HasCallStack backtrace:") (lines (Text.unpack value)))
     hint | "Missing field" `isInfixOf` message || "fetchOptionsType" `isInfixOf` message =
-             "Initialize every SourceConnector field: fetchOptionsType, acquisitionContext (FileSource or NetworkSource), and login (Nothing when unused)."
+             "Initialize every SourceConnector field, including fetchOptionsType and login (Nothing when unused)."
          | otherwise = "Check the plugin's connectors declaration."
 
 registrationSources :: String -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
@@ -37,9 +37,9 @@ registrationSources entryModule sources = do
 decodeConnectors :: Bytes.ByteString -> Either String [ConnectorDeclaration]
 decodeConnectors bytes = do
   declarations <- eitherDecodeStrict bytes >>= parseEither (withArray "connectors" (traverse connector . toList))
-  let names = [name | SourceConnector name _ _ _ _ _ _ _ _ <- declarations]
+  let names = [name | SourceConnector name _ _ _ _ _ _ _ <- declarations]
   unless (length names == length (nub names)) (Left "Connector type names must be unique within a plugin")
-  forM declarations $ \(SourceConnector name config payload fetch validate methods options context login) -> do
+  forM declarations $ \(SourceConnector name config payload fetch validate methods options login) -> do
     checkedName <- connectorTypeName name
     checkedConfig <- either (Left . ((name ++ ": configType: ") ++)) Right (qualifiedTypeName config)
     checkedPayload <- either (Left . ((name ++ ": payloadType: ") ++)) Right (qualifiedTypeName payload)
@@ -47,7 +47,6 @@ decodeConnectors bytes = do
     _ <- either (Left . ((name ++ ": fetch: ") ++)) Right (bindingModule fetch)
     _ <- either (Left . ((name ++ ": validateConfig: ") ++)) Right (bindingModule validate)
     _ <- traverse (either (Left . ((name ++ ": login: ") ++)) Right . bindingModule) login
-    unless (context == NetworkSource || login == Nothing) (Left (name ++ ": login requires NetworkSource"))
     let methodNames = [n | CapturedMethod n _ _ _ _ <- methods]
     unless (length methodNames == length (nub methodNames)) (Left (name ++ ": Method names must be unique"))
     checkedMethods <- forM methods $ \(CapturedMethod n description input result implementation) -> do
@@ -57,21 +56,14 @@ decodeConnectors bytes = do
       output <- located (qualifiedTypeName result)
       _ <- located (bindingModule implementation)
       pure (CapturedMethodDeclaration checkedMethod description arguments output implementation)
-    pure (ConnectorDeclaration checkedName checkedConfig checkedPayload fetch validate checkedMethods checkedOptions context login)
+    pure (ConnectorDeclaration checkedName checkedConfig checkedPayload fetch validate checkedMethods checkedOptions login)
   where
     connector = withObject "source connector" $ \fields -> do
-      unless (sort (Keys.keys fields) == ["acquisitionContext","configType","fetch","fetchOptionsType","login","methods","name","payloadType","validateConfig"])
+      unless (sort (Keys.keys fields) == ["configType","fetch","fetchOptionsType","login","methods","name","payloadType","validateConfig"])
         (fail "Unexpected or missing source connector fields")
       SourceConnector <$> fields .: "name" <*> fields .: "configType" <*> fields .: "payloadType"
         <*> fields .: "fetch" <*> fields .: "validateConfig" <*> (fields .: "methods" >>= traverse method)
         <*> (fields .: "fetchOptionsType" >>= optional)
-        <*> (fields .: "acquisitionContext" >>= withObject "acquisition context" (\value -> do
-          unless (Keys.keys value == ["tag"]) (fail "Unexpected acquisition context fields")
-          tag <- value .: "tag"
-          case tag :: String of
-            "FileSource" -> pure FileSource
-            "NetworkSource" -> pure NetworkSource
-            _ -> fail "Unknown acquisition context"))
         <*> (fields .: "login" >>= optional)
     optional = withObject "optional export" $ \value -> do
       tag <- value .: "tag"

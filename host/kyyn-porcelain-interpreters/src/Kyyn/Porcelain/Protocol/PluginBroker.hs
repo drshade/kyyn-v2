@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition, executeCapturedRead, conversation, answerEvidence, protocolFailure) where
+module Kyyn.Porcelain.Protocol.PluginBroker (answerAcquisition, executeCapturedRead, conversation, answerEvidence, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
@@ -8,7 +8,7 @@ import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
@@ -22,10 +22,9 @@ import qualified Kyyn.Plumbing.Capability.FileAcquisition as Files
 import Kyyn.Plumbing.Protocol.PluginMessages
 import System.FilePath (takeDirectory, takeFileName)
 
-executeAcquisition :: (GuestExecution :> es, Failure :> es, Files.FileAcquisition :> es)
-  => CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
-executeAcquisition program config prior = fmap (either (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" message]) Right) $
-  conversation decodeFrame program (initialInput config) $ \call -> case call of
+answerAcquisition :: (Failure :> es, Files.FileAcquisition :> es)
+  => Maybe CurrentEvidence -> PluginCall -> Eff es Value
+answerAcquisition prior call = case call of
   ListFiles directory recursive -> case directoryScope directory of
     Left message -> pure (failure message)
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive

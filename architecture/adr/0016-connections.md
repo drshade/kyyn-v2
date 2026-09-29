@@ -122,7 +122,7 @@ SDK constructors. An integration implemented in a host handler reads its credent
 there, without automatic credential injection or a kernel-owned authentication
 workflow.
 
-Network connectors can read and replace secrets through the guest request row;
+Source connectors can read and replace secrets through the guest request row;
 explicit connector login uses the same per-KB store. Graph client-secret and
 device-code flows are implemented and tested against a recording provider under
 GHC and MicroHs. Real tenant consent/policy remains an opt-in live verification.

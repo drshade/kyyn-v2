@@ -2,7 +2,7 @@ module Kyyn.Domain.Plugin
   ( PluginName, pluginName, pluginNameText, PackageIdentity(..)
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
-  , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..), AcquisitionContext(..)
+  , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..)
   , CapturedMethodDeclaration(..), MethodName(..), methodName, connectorTypeName, bindingName, connectorName, qualifiedTypeName
   ) where
 
@@ -11,7 +11,6 @@ import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Kyyn.Domain.Git (TreePath, GitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath)
 import System.FilePath (isAbsolute, (</>))
-import Kyyn.Types.Plugin (AcquisitionContext(..))
 
 newtype PluginName = PluginName String deriving (Eq, Show)
 newtype PackageIdentity = PackageIdentity String deriving (Eq, Show)
@@ -20,7 +19,7 @@ newtype BindingName = BindingName String deriving (Eq, Show)
 newtype MethodName = MethodName String deriving (Eq, Show)
 newtype ConnectorName = ConnectorName String deriving (Eq, Show)
 newtype QualifiedTypeName = QualifiedTypeName String deriving (Eq, Show)
-data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String [CapturedMethodDeclaration] (Maybe QualifiedTypeName) AcquisitionContext (Maybe String) deriving (Eq, Show)
+data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName QualifiedTypeName QualifiedTypeName String String [CapturedMethodDeclaration] (Maybe QualifiedTypeName) (Maybe String) deriving (Eq, Show)
 data CapturedMethodDeclaration = CapturedMethodDeclaration MethodName String QualifiedTypeName QualifiedTypeName String deriving (Eq, Show)
 
 methodName :: String -> Either String MethodName

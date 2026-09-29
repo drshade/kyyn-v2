@@ -7,18 +7,18 @@ import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef, EvidenceSnapshotRef)
-import Kyyn.Domain.Plugin (PackageIdentity, AcquisitionContext)
+import Kyyn.Domain.Plugin (PackageIdentity)
 import Kyyn.Domain.Value (CheckedValue)
 
 data EvidenceAcquisition :: Effect where
-  FetchEvidence :: AcquisitionContext -> ConnectorInstanceRef -> PackageIdentity -> CheckedContract -> CompiledProgram -> CheckedValue
+  FetchEvidence :: ConnectorInstanceRef -> PackageIdentity -> CheckedContract -> CompiledProgram -> CheckedValue
     -> Maybe CheckedContract -> Maybe String
     -> EvidenceAcquisition m (Either [Diagnostic] EvidenceSnapshotRef)
 
 type instance DispatchOf EvidenceAcquisition = Dynamic
 
 fetchEvidence :: EvidenceAcquisition :> es
-  => AcquisitionContext -> ConnectorInstanceRef -> PackageIdentity -> CheckedContract -> CompiledProgram -> CheckedValue
+  => ConnectorInstanceRef -> PackageIdentity -> CheckedContract -> CompiledProgram -> CheckedValue
   -> Maybe CheckedContract -> Maybe String
   -> Eff es (Either [Diagnostic] EvidenceSnapshotRef)
-fetchEvidence context instanceRef package payload program config options = send . FetchEvidence context instanceRef package payload program config options
+fetchEvidence instanceRef package payload program config options = send . FetchEvidence instanceRef package payload program config options

@@ -12,7 +12,7 @@ import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Path
-import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName, AcquisitionContext(..))
+import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName)
 import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
@@ -65,7 +65,7 @@ nativeTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
-        fetchEvidence FileSource instanceRef package payload program (config (path :: String)) Nothing Nothing
+        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
@@ -154,7 +154,7 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noNetwork $ noFiles $ recordAcquisition firstId currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            runEvidenceAcquisition (fetchEvidence FileSource instanceRef package payload program (config directory) Nothing Nothing)
+            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -166,7 +166,7 @@ nativeTests temporary toolchain configType payloadType program = do
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
       noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
-        (fetchEvidence FileSource instanceRef package payload program (config directory) optionsContract (Just "True"))
+        (fetchEvidence instanceRef package payload program (config directory) optionsContract (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
 

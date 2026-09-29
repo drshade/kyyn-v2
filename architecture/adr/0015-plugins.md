@@ -285,11 +285,9 @@ Health is explicit and may fail; opening a KB must not probe every provider.
 Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
 Source registration is a plugin entry module's `connectors` value. Optional fetch
-options, acquisition-context selection and explicit login are implemented:
+options and explicit login are supported:
 
 ```haskell
-data AcquisitionContext = FileSource | NetworkSource
-
 connectors :: [SourceConnector]
 connectors = [SourceConnector
   { name = "Folder"
@@ -297,7 +295,6 @@ connectors = [SourceConnector
   , payloadType = "LocalFile.Types.Document"
   , fetch = "LocalFile.Folder.fetch"
   , fetchOptionsType = Nothing
-  , acquisitionContext = FileSource
   , login = Nothing
   , validateConfig = "LocalFile.Config.validate"
   , methods = [CapturedMethod
@@ -316,12 +313,11 @@ the derived Dhall configuration union. Qualified names refer to Haskell declarat
 not duplicated structural schemas. A fixed adapter evaluates the registration;
 the compiler inspects the named types and generated adapters typecheck the selected
 fetch and pure `Config -> ValidationReport` validator against those same types.
-`FileSource` selects ADR 0009's file/evidence row; `NetworkSource` selects its
-HTTP/secret/evidence row. This selects generated signatures and native dispatch,
-not a permission-grant system. A missing capability cannot be obtained by an
-untyped callback. The optional `login` qualified entry is checked and dispatched
+All source connectors use [ADR 0009's acquisition row](0009-capabilities.md#provider-acquisition-and-explicit-login).
+The optional `login` qualified entry is checked and dispatched
 under [ADR 0016](0016-connections.md#authentication-belongs-to-the-integration).
-Graph advertises `NetworkSource` and its login entry; the folder needs no login.
+Graph advertises its login entry; the folder needs no login. Login is present or
+absent independently of which capabilities a fetch happens to use.
 Discovery exposes this declaration without executing authentication or fetching.
 
 `fetchOptionsType :: Maybe QualifiedTypeName` optionally names a plugin-authored

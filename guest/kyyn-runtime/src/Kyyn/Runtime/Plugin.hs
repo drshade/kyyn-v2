@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeAcquisition, executeCapturedRead, execute, exchange, eitherCodec, withOptionsCodec, input, evidenceRequest, changeCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, eitherCodec, withOptionsCodec, input, fileRequest, evidenceRequest, changeCodec) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
@@ -16,17 +16,6 @@ withOptionsCodec configCodec optionsCodec = Codec encode decode
     decode value = do
       values <- fields ["config","options"] value
       (,) <$> field "config" configCodec values <*> field "options" (optionalCodec optionsCodec) values
-
-executeAcquisition :: forall config payload. Codec config -> Codec payload
-  -> (config -> EvidenceSnapshot payload -> Program (FileRead :+: EvidenceRead payload)
-        (Either FetchError [EvidenceChange payload])) -> IO ()
-executeAcquisition configCodec payloadCodec selected = do
-  (config, snapshot) <- input configCodec
-  execute (eitherCodec (listCodec (changeCodec payloadCodec))) handler (selected config snapshot)
-  where
-    handler :: Integer -> (FileRead :+: EvidenceRead payload) a -> IO a
-    handler identity (InLeft operation) = fileRequest identity operation
-    handler identity (InRight operation) = evidenceRequest payloadCodec identity operation
 
 executeCapturedRead :: Codec arguments -> Codec payload -> Codec result
   -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload) (Either FetchError result)) -> IO ()

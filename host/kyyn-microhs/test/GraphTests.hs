@@ -42,7 +42,7 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
   config <- inspect "MicrosoftGraph.Types.CalendarConfig"
   payload <- inspect "MicrosoftGraph.Types.Event"
   options <- inspect "MicrosoftGraph.Types.CalendarFetch"
-  fetchSources <- right (networkAcquisitionSources config payload (Just options) "MicrosoftGraph.Calendar.fetch" sources)
+  fetchSources <- right (acquisitionSources config payload (Just options) "MicrosoftGraph.Calendar.fetch" sources)
   loginAdapter <- right (loginSources config "MicrosoftGraph.Login.login" sources)
   (fetchPrograms,_) <- compileBoth temporary toolchain compiler "graph-fetch" fetchSources
   (loginPrograms,_) <- compileBoth temporary toolchain compiler "graph-login" loginAdapter

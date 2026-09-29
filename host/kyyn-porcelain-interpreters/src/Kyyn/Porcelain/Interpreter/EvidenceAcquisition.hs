@@ -9,15 +9,13 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
-import Kyyn.Domain.Plugin (AcquisitionContext(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Domain.Value (CheckedValue(..))
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Porcelain.Protocol.PluginBroker (executeAcquisition)
-import qualified Kyyn.Porcelain.Protocol.PluginHost as Network
+import Kyyn.Porcelain.Protocol.PluginHost (executeAcquisition)
 import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
@@ -26,7 +24,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
 runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
-runEvidenceAcquisition = interpret $ \_ (FetchEvidence context instanceRef package payload program config optionsContract supplied) -> runExceptT $ do
+runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
   (arguments,optionsText) <- case (optionsContract,supplied) of
     (Nothing,Nothing) -> pure (configValue,Nothing)
@@ -45,7 +43,7 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence context instanceRef packa
     Right current@(Just (CurrentEvidence (EvidenceSnapshotRef _ _ identity) _)) -> pure (Just identity,current)
     Left ProducerContractChanged -> pure (observedHead,Nothing)
     Left failure -> throwE (problem failure)
-  result <- ExceptT ((case context of FileSource -> executeAcquisition; NetworkSource -> Network.executeNetworkAcquisition) program arguments prior)
+  result <- ExceptT (executeAcquisition program arguments prior)
   _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
   changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload result)
   ExceptT (fmap (either (Left . problem) Right) (Store.publishFetch instanceRef producer payload base optionsText changes))

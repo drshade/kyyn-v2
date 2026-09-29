@@ -5,7 +5,7 @@ import Control.Monad (unless, forM_)
 import Data.List (isInfixOf, stripPrefix)
 import Data.Version (showVersion)
 import Data.Coerce (coerce)
-import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..), PackageIdentity(..), AcquisitionContext(..))
+import Kyyn.Domain.Plugin (ConnectorTypeName(..), ConnectorName(..), MethodName(..), PackageIdentity(..))
 import PluginNativeTests (noNetwork)
 import Data.Aeson (Value, encode, object, (.=), toJSON)
 import qualified Data.ByteString as Bytes
@@ -77,7 +77,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         "payloadType" .= ("LocalFile.Types.Document" :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
         "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= (methods :: [Value]),
         "fetchOptionsType" .= object ["tag" .= ("None" :: String)],
-        "acquisitionContext" .= object ["tag" .= ("FileSource" :: String)],"login" .= object ["tag" .= ("None" :: String)]]
+        "login" .= object ["tag" .= ("None" :: String)]]
       methodValue name input = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
         "inputType" .= (input :: String),"resultType" .= ("LocalFile.Types.Content" :: String),
         "implementation" .= ("LocalFile.Read.content" :: String)]
@@ -154,7 +154,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
           (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ runEvidenceAcquisition
-            (fetchEvidence FileSource (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing))))))))) >>= right >>= right
+            (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of

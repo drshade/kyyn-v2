@@ -60,9 +60,9 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
-      name <- ["Evidence","Program","Plugin"]] ++
-    [load "guest/kyyn-sdk/src" "Kyyn/Plugin.hs"] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin"]] ++
+      name <- ["Evidence","Program","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
     [load "host/kyyn-microhs/test/plugin" "FolderSchema.hs"])
   let schemaDirectory = temporary </> "schema"
@@ -276,7 +276,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
     assert "invalid wait accepted" (case parseEither (Host.decodePluginHostCall "waiting" "seconds")
       (object ["seconds" .= (seconds :: String)]) of Left _ -> True; Right _ -> False)
   let forbidden = Text.encodeUtf8 (Text.unlines ["module KyynPluginEntry where","import Kyyn.Plugin.Host",
-        "main :: IO ()","main = pure ()","bad :: NetworkAcquisition String ()","bad = displayInstructions \"no\""])
+        "main :: IO ()","main = pure ()","bad :: Acquisition String ()","bad = displayInstructions \"no\""])
   rejectBoth temporary toolchain compiler =<< right
     (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",forbidden):common))
   putStrLn "Network requests, secret rotation and explicit login passed under GHC and MicroHs."

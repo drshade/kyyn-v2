@@ -51,10 +51,12 @@ try {
   await cli(['plugin', 'install', '--evolution', draft.id, '--from', source]);
   const schema = (await cli(['plugin', 'connector', 'schema', 'show', 'network-fixture', '--evolution', draft.id])).value.result.schema;
   const configPath = path.join(draft.path, 'target/plugins/config/network-fixture.dhall');
+  const localPath = path.join(temporary, 'suffix.txt');
+  fs.writeFileSync(localPath, ' local');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `([ { name = "test", binding = "test", connector =
-    < Network : { endpoint : Text, secretKey : Text } >.Network
-      { endpoint = "http://127.0.0.1:${server.address().port}", secretKey = "test-token" } } ]) : (${schema})`);
+    < Network : { endpoint : Text, secretKey : Text, localPath : Text } >.Network
+      { endpoint = "http://127.0.0.1:${server.address().port}", secretKey = "test-token", localPath = ${JSON.stringify(localPath)} } } ]) : (${schema})`);
   await cli(['evolution', 'check', draft.id]);
   await cli(['evolution', 'ready', draft.id]);
   await cli(['evolution', 'accept', draft.id]);
@@ -70,13 +72,13 @@ try {
   payload = 'second 雪';
   await fetch();
   const latest = (await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result;
-  assert.equal(latest.items[0].fingerprint, payload);
+  assert.equal(latest.items[0].fingerprint, payload + ' local');
   failFetch = true;
   await cli(['evidence', 'fetch', 'network-fixture', 'test'], 1);
   assert.deepEqual((await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result, latest);
   assert.equal(await git(kb, 'rev-parse', 'HEAD'), head);
   assert.match(await git(kb, 'check-ignore', '.kyyn/secrets/test-token.dhall'), /test-token/);
-  console.log('Installed network connector: explicit login, local secrets, latest evidence and failed-fetch atomicity passed.');
+  console.log('Installed connector: explicit login, combined HTTP/file/secret/wait/evidence acquisition and failed-fetch atomicity passed.');
 } finally {
   await new Promise(resolve => server.close(resolve));
   fs.rmSync(temporary, { recursive: true, force: true });

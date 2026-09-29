@@ -1,25 +1,26 @@
 {-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
-module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeNetworkAcquisition, executeLogin) where
+module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeLogin) where
 
 import Kyyn.Runtime.Json
-import Kyyn.Runtime.Plugin (exchange, execute, input, eitherCodec, changeCodec, evidenceRequest)
+import Kyyn.Runtime.Plugin (exchange, execute, input, eitherCodec, changeCodec, fileRequest, evidenceRequest)
 import Kyyn.Types.PluginHost
-import Kyyn.Types.Plugin (EvidenceSnapshot, EvidenceRead, FetchError)
+import Kyyn.Types.Plugin (EvidenceSnapshot, FileRead, EvidenceRead, FetchError)
 import Kyyn.Types.Program
 import Kyyn.Types.Evidence (EvidenceChange)
 
-executeNetworkAcquisition :: forall config payload. Codec config -> Codec payload
-  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: EvidenceRead payload)))
+executeAcquisition :: forall config payload. Codec config -> Codec payload
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
         (Either FetchError [EvidenceChange payload])) -> IO ()
-executeNetworkAcquisition configCodec payloadCodec selected = do
+executeAcquisition configCodec payloadCodec selected = do
   (config,snapshot) <- input configCodec
   execute (eitherCodec (listCodec (changeCodec payloadCodec))) handler (selected config snapshot)
   where
-    handler :: Integer -> (Http :+: (Secrets :+: (Waiting :+: EvidenceRead payload))) a -> IO a
+    handler :: Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))) a -> IO a
     handler identity (InLeft call) = httpRequest identity call
     handler identity (InRight (InLeft call)) = secretRequest identity call
     handler identity (InRight (InRight (InLeft call))) = waitingRequest identity call
-    handler identity (InRight (InRight (InRight call))) = evidenceRequest payloadCodec identity call
+    handler identity (InRight (InRight (InRight (InLeft call)))) = fileRequest identity call
+    handler identity (InRight (InRight (InRight (InRight call)))) = evidenceRequest payloadCodec identity call
 
 executeLogin :: Codec config
   -> (config -> Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) (Either LoginError ())) -> IO ()
