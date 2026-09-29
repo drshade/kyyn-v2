@@ -349,6 +349,7 @@ root/
   examples/                persistent executable assertions
   plugins/                 vendored source, origins and non-secret configuration
 evolutions/<evolution>/     editable workspaces and retained accepted archives
+taps.dhall                 tracked discovery configuration, outside root publication
 .kyyn/                     ignored checkout-local data and disposable caches
 ```
 
@@ -357,6 +358,9 @@ This is a proposed layout for review, illustrated by the
 The important distinction is one complete publication subtree versus evolution
 archaeology and local runtime data. RootStore exports the whole subtree, so absence
 from the new tree means deletion; acceptance does not guess which old files to keep.
+KB-local tap declarations and disposable `.kyyn/taps/` downloads follow
+[ADR 0015](0015-plugins.md#discover-packages-through-kb-local-taps); being Git-tracked
+does not make discovery configuration part of the accepted root.
 The schema and collection declarations distinguish an empty collection from missing
 data; use an explicit ordered ID list per collection to record membership/order,
 including the empty list. A listed fact must exist; duplicate IDs and unlisted fact
