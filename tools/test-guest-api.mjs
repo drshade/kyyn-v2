@@ -26,7 +26,7 @@ try {
     return JSON.parse(result.stdout).result;
   };
   const modules = json('guest', 'module', 'list').modules;
-  assert.deepEqual(modules, ['Kyyn.Edit', 'Kyyn.Evolution', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Query', 'Kyyn.Schema', 'Kyyn.Validation']);
+  assert.deepEqual(modules, ['Kyyn.Edit', 'Kyyn.Evolution', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Plugin.Host', 'Kyyn.Query', 'Kyyn.Schema', 'Kyyn.Validation']);
   assert.ok(modules.includes('Kyyn.Edit'));
   assert.ok(modules.every(name => !name.includes('Internal') && !name.includes('Runtime')));
   for (const name of modules) {
