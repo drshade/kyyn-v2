@@ -142,19 +142,18 @@ data FileRead a where
 
 data CapturedText = CapturedText String EvidenceFingerprint
 
--- Generated for the plugin's inspected Payload type.
-type Acquisition a = Host.Acquisition Payload a
-type CapturedRead a = Program (EvidenceRead Payload) a
+type CapturedRead payload a = Program (EvidenceRead payload) a
 ```
 
 A registered captured method implements:
 
 ```haskell
-content :: Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result)
+content :: Input -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Result)
 ```
 
-The generated adapter fixes `Input`, `Payload` and `Result` from the inspected
-declarations. The author writes neither an IO entry nor a codec. The host supplies
+The compiler derives `Input`, `Payload` and `Result` from the authored signature
+under ADR 0015, then generates the execution adapter. SDK types/helpers are generic
+in payload, so inspection needs no pre-generated bindings. The author writes neither an IO entry nor a codec. The host supplies
 the latest captured evidence at invocation start; method failure does not fetch or
 change that evidence. ADR 0015 owns registration and checked native dispatch.
 
@@ -198,11 +197,44 @@ data LoginInteraction a where
 data Waiting a where
   WaitSeconds :: Int -> Waiting ()
 
-type Acquisition payload a =
-  Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))) a
+type AcquisitionRequests payload =
+  Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))
+type Acquisition payload a = Program (AcquisitionRequests payload) a
 type PluginLogin a =
   Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) a
 ```
+
+The SDK exposes the same evidence helper names in both acquisition and captured
+reads. A small class supplies their request injection, with two explicit instances:
+
+```haskell
+class ReadsEvidence row payload where
+  injectEvidence :: EvidenceRead payload a -> row a
+
+instance ReadsEvidence (EvidenceRead payload) payload where
+  injectEvidence = id
+
+instance ReadsEvidence (AcquisitionRequests payload) payload where
+  injectEvidence = InRight . InRight . InRight . InRight
+
+listEvidenceIds
+  :: ReadsEvidence row payload
+  => EvidenceSnapshot payload -> Program row (Either FetchError [EvidenceId])
+listEvidenceIds = request . injectEvidence . ListEvidenceIds
+
+readEvidence
+  :: ReadsEvidence row payload
+  => EvidenceSnapshot payload -> EvidenceId
+  -> Program row (Either FetchError (Maybe (Evidence payload)))
+readEvidence snapshot key = request (injectEvidence (ReadEvidence snapshot key))
+```
+
+The concrete entry-point row selects the instance. No generated helper module or
+recursive sum-membership search is required. Reusable helpers may retain this
+constraint; registered entries supply concrete data contracts and the supported
+row under ADR 0015. Verify these instances and their helper use under both GHC and
+MicroHs as part of the signature-derived registration implementation; these
+signatures do not themselves establish compiler support.
 
 Native HTTP handles TLS and UTF-8 transport. HTTP status responses remain values
 for provider code to interpret; transport failures have sanitized diagnostics,
