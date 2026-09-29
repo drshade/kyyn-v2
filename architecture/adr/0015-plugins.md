@@ -2,7 +2,7 @@
 id: 0015
 title: 'Locally built plugins group source and sink connectors'
 status: proposed
-date: 2026-09-25
+date: 2026-09-29
 ---
 # Locally built plugins group source and sink connectors
 
@@ -199,11 +199,117 @@ refusals with existing KB files and HEAD preserved. Use a local Git remote for t
 acquisition integration test, avoiding network-dependent tests. The first-party
 `plugins/local-file` package uses exactly this boundary.
 
-A tap is a Git repository with a data catalog. It distributes three package
-kinds: MicroHs plugins with registered methods; reusable MicroHs libraries; and
-templates copied into a new KB. The latter two are not pretend running plugins.
-Any third-party tap URL and local development checkout can be used without a
-central approval service. First-party packages use the same interfaces.
+### Discover packages through KB-local taps
+
+Owner decision (2026-09-29); tap and guide commands below are proposed, not
+implemented. A tap is a Git repository with a Dhall catalogue, not a dependency
+resolver or runtime registry. First- and third-party catalogues use the same
+interface; no central approval service is involved. The first discovery slice
+lists plugins.
+
+The KB's top-level `taps.dhall` records tap names and upstream Git locations:
+
+```dhall
+[ { name = "first-party", source = "https://github.com/drshade/kyyn-v2" } ]
+```
+
+This file is committed with the KB but is outside `root/` and evolution ownership.
+It describes where authors discover code, not the accepted KB's executable meaning.
+`tap add/remove` edits it directly without creating a commit; ordinary Git provides
+sharing and review. A malformed declaration affects tap operations, not root
+validation or execution of already vendored plugins. There is no user-wide or
+system-wide registry, configuration precedence or daemon.
+
+`kb init` writes the first-party declaration as part of the initial KB commit,
+without downloading the repository. It is an ordinary editable entry, not an
+implicit fallback: removing it is respected. Existing KBs can add it explicitly
+through `tap add`; installation guidance supplies the first-party URL.
+
+Synced repositories live under `.kyyn/taps/<name>/` and are ignored, disposable
+downloads. `tap update` reconstructs or refreshes them from the declarations;
+a shallow fetch of the default branch is sufficient.
+Deleting the cache loses no declarations or installed source. Updating or removing
+a tap never updates or removes an installed plugin. A cloned KB retains its
+discovery setup without inheriting another checkout's cache.
+
+A catalogue entry supplies a plugin name, short description, source repository
+and package-relative path. The description is the catalogue's offline-search
+summary, not a replacement for the plugin's own description. Illustratively:
+
+```dhall
+[ { name = "microsoft-graph"
+  , description = "Microsoft calendar evidence"
+  , source = "https://github.com/drshade/kyyn-v2"
+  , path = "plugins/microsoft-graph"
+  } ]
+```
+
+The first-party catalogue may live in the Kyyn monorepo. Search reads downloaded
+catalogues, without an implicit network refresh; an unsynced tap reports how to
+sync it. A qualified selection `tap-name/plugin-name` resolves to the existing
+`PluginSource`, then uses the same captured-source installation operation. It
+does not introduce a second installer or version/compatibility pinning. Installed
+origin still records the actual package repository, path and captured revision;
+execution never resolves a tap name. Direct `--from` installation stays available.
+
+```sh
+kyyn-v2 --kb PATH tap add community --from URL
+kyyn-v2 --kb PATH tap list
+kyyn-v2 --kb PATH tap update
+kyyn-v2 --kb PATH plugin search calendar
+kyyn-v2 --kb PATH plugin install community/calendar --evolution ID
+```
+
+### Read packaged guides without executing plugins
+
+A plugin's guide is `README.md` at the package root, by convention. There is no
+guide field in `kyyn-plugin.dhall` or duplicate documentation declaration.
+
+The host reads that file, not a guest function. Guide access requires neither a
+compiler nor valid connector configuration, credentials, authentication or root
+validation. It must work when incompatible plugin source prevents root checking.
+The guide path stays inside the selected package and uses the existing package
+file rules. Missing or unreadable guides receive a specific actionable diagnostic.
+
+```haskell
+data PluginGuideSource
+  = InstalledGuide InstalledPlugin
+  | AvailableGuide PluginSource
+
+readPluginGuide
+  :: (PluginDocumentation :> es, Failure :> es)
+  => PluginGuideSource -> Eff es Markdown
+```
+
+These illustrative host contracts distinguish reading an installed package from
+acquiring available source. The interpreter uses manifest/file reading and, for
+available source, the existing Git acquisition boundary; it has no guest execution
+or secret-store requirement. CLI, MCP and Web expose the same guide operation.
+
+`plugin guide microsoft-graph` reads the accepted vendored package;
+`--evolution ID` instead reads that evolution's target package. Before installation,
+`plugin guide first-party/microsoft-graph` resolves the tap entry without installing
+it. When its source equals the tap's declared repository location, read the package
+at the synced tap revision without a network fetch. Otherwise use existing source
+acquisition into a temporary scope, read the guide and discard the temporary
+download. This does not create another persistent package cache. The result
+identifies the source revision it describes; a later install may select a newer
+upstream revision. There is no separate guide copy or requirement to retain the
+previewed revision.
+
+`plugin show` advertises guide access, and successful installation points to both
+the guide and configuration-schema discovery. Guides explain setup, authentication,
+examples and limitations; checked Haskell declarations remain authoritative for
+exact types and signatures. Existing package READMEs are the guides, avoiding
+duplicate documentation or any need for consumers to find the source repository.
+
+Verification must cover discovery in a fresh clone after syncing taps, independent
+KB caches, cache deletion/reconstruction, qualified-name resolution through the
+existing installer, and unchanged installed packages after tap updates/removal.
+Read guides before installation and from accepted/draft packages whose Haskell
+does not compile, without invoking the guest. Check missing/invalid guide paths
+and source identity in results. These are required implementation proofs, not
+claims that the proposed commands already exist.
 
 Evidence-producing methods should supply useful source identifiers as described
 in [evidence](0014-evidence.md): a stable URI where available, a scoped provider

@@ -107,6 +107,8 @@ kyyn
     recover <id>
   plugin
     install <source>
+    search <text>
+    guide <plugin-or-tap/plugin> [--evolution <id>]
     list
     show <plugin>
     update <plugin>
@@ -155,6 +157,11 @@ a deliberate standalone readiness command. Collection selection for fact IDs,
 typed query arguments and secret input are details for their respective slices.
 `root schema list/show` exposes the selected root contract's types, definitions,
 fields and declared roles, not arbitrary compiler internals.
+
+Tap discovery and packaged-guide commands are proposed in
+[ADR 0015](0015-plugins.md#discover-packages-through-kb-local-taps), including
+`tap add/remove/list/update`, qualified installation and pre-install guide access.
+They share the selected `--kb` scope and do not require a valid executable root.
 
 The plugin-install slice adds `plugin install --evolution ID --from SOURCE [--path SUBDIRECTORY]`
 under the common `--kb PATH` selection. It prepares a copied source package in that evolution's target and
