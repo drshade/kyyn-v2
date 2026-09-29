@@ -235,13 +235,14 @@ evolution =
   assert.equal(incomplete.result.revision, git(repo, 'rev-parse', 'HEAD'));
   const recovery = incomplete.diagnostics.find(d => d.code === 'kb.checkout-incomplete').message;
   assert(recovery.includes(`restore --source=${incomplete.result.revision}`));
-  assert(recovery.includes("--staged --worktree -- 'repair/root'"));
+  assert(recovery.includes("--staged --worktree -- 'repair/root' 'repair/taps.dhall'"));
   fs.unlinkSync(lock);
   cli(repair, ['kb', 'init'], 1);
   const restoreCommand = recovery.split('with: ')[1].split('\n')[0];
   const restored = spawnSync('sh', ['-c', restoreCommand], { cwd: temporary, env, encoding: 'utf8' });
   assert.equal(restored.status, 0, JSON.stringify(restored));
   assert.equal(fs.existsSync(path.join(repair, 'root', 'kb.dhall')), true);
+  assert.equal(cli(repair, ['tap', 'list']).result.taps[0].name, 'first-party');
   console.log('Existing/nested repositories, preservation, read-only refusals and post-publication recovery passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
