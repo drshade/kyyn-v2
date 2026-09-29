@@ -131,7 +131,7 @@ main = do
       succeeds ["evolution",verb,"000001-add-review-status"] (Invocation selected Human (Evolution (constructor numbered)))
   forM_ [["evolution","evaluate","abc123"],["root","delete"],["evolution","accept"],["evolution","accept","Monthly"],
     ["evolution","new",""],["evolution","new","example","--before","HEAD"],
-    ["--repository",".","root","show"],["plugin","list"],
+    ["--repository",".","root","show"],
     ["plugin","install"], ["plugin","install","--from"], ["root","show","extra"]] refuses
   forM_ [[],["root"],["evolution"],["--help"],["evolution","accept","--help"]] $ \args ->
     case parseArguments args of
@@ -141,7 +141,7 @@ main = do
         assert "Wrong help exit status"
           (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
-  forM_ [([], ["kb", "root", "evolution", "guest", "plugin", "evidence"]), (["plugin"], ["install", "connector"]),
+  forM_ [([], ["kb", "root", "evolution", "guest", "plugin", "evidence"]), (["plugin"], ["install", "list", "show", "guide", "connector"]),
     (["evidence"], ["fetch", "history", "change"]), (["plugin", "connector"], ["list", "schema"]),
     (["kb"], ["init"]), (["root"], ["show", "check"]),
     (["guest"], ["module", "symbol"]), (["guest", "module"], ["list", "show"]),
