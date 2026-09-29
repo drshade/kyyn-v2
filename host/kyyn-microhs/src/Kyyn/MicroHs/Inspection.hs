@@ -1,12 +1,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Werror #-}
-module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectionSettings) where
+module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectPluginSignature, inspectionSettings) where
 
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (unless)
 import Data.List (nubBy, nub)
 import Kyyn.Domain.DataType
+import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..), expectedPluginSignature)
 import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
 import Kyyn.MicroHs.Timing (withTimingIO)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
@@ -59,6 +60,73 @@ inspectDataType compiler sources selected = withTimingIO "inspection" selected (
       pure (either (Left . TypeNotSupported) (\structure -> Right (structure,loaded)) forced)
 
 type Constructors = String -> [ValueExport]
+
+inspectPluginSignature :: FilePath -> [FilePath] -> PluginEntryKind -> String
+  -> IO (Either InspectionError (PluginSignature,[FilePath]))
+inspectPluginSignature compiler sources kind selected = withTimingIO "inspection" selected (inspect `catch` failure)
+  where
+    failure (err :: SomeException)
+      | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
+      | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (compilerMessage (displayException err))))
+      | otherwise = pure (Left (NativeError (displayException err)))
+    inspect = do
+      let imported = mkIdent (definingModule selected)
+          witness = addPreludeImport (EModule (mkIdent "KyynFunctionWitness") [ExpModule imported]
+            [Import (ImportSpec ImpNormal False imported Nothing Nothing)])
+      (((checked,_,_,_,_),_),cache0) <- runStateIO (compileModuleP (inspectionFlags compiler sources) ImpNormal witness) emptyCache
+      (_,cache) <- evaluate (force (checked,cache0))
+      let exports = [(unIdent qi,vs) | m <- cachedModules cache,
+            TypeExport _ (Entry (EVar qi) _) vs <- tTypeExps m]
+          constructors name = maybe [] id (lookup name exports)
+          localName = reverse (takeWhile (/= '.') (reverse selected))
+          result = case [signature | ValueExport name (Entry _ signature) <- tValueExps checked,
+                                    unIdent name == localName] of
+            [signature] -> lowerPluginSignature constructors kind signature
+            _ -> Left "selected function is not exported"
+      _ <- evaluate (force (show result))
+      pure $ case result of
+        Left message -> Left (TypeNotSupported (selected ++ ": " ++ message ++ "\nExpected: " ++ expectedPluginSignature kind))
+        Right signature -> Right (signature,nub [slocFile (slocIdent (tModuleName m)) | m <- cachedModules cache])
+
+lowerPluginSignature :: Constructors -> PluginEntryKind -> Expr -> Either String PluginSignature
+lowerPluginSignature table kind signature = do
+  let (vars,body) = stripForall signature
+      (args,result) = arrows body
+      lower = lowerType table [] []
+      application name arity value = case unApps value of
+        (EVar n,xs) | unIdent n == name && length xs == arity -> Right xs
+        _ -> Left ("expected " ++ name)
+      unary name value = do
+        xs <- application name 1 value
+        case xs of [x] -> Right x; _ -> Left "invalid unary type"
+      pair name value = do
+        xs <- application name 2 value
+        case xs of [a,b] -> Right (a,b); _ -> Left "invalid binary type"
+      named name = EVar (mkIdent name)
+      apply name a = EApp (named name) a
+      sumType a b = EApp (EApp (named "Kyyn.Types.Program.:+:") a) b
+  unless (null vars) (Left "registered entry must have concrete types and no residual constraints")
+  (input,options,snapshot) <- case (kind,args) of
+    (_, [a,s]) -> Right (a,Nothing,s)
+    (AcquisitionEntry,[a,o,s]) -> do
+      option <- unary "Data.Maybe_Type.Maybe" o
+      Right (a,Just option,s)
+    _ -> Left "unsupported entry arity"
+  payload <- unary "Kyyn.Types.Plugin.EvidenceSnapshot" snapshot
+  (row,answer) <- pair "Kyyn.Types.Program.Program" result
+  let evidenceRow = apply "Kyyn.Types.Plugin.EvidenceRead" payload
+      acquisitionRow = foldr sumType evidenceRow (map named
+        ["Kyyn.Types.PluginHost.Http","Kyyn.Types.PluginHost.Secrets","Kyyn.Types.PluginHost.Waiting","Kyyn.Types.Plugin.FileRead"])
+      expectedRow = case kind of AcquisitionEntry -> acquisitionRow; CapturedReadEntry -> evidenceRow
+  unless (eqEType row expectedRow) (Left "unsupported capability row or inconsistent payload")
+  (problem,value) <- pair "Data.Either.Either" answer
+  unless (eqEType problem (named "Kyyn.Types.Plugin.FetchError")) (Left "expected FetchError failure type")
+  case kind of
+    AcquisitionEntry -> do
+      change <- unary "Data.List_Type.[]" value >>= unary "Kyyn.Types.Evidence.EvidenceChange"
+      unless (eqEType change payload) (Left "EvidenceChange payload differs from snapshot payload")
+      FetchSignature <$> lower input <*> traverse lower options <*> lower payload
+    CapturedReadEntry -> ReadSignature <$> lower input <*> lower payload <*> lower value
 
 -- Traverses CHECKED constructor signatures. Aliases in them are already expanded
 -- by MicroHs. Matching their result against an application substitutes parameters.

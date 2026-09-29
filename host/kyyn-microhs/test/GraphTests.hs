@@ -14,7 +14,8 @@ import Data.Version (showVersion)
 import Effectful (runEff)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path
-import Kyyn.MicroHs.Inspection (inspectDataType)
+import Kyyn.MicroHs.Inspection (inspectDataType, inspectPluginSignature)
+import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..))
 import Kyyn.Plumbing.Capability.FileSystem (readTree)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -42,6 +43,8 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
   config <- inspect "MicrosoftGraph.Types.CalendarConfig"
   payload <- inspect "MicrosoftGraph.Types.Event"
   options <- inspect "MicrosoftGraph.Types.CalendarFetch"
+  (derived,_) <- inspectPluginSignature toolchain (map (repo </>) directories) AcquisitionEntry "MicrosoftGraph.Calendar.fetch" >>= right
+  assert "Graph signature-derived contracts differ" (derived == FetchSignature config (Just options) payload)
   fetchSources <- right (acquisitionSources config payload (Just options) "MicrosoftGraph.Calendar.fetch" sources)
   loginAdapter <- right (loginSources config "MicrosoftGraph.Login.login" sources)
   (fetchPrograms,_) <- compileBoth temporary toolchain compiler "graph-fetch" fetchSources

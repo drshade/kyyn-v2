@@ -10,7 +10,7 @@ import Data.List (nub, sort, isInfixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path (RelativePath, relativePath)
-import Kyyn.Domain.Plugin (ConnectorDeclaration(..), CapturedMethodDeclaration(..), connectorTypeName, qualifiedTypeName, methodName)
+import Kyyn.Domain.Plugin (ConnectorDeclaration(..), CapturedMethodDeclaration(..), connectorTypeName, methodName)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Types.Plugin (SourceConnector(SourceConnector), CapturedMethod(CapturedMethod))
 
@@ -21,8 +21,9 @@ registrationFailure bytes = "Could not evaluate connector registration.\n" ++ me
       Left _ -> "Guest returned non-UTF-8 diagnostics.\n"
       Right value -> unlines (takeWhile (\line -> line /= "CallStack (from HasCallStack):" &&
         line /= "HasCallStack backtrace:") (lines (Text.unpack value)))
-    hint | "Missing field" `isInfixOf` message || "fetchOptionsType" `isInfixOf` message =
-             "Initialize every SourceConnector field, including fetchOptionsType and login (Nothing when unused)."
+    hint | "KyynPluginBindings" `isInfixOf` message = "Import Kyyn.Plugin / Kyyn.Plugin.Host instead of KyynPluginBindings; use Acquisition Payload and CapturedRead Payload in signatures."
+         | "Missing field" `isInfixOf` message =
+             "Initialize every SourceConnector field, including login (Nothing when unused)."
          | otherwise = "Check the plugin's connectors declaration."
 
 registrationSources :: String -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
@@ -37,33 +38,27 @@ registrationSources entryModule sources = do
 decodeConnectors :: Bytes.ByteString -> Either String [ConnectorDeclaration]
 decodeConnectors bytes = do
   declarations <- eitherDecodeStrict bytes >>= parseEither (withArray "connectors" (traverse connector . toList))
-  let names = [name | SourceConnector name _ _ _ _ _ _ _ <- declarations]
+  let names = [name | SourceConnector name _ _ _ _ <- declarations]
   unless (length names == length (nub names)) (Left "Connector type names must be unique within a plugin")
-  forM declarations $ \(SourceConnector name config payload fetch validate methods options login) -> do
+  forM declarations $ \(SourceConnector name fetch validate methods login) -> do
     checkedName <- connectorTypeName name
-    checkedConfig <- either (Left . ((name ++ ": configType: ") ++)) Right (qualifiedTypeName config)
-    checkedPayload <- either (Left . ((name ++ ": payloadType: ") ++)) Right (qualifiedTypeName payload)
-    checkedOptions <- traverse (either (Left . ((name ++ ": fetchOptionsType: ") ++)) Right . qualifiedTypeName) options
     _ <- either (Left . ((name ++ ": fetch: ") ++)) Right (bindingModule fetch)
     _ <- either (Left . ((name ++ ": validateConfig: ") ++)) Right (bindingModule validate)
     _ <- traverse (either (Left . ((name ++ ": login: ") ++)) Right . bindingModule) login
-    let methodNames = [n | CapturedMethod n _ _ _ _ <- methods]
+    let methodNames = [n | CapturedMethod n _ _ <- methods]
     unless (length methodNames == length (nub methodNames)) (Left (name ++ ": Method names must be unique"))
-    checkedMethods <- forM methods $ \(CapturedMethod n description input result implementation) -> do
+    checkedMethods <- forM methods $ \(CapturedMethod n description implementation) -> do
       let located = either (Left . ((name ++ "/" ++ n ++ ": ") ++)) Right
       checkedMethod <- located (methodName n)
-      arguments <- located (qualifiedTypeName input)
-      output <- located (qualifiedTypeName result)
       _ <- located (bindingModule implementation)
-      pure (CapturedMethodDeclaration checkedMethod description arguments output implementation)
-    pure (ConnectorDeclaration checkedName checkedConfig checkedPayload fetch validate checkedMethods checkedOptions login)
+      pure (CapturedMethodDeclaration checkedMethod description implementation)
+    pure (ConnectorDeclaration checkedName fetch validate checkedMethods login)
   where
     connector = withObject "source connector" $ \fields -> do
-      unless (sort (Keys.keys fields) == ["configType","fetch","fetchOptionsType","login","methods","name","payloadType","validateConfig"])
+      unless (sort (Keys.keys fields) == ["fetch","login","methods","name","validateConfig"])
         (fail "Unexpected or missing source connector fields")
-      SourceConnector <$> fields .: "name" <*> fields .: "configType" <*> fields .: "payloadType"
+      SourceConnector <$> fields .: "name"
         <*> fields .: "fetch" <*> fields .: "validateConfig" <*> (fields .: "methods" >>= traverse method)
-        <*> (fields .: "fetchOptionsType" >>= optional)
         <*> (fields .: "login" >>= optional)
     optional = withObject "optional export" $ \value -> do
       tag <- value .: "tag"
@@ -72,7 +67,6 @@ decodeConnectors bytes = do
         "Some" | sort (Keys.keys value) == ["tag","value"] -> Just <$> value .: "value"
         _ -> fail "Invalid optional export"
     method = withObject "captured method" $ \fields -> do
-      unless (sort (Keys.keys fields) == ["description","implementation","inputType","name","resultType"])
+      unless (sort (Keys.keys fields) == ["description","implementation","name"])
         (fail "Unexpected or missing captured method fields")
-      CapturedMethod <$> fields .: "name" <*> fields .: "description" <*> fields .: "inputType"
-        <*> fields .: "resultType" <*> fields .: "implementation"
+      CapturedMethod <$> fields .: "name" <*> fields .: "description" <*> fields .: "implementation"

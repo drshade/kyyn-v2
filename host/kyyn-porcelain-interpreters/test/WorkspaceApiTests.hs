@@ -68,6 +68,7 @@ workspaceApiTests = do
               pure (Right expected))
           . interpret (\_ -> \case
               Schema.InspectType {} -> error "Unexpected plain type inspection"
+              Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
               Schema.InspectSchema source -> do
                 record ("schema:" ++ Schema.selectedType source)
                 let entries = sourceFiles (Schema.schemaSources source)

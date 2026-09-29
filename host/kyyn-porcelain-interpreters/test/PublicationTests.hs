@@ -324,6 +324,7 @@ noEvidence = interpret $ \_ _ -> error "Publication/recovery read evidence"
 schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
   Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   Schema.InspectSchema _ -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
 
 evaluationMock :: (RootOpening :> es, RootStore :> es) => Value -> Eff (EvolutionExecution : es) a -> Eff es a

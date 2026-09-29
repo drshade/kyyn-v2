@@ -73,21 +73,18 @@ type Preparation = '[PluginPreparation, SchemaInspection, GuestCompilation, Gues
 main :: IO ()
 main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   let declaration name = withMethods name []
-      withMethods name methods = object ["name" .= (name :: String),"configType" .= ("LocalFile.Types.FolderConfig" :: String),
-        "payloadType" .= ("LocalFile.Types.Document" :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
+      withMethods name methods = object ["name" .= (name :: String),"fetch" .= ("LocalFile.Folder.fetch" :: String),
         "validateConfig" .= ("LocalFile.Config.validate" :: String), "methods" .= (methods :: [Value]),
-        "fetchOptionsType" .= object ["tag" .= ("None" :: String)],
         "login" .= object ["tag" .= ("None" :: String)]]
-      methodValue name input = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
-        "inputType" .= (input :: String),"resultType" .= ("LocalFile.Types.Content" :: String),
-        "implementation" .= ("LocalFile.Read.content" :: String)]
+      methodValue name implementation = object ["name" .= (name :: String),"description" .= ("Read text" :: String),
+        "implementation" .= (implementation :: String)]
       rejected :: Either e a -> Bool
       rejected (Left _) = True
       rejected _ = False
   forM_ [[declaration "Folder",declaration "Folder"],[declaration "folder"],[object ["name" .= ("Folder" :: String)]]] $
     \value -> assert "Invalid connector registration accepted" (rejected (decodeConnectors (Lazy.toStrict (encode value))))
-  let validMethod = methodValue "content" "LocalFile.Types.ContentId"
-  forM_ [[validMethod,validMethod],[methodValue "case" "LocalFile.Types.ContentId"],[methodValue "content" "String"]] $ \methods ->
+  let validMethod = methodValue "content" "LocalFile.Read.content"
+  forM_ [[validMethod,validMethod],[methodValue "case" "LocalFile.Read.content"],[methodValue "content" "unqualified"]] $ \methods ->
     assert "Invalid method registration accepted" (case decodeConnectors (Lazy.toStrict (encode [withMethods "Folder" methods])) of
       Left message -> "Folder" `isInfixOf` message
       Right _ -> False)
@@ -99,7 +96,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   runtime <- getEnv "KYYN_TEST_TOOLCHAIN"
   api <- inspectApi runtime (map (repo </>) ["shared/kyyn-types/src","guest/kyyn-sdk/src"]) ["Kyyn.Plugin"] >>= right
-  forM_ ["name","configType","payloadType","fetch","validateConfig"] $ \field ->
+  forM_ ["name","fetch","validateConfig","login"] $ \field ->
     assert ("Missing reflected connector field documentation: " ++ field)
       (not (null [() | ApiModule _ symbols <- api, ApiSymbol name ValueNamespace origin _ _ (Just doc) <- symbols,
         name == field, "SourceConnector" `isInfixOf` origin, not (null doc)]))

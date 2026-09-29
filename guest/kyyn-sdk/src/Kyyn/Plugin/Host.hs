@@ -1,15 +1,23 @@
 {-# LANGUAGE TypeOperators, DuplicateRecordFields #-}
 module Kyyn.Plugin.Host
   ( NetworkHost, Acquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
-  , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions ) where
+  , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions, listFiles, readTextFile ) where
 
 import Kyyn.Types.Program
-import Kyyn.Types.Plugin (FileRead, EvidenceRead)
+import Kyyn.Types.Plugin (FileRead(..), EvidenceRead, FetchError, CapturedText)
 import Kyyn.Types.PluginHost
 
 type NetworkHost rest = Program (Http :+: (Secrets :+: (Waiting :+: rest)))
 type Acquisition payload = NetworkHost (FileRead :+: EvidenceRead payload)
 type PluginLogin = NetworkHost LoginInteraction
+
+-- | Enumerate source files relative to the selected absolute directory.
+listFiles :: FilePath -> Bool -> Acquisition payload (Either FetchError [FilePath])
+listFiles directory recursive = request (InRight (InRight (InRight (InLeft (ListFiles directory recursive)))))
+
+-- | Capture source text and its fingerprint together.
+readTextFile :: FilePath -> Acquisition payload (Either FetchError CapturedText)
+readTextFile path = request (InRight (InRight (InRight (InLeft (ReadTextFile path)))))
 
 -- | Send a text request; the caller handles HTTP status codes and retry policy.
 sendHttp :: HttpRequest -> Program (Http :+: rest) (Either HttpError HttpResponse)

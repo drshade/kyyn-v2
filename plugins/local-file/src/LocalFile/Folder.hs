@@ -1,11 +1,12 @@
 module LocalFile.Folder (fetch) where
 
-import KyynPluginBindings
+import Kyyn.Plugin
+import Kyyn.Plugin.Host
 import qualified LocalFile.Types as Schema
 
 -- | Return changes since the selected prior fetch. IDs are paths relative to the folder.
 fetch :: Schema.FolderConfig -> EvidenceSnapshot Schema.Document
-  -> Acquisition (Either FetchError [EvidenceChange Schema.Document])
+  -> Acquisition Schema.Document (Either FetchError [EvidenceChange Schema.Document])
 fetch (Schema.FolderConfig directory recursive) prior =
   listFiles directory recursive `andThen` \paths ->
     listEvidenceIds prior `andThen` \previousIds -> do

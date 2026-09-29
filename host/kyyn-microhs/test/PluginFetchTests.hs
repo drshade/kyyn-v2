@@ -19,9 +19,10 @@ import qualified Kyyn.Plumbing.Capability.PluginInteraction as Interaction
 import qualified Kyyn.Plumbing.Protocol.PluginHost as Host
 import qualified Kyyn.Porcelain.Protocol.PluginHost as Host
 import Kyyn.Domain.DataType (DataType(..))
+import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..))
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Path
-import Kyyn.MicroHs.Inspection (inspectDataType)
+import Kyyn.MicroHs.Inspection (inspectDataType, inspectPluginSignature)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
 import Kyyn.Plumbing.Capability.GuestCompilation
@@ -64,12 +65,25 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
-    [load "host/kyyn-microhs/test/plugin" "FolderSchema.hs"])
+    [load "host/kyyn-microhs/test/plugin" name | name <- ["FolderSchema.hs","SignatureCases.hs"]])
   let schemaDirectory = temporary </> "schema"
   writeSources schemaDirectory common
   (config,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.Config" >>= right
   (payload,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.Document" >>= right
   (options,_) <- inspectDataType toolchain [schemaDirectory] "FolderSchema.FetchOptions" >>= right
+  (box,_) <- inspectDataType toolchain [schemaDirectory] "SignatureCases.Payload" >>= right
+  forM_ [(AcquisitionEntry,"good",FetchSignature config Nothing box),
+         (AcquisitionEntry,"goodOptions",FetchSignature config (Just options) box),
+         (CapturedReadEntry,"goodRead",ReadSignature StringType box StringType)] $ \(kind,name,expectedSignature) -> do
+    (actual,_) <- inspectPluginSignature toolchain [schemaDirectory] kind ("SignatureCases." ++ name) >>= right
+    assert ("Wrong derived signature for " ++ name) (actual == expectedSignature)
+  forM_ ["badRow","badResult","badPayload","badChange","badOptions","badPolymorphic","badArity","badFailure","absent"] $ \name -> do
+    inspected <- inspectPluginSignature toolchain [schemaDirectory] AcquisitionEntry ("SignatureCases." ++ name)
+    assert ("Accepted malformed signature " ++ name) (case inspected of
+      Left problem -> Text.pack ("SignatureCases." ++ name) `Text.isInfixOf` Text.pack (show problem) && "Expected:" `Text.isInfixOf` Text.pack (show problem)
+      Right _ -> False)
+  genericSources <- right (acquisitionSources config box Nothing "SignatureCases.good" common)
+  _ <- compileBoth temporary toolchain nativeCompiler "generic-helper" genericSources
   folder <- load "host/kyyn-microhs/test/plugin" "Folder.hs"
   view <- load "host/kyyn-microhs/test/plugin" "ReadDocument.hs"
   optionFixture <- load "host/kyyn-microhs/test/plugin" "Options.hs"
@@ -86,7 +100,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
         (result == Just (failure message) && null trace && status == ExitSuccess)
   acquisition <- right (acquisitionSources config payload Nothing "Folder.fetch" (folder:common))
   captured <- right (capturedReadSources StringType payload StringType "ReadDocument.view" (view:common))
-  forM_ ["KyynPluginBindings.hs","KyynPluginEntry.hs","KyynPluginPayloadCodec.hs"] $ \name ->
+  forM_ ["KyynPluginEntry.hs","KyynPluginPayloadCodec.hs"] $ \name ->
     assert "generated adapter overwrote authored source" (case acquisitionSources config payload Nothing "Folder.fetch" ((path name,"collision"):folder:common) of
       Left _ -> True; Right _ -> False)
   (fetchPrograms,artifact) <- compileBoth temporary toolchain nativeCompiler "fetch" acquisition
@@ -115,9 +129,9 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
     (result,trace,status) <- broker Normal program (input (String "changed.txt"))
     assert "captured read requested acquisition or lost payload" (result == Just (success (String "old")) &&
       trace == [("evidence","read")] && status == ExitSuccess)
-  let forbidden = Text.encodeUtf8 (Text.unlines ["module ReadDocument where","import KyynPluginBindings",
+  let forbidden = Text.encodeUtf8 (Text.unlines ["module ReadDocument where","import Kyyn.Plugin","import Kyyn.Plugin.Host",
         "import qualified FolderSchema as Schema",
-        "view :: String -> EvidenceSnapshot Schema.Document -> CapturedRead (Either FetchError String)",
+        "view :: String -> EvidenceSnapshot Schema.Document -> CapturedRead Schema.Document (Either FetchError String)",
         "view path _ = readTextFile path"])
   forbiddenSources <- right (capturedReadSources StringType payload StringType "ReadDocument.view" ((path "ReadDocument.hs",forbidden):common))
   rejectBoth temporary toolchain nativeCompiler forbiddenSources

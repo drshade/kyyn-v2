@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, NoFieldSelectors #-}
 module Kyyn.Types.Plugin
   ( SourceConnector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
 
@@ -11,18 +11,12 @@ newtype ConnectorInstance connector = ConnectorInstance String
 data SourceConnector = SourceConnector
   { -- | Unique connector type name: an ASCII uppercase letter followed by letters, digits or underscores.
     name :: String
-  , -- | Qualified Haskell type of this connector's configuration, for example LocalFile.Types.FolderConfig.
-    configType :: String
-  , -- | Qualified Haskell type of one captured evidence payload, for example LocalFile.Types.Document.
-    payloadType :: String
-  , -- | Qualified acquisition function. Its Config and Payload must match this declaration.
+  , -- | Qualified acquisition function; its checked signature supplies the data contracts.
     fetch :: String
   , -- | Qualified pure configuration validator, with type Config -> ValidationReport.
     validateConfig :: String
   , -- | Typed methods for reading this connector's captured evidence.
     methods :: [CapturedMethod]
-  , -- | Optional qualified type of per-fetch arguments. Nothing keeps the config/snapshot signature.
-    fetchOptionsType :: Maybe String
   , -- | Optional qualified Config -> PluginLogin (Either LoginError ()) function.
     login :: Maybe String
   } deriving (Eq, Show)
@@ -33,11 +27,7 @@ data CapturedMethod = CapturedMethod
     methodName :: String
   , -- | Description shown when an agent or human discovers the method.
     methodDescription :: String
-  , -- | Qualified Haskell input type or type alias.
-    inputType :: String
-  , -- | Qualified Haskell result type or type alias.
-    resultType :: String
-  , -- | Qualified function: Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result).
+  , -- | Qualified function: Input -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Result).
     implementation :: String
   } deriving (Eq, Show)
 
