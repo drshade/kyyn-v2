@@ -392,7 +392,6 @@ Account setup uses host capabilities under ADR 0016, not IO in authored modules.
 
 Source registration is a plugin entry module's `connectors` value. Registration
 names implementations; checked function signatures determine their data contracts.
-Owner decision (2026-09-29); signature-derived preparation is not yet implemented.
 
 ```haskell
 connectors :: [SourceConnector]

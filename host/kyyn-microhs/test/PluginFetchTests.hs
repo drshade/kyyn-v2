@@ -77,11 +77,13 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
          (CapturedReadEntry,"goodRead",ReadSignature StringType box StringType)] $ \(kind,name,expectedSignature) -> do
     (actual,_) <- inspectPluginSignature toolchain [schemaDirectory] kind ("SignatureCases." ++ name) >>= right
     assert ("Wrong derived signature for " ++ name) (actual == expectedSignature)
-  forM_ ["badRow","badResult","badPayload","badChange","badOptions","badPolymorphic","badArity","badFailure","absent"] $ \name -> do
+  forM_ ["badRow","badResult","badPayload","badChange","badOptions","badPolymorphic","badHelper","badArity","badFailure","absent"] $ \name -> do
     inspected <- inspectPluginSignature toolchain [schemaDirectory] AcquisitionEntry ("SignatureCases." ++ name)
     assert ("Accepted malformed signature " ++ name) (case inspected of
       Left problem -> Text.pack ("SignatureCases." ++ name) `Text.isInfixOf` Text.pack (show problem) && "Expected:" `Text.isInfixOf` Text.pack (show problem)
       Right _ -> False)
+    if name == "badHelper" then assert "Constrained registered entry lost its concrete-type diagnostic"
+      ("concrete types and no residual constraints" `Text.isInfixOf` Text.pack (show inspected)) else pure ()
   genericSources <- right (acquisitionSources config box Nothing "SignatureCases.good" common)
   _ <- compileBoth temporary toolchain nativeCompiler "generic-helper" genericSources
   folder <- load "host/kyyn-microhs/test/plugin" "Folder.hs"

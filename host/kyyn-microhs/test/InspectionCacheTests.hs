@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, GADTs, LambdaCase, DataKinds #-}
 module Main where
 
-import Control.Monad (unless)
+import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
 import Data.IORef
 import Effectful (liftIO, runEff, Eff, IOE, (:>))
@@ -12,6 +12,7 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.GuestApi
 import Kyyn.Domain.Path
+import Kyyn.Domain.Plugin (PluginSignature(..))
 import Kyyn.MicroHs.Interpreter.InspectionCache
 import Kyyn.MicroHs.Interpreter.SchemaInspection
 import Kyyn.MicroHs.Inspection (inspectionSettings)
@@ -47,6 +48,13 @@ main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
       run :: Eff CacheEffects a -> IO (Either OperationalFailure a)
       run action = runEff . runFailure . runFileSystemIO (scope temporary) . runDhallHandling $ action
   calls <- newIORef (0 :: Int)
+  forM_ [FetchSignature structure Nothing StringType, FetchSignature structure (Just BoolType) StringType,
+         ReadSignature StringType structure BoolType] $ \signature -> do
+    let expected = (signature,[path "A.hs"])
+    roundtrip <- run $ do
+      encoded <- encodePluginSignature expected
+      case encoded of Left diagnostics -> pure (Left diagnostics); Right bytes -> decodePluginSignature bytes
+    assert "plugin signature Dhall roundtrip" (roundtrip == Right (Right expected))
   let inspect selectedCache settings input outcome = run $ cachedInspection selectedCache "inspection" "A.Root" settings input
         encodeInspection decodeInspection (liftIO (modifyIORef' calls (+1)) >> pure outcome)
       cache = Just (InspectionCache "revision-one" directory)

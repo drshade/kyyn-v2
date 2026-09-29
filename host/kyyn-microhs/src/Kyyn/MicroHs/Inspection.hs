@@ -27,7 +27,8 @@ data InspectionError
 
 -- Native compiler integration, not a porcelain operation or a complete KB contract.
 inspectionFlags :: FilePath -> [FilePath] -> Flags
-inspectionFlags compiler sources = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"] }
+inspectionFlags compiler sources = defaultFlags { mhsdir = compiler, srcPaths = sources ++ [compiler ++ "/lib"],
+  cppArgs = ["-DMIN_VERSION_base(x,y,z)=1"] }
 
 inspectionSettings :: FilePath -> String -> String
 inspectionSettings compiler selected = show (selected, inspectionFlags compiler ["<captured>"])
@@ -90,6 +91,7 @@ inspectPluginSignature compiler sources kind selected = withTimingIO "inspection
 
 lowerPluginSignature :: Constructors -> PluginEntryKind -> Expr -> Either String PluginSignature
 lowerPluginSignature table kind signature = do
+  -- These are the pinned compiler's resolved identities, not source-level aliases.
   let (vars,body) = stripForall signature
       (args,result) = arrows body
       lower = lowerType table [] []

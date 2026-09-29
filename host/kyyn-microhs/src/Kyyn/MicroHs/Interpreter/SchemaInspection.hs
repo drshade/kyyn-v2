@@ -52,7 +52,7 @@ inspectFunction :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :>
   -> Eff es (Either [Diagnostic] (PluginSignature,[RelativePath]))
 inspectFunction (GuestToolchain compiler) cache sources kind selected =
   cachedInspection cache "plugin-signature" (show kind ++ ":" ++ selected)
-    (inspectionSettings (scopePath compiler) selected) sources encodePluginSignature decode $
+    (show kind ++ inspectionSettings (scopePath compiler) selected) sources encodePluginSignature decode $
   withTemporaryScope $ \scope -> do
     forM_ sources $ \(path,bytes) -> writeBytes scope path bytes
     inspected <- liftIO (inspectPluginSignature (scopePath compiler) [scopePath scope] kind selected)

@@ -39,6 +39,9 @@ badOptions _ _ _ = pure (Right [])
 badPolymorphic :: Eq a => a -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 badPolymorphic _ _ = pure (Right [])
 
+badHelper :: ReadsEvidence row payload => Config -> EvidenceSnapshot payload -> Program row (Either FetchError [EvidenceChange payload])
+badHelper _ snapshot = fmap (fmap (const [])) (ids snapshot)
+
 badArity :: Config -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 badArity _ = pure (Right [])
 

@@ -188,6 +188,26 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
     Left diagnostics -> assert "Wrong fetch type diagnostic lost connector context"
       (any (\(Diagnostic _ _ message _) -> "local-file/Folder" `isInfixOf` message) diagnostics)
     Right _ -> fail "Registration accepted a config validator as its fetch function"
+  let packagePath file = "plugins/packages/local-file/source/src/LocalFile/" ++ file
+      replaceFile file source = map (\(path,bytes) ->
+        (path,if relativeName path == packagePath file then Text.encodeUtf8 (Text.pack source) else bytes)) installed
+      expectProblem label fragments entries = do
+        tree <- right (fileTree entries)
+        result <- runPreparation scope toolchain sdk (preparePlugins tree)
+        assert label (case result of
+          Left diagnostics -> all (\fragment -> any (\(Diagnostic _ _ message _) -> fragment `isInfixOf` message) diagnostics) fragments
+          Right _ -> False)
+  expectProblem "validator Config mismatch accepted" ["LocalFile.Config.validate","expected Config"] $
+    replaceFile "Config.hs" "module LocalFile.Config where\nimport Kyyn.Validation\nvalidate :: String -> ValidationReport\nvalidate _ = ValidationReport []\n"
+  expectProblem "captured Payload mismatch accepted" ["LocalFile.Read.content","Payload differs"] $
+    replaceFile "Read.hs" "module LocalFile.Read where\nimport Kyyn.Plugin\ncontent :: String -> EvidenceSnapshot String -> CapturedRead String (Either FetchError String)\ncontent _ _ = pure (Right \"x\")\n"
+  expectProblem "legacy bindings import lacks repair hint" ["Kyyn.Plugin / Kyyn.Plugin.Host"] $
+    replaceFile "Folder.hs" "module LocalFile.Folder where\nimport KyynPluginBindings\nfetch = undefined\n"
+  loginPath <- right (relativePath (packagePath "Login.hs"))
+  let withLogin = map (\(path,bytes) -> (path,if relativeName path == packagePath "Plugin.hs"
+        then Text.encodeUtf8 (Text.replace "login = Nothing" "login = Just \"LocalFile.Login.login\"" (Text.decodeUtf8 bytes)) else bytes)) installed
+  expectProblem "login Config mismatch accepted" ["LocalFile.Login.login","expected Config"] $
+    withLogin ++ [(loginPath,"module LocalFile.Login where\nimport Kyyn.Plugin.Host\nlogin :: String -> PluginLogin (Either LoginError ())\nlogin _ = pure (Right ())\n")]
   putStrLn "Plugin registration: inspected real package, two independent configured fetches and pure per-instance validation passed."
 
 compileFirstParty :: FilePath -> GuestSources -> IO ()
