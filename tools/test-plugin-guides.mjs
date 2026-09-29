@@ -39,6 +39,10 @@ try {
   const initial = commit(repo);
   write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${initial}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft }`);
   write(path.join(workspace, 'target/kb.dhall'), 'Invalid target');
+  assert.deepEqual(cli(['list', ...draft]).result.plugins, []);
+  for (const args of [['list'], ['show', 'example'], ['guide', 'example']]) {
+    assert.equal(cli([...args, '--evolution', '000002-unknown'], 1).diagnostics[0].code, 'evolution.unknown');
+  }
   write(path.join(source, 'kyyn-plugin.dhall'), '{ name = "example", entryModule = "Example.Plugin" }');
   write(path.join(source, 'src/Example/Plugin.hs'), 'This is not valid Haskell');
   const markdown = '# Example λ\n\nSetup, then use it.\n';

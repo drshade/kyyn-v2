@@ -8,11 +8,11 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Evolution (EvolutionWorkspace(..))
+import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
-import Kyyn.Domain.Path (RelativePath, relativePath, relativeName, directoryScope, scopedPath)
+import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, directoryScope, scopedPath)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Root (pluginPackagesLocation, pluginOriginLocation, pluginSourceLocation, pluginManifestLocation)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
@@ -31,7 +31,7 @@ runPluginDocumentation = interpret $ \_ -> \case
         path <- checked (relativePath ("root/" ++ relativeName pluginPackagesLocation) >>= knowledgeBasePath kb)
         ExceptT (Git.readDirectoryAt repository revision (Subtree path))
       EvolutionPlugins workspace@(EvolutionWorkspace (KnowledgeBase (Repository repository) _) _) -> do
-        location <- checked (workspaceLocation workspace)
+        location <- existingWorkspace repository workspace
         path <- checked (relativePath (relativeName location ++ "/target/" ++ relativeName pluginPackagesLocation))
         scope <- checked (directoryScope (scopedPath repository path))
         liftEff (FS.listDirectory scope)
@@ -55,7 +55,7 @@ loadPackage selected name = do
       unless (present /= Nothing) (reject "plugin.not-installed" ("Plugin is not installed: " ++ pluginNameText name))
       ExceptT (Git.readTreeAt repository revision (Subtree path))
     EvolutionPlugins workspace@(EvolutionWorkspace (KnowledgeBase (Repository repository) _) _) -> do
-      location <- checked (workspaceLocation workspace)
+      location <- existingWorkspace repository workspace
       path <- checked (relativePath (relativeName location ++ "/target/" ++ suffix))
       scope <- checked (directoryScope (scopedPath repository path))
       present <- liftEff (FS.directoryExists scope)
@@ -70,6 +70,14 @@ loadPackage selected name = do
 
 guidePath :: RelativePath
 guidePath = either error id (relativePath "source/README.md")
+
+existingWorkspace :: FS.FileSystem :> es => DirectoryScope -> EvolutionWorkspace -> ExceptT [Diagnostic] (Eff es) RelativePath
+existingWorkspace repository workspace@(EvolutionWorkspace _ identity) = do
+  location <- checked (workspaceLocation workspace)
+  scope <- checked (directoryScope (scopedPath repository location))
+  present <- liftEff (FS.directoryExists scope)
+  unless present (reject "evolution.unknown" ("Unknown evolution: " ++ evolutionIdName identity))
+  pure location
 
 liftEff :: Eff es a -> ExceptT [Diagnostic] (Eff es) a
 liftEff = ExceptT . fmap Right
