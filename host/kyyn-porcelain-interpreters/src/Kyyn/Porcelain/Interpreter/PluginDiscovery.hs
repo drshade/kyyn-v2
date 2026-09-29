@@ -9,7 +9,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase, knowledgeBaseScope, cacheLocation)
@@ -100,9 +100,12 @@ syncTap kb tap@(Tap _ source) = do
   liftEff (FS.ensureDirectory scope)
   gitMarker <- checked (relativePath ".git")
   exists <- liftEff (FS.entryExists repoScope gitMarker)
-  revision <- if exists then ExceptT (Git.fetchRevision repository source) else do
+  let acquire action = ExceptT (fmap (either (Left . map accessHint) Right) action)
+      accessHint (Diagnostic severity code message location) = Diagnostic severity code
+        (message ++ "\nCheck access to the tap repository; private repositories need a configured Git credential helper.") location
+  revision <- if exists then acquire (Git.fetchRevision repository source) else do
     liftEff (FS.ensureDirectory repoScope)
-    cloned <- ExceptT (Git.cloneRepository source repoScope)
+    cloned <- acquire (Git.cloneRepository source repoScope)
     ExceptT (Git.resolveRevision cloned "HEAD")
   bytes <- ExceptT (Git.readFileAt repository revision cataloguePath) >>= maybe
     (reject "tap.catalogue-missing" "Tap repository has no kyyn-tap.dhall") pure

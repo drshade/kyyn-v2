@@ -73,6 +73,9 @@ try {
   fs.renameSync(upstream, upstream + '-offline');
   assert.equal(cli(['plugin', 'guide', 'local/local']).result.markdown, '# Local λ\n');
   assert.equal(cli(['plugin', 'search', 'Folder']).result.plugins.length, 1);
+  const unavailable = cli(['tap', 'update', 'local'], 1);
+  assert.equal(unavailable.diagnostics[0].code, 'git.fetch-failed');
+  assert(unavailable.diagnostics[0].message.includes('Check access to the tap repository'));
   fs.renameSync(upstream + '-offline', upstream);
   const guide = cli(['plugin', 'guide', 'local/external']).result;
   assert.equal(guide.markdown, '# External\n'); assert.equal(guide.package.origin.revision, externalRevision);
