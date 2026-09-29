@@ -45,7 +45,8 @@ validate _ = REPORT
   const created = JSON.parse(cli('--json', 'evolution', 'new', 'cpp-paths')).result;
   const catalogue = cli('guest', 'module', 'show', 'Kyyn.Workspace.Before', '--evolution', created.id);
   assert.match(catalogue, /Kyyn.Workspace.Before/);
-  assert.match(catalogue, /RootV1\.Root/);
+  const evolutionApi = cli('guest', 'module', 'show', 'Kyyn.Workspace.Evolution', '--evolution', created.id);
+  assert.match(evolutionApi, /RootV1\.Root/);
   assert.match(cli('evolution', 'check', created.id), /checks passed/i);
   console.log('CPP path smoke passed: native schema/API inspection and guest compilation with spaces and quotes in compiler-temp paths, and Unicode in runtime and KB paths.');
 } finally {
