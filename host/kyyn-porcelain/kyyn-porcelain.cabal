@@ -18,6 +18,7 @@ library
     Kyyn.Porcelain.Capability.Tool
     Kyyn.Porcelain.Capability.PluginInstallation
     Kyyn.Porcelain.Capability.PluginDocumentation
+    Kyyn.Porcelain.Capability.PluginDiscovery
     Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
     Kyyn.Porcelain.Capability.Root
     Kyyn.Porcelain.Capability.GuestApi

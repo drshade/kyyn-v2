@@ -283,7 +283,8 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   indexBefore <- Bytes.readFile (directory </> ".git/index")
   outsideBefore <- inspect ["ls-tree", "-z", revisionName parent, "--", "outside", "outside-link", "kb/archive"]
   let replacement = tree [("nested/new\t\n\955.dhall", bytes), ("changed.dhall", "replacement")]
-      changes = GitTree [(Subtree (path "root"), replacement), (Subtree (path "kb/new/root"), tree [("fact", "new")])]
+      changes = GitTreeWithFiles [(Subtree (path "root"), replacement), (Subtree (path "kb/new/root"), tree [("fact", "new")])]
+        [(path "kb/new/taps.dhall", "tap declarations")]
   candidate <- perform (createCommit repo changes (Just parent) metadata)
   repeatCandidate <- perform (createCommit repo changes (Just parent) metadata)
   assert "Commit metadata or construction was nondeterministic" (repeatCandidate == candidate)
@@ -295,6 +296,11 @@ snapshotTests = withSystemTempDirectory "kyyn-git" $ \directory -> do
   assert "Replacement did not remove old files or preserve new bytes" (opened == replacement)
   nested <- execute (readTreeAt repo candidate (Subtree (path "kb/new/root")))
   assert "Nested replacement failed" (nested == tree [("fact", "new")])
+  tapBytes <- execute (readFileAt repo candidate (path "kb/new/taps.dhall"))
+  assert "Mixed blob/tree update lost the file" (tapBytes == Just "tap declarations")
+  fileOverlap <- runEff (runFailure (runProcessExecutionIO (runGit executable []
+    (createCommit repo (GitTreeWithFiles [(Subtree (path "root"),replacement)] [(path "root/taps.dhall","overlap")]) (Just parent) metadata))))
+  case fileOverlap of Left _ -> pure (); _ -> fail "Overlapping blob/tree replacements accepted"
   outsideAfter <- inspect ["ls-tree", "-z", revisionName candidate, "--", "outside", "outside-link", "kb/archive"]
   assert "Unrelated entries or mode bits changed" (outsideBefore == outsideAfter)
   parents <- inspect ["show", "-s", "--format=%P", revisionName candidate]

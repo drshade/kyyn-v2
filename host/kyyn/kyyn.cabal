@@ -9,7 +9,7 @@ executable kyyn-v2
   hs-source-dirs: app src
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
-    Kyyn.Composition.Tools Kyyn.Composition.Recipes
+    Kyyn.Composition.Tools Kyyn.Composition.Recipes Kyyn.Composition.Taps
     Kyyn.Composition.Secrets Kyyn.Composition.Timings
     Kyyn.Build
   default-language: GHC2021

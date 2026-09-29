@@ -9,6 +9,10 @@ import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
 import Kyyn.Composition.Recipes (dispatchRecipes)
 import Kyyn.Composition.Secrets (executeSecrets)
+import Kyyn.Composition.Taps (dispatchTaps, searchAvailablePlugins, availableGuide)
+import qualified Kyyn.Porcelain.Capability.PluginDiscovery as Discovery
+import Kyyn.Porcelain.Interpreter.PluginDiscovery (runPluginDiscovery)
+import Kyyn.Domain.Tap (AvailablePlugin(..), CatalogueEntry(..))
 import qualified Kyyn.Porcelain.Capability.PluginDocumentation as Documentation
 import Kyyn.Porcelain.Interpreter.PluginDocumentation (runPluginDocumentation)
 import Kyyn.Surfaces.Plugins (pluginListResult, pluginDescriptionResult, pluginGuideResult)
@@ -25,7 +29,7 @@ import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath, relativePath)
-import Kyyn.Domain.Plugin (pluginSource)
+import Kyyn.Domain.Plugin (PluginSource(..), pluginSource)
 import Kyyn.Domain.Publication (InitializationTarget(..))
 import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -116,6 +120,7 @@ execute (Cli.Invocation selection _ command) = do
         Cli.Root request -> selectKnowledgeBase host scope >>= either pure (dispatchRoot host request)
         Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)
         Cli.Plugin request -> selectKnowledgeBase host scope >>= either pure (dispatchPlugin host request)
+        Cli.Tap request -> selectKnowledgeBase host scope >>= either pure (dispatchTaps host request)
         Cli.Evidence request -> selectKnowledgeBase host scope >>= either pure (dispatchEvidence host request)
 
 executeGuest :: Cli.Selection -> Maybe EvolutionId -> Cli.GuestCommand -> IO Response
@@ -152,6 +157,19 @@ executeGuest selection@(Cli.Selection path _ runtimeOverride) workspace request 
 
 dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
 dispatchPlugin host (Cli.Connector command) kb = dispatchConnectors host command kb
+dispatchPlugin host (Cli.SearchPlugins query) kb = searchAvailablePlugins host query kb
+dispatchPlugin host (Cli.ReadPluginGuide (Cli.AvailableGuide tap name) evolution) kb = case evolution of
+  Nothing -> availableGuide host tap name kb
+  Just _ -> pure (refusal [errorDiagnostic "plugin.guide-selection" "Use an installed plugin name with --evolution, or omit --evolution for a tap guide"])
+dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.InstallAvailablePlugin identity tap name) (SelectedKb kb _ _) =
+  finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
+    . runGit executable environment . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore
+    . runPluginInstallation . runPluginDiscovery $ do
+      resolved <- Discovery.resolvePlugin kb tap name
+      case resolved of
+        Left diagnostics -> pure (refusal diagnostics)
+        Right (AvailablePlugin _ _ (CatalogueEntry _ _ source path)) ->
+          either refusal (pluginResult identity) <$> Plugin.installNamedPlugin (EvolutionWorkspace kb identity) name (GitPackage source (Subtree path))
 dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ListPlugins evolution) (SelectedKb kb revision _) =
   finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
     . runGit executable environment . runDhallHandling . runPluginDocumentation $
@@ -161,13 +179,13 @@ dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ListPlugins evolu
 dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ShowPlugin name evolution) (SelectedKb kb revision _) =
   finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
     . runGit executable environment . runDhallHandling . runPluginDocumentation $
-      either refusal (pluginDescriptionResult evolution revision) <$> Documentation.describePlugin
+      either refusal (pluginDescriptionResult evolution (Just revision)) <$> Documentation.describePlugin
         (maybe (Documentation.AcceptedPlugins kb revision)
           (Documentation.EvolutionPlugins . EvolutionWorkspace kb) evolution) name
-dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ReadPluginGuide name evolution) (SelectedKb kb revision _) =
+dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.ReadPluginGuide (Cli.InstalledGuide name) evolution) (SelectedKb kb revision _) =
   finish $ runEff . runFailure . runProcessExecutionIO . runFileSystemIO temp
     . runGit executable environment . runDhallHandling . runPluginDocumentation $
-      either refusal (pluginGuideResult evolution revision) <$> Documentation.readPluginGuide
+      either refusal (pluginGuideResult evolution (Just revision)) <$> Documentation.readPluginGuide
         (maybe (Documentation.AcceptedPlugins kb revision)
           (Documentation.EvolutionPlugins . EvolutionWorkspace kb) evolution) name
 dispatchPlugin (Host executable environment temp _ _ _ _) (Cli.InstallPlugin identity source subdirectory) (SelectedKb kb _ _) = do

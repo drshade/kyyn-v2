@@ -3,10 +3,12 @@ module Kyyn.Surfaces.Cli
   , KbCommand(..), RootCommand(..), EvolutionCommand(..), cliInfo, cliPrefs, parseArguments, progressMessage
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   , SecretCommand(..), SecretArgument(..)
+  , TapCommand(..), GuideSelection(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
-import Kyyn.Domain.Git (GitRevision, gitRevision)
+import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
+import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Domain.Curation (RecipeId, recipeId)
@@ -28,15 +30,19 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Evidence EvidenceCommand | Secret SecretCommand deriving (Eq, Show)
+data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand deriving (Eq, Show)
 data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
 newtype SecretArgument = SecretArgument String deriving Eq
 instance Show SecretArgument where show _ = "<secret>"
 data PluginCommand = InstallPlugin EvolutionId String (Maybe FilePath)
+  | InstallAvailablePlugin EvolutionId TapName PluginName
+  | SearchPlugins String
   | ListPlugins (Maybe EvolutionId)
   | ShowPlugin PluginName (Maybe EvolutionId)
-  | ReadPluginGuide PluginName (Maybe EvolutionId)
+  | ReadPluginGuide GuideSelection (Maybe EvolutionId)
   | Connector ConnectorCommand deriving (Eq, Show)
+data GuideSelection = InstalledGuide PluginName | AvailableGuide TapName PluginName deriving (Eq, Show)
+data TapCommand = ListTaps | AddTap TapName GitUrl | RemoveTap TapName | UpdateTaps (Maybe TapName) deriving (Eq, Show)
 data ConnectorCommand
   = ListConnectors PluginName (Maybe EvolutionId)
   | ShowConnector PluginName ConnectorName (Maybe EvolutionId)
@@ -101,21 +107,43 @@ invocation = Invocation <$> selectionParser
     (group "kb" "Create a knowledge base" (hsubparser
       (group "init" "Initialize an empty knowledge base and commit its validated root" (pure (Kb InitKb))))
     <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
+    <> group "tap" "Manage KB-local plugin catalogues" (Tap <$> tapParser)
     <> group "guest" "Explore the guest SDK and workspace bindings" guestParser
     <> group "plugin" "Manage plugins and connector configuration" (Plugin <$> hsubparser
       (group "install" "Copy a committed plugin package into an evolution target"
-        (InstallPlugin <$> option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Evolution to receive the plugin")
-          <*> strOption (long "from" <> metavar "SOURCE" <> help "Local Git checkout directory or Git URL")
-          <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY" <> help "Package directory within the selected source")))
+        (pluginInstallParser)
+       <> group "search" "Search synced tap catalogues (no network refresh)"
+          (SearchPlugins <$> (maybe "" id <$> optional (strArgument (metavar "QUERY"))))
        <> group "list" "List installed plugin names" (ListPlugins <$> pluginEvolution)
        <> group "show" "Show vendored package details without compiling the plugin"
           (ShowPlugin <$> pluginArgument <*> pluginEvolution)
        <> group "guide" "Read the plugin's packaged guide without compiling it"
-          (ReadPluginGuide <$> pluginArgument <*> pluginEvolution)
+          (ReadPluginGuide <$> argument (eitherReader guideSelection) (metavar "PLUGIN|TAP/PLUGIN") <*> pluginEvolution)
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
     <> group "evidence" "Fetch and inspect current evidence and history" (Evidence <$> evidenceParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
+
+tapParser :: Parser TapCommand
+tapParser = hsubparser
+  (group "list" "List declared taps" (pure ListTaps)
+  <> group "add" "Declare a tap without fetching it" (AddTap <$> name <*> option (eitherReader gitUrl) (long "from" <> metavar "URL"))
+  <> group "remove" "Remove a declaration, leaving installed plugins unchanged" (RemoveTap <$> name)
+  <> group "update" "Download or refresh tap catalogues" (UpdateTaps <$> optional name))
+  where name = argument (eitherReader tapName) (metavar "NAME")
+
+pluginInstallParser :: Parser PluginCommand
+pluginInstallParser = build <$> option (eitherReader evolutionId) (long "evolution" <> metavar "ID")
+  <*> ((Left <$> ((,) <$> strOption (long "from" <> metavar "SOURCE" <> help "Local checkout directory or Git URL")
+    <*> optional (strOption (long "path" <> metavar "SUBDIRECTORY"))))
+    <|> (Right <$> argument (eitherReader qualifiedPlugin) (metavar "TAP/PLUGIN")))
+  where
+    build selectedId (Left (source,path)) = InstallPlugin selectedId source path
+    build selectedId (Right (tap,name)) = InstallAvailablePlugin selectedId tap name
+
+guideSelection :: String -> Either String GuideSelection
+guideSelection input | '/' `elem` input = uncurry AvailableGuide <$> qualifiedPlugin input
+                     | otherwise = InstalledGuide <$> pluginName input
 
 secretParser :: Parser SecretCommand
 secretParser = hsubparser

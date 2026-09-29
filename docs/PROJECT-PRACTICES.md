@@ -252,6 +252,14 @@ without a runtime bundle, valid root schema or compilable plugin source. It cove
 accepted Git material versus live evolution targets, source identity, Unicode,
 missing/invalid guides and symlink refusal. It is included in the installed gate.
 
+`node tools/test-plugin-taps.mjs EXECUTABLE` checks tap declarations, offline
+search/guides, explicit refresh, qualified installation and cache reconstruction
+using disposable local Git remotes. It also checks cloned-KB cache isolation and
+that updates/removal leave installed source unchanged, without a guest runtime.
+The installed initialization check verifies the default declaration is committed
+without downloading a tap. `node tools/checks/check-plugin-catalogue.mjs` checks
+the literal first-party catalogue against package directories in the fast gate.
+
 Guest API discovery has two focused checks: `cabal test guest-catalogue
 --test-show-details=direct` exercises the read-only catalogue capability and real
 Dhall codec, and `KYYN_TEST_ROOT="$PWD"
