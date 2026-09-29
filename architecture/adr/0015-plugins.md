@@ -445,8 +445,10 @@ Inspection uses checked compiler types, including expanded aliases, not source-t
 parsing or pretty-printed signatures. Config, Payload, Options, Input and Result must
 be concrete supported data types. Check the complete entry shape: arity, effect row,
 typed failure, result wrapper and agreement of Payload wherever it occurs. Reject
-unresolved polymorphic data, unsupported constraints or mismatched types rather than
-guessing contracts. The host checks supplied options before guest execution, while the
+unresolved polymorphic data, residual unsupported constraints on the inspected
+entry or its data contracts, and mismatched types rather than guessing contracts.
+This does not prohibit constrained reusable helpers: ADR 0009's `ReadsEvidence`
+constraint is resolved by a concrete registered entry's row. The host checks supplied options before guest execution, while the
 connector owns their meaning and defaults. ADR 0014 owns invocation and history.
 Native `ConnectorTypeName`, `BindingName` and `ConnectorName`
 distinguish declared names after decoding. Registered implementations are qualified
@@ -470,8 +472,9 @@ locations. Registration/data-shape errors and operational compiler failures rema
 distinct under ADR 0019.
 
 Verification must derive the local-file and Graph contracts without type-name
-declarations, exercise fetches with and without options, aliases and parameterised
-data, and reject wrong rows, arities, wrappers and inconsistent Config/Payload.
+declarations, exercise fetches with and without options, aliases and concrete
+instantiations of parameterised data, and reject wrong rows, arities, wrappers
+and inconsistent Config/Payload.
 Generated adapters must compile under GHC and MicroHs. Installed discovery must
 continue exposing exact schemas, and a mixed-capability fetch must still work.
 
