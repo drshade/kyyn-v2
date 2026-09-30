@@ -93,6 +93,18 @@ try {
   assert.equal(cli(['plugin', 'search', 'Updated']).result.plugins[0].catalogueRevision, second);
   assert.equal(cli(['plugin', 'guide', 'local/local']).result.markdown, '# New guide\n');
   assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# Local λ\n');
+  write(path.join(workspace, 'target/plugins/config/local.dhall'), 'Keep connector configuration');
+  write(path.join(workspace, 'target/plugins/packages/local/source/obsolete'), 'Old package file');
+  const upgraded = cli(['plugin', 'install', 'local/local', '--evolution', id]).result;
+  assert.equal(upgraded.origin.revision, second);
+  assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# New guide\n');
+  assert.equal(fs.existsSync(path.join(workspace, 'target/plugins/packages/local/source/obsolete')), false);
+  assert.equal(fs.readFileSync(path.join(workspace, 'target/plugins/config/local.dhall'), 'utf8'), 'Keep connector configuration');
+  const failedUpgrade = path.join(upstream, 'plugins/local/kyyn-plugin.dhall');
+  write(failedUpgrade, 'Invalid manifest'); commit(upstream);
+  assert.equal(cli(['plugin', 'install', 'local/local', '--evolution', id], 1).outcome, 'Refused');
+  assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# New guide\n');
+  write(failedUpgrade, '{ name = "local", entryModule = "Example.Plugin" }'); commit(upstream);
   write(path.join(upstream, 'kyyn-tap.dhall'), 'Invalid catalogue'); commit(upstream);
   assert.equal(cli(['tap', 'update', 'local'], 1).outcome, 'Refused');
   assert.equal(cli(['plugin', 'search', 'Updated']).result.plugins[0].catalogueRevision, second);
@@ -108,10 +120,10 @@ try {
   cli(['tap', 'update'], 0, path.join(clone, 'nested'));
   cli(['tap', 'remove', 'local']);
   assert.deepEqual(cli(['tap', 'list']).result.taps, []);
-  assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# Local λ\n');
+  assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# New guide\n');
   assert.equal(cli(['plugin', 'search'], 0, path.join(clone, 'nested')).result.plugins.length, 4);
   write(path.join(kb, 'taps.dhall'), 'Invalid Dhall');
   assert.equal(cli(['tap', 'list'], 1).outcome, 'Refused');
-  assert.equal(cli(['plugin', 'guide', 'local', '--evolution', id]).result.markdown, '# Local λ\n');
+  assert.equal(cli(['plugin', 'guide', 'local', '--evolution', id]).result.markdown, '# New guide\n');
   console.log('Tap journey passed: offline search/guides, external guides, qualified install, name mismatch, refresh, cache reconstruction, cloned KB isolation and declaration independence.');
 } finally { fs.rmSync(temp, { recursive: true, force: true }); }

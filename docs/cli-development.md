@@ -240,17 +240,18 @@ a local checkout. Prefix a local relative path containing a colon with `./`.
 The package has `kyyn-plugin.dhall` with `name` and `entryModule`, and the entry's
 source under `src/`. Installed files go into `evolutions/ID/target/plugins/packages/NAME/source/`;
 the adjacent `origin.dhall` records the repository, package path and exact Git revision.
-The command reports those details in both human and JSON output. It refuses an
-existing destination rather than updating or merging into it.
+The command reports those details in both human and JSON output. Repeat installation
+to update: it replaces the named package completely, removing obsolete files while
+preserving connector configuration. For catalogue installs, use `tap update` then
+`plugin install TAP/PLUGIN --evolution ID`.
 
 Installation needs Git but no guest runtime. It validates package structure, not
-guest compilation or connector behavior. The current `local-file` package demonstrates
-installation only; its source/sink operations are not implemented yet.
+guest compilation or connector behavior.
 Use the ID returned by `evolution new`; `--evolution` is required. Missing or accepted
 evolutions are refused. Installation leaves HEAD and accepted `root/` unchanged.
 Review the target changes, check the evolution, mark it ready and accept it normally.
-New evolutions inherit accepted plugins. If a filesystem write fails after destination
-creation, inspect the reported directory before removing the partial copy and retrying.
+New evolutions inherit accepted plugins. Reinstallation replaces any local edits
+inside that evolution's named package; review them with Git before updating.
 
 ## Discover the guest SDK
 

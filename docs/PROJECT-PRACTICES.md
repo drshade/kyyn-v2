@@ -231,8 +231,9 @@ It requires no guest compiler and is included in the fast check.
 `cabal test plugin-installation --test-show-details=direct` checks the installation
 handler with write-forbidding refusal handlers and real Git/filesystem/Dhall
 integration: local and file-URL sources, nested KBs, persisted origins, independent
-copies, existing destinations (including empty directories and symlinks), and
-unchanged KB HEAD. It is included in the fast check and does not compile or invoke guests.
+copies, repeat installation (including an empty destination), and
+unchanged KB HEAD. The filesystem suite checks complete tree replacement, staging
+failure preservation and file/symlink refusal. These checks do not compile or invoke guests.
 
 Plugin installation targets an evolution, not the accepted root. The installed
 `node tools/test-plugin-evolution.mjs EXECUTABLE` journey checks install into a Ready

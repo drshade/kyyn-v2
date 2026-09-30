@@ -66,16 +66,15 @@ refusalTests = do
   let empty = either error id (fileTree [])
       withoutEntry = either error id (fileTree (filter ((/= path "src/LocalFile/Plugin.hs") . fst) (files (fixture "local-file"))))
       invalid = either error id (fileTree [(path "kyyn-plugin.dhall", "./import.dhall")])
-      cases = [(empty, [], False, "plugin.manifest-missing"),
-               (empty, [], False, "plugin.source-unavailable"),
-               (invalid, [], False, "plugin.manifest-invalid"),
-               (withoutEntry, [], False, "plugin.entry-missing"),
-               (fixture "local-file", [path "package/src/LocalFile/Plugin.hs"], False, "plugin.source-uncommitted"),
-               (fixture "local-file", [], True, "plugin.already-installed")]
+      cases = [(empty, [], "plugin.manifest-missing"),
+               (empty, [], "plugin.source-unavailable"),
+               (invalid, [], "plugin.manifest-invalid"),
+               (withoutEntry, [], "plugin.entry-missing"),
+               (fixture "local-file", [path "package/src/LocalFile/Plugin.hs"], "plugin.source-uncommitted")]
       revision = either error id (gitRevision (replicate 40 'a'))
       repository = Repository (scope "/source")
       kb = KnowledgeBase (Repository (scope "/target")) (Subtree (path "nested/kb"))
-  forM_ cases $ \(tree, changed, exists, expected) -> do
+  forM_ cases $ \(tree, changed, expected) -> do
     let gitHandler :: Eff (Git : es) a -> Eff es a
         gitHandler = interpret $ \_ -> \case
           DiscoverRepository _ | expected /= "plugin.source-unavailable" -> pure (Right (repository, Subtree (path "package")))
@@ -87,7 +86,6 @@ refusalTests = do
         noWrites = interpret $ \_ -> \case
           FS.DirectoryExists directory | directory == scope "/source/package" ->
             pure (expected /= "plugin.source-unavailable")
-          FS.EntryExists _ _ -> pure exists
           _ -> error "Refused installation performed a filesystem write"
         editable :: Eff (Evolution.EvolutionStore : es) a -> Eff es a
         editable = interpret $ \_ -> \case
@@ -153,23 +151,19 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
     decoded <- right (runPureEff (runDhallHandling (decodeOrigin encoded)))
     assert "persisted origin changed" (decoded == origin)
     before <- runEff (runFailure (runFileSystemIO (scope directory) (FS.readTree (scope kbDirectory)))) >>= right
-    refused <- install selection
-    case refused of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
+    _ <- install selection >>= right
     after <- runEff (runFailure (runFileSystemIO (scope directory) (FS.readTree (scope kbDirectory)))) >>= right
-    assert "duplicate changed existing KB" (before == after)
-  colonSource <- install (LocalPackage (scope sourceDirectory) (Subtree (path "packages/local")))
-  case colonSource of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
+    assert "same-revision reinstall changed existing KB" (before == after)
+  _ <- install (LocalPackage (scope sourceDirectory) (Subtree (path "packages/local"))) >>= right
   createDirectoryLink sourceDirectory (directory </> "linked-source")
-  linkedSource <- install (LocalPackage (scope (directory </> "linked-source")) (Subtree (path "packages/local")))
-  case linkedSource of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
-  forM_ ["empty", "linked"] $ \name -> do
+  _ <- install (LocalPackage (scope (directory </> "linked-source")) (Subtree (path "packages/local"))) >>= right
+  forM_ ["empty"] $ \name -> do
     let destination = targetRoot </> "plugins/packages" </> name
-    if name == "empty" then createDirectory destination else createFileLink "/missing/plugin" destination
+    createDirectory destination
     package <- right (fileTree (files (fixture name)))
     next <- gitAction (createCommit sourceRepository (GitTree [(Subtree (path name), package)]) (Just sourceCommit) metadata)
     _ <- gitAction (compareAndSwapRef sourceRepository sourceBranch (Just sourceCommit) next)
-    refused <- install (GitPackage url (Subtree (path name)))
-    case refused of Left [Diagnostic _ "plugin.already-installed" _ _] -> pure (); other -> fail (show other)
+    _ <- install (GitPackage url (Subtree (path name))) >>= right
     _ <- gitAction (compareAndSwapRef sourceRepository sourceBranch (Just next) sourceCommit)
     pure ()
   createDirectoryIfMissing True (sourceDirectory </> "packages/local/src")

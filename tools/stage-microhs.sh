@@ -12,10 +12,11 @@ if [[ -e "$toolchain_prefix" || -L "$toolchain_prefix" ]]; then
   exit 1
 fi
 cd "$(dirname "$0")/.."
-make -C vendor/MicroHs bin/gmhs bin/mhseval bin/cpphs
+make -C vendor/MicroHs bin/gmhs bin/mhseval bin/cpphs mhs.conf
 mkdir -p "$toolchain_prefix/bin"
 cp vendor/MicroHs/bin/gmhs "$toolchain_prefix/bin/mhs"
 for executable in mhseval cpphs; do
   cp "vendor/MicroHs/bin/$executable" "$toolchain_prefix/bin/"
 done
 cp -R vendor/MicroHs/lib "$toolchain_prefix/"
+cp vendor/MicroHs/mhs.conf "$toolchain_prefix/mhs.conf"

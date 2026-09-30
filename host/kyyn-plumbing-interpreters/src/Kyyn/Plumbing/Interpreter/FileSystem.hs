@@ -2,7 +2,8 @@
 module Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO) where
 
 import Control.Exception (IOException, displayException, try)
-import Control.Monad (forM)
+import qualified Control.Exception as IO
+import Control.Monad (forM, forM_, when, unless)
 import qualified Data.ByteString as Bytes
 import Data.List (sort)
 import Data.Word (Word64)
@@ -12,7 +13,7 @@ import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
 import qualified Effectful.Exception as Exception
 import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Path
-import Kyyn.Domain.FileTree (FileTree, fileTree)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Plumbing.Capability.Failure
 import Kyyn.Plumbing.Capability.FileSystem
 import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
@@ -56,6 +57,8 @@ runFileSystemIO parent = interpret $ \env -> \case
       hClose handle
       renameFile temporary target
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
+  ReplaceTree scope path tree -> native Failure.ReplaceDirectoryTree (scopedPath scope path)
+    (replaceDirectoryTree (scopedPath scope path) tree)
   ListDirectory scope -> native Failure.ListDirectory (scopePath scope) $ do
     result <- try (Directory.listDirectory (scopePath scope))
     case result of
@@ -77,6 +80,35 @@ runFileSystemIO parent = interpret $ \env -> \case
                | otherwise -> ioError err
   DirectoryExists scope -> native Failure.InspectEntry (scopePath scope) (doesDirectoryExist (scopePath scope))
   EnsureDirectory scope -> native Failure.EnsureDirectory (scopePath scope) (createDirectoryIfMissing True (scopePath scope))
+
+-- Stage on the destination filesystem. Keep the old tree if publication or
+-- rollback fails; never delete it merely because an exception was raised.
+replaceDirectoryTree :: FilePath -> FileTree -> IO ()
+replaceDirectoryTree target tree = IO.mask $ \restore -> do
+  entry <- try (pathIsSymbolicLink target)
+  exists <- case entry of
+    Right linked -> do
+      directory <- doesDirectoryExist target
+      unless (directory && not linked) (ioError (userError "Tree destination must be a directory, not a file or symlink"))
+      pure True
+    Left err | isDoesNotExistError err -> pure False
+             | otherwise -> ioError err
+  let parentDirectory = takeDirectory target
+  createDirectoryIfMissing True parentDirectory
+  staging <- createTempDirectory parentDirectory ".kyyn-replace-"
+  let fresh = staging </> "new"
+      previous = staging </> "previous"
+      cleanup = removeDirectoryRecursive staging
+  restore (do
+    Directory.createDirectory fresh
+    forM_ (files tree) $ \(path, bytes) -> do
+      let file = fresh </> relativeName path
+      createDirectoryIfMissing True (takeDirectory file)
+      Bytes.writeFile file bytes) `IO.onException` cleanup
+  when exists (Directory.renameDirectory target previous)
+  Directory.renameDirectory fresh target `IO.onException`
+    when exists (Directory.renameDirectory previous target)
+  cleanup
 
 allocateDirectory :: FilePath -> IO RelativePath
 allocateDirectory parent = createDirectoryIfMissing True parent >> allocate

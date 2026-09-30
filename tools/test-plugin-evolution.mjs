@@ -56,7 +56,7 @@ try {
   const inherited = path.join(next.path, 'target', packagePath);
   assert.deepEqual(fs.readFileSync(path.join(inherited, 'source/src/LocalFile/Plugin.hs')), expected);
   assert.deepEqual(fs.readFileSync(path.join(inherited, 'origin.dhall')), fs.readFileSync(path.join(accepted, 'origin.dhall')));
-  assert.equal(cli(install(next.id), 1).diagnostics[0].code, 'plugin.already-installed');
+  cli(install(next.id));
   cli(['evolution', 'check', next.id]);
   cli(['evolution', 'ready', next.id]);
   cli(['evolution', 'accept', next.id]);

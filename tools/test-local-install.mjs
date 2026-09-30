@@ -13,6 +13,7 @@ const executable = path.join(prefix, 'bin/kyyn-v2');
 const invoke = (command, args, expected = 0, env = process.env) => {
   const result = spawnSync(command, args, { cwd: repository, env, encoding: 'utf8' });
   assert.equal(result.status, expected, `${command} ${args.join(' ')}\n${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
+  assert(!result.stderr.includes('cannot find config file:'), result.stderr);
   return result.stdout;
 };
 const install = (destination = prefix, expected = 0, env = process.env) =>
@@ -28,7 +29,7 @@ try {
   assert.deepEqual(fs.readFileSync(path.join(bundle, 'lib/kyyn/microhs/bin/mhs')),
     fs.readFileSync(path.join(repository, 'vendor/MicroHs/bin/gmhs')),
     'Installed compiler differs from the native toolchain');
-  for (const entry of ['microhs/bin/mhs', 'microhs/bin/mhseval', 'microhs/bin/cpphs', 'sdk/Kyyn/Types/Fact.hs']) {
+  for (const entry of ['microhs/mhs.conf', 'microhs/bin/mhs', 'microhs/bin/mhseval', 'microhs/bin/cpphs', 'sdk/Kyyn/Types/Fact.hs']) {
     assert.ok(fs.existsSync(path.join(bundle, 'lib/kyyn', entry)), entry);
   }
   const stale = path.join(bundle, 'lib/kyyn/sdk/Retired.hs');

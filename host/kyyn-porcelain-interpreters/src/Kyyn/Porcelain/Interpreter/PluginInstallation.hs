@@ -52,12 +52,7 @@ runPluginInstallation = interpret $ \_ -> \case
           parent <- pathChecked (directoryScope (scopedPath destination parentPath))
           namePath <- pathChecked (relativePath (pluginNameText name))
           target <- pathChecked (directoryScope (scopedPath parent namePath))
-          exists <- liftEff (FS.entryExists parent namePath)
-          when exists (reject "plugin.already-installed" (pluginNameText name ++ " is already installed"))
-          liftEff (FS.ensureDirectory parent)
-          created <- liftEff (FS.createDirectory target)
-          unless created (reject "plugin.already-installed" (pluginNameText name ++ " is already installed"))
-          forM_ (files payload) $ \(path, bytes) -> liftEff (FS.writeBytes target path bytes)
+          liftEff (FS.replaceTree parent namePath payload)
           pure (InstalledPlugin name target origin)
     ExceptT $ case source of
       LocalPackage directory path -> runExceptT $ do
