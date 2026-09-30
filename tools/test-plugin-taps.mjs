@@ -100,6 +100,7 @@ try {
   assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# New guide\n');
   assert.equal(fs.existsSync(path.join(workspace, 'target/plugins/packages/local/source/obsolete')), false);
   assert.equal(fs.readFileSync(path.join(workspace, 'target/plugins/config/local.dhall'), 'utf8'), 'Keep connector configuration');
+  assert(!fs.readdirSync(workspace).some(name => name.startsWith('.kyyn-replace-')));
   const failedUpgrade = path.join(upstream, 'plugins/local/kyyn-plugin.dhall');
   write(failedUpgrade, 'Invalid manifest'); commit(upstream);
   assert.equal(cli(['plugin', 'install', 'local/local', '--evolution', id], 1).outcome, 'Refused');

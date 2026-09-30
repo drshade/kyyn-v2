@@ -14,7 +14,7 @@ data FileSystem :: Effect where
   ReadOptionalBytes :: DirectoryScope -> RelativePath -> FileSystem m (Maybe ByteString)
   WriteBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
   ReplaceBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
-  ReplaceTree :: DirectoryScope -> RelativePath -> FileTree -> FileSystem m ()
+  ReplaceTree :: DirectoryScope -> DirectoryScope -> RelativePath -> FileTree -> FileSystem m ()
   ReadTree :: DirectoryScope -> FileSystem m FileTree
   ListDirectory :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
   EntryExists :: DirectoryScope -> RelativePath -> FileSystem m Bool
@@ -40,8 +40,10 @@ writeBytes scope path = send . WriteBytes scope path
 replaceBytes :: FileSystem :> es => DirectoryScope -> RelativePath -> ByteString -> Eff es ()
 replaceBytes scope path = send . ReplaceBytes scope path
 
-replaceTree :: FileSystem :> es => DirectoryScope -> RelativePath -> FileTree -> Eff es ()
-replaceTree scope path = send . ReplaceTree scope path
+-- The staging scope must share the destination filesystem and sit outside any
+-- tree the caller treats as authoritative material.
+replaceTree :: FileSystem :> es => DirectoryScope -> DirectoryScope -> RelativePath -> FileTree -> Eff es ()
+replaceTree staging scope path = send . ReplaceTree staging scope path
 
 readTree :: FileSystem :> es => DirectoryScope -> Eff es FileTree
 readTree = send . ReadTree

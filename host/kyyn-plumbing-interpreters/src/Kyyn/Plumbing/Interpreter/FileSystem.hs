@@ -57,8 +57,8 @@ runFileSystemIO parent = interpret $ \env -> \case
       hClose handle
       renameFile temporary target
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
-  ReplaceTree scope path tree -> native Failure.ReplaceDirectoryTree (scopedPath scope path)
-    (replaceDirectoryTree (scopedPath scope path) tree)
+  ReplaceTree staging scope path tree -> native Failure.ReplaceDirectoryTree (scopedPath scope path)
+    (replaceDirectoryTree (scopePath staging) (scopedPath scope path) tree)
   ListDirectory scope -> native Failure.ListDirectory (scopePath scope) $ do
     result <- try (Directory.listDirectory (scopePath scope))
     case result of
@@ -83,8 +83,8 @@ runFileSystemIO parent = interpret $ \env -> \case
 
 -- Stage on the destination filesystem. Keep the old tree if publication or
 -- rollback fails; never delete it merely because an exception was raised.
-replaceDirectoryTree :: FilePath -> FileTree -> IO ()
-replaceDirectoryTree target tree = IO.mask $ \restore -> do
+replaceDirectoryTree :: FilePath -> FilePath -> FileTree -> IO ()
+replaceDirectoryTree stagingParent target tree = IO.mask $ \restore -> do
   entry <- try (pathIsSymbolicLink target)
   exists <- case entry of
     Right linked -> do
@@ -95,19 +95,20 @@ replaceDirectoryTree target tree = IO.mask $ \restore -> do
              | otherwise -> ioError err
   let parentDirectory = takeDirectory target
   createDirectoryIfMissing True parentDirectory
-  staging <- createTempDirectory parentDirectory ".kyyn-replace-"
+  staging <- createTempDirectory stagingParent ".kyyn-replace-"
   let fresh = staging </> "new"
       previous = staging </> "previous"
-      cleanup = removeDirectoryRecursive staging
+      cleanup = removeDirectoryRecursive staging `IO.catch` \(_ :: IOException) -> pure ()
   restore (do
     Directory.createDirectory fresh
     forM_ (files tree) $ \(path, bytes) -> do
       let file = fresh </> relativeName path
       createDirectoryIfMissing True (takeDirectory file)
       Bytes.writeFile file bytes) `IO.onException` cleanup
-  when exists (Directory.renameDirectory target previous)
-  Directory.renameDirectory fresh target `IO.onException`
+  when exists (Directory.renameDirectory target previous `IO.onException` cleanup)
+  Directory.renameDirectory fresh target `IO.onException` do
     when exists (Directory.renameDirectory previous target)
+    cleanup
   cleanup
 
 allocateDirectory :: FilePath -> IO RelativePath

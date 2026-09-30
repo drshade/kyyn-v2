@@ -29,6 +29,7 @@ runPluginInstallation = interpret $ \_ -> \case
     state <- ExceptT (Evolution.readEvolutionState workspace)
     when (state == Accepted) (reject "plugin.evolution-accepted" "Create a new evolution to change accepted plugins")
     workspacePath <- pathChecked (Evolution.workspaceLocation workspace)
+    staging <- pathChecked (directoryScope (scopedPath destination workspacePath))
     rootPath <- pathChecked (relativePath (relativeName workspacePath ++ "/target"))
     let acquire repository selected originRepository = runExceptT $ do
           revision <- ExceptT (Git.resolveRevision repository "HEAD")
@@ -52,7 +53,7 @@ runPluginInstallation = interpret $ \_ -> \case
           parent <- pathChecked (directoryScope (scopedPath destination parentPath))
           namePath <- pathChecked (relativePath (pluginNameText name))
           target <- pathChecked (directoryScope (scopedPath parent namePath))
-          liftEff (FS.replaceTree parent namePath payload)
+          liftEff (FS.replaceTree staging parent namePath payload)
           pure (InstalledPlugin name target origin)
     ExceptT $ case source of
       LocalPackage directory path -> runExceptT $ do

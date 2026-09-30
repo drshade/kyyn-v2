@@ -109,18 +109,18 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   retainedPointer <- execute (FS.readBytes scope target)
   unless (retainedPointer `elem` [completeA,completeB]) (fail "Failed replacement damaged existing directory")
   let tree entries = either error id (fileTree [(path name, bytes) | (name,bytes) <- entries])
-  execute (FS.replaceTree scope (path "package") (tree [("old", "obsolete"),("keep", "before")]))
-  execute (FS.replaceTree scope (path "package") (tree [("keep", "after"),("nested/new", "new")]))
+  execute (FS.replaceTree scope scope (path "package") (tree [("old", "obsolete"),("keep", "before")]))
+  execute (FS.replaceTree scope scope (path "package") (tree [("keep", "after"),("nested/new", "new")]))
   packageScope <- either fail pure (directoryScope (base </> "package"))
   replaced <- execute (FS.readTree packageScope)
   unless (replaced == tree [("keep", "after"),("nested/new", "new")]) (fail "Tree replacement retained obsolete files")
   stagedFailure <- runEff (runFailure (runFileSystemIO scope
-    (FS.replaceTree scope (path "package") (tree [(replicate 300 'x', "too long")]))))
+    (FS.replaceTree scope scope (path "package") (tree [(replicate 300 'x', "too long")]))))
   case stagedFailure of Left _ -> pure (); Right _ -> fail "Oversized filename unexpectedly staged"
   afterFailure <- execute (FS.readTree packageScope)
   unless (afterFailure == replaced) (fail "Staging failure damaged old tree")
   forM_ ["link", "dangling", "nested/value.dhall"] $ \name -> do
-    refused <- runEff (runFailure (runFileSystemIO scope (FS.replaceTree scope (path name) replaced)))
+    refused <- runEff (runFailure (runFileSystemIO scope (FS.replaceTree scope scope (path name) replaced)))
     case refused of Left _ -> pure (); Right _ -> fail "Tree replacement accepted file or symlink"
   finalNames <- listDirectory base
   unless (all (not . (".kyyn-replace-" `isPrefixOf`)) finalNames) (fail "Staging failure leaked temporary tree")
