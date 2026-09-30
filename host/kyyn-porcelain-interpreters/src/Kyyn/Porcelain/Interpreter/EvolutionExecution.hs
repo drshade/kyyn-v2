@@ -5,17 +5,23 @@ import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode)
 import Data.Bifunctor (first)
+import Data.List (nub, sort, stripPrefix)
 import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic, compilerContext)
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.EvolutionReport (EvolutionReport(..), PluginChange(..))
+import Kyyn.Domain.Plugin (pluginName)
+import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..))
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), pluginPackagesLocation, pluginOriginLocation)
 import qualified Kyyn.Types.KnowledgeBase as Value
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import qualified Kyyn.Plumbing.Protocol.Plugin as Plugin
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Protocol.Evolution (evolutionSources, decodeEvolutionReply, mergeEvolutionSources)
@@ -26,7 +32,7 @@ import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadR
 
 runEvolutionExecution
   :: (RootStore :> es,
-      GuestCompilation :> es, GuestExecution :> es, Failure :> es)
+      GuestCompilation :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => FileTree -> Eff (EvolutionExecution : es) a -> Eff es a
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)
@@ -49,8 +55,34 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
     Right (Left failure) -> throwE (EvolutionRejected failure)
     Right (Right result) -> pure result
   result <- proposed (checkEvolutionReport expected knowledge after reply)
-  let (value,report) = result
-  pure (EvaluatedEvolution captured (After after) value report)
+  plugins <- proposed (pluginChanges acceptedCode preparedCode)
+  let (value,EvolutionReport _ steps curation) = result
+  pure (EvaluatedEvolution captured (After after) value (EvolutionReport plugins steps curation))
+
+pluginChanges :: DhallHandling :> es => FileTree -> FileTree -> Eff es (Either [Diagnostic] [PluginChange])
+pluginChanges before after = runExceptT $ traverse change changed
+  where
+    packages tree = [(name,(path,bytes)) | (file,bytes) <- files tree,
+      Just rest <- [stripPrefix (relativeName pluginPackagesLocation ++ "/") (relativeName file)],
+      (name,'/':path) <- [break (== '/') rest]]
+    old = packages before
+    new = packages after
+    package name = map snd . filter ((== name) . fst)
+    changed = [name | name <- sort (nub (map fst old ++ map fst new)), package name old /= package name new]
+    change name = do
+      identity <- either (bad . show) pure (pluginName name)
+      let earlier = package name old
+          later = package name new
+      b <- origin name earlier
+      a <- origin name later
+      paths <- traverse (either bad pure . relativePath)
+        [path | path <- sort (nub (map fst earlier ++ map fst later)), lookup path earlier /= lookup path later]
+      pure (PluginChange identity b a paths)
+    origin _ [] = pure Nothing
+    origin name entries = case lookup (relativeName pluginOriginLocation) entries of
+      Nothing -> bad ("Changed plugin " ++ name ++ " has no origin.dhall")
+      Just bytes -> Just <$> ExceptT (Plugin.decodeOrigin bytes)
+    bad = throwE . pure . errorDiagnostic "plugin.report-invalid"
 
 proposed :: Eff es (Either [Diagnostic] a) -> ExceptT PreviewRejection (Eff es) a
 proposed = ExceptT . fmap (either (Left . ProposedCodeRejected) Right)

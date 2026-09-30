@@ -208,8 +208,10 @@ summaryText (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName nam
   evolutionIdName identity ++ "  " ++ show state ++ "  " ++ name
 
 reportJson :: EvolutionReport -> Value
-reportJson (EvolutionReport steps curation) = object
-  ["steps" .= map step steps,"curation" .= fmap declaration curation]
+reportJson (EvolutionReport plugins steps curation) = object
+  ["steps" .= map step steps,"curation" .= fmap declaration curation,
+   "plugins" .= [object ["name" .= pluginNameText name, "before" .= fmap originJson old,
+      "after" .= fmap originJson new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]]
   where
     declaration (Curation (RecipeId recipe) handled) = object
       ["recipe" .= recipe,"handled" .= map acknowledgement handled]
@@ -231,8 +233,13 @@ reportJson (EvolutionReport steps curation) = object
       ["producer" .= producer, "instance" .= connector, "source" .= source, "references" .= references]
 
 reportText :: EvolutionReport -> [String]
-reportText (EvolutionReport steps curation) = concatMap step steps ++ maybe [] declaration curation
+reportText (EvolutionReport plugins steps curation) = concatMap pluginLines plugins ++ concatMap step steps ++ maybe [] declaration curation
   where
+    pluginLines (PluginChange name old new paths) =
+      ["Plugin " ++ pluginNameText name ++ ": " ++ revision old ++ " → " ++ revision new]
+      ++ ["  before source: " ++ maybe "(absent)" originText old, "  after source:  " ++ maybe "(absent)" originText new]
+      ++ ["  changed: " ++ relativeName path | path <- paths]
+    revision = maybe "(absent)" (\(PluginOrigin _ _ selected) -> take 8 (revisionName selected))
     declaration (Curation (RecipeId recipe) handled) = ("Recipe: " ++ recipe) : map acknowledgement handled
     scope (EvidenceScope plugin instanceName fetch) = plugin ++ "/" ++ instanceName ++ " at fetch " ++ fetch
     acknowledgement (EntireBatch selected) = "  Handled entire batch: " ++ scope selected
@@ -250,6 +257,20 @@ reportText (EvolutionReport steps curation) = concatMap step steps ++ maybe [] d
        "    before: " ++ maybe "(absent)" recipeInstructions before,
        "    after:  " ++ maybe "(absent)" recipeInstructions after]
     value (RecordedFact _ contents) = jsonText contents
+
+originJson :: PluginOrigin -> Value
+originJson (PluginOrigin repository path revision) = object
+  ["source" .= originRepository repository,"path" .= (case path of WholeTree -> Nothing; Subtree p -> Just (relativeName p)),
+   "revision" .= revisionName revision]
+
+originText :: PluginOrigin -> String
+originText (PluginOrigin repository path _) = originRepository repository ++ case path of
+  WholeTree -> ""
+  Subtree p -> " (" ++ relativeName p ++ ")"
+
+originRepository :: PluginRepository -> String
+originRepository (LocalRepository scope) = scopePath scope
+originRepository (RemoteRepository url) = gitUrlText url
 
 diagnosticText :: Diagnostic -> String
 diagnosticText (Diagnostic severity code message location) =

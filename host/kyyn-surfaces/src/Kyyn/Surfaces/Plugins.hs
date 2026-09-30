@@ -39,10 +39,12 @@ details evolution revision (PluginDescription manifest (PluginOrigin repository 
 target :: Maybe EvolutionId -> String
 target = maybe "" ((" --evolution " ++) . evolutionIdName)
 
-tapListResult :: [Tap] -> Response
-tapListResult taps = success (object ["taps" .= [object ["name" .= tapNameText name, "source" .= gitUrlText source] | Tap name source <- taps]])
+tapListResult :: [(Tap,Maybe GitRevision)] -> Response
+tapListResult taps = success (object ["taps" .= [object ["name" .= tapNameText name, "source" .= gitUrlText source,
+  "syncedRevision" .= fmap revisionName revision] | (Tap name source,revision) <- taps]])
   (if null taps then ["No declared taps. Add one with: kyyn-v2 tap add NAME --from URL"]
-   else [tapNameText name ++ "  " ++ gitUrlText source | Tap name source <- taps])
+   else [tapNameText name ++ "  " ++ gitUrlText source ++ "  " ++ maybe "(not synced)" (("catalogue at " ++) . revisionName) revision
+     | (Tap name source,revision) <- taps])
 
 tapUpdateResult :: [(Tap,GitRevision)] -> Response
 tapUpdateResult synced = success (object ["taps" .= [object ["name" .= tapNameText name, "revision" .= revisionName revision] | (Tap name _,revision) <- synced]])

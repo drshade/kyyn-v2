@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Plugin (decodeManifest, encodeOrigin, decodeOrigin) where
+module Kyyn.Plumbing.Protocol.Plugin (decodeManifest, encodeOrigin, decodeOrigin, originShape, originValue, parseOrigin) where
 
 import Data.Aeson (Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
@@ -19,8 +19,11 @@ decodeManifest = decode "plugin.manifest-invalid" manifestShape $ withObject "pl
   either fail pure (pluginManifest name entry)
 
 encodeOrigin :: DhallHandling :> es => PluginOrigin -> Eff es (Either [Diagnostic] ByteString)
-encodeOrigin (PluginOrigin repository path revision) = fmap (fmap Text.encodeUtf8) (encodeValue originShape
-  (object ["repository" .= selected, "path" .= pathValue path, "revision" .= revisionName revision]))
+encodeOrigin = fmap (fmap Text.encodeUtf8) . encodeValue originShape . originValue
+
+originValue :: PluginOrigin -> Value
+originValue (PluginOrigin repository path revision) =
+  object ["repository" .= selected, "path" .= pathValue path, "revision" .= revisionName revision]
   where
     selected = case repository of
       LocalRepository scope -> tagged "Local" (scopePath scope)
@@ -31,7 +34,10 @@ encodeOrigin (PluginOrigin repository path revision) = fmap (fmap Text.encodeUtf
     pathValue (Subtree p) = tagged "Some" (relativeName p)
 
 decodeOrigin :: DhallHandling :> es => ByteString -> Eff es (Either [Diagnostic] PluginOrigin)
-decodeOrigin = decode "plugin.origin-invalid" originShape $ withObject "plugin origin" $ \fields -> do
+decodeOrigin = decode "plugin.origin-invalid" originShape parseOrigin
+
+parseOrigin :: Value -> Parser PluginOrigin
+parseOrigin = withObject "plugin origin" $ \fields -> do
   path <- fields .: "path" >>= withObject "package path" (\p -> do
     tag <- p .: "tag"
     case tag :: String of

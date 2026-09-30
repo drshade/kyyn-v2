@@ -40,26 +40,26 @@ main = do
       recorded c value = Just (RecordedFact c value)
   (checked, report) <- right (check old input old [step old input old edited] edited)
   assert (checked == CheckedValue (contractId (rootSchema old)) edited) "After was not contract-tagged"
-  assert (report == EvolutionReport [StepReport rationale
+  assert (report == EvolutionReport [] [StepReport rationale
     [changed (recorded old (fact "a" "First")) (recorded old (fact "a" "Changed")) "a",
      changed (recorded old (fact "b" "Second")) Nothing "b",
      changed Nothing (recorded old (fact "c" "New")) "c"]] Nothing) "Wrong identified additions/modifications/deletions"
-  (_,EvolutionReport reversed _) <- right (check old input old
+  (_,EvolutionReport _ reversed _) <- right (check old input old
     [step old input old edited,step old edited old input] input)
   assert (length reversed == 2 && all (\(StepReport r cs) -> r == rationale && length cs == 3) reversed)
     "Cancelling edits or declared evidence disappeared"
   (_,empty) <- right (check old input old [] input)
-  assert (empty == EvolutionReport [] Nothing) "Identity produced a report"
+  assert (empty == EvolutionReport [] [] Nothing) "Identity produced a report"
   let reordered = root [fact "b" "Second",fact "a" "First"]
   (_,reorderReport) <- right (check old input old [step old input old reordered] reordered)
-  assert (reorderReport == EvolutionReport [StepReport rationale []] Nothing) "Reordering became record edits"
+  assert (reorderReport == EvolutionReport [] [StepReport rationale []] Nothing) "Reordering became record edits"
   (_,metadataReport) <- right (check old input renamed [step old input renamed input] input)
-  assert (metadataReport == EvolutionReport [StepReport rationale
+  assert (metadataReport == EvolutionReport [] [StepReport rationale
     [changed (recorded old f) (recorded renamed f) identifier | (identifier,f) <- [("a",fact "a" "First"),("b",fact "b" "Second")]]] Nothing)
     "Metadata interpretation change disappeared"
   let migrated = root [object ["id" .= ("a" :: String),"value" .= object ["title" .= ("First" :: String),"done" .= False]]]
   (_,migration) <- right (check old input new [step old input new migrated] migrated)
-  assert (migration == EvolutionReport [StepReport rationale
+  assert (migration == EvolutionReport [] [StepReport rationale
     [changed (recorded old (fact "a" "First")) (recorded new (object ["id" .= ("a" :: String),"value" .= object ["title" .= ("First" :: String),"done" .= False]])) "a",
      changed (recorded old (fact "b" "Second")) Nothing "b"]] Nothing) "Migration lost old or new contract/value"
   forM_
@@ -84,7 +84,7 @@ main = do
   let both = object ["todos" .= [fact "a" "First"],"other" .= [fact "a" "Second"]]
       moved = object ["todos" .= ([] :: [Value]),"other" .= [fact "a" "Second"]]
   (_,scoped) <- right (check two both two [step two both two moved] moved)
-  assert (scoped == EvolutionReport [StepReport rationale [changed (recorded two (fact "a" "First")) Nothing "a"]] Nothing)
+  assert (scoped == EvolutionReport [] [StepReport rationale [changed (recorded two (fact "a" "First")) Nothing "a"]] Nothing)
     "Fact identity was not scoped to its collection"
   protocolTests
   recipeTests old new input migrated
@@ -104,7 +104,7 @@ recipeTests beforeContract afterContract input migrated = do
       check initial finalContract steps final = runPureEff . runDhallHandling . runRootStore $
         checkEvolutionReport beforeContract initial finalContract (EvolutionObservation final steps Nothing)
       same initial final = check initial beforeContract [step beforeContract initial beforeContract final] final
-      expected a b = EvolutionReport [StepReport why [RecipeChange (FactId "syncTodos") a b]] Nothing
+      expected a b = EvolutionReport [] [StepReport why [RecipeChange (FactId "syncTodos") a b]] Nothing
   (_,added) <- right (same empty before)
   assert (added == expected Nothing (Just first)) "Recipe addition lost identity or instructions"
   (_,edited) <- right (same before after)
@@ -112,7 +112,7 @@ recipeTests beforeContract afterContract input migrated = do
   (_,removed) <- right (same before empty)
   assert (removed == expected (Just first) Nothing) "Recipe deletion absent from report"
   (_,identity) <- right (check before beforeContract [] before)
-  assert (identity == EvolutionReport [] Nothing) "Unchanged recipes created changes"
+  assert (identity == EvolutionReport [] [] Nothing) "Unchanged recipes created changes"
   rejected (check before beforeContract [] after)
   rejected (check before beforeContract [step beforeContract empty beforeContract after] after)
   forM_ [[entry first,entry updated], [Fact (FactId "bad-name") first]] $ \entries -> do
@@ -121,12 +121,12 @@ recipeTests beforeContract afterContract input migrated = do
     rejected (check before beforeContract
       [step beforeContract before beforeContract invalid,step beforeContract invalid beforeContract before] before)
   let migratedKb = KB.KnowledgeBase migrated [entry first]
-  (_,EvolutionReport steps _) <- right (check before afterContract
+  (_,EvolutionReport _ steps _) <- right (check before afterContract
     [step beforeContract before afterContract migratedKb] migratedKb)
   assert (all (\(StepReport _ changes) -> all domainChange changes) steps)
     "Schema migration falsely changed preserved recipes"
   let changedBoth = KB.KnowledgeBase (root []) [entry updated]
-  (_,EvolutionReport mixed _) <- right (same before changedBoth)
+  (_,EvolutionReport _ mixed _) <- right (same before changedBoth)
   assert (case mixed of [StepReport _ changes] -> any domainChange changes && any (not . domainChange) changes; _ -> False)
     "Mixed fact and recipe edits lost a change category"
   where
