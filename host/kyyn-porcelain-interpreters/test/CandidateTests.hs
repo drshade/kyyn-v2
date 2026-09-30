@@ -26,6 +26,7 @@ import Kyyn.Domain.FileTree
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
+import Kyyn.Domain.Plugin (pluginName, PluginOrigin(..), PluginRepository(..))
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (Rationale(..))
@@ -41,7 +42,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, legacyRecordShape)
+import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, previousRecordShape, legacyRecordShape)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution, checkEvolution)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
@@ -84,7 +85,8 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       recipeValues = [Fact (FactId "syncTodos") (KB.Recipe "Read and explain λ")]
-      report = EvolutionReport []
+      report = EvolutionReport [PluginChange (either error id (pluginName "local-file")) Nothing
+        (Just (PluginOrigin (LocalRepository scope) WholeTree revision)) [either error id (relativePath "source/README.md")]]
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
          StepReport (Rationale "Teach curation" []) [RecipeChange (FactId "syncTodos") Nothing (Just (KB.Recipe "Read and explain λ"))]] Nothing
@@ -330,6 +332,12 @@ contractDescriptions baseline = do
   unless (decodedReport == (identity,baseline,schema,report))
     (fail "Dhall record changed migration steps, typed payloads or optional fact sides")
   (_,currentDocument) <- right (recordDocument identity baseline schema report)
+  let versionThree = case currentDocument of
+        Object fields -> Object (KeyMap.insert "version" (String "3") (KeyMap.delete "plugins" fields))
+        _ -> error "Expected record document"
+  v3 <- right (runPureEff (runDhallHandling (encodeValue (previousRecordShape baseline schema) versionThree)))
+  v3Decoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 v3)))) >>= right
+  unless (v3Decoded == (identity,baseline,schema,report)) (fail "Version-three archive changed")
   let removeRecipeChanges (Object fields) = Object (KeyMap.delete "recipeChanges" fields)
       removeRecipeChanges value = value
       legacySteps (Array steps) = Array (fmap removeRecipeChanges steps)

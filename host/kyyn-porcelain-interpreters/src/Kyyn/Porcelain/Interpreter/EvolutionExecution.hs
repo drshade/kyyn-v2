@@ -73,14 +73,14 @@ pluginChanges before after = runExceptT $ traverse change changed
       identity <- either (bad . show) pure (pluginName name)
       let earlier = package name old
           later = package name new
-      b <- origin earlier
-      a <- origin later
+      b <- origin name earlier
+      a <- origin name later
       paths <- traverse (either bad pure . relativePath)
         [path | path <- sort (nub (map fst earlier ++ map fst later)), lookup path earlier /= lookup path later]
       pure (PluginChange identity b a paths)
-    origin [] = pure Nothing
-    origin entries = case lookup (relativeName pluginOriginLocation) entries of
-      Nothing -> bad "Changed plugin package has no origin.dhall"
+    origin _ [] = pure Nothing
+    origin name entries = case lookup (relativeName pluginOriginLocation) entries of
+      Nothing -> bad ("Changed plugin " ++ name ++ " has no origin.dhall")
       Just bytes -> Just <$> ExceptT (Plugin.decodeOrigin bytes)
     bad = throwE . pure . errorDiagnostic "plugin.report-invalid"
 
