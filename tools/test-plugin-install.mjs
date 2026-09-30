@@ -98,11 +98,18 @@ try {
   assert.deepEqual(remote.result.origin, { repository: { kind: 'Git', location: remoteUrl }, path: 'plugins/remote', revision: sourceHead });
   const human = invoke(['--from', source, '--path', 'plugins/human'], 0, { json: false });
   for (const text of ['Installed plugin human', path.join(installed, 'human'), source, sourceHead]) assert.ok(human.includes(text), human);
-  refuse(['--from', source, '--path', 'plugins/local-file'], 'plugin.already-installed');
+  const installedBefore = snapshot(repo);
+  invoke(['--from', source, '--path', 'plugins/local-file']);
+  assert.deepEqual(snapshot(repo), installedBefore);
   for (const name of ['empty', 'linked']) {
     if (name === 'empty') fs.mkdirSync(path.join(installed, name));
     else fs.symlinkSync('/missing', path.join(installed, name));
-    refuse(['--from', source, '--path', `plugins/${name}`], 'plugin.already-installed');
+    if (name === 'empty') invoke(['--from', source, '--path', `plugins/${name}`]);
+    else {
+      const unchanged = snapshot(repo);
+      assert.equal(invoke(['--from', source, '--path', `plugins/${name}`], 3).diagnostics[0].code, 'storage.unavailable');
+      assert.deepEqual(snapshot(repo), unchanged);
+    }
   }
   for (const [name, code] of [['missing', 'plugin.manifest-missing'], ['invalid', 'plugin.manifest-invalid'],
     ['entry', 'plugin.entry-missing'], ['unsupported', 'git.unsupported-entry']]) {

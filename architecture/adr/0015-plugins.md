@@ -109,9 +109,12 @@ adoption. It is not a dependency-version constraint. Layout constants for
 list belong in `Kyyn.Domain.Root` alongside `factsLocation`, shared by installation
 and later root consumers.
 
-Prepare and validate the complete captured package before installing it. Refuse an
-existing destination (including an empty directory or symlink); do not merge into
-it or overwrite it. A missing/invalid manifest, absent entry source, failed fetch
+Prepare and validate the complete captured package before installing it. Repeating
+installation replaces that named package in the selected evolution, including its
+origin; files absent from the new package are removed rather than merged. This is
+also the update route, with no force flag or separate upgrade lifecycle. Connector
+configuration lives outside the package and is preserved. Stage the replacement
+before exchanging directories; refuse file/symlink destinations. A missing/invalid manifest, absent entry source, failed fetch
 or unsupported package entry leaves the KB's installed packages unchanged.
 Installation does not create a Git commit, change accepted HEAD, configure instances
 or accept an evolution. The accepted `root/` is untouched until evolution acceptance
@@ -181,7 +184,6 @@ Use stable refusal codes at these boundaries:
 | `plugin.manifest-invalid` | Manifest is malformed or its name/module is invalid |
 | `plugin.entry-missing` | Declared entry module has no source under `src/` |
 | `plugin.source-uncommitted` | Selected local package has staged, unstaged or untracked changes |
-| `plugin.already-installed` | Destination already exists |
 | `plugin.evolution-accepted` | Selected evolution is already accepted; create a new evolution |
 | `evolution.unknown` | EvolutionStore found no workspace manifest; retain its existing diagnostic |
 
@@ -194,7 +196,7 @@ exit; semantic refusals use these codes, and operational failures remain distinc
 Before this slice is complete, test refusal of directories outside Git, packages nested
 inside local and remote repositories, scoped dirty-source refusals, copy independence,
 exact source revision and repository-relative origin paths,
-exclusion of repository/build metadata, and duplicate/malformed/unsupported package
+exclusion of repository/build metadata, complete re-vendoring and malformed/unsupported package
 refusals with existing KB files and HEAD preserved. Use a local Git remote for the
 acquisition integration test, avoiding network-dependent tests. The first-party
 `plugins/local-file` package uses exactly this boundary.

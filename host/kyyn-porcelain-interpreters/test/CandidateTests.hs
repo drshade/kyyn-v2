@@ -381,6 +381,7 @@ evaluationMock expected answer = interpret $ \_ -> \case
 failPublication :: (FileSystem :> es, Failure :> es) => OperationalFailure -> Eff (FileSystem : es) a -> Eff es a
 failPublication failure = interpret $ \_ -> \case
   ReplaceBytes {} -> raiseFailure failure
+  ReplaceTree {} -> error "Candidate persistence must not replace directory trees"
   WithTemporaryScope {} -> error "Candidate persistence requested a temporary scope"
   ReadBytes scope path -> send (ReadBytes scope path)
   ReadOptionalBytes scope path -> send (ReadOptionalBytes scope path)

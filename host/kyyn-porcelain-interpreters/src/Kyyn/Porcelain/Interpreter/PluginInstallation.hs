@@ -29,6 +29,7 @@ runPluginInstallation = interpret $ \_ -> \case
     state <- ExceptT (Evolution.readEvolutionState workspace)
     when (state == Accepted) (reject "plugin.evolution-accepted" "Create a new evolution to change accepted plugins")
     workspacePath <- pathChecked (Evolution.workspaceLocation workspace)
+    staging <- pathChecked (directoryScope (scopedPath destination workspacePath))
     rootPath <- pathChecked (relativePath (relativeName workspacePath ++ "/target"))
     let acquire repository selected originRepository = runExceptT $ do
           revision <- ExceptT (Git.resolveRevision repository "HEAD")
@@ -52,12 +53,7 @@ runPluginInstallation = interpret $ \_ -> \case
           parent <- pathChecked (directoryScope (scopedPath destination parentPath))
           namePath <- pathChecked (relativePath (pluginNameText name))
           target <- pathChecked (directoryScope (scopedPath parent namePath))
-          exists <- liftEff (FS.entryExists parent namePath)
-          when exists (reject "plugin.already-installed" (pluginNameText name ++ " is already installed"))
-          liftEff (FS.ensureDirectory parent)
-          created <- liftEff (FS.createDirectory target)
-          unless created (reject "plugin.already-installed" (pluginNameText name ++ " is already installed"))
-          forM_ (files payload) $ \(path, bytes) -> liftEff (FS.writeBytes target path bytes)
+          liftEff (FS.replaceTree staging parent namePath payload)
           pure (InstalledPlugin name target origin)
     ExceptT $ case source of
       LocalPackage directory path -> runExceptT $ do

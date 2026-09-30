@@ -3,12 +3,12 @@ module Main (main) where
 
 import Control.Monad (unless, forM_)
 import Control.Concurrent.Async (mapConcurrently)
-import Data.List (nub)
+import Data.List (nub, isPrefixOf)
 import qualified Data.ByteString as Bytes
 import Data.Word (Word64)
 import Numeric (showHex)
 import Effectful (runEff)
-import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Path
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.FileSystem
@@ -108,4 +108,20 @@ main = withSystemTempDirectory "kyyn-tree" $ \base -> do
   case badReplace of Left _ -> pure (); Right _ -> fail "Directory replacement succeeded"
   retainedPointer <- execute (FS.readBytes scope target)
   unless (retainedPointer `elem` [completeA,completeB]) (fail "Failed replacement damaged existing directory")
+  let tree entries = either error id (fileTree [(path name, bytes) | (name,bytes) <- entries])
+  execute (FS.replaceTree scope scope (path "package") (tree [("old", "obsolete"),("keep", "before")]))
+  execute (FS.replaceTree scope scope (path "package") (tree [("keep", "after"),("nested/new", "new")]))
+  packageScope <- either fail pure (directoryScope (base </> "package"))
+  replaced <- execute (FS.readTree packageScope)
+  unless (replaced == tree [("keep", "after"),("nested/new", "new")]) (fail "Tree replacement retained obsolete files")
+  stagedFailure <- runEff (runFailure (runFileSystemIO scope
+    (FS.replaceTree scope scope (path "package") (tree [(replicate 300 'x', "too long")]))))
+  case stagedFailure of Left _ -> pure (); Right _ -> fail "Oversized filename unexpectedly staged"
+  afterFailure <- execute (FS.readTree packageScope)
+  unless (afterFailure == replaced) (fail "Staging failure damaged old tree")
+  forM_ ["link", "dangling", "nested/value.dhall"] $ \name -> do
+    refused <- runEff (runFailure (runFileSystemIO scope (FS.replaceTree scope scope (path name) replaced)))
+    case refused of Left _ -> pure (); Right _ -> fail "Tree replacement accepted file or symlink"
+  finalNames <- listDirectory base
+  unless (all (not . (".kyyn-replace-" `isPrefixOf`)) finalNames) (fail "Staging failure leaked temporary tree")
   putStrLn "Directory byte-tree capture, empty trees and read failures passed."
