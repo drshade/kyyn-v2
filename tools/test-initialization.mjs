@@ -40,7 +40,7 @@ try {
   assert.equal(git(kb, 'show', '-s', '--format=%an', 'HEAD'), 'Initialization λ');
   assert.equal(initialized.revision, git(kb, 'rev-parse', 'HEAD'));
   const taps = cli(kb, ['tap', 'list']).result.taps;
-  assert.deepEqual(taps, [{ name: 'first-party', source: 'https://github.com/drshade/kyyn-v2' }]);
+  assert.deepEqual(taps, [{ name: 'first-party', source: 'https://github.com/drshade/kyyn-v2', syncedRevision: null }]);
   assert(git(kb, 'show', 'HEAD:taps.dhall').includes('first-party'));
   assert.equal(fs.existsSync(path.join(kb, '.kyyn/taps')), false);
   assert.deepEqual(cli(kb, ['root', 'show']).result.value, {});

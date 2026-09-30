@@ -59,12 +59,14 @@ try {
 
   assert.deepEqual(cli(['tap', 'list']).result.taps, []);
   cli(['tap', 'add', 'local', '--from', url]);
+  assert.equal(cli(['tap', 'list']).result.taps[0].syncedRevision, null);
   assert.equal(git(repo, 'rev-parse', 'HEAD'), initial);
   assert.equal(fs.existsSync(path.join(kb, '.kyyn/taps')), false);
   assert.equal(cli(['plugin', 'search'], 1).diagnostics[0].code, 'tap.not-synced');
   assert.equal(cli(['tap', 'add', 'local', '--from', url], 1).diagnostics[0].code, 'tap.exists');
   assert.equal(cli(['tap', 'update', 'missing'], 1).diagnostics[0].code, 'tap.unknown');
   cli(['tap', 'update']);
+  assert.equal(cli(['tap', 'list']).result.taps[0].syncedRevision, first);
   assert.equal(git(path.join(kb, '.kyyn/taps/local/repository'), 'rev-parse', '--is-shallow-repository'), 'true');
   assert(git(repo, 'check-ignore', 'nested/.kyyn/taps/local/sync.dhall'));
   let results = cli(['plugin', 'search', 'FOLDER']).result.plugins;
@@ -89,7 +91,9 @@ try {
   const installedGuide = path.join(workspace, 'target/plugins/packages/local/source/README.md');
   catalogue('Updated description'); write(path.join(upstream, 'plugins/local/README.md'), '# New guide\n'); const second = commit(upstream);
   assert.equal(cli(['plugin', 'search', 'Updated']).result.plugins.length, 0);
+  assert.equal(cli(['tap', 'list']).result.taps[0].syncedRevision, first);
   cli(['tap', 'update', 'local']);
+  assert.equal(cli(['tap', 'list']).result.taps[0].syncedRevision, second);
   assert.equal(cli(['plugin', 'search', 'Updated']).result.plugins[0].catalogueRevision, second);
   assert.equal(cli(['plugin', 'guide', 'local/local']).result.markdown, '# New guide\n');
   assert.equal(fs.readFileSync(installedGuide, 'utf8'), '# Local λ\n');
@@ -112,6 +116,7 @@ try {
   assert.equal(cli(['plugin', 'guide', 'local/local']).result.markdown, '# New guide\n');
   catalogue('Updated description'); commit(upstream);
   fs.rmSync(path.join(kb, '.kyyn/taps/local'), { recursive: true });
+  assert.equal(cli(['tap', 'list']).result.taps[0].syncedRevision, null);
   assert.equal(cli(['plugin', 'search'], 1).diagnostics[0].code, 'tap.not-synced');
   cli(['tap', 'update']);
   commit(repo);

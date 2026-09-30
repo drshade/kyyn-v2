@@ -11,7 +11,7 @@ import Kyyn.Domain.Plugin (PluginName, PluginGuide)
 import Kyyn.Domain.Tap
 
 data PluginDiscovery :: Effect where
-  ListTaps :: KnowledgeBase -> PluginDiscovery m (Either [Diagnostic] [Tap])
+  ListTaps :: KnowledgeBase -> PluginDiscovery m (Either [Diagnostic] [(Tap, Maybe GitRevision)])
   AddTap :: KnowledgeBase -> Tap -> PluginDiscovery m (Either [Diagnostic] ())
   RemoveTap :: KnowledgeBase -> TapName -> PluginDiscovery m (Either [Diagnostic] ())
   UpdateTaps :: KnowledgeBase -> Maybe TapName -> PluginDiscovery m (Either [Diagnostic] [(Tap,GitRevision)])
@@ -21,7 +21,7 @@ data PluginDiscovery :: Effect where
 
 type instance DispatchOf PluginDiscovery = Dynamic
 
-listTaps :: PluginDiscovery :> es => KnowledgeBase -> Eff es (Either [Diagnostic] [Tap])
+listTaps :: PluginDiscovery :> es => KnowledgeBase -> Eff es (Either [Diagnostic] [(Tap, Maybe GitRevision)])
 listTaps = send . ListTaps
 addTap :: PluginDiscovery :> es => KnowledgeBase -> Tap -> Eff es (Either [Diagnostic] ())
 addTap kb = send . AddTap kb

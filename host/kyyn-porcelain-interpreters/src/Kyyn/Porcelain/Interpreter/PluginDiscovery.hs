@@ -27,7 +27,7 @@ import Kyyn.Porcelain.Capability.PluginDiscovery
 runPluginDiscovery :: (FS.FileSystem :> es, Git.Git :> es, DhallHandling :> es)
   => Eff (PluginDiscovery : es) a -> Eff es a
 runPluginDiscovery = interpret $ \_ -> \case
-  ListTaps kb -> runExceptT (readTaps kb)
+  ListTaps kb -> runExceptT $ readTaps kb >>= traverse (\tap -> (tap,) <$> syncedRevision kb tap)
   AddTap kb tap@(Tap name _) -> runExceptT $ do
     taps <- readTaps kb
     when (any (\(Tap existing _) -> existing == name) taps) (reject "tap.exists" "Tap already exists; remove it before changing its source")
@@ -70,6 +70,19 @@ readTaps kb = do
   scope <- checked (knowledgeBaseScope kb)
   bytes <- liftEff (FS.readOptionalBytes scope tapsPath)
   maybe (pure []) (ExceptT . Protocol.decodeTaps) bytes
+
+syncedRevision :: (FS.FileSystem :> es, DhallHandling :> es)
+  => KnowledgeBase -> Tap -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)
+syncedRevision kb tap = do
+  (scope,Repository repoScope) <- cacheScopes kb tap
+  present <- liftEff (FS.directoryExists repoScope)
+  if not present then pure Nothing else do
+    bytes <- liftEff (FS.readOptionalBytes scope syncPath)
+    case bytes of
+      Nothing -> pure Nothing
+      Just value -> do
+        (saved,revision) <- ExceptT (Protocol.decodeSync value)
+        pure (if saved == tap then Just revision else Nothing)
 
 writeTaps :: (FS.FileSystem :> es, DhallHandling :> es) => KnowledgeBase -> [Tap] -> ExceptT [Diagnostic] (Eff es) ()
 writeTaps kb taps = do

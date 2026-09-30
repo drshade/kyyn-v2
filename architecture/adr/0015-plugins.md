@@ -123,6 +123,15 @@ inherit all accepted non-fact root files, including plugin packages and configur
 Plugin installation, later updates and removals follow this same evolution-owned
 route; there is no direct-to-accepted-root installation mode.
 
+Evolution review includes a host-derived comparison of captured Before and target
+plugin packages, separate from guest-authored rationale and citations. Record each
+added, removed or changed package, its before/after origin and changed file paths.
+Compare package bytes, not only origin revisions: local edits to vendored source
+must remain visible under an unchanged origin. Save this comparison with the
+candidate and accepted report so inspection does not consult live package files
+or require a compiler. Tap aliases are not retained provenance; show the concrete
+source repository/path instead.
+
 The first packages are self-contained. Dependency acquisition, tap lookup and update
 commands are separate slices; installation does not silently fetch imports or
 invent dependency declarations before those operations exist.

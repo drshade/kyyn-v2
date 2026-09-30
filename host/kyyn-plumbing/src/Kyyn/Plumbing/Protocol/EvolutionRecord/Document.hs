@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.EvolutionRecord.Document
-  ( recordDocument, recordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord ) where
+  ( recordDocument, recordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, object, (.=), withObject, (.:), (.:?), (.!=))
@@ -12,6 +12,9 @@ import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionId, evolutionId, evolutionIdName)
 import Kyyn.Domain.EvolutionReport
+import Kyyn.Domain.Plugin (pluginName, pluginNameText)
+import Kyyn.Domain.Path (relativePath, relativeName)
+import Kyyn.Plumbing.Protocol.Plugin (originShape, originValue, parseOrigin)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration)
 import Kyyn.Plumbing.Protocol.Recipes (recipeShape, recipeValue, parseRecipe)
@@ -22,11 +25,13 @@ import Kyyn.Types.Fact (FactId(..))
 
 recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Either [Diagnostic] (Shape, Value)
-recordDocument identity before after (EvolutionReport steps curation) = do
+recordDocument identity before after (EvolutionReport plugins steps curation) = do
   encoded <- traverse step steps
   pure (recordShape before after,
-    object ["version" .= ("3" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
-      "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation])
+    object ["version" .= ("4" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+      "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation,
+      "plugins" .= [object ["name" .= pluginNameText name, "before" .= optional originValue old,
+        "after" .= optional originValue new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]])
   where
     endpoints = [("Before",before),("After",after)]
     collections = collectionNames before after
@@ -61,7 +66,13 @@ headerShape :: Shape
 headerShape = Record headerFields
 
 recordShape :: RootContract -> RootContract -> Shape
-recordShape = recordShapeWithRecipes True
+recordShape before after = case previousRecordShape before after of
+  Record fields -> Record (fields ++ [("plugins",List (Record [("name",text),("before",Optional originShape),
+    ("after",Optional originShape),("files",List text)]))])
+  _ -> error "Expected record shape"
+
+previousRecordShape :: RootContract -> RootContract -> Shape
+previousRecordShape = recordShapeWithRecipes True
 
 legacyRecordShape :: RootContract -> RootContract -> Shape
 legacyRecordShape = recordShapeWithRecipes False
@@ -88,7 +99,7 @@ header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootCon
 header = withObject "Evolution record" $ \record -> do
   version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version `notElem` ["2","3"] then pure (Left [errorDiagnostic "evolution.record-format"
+  if version `notElem` ["2","3","4"] then pure (Left [errorDiagnostic "evolution.record-format"
     "Stored evolution record format is not supported by this kernel"])
   else do
     before <- record .: "before" >>= restoreSnapshot
@@ -99,7 +110,14 @@ decodeRecord :: RootContract -> RootContract -> Value -> Either String Evolution
 decodeRecord before after = parseEither $ withObject "Evolution record" $ \record -> do
   steps <- record .: "steps" >>= traverse (step [("Before",before),("After",after)])
   curation <- record .: "curation" >>= parseCuration
-  pure (EvolutionReport steps curation)
+  plugins <- record .:? "plugins" .!= [] >>= traverse (withObject "Plugin change" $ \fields -> do
+    name <- fields .: "name" >>= either fail pure . pluginName
+    old <- fields .: "before" >>= parseOptional parseOrigin
+    new <- fields .: "after" >>= parseOptional parseOrigin
+    unless (old /= Nothing || new /= Nothing) (fail "Plugin change has no package")
+    paths <- fields .: "files" >>= traverse (either fail pure . relativePath)
+    pure (PluginChange name old new paths))
+  pure (EvolutionReport plugins steps curation)
   where
     step :: [(String,RootContract)] -> Value -> Parser StepReport
     step endpoints = withObject "Step" $ \record -> do

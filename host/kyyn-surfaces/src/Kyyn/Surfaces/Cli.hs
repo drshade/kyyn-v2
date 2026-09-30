@@ -110,7 +110,7 @@ invocation = Invocation <$> selectionParser
     <> group "tap" "Manage KB-local plugin catalogues" (Tap <$> tapParser)
     <> group "guest" "Explore the guest SDK and workspace bindings" guestParser
     <> group "plugin" "Manage plugins and connector configuration" (Plugin <$> hsubparser
-      (group "install" "Copy a committed plugin package into an evolution target"
+      (group "install" "Install or replace a plugin from source HEAD in an evolution target"
         (pluginInstallParser)
        <> group "search" "Search synced tap catalogues (no network refresh)"
           (SearchPlugins <$> (maybe "" id <$> optional (strArgument (metavar "QUERY"))))
@@ -126,7 +126,7 @@ invocation = Invocation <$> selectionParser
 
 tapParser :: Parser TapCommand
 tapParser = hsubparser
-  (group "list" "List declared taps" (pure ListTaps)
+  (group "list" "List taps and their synced catalogue revisions" (pure ListTaps)
   <> group "add" "Declare a tap without fetching it" (AddTap <$> name <*> option (eitherReader gitUrl) (long "from" <> metavar "URL"))
   <> group "remove" "Remove a declaration, leaving installed plugins unchanged" (RemoveTap <$> name)
   <> group "update" "Download or refresh tap catalogues" (UpdateTaps <$> optional name))

@@ -84,7 +84,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       recipeValues = [Fact (FactId "syncTodos") (KB.Recipe "Read and explain λ")]
-      report = EvolutionReport
+      report = EvolutionReport []
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
          StepReport (Rationale "Teach curation" []) [RecipeChange (FactId "syncTodos") Nothing (Just (KB.Recipe "Read and explain λ"))]] Nothing
@@ -130,12 +130,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
     other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)
   Bytes.writeFile capturedManifest currentManifest
-  let futureRecord = "(" <> metadata <> ") // { version = +4 }"
+  let futureRecord = "(" <> metadata <> ") // { version = +5 }"
   case runPureEff (runDhallHandling (decodeEvolutionRecord futureRecord)) of
     Right (Left [Diagnostic Error "evolution.record-format" message _])
       | not ("apply" `isInfixOf` message) -> pure ()
     other -> fail ("Unsupported archive format was corruption or requested replay: " ++ show other)
-  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +4, content = True }")) of
+  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +5, content = True }")) of
     Right (Left [Diagnostic Error "evolution.record-format" _ _]) -> pure ()
     other -> fail ("Unsupported version required the current schema: " ++ show other)
   Bytes.writeFile metadataPath futureRecord
@@ -177,7 +177,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
       migratedCapture = CapturedEvolution migratedContext (Root schema facts code sampleCuration []) []
         (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] empty) [])
-      migratedReport = EvolutionReport [StepReport (Rationale "New schema" [])
+      migratedReport = EvolutionReport [] [StepReport (Rationale "New schema" [])
         [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]] Nothing
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
   migratedInput <- right migratedChecked
@@ -319,7 +319,7 @@ contractDescriptions baseline = do
         "parent" .= object ["tag" .= ("Some" :: String), "value" .= ("b" :: String)]]))
       step description before after = StepReport (Rationale description [])
         [FactChange "todos" (FactId "a") before after]
-      report = EvolutionReport [step "Edit" (Just old) (Just changed),
+      report = EvolutionReport [] [step "Edit" (Just old) (Just changed),
         step "Migrate" (Just changed) (Just new), step "Delete" (Just new) Nothing,
         step "Add" Nothing (Just new), StepReport (Rationale "No change" []) []]
         (Just (Curation.Curation (Curation.RecipeId "syncTodos")
@@ -335,16 +335,16 @@ contractDescriptions baseline = do
       legacySteps (Array steps) = Array (fmap removeRecipeChanges steps)
       legacySteps value = value
       legacyDocument = case currentDocument of
-        Object fields -> Object (KeyMap.insert "version" (String "2")
-          (KeyMap.mapWithKey (\key value -> if key == "steps" then legacySteps value else value) fields))
+        Object fields -> Object (KeyMap.delete "plugins" (KeyMap.insert "version" (String "2")
+          (KeyMap.mapWithKey (\key value -> if key == "steps" then legacySteps value else value) fields)))
         _ -> error "Expected record document"
   legacy <- right (runPureEff (runDhallHandling (encodeValue (legacyRecordShape baseline schema) legacyDocument)))
   legacyDecoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 legacy)))) >>= right
   unless (legacyDecoded == (identity,baseline,schema,report)) (fail "Version-two archive changed")
   let oldRecord = "(" <> Text.encodeUtf8 legacy <> ").{identity,before,after,steps} // { version = +1 }"
-  (_,_,_,EvolutionReport oldSteps oldCuration) <- right
+  (_,_,_,EvolutionReport _ oldSteps oldCuration) <- right
     (runPureEff (runDhallHandling (decodeEvolutionRecord oldRecord))) >>= right
-  let EvolutionReport expectedSteps _ = report
+  let EvolutionReport _ expectedSteps _ = report
   unless (oldSteps == expectedSteps && oldCuration == Nothing)
     (fail "Version-one archive did not remain readable without curation")
   forM_ [baseline,schema] $ \selected -> do

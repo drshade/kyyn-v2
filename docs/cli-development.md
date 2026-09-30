@@ -221,6 +221,12 @@ downloaded catalogue; use `tap update [NAME]` to refresh it. `tap add/remove` ed
 `plugin guide NAME` inspect installed packages; add `--evolution ID` for a draft.
 Guides and discovery work even when the KB or plugin code cannot compile.
 
+`tap list` shows the synced catalogue revision, or `not synced`. Installation uses
+that catalogue to locate the package, then captures the package source's current
+HEAD; its installed revision can therefore be newer than the catalogue revision.
+`evolution check` and `evolution show` include plugin additions, removals, origin
+changes and changed package paths, including edits with an unchanged origin.
+
 Create an evolution, then copy a committed plugin package into its target:
 
 ```sh

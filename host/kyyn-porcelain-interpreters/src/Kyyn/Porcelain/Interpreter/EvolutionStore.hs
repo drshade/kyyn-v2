@@ -264,7 +264,7 @@ introducingCommits kb@(KnowledgeBase repository _) identity before visited (revi
       pure (if introduced then revision:rest else rest)
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
-checkSavedReport operation (EvolutionReport steps _) = forM_ steps $ \(StepReport _ changes) ->
+checkSavedReport operation (EvolutionReport _ steps _) = forM_ steps $ \(StepReport _ changes) ->
   forM_ changes check
   where
     check (RecipeChange (FactId identity) before after) = do

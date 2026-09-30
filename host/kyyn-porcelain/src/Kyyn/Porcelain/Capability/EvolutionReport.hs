@@ -46,7 +46,7 @@ checkEvolutionReport source input target (EvolutionObservation output steps cura
           (reject "An evolution cannot return to Before after entering After")
         reports <- stepReports steps (drop 1 factSets)
         case reverse values of
-          final : _ -> Right (final, EvolutionReport reports curation)
+          final : _ -> Right (final, EvolutionReport [] reports curation)
           [] -> reject "Missing evolution boundaries"
   where
     contracts = nub [source, target]

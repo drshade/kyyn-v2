@@ -408,9 +408,8 @@ data StepReport = StepReport Rationale [Change]
 ```
 
 The two cases keep a recipe named `todos` distinct from a domain collection of
-that name; no reserved domain collection name is needed. Newly written archive records use version 3;
-readers retain versions 1 and 2 as reports with no recipe changes. Private
-candidates can be regenerated rather than carrying a compatibility migration.
+that name; no reserved domain collection name is needed. Archive format and
+older-record reading are owned by [evolutions](0010-evolutions.md).
 
 Resolve acknowledgements against the returned recipe set: an evolution can add a
 recipe and acknowledge evidence for it in the same result. Removing a recipe does
