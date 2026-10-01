@@ -19,6 +19,18 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`KYYN_TEST_TOOLCHAIN=/path/to/staged/microhs node tools/test-agentic.mjs`
+compiles the proof fixture under GHC 9.10.3 (override with `KYYN_TEST_GHC`) and
+MicroHs. A scripted host exchanges real pipe frames with the guest's Agentic
+interpreter: nested drafting, malformed-output correction, provider refusal and
+wrong response IDs. Typed edits for two collections are then applied through the
+ordinary pure Evolution SDK in a separate invocation with no model handler.
+The proof checks ordering, observations, curation attachment, repeatability and
+missing/duplicate-ID failures. It uses handwritten fixture codecs/bindings;
+it does not establish production generation, Dhall proposal persistence, host
+report validation, recipe CLI, Jev alignment or live providers. The test is part
+of full guest integration, not the fast check. No installed CLI behavior changes.
+
 `cabal test plugin-fetch plugin-registration graph-calendar inspection-cache --test-show-details=direct`
 with the selected guest toolchain checks signature-derived registration: concrete
 entry contracts, aliases and applied data, malformed signatures, validator/login
