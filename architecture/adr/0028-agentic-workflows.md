@@ -25,8 +25,9 @@ Existing Jev Judgement semantics remain unchanged. Runs need bounded model use,
 inspectable flow descriptions and deterministic test fixtures.
 
 The signatures and integration choices below are proposals, not implemented APIs.
-In particular, partial acknowledgement, frozen proposal representation and model
-configuration require review. This ADR does not authorize production integration.
+In particular, partial acknowledgement, flow registration, frozen proposal
+representation and model configuration require review. This ADR does not
+authorize production integration.
 
 ## Decision
 
@@ -134,22 +135,33 @@ that the model is correct. Do not silently substitute an LLM for Jev.
 ### Open and closed recipes share ordinary curation
 
 Recipe identity, instructions and curation progress remain owned by
-[ADR 0014](0014-evidence.md). Proposed extension to its data payload:
+[ADR 0014](0014-evidence.md). Open recipes continue to guide an external agent
+investigating evidence and authoring an evolution. Closed recipes let a caller
+explicitly execute a typed flow to prepare that work. Both still carry
+instructions, and both use the same recipe ID and curation register. A closed
+recipe is not a scheduled job or a promise that every input will be resolved.
+
+**Recommended, pending owner review:** keep the recipe as data and register the
+optional flow in `kb.dhall` alongside existing tool entry registrations:
 
 ```haskell
-data RecipeMode = Open | Closed FlowEntryRef
-data Recipe = Recipe
-  { recipeInstructions :: String
-  , recipeMode :: RecipeMode
+data RecipeFlowRegistration = RecipeFlowRegistration
+  { recipe :: RecipeId
+  , entry :: FlowEntryRef
   }
 ```
 
-The reference identifies checked KB code, not a serialized Haskell closure.
-Open recipes continue to guide an external agent investigating evidence and
-authoring an evolution. Closed recipes let a caller explicitly execute a typed
-flow to prepare that work. Both still carry instructions, and both use the same
-recipe ID and curation register. A closed recipe is not a scheduled job or a
-promise that every input will be resolved.
+The reference identifies checked KB code, not a serialized Haskell closure. The
+host resolves a registration against the selected root's recipe IDs and code
+exports; dangling or duplicate registrations are errors. Discovery joins these
+to show whether the recipe offers explicit execution. Both data and registration
+changes still belong to ordinary evolutions.
+
+The alternative is `recipeMode :: Open | Closed FlowEntryRef` inside the recipe
+payload. That keeps the association together and avoids a join, but puts code
+export references inside fact data, unlike current tool registration. Neither
+location has been settled by the owner; do not persist both or create another
+recipe identity. Open/Closed describe these modes, not two curation systems.
 
 At invocation, the host selects a Before root and captures the pending evidence
 inputs for the selected connector instances. The flow gets typed pending data
@@ -209,13 +221,27 @@ an explicit effect row when those dependencies are known.
 `FrozenProposal root` above is intentionally an unresolved boundary. It needs to
 represent fact and recipe changes with step rationale/citations, without requiring
 the model to author Haskell or inventing a second general mutation language.
-The recommended first proof is a typed change-plan value plus a KB-authored pure
-`plan -> Evolution (KnowledgeBase root) (KnowledgeBase root)` applicator. Persist
-the plan using the ordinary Dhall data path and generate the conventional entry
-that applies it. Prove that this preserves step reporting before choosing its
-public SDK shape. Automatic schema-changing proposals are not established by
-this sketch; discuss that separately rather than implying an existential type
-can cross the wire without generated bindings.
+Two candidates deserve comparison in the first proof:
+
+- Generated, root-specific typed edits, grouped into annotated steps, applied
+  through the existing SDK edit operations by a generated conventional entry.
+  This minimizes per-recipe boilerplate. The existing report's fact/recipe change
+  vocabulary informs it, but a report is a derived observation, not an executable
+  patch API. Typed edit generation and application are new work to prove.
+- A KB-authored typed plan and pure
+  `plan -> Evolution (KnowledgeBase root) (KnowledgeBase root)` applicator.
+  This reuses ordinary Haskell for domain-specific application semantics, but
+  each recipe author must provide that function.
+
+Prefer generated edits if that proof establishes a small implementation using
+existing SDK semantics; otherwise bring the tradeoff back for a decision. Do not
+implement both speculatively. Persist frozen inputs through the ordinary Dhall
+path. In either approach, apply them to the actual captured Before and derive
+the review diff through the normal observation checks. Never substitute a model's
+claimed before/after report for the computed changes. Prove missing/duplicate-ID,
+ordering and step-rationale behavior before settling the public SDK shape. The
+first proof is same-schema; automatic schema-changing proposals are not established
+by this sketch or by wrapping a wire value in an existential type.
 
 Checks and acceptance never rerun the flow. Editing the frozen plan or applicator
 requires fresh checking, just like other source/input edits. A failed or cancelled
