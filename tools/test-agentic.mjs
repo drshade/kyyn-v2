@@ -35,14 +35,20 @@ function decode(v) {
     default: throw new Error(`Unexpected fixture value ${v.tag}`);
   }
 }
+const citation = { producer: 'fixture', connector: 'files', source: 'folder', references: ['file:///e-1'] };
 const plans = [
-  { reason: 'Update and retire old evidence', edits: [
+  { reason: 'Update and retire old evidence', citations: [citation], edits: [
     { tag: 'Todos', edit: { tag: 'Replace', id: 'old', value: 'updated 雪' } },
     { tag: 'Todos', edit: { tag: 'Remove', id: 'remove' } }] },
-  { reason: 'Add reviewed facts', edits: [
+  { reason: 'Add reviewed facts', citations: [], edits: [
     { tag: 'Todos', edit: { tag: 'Append', id: 'new', value: 'new item' } },
     { tag: 'Flags', edit: { tag: 'Append', id: 'reviewed', value: true } }] }
 ];
+const curation = { recipe: 'sync', handled: [
+  { tag: 'IndividualRecords', scope: { plugin: 'fixture', instance: 'files', fetch: 'fetch-1' }, ids: ['e-1'] },
+  { tag: 'EntireBatch', scope: { plugin: 'fixture', instance: 'other', fetch: 'fetch-2' } }
+] };
+const proposal = { steps: plans, curation };
 
 async function broker(bin, args, scenario) {
   const child = spawn(bin, args, { cwd: temporary, env, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -75,7 +81,7 @@ async function broker(bin, args, scenario) {
         if (trace.length === 1) {
           assert.equal(c.instruction, 'Propose fact edits');
           assert.equal(decode(c.state), 'captured evidence 雪');
-          assert.equal(c.output.shape.tag, 'Array');
+          assert.equal(c.output.shape.tag, 'Object');
           assert.equal(c.tools[0].name, 'review');
           action = tag('CallTools', [{ id: 'review-1', name: 'review', input: encode('evidence to review') }]);
         } else if (trace.length === 2) {
@@ -90,7 +96,7 @@ async function broker(bin, args, scenario) {
         } else {
           assert.equal(trace.length, 4);
           assert.equal(c.history[1].tag, 'Rejected');
-          action = tag('Respond', encode(plans));
+          action = tag('Respond', encode(proposal));
         }
         response = tag('Right', { raw: encode({ turn: String(trace.length) }), action });
       }
@@ -102,7 +108,7 @@ async function broker(bin, args, scenario) {
     } else {
       assert.equal(code, 0, diagnostic);
       if (scenario === 'refuse') assert.deepEqual(result, tag('Left', 'provider unavailable'));
-      else { assert.equal(result.tag, 'Right'); assert.deepEqual(decode(result.value), plans); }
+      else { assert.equal(result.tag, 'Right'); assert.deepEqual(decode(result.value), proposal); }
     }
     return result;
   } finally { clearTimeout(timer); lines.close(); if (child.exitCode === null) child.kill('SIGKILL'); }
@@ -125,18 +131,30 @@ try {
     for (const scenario of ['refuse', 'malformed', 'wrong-id']) await broker(bin, args, scenario);
     const apply = value => JSON.parse(run(bin, [...args, 'apply'], `${JSON.stringify(encode(value))}\n`));
     const output = apply(decode(result.value));
-    assert.deepEqual(apply(plans), output, 'Frozen replay changed the output');
+    assert.deepEqual(apply(proposal), output, 'Frozen replay changed the output');
     assert.equal(output.tag, 'Succeeded');
     assert.deepEqual(output.value.after, { todos: [{ id: 'old', value: 'updated 雪' }, { id: 'new', value: 'new item' }], flags: [{ id: 'reviewed', value: true }] });
     assert.equal(output.value.steps.length, 2);
     assert.equal(output.value.steps[0].rationale.explanation, plans[0].reason);
+    assert.deepEqual(output.value.steps[0].rationale.evidence, [citation]);
     assert.deepEqual(output.value.steps[0].after, output.value.steps[1].before);
     assert.equal(output.value.steps[1].after.contract, 'fixture-root-v1');
     assert.equal(output.value.curation.value.handled[0].tag, 'IndividualRecords');
-    const one = edit => [{ reason: 'failure case', edits: [{ tag: 'Todos', edit }] }];
+    assert.equal(output.value.curation.value.handled[1].tag, 'EntireBatch');
+    const one = edit => [{ reason: 'failure case', citations: [], edits: [{ tag: 'Todos', edit }] }];
+    const sequential = apply({ steps: [{ reason: 'Ordered edits', citations: [], edits: [
+      { tag: 'Todos', edit: { tag: 'Append', id: 'fresh', value: 'first' } },
+      { tag: 'Todos', edit: { tag: 'Replace', id: 'fresh', value: 'second' } }
+    ] }], curation: { recipe: 'sync', handled: [] } });
+    assert.equal(sequential.tag, 'Succeeded');
+    assert.deepEqual(sequential.value.after.todos.at(-1), { id: 'fresh', value: 'second' });
+    const unchanged = apply({ steps: [], curation });
+    assert.equal(unchanged.tag, 'Succeeded');
+    assert.deepEqual(unchanged.value.steps, []);
+    assert.deepEqual(unchanged.value.curation, output.value.curation);
     for (const edit of [{ tag: 'Remove', id: 'missing' }, { tag: 'Replace', id: 'missing', value: 'x' }, { tag: 'Append', id: 'old', value: 'x' }]) {
-      assert.equal(apply(one(edit)).tag, 'Rejected');
-      assert.equal(apply([...plans, ...one(edit)]).tag, 'Rejected', 'Partial proposal succeeded');
+      assert.equal(apply({ steps: one(edit), curation }).tag, 'Rejected');
+      assert.equal(apply({ steps: [...plans, ...one(edit)], curation }).tag, 'Rejected', 'Partial proposal succeeded');
     }
     outputs.push(output);
   }
