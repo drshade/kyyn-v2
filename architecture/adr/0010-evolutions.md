@@ -896,14 +896,11 @@ values. Web/MCP/CLI evaluate the selected evolution workspace, not a separately
 recorded function-and-arguments invocation. Reusable helpers need no separate
 proposal-authoring handoff or guest ProposalAuthoring effect.
 
-An entry may read selected evidence or explicitly acquire it during evaluation.
-The candidate records the result actually produced; checking and acceptance use
-that materialized result, not a second execution of the entry. Re-evaluation may
-observe different external data and produces a new candidate to inspect. No
-promise of replaying live effects, mandatory RPC transcript, automatic secret
-capture or durable continuation is implied. Pure validators and helpers only see
-their explicit inputs. Cancellation/failure stops further work but cannot undo
-evidence acquisition already performed; it never authorizes acceptance.
+Investigation precedes this pure entry, as specified under
+[pure evolution execution](#pure-evolution-execution).
+[ADR 0028](0028-agentic-workflows.md) proposes an explicit recipe flow that freezes
+its result into an ordinary workspace before checking. It does not add model or
+acquisition calls to evolution evaluation.
 
 ## Updating the base before acceptance
 

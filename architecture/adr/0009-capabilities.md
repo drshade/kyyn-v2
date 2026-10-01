@@ -35,6 +35,9 @@ separate product permission taxonomy. Retain these explicit boundaries:
   [model judgements](0027-judgement.md); they do not acquire evidence, invoke sinks
   or propose/accept roots.
 - Accepted-root publication is not a guest capability.
+- [ADR 0028](0028-agentic-workflows.md) proposes model-turn requests in KB tools
+  and explicit recipe flows, without adding them to evolution, validation,
+  query or renderer contexts.
 - Delivery invokes a configured plugin sink with its prepared typed input under
   ADR 0017; it does not implicitly render or accept knowledge.
 
