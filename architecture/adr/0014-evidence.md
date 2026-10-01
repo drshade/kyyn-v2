@@ -322,14 +322,16 @@ are identified data in the accepted root, edited by the same typed evolution
 that edits domain facts. In the implemented instruction-led mode, an agent follows
 their instructions and uses ordinary investigation and evolution tools.
 [ADR 0028](0028-agentic-workflows.md#open-and-closed-recipes-share-ordinary-curation)
-proposes explicit flow execution alongside this mode. It owns the proposed mode
-and invocation contract; recipes remain neither scheduled jobs nor autonomous
-kernel-managed sequences of agent actions. The payload below describes today's
-instruction-only implementation, before that proposed extension.
+owns explicit flow execution alongside this mode. This ADR owns the recipe data
+type; recipes remain neither scheduled jobs nor autonomous kernel-managed
+sequences of agent actions. The constructor extension below is agreed design,
+not yet the implemented instruction-only payload.
 
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.
-data Recipe = Recipe { recipeInstructions :: String }
+data Recipe
+  = OpenAgent { instructions :: Text }
+  | ClosedAgent { flow :: FlowEntryRef }
 data KnowledgeBase facts = KnowledgeBase facts [Fact Recipe]
 
 -- Author-facing optics/edit handles; their implementation owns the wrapper.
@@ -341,7 +343,9 @@ onFacts
   -> KnowledgeBase a -> Either EvolutionFailure (KnowledgeBase b)
 ```
 
-The guest wrapper is a materialized value, not the host repository locator named
+`FlowEntryRef` stores the name of a callable KB function, not executable code or
+a closure. ADR 0028 owns its resolution and execution. The guest wrapper is a
+materialized value, not the host repository locator named
 `KnowledgeBase` in ADR 0004. It contains no paths, code, closures or curation
 register. `onFacts` lifts an ordinary fallible domain transformation and preserves
 the recipes; it does not lift a previously observed Evolution or create another
@@ -362,7 +366,7 @@ evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = edit (Rationale "Explain how to reconcile todos" []) $
   within recipes $
     append (Fact (FactId "syncTodos")
-      (Recipe "Read pending evidence and reconcile the corresponding todos."))
+      (OpenAgent "Read pending evidence and reconcile the corresponding todos."))
 ```
 
 For this recipe-only edit, Before and After alias the same authored root type.
@@ -376,9 +380,13 @@ evolution = edit (Rationale "Remove the cancelled task" []) $
   within AfterCollections.todos $ remove (FactId "todo-002")
 ```
 
-Persist the recipes in `root/recipes.dhall` as the known type
-`List { id : Text, value : { instructions : Text } }`. The fixed codec follows
-the shared Recipe/Fact structure; it is not a second KB-authored schema.
+Persist the recipes in `root/recipes.dhall` as identified values of the shared
+Recipe union, with an OpenAgent instructions payload or a ClosedAgent function
+reference. The fixed codec follows the shared Recipe/Fact structure; it is not a
+second KB-authored schema. Existing instruction-only `{ instructions : Text }`
+payloads decode as `OpenAgent`; new writes use the constructor representation.
+This narrow old-shape read also preserves existing recipe payloads in archived
+reports, without introducing a general migration framework.
 Initialization emits an empty list; absence reads as empty, malformed data fails.
 Materialization and acceptance always write recipes.dhall, including an empty list.
 Recipes do not change the author's RootContract identity. Read them from the
@@ -391,7 +399,7 @@ There is no target-manifest override of the evolved result.
 unexpected fields; do not add recognition of retired manifest fields or a second
 read path. The CLI guide explains the one-time repair for existing KBs: move
 entries to recipes.dhall and remove the field. An entry `{ name, instructions }` becomes
-`{ id = name, value = { instructions } }`. This is a one-time manual working-KB
+an identified `OpenAgent` value carrying those instructions. This is a one-time manual working-KB
 repair, not a versioned migration subsystem. Already accepted evolution archives
 remain readable without loading or rerunning their old source.
 
@@ -410,6 +418,11 @@ data Change
 
 data StepReport = StepReport Rationale [Change]
 ```
+
+`RecipeChange` compares the complete payload, including its constructor. Switching
+OpenAgent to ClosedAgent is an update to the same recipe ID; review displays the
+before/after mode and instructions or callable name, respectively. Changing a
+closed recipe's callable name is likewise a recipe update, not a fact edit.
 
 The two cases keep a recipe named `todos` distinct from a domain collection of
 that name; no reserved domain collection name is needed. Archive format and

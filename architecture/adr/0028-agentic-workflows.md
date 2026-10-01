@@ -21,8 +21,7 @@ including model-assisted drafting and subagents. Recipes support both external
 instruction-led work and explicit flow execution. Kyyn is not an autonomous
 agent; evolutions remain pure and nothing is automatically accepted. The host
 performs individual model turns with per-KB credentials hidden from guest code.
-Existing Jev Judgement semantics remain unchanged. Model selection is KB
-configuration; no usage-limit mechanism is selected. Closed agents propose only
+Existing Jev Judgement semantics remain unchanged. Closed agents propose only
 fact edits, with existing curation declarations, not schema or code changes.
 Flows remain inspectable and testable with deterministic fixtures.
 
@@ -95,8 +94,8 @@ This is specific to the model-turn capability; it does not change plugin-owned
 authentication under [ADR 0016](0016-connections.md). Native provider packages
 may inform the host adapter, but their IO dependencies do not enter the guest.
 
-Do not add request-count limits, spend budgets or shared usage accounting to this
-initial design. Ordinary cancellation and provider errors retain their existing
+There are no request-count limits, spend budgets or shared usage accounting.
+Ordinary cancellation and provider errors retain their existing
 behavior; this is not a guarantee of bounded model use.
 
 ### Keep one schema authority and preserve Judgement semantics
@@ -127,22 +126,14 @@ that the model is correct. Do not silently substitute an LLM for Jev.
 
 ### Open and closed recipes share ordinary curation
 
-Recipe identity, instructions and curation progress remain owned by
+Recipe identity, its constructor type and curation progress remain owned by
 [ADR 0014](0014-evidence.md). Open recipes continue to guide an external agent
 investigating evidence and authoring an evolution. Closed recipes let a caller
 explicitly execute a typed flow to prepare that work. Both use the same recipe
 ID and curation register. A closed
 recipe is not a scheduled job or a promise that every input will be resolved.
 
-Represent the modes as constructors in the persisted recipe data:
-
-```haskell
-data Recipe
-  = OpenAgent { instructions :: Text }
-  | ClosedAgent { flow :: FlowEntryRef }
-```
-
-The reference names a regular callable KB function, resolved and type-checked
+The `ClosedAgent` reference names a regular callable KB function, resolved and type-checked
 like a tool entry, not a serialized Haskell closure. Invalid names or incompatible
 signatures produce diagnostics. The recipe constructor owns the reference; there
 is no separate recipe-flow registration list. Recipe definitions and their code
