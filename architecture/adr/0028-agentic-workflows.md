@@ -21,13 +21,15 @@ including model-assisted drafting and subagents. Recipes support both external
 instruction-led work and explicit flow execution. Kyyn is not an autonomous
 agent; evolutions remain pure and nothing is automatically accepted. The host
 performs individual model turns with per-KB credentials hidden from guest code.
-Existing Jev Judgement semantics remain unchanged. Runs need bounded model use,
-inspectable flow descriptions and deterministic test fixtures.
+Existing Jev Judgement semantics remain unchanged. Model selection is KB
+configuration; no usage-limit mechanism is selected. Closed agents propose only
+fact edits, with existing curation declarations, not schema or code changes.
+Flows remain inspectable and testable with deterministic fixtures.
 
 The signatures and integration choices below are proposals, not implemented APIs.
-In particular, partial acknowledgement, flow registration, frozen proposal
-representation and model configuration require review. This ADR does not
-authorize production integration.
+The product choices below are owner-established; concrete generated bindings and
+host integration still require proof. This ADR does not authorize production
+integration.
 
 ## Decision
 
@@ -69,7 +71,7 @@ Illustrative request/result boundary:
 
 ```haskell
 data ModelTurn result where
-  TakeModelTurn :: ModelProfileRef -> TurnRequest
+  TakeModelTurn :: ModelConfiguration -> TurnRequest
                -> ModelTurn (Either ModelFailure TurnResponse)
 
 data TurnRequest = TurnRequest
@@ -86,26 +88,16 @@ The host does not execute returned tool calls: the guest loop does so through
 the supplied typed tool bodies. Internal library values are not an additional
 KB-authored wire schema.
 
-A host-resolved profile selects provider/model and a secret-store key. Its
+KB configuration selects provider/model and a secret-store key. The host resolves
+that configuration for a model request; no separate profile registry is needed. Its
 credential value never crosses this boundary or appears in guest diagnostics.
 This is specific to the model-turn capability; it does not change plugin-owned
 authentication under [ADR 0016](0016-connections.md). Native provider packages
 may inform the host adapter, but their IO dependencies do not enter the guest.
 
-One invocation has one shared limit across nested drafting tools, retries and
-parallel branches. Reserve a turn before dispatch; exhaustion returns a useful
-failure and cannot yield a successful recipe proposal. A fresh nested
-conversation does not reset the allowance. Failed dispatched calls count too.
-Judgement requests within the invocation also consume its model-request allowance;
-this does not change their result semantics. The library's current `capped`
-helper limits each conversation, so it is not sufficient for this contract.
-
-Use a hard request-count limit initially; the desired cost limit needs a concrete
-provider usage/pricing and maximum-output policy before claiming an exact spend
-ceiling. Do not label a turn count a monetary guarantee. Limits do not prove
-termination of arbitrary pure `arr` or `repeat` code; ordinary cancellation remains
-available. Profile storage, defaults, per-run overrides and monetary-limit
-semantics are unresolved, not permission to add a general provider registry.
+Do not add request-count limits, spend budgets or shared usage accounting to this
+initial design. Ordinary cancellation and provider errors retain their existing
+behavior; this is not a guarantee of bounded model use.
 
 ### Keep one schema authority and preserve Judgement semantics
 
@@ -138,31 +130,23 @@ that the model is correct. Do not silently substitute an LLM for Jev.
 Recipe identity, instructions and curation progress remain owned by
 [ADR 0014](0014-evidence.md). Open recipes continue to guide an external agent
 investigating evidence and authoring an evolution. Closed recipes let a caller
-explicitly execute a typed flow to prepare that work. Both still carry
-instructions, and both use the same recipe ID and curation register. A closed
+explicitly execute a typed flow to prepare that work. Both use the same recipe
+ID and curation register. A closed
 recipe is not a scheduled job or a promise that every input will be resolved.
 
-**Recommended, pending owner review:** keep the recipe as data and register the
-optional flow in `kb.dhall` alongside existing tool entry registrations:
+Represent the modes as constructors in the persisted recipe data:
 
 ```haskell
-data RecipeFlowRegistration = RecipeFlowRegistration
-  { recipe :: RecipeId
-  , entry :: FlowEntryRef
-  }
+data Recipe
+  = OpenAgent { instructions :: Text }
+  | ClosedAgent { flow :: FlowEntryRef }
 ```
 
-The reference identifies checked KB code, not a serialized Haskell closure. The
-host resolves a registration against the selected root's recipe IDs and code
-exports; dangling or duplicate registrations are errors. Discovery joins these
-to show whether the recipe offers explicit execution. Both data and registration
-changes still belong to ordinary evolutions.
-
-The alternative is `recipeMode :: Open | Closed FlowEntryRef` inside the recipe
-payload. That keeps the association together and avoids a join, but puts code
-export references inside fact data, unlike current tool registration. Neither
-location has been settled by the owner; do not persist both or create another
-recipe identity. Open/Closed describe these modes, not two curation systems.
+The reference names a regular callable KB function, resolved and type-checked
+like a tool entry, not a serialized Haskell closure. Invalid names or incompatible
+signatures produce diagnostics. The recipe constructor owns the reference; there
+is no separate recipe-flow registration list. Recipe definitions and their code
+are changed through ordinary authored evolutions, not closed-agent fact edits.
 
 At invocation, the host selects a Before root and captures the pending evidence
 inputs for the selected connector instances. The flow gets typed pending data
@@ -172,32 +156,66 @@ payloads: after a run, [latest-only storage](0014-evidence.md) still applies.
 
 ```haskell
 closedRecipe
-  :: Flow RecipeCalls (RecipeInput root) (ProposedCuration root)
+  :: Flow RecipeCalls (RecipeInput Root) (ProposedCuration RootEdit)
 
-data ProposedCuration root = ProposedCuration
-  { proposal :: FrozenProposal root
-  , handled :: [HandledInput]
+data ProposedCuration edits = ProposedCuration
+  { steps :: [ProposedStep edits]
+  , curation :: Curation
   }
-
-data HandledInput
-  = EntireInput InputRef
-  | SelectedItems InputRef [EvidenceId]
 ```
 
 `RecipeInput` contains the selected root and pending changes grouped by captured
-instance; `InputRef` addresses one supplied group, not a new persisted selection
-registry. Recipes are not restricted to one connector. A CLI spelling such as
+instance, including the existing evidence scopes. Recipes are not restricted to
+one connector. A CLI spelling such as
 `root recipe run NAME PLUGIN INSTANCE` selects input to one invocation; it does
 not define what other invocations of that recipe may use. Multi-instance CLI
 syntax and the concrete typed input representation remain to be designed.
 
-**Recommended, pending owner review:** the flow explicitly selects whole supplied
-inputs or individual pending items, including deletions. The host fills the exact
-fetch scopes and converts these selections to ADR 0014 acknowledgements. Reject
-unknown input references and items outside the supplied pending input. Reading,
-citing or changing a fact does not acknowledge evidence. Empty selection is valid;
-low-confidence work can stay pending for an external agent. This adds no second
-watermark or inference that model confidence means successful curation.
+Reuse ADR 0014's existing `Curation`, `EntireBatch EvidenceScope` and
+`IndividualRecords EvidenceScope [EvidenceId]` unchanged. The input supplies the
+captured scopes; the flow declares what it handled, including deletions, and the
+normal host curation checks resolve those declarations. The declaration names
+the invoked recipe. Reading, citing or changing a fact does not acknowledge
+evidence. Empty acknowledgements are valid; low-confidence work can stay pending
+for an external agent. There is no additional selection vocabulary, watermark or
+inference that model confidence means successful curation.
+
+### Describe fact edits as data
+
+A closed agent returns ordered operations, not executable mutation functions or
+a replacement root. Use a small typed description of existing collection edits:
+
+```haskell
+data FactEdit a
+  = Append (Fact a)
+  | Replace FactId a
+  | Remove FactId
+
+data ProposedStep edits = ProposedStep
+  { rationale :: Rationale
+  , edits :: [edits]
+  }
+
+-- Generated for an example root's domain fact collections.
+data RootEdit
+  = Todos (FactEdit Todo)
+  | Meetings (FactEdit Meeting)
+```
+
+`Rationale` already carries evidence citations. Generated root-specific sums
+preserve each collection's payload type without an untyped patch language.
+`Replace` supplies the complete new payload and retains the selected ID; it is
+not a serialized update function. Interpret operations in their listed order
+through the existing `append`, `update` and `remove` SDK combinators, with one
+annotated evolution step per proposed step. Reuse their missing/ambiguous-ID and
+duplicate-append failures; a failed application produces no partial edited root.
+
+The current executable `CollectionEdit` is not a wire value. These data
+constructors describe its operations, and generated bindings supply the pure
+interpreter. No per-recipe applicator is required. The generated edit type
+contains domain fact collections only, not recipe definitions, schema, code,
+plugin configuration or other root artifacts. The accepted schema and associated
+metadata stay fixed; equal endpoint Haskell types alone would not establish that.
 
 ### Freeze the result, then use the existing evolution path
 
@@ -219,32 +237,16 @@ This signature elides the existing execution/authoring/store effects; it does
 not permit ambient IO in porcelain. The implementation must give the operation
 an explicit effect row when those dependencies are known.
 
-`FrozenProposal root` above is intentionally an unresolved boundary. It needs to
-represent fact and recipe changes with step rationale/citations, without requiring
-the model to author Haskell or inventing a second general mutation language.
-Two candidates deserve comparison in the first proof:
+Persist the returned steps and curation declaration through the ordinary Dhall
+path. A generated conventional evolution entry applies them to the actual
+captured Before with the existing SDK and attaches the existing curation
+declaration. It changes facts only; the workspace initially retains Before's
+schema, code, configuration and recipe definitions unchanged. Derive the review
+diff through normal observation checks, never from a model's claimed before/after
+report. The persisted operations make pure re-evaluation possible without model
+calls or serialized closures.
 
-- Generated, root-specific typed edits, grouped into annotated steps, applied
-  through the existing SDK edit operations by a generated conventional entry.
-  This minimizes per-recipe boilerplate. The existing report's fact/recipe change
-  vocabulary informs it, but a report is a derived observation, not an executable
-  patch API. Typed edit generation and application are new work to prove.
-- A KB-authored typed plan and pure
-  `plan -> Evolution (KnowledgeBase root) (KnowledgeBase root)` applicator.
-  This reuses ordinary Haskell for domain-specific application semantics, but
-  each recipe author must provide that function.
-
-Prefer generated edits if that proof establishes a small implementation using
-existing SDK semantics; otherwise bring the tradeoff back for a decision. Do not
-implement both speculatively. Persist frozen inputs through the ordinary Dhall
-path. In either approach, apply them to the actual captured Before and derive
-the review diff through the normal observation checks. Never substitute a model's
-claimed before/after report for the computed changes. Prove missing/duplicate-ID,
-ordering and step-rationale behavior before settling the public SDK shape. The
-first proof is same-schema; automatic schema-changing proposals are not established
-by this sketch or by wrapping a wire value in an existential type.
-
-Checks and acceptance never rerun the flow. Editing the frozen plan or applicator
+Checks and acceptance never rerun the flow. Editing the frozen operations or source
 requires fresh checking, just like other source/input edits. A failed or cancelled
 run produces no successful proposal and advances no curation progress. If head
 changes during the run, its output remains based on the captured Before;
@@ -294,16 +296,15 @@ wire, provider or recipe integration; no dependency was vendored by this proof.
 
 Judgement alignment remains an upstream integration discussion. The one-turn
 provider abstraction and generic monadic interpreter already exist; do not
-request or reimplement them as missing features. Kyyn can own shared run
-accounting at its host capability boundary; usage metadata needed for monetary
-limits must be checked against provider support.
+request or reimplement them as missing features.
 
 Before production integration, demonstrate a generated-contract flow under GHC
 and pinned MicroHs with a recording host: typed draft, nested tool, malformed
-response retry, Judgement and exhausted shared budget. Then demonstrate one closed
+response retry, Judgement and cancellation/failure. Then demonstrate one closed
 recipe producing a reviewable frozen ordinary evolution, partial/deletion
 acknowledgements, failed-run preservation and repeated checking without model
-calls. That proof must settle the proposal boundary and public authoring shape;
+calls. Cover edit ordering, missing/duplicate IDs, rationale preservation and
+unchanged non-fact artifacts. That proof must establish the generated bindings;
 documentation approval alone is not evidence they work.
 
 ## Consequences and alternatives
