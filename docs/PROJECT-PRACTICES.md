@@ -26,8 +26,10 @@ it using the public proposal SDK and generated interpreter, checks observations
 with the ordinary host diff derivation, and materializes/reloads facts through
 RootStore. It also checks failure after a preceding successful edit returns no
 partial root. The fixture intentionally has no Eq/Show instances on domain types.
-This does not yet exercise a model provider, whole proposal-file persistence,
-guest validators, candidate acceptance or a recipe CLI. It is in full integration,
+The complete proposal (including rationale, citations and curation) round-trips
+through Dhall and the generated frozen evolution produces the same observations.
+This does not yet exercise a model provider, guest validators, candidate acceptance
+or a recipe CLI. It is in full integration,
 not the fast check.
 
 `KYYN_TEST_TOOLCHAIN=/path/to/staged/microhs node tools/test-agentic.mjs`

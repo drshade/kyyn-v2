@@ -3,6 +3,7 @@ module EvolutionCaptureTests (evolutionCaptureTests) where
 
 import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (forM_, unless)
+import Data.Aeson (Value(Null))
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
@@ -11,8 +12,9 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(Error), errorDiagnostic)
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.FactProposal
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(WriteFile))
-import Kyyn.Domain.FileTree (FileTree, fileTree)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (directoryScope, relativePath)
@@ -23,6 +25,9 @@ import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
+import Kyyn.Plumbing.Protocol.FactProposal (proposalChange)
+import Kyyn.Types.Curation (Curation(..), RecipeId(..))
+import Kyyn.Types.Evolution (Rationale(..))
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -112,6 +117,27 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     afterRejection <- listDirectory evolutionDirectory
     unless (denied == Right (Left sourceError) && beforeRejection == afterRejection)
       (fail "Source rejection created a draft or lost diagnostics")
+    let proposal = FactProposal [] (Curation (RecipeId "sync") [])
+    frozen@(EvolutionWorkspace _ frozenId) <- success (createFactProposal kb (EvolutionName "Frozen") revision proposal) >>= right >>= right
+    frozenChange <- runEff (runDhallHandling (proposalChange contract proposal)) >>= right
+    frozenSnapshot <- noOpening (readWorkspace frozen) >>= right >>= right
+    case frozenSnapshot of
+      WorkspaceSnapshot (WorkspaceManifest selected _ _ selectedState) b t c _ ->
+        unless (selected == revision && selectedState == Draft && b == sourceTree && t == sourceCode && c == frozenChange)
+          (fail "Proposal creation changed its base, target artifacts, state or saved data")
+    frozenContext <- success (captureEvolution frozen) >>= right >>= right
+    let CapturedEvolution selectedContext _ _ _ = frozenContext
+    noOpening (matchesCapturedInputs selectedContext) >>= right >>= right >>= assertTrue
+    proposalPath <- right (relativePath "proposal.dhall")
+    proposalBytes <- maybe (fail "Proposal data was not saved") pure (lookup proposalPath (files frozenChange))
+    Bytes.writeFile (evolutionDirectory </> evolutionIdName frozenId </> "change/proposal.dhall") (proposalBytes <> Char8.pack "\n")
+    noOpening (matchesCapturedInputs selectedContext) >>= right >>= right >>= assertFalse
+    beforeInvalid <- listDirectory evolutionDirectory
+    invalid <- success (createFactProposal kb (EvolutionName "Invalid") revision
+      (FactProposal [FactProposalStep (Rationale "Bad edit" []) [Null]] (Curation (RecipeId "sync") []))) >>= right
+    rejected invalid
+    afterInvalid <- listDirectory evolutionDirectory
+    unless (beforeInvalid == afterInvalid) (fail "Invalid proposal allocated a workspace")
     write "manifest.dhall" (manifest 'a' "Draft")
     write "before/Schema.hs" "selected source"
     write "before/Helpers.hs" "selected helper"
