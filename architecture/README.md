@@ -102,6 +102,7 @@ unresolved choice or proof, not a second lifecycle to administer.
 | [0025](adr/0025-lifecycle.md) | Agent setup, per-KB open/close and headless operation | Complete ordinary-user and automation journeys |
 | [0026](adr/0026-repository-layout.md) | Monorepo with explicit host/guest and interpreter package boundaries | Create packages as the implemented slice needs them |
 | [0027](adr/0027-judgement.md) | Typed model judgements in KB tools; Jev first | Guest continuation, actual provider response semantics and local secrets |
+| [0028](adr/0028-agentic-workflows.md) | Typed agentic tools and explicitly executable recipes | MicroHs portability, frozen proposal representation and model configuration |
 
 ## Remaining implementation proofs
 

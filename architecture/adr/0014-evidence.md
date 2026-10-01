@@ -313,15 +313,19 @@ An agent investigates, reasons and authors an evolution with its proposed change
 rationale and citations. It need not express its investigation as evolution code.
 Repeatable processing may read current evidence through the same typed helpers.
 
-### Recipes name the task, not an execution workflow
+### Recipes name the curation task
 
 A recipe is authored knowledge about how to interpret evidence and do useful
 work: for example, synchronize todos or update grocery prices. Its instructions
 are part of the KB's accumulated understanding, not tool configuration. Recipes
 are identified data in the accepted root, edited by the same typed evolution
-that edits domain facts. They are not scheduled jobs, executable entry points or
-kernel-managed sequences of agent actions. An agent follows their instructions
-and uses ordinary investigation and evolution tools.
+that edits domain facts. In the implemented instruction-led mode, an agent follows
+their instructions and uses ordinary investigation and evolution tools.
+[ADR 0028](0028-agentic-workflows.md#open-and-closed-recipes-share-ordinary-curation)
+proposes explicit flow execution alongside this mode. It owns the proposed mode
+and invocation contract; recipes remain neither scheduled jobs nor autonomous
+kernel-managed sequences of agent actions. The payload below describes today's
+instruction-only implementation, before that proposed extension.
 
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.
