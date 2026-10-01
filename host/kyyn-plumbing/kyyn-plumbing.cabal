@@ -24,6 +24,7 @@ library
     Kyyn.Plumbing.Protocol.PluginRegistration
     Kyyn.Plumbing.Protocol.ConnectorConfig
     Kyyn.Plumbing.Protocol.Evolution
+    Kyyn.Plumbing.Protocol.FactEdits
     Kyyn.Plumbing.Protocol.Curation
     Kyyn.Plumbing.Protocol.Recipes
     Kyyn.Plumbing.Protocol.EvolutionRecord

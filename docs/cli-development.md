@@ -327,6 +327,19 @@ Human module output places workspace-defined operations before reexports.
 
 If an older installation lacks the catalogue, reinstall with `bash tools/install-cli.sh`.
 
+For data-described fact edits, import `Kyyn.Evolution.Proposal` and the generated
+`Kyyn.Workspace.FactEdits`. The latter provides `RootEdit` and `proposalEvolution`:
+each root collection field gets a constructor such as `Edit_todos`, containing
+a typed `FactEdit` (`Append`, `Replace` or `Remove`). Group operations into
+`ProposedStep`s with a rationale, then pass a `ProposedCuration` to
+`proposalEvolution` to obtain an ordinary pure evolution.
+
+`Kyyn.Workspace.FactEdits` is generated only when Before and After have the same
+checked schema **and metadata**, and contain at least one domain fact collection.
+If the module is unavailable because the schema or metadata changes, use the
+ordinary `evolve`/`edit` combinators instead. A root without fact collections has
+no fact-edit proposal bindings.
+
 For tool authoring, inspect these modules on an accepted root or add
 `--evolution ID` to inspect its target:
 

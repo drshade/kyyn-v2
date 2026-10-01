@@ -17,5 +17,6 @@ cabal test graph-calendar --test-show-details=direct
 cabal test plugin-registration --test-show-details=direct
 cabal test judgements --test-show-details=direct
 node tools/test-agentic.mjs
+cabal test fact-edit-bindings --test-show-details=direct
 cabal test evolutions --test-show-details=direct
 cabal test workspace-evolutions --test-show-details=direct

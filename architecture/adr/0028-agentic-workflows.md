@@ -189,8 +189,8 @@ data ProposedStep edits = ProposedStep
 
 -- Generated for an example root's domain fact collections.
 data RootEdit
-  = Todos (FactEdit Todo)
-  | Meetings (FactEdit Meeting)
+  = Edit_todos (FactEdit Todo)
+  | Edit_meetings (FactEdit Meeting)
 ```
 
 `Rationale` already carries evidence citations. Generated root-specific sums
