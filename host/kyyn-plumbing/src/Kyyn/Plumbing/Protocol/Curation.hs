@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration) where
+module Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration, curationDeclarationShape, curationDeclarationValue) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, Object, object, (.=), (.:), withObject)
@@ -11,7 +11,10 @@ import Kyyn.Types.Curation
 import Kyyn.Types.Evidence (EvidenceId(..))
 
 curationShape :: Shape
-curationShape = Optional (Record [("recipe",text),("handled",List acknowledgement)])
+curationShape = Optional curationDeclarationShape
+
+curationDeclarationShape :: Shape
+curationDeclarationShape = Record [("recipe",text),("handled",List acknowledgement)]
   where
     text = Scalar TextScalar
     scope = Record [("plugin",text),("instance",text),("fetch",text)]
@@ -20,8 +23,11 @@ curationShape = Optional (Record [("recipe",text),("handled",List acknowledgemen
 
 curationValue :: Maybe Curation -> Value
 curationValue Nothing = tagged "None" Nothing
-curationValue (Just (Curation (RecipeId recipe) handled)) = tagged "Some" (Just
-  (object ["recipe" .= recipe,"handled" .= map acknowledgement handled]))
+curationValue (Just declaration) = tagged "Some" (Just (curationDeclarationValue declaration))
+
+curationDeclarationValue :: Curation -> Value
+curationDeclarationValue (Curation (RecipeId recipe) handled) =
+  object ["recipe" .= recipe,"handled" .= map acknowledgement handled]
   where
     scope (EvidenceScope plugin instanceName fetch) = object
       ["plugin" .= plugin,"instance" .= instanceName,"fetch" .= fetch]

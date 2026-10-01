@@ -71,11 +71,11 @@ const allowed = {
     'Kyyn.Domain.Publication', 'Kyyn.Domain.Path', 'Kyyn.Porcelain.Capability.RootPublication', 'Kyyn.Porcelain.Capability.Validation',
     'Kyyn.Porcelain.Capability.EvolutionExecution', 'Kyyn.Porcelain.Capability.EvolutionStore', 'Kyyn.Porcelain.Capability.EvolutionAuthoring',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Fact',
-    'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
+    'Kyyn.Domain.FactProposal', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
   'kyyn-porcelain-interpreters': ['Data.Bifunctor', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Porcelain.Protocol.RecipePersistence', 'Control.Monad', 'Control.Monad.Trans.Except',
-    'Kyyn.Porcelain.Protocol.CurationPersistence', 'Kyyn.Porcelain.Capability.RecipeStore',
+    'Kyyn.Domain.FactProposal', 'Kyyn.Plumbing.Protocol.FactProposal', 'Kyyn.Porcelain.Protocol.CurationPersistence', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Curation', 'Kyyn.Porcelain.Capability.PluginDocumentation', 'Kyyn.Plumbing.Protocol.Plugin',
     'Data.Char', 'Kyyn.Domain.Tap', 'Kyyn.Plumbing.Protocol.Tap', 'Kyyn.Porcelain.Capability.PluginDiscovery',
     'Kyyn.Domain.Tool', 'Kyyn.Domain.Plugin', 'Kyyn.Porcelain.Capability.Tool',
@@ -105,7 +105,7 @@ const allowed = {
     'MicroHs.SymTab', 'MicroHs.StateIO', 'MicroHs.TypeCheck',
   ],
   'kyyn-runtime': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Curation', 'Data.List', 'Text.JSON.Types', 'Text.JSON.String', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Diagnostic', 'Kyyn.Runtime.Json', 'Kyyn.Types.Fact', 'Kyyn.Types.Query',
-    'Kyyn.Evolution.Internal', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Program', 'Kyyn.Runtime.Validation'],
+    'Kyyn.Evolution.Proposal', 'Kyyn.Evolution.Internal', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Program', 'Kyyn.Runtime.Validation'],
   'kyyn-plumbing-interpreters': [
     'Data.Word', 'Numeric', 'System.IO.Error', 'System.Random',
     'Control.Concurrent.Async', 'Control.Exception', 'Data.ByteString', 'Effectful',
@@ -119,6 +119,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.FactProposal': ['Data.Aeson', 'Kyyn.Types.Curation', 'Kyyn.Types.Evolution'],
   'Kyyn.Domain.Curation': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Fact', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Curation', 'Data.List', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Tool': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Evidence': ['Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
@@ -145,6 +146,11 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.FactProposal': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson',
+    'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FactProposal', 'Kyyn.Domain.FileTree',
+    'Kyyn.Domain.Path', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence',
+    'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Protocol.Curation', 'Kyyn.Plumbing.Protocol.FactEdits'],
   'Kyyn.Plumbing.Protocol.FactEdits': ['Data.List', 'Data.Text', 'Data.Text.Encoding',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],

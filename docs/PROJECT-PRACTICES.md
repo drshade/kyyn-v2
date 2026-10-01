@@ -26,9 +26,18 @@ it using the public proposal SDK and generated interpreter, checks observations
 with the ordinary host diff derivation, and materializes/reloads facts through
 RootStore. It also checks failure after a preceding successful edit returns no
 partial root. The fixture intentionally has no Eq/Show instances on domain types.
-This does not yet exercise a model provider, whole proposal-file persistence,
-guest validators, candidate acceptance or a recipe CLI. It is in full integration,
+The complete proposal (including rationale, citations and curation) round-trips
+through Dhall and the generated frozen evolution produces the same observations.
+This does not yet exercise a model provider, guest validators, candidate acceptance
+or a recipe CLI. It is in full integration,
 not the fast check.
+
+`node tools/test-fact-proposal.mjs INSTALLED_EXECUTABLE` exercises a captured
+Dhall proposal through repeated checking, review, stale-input refusal, malformed
+proposal preservation and ordinary Git acceptance. It verifies retained citations,
+unchanged schema/recipes and archived proposal data. The fixture authors the
+workspace directly; the `roots` suite separately checks `createFactProposal`.
+This installed journey is in full integration and does not call a model.
 
 `KYYN_TEST_TOOLCHAIN=/path/to/staged/microhs node tools/test-agentic.mjs`
 compiles the proof fixture under GHC 9.10.3 (override with `KYYN_TEST_GHC`) and

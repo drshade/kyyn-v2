@@ -25,6 +25,7 @@ library
     Kyyn.Plumbing.Protocol.ConnectorConfig
     Kyyn.Plumbing.Protocol.Evolution
     Kyyn.Plumbing.Protocol.FactEdits
+    Kyyn.Plumbing.Protocol.FactProposal
     Kyyn.Plumbing.Protocol.Curation
     Kyyn.Plumbing.Protocol.Recipes
     Kyyn.Plumbing.Protocol.EvolutionRecord
@@ -47,5 +48,5 @@ library
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0,
+  build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
     cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson ==2.2.5.0

@@ -340,6 +340,12 @@ If the module is unavailable because the schema or metadata changes, use the
 ordinary `evolve`/`edit` combinators instead. A root without fact collections has
 no fact-edit proposal bindings.
 
+Prepared fact proposals keep their operations, rationale and curation declaration
+in `change/proposal.dhall`. Checking decodes that captured file and supplies
+`KyynFrozenProposal.proposal` to the ordinary evolution entry; no model is called.
+Editing the file requires checking again before acceptance. The proposal-authoring
+operation currently exists in the host API; recipe execution is not yet a CLI command.
+
 For tool authoring, inspect these modules on an accepted root or add
 `--evolution ID` to inspect its target:
 

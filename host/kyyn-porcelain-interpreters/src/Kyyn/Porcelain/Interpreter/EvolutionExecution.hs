@@ -25,6 +25,7 @@ import qualified Kyyn.Plumbing.Protocol.Plugin as Plugin
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Protocol.Evolution (evolutionSources, decodeEvolutionReply, mergeEvolutionSources)
+import Kyyn.Plumbing.Protocol.FactProposal (lowerProposal)
 import Kyyn.Plumbing.Protocol.Recipes (knowledgeBaseValue)
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
@@ -44,7 +45,8 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
   unless (target == preparedCode) (reject "evolution.after-source" "Prepared After does not match the captured target")
   CheckedValue _ input <- proposed (loadRootValueForChecking source)
   old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` closure])
-  combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,change,sdk])
+  lowered <- proposed (lowerProposal expected after change)
+  combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,lowered,sdk])
   prepared <- checked "evolution.prepare" (evolutionSources expected after combined)
   compiled <- proposed (first (map (compilerContext "evolution")) <$> compileGuest prepared)
   let knowledge = Value.KnowledgeBase input recipes
