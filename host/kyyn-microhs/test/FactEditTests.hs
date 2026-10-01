@@ -98,6 +98,16 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
   restored <- right (runPureEff (runDhallHandling (decodeValue shape loaded)))
   unless (restored == proposalValue (proposal operations)) (fail "Dhall proposal round trip changed the operations")
   change <- right (runPureEff (runDhallHandling (proposalChange contract (proposal operations))))
+  renamed <- right (checkContract root (SchemaMetadata [] []
+    [CollectionDecl "renamed" "todos" [], CollectionDecl "flags" "flags" []]) >>= checkRootLayout)
+  case runPureEff (runDhallHandling (lowerProposal contract renamed change)) of
+    Left _ -> pure ()
+    Right _ -> fail "Proposal accepted changed endpoint metadata"
+  invalidPath <- right (relativePath "proposal.dhall")
+  invalidChange <- right (fileTree [(invalidPath,"True")])
+  case runPureEff (runDhallHandling (lowerProposal contract contract invalidChange)) of
+    Left _ -> pure ()
+    Right _ -> fail "Malformed Dhall reached the guest compiler"
   lowered <- right (runPureEff (runDhallHandling (lowerProposal contract contract change)))
   forM_ (files lowered) $ \(relative,bytes) -> Bytes.writeFile (temporary </> relativeName relative) bytes
   compile (command "ghc-9.10.3" (["-v0","-i"] ++ include ++ ["-outputdir",temporary </> "objects","Main.hs","-o",native]))

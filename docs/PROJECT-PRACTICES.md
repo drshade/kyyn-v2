@@ -32,6 +32,13 @@ This does not yet exercise a model provider, guest validators, candidate accepta
 or a recipe CLI. It is in full integration,
 not the fast check.
 
+`node tools/test-fact-proposal.mjs INSTALLED_EXECUTABLE` exercises a captured
+Dhall proposal through repeated checking, review, stale-input refusal, malformed
+proposal preservation and ordinary Git acceptance. It verifies retained citations,
+unchanged schema/recipes and archived proposal data. The fixture authors the
+workspace directly; the `roots` suite separately checks `createFactProposal`.
+This installed journey is in full integration and does not call a model.
+
 `KYYN_TEST_TOOLCHAIN=/path/to/staged/microhs node tools/test-agentic.mjs`
 compiles the proof fixture under GHC 9.10.3 (override with `KYYN_TEST_GHC`) and
 MicroHs. A scripted host exchanges real pipe frames with the guest's Agentic
