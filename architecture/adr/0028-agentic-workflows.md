@@ -117,11 +117,12 @@ The library's model-facing schema may need a different projection from the
 runtime protocol; make that conversion explicit rather than silently changing
 the guest wire encoding. Unsupported projections fail before making model calls.
 
-Upstream currently defaults to GHC.Generic-derived contracts and uses its own
-JSON-shaped `Value`. The needed generated-codec path must work without requiring
-GHC metadata in the MicroHs guest. This is an integration gate, not a proven
-automatic mapping. Internal library tuples or floating-point values do not
-expand Kyyn's public schema vocabulary by accident.
+Upstream supports explicit codecs under both GHC and MicroHs; Generic deriving
+of `Contract` and `Options` is GHC-only. It uses its own JSON-shaped `Value`.
+Kyyn must generate the explicit codecs without requiring GHC metadata in the
+guest. The library's explicit-codec support is proven below; Kyyn's automatic
+mapping remains an integration gate. Internal library tuples or floating-point
+values do not expand Kyyn's public schema vocabulary by accident.
 
 [ADR 0027](0027-judgement.md) owns Jev semantics. Its explicit criteria,
 fixed-point values, whole-batch errors and ordinal scale answers are not replaced
@@ -267,27 +268,35 @@ Production response caching or mandatory transcript retention is not selected.
 
 ## Compatibility evidence and required proof
 
-Inspected public library commit
-[`61c87ba`](https://github.com/drshade/haskell-agentic/tree/61c87ba42c16efe9ddda1aa4d5a8721b98d6cfef),
-package `agentic` 0.2.0.1, against Kyyn's pinned MicroHs
+Verified library commit
+[`9c74f01`](https://github.com/drshade/haskell-agentic/tree/9c74f019424d88c20ac457b2e655585c5df7c30f),
+package `agentic` 0.2.0.2, against Kyyn's pinned MicroHs
 [`8bf3d4d`](https://github.com/augustss/MicroHs/tree/8bf3d4d4242c8707b31c2338716977d24a95ad39)
-on 2026-10-01. Disposable probes used the installed native compiler and libraries:
+on 2026-10-01. Using the installed native compiler, libraries and bundled cpphs,
+with cleared package/module paths and explicit core/library include directories:
 
-- A `Control.Arrow`/`Data.Text` baseline compiled and its combinator artifact ran.
-- A module importing `Agentic`, compiled with `-fno-code` and the core source
-  directory on the include path, failed in `Agentic.Value` at `T.concatMap`.
-- An independent `GHC.Generics (Datatype, Constructor, Selector)` import failed
-  at `Datatype`. MicroHs's module is a dummy Generic implementation; these
-  metadata classes used by `Agentic.Contract` are not exported.
-- No source was patched and no full flow was compiled or executed. These are
-  observed blockers, not an exhaustive compatibility inventory.
+- `mhs ... -fno-code Agentic` passed.
+- Compiled upstream's `agentic/test/Portable.hs` to a combinator artifact and
+  executed it using `mhseval +RTS -r<artifact> -RTS`: all 14 checks passed.
+- The proof covers explicit record and payload-bearing sum codecs, typed tool
+  calls/results, a nested drafting tool, malformed output followed by correction,
+  an applicative Judgement batch, and flow descriptions. Interpretation uses a
+  pure non-IO monad with scripted handlers.
+- Upstream runs the same portable test under GHC and has a MicroHs workflow
+  pinned to the same compiler revision. This local verification ran MicroHs;
+  it did not independently rerun the GHC suite or call live providers.
 
-Upstream requests: a MicroHs-supported core (including text operations), a
-non-Generic generated-codec path, and Judgement alignment. The one-turn provider
-abstraction and generic monadic interpreter already exist; do not request or
-reimplement them as missing features. Kyyn can own shared run accounting at its
-host capability boundary; usage metadata needed for monetary limits must be
-checked against provider support.
+The earlier text-operation and Generic-metadata blockers are resolved upstream:
+portable helpers replace unsupported operations and Generic deriving is excluded
+under MicroHs. Explicit codecs remain available. No Kyyn fork or source patch
+was required. This establishes core portability, not Kyyn's generated-codec,
+wire, provider or recipe integration; no dependency was vendored by this proof.
+
+Judgement alignment remains an upstream integration discussion. The one-turn
+provider abstraction and generic monadic interpreter already exist; do not
+request or reimplement them as missing features. Kyyn can own shared run
+accounting at its host capability boundary; usage metadata needed for monetary
+limits must be checked against provider support.
 
 Before production integration, demonstrate a generated-contract flow under GHC
 and pinned MicroHs with a recording host: typed draft, nested tool, malformed
