@@ -22,6 +22,7 @@ import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Plumbing.Protocol.Validation (parseReport)
 import Kyyn.Plumbing.Protocol.Curation (parseCuration)
 import Kyyn.Plumbing.Protocol.Recipes (parseKnowledgeBase)
+import Kyyn.Plumbing.Protocol.FactEdits (factEditBindings)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
@@ -69,6 +70,10 @@ evolutionSources before after authored = do
 evolutionBindings :: RootContract -> RootContract -> Either String FileTree
 evolutionBindings before after = do
   collections <- sequence [collectionBindings "Before" before, collectionBindings "After" after]
+  proposals <- if contractId (rootSchema before) == contractId (rootSchema after)
+      && not (null (collectionContracts (rootSchema after)))
+    then factEditBindings after
+    else fileTree []
   codecs <- sequence [do
     source <- generateCodecs (codecName index) (rootType (rootSchema contract))
     path <- relativePath (codecName index ++ ".hs")
@@ -95,7 +100,7 @@ evolutionBindings before after = do
                  name ++ " :: Rationale -> Edit " ++ endpoint ++ " () -> Evolution " ++ endpoint ++ " " ++ endpoint,
                  name ++ " = Internal.edit " ++ binding] |
           (name,binding,endpoint,role) <- [("editBefore","beforeRoot",beforeType,"Before"),("edit","afterRoot",afterType,"After")]]
-  fileTree ((path,utf8 source):codecs ++ concatMap files collections)
+  fileTree ((path,utf8 source):codecs ++ concatMap files collections ++ files proposals)
   where
     declarations = [("beforeRoot",before),("afterRoot",after)]
     beforeType = "(KnowledgeBase " ++ haskellType (rootType (rootSchema before)) ++ ")"

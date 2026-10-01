@@ -19,6 +19,17 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test fact-edit-bindings --test-show-details=direct`, with `KYYN_TEST_ROOT`
+and `KYYN_TEST_TOOLCHAIN` set, checks generated fact-edit bindings for a same-schema
+workspace under GHC and MicroHs. It round-trips edit data through Dhall, applies
+it using the public proposal SDK and generated interpreter, checks observations
+with the ordinary host diff derivation, and materializes/reloads facts through
+RootStore. It also checks failure after a preceding successful edit returns no
+partial root. The fixture intentionally has no Eq/Show instances on domain types.
+This does not yet exercise a model provider, whole proposal-file persistence,
+guest validators, candidate acceptance or a recipe CLI. It is in full integration,
+not the fast check.
+
 `KYYN_TEST_TOOLCHAIN=/path/to/staged/microhs node tools/test-agentic.mjs`
 compiles the proof fixture under GHC 9.10.3 (override with `KYYN_TEST_GHC`) and
 MicroHs. A scripted host exchanges real pipe frames with the guest's Agentic

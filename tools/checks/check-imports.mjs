@@ -145,6 +145,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.FactEdits': ['Data.List', 'Data.Text', 'Data.Text.Encoding',
+    'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
+    'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Capability.HttpTransport': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Types.PluginHost'],
   'Kyyn.Plumbing.Capability.PluginInteraction': ['Effectful', 'Effectful.Dispatch.Dynamic'],
   'Kyyn.Plumbing.Protocol.PluginHost': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.Secret', 'Kyyn.Types.PluginHost'],
@@ -194,7 +197,7 @@ const plumbingModules = {
     'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Plumbing.Protocol.EvolutionRecord.Contract',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.EvolutionReport',
     'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact'],
-  'Kyyn.Plumbing.Protocol.Evolution': ['Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Plumbing.Protocol.Curation', 'Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
+  'Kyyn.Plumbing.Protocol.Evolution': ['Kyyn.Plumbing.Protocol.FactEdits', 'Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Plumbing.Protocol.Curation', 'Control.Monad', 'Data.List', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding',
     'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.Foldable',
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Diagnostic', 'Kyyn.Plumbing.Protocol.Validation',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
