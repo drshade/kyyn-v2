@@ -1,7 +1,7 @@
 ---
 id: 0027
 title: 'Agentic judgements backed by Jev'
-status: proposed
+status: accepted
 date: 2026-10-02
 ---
 
@@ -42,8 +42,7 @@ interpret :: Flow input output -> input -> Tool (Either FetchError output)
 Remove the public `Kyyn.Judgement` modules and duplicate shared question/answer
 types. There is no legacy shim. Agentic owns probability, choice and score
 semantics, including its basis-point probability representation and weighted
-`Double` score. Do not round scores to a Kyyn-specific unit or add required
-yes/no descriptions absent from the upstream API.
+`Double` score.
 
 Agentic values are internal workflow values. This does not expand the public
 KB schema subset: a registered tool's output still needs a supported declared
@@ -73,8 +72,8 @@ another Jev request builder or answer model. Provider fixes belong upstream.
 
 Resolve `JEV_TOKEN` from the selected KB's checkout-local SecretStore, then pass
 it explicitly to the adapter. Missing or empty keys refuse before constructing
-the provider; never fall back to environment credentials. Keep the existing
-`jev-1.13.0` model selection for this change. No new configuration registry or
+the provider; never fall back to environment credentials. Jev requests use model
+`jev-1.13.0`. No new configuration registry or
 usage limits. The guest never receives the credential.
 
 Translate provider/HTTP exceptions into sanitized host failures, following the
