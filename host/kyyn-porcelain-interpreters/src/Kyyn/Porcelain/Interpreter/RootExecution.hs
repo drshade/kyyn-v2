@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution) where
 
-import Control.Monad (unless, forM)
+import Control.Monad (unless, forM, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode, object, (.=))
 import Data.Bifunctor (first)
@@ -21,12 +21,15 @@ import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Plumbing.Protocol.Query (queryBindings, querySources, decodeQueryReply)
+import Kyyn.Plumbing.Protocol.Recipe (recipeCheckSources)
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins, validatePlugins)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareTools)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareTools, prepareToolBindings)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
@@ -34,9 +37,18 @@ runRootExecution
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
-  PrepareRoot root@(Root contract _ code _ _) -> runExceptT $ do
+  PrepareRoot root@(Root contract _ code _ recipes) -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
     _ <- ExceptT (prepareTools code plugins)
+    let closed = [(name,entry) | Fact (FactId name) (ClosedAgent entry) <- recipes]
+    unless (null closed) $ do
+      (sources,_) <- ExceptT (prepareToolBindings code plugins)
+      forM_ closed $ \(name,entry@(FlowEntryRef selected)) -> do
+        source <- checked "recipe.signature" (recipeCheckSources contract entry sources)
+        let context = errorDiagnostic "recipe.signature"
+              ("Recipe " ++ name ++ ": expected " ++ selected ++ " :: Flow (RecipeInput Root) (ProposedCuration RootEdit)")
+        _ <- ExceptT (first (context :) <$> compileGuest source)
+        pure ()
     RootDefinition _ _ validator declarations _ authored <- ExceptT (readRootDefinition code)
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"

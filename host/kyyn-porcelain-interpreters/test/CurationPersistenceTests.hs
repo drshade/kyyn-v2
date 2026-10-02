@@ -74,7 +74,9 @@ curationPersistenceTests = do
     (fail "Old recipe payload no longer reads as OpenAgent")
   unless (decodeRecipeData Nothing == Right []) (fail "Absent recipe data is not empty")
   unless (all (isLeft . encodeRecipeData)
-      [[declaration,declaration], [Fact (FactId "bad-name") (OpenAgent "x")]])
+      ([[declaration,declaration], [Fact (FactId "bad-name") (OpenAgent "x")]] ++
+       [[Fact (FactId "valid") (ClosedAgent (FlowEntryRef entry))] |
+         entry <- ["", "reconcile", "tasks.reconcile", "Tasks.Reconcile", "Tasks.reconcile\nmain = undefined"]]))
     (fail "Duplicate or invalid recipe IDs accepted")
   unless (all (isLeft . decodeRecipeData . Just)
       ["./external.dhall", "True", "[{ id = \"bad-name\", value = { instructions = \"x\" } }]"])

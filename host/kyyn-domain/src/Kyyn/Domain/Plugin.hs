@@ -5,7 +5,7 @@ module Kyyn.Domain.Plugin
   , PluginDescription(..), PluginGuide(..)
   , ConnectorTypeName(..), BindingName(..), ConnectorName(..), QualifiedTypeName(..), ConnectorDeclaration(..)
   , CapturedMethodDeclaration(..), MethodName(..), methodName, connectorTypeName, bindingName, connectorName, qualifiedTypeName
-  , PluginEntryKind(..), PluginSignature(..), expectedPluginSignature
+  , PluginEntryKind(..), PluginSignature(..), expectedPluginSignature, bindingModule
   ) where
 
 import Data.Char (isAlphaNum, isUpper, isAsciiLower, isAsciiUpper, isDigit)
@@ -58,6 +58,12 @@ qualifiedTypeName :: String -> Either String QualifiedTypeName
 qualifiedTypeName value
   | length (segments value) >= 2 && all (identifier isAsciiUpper) (segments value) = Right (QualifiedTypeName value)
   | otherwise = Left "Expected a qualified Haskell type name: uppercase module and type identifiers separated by dots"
+
+bindingModule :: String -> Either String String
+bindingModule selected = case reverse (segments selected) of
+  binding : modules@(_:_) | identifier isAsciiLower binding && all (identifier isAsciiUpper) modules ->
+    Right (take (length selected - length binding - 1) selected)
+  _ -> Left "Expected a qualified Haskell binding, such as Schema.validate"
 
 identifier :: (Char -> Bool) -> String -> Bool
 identifier first (c:cs) = first c && all (\x -> isAsciiLower x || isAsciiUpper x || isDigit x || x `elem` "_'") cs
