@@ -19,6 +19,15 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test agentic-contracts --test-show-details=direct`, with `KYYN_TEST_ROOT`
+and `KYYN_TEST_TOOLCHAIN` selected, generates Agentic contracts from Kyyn's
+resolved type representation and compiles them with GHC and MicroHs. It checks
+typed drafting with malformed-output retry, records, payload sums, optional tags,
+FactIds and exact integer strings. Unsupported shapes fail during generation.
+This focused proof uses an in-memory provider; it does not exercise a production
+model capability, KB model configuration, provider HTTP or the recipe-run CLI.
+It belongs to full integration, not the fast check.
+
 `cabal test fact-edit-bindings --test-show-details=direct`, with `KYYN_TEST_ROOT`
 and `KYYN_TEST_TOOLCHAIN` set, checks generated fact-edit bindings for a same-schema
 workspace under GHC and MicroHs. It round-trips edit data through Dhall, applies

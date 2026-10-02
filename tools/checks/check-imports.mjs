@@ -146,6 +146,9 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.SchemaInspection.Agentic': ['Data.List', 'Data.Text', 'Data.Text.Encoding',
+    'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
+    'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
   'Kyyn.Plumbing.Protocol.FactProposal': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson',
     'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FactProposal', 'Kyyn.Domain.FileTree',
@@ -244,6 +247,7 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Runtime.AgenticContract': ['Agentic.Contract', 'Agentic.Schema', 'Agentic.Value', 'Data.Text', 'Kyyn.Runtime.Json', 'Text.JSON.Types'],
   'Kyyn.Runtime.PluginHost': ['Kyyn.Runtime.Json', 'Kyyn.Runtime.Plugin', 'Kyyn.Types.PluginHost', 'Kyyn.Types.Plugin', 'Kyyn.Types.Program', 'Kyyn.Types.Evidence'],
   'Kyyn.Porcelain.Protocol.PluginHost': ['Kyyn.Plumbing.Capability.FileAcquisition', 'Data.Aeson', 'Data.Text', 'Data.ByteString.Lazy', 'Effectful', 'Kyyn.Plumbing.Capability.GuestExecution', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Types.Plugin', 'Kyyn.Plumbing.Protocol.PluginMessages', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.HttpTransport', 'Kyyn.Plumbing.Capability.SecretStore', 'Kyyn.Plumbing.Capability.PluginInteraction', 'Kyyn.Plumbing.Protocol.PluginHost', 'Kyyn.Porcelain.Protocol.PluginBroker'],
   'Kyyn.Porcelain.Interpreter.PluginLogin': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.GuestExecution', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.HttpTransport', 'Kyyn.Plumbing.Capability.SecretStore', 'Kyyn.Plumbing.Capability.PluginInteraction', 'Kyyn.Porcelain.Capability.PluginLogin', 'Kyyn.Porcelain.Protocol.PluginHost'],

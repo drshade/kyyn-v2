@@ -159,6 +159,15 @@ test-suite plugin-registration
     bytestring, text, filepath, directory, temporary ==1.3, aeson, process,
     kyyn-porcelain, kyyn-porcelain-interpreters
 
+test-suite agentic-contracts
+  type: exitcode-stdio-1.0
+  main-is: AgenticContractTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
+    bytestring, text, filepath, directory, temporary ==1.3, process
+
 test-suite fact-edit-bindings
   type: exitcode-stdio-1.0
   main-is: FactEditTests.hs

@@ -8,6 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Plumbing.Capability.SchemaInspection.Codecs
+    Kyyn.Plumbing.Capability.SchemaInspection.Agentic
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
     Kyyn.Plumbing.Capability.GuestExecution Kyyn.Plumbing.Capability.FileAcquisition
