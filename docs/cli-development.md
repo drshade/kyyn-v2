@@ -497,9 +497,35 @@ into a flow. Failures return through the ordinary tool result; Ctrl-C cancels
 the invocation. Model requests use the configuration captured when the tool was
 prepared. No model is contacted by listing or showing a tool.
 
-Automatic bindings for authored ADT model contracts and executable closed recipes
-are not yet exposed. The current facade supports upstream primitive contracts and
-explicit codecs; do not maintain a second handwritten schema for KB types.
+For an authored type, define it in a separate module:
+
+```haskell
+-- Todos.hs
+module Todos where
+data Todo = Todo { name :: String, completed :: Bool }
+```
+
+Then import its generated instance in the flow module:
+
+```haskell
+import Todos (Todo)
+import Kyyn.Contracts.Todos.Todo ()
+
+extractTodo :: Flow Text.Text Todo
+extractTodo = A.draft "Extract the actionable task from this evidence."
+```
+
+Kyyn generates the `Contract Todo` instance and its codec from the checked type;
+the empty import list brings the instance into scope. No deriving clause or
+handwritten codec is needed. Keep `Todos` independent of flow/generated-contract
+modules. The import convention is `Kyyn.Contracts.<defining module>.<type>`;
+inspect it with `guest module show Kyyn.Contracts.Todos.Todo` inside the KB.
+Generated modules also export a typed `codec` for explicit-codec uses.
+
+Select monomorphic data/newtype declarations. For aliases, import the underlying
+type's defining contract; for a standalone list or applied generic contract, use
+a named data/newtype wrapper. Existing primitive library contracts still work.
+Executable closed recipes are not yet exposed.
 The existing `Kyyn.Judgement` API is unchanged; Agentic's System One bridge is not
 yet supplied.
 

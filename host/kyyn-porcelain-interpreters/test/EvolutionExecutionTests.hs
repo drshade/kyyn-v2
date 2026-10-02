@@ -112,6 +112,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
 
 schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
 schemaMock count contract = interpret $ \_ -> \case
+  InspectImports {} -> error "Unexpected import inspection"
   InspectType {} -> error "Unexpected plain type inspection"
   InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   InspectSchema source -> do

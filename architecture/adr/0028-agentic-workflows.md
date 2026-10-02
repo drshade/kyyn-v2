@@ -25,10 +25,10 @@ Existing Jev Judgement semantics remain unchanged. Closed agents propose only
 fact edits, with existing curation declarations, not schema or code changes.
 Flows remain inspectable and testable with deterministic fixtures.
 
-The signatures and integration choices below are proposals, not implemented APIs.
-The product choices below are owner-established; concrete generated bindings and
-host integration still require proof. This ADR does not authorize production
-integration.
+The product choices below are owner-established. Ordinary tool/model execution
+and generated contracts are implemented; closed-recipe execution and the Agentic
+Judgement bridge remain unimplemented. The wider workflow signatures below are
+architectural sketches, not a claim that all these APIs exist.
 
 ## Decision
 
@@ -126,11 +126,36 @@ The library's model-facing schema may need a different projection from the
 runtime protocol; make that conversion explicit rather than silently changing
 the guest wire encoding. Unsupported projections fail before making model calls.
 
+Keep authored type definitions in modules independent of flows and generated
+contracts. A flow requests a generated instance through an ordinary import:
+
+```haskell
+import Todos (Todo)
+import Kyyn.Contracts.Todos.Todo ()
+
+extractTodo :: Flow Text Todo
+extractTodo = draft "Extract the actionable task from this evidence."
+```
+
+`Kyyn.Contracts.<Module>.<Type>` names the type at its defining module. The host
+parses authored imports with the compiler, inspects each requested type, and
+generates its codec plus `Contract` instance before compiling the authored flow.
+Imports in other authored helper modules count too; repeated imports select the
+same instance. Generated public modules are available through guest API discovery.
+There is no second registration list, handwritten structural contract, or generated
+flow. Agents and humans own the instructions, tool choices and flow composition.
+
+Initially generate instances for monomorphic `data`/`newtype` declarations at
+their defining names. A type alias is not a new instance identity: import the
+underlying nominal type's contract. Use a named wrapper for a standalone model
+contract over a container or applied generic type. This avoids competing with
+upstream's existing instances. Defining modules must not import their generated
+contracts, directly or through a flow; that would make inspection circular.
+
 Upstream supports explicit codecs under both GHC and MicroHs; Generic deriving
 of `Contract` and `Options` is GHC-only. It uses its own JSON-shaped `Value`.
-Kyyn must generate the explicit codecs without requiring GHC metadata in the
-guest. The library's explicit-codec support is proven below; Kyyn's automatic
-mapping remains an integration gate. Internal library tuples or floating-point
+Kyyn generates explicit codecs and instances without requiring GHC metadata in the
+guest. Internal library tuples or floating-point
 values do not expand Kyyn's public schema vocabulary by accident.
 
 [ADR 0027](0027-judgement.md) owns Jev semantics. Its explicit criteria,

@@ -114,6 +114,7 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
 
 schemaMock :: CheckedContract -> CheckedContract -> Eff (SchemaInspection : es) a -> Eff es a
 schemaMock input output = interpret $ \_ -> \case
+  InspectImports {} -> error "Unexpected import inspection"
   InspectType {} -> error "Unexpected plain type inspection"
   InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   InspectSchema source -> do
@@ -154,6 +155,7 @@ recordExecution = interpret $ \_ -> \case
 recordInspection :: (State [String] :> es, SchemaInspection :> es)
   => Eff (SchemaInspection : es) a -> Eff es a
 recordInspection = interpret $ \_ -> \case
+  InspectImports {} -> error "Unexpected import inspection"
   InspectType {} -> error "Unexpected plain type inspection"
   InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   InspectSchema source -> do

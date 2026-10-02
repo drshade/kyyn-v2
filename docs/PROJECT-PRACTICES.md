@@ -22,7 +22,8 @@ does not become another specification of the product's runtime workflows.
 `cabal test model-tools --test-show-details=direct`, with `KYYN_TEST_ROOT` and
 `KYYN_TEST_TOOLCHAIN` selected, exercises captured model configuration, malformed
 root configuration, generated guest dispatch and the ordinary tool interpreter.
-The recording provider checks nested drafting, malformed-output retry and provider
+The recording provider checks generated instances requested by parsed imports,
+nested drafting over an authored record, malformed-output retry and provider
 refusal across real MicroHs pipes. No credentials or live providers are used.
 This check belongs to full integration, not the fast gate.
 

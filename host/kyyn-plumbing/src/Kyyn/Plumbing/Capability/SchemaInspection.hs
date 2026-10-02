@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.SchemaInspection
-  ( SchemaInspection(..), InspectedSchema(..), inspectSchema, inspectType, inspectPluginFunction, SchemaSource, schemaSource, schemaSources, selectedType ) where
+  ( SchemaInspection(..), InspectedSchema(..), inspectSchema, inspectType, inspectImports, inspectPluginFunction, SchemaSource, schemaSource, schemaSources, selectedType ) where
 
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
@@ -34,6 +34,7 @@ selectedType :: SchemaSource -> String
 selectedType (SchemaSource name _) = name
 
 data SchemaInspection :: Effect where
+  InspectImports :: FileTree -> SchemaInspection m (Either [Diagnostic] [(RelativePath,[String])])
   InspectSchema :: SchemaSource -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
   InspectType :: FileTree -> QualifiedTypeName -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
   InspectPluginFunction :: FileTree -> PluginEntryKind -> String -> SchemaInspection m (Either [Diagnostic] PluginSignature)
@@ -45,6 +46,10 @@ inspectSchema = send . InspectSchema
 
 inspectType :: SchemaInspection :> es => FileTree -> QualifiedTypeName -> Eff es (Either [Diagnostic] InspectedSchema)
 inspectType sources = send . InspectType sources
+
+inspectImports :: SchemaInspection :> es
+  => FileTree -> Eff es (Either [Diagnostic] [(RelativePath,[String])])
+inspectImports = send . InspectImports
 
 inspectPluginFunction :: SchemaInspection :> es => FileTree -> PluginEntryKind -> String -> Eff es (Either [Diagnostic] PluginSignature)
 inspectPluginFunction sources kind = send . InspectPluginFunction sources kind

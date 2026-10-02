@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Werror #-}
 module Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, forM)
 import Data.Bifunctor (first)
 import Data.Coerce (coerce)
 import qualified Data.ByteString as Bytes
@@ -13,11 +13,12 @@ import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Diagnostic (Diagnostic, compilerContext)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure(..))
-import Kyyn.Domain.Path (scopePath, scopedPath, RelativePath)
+import Kyyn.Domain.Path (scopePath, scopedPath, RelativePath, relativeName)
+import Data.List (isSuffixOf)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Plugin (QualifiedTypeName(..), PluginEntryKind, PluginSignature)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectPluginSignature, inspectionSettings)
+import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectionSettings)
 import Kyyn.MicroHs.Interpreter.InspectionCache (InspectionCache, cachedInspection)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature)
@@ -34,6 +35,17 @@ runSchemaInspectionIO
   :: (IOE :> es, DhallHandling :> es, FileSystem :> es, GuestCompilation :> es, GuestExecution :> es, Failure :> es)
   => GuestToolchain -> Maybe InspectionCache -> Eff (SchemaInspection : es) a -> Eff es a
 runSchemaInspectionIO toolchain cache = interpret $ \_ -> \case
+  InspectImports tree -> withTemporaryScope $ \scope -> do
+    forM_ (files tree) $ \(path,bytes) -> writeBytes scope path bytes
+    let GuestToolchain compiler = toolchain
+    results <- forM [path | (path,_) <- files tree, ".hs" `isSuffixOf` relativeName path] $ \path -> do
+      result <- liftIO (inspectModuleImports (scopePath compiler) (scopedPath scope path))
+      case result of
+        Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
+        Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.imports" message])
+        Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "guest.imports" message])
+        Right imports -> pure (Right (path,imports))
+    pure (sequence results)
   InspectSchema source -> do
     inspected <- inspect toolchain cache (sourceFiles (schemaSources source)) (selectedType source)
     case inspected of
