@@ -7,7 +7,7 @@ build-type: Simple
 
 library
   hs-source-dirs: src ../../guest/kyyn-runtime/src
-  other-modules: Kyyn.Runtime.Json Kyyn.Runtime.ModelWire
+  other-modules: Kyyn.Runtime.Json Kyyn.Runtime.ModelWire Kyyn.Runtime.JudgementWire
   exposed-modules: Kyyn.Plumbing.Capability.SchemaInspection.Codecs
     Kyyn.Plumbing.Capability.SchemaInspection.Agentic
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
@@ -47,7 +47,6 @@ library
     Kyyn.Plumbing.Capability.PluginInteraction
     Kyyn.Plumbing.Capability.Judgement
     Kyyn.Plumbing.Capability.ModelTurn
-    Kyyn.Plumbing.Capability.Judgement.Jev
     Kyyn.Plumbing.Protocol.Judgement
     Kyyn.Plumbing.Protocol.ModelConfiguration
     Kyyn.Plumbing.Protocol.ModelTurn

@@ -17,14 +17,14 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSourc
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame, decodeFrameWith)
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
-import Kyyn.Types.Judgement (JudgementRequest)
+import Agentic.Questions (JudgeRequest)
 import qualified Agentic.Runtime as Agentic
 import qualified Kyyn.Plumbing.Protocol.ModelTurn as Model
 
 data ConnectorInterface = ConnectorInterface PluginName ConnectorTypeName [(MethodName,DataType,DataType)]
 data InstanceBinding = InstanceBinding BindingName PluginName ConnectorTypeName ConnectorName
 data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName Value
-  | ToolJudgement JudgementRequest
+  | ToolJudgement JudgeRequest
   | ToolModel Agentic.Conversation
 
 proxyModule :: PluginName -> ConnectorTypeName -> String
@@ -42,10 +42,10 @@ toolBindings interfaces bindings = do
       calls = unlines $ ["{-# LANGUAGE GADTs, EmptyDataDecls #-}",
         "module KyynToolCalls (Calls(..)" ++ concat [", Connector" ++ show i | (i,_) <- indexed] ++ ") where",
         "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)",
-        "import Kyyn.Types.Judgement (JudgementRequest, JudgementFailure, JudgementAnswer)",
+        "import Agentic.Questions (JudgeRequest, Answer)",
         "import qualified Agentic.Runtime as Agentic"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
         ["data Connector" ++ show i | (i,_) <- indexed] ++
-        ["data Calls a where", "  JudgementCall :: JudgementRequest -> Calls (Either JudgementFailure [JudgementAnswer])",
+        ["data Calls a where", "  JudgementCall :: JudgeRequest -> Calls (Either String [Answer])",
          "  ModelCall :: Agentic.Conversation -> Calls (Either String Agentic.Turn)"] ++
         ["  " ++ requestName i n ++ " :: ConnectorInstance Connector" ++ show i ++ " -> " ++ haskellType a ++
           " -> Calls (Either FetchError " ++ haskellType b ++ ")" | (i,_,_,n,a,b) <- requests]
@@ -65,20 +65,12 @@ toolBindings interfaces bindings = do
      "interpret flow input = runExceptT (A.interpret runtime flow input)",
      "runtime :: A.Runtime (ExceptT FetchError Tool)",
      "runtime = (A.runtimeWith (throwE . FetchError . show))",
-     "  { systemTwo = A.SystemTwo $ \\conversation ->",
+     "  { systemOne = A.SystemOne $ \\question ->",
+     "      lift (request (Calls.JudgementCall question)) >>= either (throwE . FetchError) pure",
+     "  , systemTwo = A.SystemTwo $ \\conversation ->",
      "      lift (request (Calls.ModelCall conversation)) >>= either (throwE . FetchError) pure }",
-     "-- | Lift a captured-read or Judgement tool action into a flow's effect monad.",
+     "-- | Lift a captured-read tool action into a flow's effect monad.",
      "liftTool :: Tool a -> ExceptT FetchError Tool a", "liftTool = lift"])
-  judgementModule <- source "Kyyn.Judgement" (unlines
-    ["module Kyyn.Judgement (module Kyyn.Judgement.Question, judge) where",
-     "import Kyyn.Judgement.Question", "import Kyyn.Judgement.Internal (judgeWith)",
-     "import Kyyn.Types.Program (request)", "import Kyyn.Connectors (Tool)", "import qualified KyynToolCalls as Calls",
-     "-- | Send an applicative batch over one context, returning all answers or one failure.",
-     "-- Set up the checkout-local credential with: kyyn-v2 --kb PATH secret set JEV_TOKEN",
-     "-- Example: judge (Context body) (ask (yesNo \"Does this need a reply?\" describe))",
-     "-- where describe True = \"Reply requested\"; describe False = \"No reply needed\".",
-     "judge :: Context -> Questions a -> Tool (Either JudgementFailure a)",
-     "judge = judgeWith (request . Calls.JudgementCall)"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",
      "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)","import Kyyn.Types.Program (Program)",
@@ -99,7 +91,7 @@ toolBindings interfaces bindings = do
      "type Tool = Program Calls.Calls"] ++ concat
     [[coerce n ++ " :: " ++ proxyModule p k ++ ".Instance",
       coerce n ++ " = ConnectorInstance " ++ show (coerce instanceName :: String)] | InstanceBinding n p k instanceName <- bindings])
-  pure (core:connectorModule:judgementModule:agenticModule:proxies)
+  pure (core:connectorModule:agenticModule:proxies)
 
 toolSources :: [ConnectorInterface] -> [InstanceBinding] -> DataType -> DataType -> String
   -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources

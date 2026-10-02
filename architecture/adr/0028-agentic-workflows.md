@@ -27,7 +27,7 @@ Flows remain inspectable and testable with deterministic fixtures.
 
 The product choices below are owner-established. Ordinary tool/model execution
 and generated contracts are implemented, including explicit closed-recipe execution
-into draft proposals. The Agentic Judgement bridge remains unimplemented. The wider workflow signatures below are
+into draft proposals and Jev-backed SystemOne judgements. The wider workflow signatures below are
 architectural sketches, not a claim that all these APIs exist.
 
 ## Decision

@@ -152,20 +152,15 @@ removal and contextual rejection codes. `node tools/test-compiler-diagnostics.mj
 INSTALLED_EXECUTABLE` checks authored schema and tool type errors through the
 installed evolution-check command.
 
-`cabal test judgement-provider --test-show-details=direct` checks Jev request and
-response mapping, fixed-point conversion/display, batch ordering, refusal and native handler behavior without a
-live provider. `cabal test judgements --test-show-details=direct`, with the guest
-toolchain selected below, compiles one captured-read/applicative-judgement tool
-under GHC and MicroHs and exchanges real pipe frames with a recording host.
-It checks heterogeneous answer assembly, whole-request refusal, malformed
-replies and query/validation/dependent-question compile refusals. Neither test
-uses a real credential or calls Jev.
-`node tools/test-judgement.mjs INSTALLED_EXECUTABLE` accepts a tool definition,
-then checks missing-secret and invalid-batch outcomes with no change to the
-accepted root. It also returns parameterised SDK choice/scale answers with a
-KB-owned enum through schema inspection and JSON/Dhall output, using deterministic
-fixture values rather than a live model. This is not a model-quality or
-provider-availability test.
+`cabal test judgement-provider --test-show-details=direct` checks the upstream
+Jev adapter mapping, explicit local credentials, sanitized failures and cancellation
+without live requests. `cabal test judgements --test-show-details=direct`, with the
+guest toolchain selected, compiles a captured-read/Agentic judgement flow under
+GHC and MicroHs and exchanges real pipe frames with a recording host. It checks
+heterogeneous answer assembly, flow failure, malformed replies and query/validation/
+dependent-question rejection. `node tools/test-judgement.mjs INSTALLED_EXECUTABLE`
+checks API discovery and missing-secret refusal through ordinary registered tools.
+No live Jev request is made.
 `cabal test contract-roles --test-show-details=direct` checks distinct badge roles
 and refusal of duplicate roles, ambiguous titles and incompatible badge fields.
 

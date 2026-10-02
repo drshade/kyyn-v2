@@ -84,11 +84,15 @@ in [{ name = "documents", binding = "documents", connector = Connector.Folder { 
   fs.writeFileSync(manifest, contents.replace(empty,
     '[{ name = "assess", description = "Read and judge a document", implementation = "Helpers.assess", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));
   fs.writeFileSync(path.join(target, 'src/Helpers.hs'), `module Helpers where
-import Kyyn.Plugin (FetchError)
+import Kyyn.Plugin (FetchError(..))
 import Kyyn.Connectors (Tool)
 import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_local_file.Folder as Files
-import Kyyn.Judgement
+import qualified Agentic as A
+import Agentic.Questions (yesNo, YesNo(..), basisPoints)
+import Control.Arrow ((>>>), arr)
+import qualified Data.Text as Text
+import Kyyn.Agentic (interpret)
 type Input = String
 type Output = String
 assess :: Input -> Tool (Either FetchError Output)
@@ -97,14 +101,13 @@ assess name = do
   case captured of
     Left failure -> pure (Left failure)
     Right text -> do
-      answer <- judge (Context text) (ask (yesNo "Does this request a reply?" describe))
-      pure (Right (text ++ " | " ++ either judgementFailureMessage show answer))
-  where describe yes = if yes then "Reply requested" else "No reply requested"
+      answer <- interpret (A.judge (yesNo (Text.pack "Does this request a reply?")) >>> arr (\\(YesNo p) -> toInteger (basisPoints p))) (Text.pack text)
+      pure (Right (text ++ " | " ++ either (\\(FetchError message) -> message) show answer))
 `);
   if (timings) {
-    cli(['guest', 'module', 'show', 'Kyyn.Judgement', '--evolution', draft.id], true);
-    assert(lastTimings.some(event => event.step === 'api-inspection' && event.label.includes('Kyyn.Judgement')));
-    cli(['guest', 'module', 'show', 'Kyyn.Judgement', '--evolution', draft.id], true);
+    cli(['guest', 'module', 'show', 'Kyyn.Agentic', '--evolution', draft.id], true);
+    assert(lastTimings.some(event => event.step === 'api-inspection' && event.label.includes('Kyyn.Agentic')));
+    cli(['guest', 'module', 'show', 'Kyyn.Agentic', '--evolution', draft.id], true);
     assert(lastTimings.some(event => event.step === 'api-inspection-hit'));
     assert(!lastTimings.some(event => event.step === 'api-inspection'));
   }

@@ -2,7 +2,7 @@
 module Main (main) where
 
 import Control.Monad (forM_, unless)
-import Data.Aeson (Value(..), encode)
+import Data.Aeson (Value(..), encode, object, (.=))
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
@@ -18,13 +18,15 @@ import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.Judgement (Judgement(..), judge)
 import Kyyn.Plumbing.Protocol.Judgement (encodeReply)
-import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), encodeResponse, success)
+import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), encodeResponse, success, failure, parseResult)
 import Kyyn.Plumbing.Protocol.Tool
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
-import Kyyn.Types.Judgement
-import System.Directory (createDirectoryIfMissing, findExecutable)
+import Agentic.Questions
+import qualified Agentic.Value as A
+import Kyyn.Domain.Model (ModelFailure(..))
+import System.Directory (createDirectoryIfMissing, findExecutable, listDirectory, doesDirectoryExist)
 import System.Environment (getEnv)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>), takeDirectory)
@@ -41,13 +43,10 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   ghc <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe (fail "Missing matching GHC") pure
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
-  common <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Judgement","Program","Evidence","Plugin","PluginHost","Query","Fact"]] ++
-     [load "guest/kyyn-sdk/src" file | file <- ["Kyyn/Plugin.hs","Kyyn/Judgement/Internal.hs","Kyyn/Judgement/Question.hs","Kyyn/Query.hs"]] ++
-     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","Judgement","Model","ModelWire"]] ++
-     [load "vendor/agentic/src" ("Agentic/" ++ name ++ ".hs") | name <- ["Core","Contract","Schema","Value","Questions","Runtime"]] ++
-     [load "vendor/json" file | file <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
-     [load "host/kyyn-microhs/test/judgement" "Helpers.hs"])
+  trees <- mapM (\dir -> collect (repo </> dir) "") ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src","vendor/agentic/src","vendor/transformers"]
+  common <- sequence ([load dir file | (dir,paths) <- zip ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src","vendor/agentic/src","vendor/transformers"] trees, file <- paths] ++
+    [load "vendor/json" file | file <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
+    [load "host/kyyn-microhs/test/judgement" "Helpers.hs"])
   let plugin = either error id (pluginName "fixture")
       kind = either error id (connectorTypeName "Folder")
       method = either error id (methodName "content")
@@ -75,20 +74,22 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   Bytes.writeFile bytecode bytes
   forM_ [proc executable [],proc (toolchain </> "bin/mhseval") ["+RTS","-r" ++ bytecode,"-RTS"]] $ \program -> do
     (result,trace,code) <- broker Normal program
-    let expected = "captured 雪|" ++ "(Urgent,9500,8000,1250,[Routine,Important,Urgent],[Routine,Important,Urgent],\"80.00%\",\"1.250\",True)"
+    let expected = "(Urgent,9500,8000,1.25,[Routine,Important,Urgent],[Routine,Important,Urgent])"
     assert "typed results or continuation differed" (result == Just (success (String (Text.pack expected))) && code == ExitSuccess)
     assert "wrong composition trace" (trace == ["read","judge"])
     (refused,refusalTrace,refusalCode) <- broker Refused program
-    assert "typed refusal not handled" (refused == Just (success (String "RateLimited")) && refusalTrace == ["read","judge"] && refusalCode == ExitSuccess)
+    assert "typed refusal not handled" (refused == Just (failure "The model provider is rate limiting requests; retry later.") && refusalTrace == ["read","judge"] && refusalCode == ExitSuccess)
     (malformed,_,malformedCode) <- broker OutOfRange program
     assert "out-of-range wire probability accepted" (malformed == Nothing && malformedCode /= ExitSuccess)
     forM_ [MissingAnswer,ExtraAnswer,WrongAnswer] $ \scenario -> do
       (bad,_,badCode) <- broker scenario program
-      assert "malformed batch assembled" (bad == Just (success (String "InvalidProviderResponse")) && badCode == ExitSuccess)
+      assert "malformed batch assembled" (case fmap parseResult bad of
+        Just (Right (Left _)) -> badCode == ExitSuccess
+        _ -> False)
   forM_ [
-    ("query", "invalid :: Query.Query () (Either JudgementFailure YesNoAnswer)\ninvalid = judge (Context \"x\") (ask (yesNo \"q\" show))\n"),
-    ("pure validator", "invalid :: () -> Bool\ninvalid _ = judge (Context \"x\") (ask (yesNo \"q\" show))\n"),
-    ("dependent question", "invalid :: Questions YesNoAnswer\ninvalid = ask (yesNo \"q\" show) >>= pure\n")
+    ("query", "invalid :: Query.Query () Bool\ninvalid = interpret assessment \"x\"\n"),
+    ("pure validator", "invalid :: () -> Bool\ninvalid _ = interpret assessment \"x\"\n"),
+    ("dependent question", "invalid :: Questions YesNo\ninvalid = yesNo \"q\" >>= pure\n")
     ] $ \(label,extra) -> do
       let files = [(file, if relativeName file == "Helpers.hs" then content <> Text.encodeUtf8 (Text.pack ("\n" ++ extra)) else content)
             | (file,content) <- sourceFiles sources]
@@ -100,23 +101,23 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
       refused <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
         (runGuestCompilation compiler Nothing (compileGuest invalid))))) >>= right
       assert ("MicroHs accepted " ++ label) (case refused of Left _ -> True; Right _ -> False)
-  putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, applicative batch, refusals, fixed-point codec and query/validation/Monad exclusions."
+  putStrLn "Judgement generated tool passed GHC and MicroHs: captured read, applicative batch, refusals, Agentic codec and query/validation/Monad exclusions."
 
 data Scenario = Normal | Refused | OutOfRange | MissingAnswer | ExtraAnswer | WrongAnswer deriving Eq
 
 recording :: Scenario -> Eff (Judgement : es) a -> Eff es a
-recording scenario = interpret $ \_ (Judge (JudgementRequest _ questions)) -> pure $
-  if scenario == Refused then Left RateLimited else Right (alter (map answer questions))
+recording scenario = interpret $ \_ (Judge (JudgeRequest _ questions)) -> pure $
+  if scenario == Refused then Left ModelRateLimited else Right (alter (map answer questions))
   where
-    alter :: [JudgementAnswer] -> [JudgementAnswer]
+    alter :: [Answer] -> [Answer]
     alter values = case scenario of
       MissingAnswer -> drop 1 values
       ExtraAnswer -> values ++ values
       WrongAnswer -> reverse values
       _ -> values
-    answer (YesNoRequest _ _ _) = YesNoResult (YesNoAnswer (Probability (if scenario == OutOfRange then 10001 else 9500)))
-    answer (ChoiceRequest _ options) = ChoiceResult (ChoiceAnswer "Urgent" (zipWith OptionProbability (map fst options) (map Probability [500,500,9000])) (Probability 8000))
-    answer (ScaleRequest _ levels) = ScaleResult (ScaleAnswer (Score 1250) (zipWith OptionProbability [0 .. toInteger (length levels) - 1] (map Probability [0,7500,2500])) (Probability 7000))
+    answer (AskYesNo _) = YesNoAnswer 0.95
+    answer (AskChoice _ options) = ChoiceAnswer "Urgent" (zip (map fst options) [0.05,0.05,0.9]) 0.8
+    answer (AskScore _ levels) = ScoreAnswer 1.25 (zip [0 .. length levels - 1] [0,0.75,0.25]) 0.7
 
 broker :: Scenario -> CreateProcess -> IO (Maybe Value,[String],ExitCode)
 broker scenario program = do
@@ -138,11 +139,14 @@ broker scenario program = do
                       ToolCall _ _ _ _ value -> do
                         assert "captured-read argument" (value == String "item")
                         pure ("read",success (String "captured 雪"))
-                      ToolJudgement request@(JudgementRequest context questions) -> do
-                        assert "captured context lost" (context == Context "captured 雪")
+                      ToolJudgement request@(JudgeRequest context questions) -> do
+                        assert "captured context lost" (context == A.String "captured 雪")
                         assert "questions not batched" (length questions == 3)
                         let reply = runPureEff (recording scenario (judge request))
-                        pure ("judge",encodeReply reply)
+                        encoded <- right (encodeReply reply)
+                        pure ("judge",if scenario == OutOfRange
+                          then object ["tag" .= ("Right" :: String), "value" .= [object ["tag" .= ("YesNo" :: String), "value" .= ("10001" :: String)]]]
+                          else encoded)
                     emit (encodeResponse identity reply)
                     loop (trace ++ [label])
         emit (Lazy.toStrict (encode (String "item")))
@@ -159,3 +163,11 @@ right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
 assert :: String -> Bool -> IO ()
 assert label condition = unless condition (fail label)
+
+collect :: FilePath -> FilePath -> IO [FilePath]
+collect base relative = do
+  entries <- listDirectory (base </> relative)
+  fmap concat $ mapM (\name -> do
+    let path = relative </> name
+    directory <- doesDirectoryExist (base </> path)
+    if directory then collect base path else pure [path | reverse (take 3 (reverse path)) == ".hs"]) entries
