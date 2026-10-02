@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Surfaces.Recipes (recipesResult, recipeResult, pendingResult) where
+module Kyyn.Surfaces.Recipes (recipesResult, recipeResult, pendingResult, recipeRunResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Kyyn.Domain.Curation (Recipe(..), RecipeId(..), PendingEvidence(..))
@@ -7,7 +7,15 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..), ConnectorInstanceRef(..), FetchId(..), EvidenceId(..))
 import Kyyn.Domain.Plugin (pluginNameText)
-import Kyyn.Surfaces.Result (Response, success)
+import Kyyn.Surfaces.Result (Response(..), success, workspaceResult)
+import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
+import Kyyn.Domain.Git (GitRevision)
+
+recipeRunResult :: EvolutionWorkspace -> GitRevision -> FilePath -> Response
+recipeRunResult workspace@(EvolutionWorkspace _ identity) revision path =
+  case workspaceResult workspace revision path of
+    Response outcome value rendered diagnostics -> Response outcome value
+      (rendered ++ ["Next: evolution check " ++ evolutionIdName identity ++ " (using the same --kb)"]) diagnostics
 
 recipesResult :: [Fact Recipe] -> Response
 recipesResult recipes = success (object ["recipes" .= map recipeJson recipes])

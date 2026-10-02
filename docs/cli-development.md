@@ -550,11 +550,26 @@ be unique. Recipe changes appear distinctly in the evolution review.
 `ClosedAgent (FlowEntryRef "Tasks.reconcile")` stores a named authored flow
 instead of instructions. Root checking resolves the function and checks
 `Flow (RecipeInput Root) (ProposedCuration RootEdit)` without running it. Both
-constructors can be inspected and edited; closed recipe execution is not yet
-exposed by the CLI. Authored uses of the earlier `Recipe "..."` constructor must
+constructors can be inspected and edited. Authored uses of the earlier `Recipe "..."` constructor must
 be changed to `OpenAgent "..."`; existing stored instruction-only recipes still
 read correctly. Recipe JSON now carries `recipe: { kind, instructions }` or
 `recipe: { kind, flow }`.
+
+Run a closed recipe against one or more fetched connector instances:
+
+```sh
+kyyn-v2 --kb ./my-kb root recipe run syncTodos local-file documents local-file prices
+kyyn-v2 --kb ./my-kb evolution check 000003-curate-synctodos
+```
+
+Use the evolution ID returned by `run`. It creates a Draft with
+`change/proposal.dhall`; checking and acceptance use that saved proposal, not
+another model invocation. Review it before marking it ready and accepting it.
+Each selected instance supplies its pending changes and fetch scope. Its evidence
+contents are captured once for the invocation, including subsequent plugin reads.
+Reads of other instances capture lazily as ordinary tools do, but the proposal
+can acknowledge only supplied scopes and their pending IDs. Duplicate instance
+pairs are refused. Open recipes remain instructions for an external agent.
 
 The host persists these values in `root/recipes.dhall`; an absent file means no
 recipes. Do not place this file in an evolution target: the evolution must return

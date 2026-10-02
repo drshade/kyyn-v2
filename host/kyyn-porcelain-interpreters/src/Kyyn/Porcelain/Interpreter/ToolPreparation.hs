@@ -24,6 +24,7 @@ import Kyyn.Plumbing.Protocol.Tool (ConnectorInterface(..), InstanceBinding(..),
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition)
 import Kyyn.Porcelain.Capability.Tool
+import Kyyn.Porcelain.Protocol.ToolBindings (pluginBindings)
 
 runToolPreparation :: (RootStore :> es, SchemaInspection :> es, GuestCompilation :> es, DhallHandling :> es)
   => FileTree -> Eff (ToolPreparation : es) a -> Eff es a
@@ -69,10 +70,7 @@ environment sdk code plugins = do
     either (throwE . pure . errorDiagnostic "model.contract") pure
       (generateAgenticInstance index selected (rootType contract))
   allSources <- checked (fileTree (files baseSources ++ concatMap files contracts))
-  let interfaces = [ConnectorInterface plugin kind [(name,rootType input,rootType output) | PreparedMethod name _ input output _ <- methods]
-        | PreparedPlugin (PreparedPackage plugin _ connectors) _ <- plugins, PreparedConnector {connectorType = kind, methods = methods} <- connectors]
-      bindings = [InstanceBinding binding plugin kind name | PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
-        ConfiguredConnector name binding (PreparedConnector {connectorType = kind}) _ <- instances]
+  let (interfaces,bindings) = pluginBindings plugins
   generated <- checked (toolBindings interfaces bindings)
   inspectionSources <- checked (fileTree (files allSources ++ generated))
   let names = [map (\c -> if c == '/' then '.' else c) (take (length name - 3) name)

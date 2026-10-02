@@ -26,8 +26,8 @@ fact edits, with existing curation declarations, not schema or code changes.
 Flows remain inspectable and testable with deterministic fixtures.
 
 The product choices below are owner-established. Ordinary tool/model execution
-and generated contracts are implemented; closed-recipe execution and the Agentic
-Judgement bridge remain unimplemented. The wider workflow signatures below are
+and generated contracts are implemented, including explicit closed-recipe execution
+into draft proposals. The Agentic Judgement bridge remains unimplemented. The wider workflow signatures below are
 architectural sketches, not a claim that all these APIs exist.
 
 ## Decision
@@ -185,7 +185,9 @@ are changed through ordinary authored evolutions, not closed-agent fact edits.
 At invocation, the host selects a Before root and captures the pending evidence
 inputs for the selected connector instances. The flow gets typed pending data
 and captured-read bindings, not live provider access. The same capture is used
-for subsequent reads during this invocation. This does not archive old evidence
+for subsequent reads of those instances during this invocation. Reads of other
+instances capture lazily as ordinary tools do, but they do not expand the supplied
+curation scopes. This does not archive old evidence
 payloads: after a run, [latest-only storage](0014-evidence.md) still applies.
 
 ```haskell
@@ -202,16 +204,18 @@ data ProposedCuration edits = ProposedCuration
 pending changes grouped by captured instance. Each `PendingEvidence` carries an
 existing `EvidenceScope` and `[PendingChange]`, with `New`, `Updated` and `Removed`
 carrying evidence IDs. Recipes are not restricted to
-one connector. A CLI spelling such as
-`root recipe run NAME PLUGIN INSTANCE` selects input to one invocation; it does
-not define what other invocations of that recipe may use. Multi-instance CLI
-syntax remains to be designed.
+one connector. `root recipe run NAME PLUGIN INSTANCE [PLUGIN INSTANCE ...]`
+selects one or more input instances for one invocation, refusing incomplete or
+duplicate pairs. It does not define what other invocations of that recipe may
+use. Empty pending data is valid input; the authored flow decides what to do.
 
 Reuse ADR 0014's existing `Curation`, `EntireBatch EvidenceScope` and
 `IndividualRecords EvidenceScope [EvidenceId]` unchanged. The input supplies the
 captured scopes; the flow declares what it handled, including deletions, and the
 normal host curation checks resolve those declarations. The declaration names
-the invoked recipe. Reading, citing or changing a fact does not acknowledge
+the invoked recipe. A returned scope must be one supplied to the invocation;
+individual IDs must be in that scope's pending batch, including removed IDs.
+Reading, citing or changing a fact does not acknowledge
 evidence. Empty acknowledgements are valid; low-confidence work can stay pending
 for an external agent. There is no additional selection vocabulary, watermark or
 inference that model confidence means successful curation.

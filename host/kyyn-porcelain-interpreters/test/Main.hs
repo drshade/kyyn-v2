@@ -42,12 +42,14 @@ import InitializationTests (initializationTests)
 import WorkspaceApiTests (workspaceApiTests)
 import CurationPersistenceTests (curationPersistenceTests, sampleCuration)
 import RecipeTests (recipeTests)
+import ToolBrokerTests (toolBrokerTests)
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
 
 main :: IO ()
 main = do
   curationPersistenceTests
   recipeTests
+  toolBrokerTests
   initializationTests
   workspaceApiTests
   emptyContract <- right (checkContract

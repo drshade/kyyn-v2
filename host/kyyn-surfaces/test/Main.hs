@@ -42,6 +42,10 @@ main = do
   succeeds ["root","recipe","list"] (Invocation selected Human (Root (RootRecipe ListRecipes)))
   succeeds ["root","recipe","show","syncTodos"]
     (Invocation selected Human (Root (RootRecipe (ShowRecipe (RecipeId "syncTodos")))))
+  succeeds ["root","recipe","run","syncTodos","local-file","sales","local-file","sales"]
+    (Invocation selected Human (Root (RootRecipe (RunRecipe (RecipeId "syncTodos") [(localFile,sales),(localFile,sales)]))))
+  forM_ [["root","recipe","run","syncTodos"], ["root","recipe","run","syncTodos","local-file"],
+    ["root","recipe","run","syncTodos","local-file","sales","local-file"]] refuses
   succeeds ["root","recipe","pending","list","syncTodos","local-file","sales"]
     (Invocation selected Human (Root (RootRecipe (ListPendingEvidence (RecipeId "syncTodos") localFile sales))))
   forM_ [["root","recipe","show","bad-name"], ["root","recipe","pending","list","syncTodos"],

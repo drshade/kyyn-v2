@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.Tool
-  ( ConnectorInterface(..), InstanceBinding(..), toolBindings, toolSources, ToolCall(..), decodeToolFrame ) where
+  ( ConnectorInterface(..), InstanceBinding(..), toolBindings, toolSources, toolSourcesWithCodecs, ToolCall(..), decodeToolFrame ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, withObject, (.:))
@@ -104,12 +104,19 @@ toolBindings interfaces bindings = do
 toolSources :: [ConnectorInterface] -> [InstanceBinding] -> DataType -> DataType -> String
   -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
 toolSources interfaces bindings input output implementation authored = do
+  inputCodecSource <- generateCodecs "KyynToolInputCodec" input
+  outputCodecSource <- generateCodecs "KyynToolResultCodec" output
+  toolSourcesWithCodecs interfaces bindings input output implementation inputCodecSource outputCodecSource authored
+
+toolSourcesWithCodecs :: [ConnectorInterface] -> [InstanceBinding] -> DataType -> DataType -> String
+  -> String -> String -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
+toolSourcesWithCodecs interfaces bindings input output implementation inputSource outputSource authored = do
   implementationModule <- bindingModule implementation
   generated <- toolBindings interfaces bindings
+  boundaryCodecs <- sequence [source "KyynToolInputCodec" inputSource, source "KyynToolResultCodec" outputSource]
   let methods = [(i,p,k,n,a,b) | (i,ConnectorInterface p k ms) <- zip [0 :: Int ..] interfaces, (n,a,b) <- ms]
   codecs <- traverse (\(name,datatype) -> generateCodecs name datatype >>= source name)
-    ([("KyynToolInputCodec",input),("KyynToolResultCodec",output)] ++ concat
-      [[(inputCodec i n,a),(resultCodec i n,b)] | (i,_,_,n,a,b) <- methods])
+    (concat [[(inputCodec i n,a),(resultCodec i n,b)] | (i,_,_,n,a,b) <- methods])
   entry <- source "KyynToolEntry" (unlines $
     ["{-# LANGUAGE GADTs, EmptyCase #-}","module KyynToolEntry where",
      "import qualified " ++ implementationModule,"import qualified Kyyn.Connectors as Connectors",
@@ -135,7 +142,7 @@ toolSources interfaces bindings input output implementation authored = do
         "    (\"method\", encodeWith stringCodec " ++ show (coerce n :: String) ++ "),",
         "    (\"input\", encodeWith " ++ inputCodec i n ++ ".rootCodec arguments)])",
         "    (eitherCodec " ++ resultCodec i n ++ ".rootCodec)"] | (i,p,k,n,_,_) <- methods])
-  guestSources (fst entry) (authored ++ generated ++ codecs ++ [entry])
+  guestSources (fst entry) (authored ++ generated ++ boundaryCodecs ++ codecs ++ [entry])
 
 requestName :: Int -> MethodName -> String
 requestName i n = "Call" ++ show i ++ "_" ++ coerce n
