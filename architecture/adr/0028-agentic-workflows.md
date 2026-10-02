@@ -21,7 +21,7 @@ including model-assisted drafting and subagents. Recipes support both external
 instruction-led work and explicit flow execution. Kyyn is not an autonomous
 agent; evolutions remain pure and nothing is automatically accepted. The host
 performs individual model turns with per-KB credentials hidden from guest code.
-Existing Jev Judgement semantics remain unchanged. Closed agents propose only
+SystemOne and SystemTwo use Agentic's types directly. Closed agents propose only
 fact edits, with existing curation declarations, not schema or code changes.
 Flows remain inspectable and testable with deterministic fixtures.
 
@@ -158,14 +158,11 @@ Kyyn generates explicit codecs and instances without requiring GHC metadata in t
 guest. Internal library tuples or floating-point
 values do not expand Kyyn's public schema vocabulary by accident.
 
-[ADR 0027](0027-judgement.md) owns Jev semantics. Its explicit criteria,
-fixed-point values, whole-batch errors and ordinal scale answers are not replaced
-by similarly named library types. In the inspected library, `yesNo` lacks Kyyn's
-two answer descriptions and `Score` carries a `Double` position. Ask upstream
-for a compatible bridge or API changes before exposing a unified `judge` facade.
-`score` versus `scale`, and helpers such as `keep`/`gate`/`clearly`, remain naming
-and ergonomics decisions; filtering thresholds are authored policy, not proof
-that the model is correct. Do not silently substitute an LLM for Jev.
+[ADR 0027](0027-judgement.md) owns the Jev-backed SystemOne integration.
+Agentic owns the question and answer types; Kyyn supplies credentials, wire
+encoding and host interpretation, not a competing public judgement API.
+Filtering thresholds remain authored policy, not proof that the model is correct.
+Do not silently substitute an LLM for Jev.
 
 ### Open and closed recipes share ordinary curation
 
@@ -334,9 +331,8 @@ under MicroHs. Explicit codecs remain available. No Kyyn fork or source patch
 was required. This establishes core portability, not Kyyn's generated-codec,
 wire, provider or recipe integration; no dependency was vendored by this proof.
 
-Judgement alignment remains an upstream integration discussion. The one-turn
-provider abstraction and generic monadic interpreter already exist; do not
-request or reimplement them as missing features.
+The one-turn provider abstractions and generic monadic interpreter already exist;
+reuse them for both SystemOne and SystemTwo.
 
 Before production integration, demonstrate a generated-contract flow under GHC
 and pinned MicroHs with a recording host: typed draft, nested tool, malformed
