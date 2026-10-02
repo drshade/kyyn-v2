@@ -19,6 +19,14 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`node tools/test-recipe-run.mjs INSTALLED_EXECUTABLE` executes a closed recipe
+against two local-file instances, saves a frozen Draft, checks it repeatedly and
+accepts it through the ordinary workflow. It checks recipe/scope/ID refusals,
+authored failure, local model-secret refusal, newer fetches staying pending, and
+deletion acknowledgement. No live model provider is contacted. It belongs to the
+full installed check. The native roots suite separately proves the shared broker
+reuses supplied evidence captures for repeated reads without loading latest.
+
 `node tools/test-closed-recipes.mjs INSTALLED_EXECUTABLE` checks closed-recipe
 references through the installed CLI: missing exports and wrong signatures are
 rejected; a correctly typed flow is compiled but never invoked during checking.

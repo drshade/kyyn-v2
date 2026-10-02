@@ -325,7 +325,7 @@ their instructions and uses ordinary investigation and evolution tools.
 owns explicit flow execution alongside this mode. This ADR owns the recipe data
 type; recipes remain neither scheduled jobs nor autonomous kernel-managed
 sequences of agent actions. Both constructors are persisted and inspectable;
-explicit flow execution remains outstanding in ADR 0028.
+ADR 0028 owns explicit flow execution into a draft evolution.
 
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.

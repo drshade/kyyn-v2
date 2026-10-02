@@ -24,6 +24,7 @@ pendingCodec = Codec encode decode
       values <- fields ["scope","changes"] value
       scope <- field "scope" scopeCodec values
       PendingEvidence scope <$> field "changes" (listCodec changeCodec) values
+
 scopeCodec :: Codec EvidenceScope
 scopeCodec = Codec encode decode
   where

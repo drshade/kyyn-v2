@@ -25,7 +25,7 @@ import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Recipes
-import Kyyn.Surfaces.Result (Response, refusal, workspaceResult)
+import Kyyn.Surfaces.Result (Response, refusal)
 
 dispatchRecipes :: Host -> Cli.RecipeCommand -> SelectedKb -> IO Response
 dispatchRecipes host command (SelectedKb kb revision _) = case command of
@@ -46,7 +46,7 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
           Right workspace -> case workspaceLocation workspace of
             Left message -> refusal [errorDiagnostic "kb.path" message]
             Right path -> let KnowledgeBase (Repository repositoryScope) _ = kb
-              in workspaceResult workspace revision (scopedPath repositoryScope path)
+              in recipeRunResult workspace revision (scopedPath repositoryScope path)
   Cli.ListPendingEvidence recipe plugin instanceName -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
