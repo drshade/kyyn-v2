@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
-  'kyyn-surfaces': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+  'kyyn-surfaces': ['Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
     'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Secret',
     'Kyyn.Domain.Plugin', 'Kyyn.Domain.Tap',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
@@ -12,7 +12,7 @@ const allowed = {
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
-  'kyyn': ['Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+  'kyyn': ['Kyyn.Plumbing.Interpreter.ModelTurn', 'Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
     'Kyyn.Build', 'Kyyn.MicroHs.Interpreter.InspectionCache', 'Kyyn.Composition.Timings', 'Kyyn.MicroHs.Timing', 'Data.IORef', 'GHC.Clock', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.CompiledProgram',
     'Kyyn.Composition.Secrets', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.SecretStore',
     'Kyyn.Plumbing.Interpreter.SecretStore', 'Kyyn.Plumbing.Interpreter.HttpTransport', 'Kyyn.Plumbing.Interpreter.PluginInteraction', 'Kyyn.Porcelain.Interpreter.PluginLogin', 'Kyyn.Plumbing.Interpreter.Judgement', 'Control.Exception', 'Data.Aeson', 'Data.ByteString.Char8', 'Data.Text.Encoding', 'System.IO',
@@ -60,7 +60,7 @@ const allowed = {
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
     'Control.Monad.Trans.State.Strict', 'Control.Monad.Trans.Reader', 'Data.Functor.Identity', 'Data.Functor.Const'],
-  'kyyn-porcelain': ['Kyyn.Types.KnowledgeBase', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
+  'kyyn-porcelain': ['Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.List', 'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Curation', 'Kyyn.Types.Curation', 'Kyyn.Porcelain.Capability.Curation', 'Kyyn.Porcelain.Capability.Connector', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Tool', 'Kyyn.Types.Plugin', 'Kyyn.Porcelain.Capability.Root', 'Kyyn.Porcelain.Capability.Tool',
     'Kyyn.Porcelain.Capability.EvidenceAcquisition', 'Kyyn.Porcelain.Capability.EvidenceInspection', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Domain.DataType',
@@ -74,7 +74,7 @@ const allowed = {
     'Kyyn.Domain.FactProposal', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.KnowledgeBase',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Root', 'Kyyn.Domain.Query', 'Kyyn.Domain.Example', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git',
     'Kyyn.Porcelain.Capability.RootExecution', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Validated'],
-  'kyyn-porcelain-interpreters': ['Data.Bifunctor', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Porcelain.Protocol.RecipePersistence', 'Control.Monad', 'Control.Monad.Trans.Except',
+  'kyyn-porcelain-interpreters': ['Kyyn.Porcelain.Protocol.ModelConfiguration', 'Data.Bifunctor', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Plumbing.Protocol.Recipes', 'Kyyn.Porcelain.Protocol.RecipePersistence', 'Control.Monad', 'Control.Monad.Trans.Except',
     'Kyyn.Domain.FactProposal', 'Kyyn.Plumbing.Protocol.FactProposal', 'Kyyn.Porcelain.Protocol.CurationPersistence', 'Kyyn.Porcelain.Capability.RecipeStore',
     'Kyyn.Domain.Curation', 'Kyyn.Porcelain.Capability.PluginDocumentation', 'Kyyn.Plumbing.Protocol.Plugin',
     'Data.Char', 'Kyyn.Domain.Tap', 'Kyyn.Plumbing.Protocol.Tap', 'Kyyn.Porcelain.Capability.PluginDiscovery',
@@ -147,6 +147,8 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.ModelConfiguration': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Char', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Model', 'Kyyn.Domain.Secret'],
+  'Kyyn.Plumbing.Protocol.ModelTurn': ['Agentic.Runtime', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Model', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.ModelWire'],
   'Kyyn.Plumbing.Capability.ModelTurn': ['Agentic.Runtime', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Model'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Agentic': ['Data.List', 'Data.Text', 'Data.Text.Encoding',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
@@ -167,7 +169,7 @@ const plumbingModules = {
   'Kyyn.Plumbing.Protocol.Judgement': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Types.Judgement'],
   'Kyyn.Plumbing.Capability.SecretStore': ['Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Secret'],
   'Kyyn.Plumbing.Protocol.Recipes': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Types.Fact', 'Kyyn.Types.KnowledgeBase'],
-  'Kyyn.Plumbing.Protocol.Tool': ['Kyyn.Plumbing.Protocol.Judgement', 'Kyyn.Types.Judgement', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.KeyMap', 'Data.ByteString',
+  'Kyyn.Plumbing.Protocol.Tool': ['Agentic.Runtime', 'Kyyn.Plumbing.Protocol.ModelTurn', 'Kyyn.Plumbing.Protocol.Judgement', 'Kyyn.Types.Judgement', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.KeyMap', 'Data.ByteString',
     'Data.Coerce', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
     'Kyyn.Plumbing.Capability.SchemaInspection.Codecs', 'Kyyn.Plumbing.Protocol.PluginMessages'],
@@ -249,6 +251,9 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Runtime.ModelWire': ['Agentic.Core', 'Agentic.Runtime', 'Agentic.Schema', 'Agentic.Value', 'Data.Text', 'Kyyn.Runtime.Json', 'Text.JSON.Types'],
+  'Kyyn.Runtime.Model': ['Agentic.Runtime', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.ModelWire', 'Kyyn.Runtime.Plugin'],
+  'Kyyn.Porcelain.Protocol.ModelConfiguration': ['Data.Bifunctor', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Model', 'Kyyn.Domain.Path', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Protocol.ModelConfiguration'],
   'Kyyn.Plumbing.Interpreter.ModelTurn': ['Agentic.OpenAI', 'Agentic.Anthropic', 'Agentic.Runtime',
     'Agentic.Settings', 'Control.Exception', 'Data.Char', 'Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic',
     'Kyyn.Domain.Model', 'Kyyn.Plumbing.Capability.ModelTurn', 'Kyyn.Plumbing.Capability.SecretStore', 'Network.HTTP.Client'],
@@ -268,13 +273,13 @@ const interpreterModules = {
     'Kyyn.Domain.Path', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.Failure',
     'Kyyn.Plumbing.Capability.SecretStore', 'System.Directory', 'System.FilePath', 'System.IO', 'System.IO.Error', 'System.IO.Temp'],
   'Kyyn.Porcelain.Protocol.CurationPersistence': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Curation', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling'],
-  'Kyyn.Porcelain.Interpreter.ToolPreparation': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.List', 'Data.Bifunctor', 'Data.Coerce',
+  'Kyyn.Porcelain.Interpreter.ToolPreparation': ['Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Porcelain.Protocol.ModelConfiguration', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.List', 'Data.Bifunctor', 'Data.Coerce',
     'Kyyn.Domain.Plugin',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path', 'Kyyn.Domain.Root', 'Kyyn.Domain.Tool',
     'Kyyn.Plumbing.Capability.GuestCompilation', 'Kyyn.Plumbing.Capability.SchemaInspection', 'Kyyn.Plumbing.Protocol.Tool',
     'Kyyn.Porcelain.Capability.PluginPreparation', 'Kyyn.Porcelain.Capability.RootStore', 'Kyyn.Porcelain.Capability.Tool'],
-  'Kyyn.Porcelain.Interpreter.ToolExecution': ['Kyyn.Plumbing.Capability.Judgement', 'Kyyn.Plumbing.Protocol.Judgement', 'Kyyn.Types.Judgement', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.ByteString.Lazy',
+  'Kyyn.Porcelain.Interpreter.ToolExecution': ['Kyyn.Plumbing.Capability.ModelTurn', 'Kyyn.Plumbing.Protocol.ModelTurn', 'Kyyn.Plumbing.Capability.Judgement', 'Kyyn.Plumbing.Protocol.Judgement', 'Kyyn.Types.Judgement', 'Control.Monad.Trans.Except', 'Data.Aeson', 'Data.ByteString.Lazy',
     'Data.Coerce', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.State.Static.Local',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Tool',
     'Kyyn.Domain.Value', 'Kyyn.Types.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling',

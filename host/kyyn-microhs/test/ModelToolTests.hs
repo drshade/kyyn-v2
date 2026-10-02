@@ -1,14 +1,15 @@
-{-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
+{-# LANGUAGE DataKinds, GADTs, OverloadedStrings, TypeApplications #-}
 module Main (main) where
 
 import qualified Agentic as A
 import qualified Agentic.Runtime as A
 import Control.Monad (unless, forM_)
 import Data.Aeson (toJSON)
+import qualified Data.ByteString as Bytes
 import Data.List (isInfixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Effectful (Eff, runEff, runPureEff)
+import Effectful (Eff, runEff, runPureEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret, reinterpret)
 import Effectful.State.Static.Local (runState, get, put)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
@@ -22,6 +23,8 @@ import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
 import Kyyn.Plumbing.Capability.FileSystem (readTree)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..), compileGuest)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -35,20 +38,24 @@ import Kyyn.Porcelain.Capability.Tool
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.ToolExecution (runToolExecution)
-import System.Environment (getEnv)
-import System.FilePath ((</>))
+import System.Environment (getEnv, setEnv)
+import System.Directory (createDirectoryIfMissing)
+import System.Exit (ExitCode(..))
+import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
+import System.Process (readProcessWithExitCode)
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   runtime <- getEnv "KYYN_TEST_TOOLCHAIN"
+  setEnv "MHSCPPHS" (runtime </> "bin/cpphs")
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope runtime)
   let load path = do
         directory <- right (directoryScope (repo </> path))
         runEff (runFailure (runFileSystemIO scope (readTree directory))) >>= right
-  trees <- traverse load ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src","vendor/agentic/src"]
+  trees <- traverse load ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src","vendor/agentic/src","vendor/transformers"]
   json <- load "vendor/json/Text"
   jsonFiles <- traverse (\(p,b) -> (,) <$> right (relativePath ("Text/" ++ relativeName p)) <*> pure b) (files json)
   sdk <- right (fileTree (concatMap files trees ++ jsonFiles))
@@ -72,9 +79,21 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
       config = "{ provider = < OpenAI | Anthropic >.Anthropic, model = \"fixture-model\", credential = \"MODEL_KEY\" }"
       prepare tree = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
         . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runSchemaInspectionIO toolchain Nothing . runRootStore
-        . runToolPreparation sdk $ prepareTools tree []
+        . captureCompilation . runToolPreparation sdk $ prepareTools tree []
   configured <- right (fileTree (base ++ [(modelPath,config)]))
-  selected <- prepare configured >>= right >>= right >>= only
+  (prepared,sources) <- prepare configured >>= right
+  selected <- right prepared >>= only
+  forM_ sources $ \source -> do
+    let directory = temporary </> "ghc"
+    forM_ (sourceFiles source) $ \(path,bytes) -> do
+      let target = directory </> relativeName path
+      createDirectoryIfMissing True (takeDirectory target)
+      Bytes.writeFile target bytes
+    (status,output,errors) <- readProcessWithExitCode "ghc-9.10.3"
+      ["-v0","-fno-code","-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
+       "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes",
+       "-i" ++ directory,"-outputdir",directory </> "objects",directory </> relativeName (selectedEntry source)] ""
+    assert ("GHC rejected generated model tool: " ++ output ++ errors) (status == ExitSuccess)
   key <- right (secretName "MODEL_KEY")
   let expected = ModelConfiguration Anthropic "fixture-model" key
   case selected of
@@ -95,13 +114,13 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
   missing <- invoke (withoutModel selected) (recording expected) >>= right
   assert "Unconfigured model contacted provider" (snd missing == 0)
   assert "Missing model not actionable" (hasDiagnostic "root/model.dhall" (fst missing))
-  failed <- invoke selected refusing >>= right
+  (failed,_) <- invoke selected refusing >>= right
   assert "Provider refusal didn't return a tool diagnostic" (hasDiagnostic "ModelRefused" failed)
   putStrLn "Model tools: captured config, root validation, real guest nested calls/retry and typed refusal passed."
 
 recording :: ModelConfiguration -> Eff (ModelTurn : es) a -> Eff es (a,Int)
 recording expected = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn configuration conversation) -> do
-  n <- get
+  n <- get @Int
   put (n + 1)
   unless (configuration == expected) (error "Changed captured model selection")
   let raw = A.Raw (A.Object [("n",A.Integer (900719925474099312345 + toInteger n)),("float",A.Number 0.25)])
@@ -114,8 +133,14 @@ recording expected = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn confi
       Right (turn (A.Respond (A.String "final 雪")))
     _ -> error ("Unexpected guest model request: " ++ show conversation)
 
-refusing :: Eff (ModelTurn : es) a -> Eff es a
-refusing = interpret $ \_ (TakeModelTurn _ _) -> pure (Left ModelRefused)
+captureCompilation :: GuestCompilation :> es => Eff (GuestCompilation : es) a -> Eff es (a,[GuestSources])
+captureCompilation = reinterpret (runState []) $ \_ (CompileGuest sources) -> do
+  previous <- get @[GuestSources]
+  put (sources : previous)
+  compileGuest sources
+
+refusing :: Eff (ModelTurn : es) a -> Eff es (a,Int)
+refusing = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn _ _) -> pure (Left ModelRefused)
 
 noReads :: Eff (PluginRead : es) a -> Eff es a
 noReads = interpret $ \_ _ -> error "Model fixture unexpectedly read evidence"

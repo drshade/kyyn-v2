@@ -44,7 +44,8 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   common <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Judgement","Program","Evidence","Plugin","PluginHost","Query","Fact"]] ++
      [load "guest/kyyn-sdk/src" file | file <- ["Kyyn/Plugin.hs","Kyyn/Judgement/Internal.hs","Kyyn/Judgement/Question.hs","Kyyn/Query.hs"]] ++
-     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","Judgement"]] ++
+     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","Judgement","Model","ModelWire"]] ++
+     [load "vendor/agentic/src" ("Agentic/" ++ name ++ ".hs") | name <- ["Core","Contract","Schema","Value","Questions","Runtime"]] ++
      [load "vendor/json" file | file <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
      [load "host/kyyn-microhs/test/judgement" "Helpers.hs"])
   let plugin = either error id (pluginName "fixture")
@@ -59,9 +60,11 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
     createDirectoryIfMissing True (takeDirectory target)
     Bytes.writeFile target bytes
   let executable = temporary </> "native"
-  (status,out,err) <- readProcessWithExitCode ghc ["-v0","-i","-i" ++ temporary,
+  let extensions = ["-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
+        "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes"]
+  (status,out,err) <- readProcessWithExitCode ghc (extensions ++ ["-v0","-i","-i" ++ temporary,
     "-outputdir",temporary </> "objects","-main-is","KyynToolEntry.main",
-    temporary </> relativeName (selectedEntry sources),"-o",executable] ""
+    temporary </> relativeName (selectedEntry sources),"-o",executable]) ""
   assert ("GHC rejected judgement: " ++ out ++ err) (status == ExitSuccess)
   scope <- right (directoryScope temporary)
   compiler <- GuestToolchain <$> right (directoryScope toolchain)
@@ -91,8 +94,8 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
             | (file,content) <- sourceFiles sources]
       invalid <- right (guestSources (selectedEntry sources) files)
       forM_ files $ \(file,content) -> Bytes.writeFile (temporary </> relativeName file) content
-      (invalidStatus,_,_) <- readProcessWithExitCode ghc ["-v0","-fno-code","-fforce-recomp","-i","-i" ++ temporary,
-        temporary </> relativeName (selectedEntry invalid)] ""
+      (invalidStatus,_,_) <- readProcessWithExitCode ghc (extensions ++ ["-v0","-fno-code","-fforce-recomp","-i","-i" ++ temporary,
+        temporary </> relativeName (selectedEntry invalid)]) ""
       assert ("GHC accepted " ++ label) (invalidStatus /= ExitSuccess)
       refused <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope
         (runGuestCompilation compiler Nothing (compileGuest invalid))))) >>= right
@@ -131,6 +134,7 @@ broker scenario program = do
                   HostRequest identity call -> do
                     assert "request order" (identity == toInteger (length trace + 1))
                     (label,reply) <- case call of
+                      ToolModel _ -> fail "Judgement fixture unexpectedly requested a model"
                       ToolCall _ _ _ _ value -> do
                         assert "captured-read argument" (value == String "item")
                         pure ("read",success (String "captured 雪"))

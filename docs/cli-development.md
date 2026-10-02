@@ -453,6 +453,56 @@ for combining different question types into a single request. Shared question
 types and combinators are discoverable with
 `kyyn-v2 --kb PATH guest module show Kyyn.Judgement`.
 
+## Model-assisted tools
+
+Add `model.dhall` to an evolution's `target/` directory, then check and accept it:
+
+```dhall
+{ provider = < OpenAI | Anthropic >.Anthropic
+, model = "your-provider-model-name"
+, credential = "MODEL_KEY"
+}
+```
+
+Set the corresponding checkout-local credential with
+`kyyn-v2 --kb PATH secret set MODEL_KEY`. For OpenAI, select `.OpenAI` instead.
+`root tool show NAME` shows the captured provider/model and secret name.
+
+Registered tools can execute upstream Agentic flows through generated
+`Kyyn.Agentic`. For example, a text-only tool needs no authored codec:
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+module Helpers where
+
+import qualified Agentic as A
+import qualified Data.Text as Text
+import Kyyn.Agentic (Flow, interpret)
+import Kyyn.Connectors (Tool)
+import Kyyn.Plugin (FetchError)
+
+type Input = String
+type Output = String
+
+summarise :: Flow Text.Text Text.Text
+summarise = A.draft "Summarise the supplied text in one sentence."
+
+summary :: Input -> Tool (Either FetchError Output)
+summary input = fmap (fmap Text.unpack) (interpret summarise (Text.pack input))
+```
+
+Register `Helpers.summary` as a tool with `Helpers.Input` and `Helpers.Output`,
+as above. Use `A.act` with `liftTool` to compose existing captured-read helpers
+into a flow. Failures return through the ordinary tool result; Ctrl-C cancels
+the invocation. Model requests use the configuration captured when the tool was
+prepared. No model is contacted by listing or showing a tool.
+
+Automatic bindings for authored ADT model contracts and executable closed recipes
+are not yet exposed. The current facade supports upstream primitive contracts and
+explicit codecs; do not maintain a second handwritten schema for KB types.
+The existing `Kyyn.Judgement` API is unchanged; Agentic's System One bridge is not
+yet supplied.
+
 ## Recipe declarations and curation progress
 
 Recipes are first-class data in `KnowledgeBase a`, alongside the authored domain

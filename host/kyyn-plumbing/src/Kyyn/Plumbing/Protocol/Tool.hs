@@ -96,7 +96,7 @@ toolBindings interfaces bindings = do
      "-- A registered implementation has type: Input -> Tool (Either FetchError Result).",
      "-- Register name, description, implementation, inputType and resultType in kb.dhall's tools list.",
      "-- Input and Result are the authored Haskell types named by that registration.",
-     "type Tool a = Program Calls.Calls a"] ++ concat
+     "type Tool = Program Calls.Calls"] ++ concat
     [[coerce n ++ " :: " ++ proxyModule p k ++ ".Instance",
       coerce n ++ " = ConnectorInstance " ++ show (coerce instanceName :: String)] | InstanceBinding n p k instanceName <- bindings])
   pure (core:connectorModule:judgementModule:agenticModule:proxies)
