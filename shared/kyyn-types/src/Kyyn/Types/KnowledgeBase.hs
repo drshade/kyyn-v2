@@ -1,10 +1,16 @@
-module Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..)) where
+module Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..), FlowEntryRef(..)) where
 
 import Kyyn.Types.Fact (Fact)
 
 -- | Domain facts and the identified recipes explaining how to work with them.
 data KnowledgeBase a = KnowledgeBase a [Fact Recipe] deriving (Eq, Show)
 
--- | Instructions for an agent performing a named task in the knowledge base.
+-- | A task guided by instructions or implemented by an authored flow.
 -- The containing fact's ID is the recipe's name.
-data Recipe = Recipe { recipeInstructions :: String } deriving (Eq, Show)
+data Recipe
+  = OpenAgent { instructions :: String }
+  | ClosedAgent { flow :: FlowEntryRef }
+  deriving (Eq, Show)
+
+-- | The qualified name of an authored flow, for example Tasks.reconcile.
+newtype FlowEntryRef = FlowEntryRef String deriving (Eq, Show)

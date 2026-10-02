@@ -13,7 +13,7 @@ import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.DataType (DataType(..), definingModule, haskellType, reachableTypes)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Plugin
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame, decodeFrameWith)
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement

@@ -42,7 +42,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, previousRecordShape, legacyRecordShape)
+import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, openRecipeRecordShape, previousRecordShape, legacyRecordShape)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution, checkEvolution)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
@@ -84,12 +84,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] beforeFiles) [])
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
-      recipeValues = [Fact (FactId "syncTodos") (KB.Recipe "Read and explain λ")]
+      recipeValues = [Fact (FactId "syncTodos") (KB.OpenAgent "Read and explain λ")]
       report = EvolutionReport [PluginChange (either error id (pluginName "local-file")) Nothing
         (Just (PluginOrigin (LocalRepository scope) WholeTree revision)) [either error id (relativePath "source/README.md")]]
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
-         StepReport (Rationale "Teach curation" []) [RecipeChange (FactId "syncTodos") Nothing (Just (KB.Recipe "Read and explain λ"))]] Nothing
+         StepReport (Rationale "Teach curation" []) [RecipeChange (FactId "syncTodos") Nothing (Just (KB.OpenAgent "Read and explain λ"))]] Nothing
       root = Root schema facts code sampleCuration recipeValues
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
@@ -132,12 +132,12 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
     other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)
   Bytes.writeFile capturedManifest currentManifest
-  let futureRecord = "(" <> metadata <> ") // { version = +5 }"
+  let futureRecord = "(" <> metadata <> ") // { version = +6 }"
   case runPureEff (runDhallHandling (decodeEvolutionRecord futureRecord)) of
     Right (Left [Diagnostic Error "evolution.record-format" message _])
       | not ("apply" `isInfixOf` message) -> pure ()
     other -> fail ("Unsupported archive format was corruption or requested replay: " ++ show other)
-  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +5, content = True }")) of
+  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +6, content = True }")) of
     Right (Left [Diagnostic Error "evolution.record-format" _ _]) -> pure ()
     other -> fail ("Unsupported version required the current schema: " ++ show other)
   Bytes.writeFile metadataPath futureRecord
@@ -338,6 +338,30 @@ contractDescriptions baseline = do
   v3 <- right (runPureEff (runDhallHandling (encodeValue (previousRecordShape baseline schema) versionThree)))
   v3Decoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 v3)))) >>= right
   unless (v3Decoded == (identity,baseline,schema,report)) (fail "Version-three archive changed")
+  let open = KB.OpenAgent "Inspect todos"
+      closed = KB.ClosedAgent (KB.FlowEntryRef "Tasks.reconcile")
+      recipeReport oldRecipe newRecipe = EvolutionReport []
+        [StepReport (Rationale "Change recipe" []) [RecipeChange (FactId "syncTodos") oldRecipe newRecipe]] Nothing
+      closedReport = recipeReport (Just open) (Just closed)
+  closedBytes <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema closedReport)))
+  closedRead <- right (runPureEff (runDhallHandling (decodeEvolutionRecord closedBytes))) >>= right
+  unless (closedRead == (identity,baseline,schema,closedReport)) (fail "Archive lost recipe constructor change")
+  let openReport = recipeReport Nothing (Just open)
+      oldPayload (Object fields)
+        | KeyMap.lookup "tag" fields == Just (String "OpenAgent")
+        , Just recipePayload <- KeyMap.lookup "value" fields = recipePayload
+        | otherwise = Object (fmap oldPayload fields)
+      oldPayload (Array values) = Array (fmap oldPayload values)
+      oldPayload value = value
+  (_,openDocument) <- right (recordDocument identity baseline schema openReport)
+  forM_ [("3",previousRecordShape),("4",openRecipeRecordShape)] $ \(version,shape) -> do
+    let document = case oldPayload openDocument of
+          Object fields -> Object (KeyMap.insert "version" (String version)
+            (if version == "3" then KeyMap.delete "plugins" fields else fields))
+          _ -> error "Expected record document"
+    source <- right (runPureEff (runDhallHandling (encodeValue (shape baseline schema) document)))
+    restored <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 source)))) >>= right
+    unless (restored == (identity,baseline,schema,openReport)) (fail "Legacy archive recipe was not OpenAgent")
   let removeRecipeChanges (Object fields) = Object (KeyMap.delete "recipeChanges" fields)
       removeRecipeChanges value = value
       legacySteps (Array steps) = Array (fmap removeRecipeChanges steps)

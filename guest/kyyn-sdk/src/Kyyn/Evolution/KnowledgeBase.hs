@@ -1,8 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
 module Kyyn.Evolution.KnowledgeBase
-  ( KnowledgeBase(..), Recipe(..), facts, recipes, onFacts ) where
+  ( KnowledgeBase(..), Recipe(..), FlowEntryRef(..), facts, recipes, onFacts ) where
 
-import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..))
+import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..), FlowEntryRef(..))
 import Kyyn.Types.Evolution (EvolutionFailure)
 import Kyyn.Edit.Internal (Collection(..))
 import Kyyn.Optics (Lens, lens)

@@ -7,9 +7,9 @@ module Kyyn.Domain.Curation
 
 import Data.List (nub, sortOn)
 import Kyyn.Domain.Evidence
-import Kyyn.Domain.Plugin (bindingName, pluginNameText, PackageIdentity(..))
+import Kyyn.Domain.Plugin (bindingName, bindingModule, pluginNameText, PackageIdentity(..))
 import Kyyn.Types.Curation (RecipeId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 
@@ -18,6 +18,7 @@ recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (Rec
 checkRecipes :: [Fact Recipe] -> Either [Diagnostic] [Fact Recipe]
 checkRecipes values = do
   mapM_ check names
+  mapM_ checkFlow [(name,entry) | Fact (FactId name) (ClosedAgent (FlowEntryRef entry)) <- values]
   case [name | name <- nub names, length (filter (== name) names) > 1] of
     name : _ -> Left [errorDiagnostic "recipe.duplicate" ("Duplicate recipe ID: " ++ name)]
     [] -> Right values
@@ -25,6 +26,9 @@ checkRecipes values = do
     names = [name | Fact (FactId name) _ <- values]
     check name = either (\message -> Left [errorDiagnostic "recipe.invalid-id" (name ++ ": " ++ message)])
       (const (Right ())) (recipeId name)
+    checkFlow (name,entry) = either
+      (\_ -> Left [errorDiagnostic "recipe.invalid-flow" (name ++ ": expected a qualified flow name such as Tasks.reconcile")])
+      (const (Right ())) (bindingModule entry)
 
 data Acknowledgement = EntireBatch | IndividualRecords [EvidenceId] deriving (Eq, Show)
 

@@ -28,7 +28,7 @@ import Kyyn.Porcelain.Validated (Validated, validatedValue)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 
 data Outcome = Succeeded | Refused | Failed | Incomplete | Interrupted deriving (Eq, Show)
 data Response = Response Outcome Value [String] [Diagnostic] deriving (Eq, Show)
@@ -227,7 +227,8 @@ reportJson (EvolutionReport plugins steps curation) = object
       ["kind" .= ("Fact" :: String), "collection" .= collection, "id" .= identity, "before" .= fmap recorded before, "after" .= fmap recorded after]
     change (RecipeChange (FactId identity) before after) = object
       ["kind" .= ("Recipe" :: String), "id" .= identity, "before" .= fmap recipeJson before, "after" .= fmap recipeJson after]
-    recipeJson (Recipe instructions) = object ["instructions" .= instructions]
+    recipeJson (OpenAgent instructions) = object ["kind" .= ("OpenAgent" :: String),"instructions" .= instructions]
+    recipeJson (ClosedAgent (FlowEntryRef entry)) = object ["kind" .= ("ClosedAgent" :: String),"flow" .= entry]
     recorded (RecordedFact contract value) = object ["schema" .= describeRootContract contract, "value" .= value]
     evidenceJson (EvidenceRef producer connector source references) = object
       ["producer" .= producer, "instance" .= connector, "source" .= source, "references" .= references]
@@ -254,8 +255,10 @@ reportText (EvolutionReport plugins steps curation) = concatMap pluginLines plug
       ++ ["    before: " ++ maybe "(absent)" value before, "    after:  " ++ maybe "(absent)" value after]
     change (RecipeChange (FactId identity) before after) =
       ["  Recipe: " ++ identity,
-       "    before: " ++ maybe "(absent)" recipeInstructions before,
-       "    after:  " ++ maybe "(absent)" recipeInstructions after]
+       "    before: " ++ maybe "(absent)" recipeText before,
+       "    after:  " ++ maybe "(absent)" recipeText after]
+    recipeText (OpenAgent instructions) = "Open agent: " ++ instructions
+    recipeText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ entry
     value (RecordedFact _ contents) = jsonText contents
 
 originJson :: PluginOrigin -> Value

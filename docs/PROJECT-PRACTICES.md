@@ -19,6 +19,13 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`node tools/test-closed-recipes.mjs INSTALLED_EXECUTABLE` checks closed-recipe
+references through the installed CLI: missing exports and wrong signatures are
+rejected; a correctly typed flow is compiled but never invoked during checking.
+It accepts and inspects an open-to-closed recipe change and its archive without
+a compiler. This is preparation evidence, not recipe execution or provider use.
+It belongs to full installed integration, not the fast gate.
+
 `cabal test model-tools --test-show-details=direct`, with `KYYN_TEST_ROOT` and
 `KYYN_TEST_TOOLCHAIN` selected, exercises captured model configuration, malformed
 root configuration, generated guest dispatch and the ordinary tool interpreter.

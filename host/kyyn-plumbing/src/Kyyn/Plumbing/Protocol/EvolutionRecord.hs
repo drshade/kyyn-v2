@@ -10,7 +10,7 @@ import Kyyn.Domain.DataType (Shape(Scalar), ScalarKind(IntegerScalar))
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, recordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord)
+import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, recordShape, openRecipeRecordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord)
 import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue)
 
 encodeEvolutionRecord :: DhallHandling :> es => EvolutionId -> RootContract -> RootContract -> EvolutionReport
@@ -34,7 +34,8 @@ decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
           Right declaration -> decodeContents legacyRecordShape ("(" <> contents <> "\n) // { version = +2, curation = " <> declaration <> " }")
       Right (String "2") -> decodeContents legacyRecordShape contents
       Right (String "3") -> decodeContents previousRecordShape contents
-      Right (String "4") -> decodeContents recordShape contents
+      Right (String "4") -> decodeContents openRecipeRecordShape contents
+      Right (String "5") -> decodeContents recordShape contents
       Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
         "Stored evolution record format is not supported by this kernel"]))
   where

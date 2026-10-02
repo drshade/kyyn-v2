@@ -22,7 +22,7 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 
 recipeTests :: IO ()
 recipeTests = do
-  let recipe = Fact (FactId "syncTodos") (Recipe "Read current documents, then explain the proposed changes.")
+  let recipe = Fact (FactId "syncTodos") (OpenAgent "Read current documents, then explain the proposed changes.")
       check label condition = unless condition (fail label)
       kb = KnowledgeBase repository (Subtree (either error id (relativePath "nested/kb")))
       at = either error id (gitRevision (replicate 40 'a'))

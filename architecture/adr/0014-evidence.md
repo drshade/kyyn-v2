@@ -324,8 +324,8 @@ their instructions and uses ordinary investigation and evolution tools.
 [ADR 0028](0028-agentic-workflows.md#open-and-closed-recipes-share-ordinary-curation)
 owns explicit flow execution alongside this mode. This ADR owns the recipe data
 type; recipes remain neither scheduled jobs nor autonomous kernel-managed
-sequences of agent actions. The constructor extension below is agreed design,
-not yet the implemented instruction-only payload.
+sequences of agent actions. Both constructors are persisted and inspectable;
+explicit flow execution remains outstanding in ADR 0028.
 
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.

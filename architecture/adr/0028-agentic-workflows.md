@@ -190,7 +190,7 @@ payloads: after a run, [latest-only storage](0014-evidence.md) still applies.
 
 ```haskell
 closedRecipe
-  :: Flow RecipeCalls (RecipeInput Root) (ProposedCuration RootEdit)
+  :: Flow (RecipeInput Root) (ProposedCuration RootEdit)
 
 data ProposedCuration edits = ProposedCuration
   { steps :: [ProposedStep edits]
@@ -198,12 +198,14 @@ data ProposedCuration edits = ProposedCuration
   }
 ```
 
-`RecipeInput` contains the selected root and pending changes grouped by captured
-instance, including the existing evidence scopes. Recipes are not restricted to
+`Kyyn.Recipe.RecipeInput root` contains the recipe ID, selected domain root and
+pending changes grouped by captured instance. Each `PendingEvidence` carries an
+existing `EvidenceScope` and `[PendingChange]`, with `New`, `Updated` and `Removed`
+carrying evidence IDs. Recipes are not restricted to
 one connector. A CLI spelling such as
 `root recipe run NAME PLUGIN INSTANCE` selects input to one invocation; it does
 not define what other invocations of that recipe may use. Multi-instance CLI
-syntax and the concrete typed input representation remain to be designed.
+syntax remains to be designed.
 
 Reuse ADR 0014's existing `Curation`, `EntireBatch EvidenceScope` and
 `IndividualRecords EvidenceScope [EvidenceId]` unchanged. The input supplies the

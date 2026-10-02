@@ -70,14 +70,14 @@ import qualified RootV2 as After
 evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = evolve (Rationale "Start tracking tasks" []) (onFacts (\\Before.Root -> Right (After.Root [])))
   >=> edit (Rationale "Teach the KB its curation tasks" []) (within recipes $ do
-    append (Fact (FactId "syncTodos") (Recipe "Inspect evidence"))
-    append (Fact (FactId "groceryPrices") (Recipe "Refresh prices")))
+    append (Fact (FactId "syncTodos") (OpenAgent "Inspect evidence"))
+    append (Fact (FactId "groceryPrices") (OpenAgent "Refresh prices")))
 `);
   cli(['evolution', 'check', setup.id]);
   accept(setup.id);
   const noRuntime = ['--runtime', path.join(temporary, 'absent-runtime'), 'root', 'recipe'];
   assert.deepEqual(cli([...noRuntime, 'list']).result.recipes.map(r => r.name), ['syncTodos', 'groceryPrices']);
-  assert.equal(cli([...noRuntime, 'show', 'syncTodos']).result.instructions, 'Inspect evidence');
+  assert.equal(cli([...noRuntime, 'show', 'syncTodos']).result.recipe.instructions, 'Inspect evidence');
   assert.equal(cli([...noRuntime, 'show', 'unknown'], 1).diagnostics[0].code, 'curation.recipe-unknown');
   assert.equal(pending('syncTodos', 'documents', 1).diagnostics[0].code, 'evidence.not-fetched');
   const first = fetch();
@@ -137,7 +137,7 @@ evolution = evolve (Rationale "Start tracking tasks" []) (onFacts (\\Before.Root
   assert.match(human, /No unacknowledged changes/);
   const teach = cli(['evolution', 'new', 'teach-and-curate']).result;
   author(teach, `EntireBatch (${scope(empty)})`, 'newTask',
-    'edit (Rationale "Teach and perform a task" []) (within recipes (append (Fact (FactId "newTask") (Recipe "Inspect documents"))))');
+    'edit (Rationale "Teach and perform a task" []) (within recipes (append (Fact (FactId "newTask") (OpenAgent "Inspect documents"))))');
   cli(['evolution', 'check', teach.id]);
   accept(teach.id);
   assert.deepEqual(pending('newTask').result.changes, [], 'New recipe did not acknowledge in the same evolution');

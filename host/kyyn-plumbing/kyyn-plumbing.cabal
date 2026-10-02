@@ -23,6 +23,7 @@ library
     Kyyn.Plumbing.Protocol.Plugin
     Kyyn.Plumbing.Protocol.PluginInvocation
     Kyyn.Plumbing.Protocol.Tool
+    Kyyn.Plumbing.Protocol.Recipe
     Kyyn.Plumbing.Protocol.PluginRegistration
     Kyyn.Plumbing.Protocol.ConnectorConfig
     Kyyn.Plumbing.Protocol.Evolution
