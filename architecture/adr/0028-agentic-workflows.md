@@ -142,6 +142,12 @@ parses authored imports with the compiler, inspects each requested type, and
 generates its codec plus `Contract` instance before compiling the authored flow.
 Imports in other authored helper modules count too; repeated imports select the
 same instance. Generated public modules are available through guest API discovery.
+For a nonempty enum (all constructors nullary), the same import also generates
+`Options`: constructor labels, declaration order and no optional descriptions.
+This supports `choice` and `score` without a handwritten instance. Payload-bearing
+sums and records receive only `Contract`. Authors needing custom option labels,
+descriptions or ordering own their instances instead of importing that generated
+module; generated and handwritten instances for the same class/type cannot coexist.
 There is no second registration list, handwritten structural contract, or generated
 flow. Agents and humans own the instructions, tool choices and flow composition.
 

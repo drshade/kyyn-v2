@@ -455,7 +455,8 @@ the register from the same selected Git revision and performs the pure compariso
 Results include a fixed plugin/instance/fetch scope and ID/change-kind entries,
 not payloads. An incompatible stored capture requires refetch
 (`evidence.producer-changed`); a refetched producer which differs from accepted
-recipe progress requires batch reconciliation (`curation.producer-changed`).
+recipe progress returns `Reconciliation` with the full current ID set, rather
+than pretending the producers' fingerprints are comparable.
 
 An evolution may name one recipe or none. A recipe may use many connector instances;
 different recipes may independently process the same evidence. Instructions can
@@ -604,10 +605,9 @@ without consulting fetch history. It does not return every intervening
 acquisition event. No historical payload is required:
 
 ```haskell
-data PendingEvidence = PendingEvidence
-  { scope :: EvidenceScope
-  , changes :: [(EvidenceId, ChangeKind)]
-  }
+data PendingEvidence
+  = PendingEvidence EvidenceScope [(EvidenceId, ChangeKind)]
+  | Reconciliation EvidenceScope [EvidenceId]
 
 -- Pure comparison after host capabilities load progress and evidence metadata.
 pendingEvidence
@@ -643,9 +643,16 @@ After a fresh clone or cache clear, a successful fetch from the same producer is
 enough to compare against the committed register, including detecting deletions.
 A failed/unavailable fetch is not an empty capture. Producer mismatch is explicit:
 do not compare incompatible fingerprints or silently report no work. The agent
-can inspect the new capture and declare a whole batch to establish its acknowledged
-map under the new producer. Individual updates cannot mix producer contexts within
-one map. The register stores no payloads, tombstones, read log or review statuses.
+receives `Reconciliation scope currentIds` through pending discovery and closed
+recipe input. This includes an empty current set when applicable. It is not a
+delta: old IDs are not presented as deletions and current IDs are not labelled
+new. Compare the current evidence with the supplied root according to the recipe.
+The flow may omit acknowledgement, leaving reconciliation pending, or declare
+`EntireBatch scope` to establish the map under the new producer. Reject individual
+acknowledgements for that scope before saving a proposal. Acceptance still owns
+updating progress; fetching and merely executing a flow do not.
+Individual updates cannot mix producer contexts within one map. The register
+stores no payloads, tombstones, read log or review statuses.
 Its size is proportional to acknowledged present items.
 
 ### Declared provenance
