@@ -68,15 +68,21 @@ checkRecipeCuration recipe inputs (Declaration.Curation declared handled) = do
   mapM_ check handled
   where
     failure code message = Left [errorDiagnostic code message]
-    available = [(Declaration.EvidenceScope (pluginNameText plugin) instanceName fetch, map fst changes) |
-      PendingEvidence (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) changes <- inputs]
+    available = map input inputs
+    input batch = case batch of
+      PendingEvidence snapshot changes -> (scopeOf snapshot, Just (map fst changes))
+      Reconciliation snapshot _ -> (scopeOf snapshot, Nothing)
+    scopeOf (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) =
+      Declaration.EvidenceScope (pluginNameText plugin) instanceName fetch
     check item = do
       let scope = case item of Declaration.EntireBatch value -> value; Declaration.IndividualRecords value _ -> value
       ids <- maybe (failure "recipe.curation-scope" "The proposal acknowledges a scope not supplied to this invocation") Right (lookup scope available)
       case item of
         Declaration.EntireBatch _ -> Right ()
-        Declaration.IndividualRecords _ chosen -> unless (all (`elem` ids) chosen)
-          (failure "recipe.curation-record" "The proposal acknowledges IDs outside the supplied pending batch")
+        Declaration.IndividualRecords _ chosen -> case ids of
+          Nothing -> failure "curation.producer-changed" "The evidence producer changed; acknowledge the entire reconciliation batch or leave it pending"
+          Just pending -> unless (all (`elem` pending) chosen)
+            (failure "recipe.curation-record" "The proposal acknowledges IDs outside the supplied pending batch")
 
 pendingRecipeEvidence
   :: (RecipeStore :> es, RootOpening :> es, EvolutionStore :> es, PluginPreparation :> es, EvidenceStore :> es)

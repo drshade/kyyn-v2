@@ -43,3 +43,12 @@ pendingResult (RecipeId recipe) (PendingEvidence (EvidenceSnapshotRef (Connector
     (["Recipe: " ++ recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch,
       "Scope: EvidenceScope " ++ unwords (map show [pluginNameText plugin,instanceName,fetch])] ++
       if null changes then ["No unacknowledged changes."] else [show kind ++ "  " ++ item | (EvidenceId item,kind) <- changes])
+pendingResult (RecipeId recipe) (Reconciliation (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) ids) =
+  success (object ["recipe" .= recipe, "kind" .= ("Reconciliation" :: String),
+    "scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
+    "currentIds" .= [item | EvidenceId item <- ids]])
+    (["Recipe: " ++ recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch,
+      "Producer changed: reconcile the current evidence with the root.",
+      "Scope: EvidenceScope " ++ unwords (map show [pluginNameText plugin,instanceName,fetch]),
+      "Acknowledge the entire batch or leave it pending."] ++
+      if null ids then ["The current evidence set is empty."] else [item | EvidenceId item <- ids])

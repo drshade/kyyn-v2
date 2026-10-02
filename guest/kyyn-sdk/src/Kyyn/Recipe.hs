@@ -18,6 +18,9 @@ data RecipeInput root = RecipeInput
 -- | Pending changes for one captured connector instance. Use its scope in curation.
 data PendingEvidence = PendingEvidence
   { scope :: EvidenceScope, changes :: [PendingChange] }
+  -- | The producer changed. Reconcile these current IDs with the root;
+  -- acknowledge the whole scope or leave it pending.
+  | Reconciliation { scope :: EvidenceScope, currentIds :: [EvidenceId] }
   deriving (Eq, Show)
 
 -- | Net changes since this recipe last acknowledged an evidence item.

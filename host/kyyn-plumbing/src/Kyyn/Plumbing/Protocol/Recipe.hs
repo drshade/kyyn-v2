@@ -66,6 +66,10 @@ recipeInputValue :: RecipeId -> Value -> [PendingEvidence] -> Value
 recipeInputValue (RecipeId name) root pending = object
   ["recipe" .= name,"root" .= root,"pending" .= map selected pending]
   where
-    selected (PendingEvidence (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) changes) = object
+    selected (PendingEvidence snapshot changes) = batch snapshot "Changes"
+      [object ["tag" .= show kind,"value" .= item] | (EvidenceId item,kind) <- changes]
+    selected (Reconciliation snapshot ids) = batch snapshot "Reconciliation"
+      [Text.pack item | EvidenceId item <- ids]
+    batch (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) (kind :: String) values = object
       ["scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
-       "changes" .= [object ["tag" .= show kind,"value" .= item] | (EvidenceId item,kind) <- changes]]
+       "batch" .= object ["tag" .= kind,"value" .= values]]
