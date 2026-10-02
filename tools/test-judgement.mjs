@@ -29,7 +29,7 @@ try {
   const draft = cli(['evolution', 'new', 'add-judgement-tool']).result;
   const modules = cli(['guest', 'module', 'list', '--evolution', draft.id]).result.modules;
   assert(modules.includes('Kyyn.Agentic') && modules.includes('Kyyn.Connectors'));
-  assert(!modules.some(name => name.startsWith('Kyyn.Judgement')));
+  assert(modules.includes('Agentic') && modules.includes('Agentic.Questions'));
   const api = cli(['guest', 'module', 'show', 'Agentic.Questions']).result;
   for (const name of ['yesNo', 'choice', 'score', 'Questions', 'YesNo', 'Probability'])
     assert(api.symbols.some(symbol => symbol.name === name), name);

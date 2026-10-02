@@ -344,7 +344,7 @@ Prepared fact proposals keep their operations, rationale and curation declaratio
 in `change/proposal.dhall`. Checking decodes that captured file and supplies
 `KyynFrozenProposal.proposal` to the ordinary evolution entry; no model is called.
 Editing the file requires checking again before acceptance. The proposal-authoring
-operation currently exists in the host API; recipe execution is not yet a CLI command.
+operation is also used by `root recipe run` to save closed-recipe results.
 
 For tool authoring, inspect these modules on an accepted root or add
 `--evolution ID` to inspect its target:

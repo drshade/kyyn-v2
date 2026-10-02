@@ -1,4 +1,4 @@
-module Kyyn.Runtime.ModelWire (conversationCodec, replyCodec, valueCodec, textCodec, pairCodec, mapped) where
+module Kyyn.Runtime.ModelWire (conversationCodec, replyCodec, valueCodec, textCodec, pairCodec) where
 
 import qualified Agentic.Core as A
 import qualified Agentic.Runtime as A

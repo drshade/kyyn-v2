@@ -18,7 +18,7 @@ import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.Judgement (Judgement(..), judge)
 import Kyyn.Plumbing.Protocol.Judgement (encodeReply)
-import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), encodeResponse, success, failure)
+import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), encodeResponse, success, failure, parseResult)
 import Kyyn.Plumbing.Protocol.Tool
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -83,7 +83,9 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
     assert "out-of-range wire probability accepted" (malformed == Nothing && malformedCode /= ExitSuccess)
     forM_ [MissingAnswer,ExtraAnswer,WrongAnswer] $ \scenario -> do
       (bad,_,badCode) <- broker scenario program
-      assert "malformed batch assembled" (bad /= Nothing && bad /= Just (success (String (Text.pack expected))) && badCode == ExitSuccess)
+      assert "malformed batch assembled" (case fmap parseResult bad of
+        Just (Right (Left _)) -> badCode == ExitSuccess
+        _ -> False)
   forM_ [
     ("query", "invalid :: Query.Query () Bool\ninvalid = interpret assessment \"x\"\n"),
     ("pure validator", "invalid :: () -> Bool\ninvalid _ = interpret assessment \"x\"\n"),

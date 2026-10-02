@@ -1,7 +1,7 @@
 ---
 id: 0027
 title: 'Agentic judgements backed by Jev'
-status: accepted
+status: implemented
 date: 2026-10-02
 ---
 
