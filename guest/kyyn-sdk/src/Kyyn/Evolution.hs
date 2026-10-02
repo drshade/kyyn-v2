@@ -2,7 +2,7 @@ module Kyyn.Evolution
   ( Evolution, Rationale(..), EvolutionFailure(..)
   , EvidenceRef(..), EvidenceId(..), (>=>), identityEvolution, withCuration
   , RecipeId(..), EvidenceScope(..), Acknowledgement(..), Curation(..)
-  , KnowledgeBase(..), Recipe(..), facts, recipes, onFacts
+  , KnowledgeBase(..), Recipe(..), FlowEntryRef(..), facts, recipes, onFacts
   , module Kyyn.Edit
   ) where
 

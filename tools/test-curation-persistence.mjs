@@ -33,11 +33,11 @@ try {
   fs.copyFileSync(recipeFile, targetRecipes);
   invoke(executable, ['--kb', kb, 'evolution', 'check', add.id], 1);
   fs.unlinkSync(targetRecipes);
-  edit(add, 'append (Fact (FactId "syncTodos") (Recipe "Inspect current evidence"))');
+  edit(add, 'append (Fact (FactId "syncTodos") (OpenAgent "Inspect current evidence"))');
   cli('evolution', 'check', add.id);
   const saved = cli('evolution', 'show', add.id);
   assert.match(saved, /"kind":"Recipe"/);
-  edit(add, 'append (Fact (FactId "bad-name") (Recipe "Invalid"))');
+  edit(add, 'append (Fact (FactId "bad-name") (OpenAgent "Invalid"))');
   const invalid = JSON.parse(invoke(executable, ['--kb', kb, '--json', 'evolution', 'check', add.id], 1));
   assert.equal(invalid.diagnostics[0].code, 'recipe.invalid-id');
   assert.equal(cli('evolution', 'show', add.id), saved, 'Rejected recipe replaced the candidate');
@@ -45,7 +45,7 @@ try {
   fs.writeFileSync(source, fs.readFileSync(source, 'utf8').replace('bad-name', 'syncTodos').replace('Invalid', 'Inspect current evidence'));
   cli('evolution', 'check', add.id);
   accept(add.id);
-  assert.equal(JSON.parse(cli('root', 'recipe', 'show', 'syncTodos')).result.instructions, 'Inspect current evidence');
+  assert.equal(JSON.parse(cli('root', 'recipe', 'show', 'syncTodos')).result.recipe.instructions, 'Inspect current evidence');
   const register = path.join(kb, 'root/curation.dhall');
   fs.writeFileSync(register, `[{ recipe = "syncTodos", plugin = "files", instance = "documents", producer = "source", contract = "${'0'.repeat(64)}", acknowledged = [{ id = "milk", fingerprint = "v1" }] }]`);
   invoke('git', ['-C', kb, 'add', 'root']);
@@ -66,14 +66,14 @@ try {
   assert.match(accepted, /v1/);
   cli('root', 'check');
   const update = JSON.parse(cli('evolution', 'new', 'refine-instructions')).result;
-  edit(update, 'update (FactId "syncTodos") (put (Recipe "Read evidence and explain changes"))');
+  edit(update, 'update (FactId "syncTodos") (put (OpenAgent "Read evidence and explain changes"))');
   const second = update.id;
   assert.equal(fs.existsSync(path.join(kb, 'evolutions', second, 'target/curation.dhall')), false);
   cli('evolution', 'check', second);
   cli('evolution', 'ready', second);
   cli('evolution', 'accept', second);
   assert.equal(fs.readFileSync(register, 'utf8'), accepted);
-  assert.equal(JSON.parse(cli('root', 'recipe', 'show', 'syncTodos')).result.instructions, 'Read evidence and explain changes');
+  assert.equal(JSON.parse(cli('root', 'recipe', 'show', 'syncTodos')).result.recipe.instructions, 'Read evidence and explain changes');
   const remove = JSON.parse(cli('evolution', 'new', 'remove-recipe')).result;
   edit(remove, 'remove (FactId "syncTodos")');
   cli('evolution', 'check', remove.id);
@@ -81,7 +81,7 @@ try {
   assert.deepEqual(JSON.parse(cli('root', 'recipe', 'list')).result.recipes, []);
   assert.equal(fs.readFileSync(register, 'utf8'), accepted, 'Removing recipe discarded its progress');
   const restore = JSON.parse(cli('evolution', 'new', 'restore-recipe')).result;
-  edit(restore, 'append (Fact (FactId "syncTodos") (Recipe "Resume the same task"))');
+  edit(restore, 'append (Fact (FactId "syncTodos") (OpenAgent "Resume the same task"))');
   cli('evolution', 'check', restore.id);
   accept(restore.id);
   assert.equal(fs.readFileSync(register, 'utf8'), accepted);

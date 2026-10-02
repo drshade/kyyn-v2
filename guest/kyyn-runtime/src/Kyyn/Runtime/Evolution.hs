@@ -6,7 +6,7 @@ import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Evidence (EvidenceId(..))
 import Kyyn.Types.Curation
-import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..))
+import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..), FlowEntryRef(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Program (Program(..))
@@ -25,19 +25,29 @@ knowledgeBaseCodec valueCodec = Codec encode decode
       values <- fields ["facts","recipes"] value
       KnowledgeBase <$> field "facts" valueCodec values <*> field "recipes" (listCodec recipeCodec) values
     recipeCodec = Codec encodeRecipe decodeRecipe
-    encodeRecipe (Fact (FactId name) (Recipe instructions)) = record
+    encodeRecipe (Fact (FactId name) payload) = record
       [("id",encodeWith stringCodec name),
-       ("value",record [("instructions",encodeWith stringCodec instructions)])]
+       ("value",encodePayload payload)]
     decodeRecipe value = do
       values <- fields ["id","value"] value
       name <- field "id" stringCodec values
       payload <- field "value" payloadCodec values
       pure (Fact (FactId name) payload)
     payloadCodec = Codec encodePayload decodePayload
-    encodePayload (Recipe instructions) = record [("instructions",encodeWith stringCodec instructions)]
+    encodePayload (OpenAgent instructions) = tagged "OpenAgent" (Just
+      (record [("instructions",encodeWith stringCodec instructions)]))
+    encodePayload (ClosedAgent (FlowEntryRef entry)) = tagged "ClosedAgent" (Just
+      (record [("flow",encodeWith stringCodec entry)]))
     decodePayload value = do
-      values <- fields ["instructions"] value
-      Recipe <$> field "instructions" stringCodec values
+      (name, payload) <- variant value
+      case (name,payload) of
+        ("OpenAgent", Just contents) -> do
+          values <- fields ["instructions"] contents
+          OpenAgent <$> field "instructions" stringCodec values
+        ("ClosedAgent", Just contents) -> do
+          values <- fields ["flow"] contents
+          ClosedAgent . FlowEntryRef <$> field "flow" stringCodec values
+        _ -> Left "Expected OpenAgent or ClosedAgent recipe"
 
 executeEvolution :: Codec a -> Codec b
   -> (a -> Program NoRequests (Either EvolutionFailure (EvolutionOutput b)))

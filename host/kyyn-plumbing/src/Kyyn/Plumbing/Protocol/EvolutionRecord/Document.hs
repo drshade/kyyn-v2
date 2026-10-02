@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.EvolutionRecord.Document
-  ( recordDocument, recordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord ) where
+  ( recordDocument, recordShape, openRecipeRecordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, object, (.=), withObject, (.:), (.:?), (.!=))
@@ -17,7 +17,7 @@ import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Plumbing.Protocol.Plugin (originShape, originValue, parseOrigin)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration)
-import Kyyn.Plumbing.Protocol.Recipes (recipeShape, recipeValue, parseRecipe)
+import Kyyn.Plumbing.Protocol.Recipes (recipeShape, legacyRecipeShape, recipeValue, parseRecipe)
 import Kyyn.Domain.Curation (recipeId)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
@@ -28,7 +28,7 @@ recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
 recordDocument identity before after (EvolutionReport plugins steps curation) = do
   encoded <- traverse step steps
   pure (recordShape before after,
-    object ["version" .= ("4" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+    object ["version" .= ("5" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
       "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation,
       "plugins" .= [object ["name" .= pluginNameText name, "before" .= optional originValue old,
         "after" .= optional originValue new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]])
@@ -66,19 +66,25 @@ headerShape :: Shape
 headerShape = Record headerFields
 
 recordShape :: RootContract -> RootContract -> Shape
-recordShape before after = case previousRecordShape before after of
+recordShape before after = withPlugins (recordShapeWithRecipes (Just recipeShape) before after)
+
+openRecipeRecordShape :: RootContract -> RootContract -> Shape
+openRecipeRecordShape before after = withPlugins (previousRecordShape before after)
+
+withPlugins :: Shape -> Shape
+withPlugins shape = case shape of
   Record fields -> Record (fields ++ [("plugins",List (Record [("name",text),("before",Optional originShape),
     ("after",Optional originShape),("files",List text)]))])
   _ -> error "Expected record shape"
 
 previousRecordShape :: RootContract -> RootContract -> Shape
-previousRecordShape = recordShapeWithRecipes True
+previousRecordShape = recordShapeWithRecipes (Just legacyRecipeShape)
 
 legacyRecordShape :: RootContract -> RootContract -> Shape
-legacyRecordShape = recordShapeWithRecipes False
+legacyRecordShape = recordShapeWithRecipes Nothing
 
-recordShapeWithRecipes :: Bool -> RootContract -> RootContract -> Shape
-recordShapeWithRecipes includeRecipes before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
+recordShapeWithRecipes :: Maybe Shape -> RootContract -> RootContract -> Shape
+recordShapeWithRecipes recipe before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
   where
     fact collection = Union [(tag, Just (Record [("id",text),("value",shape)])) |
       (tag,contract) <- [("Before",before),("After",after)],
@@ -86,7 +92,7 @@ recordShapeWithRecipes includeRecipes before after = Record (headerFields ++ [("
     change collection = Record [("id",text),("before",Optional (fact collection)),("after",Optional (fact collection))]
     step = Record ([("explanation",text),("evidence",List evidenceShape),
       ("changes",Record [(name,List (change name)) | name <- collectionNames before after])] ++
-      [("recipeChanges",List (Record [("id",text),("before",Optional recipeShape),("after",Optional recipeShape)])) | includeRecipes])
+      [("recipeChanges",List (Record [("id",text),("before",Optional payload),("after",Optional payload)])) | Just payload <- [recipe]])
 
 collectionNames :: RootContract -> RootContract -> [String]
 collectionNames before after = sort (nub [name | contract <- [before,after],
@@ -99,7 +105,7 @@ header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootCon
 header = withObject "Evolution record" $ \record -> do
   version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version `notElem` ["2","3","4"] then pure (Left [errorDiagnostic "evolution.record-format"
+  if version `notElem` ["2","3","4","5"] then pure (Left [errorDiagnostic "evolution.record-format"
     "Stored evolution record format is not supported by this kernel"])
   else do
     before <- record .: "before" >>= restoreSnapshot

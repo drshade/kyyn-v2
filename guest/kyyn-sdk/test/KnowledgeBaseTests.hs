@@ -8,13 +8,13 @@ import Kyyn.Types.Diagnostic (errorDiagnostic)
 main :: IO ()
 main = do
   let ident = FactId "syncTodos"
-      task = Fact ident (Recipe "Read the pending evidence")
+      task = Fact ident (OpenAgent "Read the pending evidence")
       initial = KnowledgeBase (7 :: Integer) []
       withTask = KnowledgeBase 7 [task]
-      edited = KnowledgeBase 8 [Fact ident (Recipe "Explain each change")]
+      edited = KnowledgeBase 8 [Fact ident (OpenAgent "Explain each change")]
       appendTask = within recipes (append task)
       updateTask = do
-        within recipes $ update ident $ put (Recipe "Explain each change")
+        within recipes $ update ident $ put (OpenAgent "Explain each change")
         modifying facts (+ 1)
   assert "append recipe preserves domain facts" (execute appendTask initial == Right withTask)
   assert "recipe/domain edits share one state action" (execute updateTask withTask == Right edited)
@@ -23,7 +23,7 @@ main = do
   assert "duplicate recipe ID refuses" (isFailure (execute appendTask withTask))
   assert "missing recipe refuses" (isFailure (execute (within recipes $ remove ident) initial))
   assert "ambiguous recipe refuses" (isFailure
-    (execute (within recipes $ update ident (put (Recipe "changed"))) (KnowledgeBase (7 :: Integer) [task,task])))
+    (execute (within recipes $ update ident (put (OpenAgent "changed"))) (KnowledgeBase (7 :: Integer) [task,task])))
   assert "type-changing facts lens preserves recipes"
     (set facts "seven" withTask == KnowledgeBase "seven" [task])
   assert "onFacts preserves recipes during schema change"

@@ -6,10 +6,11 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Curation (checkRecipes)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Types.KnowledgeBase (Recipe)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
-import Kyyn.Plumbing.Protocol.Recipes (recipesShape, recipesValue, parseRecipes)
+import Kyyn.Plumbing.Protocol.Recipes (recipesShape, legacyRecipeShape, recipesValue, parseRecipes)
 
 encodeRecipes :: DhallHandling :> es => [Fact Recipe] -> Eff es (Either [Diagnostic] ByteString)
 encodeRecipes values = case checkRecipes values of
@@ -22,5 +23,10 @@ decodeRecipes (Just bytes) = case Text.decodeUtf8' bytes of
   Left problem -> pure (failure (show problem))
   Right source -> do
     decoded <- decodeValue recipesShape source
-    pure $ decoded >>= either failure checkRecipes . parseEither parseRecipes
+    compatible <- case decoded of
+      Right value -> pure (Right value)
+      Left diagnostics -> do
+        old <- decodeValue (List (Record [("id",Scalar TextScalar),("value",legacyRecipeShape)])) source
+        pure (either (const (Left diagnostics)) Right old)
+    pure $ compatible >>= either failure checkRecipes . parseEither parseRecipes
   where failure = Left . pure . errorDiagnostic "recipe.invalid-data"

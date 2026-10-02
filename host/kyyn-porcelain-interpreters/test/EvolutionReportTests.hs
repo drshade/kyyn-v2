@@ -92,8 +92,8 @@ main = do
 
 recipeTests :: RootContract -> RootContract -> Value -> Value -> IO ()
 recipeTests beforeContract afterContract input migrated = do
-  let first = KB.Recipe "Read todos"
-      updated = KB.Recipe "Read todos and explain changes"
+  let first = KB.OpenAgent "Read todos"
+      updated = KB.OpenAgent "Read todos and explain changes"
       entry value = Fact (FactId "syncTodos") value
       before = KB.KnowledgeBase input [entry first]
       after = KB.KnowledgeBase input [entry updated]
@@ -109,6 +109,9 @@ recipeTests beforeContract afterContract input migrated = do
   assert (added == expected Nothing (Just first)) "Recipe addition lost identity or instructions"
   (_,edited) <- right (same before after)
   assert (edited == expected (Just first) (Just updated)) "Recipe edit absent from report"
+  let closed = KB.ClosedAgent (KB.FlowEntryRef "Tasks.reconcile")
+  (_,converted) <- right (same before (KB.KnowledgeBase input [entry closed]))
+  assert (converted == expected (Just first) (Just closed)) "Recipe constructor change absent from report"
   (_,removed) <- right (same before empty)
   assert (removed == expected (Just first) Nothing) "Recipe deletion absent from report"
   (_,identity) <- right (check before beforeContract [] before)

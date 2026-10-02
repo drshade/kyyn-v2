@@ -694,9 +694,11 @@ unions containing typed fact values. Rationale and evidence remain ordinary
 records and lists. Candidate reload and archived inspection return the same domain
 report types they received at save time.
 
-New records use version 4, including the host-derived plugin package comparison
-described in [plugins](0015-plugins.md). Versions 1–3 remain readable: absent
-plugin summaries are empty, and versions 1–2 have no recipe changes. Reading an
+New records use version 5, including the recipe constructors in
+[evidence](0014-evidence.md) and the host-derived plugin package comparison
+described in [plugins](0015-plugins.md). Versions 1–4 remain readable: old recipe
+payloads read as OpenAgent, absent plugin summaries are empty, and versions 1–2
+have no recipe changes. Reading an
 older archive does not reconstruct a missing summary from current source.
 
 Once committed, this record is durable history, not a disposable cache:

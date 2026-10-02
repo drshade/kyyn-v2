@@ -13,6 +13,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.Curation
 import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Data.Coerce (coerce)
 import Kyyn.Domain.DataType (DataType(StringType))
 import Kyyn.Domain.Evidence
@@ -58,7 +59,7 @@ curationPersistenceTests = do
           ("{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", " ++
            "queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, " ++
            "tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }" ++ extra ++ " }"))])
-      declaration = Fact (FactId "syncTodos") (Recipe "Inspect current evidence")
+      declaration = Fact (FactId "syncTodos") (OpenAgent "Inspect current evidence")
       encodeRecipeData value = runPureEff (runDhallHandling (encodeRecipes value))
       decodeRecipeData value = runPureEff (runDhallHandling (decodeRecipes value))
   _ <- right (readManifest "")
@@ -66,9 +67,14 @@ curationPersistenceTests = do
     (fail "Obsolete manifest recipe field accepted")
   recipeBytes <- right (encodeRecipeData [declaration])
   unless (decodeRecipeData (Just recipeBytes) == Right [declaration]) (fail "Recipe data round trip failed")
+  let closed = Fact (FactId "closed") (ClosedAgent (FlowEntryRef "Tasks.reconcile"))
+  mixed <- right (encodeRecipeData [declaration,closed])
+  unless (decodeRecipeData (Just mixed) == Right [declaration,closed]) (fail "Closed recipe reference lost")
+  unless (decodeRecipeData (Just "[{ id = \"syncTodos\", value = { instructions = \"Inspect current evidence\" } }]") == Right [declaration])
+    (fail "Old recipe payload no longer reads as OpenAgent")
   unless (decodeRecipeData Nothing == Right []) (fail "Absent recipe data is not empty")
   unless (all (isLeft . encodeRecipeData)
-      [[declaration,declaration], [Fact (FactId "bad-name") (Recipe "x")]])
+      [[declaration,declaration], [Fact (FactId "bad-name") (OpenAgent "x")]])
     (fail "Duplicate or invalid recipe IDs accepted")
   unless (all (isLeft . decodeRecipeData . Just)
       ["./external.dhall", "True", "[{ id = \"bad-name\", value = { instructions = \"x\" } }]"])
@@ -80,7 +86,7 @@ resolutionTests = do
   let (recipe,instanceRef,producer,items) = case curationEntries sampleCuration of
         [entry] -> entry
         _ -> error "Expected one sample register entry"
-      recipes = [Fact (FactId (coerce recipe)) (Recipe "Inspect evidence")]
+      recipes = [Fact (FactId (coerce recipe)) (OpenAgent "Inspect evidence")]
       scope fetch = Declaration.EvidenceScope "files" "documents" fetch
       declaration values = Just (Declaration.Curation recipe values)
       run selected = runPureEff . interpret (\_ operation -> case operation of

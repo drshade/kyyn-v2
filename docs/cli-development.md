@@ -540,12 +540,16 @@ import Kyyn.Schema (Fact(..), FactId(..))
 
 evolution = edit (Rationale "Teach the KB how to curate todos" []) $
   within recipes $ append (Fact (FactId "syncTodos")
-    (Recipe "Inspect item/status evidence and update todos."))
+    (OpenAgent "Inspect item/status evidence and update todos."))
 ```
 
 Use `update` and `remove` with the same FactId to refine or remove the recipe.
 The ID is its name and follows the connector-binding identifier rule; IDs must
 be unique. Recipe changes appear distinctly in the evolution review.
+
+`ClosedAgent (FlowEntryRef "Tasks.reconcile")` stores a named authored flow
+instead of instructions. Both constructors can be inspected and edited; closed
+recipe execution is not yet exposed by the CLI.
 
 The host persists these values in `root/recipes.dhall`; an absent file means no
 recipes. Do not place this file in an evolution target: the evolution must return

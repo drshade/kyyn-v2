@@ -41,7 +41,7 @@ import qualified RootV2 as After
 evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = evolve (Rationale "Start tracking tasks" [])
   (onFacts (\\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Teach curation" []) (within recipes (append (Fact (FactId "sync") (Recipe "Review tasks"))))
+  >=> edit (Rationale "Teach curation" []) (within recipes (append (Fact (FactId "sync") (OpenAgent "Review tasks"))))
 `);
   cli(['evolution', 'check', initial.id]);
   accept(initial.id);
