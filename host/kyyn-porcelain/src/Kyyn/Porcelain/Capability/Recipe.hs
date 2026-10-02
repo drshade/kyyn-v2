@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Capability.Recipe (findRecipeAt, pendingRecipeEvidence, runRecipe) where
+module Kyyn.Porcelain.Capability.Recipe (findRecipeAt, pendingRecipeEvidence, proposeFromRecipe) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad (unless, forM)
@@ -36,11 +36,11 @@ findRecipeAt kb revision (RecipeId name) = runExceptT $ do
     [recipe] -> pure recipe
     _ -> throwE [errorDiagnostic "curation.recipe-unknown" ("No recipe named " ++ name ++ " is declared in the selected root")]
 
-runRecipe :: (RootOpening :> es, PluginPreparation :> es, PluginRead :> es,
+proposeFromRecipe :: (RootOpening :> es, PluginPreparation :> es, PluginRead :> es,
   RecipeExecution :> es, EvolutionAuthoring :> es)
   => KnowledgeBase -> GitRevision -> RecipeId -> [(PluginName,ConnectorName)]
   -> Eff es (Either [Diagnostic] EvolutionWorkspace)
-runRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name) selected = runExceptT $ do
+proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name) selected = runExceptT $ do
   unless (not (null selected)) (failure "recipe.inputs" "Select at least one PLUGIN INSTANCE pair")
   unless (length selected == length (nub selected)) (failure "recipe.duplicate-input" "Each PLUGIN INSTANCE pair must appear only once")
   location <- either (failure "kb.path") pure (rootLocation kb)

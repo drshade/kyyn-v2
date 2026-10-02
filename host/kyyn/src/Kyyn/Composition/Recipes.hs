@@ -8,7 +8,7 @@ import Kyyn.Domain.Git (Repository(..))
 import Kyyn.Domain.Path (scopedPath)
 import Kyyn.Porcelain.Capability.EvolutionStore (workspaceLocation)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
-import Kyyn.Porcelain.Capability.Recipe (findRecipeAt, pendingRecipeEvidence, runRecipe)
+import Kyyn.Porcelain.Capability.Recipe (findRecipeAt, pendingRecipeEvidence, proposeFromRecipe)
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
 import Kyyn.Plumbing.Interpreter.Judgement (runJudgementIO)
 import Kyyn.Plumbing.Interpreter.ModelTurn (runModelTurnIO)
@@ -40,7 +40,7 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
       . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
       . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk
       . runToolPreparation sdk . runRecipeExecution . runEvolutionAuthoring $ do
-        result <- runRecipe kb revision recipe instances
+        result <- proposeFromRecipe kb revision recipe instances
         pure $ case result of
           Left diagnostics -> refusal diagnostics
           Right workspace -> case workspaceLocation workspace of
