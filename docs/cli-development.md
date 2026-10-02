@@ -514,10 +514,25 @@ modules. The import convention is `Kyyn.Contracts.<defining module>.<type>`;
 inspect it with `guest module show Kyyn.Contracts.Todos.Todo` inside the KB.
 Generated modules also export a typed `codec` for explicit-codec uses.
 
+For a nonempty enum, the same import supplies `Options` for Agentic `choice`
+and `score`, using constructor names and declaration order:
+
+```haskell
+-- In Todos.hs: data Priority = Routine | Important | Urgent
+import Todos (Priority)
+import Kyyn.Contracts.Todos.Priority ()
+
+priority = A.judge (A.choice @Priority "How urgent is this?")
+```
+
+Use `TypeApplications` for the example. Generated options have no descriptions.
+For custom labels, descriptions or ordering, write your own instances instead
+of importing the generated module. Importing it alongside your own instance
+produces the compiler's duplicate-instance error; remove one of the definitions.
+
 Select monomorphic data/newtype declarations. For aliases, import the underlying
 type's defining contract; for a standalone list or applied generic contract, use
 a named data/newtype wrapper. Existing primitive library contracts still work.
-Executable closed recipes are not yet exposed.
 Agentic's SystemOne uses Jev; SystemTwo uses the configured OpenAI or Anthropic provider.
 
 ## Recipe declarations and curation progress
@@ -614,9 +629,16 @@ kyyn-v2 --kb PATH --json root recipe pending list syncTodos local-file documents
 ```
 
 List/show needs no runtime bundle. Pending discovery returns a fixed `scope`
-(`plugin`, `instance`, `fetch`) and `changes` (`id`, `kind`), comparing latest
+(`plugin`, `instance`, `fetch`), `kind: "Changes"` and `changes` (`id`, `kind`), comparing latest
 evidence against this recipe's accepted acknowledgements. It neither fetches nor
-marks anything handled. Missing evidence asks you to fetch; changed producers ask
-you to refetch or reconcile as appropriate. An empty list means no unacknowledged
+marks anything handled. An incompatible cached producer requires refetching.
+After refetch, a producer change relative to accepted progress returns
+`kind: "Reconciliation"` and `currentIds` instead of `changes`. These are all
+currently present IDs, not a diff against the previous producer. The same input
+arrives in closed flows as `Reconciliation scope currentIds`. Compare current
+evidence with the root, then return `EntireBatch scope` or omit acknowledgement
+to leave reconciliation pending. `IndividualRecords` is refused for that scope.
+An empty reconciliation set still needs consideration; it is not an empty delta.
+An empty ordinary changes list means no unacknowledged
 changes, not that the recipe's task is complete. Use plugin methods or KB tools to
 read the actual evidence.

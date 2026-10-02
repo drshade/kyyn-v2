@@ -29,6 +29,10 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
          (Just "number",IntegerType),(Just "identity",sdkFactIdType)]]
   generated <- right (generateAgenticCodec "Generated" payload)
   instanceFiles <- right (generateAgenticInstance 0 "Schema.Payload" payload)
+  enumFiles <- right (generateAgenticInstance 1 "Schema.Status" status)
+  sumFiles <- right (generateAgenticInstance 2 "Schema.Choice" choice)
+  unless (all (not . Text.isInfixOf "instance Options" . Text.decodeUtf8 . snd) (files instanceFiles ++ files sumFiles))
+    (fail "Options generated for a non-enum")
   forM_ [("Schema.Alias",payload),("Schema.List",ListType payload),("Schema.Parameter",Algebraic "Schema.Parameter" [payload] [])] $ \(name,datatype) ->
     case generateAgenticInstance 0 name datatype of
       Left _ -> pure ()
@@ -38,7 +42,7 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
       case generateAgenticCodec "Rejected" unsupported of
         Left _ -> pure ()
         Right _ -> fail "Unsupported model contract generated code"
-  forM_ (files generated ++ files instanceFiles) $ \(relative,bytes) -> do
+  forM_ (files generated ++ files instanceFiles ++ files enumFiles ++ files sumFiles) $ \(relative,bytes) -> do
     let destination = temporary </> relativeName relative
     createDirectoryIfMissing True (takeDirectory destination)
     Bytes.writeFile destination bytes
@@ -48,7 +52,10 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
      "data Choice = Named String | Counted { count :: Integer, enabled :: Bool } deriving (Eq,Show)",
      "data Payload = Payload { status :: Status, choices :: [Choice], note :: Maybe String, number :: Integer, identity :: FactId } deriving (Eq,Show)"]))
   Bytes.writeFile (temporary </> "Main.hs") (Text.encodeUtf8 (Text.unlines
-    ["{-# LANGUAGE OverloadedStrings #-}", "module Main where", "import Schema", "import Generated",
+    ["{-# LANGUAGE OverloadedStrings, TypeApplications #-}", "module Main where", "import Schema", "import Generated",
+     "import Kyyn.Contracts.Schema.Status ()",
+     "import qualified Agentic.Questions as Q",
+     "import Agentic.Contract (options, optionList, optionLabel, optionValue, optionDoc)",
      "import Kyyn.Types.Fact", "import qualified Agentic as A", "import qualified Agentic.Runtime as R",
      "import Kyyn.Contracts.Schema.Payload ()",
      "import Agentic.Runtime (Runtime(..), SystemTwo(..))", "import qualified Agentic.Schema as S",
@@ -64,6 +71,10 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
      "flow :: A.Agentic (Either String) Payload Payload",
      "flow = A.draft \"Draft a value\"",
      "main :: IO ()", "main = do",
+     "  let opts = optionList (options @Status)",
+     "  unless (map optionLabel opts == [\"Open\",\"Done\"] && map optionValue opts == [Open,Done] && map optionDoc opts == [Nothing,Nothing]) (fail \"Generated enum options differed\")",
+     "  unless (Q.decodeAnswers (Q.choice @Status \"State?\") [Q.ChoiceAnswer \"Done\" [(\"Open\",0.1),(\"Done\",0.9)] 0.8] == Right (Q.Choice Done [(Open,0.1),(Done,0.9)] 0.8)) (fail \"Generated choice options failed\")",
+     "  unless (Q.decodeAnswers (Q.score @Status \"Position?\") [Q.ScoreAnswer 0.75 [(0,0.25),(1,0.75)] 0.7] == Right (Q.Score 0.75 [(Open,0.25),(Done,0.75)] 0.7)) (fail \"Generated score options failed\")",
      "  unless (A.decode rootCodec encoded == Right sample) (fail \"Round trip failed\")",
      "  unless (A.interpret rt flow sample == Right sample) (fail \"Generated-contract draft/retry failed\")",
      "  let absent = sample { note = Nothing }",

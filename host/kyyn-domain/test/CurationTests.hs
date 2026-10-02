@@ -85,11 +85,19 @@ main = do
   expect "refresh after prepared acknowledgement" recipe base latest [("milk",Updated)]
   expect "fresh clone no history" recipe base (at "unrelated-new-fetch-id" [("milk","v1")]) [("bread",Removed)]
   let replacement = capture instanceA otherProducer "new-producer" [("milk","v1")]
-  assert "producer mismatch pending" (pendingEvidence recipe base replacement == Left CurationProducerChanged)
+  let EvidenceCapture replacementScope _ = replacement
+  assert "producer mismatch supplies current IDs"
+    (pendingEvidence recipe base replacement == Right (Reconciliation replacementScope [EvidenceId "milk"]))
+  let noItems = capture instanceA otherProducer "empty-producer" []
+      EvidenceCapture emptyScope _ = noItems
+  assert "empty replacement still needs reconciliation"
+    (pendingEvidence recipe base noItems == Right (Reconciliation emptyScope []))
   assert "individual producer mixing refused"
     (acknowledgeEvidence recipe (IndividualRecords [EvidenceId "milk"]) replacement base == Left CurationProducerChanged)
   reconciled <- right (acknowledgeEvidence recipe EntireBatch replacement base)
   expect "batch producer reconciliation" recipe reconciled replacement []
+  emptyReconciled <- right (acknowledgeEvidence recipe EntireBatch noItems base)
+  expect "empty batch reconciled" recipe emptyReconciled noItems []
   let malformed = [at "bad" [("milk","v1"),("milk","v2")], at "bad" [("","v1")], at "bad" [("milk","")]]
   mapM_ (\bad -> do
     assert "bad capture refused on read" (isLeft (pendingEvidence recipe empty bad))

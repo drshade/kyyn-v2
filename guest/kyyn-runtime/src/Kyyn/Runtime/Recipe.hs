@@ -19,11 +19,22 @@ pendingCodec = Codec encode decode
   where
     encode (PendingEvidence scope changes) = record
       [("scope",encodeWith scopeCodec scope),
-       ("changes",encodeWith (listCodec changeCodec) changes)]
+       ("batch",tagged "Changes" (Just (encodeWith (listCodec changeCodec) changes)))]
+    encode (Reconciliation scope ids) = record
+      [("scope",encodeWith scopeCodec scope),
+       ("batch",tagged "Reconciliation" (Just (encodeWith (listCodec idCodec) ids)))]
     decode value = do
-      values <- fields ["scope","changes"] value
+      values <- fields ["scope","batch"] value
       scope <- field "scope" scopeCodec values
-      PendingEvidence scope <$> field "changes" (listCodec changeCodec) values
+      batch <- field "batch" (Codec id Right) values
+      (tag,payload) <- variant batch
+      case (tag,payload) of
+        ("Changes",Just changes) -> PendingEvidence scope <$> decodeWith (listCodec changeCodec) changes
+        ("Reconciliation",Just ids) -> Reconciliation scope <$> decodeWith (listCodec idCodec) ids
+        _ -> Left "Invalid recipe evidence batch"
+
+idCodec :: Codec EvidenceId
+idCodec = Codec (\(EvidenceId name) -> encodeWith stringCodec name) (fmap EvidenceId . decodeWith stringCodec)
 
 scopeCodec :: Codec EvidenceScope
 scopeCodec = Codec encode decode

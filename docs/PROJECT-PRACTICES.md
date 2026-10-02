@@ -23,8 +23,10 @@ does not become another specification of the product's runtime workflows.
 against two local-file instances, saves a frozen Draft, checks it repeatedly and
 accepts it through the ordinary workflow. It checks recipe/scope/ID refusals,
 authored failure, local model-secret refusal, newer fetches staying pending, and
-deletion acknowledgement. No live model provider is contacted. It belongs to the
-full installed check. The native roots suite separately proves the shared broker
+deletion acknowledgement. The same journey replaces a plugin producer and checks explicit reconciliation
+inputs, refusal of individual acknowledgements, omission remaining pending, and
+whole-batch acceptance for populated and empty current captures. No live model
+provider is contacted. It belongs to the full installed check. The native roots suite separately proves the shared broker
 reuses supplied evidence captures for repeated reads without loading latest.
 
 `node tools/test-closed-recipes.mjs INSTALLED_EXECUTABLE` checks closed-recipe

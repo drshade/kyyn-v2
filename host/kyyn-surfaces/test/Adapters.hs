@@ -62,9 +62,17 @@ main = do
   case evidenceListResult (EvidenceCapture snapshot []) of
     Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
   case pendingResult (RecipeId "review") (PendingEvidence snapshot []) of
-    Response _ _ messages _ -> unless
-      ("Scope: EvidenceScope \"local-file\" \"sales\" \"latest\"" `elem` messages)
-      (fail "Pending output must supply a pasteable scope even when empty")
+    Response _ result messages _ -> do
+      unless ("Scope: EvidenceScope \"local-file\" \"sales\" \"latest\"" `elem` messages)
+        (fail "Pending output must supply a pasteable scope even when empty")
+      unless (case result of Object fields -> KeyMap.lookup "kind" fields == Just (String "Changes"); _ -> False)
+        (fail "Ordinary pending output must identify its kind")
+  case pendingResult (RecipeId "review") (Reconciliation snapshot []) of
+    Response _ result messages _ -> do
+      unless ("The current evidence set is empty." `elem` messages)
+        (fail "Empty reconciliation must not look like no pending work")
+      unless (case result of Object fields -> KeyMap.lookup "kind" fields == Just (String "Reconciliation") && KeyMap.member "currentIds" fields && not (KeyMap.member "changes" fields); _ -> False)
+        (fail "Reconciliation must expose current IDs rather than a fabricated delta")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []
       checkInstanceKeys (Object fields) =
         not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)

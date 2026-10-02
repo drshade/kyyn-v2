@@ -67,6 +67,8 @@ import qualified RootV2
 reconcile :: Flow (RecipeInput RootV2.Root) (ProposedCuration RootEdit)
 reconcile = A.act $ \\(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batches) -> do
   let removed = or [case change of Removed _ -> True; _ -> False | PendingEvidence _ changes <- batches, change <- changes]
+        || or [null ids | Reconciliation _ ids <- batches]
+      repairing = or [True | Reconciliation _ _ <- batches]
   text <- if removed || name == "empty" then pure "" else liftTool (Folder.content Connectors.documents "todo.txt") >>= either throwE pure
   if name == "needsModel" then do
     _ <- liftTool (interpret (A.draft (A.Instruction (Text.pack "Summarise")) :: Flow Text.Text Text.Text) (Text.pack text)) >>= either throwE pure
@@ -77,8 +79,9 @@ reconcile = A.act $ \\(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) ba
     _ <- liftTool (interpret (A.judge (Q.yesNo (Text.pack "Does this need action?")) :: Flow Text.Text Q.YesNo) (Text.pack text)) >>= either throwE pure
     pure ()
     else pure ()
-  let scopes = [scope | PendingEvidence scope _ <- batches]
-      handled = if name == "empty" then []
+  let scopes = [case batch of PendingEvidence scope _ -> scope; Reconciliation scope _ -> scope | batch <- batches]
+      handled = if name == "empty" || text == "omit" then []
+        else if repairing && text == "individual" then [IndividualRecords scope [EvidenceId "todo.txt"] | scope <- scopes]
         else if name == "wrongScope" then [EntireBatch (EvidenceScope "local-file" "documents" "invented")]
         else if name == "wrongId" then [IndividualRecords scope [EvidenceId "not-pending"] | scope <- scopes]
         else map EntireBatch scopes
@@ -86,7 +89,7 @@ reconcile = A.act $ \\(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) ba
       change = if removed then Remove (FactId "todo.txt")
         else if null facts then Append (Fact (FactId "todo.txt") (RootV2.Todo text))
         else Replace (FactId "todo.txt") (RootV2.Todo text)
-      steps = if name == "empty" then [] else [ProposedStep (Rationale "Use captured evidence" []) [Edit_todos change]]
+      steps = if name == "empty" || text == "omit" then [] else [ProposedStep (Rationale "Use captured evidence" []) [Edit_todos change]]
   pure (ProposedCuration steps (Curation selected handled))
 `);
   fs.writeFileSync(path.join(setup.path, 'change/Evolution.hs'), `module Evolution where
@@ -142,6 +145,46 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   const empty = run('empty').result;
   assert.equal(empty.state, 'Draft', 'Empty pending input should remain an authored decision');
   cli(['evolution', 'check', empty.id]);
+  const upgrade = label => {
+    fs.appendFileSync(path.join(plugin, 'src/LocalFile/Folder.hs'), `\n-- ${label}\n`);
+    invoke('git', ['-C', plugin, 'add', '.']);
+    invoke('git', ['-C', plugin, '-c', 'commit.gpgsign=false', 'commit', '-qm', label]);
+    const draft = cli(['evolution', 'new', label]).result;
+    cli(['plugin', 'install', '--evolution', draft.id, '--from', plugin]);
+    cli(['evolution', 'check', draft.id]);
+    accept(draft.id);
+    cli(['evidence', 'fetch', 'local-file', 'documents']);
+  };
+  const pending = () => cli(['root', 'recipe', 'pending', 'list', 'sync', 'local-file', 'documents']).result;
+  fs.writeFileSync(path.join(folder, 'todo.txt'), 'individual');
+  upgrade('replace-producer');
+  assert.equal(pending().kind, 'Reconciliation');
+  assert.deepEqual(pending().currentIds, ['todo.txt']);
+  const priorDrafts = countDrafts();
+  assert.match(JSON.stringify(run('sync', [], 1)), /curation.producer-changed/);
+  assert.equal(countDrafts(), priorDrafts, 'Individual reconciliation saved a proposal');
+  fs.writeFileSync(path.join(folder, 'todo.txt'), 'omit');
+  cli(['evidence', 'fetch', 'local-file', 'documents']);
+  const omitted = run('sync').result;
+  cli(['evolution', 'check', omitted.id]);
+  accept(omitted.id);
+  assert.equal(pending().kind, 'Reconciliation', 'Omission cleared reconciliation');
+  fs.writeFileSync(path.join(folder, 'todo.txt'), 'Reconciled task');
+  cli(['evidence', 'fetch', 'local-file', 'documents']);
+  const repaired = run('sync').result;
+  cli(['evolution', 'check', repaired.id]);
+  assert.equal(pending().kind, 'Reconciliation', 'Checking advanced progress');
+  accept(repaired.id);
+  assert.deepEqual(pending().changes, []);
+  assert.match(JSON.stringify(cli(['root', 'show'])), /Reconciled task/);
+  fs.unlinkSync(path.join(folder, 'todo.txt'));
+  upgrade('replace-with-empty-producer');
+  assert.equal(pending().kind, 'Reconciliation');
+  assert.deepEqual(pending().currentIds, []);
+  const emptyRepair = run('sync').result;
+  cli(['evolution', 'check', emptyRepair.id]);
+  accept(emptyRepair.id);
+  assert.deepEqual(pending().changes, []);
   console.log('Recipe run: captured reads, multiple scopes, refused proposals, Draft persistence, repeatable checking and ordinary acceptance passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });

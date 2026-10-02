@@ -206,7 +206,8 @@ data ProposedCuration edits = ProposedCuration
 `Kyyn.Recipe.RecipeInput root` contains the recipe ID, selected domain root and
 pending changes grouped by captured instance. Each `PendingEvidence` carries an
 existing `EvidenceScope` and `[PendingChange]`, with `New`, `Updated` and `Removed`
-carrying evidence IDs. Recipes are not restricted to
+carrying evidence IDs. Producer replacement supplies ADR 0014's explicit
+`Reconciliation` with current IDs instead of net changes. Recipes are not restricted to
 one connector. `root recipe run NAME PLUGIN INSTANCE [PLUGIN INSTANCE ...]`
 selects one or more input instances for one invocation, refusing incomplete or
 duplicate pairs. It does not define what other invocations of that recipe may
@@ -217,7 +218,8 @@ Reuse ADR 0014's existing `Curation`, `EntireBatch EvidenceScope` and
 captured scopes; the flow declares what it handled, including deletions, and the
 normal host curation checks resolve those declarations. The declaration names
 the invoked recipe. A returned scope must be one supplied to the invocation;
-individual IDs must be in that scope's pending batch, including removed IDs.
+individual IDs must be in that scope's ordinary pending batch, including removed
+IDs; reconciliation scopes permit only whole-batch acknowledgement or omission.
 Reading, citing or changing a fact does not acknowledge
 evidence. Empty acknowledgements are valid; low-confidence work can stay pending
 for an external agent. There is no additional selection vocabulary, watermark or

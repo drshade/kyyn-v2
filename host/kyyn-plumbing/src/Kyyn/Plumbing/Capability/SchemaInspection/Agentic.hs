@@ -9,22 +9,29 @@ import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
--- | Generate one instance for a nominal, monomorphic type at its defining name.
+-- | Generate a Contract and, for an enum, Options at the type's defining name.
 generateAgenticInstance :: Int -> String -> DataType -> Either String FileTree
 generateAgenticInstance index selected datatype = case datatype of
-  Algebraic actual [] _ | actual == selected -> do
+  Algebraic actual [] constructors | actual == selected -> do
     let private = "KyynModelContract" ++ show index
         public = "Kyyn.Contracts." ++ selected
     codec <- generateAgenticCodec private datatype
     path <- relativePath (map (\c -> if c == '.' then '/' else c) public ++ ".hs")
-    let source = unlines
+    let enum = not (null constructors) && all (\(Constructor _ fields) -> null fields) constructors
+        source = unlines $
           ["module " ++ public ++ " (codec) where",
            "import Agentic.Contract (Contract(..), Codec)",
            "import qualified " ++ definingModule actual,
-           "import qualified " ++ private ++ " as Generated",
-           "-- | Generated model contract for " ++ actual ++ ".",
+           "import qualified " ++ private ++ " as Generated"] ++
+          ["import Agentic.Contract (Options(..), Option(..), OptionSet(..))" | enum] ++
+          ["import qualified Data.Text as Text" | enum] ++
+          ["-- | Generated model contract for " ++ actual ++ ".",
            "codec :: Codec " ++ actual, "codec = Generated.rootCodec",
-           "instance Contract " ++ actual ++ " where", "  contract = codec"]
+           "instance Contract " ++ actual ++ " where", "  contract = codec"] ++
+          (if enum then ["instance Options " ++ actual ++ " where",
+            "  options = OptionSet Nothing " ++ list
+              ["(Option " ++ constructor ++ " (Text.pack " ++ show (reverse (takeWhile (/= '.') (reverse constructor))) ++ ") Nothing)"
+              | Constructor constructor [] <- constructors]] else [])
     fileTree (files codec ++ [(path,Text.encodeUtf8 (Text.pack source))])
   Algebraic actual [] _ -> Left ("Import Kyyn.Contracts." ++ actual ++ " at the type's defining name, not alias " ++ selected)
   _ -> Left (selected ++ ": generated Contract instances require a monomorphic data/newtype declaration; wrap other types in a named data/newtype")

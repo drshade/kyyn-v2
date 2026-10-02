@@ -36,7 +36,10 @@ data Progress = Progress EvidenceProducer [(EvidenceId, EvidenceFingerprint)] de
 newtype CurationRegister = CurationRegister [((RecipeId, ConnectorInstanceRef), Progress)] deriving (Show)
 instance Eq CurationRegister where
   left == right = curationEntries left == curationEntries right
-data PendingEvidence = PendingEvidence EvidenceSnapshotRef [(EvidenceId, ChangeKind)] deriving (Eq, Show)
+data PendingEvidence
+  = PendingEvidence EvidenceSnapshotRef [(EvidenceId, ChangeKind)]
+  | Reconciliation EvidenceSnapshotRef [EvidenceId]
+  deriving (Eq, Show)
 data CurationProblem = CurationProducerChanged | InvalidCurationCapture String deriving (Eq, Show)
 
 type CurationEntry = (RecipeId, ConnectorInstanceRef, EvidenceProducer, [(EvidenceId, EvidenceFingerprint)])
@@ -89,11 +92,14 @@ pendingEvidence :: RecipeId -> CurationRegister -> EvidenceCapture
   -> Either CurationProblem PendingEvidence
 pendingEvidence recipe (CurationRegister entries) capture@(EvidenceCapture snapshot@(EvidenceSnapshotRef instanceRef producer _) _) = do
   current <- fingerprints capture
-  old <- compatible producer (lookup (recipe, instanceRef) entries)
-  let present = [(item, maybe New (const Updated) (lookup item old)) |
-        (item, token) <- current, lookup item old /= Just token]
-      removed = [(item, Removed) | (item, _) <- old, lookup item current == Nothing]
-  pure (PendingEvidence snapshot (present ++ removed))
+  case compatible producer (lookup (recipe, instanceRef) entries) of
+    Left CurationProducerChanged -> pure (Reconciliation snapshot (map fst current))
+    Left problem -> Left problem
+    Right old -> do
+      let present = [(item, maybe New (const Updated) (lookup item old)) |
+            (item, token) <- current, lookup item old /= Just token]
+          removed = [(item, Removed) | (item, _) <- old, lookup item current == Nothing]
+      pure (PendingEvidence snapshot (present ++ removed))
 
 compatible :: EvidenceProducer -> Maybe Progress
   -> Either CurationProblem [(EvidenceId, EvidenceFingerprint)]
