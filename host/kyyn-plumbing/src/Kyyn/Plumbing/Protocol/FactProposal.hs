@@ -1,9 +1,10 @@
 module Kyyn.Plumbing.Protocol.FactProposal
-  ( proposalShape, proposalValue, proposalChange, lowerProposal ) where
+  ( proposalShape, proposalValue, parseProposal, proposalChange, lowerProposal ) where
 
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (Value, object, (.=), encode)
+import Data.Aeson (Value, object, (.=), (.:), withObject, encode)
+import Data.Aeson.Types (Parser)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -17,7 +18,7 @@ import Kyyn.Domain.Path (relativePath)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
-import Kyyn.Plumbing.Protocol.Curation (curationDeclarationShape, curationDeclarationValue)
+import Kyyn.Plumbing.Protocol.Curation (curationDeclarationShape, curationDeclarationValue, parseCuration)
 import Kyyn.Plumbing.Protocol.FactEdits (factEditType)
 
 proposalShape :: RootContract -> Either String Shape
@@ -38,6 +39,18 @@ proposalValue (FactProposal steps curation) = object
       ["rationale" .= object ["explanation" .= explanation,"evidence" .= map citation evidence],"edits" .= edits]
     citation (EvidenceRef producer connector source references) = object
       ["producer" .= producer,"connector" .= connector,"source" .= source,"references" .= references]
+
+parseProposal :: Value -> Parser FactProposal
+parseProposal = withObject "Fact proposal" $ \fields -> do
+  steps <- fields .: "steps" >>= traverse (withObject "Proposed step" $ \step -> do
+    why <- step .: "rationale" >>= withObject "Rationale" (\rationale ->
+      Rationale <$> rationale .: "explanation" <*> (rationale .: "evidence" >>= traverse
+        (withObject "Evidence reference" $ \evidence -> EvidenceRef
+          <$> evidence .: "producer" <*> evidence .: "connector" <*> evidence .: "source" <*> evidence .: "references")))
+    FactProposalStep why <$> step .: "edits")
+  value <- fields .: "curation" :: Parser Value
+  declaration <- parseCuration (object ["tag" .= ("Some" :: String),"value" .= value])
+  maybe (fail "Proposal must declare curation") (pure . FactProposal steps) declaration
 
 proposalChange :: DhallHandling :> es => RootContract -> FactProposal -> Eff es (Either [Diagnostic] FileTree)
 proposalChange contract proposal = runExceptT $ do

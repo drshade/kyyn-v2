@@ -62,7 +62,8 @@ data EvidenceCommand
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
 data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand deriving (Eq, Show)
-data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName deriving (Eq, Show)
+data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName
+  | RunRecipe RecipeId [(PluginName,ConnectorName)] deriving (Eq, Show)
 data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
   | ExecuteTool MethodName String deriving (Eq, Show)
 
@@ -223,6 +224,8 @@ recipeParser :: Parser RecipeCommand
 recipeParser = hsubparser
   (group "list" "List recipes in the accepted root" (pure ListRecipes)
   <> group "show" "Read a recipe's instructions" (ShowRecipe <$> recipe)
+  <> group "run" "Run a closed recipe and save a draft evolution" (RunRecipe <$> recipe
+    <*> some ((,) <$> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))
   <> group "pending" "Inspect net unacknowledged evidence changes" (hsubparser
     (group "list" "List pending evidence for a recipe and connector instance"
       (ListPendingEvidence <$> recipe <*> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))))

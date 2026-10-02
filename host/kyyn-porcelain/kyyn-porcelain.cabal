@@ -35,6 +35,7 @@ library
     Kyyn.Porcelain.Capability.Curation
     Kyyn.Porcelain.Capability.RecipeStore
     Kyyn.Porcelain.Capability.Recipe
+    Kyyn.Porcelain.Capability.RecipeExecution
     Kyyn.Porcelain.Capability.RootExecution
     Kyyn.Porcelain.Capability.Validation
     Kyyn.Porcelain.Validated
