@@ -283,7 +283,7 @@ Discovery outside a KB remains catalogue-only.
 #### Tool authoring discovery
 
 For the accepted root and an evolution target, expose `Kyyn.Connectors`,
-`Kyyn.Judgement` and each generated `Kyyn.Plugins.P_*.*` facade in the same
+`Kyyn.Agentic` and each generated `Kyyn.Plugins.P_*.*` facade in the same
 list/show/symbol commands. Omit internal request rows such as `KyynToolCalls`.
 The public judgement facade reexports the question vocabulary alongside `judge`;
 it is not advertised as a separate runner-less module.
@@ -305,11 +305,8 @@ schema or configuration must not hide the documentation needed to repair it.
 
 `Kyyn.Connectors.Tool` documentation states the entry signature
 `Input -> Tool (Either FetchError Result)`, its imports and manifest registration
-fields. `Kyyn.Judgement.judge` documentation names `JEV_TOKEN`, gives
-`kyyn-v2 --kb PATH secret set JEV_TOKEN`, and includes a short `judge`/`ask`
-example. CLI output must suffice to write a first tool without reading kernel
-source. A tool-compilation refusal includes `tool.signature` with the expected
-authored input/output types and imports, alongside compiler details.
+fields. Upstream `Agentic.Questions` documents judgement authoring; generated
+`Kyyn.Agentic` exposes workflow interpretation and captured-read integration.
 
 Keep the two capabilities separate so fixed discovery does not acquire compiler
 or repository dependencies. The host contracts are:

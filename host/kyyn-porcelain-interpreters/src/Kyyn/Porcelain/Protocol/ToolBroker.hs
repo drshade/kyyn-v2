@@ -34,7 +34,7 @@ executeToolProgram :: (PluginRead :> es, GuestExecution :> es, Failure :> es, Ju
 executeToolProgram program plugins model captured arguments = runExceptT $ do
   result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState [(instanceRef,current) | current@(CurrentEvidence (EvidenceSnapshotRef instanceRef _ _) _) <- captured] $
     conversation decodeToolFrame program (Lazy.toStrict (encode arguments)) $ \case
-      ToolJudgement request -> Judgement.encodeReply <$> Judgement.judge request
+      ToolJudgement request -> Judgement.judge request >>= either protocolFailure pure . Judgement.encodeReply
       ToolModel request -> case model of
         Nothing -> pure (failure "No model configured; add root/model.dhall through an evolution")
         Just configuration -> Model.takeModelTurn configuration request >>= either protocolFailure pure . Model.encodeReply

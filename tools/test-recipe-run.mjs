@@ -52,6 +52,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   }
   fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `module Tasks where
 import qualified Agentic as A
+import qualified Agentic.Questions as Q
 import qualified Data.Text as Text
 import Control.Monad.Trans.Except (throwE)
 import Kyyn.Agentic (Flow, liftTool, interpret)
@@ -72,6 +73,10 @@ reconcile = A.act $ \\(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) ba
     pure ()
     else pure ()
   if name == "failFlow" then throwE (FetchError "Authored refusal") else pure ()
+  if name == "needsJev" then do
+    _ <- liftTool (interpret (A.judge (Q.yesNo (Text.pack "Does this need action?")) :: Flow Text.Text Q.YesNo) (Text.pack text)) >>= either throwE pure
+    pure ()
+    else pure ()
   let scopes = [scope | PendingEvidence scope _ <- batches]
       handled = if name == "empty" then []
         else if name == "wrongScope" then [EntireBatch (EvidenceScope "local-file" "documents" "invented")]
@@ -94,7 +99,7 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   >=> edit (Rationale "Teach recipes" []) (within recipes $ do
     append (Fact (FactId "open") (OpenAgent "Use an external agent"))
     mapM_ (\\name -> append (Fact (FactId name) (ClosedAgent (FlowEntryRef "Tasks.reconcile"))))
-      ["sync", "wrongRecipe", "wrongScope", "wrongId", "failFlow", "needsModel", "empty"])
+      ["sync", "wrongRecipe", "wrongScope", "wrongId", "failFlow", "needsModel", "needsJev", "empty"])
 `);
   cli(['evolution', 'check', setup.id]);
   accept(setup.id);
@@ -107,6 +112,7 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   }
   assert.match(JSON.stringify(run('sync', ['local-file', 'documents'], 1)), /recipe.duplicate-input/);
   assert.match(JSON.stringify(run('needsModel', [], 1)), /Missing model secret RECIPE_TEST_KEY/);
+  assert.match(JSON.stringify(run('needsJev', [], 1)), /Missing model secret JEV_TOKEN/);
   assert.equal(countDrafts(), before);
   invoke(executable, ['--kb', kb, 'root', 'recipe', 'run', 'sync', 'local-file'], 2);
   const proposal = run('sync', ['local-file', 'prices']).result;

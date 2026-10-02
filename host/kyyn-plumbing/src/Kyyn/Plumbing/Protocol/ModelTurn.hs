@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.ModelTurn (decodeRequest, encodeReply) where
+module Kyyn.Plumbing.Protocol.ModelTurn (decodeRequest, encodeReply, failureMessage) where
 
 import qualified Agentic.Runtime as A
 import Data.Aeson (Value, encode, eitherDecodeStrict)
@@ -24,7 +24,7 @@ failureMessage failure = case failure of
   InvalidModelConfiguration -> "Invalid model configuration; check provider and model in root/model.dhall."
   MissingModelSecret name -> "Missing model secret " ++ secretNameText name ++ ". " ++ setup name
   EmptyModelSecret name -> "Model secret " ++ secretNameText name ++ " is empty. " ++ setup name
-  ModelAuthenticationRejected -> "Model authentication was rejected; check the credential named in root/model.dhall."
+  ModelAuthenticationRejected -> "Model authentication was rejected; check the configured credential."
   ModelRateLimited -> "The model provider is rate limiting requests; retry later."
   ModelUnavailable -> "The model provider is unavailable; retry later."
   ModelRequestRejected -> "The model provider rejected the request; check the model name and account access."

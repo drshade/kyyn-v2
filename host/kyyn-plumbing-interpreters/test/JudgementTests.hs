@@ -1,157 +1,70 @@
-{-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
+{-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
-import Control.Exception (AsyncException(UserInterrupt), bracket, throwIO, try)
-import Control.Concurrent (forkFinally, killThread, newEmptyMVar, putMVar, takeMVar)
+import qualified Agentic.Jev as Jev
+import Agentic.Questions
+import Agentic.Runtime (SystemOne(..))
+import qualified Agentic.Value as Value
+import Control.Exception (AsyncException(UserInterrupt), throwIO, try, bracket)
 import Control.Monad (unless, forM_)
-import Data.Aeson (Value, object, (.=), encode, eitherDecode, toJSON)
-import qualified Data.Aeson.Key as Key
-import qualified Data.ByteString as Bytes
-import qualified Data.ByteString.Char8 as Char8
-import qualified Data.ByteString.Lazy as Lazy
-import Data.IORef (newIORef, modifyIORef', readIORef)
+import Data.Aeson (object, (.=))
 import Data.Text (Text)
 import Effectful (Eff, runEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Secret (SecretError(..), secretNameText)
+import Kyyn.Domain.Model
+import Kyyn.Domain.Secret
 import Kyyn.Plumbing.Capability.Judgement
-import Kyyn.Plumbing.Capability.Judgement.Jev
-import Kyyn.Plumbing.Capability.SecretStore (SecretStore(..))
-import Kyyn.Plumbing.Interpreter.Judgement (runJudgementWithTransport)
-import Kyyn.Types.Judgement
+import Kyyn.Plumbing.Capability.SecretStore
+import Kyyn.Plumbing.Interpreter.Judgement
 import qualified Network.HTTP.Client as Http
-import Network.HTTP.Types.Status (statusCode)
-import qualified Network.Socket as Socket
-import qualified Network.Socket.ByteString as Socket
-import System.Timeout (timeout)
+import System.Environment (lookupEnv, setEnv, unsetEnv)
 
 main :: IO ()
 main = do
-  assert "probability threshold" (atLeast (Probability 9500) (Probability 9500) && not (atLeast (Probability 9500) (Probability 9499)))
-  assert "probability display" (map (probabilityText . Probability) [0,1,9500,10000] == ["0.00%","0.01%","95.00%","100.00%"])
-  assert "score display" (map (scoreText . Score) [0,1,1250,9000] == ["0.000","0.001","1.250","9.000"])
-  let yes = JudgementRequest (Context "private state 雪") [YesNoRequest "Is this urgent?" "Needs action" "Can wait"]
-      choice = JudgementRequest (Context "text") [ChoiceRequest "Which?" [("First","first description"),("Second","second description")]]
-      scale = JudgementRequest (Context "text") [ScaleRequest "How much?" ["low","mid","high"]]
-      yesResponse probability = response (object ["type" .= ("noul" :: String),"noul" .= probability])
-  assert "yes probability" (decodeResponse yes (yesResponse (0.95 :: Double)) == Right [YesNoResult (YesNoAnswer (Probability 9500))])
-  forM_ [(0,0),(1,10000),(0.12344,1234),(0.12346,1235)] $ \(input,expected) ->
-    assert "host basis-point conversion" (decodeResponse yes (yesResponse (input :: Double)) == Right [YesNoResult (YesNoAnswer (Probability expected))])
-  forM_ [-0.1,1.1 :: Double] $ \value -> assert "out-of-range yes accepted"
-    (decodeResponse yes (yesResponse value) == Left InvalidProviderResponse)
-  let choiceResponse probabilities winner = response (object
-        ["type" .= ("choice" :: String),"choice" .= (winner :: String),"probabilities" .= probabilities,
-         "confidence" .= (0.8 :: Double)])
-      distribution = object ["First" .= (0.1 :: Double),"Second" .= (0.9 :: Double)]
-  assert "choice identity/distribution" (decodeResponse choice (choiceResponse distribution "Second") ==
-    Right [ChoiceResult (ChoiceAnswer "Second" [OptionProbability "First" (Probability 1000),OptionProbability "Second" (Probability 9000)] (Probability 8000))])
-  assert "small rounding difference refused" (decodeResponse choice
-    (choiceResponse (object ["First" .= (0.4999 :: Double),"Second" .= (0.5 :: Double)]) "Second") ==
-    Right [ChoiceResult (ChoiceAnswer "Second" [OptionProbability "First" (Probability 4999),OptionProbability "Second" (Probability 5000)] (Probability 8000))])
-  forM_ [choiceResponse distribution "Other", choiceResponse (object ["First" .= (1 :: Double)]) "First",
-    choiceResponse (object ["First" .= (0.2 :: Double),"Second" .= (0.9 :: Double)]) "First"] $ \value ->
-      assert "invalid choice accepted" (decodeResponse choice value == Left InvalidProviderResponse)
-  let scored value = response (object ["type" .= ("score" :: String),"score" .= value,
-        "legend" .= object ["0" .= ("low" :: String),"1" .= ("mid" :: String),"2" .= ("high" :: String)],
-        "probabilities" .= object ["0" .= (0 :: Double),"1" .= (0.75 :: Double),"2" .= (0.25 :: Double)],
-        "confidence" .= (0.7 :: Double)])
-  assert "weighted score not rounded" (decodeResponse scale (scored (1.25 :: Double)) ==
-    Right [ScaleResult (ScaleAnswer (Score 1250) [OptionProbability 0 (Probability 0),OptionProbability 1 (Probability 7500),OptionProbability 2 (Probability 2500)] (Probability 7000))])
-  forM_ [(1.2344,1234),(1.2346,1235)] $ \(input,expected) ->
-    assert "host score conversion" (decodeResponse scale (scored (input :: Double)) ==
-      Right [ScaleResult (ScaleAnswer (Score expected) [OptionProbability 0 (Probability 0),OptionProbability 1 (Probability 7500),OptionProbability 2 (Probability 2500)] (Probability 7000))])
-  assert "wrong answer kind" (decodeResponse yes (scored (1.25 :: Double)) == Left InvalidProviderResponse)
-  assert "score outside supplied levels" (decodeResponse scale (scored (3 :: Double)) == Left InvalidProviderResponse)
-  forM_ [ChoiceRequest "x" [], ChoiceRequest "x" [("same","a"),("same","b")]] $ \q ->
-    assert "invalid options" (case validateQuestion q of Left _ -> True; Right _ -> False)
-  assert "scale limit" (case validateQuestion (ScaleRequest "x" (replicate 11 "x")) of Left _ -> True; Right _ -> False)
-  let batch = JudgementRequest (Context "shared") (replicate 12 (YesNoRequest "q" "yes" "no"))
-      entries = [(Key.fromString ("q" ++ show n), object ["type" .= ("noul" :: String), "noul" .= (fromIntegral n / 20 :: Double)]) | n <- [0 :: Int .. 11]]
-      batchResponse values = object ["answers" .= object [key .= value | (key,value) <- values]]
-  assert "numeric question order" (decodeResponse batch (batchResponse (reverse entries)) ==
-    Right [YesNoResult (YesNoAnswer (Probability (toInteger n * 500))) | n <- [0 :: Int .. 11]])
-  assert "partial batch accepted" (decodeResponse batch (batchResponse (drop 1 entries)) == Left InvalidProviderResponse)
-  assert "extra answer accepted" (decodeResponse batch (batchResponse (("other",object []):entries)) == Left InvalidProviderResponse)
-  assert "one invalid answer accepted" (decodeResponse batch (batchResponse (("q0",object ["type" .= ("noul" :: String),"noul" .= (2 :: Double)]):drop 1 entries)) == Left InvalidProviderResponse)
-  assert "yes/no criteria not sent" (requestBody yes == object
-    ["model" .= jevModel,"state" .= ("private state 雪" :: String),"questions" .= object
-      ["q0" .= object ["type" .= ("noul" :: String),"instructions" .= ("Is this urgent?" :: String),
-        "criteria" .= object ["true" .= ("Needs action" :: String),"false" .= ("Can wait" :: String)]]]])
-  calls <- newIORef (0 :: Int)
-  let transport request = do
-        modifyIORef' calls (+1)
-        assert "fixed endpoint" (Http.host request == "api.typesafe.ai" && Http.path request == "/v1/systemone" && Http.secure request)
-        assert "bearer header" (lookup "Authorization" (Http.requestHeaders request) == Just "Bearer fixture-token")
-        assert "redirects disabled" (Http.redirectCount request == 0)
-        case Http.requestBody request of
-          Http.RequestBodyLBS body -> assert "provider request encoding" (eitherDecode body == Right (requestBody yes))
-          _ -> fail "Expected JSON body"
-        pure (200, encode (yesResponse (0.95 :: Double)))
-      invoke key action = runEff (secrets key (runJudgementWithTransport transport action))
-  actual <- invoke (Just "fixture-token") (judge yes)
-  assert "native typed dispatch" (actual == Right [YesNoResult (YesNoAnswer (Probability 9500))])
-  missing <- invoke Nothing (judge yes)
-  assert "missing key is typed" (missing == Left (MissingSecret "JEV_TOKEN"))
-  count <- readIORef calls
-  assert "missing key called provider" (count == 1)
-  forM_ [JudgementRequest (Context "") [], JudgementRequest (Context "") [YesNoRequest "q" "" "no"],
-    JudgementRequest (Context "") [YesNoRequest "q" "yes" ""]] $ \invalid -> do
-      result <- runEff . secrets Nothing . runJudgementWithTransport (\_ -> fail "Invalid batch reached HTTP") $ judge invalid
-      assert "invalid batch looked up key or succeeded" (case result of Left (InvalidQuestion _) -> True; _ -> False)
-  forM_ [(401,AuthenticationRejected),(403,AuthenticationRejected),(429,RateLimited),
-    (500,ProviderUnavailable),(529,ProviderUnavailable),(422,RequestRejected),(302,RequestRejected)] $ \(status,failure) -> do
-      result <- runEff . secrets (Just "fixture-token") . runJudgementWithTransport (\_ -> pure (status,"private provider response")) $ judge yes
-      assert "HTTP status mapping" (result == Left failure)
-  malformed <- runEff . secrets (Just "fixture-token") . runJudgementWithTransport (\_ -> pure (200,"not json private provider response")) $ judge yes
-  assert "malformed provider body" (malformed == Left InvalidProviderResponse)
-  unavailable <- runEff . secrets (Just "fixture-token") . runJudgementWithTransport
-    (\request -> throwIO (Http.HttpExceptionRequest request Http.ConnectionTimeout)) $ judge yes
-  assert "transport failure not typed" (unavailable == Left ProviderUnavailable)
-  cancelled <- try @AsyncException (runEff . secrets (Just "fixture-token") . runJudgementWithTransport
-    (\_ -> throwIO UserInterrupt) $ judge yes)
-  assert "cancellation swallowed" (case cancelled of Left UserInterrupt -> True; _ -> False)
-  localExchange yes (yesResponse (0.95 :: Double))
-  putStrLn "Judgement provider codec and native handler tests passed (no live provider)."
-
-localExchange :: JudgementRequest -> Value -> IO ()
-localExchange question reply = do
-  outcome <- timeout 5000000 $ bracket (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol) Socket.close $ \listener -> do
-    Socket.bind listener (Socket.SockAddrInet 0 (Socket.tupleToHostAddress (127,0,0,1)))
-    Socket.listen listener 1
-    address <- Socket.getSocketName listener
-    port <- case address of Socket.SockAddrInet value _ -> pure (fromIntegral value); _ -> fail "Not IPv4"
-    finished <- newEmptyMVar
-    let server = bracket (fst <$> Socket.accept listener) Socket.close $ \connection -> do
-          let readRequest accumulated = do
-                chunk <- Socket.recv connection 4096
-                assert "HTTP request ended early" (not (Bytes.null chunk))
-                let received = accumulated <> chunk
-                    (_,body) = Bytes.breakSubstring "\r\n\r\n" received
-                if Bytes.length body < 4 + fromIntegral (Lazy.length (encode (requestBody question)))
-                  then readRequest received else pure received
-          received <- readRequest Bytes.empty
-          assert "HTTP auth missing" ("Authorization: Bearer fixture-token" `Bytes.isInfixOf` received)
-          let bytes = Lazy.toStrict (encode reply)
-          Socket.sendAll connection ("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " <>
-            Char8.pack (show (Bytes.length bytes)) <> "\r\nConnection: close\r\n\r\n" <> bytes)
-    bracket (forkFinally server (putMVar finished)) killThread $ \_ -> do
-      manager <- Http.newManager Http.defaultManagerSettings { Http.managerRetryableException = const False }
-      let transport request = do
-            responseValue <- Http.httpLbs request { Http.host = "127.0.0.1", Http.port = port,
-              Http.secure = False, Http.proxy = Nothing } manager
-            pure (statusCode (Http.responseStatus responseValue), Http.responseBody responseValue)
-      result <- runEff . secrets (Just "fixture-token") . runJudgementWithTransport transport $ judge question
-      assert "local HTTP result" (result == Right [YesNoResult (YesNoAnswer (Probability 9500))])
-      takeMVar finished >>= either throwIO pure
-  assert "local HTTP fixture timed out" (case outcome of Just () -> True; Nothing -> False)
-
-response :: Value -> Value
-response answerValue = object ["model" .= ("actual-model" :: String),"answers" .= object ["q0" .= answerValue],"usage" .= toJSON (0 :: Integer)]
+  name <- either fail pure (secretName "JEV_TOKEN")
+  let request = JudgeRequest (Value.String "private input")
+        [AskYesNo "Reply?", AskChoice "Priority?" [("low",Nothing),("high",Just "Urgent")],
+         AskScore "Severity?" [("low",Nothing),("high",Just "Urgent")]]
+      answers = [YesNoAnswer 0.9, ChoiceAnswer "high" [("low",0.1),("high",0.9)] 0.8,
+                 ScoreAnswer 0.75 [(0,0.25),(1,0.75)] 0.6]
+      invoke credential factory = runEff . secrets credential . runJudgementWithProvider factory $ judge request
+      connect settings = do
+        check "explicit local key" (settings.key == Just "local-key")
+        check "model" (settings.model == "jev-1.13.0")
+        pure (SystemOne (\actual -> check "request unchanged" (actual == request) >> pure answers))
+  result <- invoke (Just "local-key") connect
+  check "answers unchanged" (result == Right answers)
+  bracket (lookupEnv "JEV_TOKEN") (maybe (unsetEnv "JEV_TOKEN") (setEnv "JEV_TOKEN")) $ \_ -> do
+    setEnv "JEV_TOKEN" "ambient-key"
+    missing <- runEff . secrets Nothing . runJudgementIO $ judge request
+    check "environment fallback" (missing == Left (MissingModelSecret name))
+  forM_ ["","   "] $ \key -> do
+    empty <- invoke (Just key) (\_ -> fail "Empty key reached provider")
+    check "empty key" (empty == Left (EmptyModelSecret name))
+  cancelled <- try @AsyncException (invoke (Just "local-key")
+    (\_ -> pure (SystemOne (\_ -> throwIO UserInterrupt))))
+  check "cancellation swallowed" (cancelled == Left UserInterrupt)
+  network <- invoke (Just "local-key") (\_ -> throwIO (Http.InvalidUrlException "private" "private"))
+  check "transport error" (network == Left ModelUnavailable)
+  forM_ [(401,ModelAuthenticationRejected),(403,ModelAuthenticationRejected),(429,ModelRateLimited),
+         (500,ModelUnavailable),(400,ModelRequestRejected)] $ \(status,expected) -> do
+    refused <- invoke (Just "local-key") (\_ -> throwIO (Jev.HttpError status "private"))
+    check "sanitized HTTP error" (refused == Left expected)
+  malformed <- invoke (Just "local-key") (\_ -> throwIO (Jev.UnexpectedResponse "private"))
+  check "sanitized malformed response" (malformed == Left InvalidModelResponse)
+  let body = Jev.requestBody "jev-1.13.0" request
+  check "upstream state preserved" (case body of Value.Object fs -> lookup "state" fs == Just (Value.String "private input"); _ -> False)
+  let response = object ["answers" .= object
+        ["q0" .= object ["noul" .= (0.9 :: Double)],
+         "q1" .= object ["choice" .= ("high" :: String), "probabilities" .= object ["low" .= (0.1 :: Double),"high" .= (0.9 :: Double)], "confidence" .= (0.8 :: Double)],
+         "q2" .= object ["score" .= (0.75 :: Double), "probabilities" .= object ["0" .= (0.25 :: Double),"1" .= (0.75 :: Double)], "confidence" .= (0.6 :: Double)]]]
+  check "upstream answer mapping" (Jev.decodeResponse request response == Right answers)
+  putStrLn "Jev SystemOne: upstream mapping, explicit local credentials, failures and cancellation passed."
 
 secrets :: Maybe Text -> Eff (SecretStore : es) a -> Eff es a
-secrets value = interpret $ \_ operation -> case operation of
-  ReadSecret name | secretNameText name == "JEV_TOKEN" -> pure (maybe (Left (SecretNotFound name)) Right value)
-  _ -> error "Unexpected secret operation"
+secrets key = interpret $ \_ -> \case
+  ReadSecret name -> pure (maybe (Left (SecretNotFound name)) Right key)
+  _ -> error "Unexpected secret mutation"
 
-assert :: String -> Bool -> IO ()
-assert label condition = unless condition (fail label)
+check :: String -> Bool -> IO ()
+check label condition = unless condition (fail label)

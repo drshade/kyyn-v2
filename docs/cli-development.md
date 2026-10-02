@@ -351,18 +351,12 @@ For tool authoring, inspect these modules on an accepted root or add
 
 ```sh
 kyyn-v2 --kb PATH guest module show Kyyn.Connectors
-kyyn-v2 --kb PATH guest module show Kyyn.Judgement
+kyyn-v2 --kb PATH guest module show Agentic.Questions
 kyyn-v2 --kb PATH guest module show Kyyn.Plugins.P_local_file.Folder
 ```
 
 `Kyyn.Connectors` documents `Tool` and the expected entry signature;
-`Kyyn.Judgement` includes question builders, `judge`, credential setup and a short
-example. Installed plugin declarations determine the proxy modules shown by
-`guest module list`. Discovery does not compile your tool implementation, so it
-also works while that function is incomplete or has the wrong type.
-Fixed SDK module/symbol lookups remain catalogue-only, even with a broken KB or
-an `--evolution` selection. If generated bindings cannot be inspected, listing
-still shows the fixed SDK with a diagnostic explaining the missing bindings.
+`Agentic.Questions` exposes the library's question builders and answer types.
 
 ## KB investigation helpers
 
@@ -412,46 +406,44 @@ update before it can be checked with this development build.
 
 ### Model-assisted questions
 
-A registered helper can import generated `Kyyn.Judgement` and compose typed
-questions. For example, `assess` below has input type `Helpers.Input` and result
-type `Helpers.Output` when saved in `Helpers.hs`:
+Expose an Agentic judgement flow through an ordinary registered helper. For
+example, `Helpers.assess` takes `Helpers.Input` and returns `Helpers.Output`:
 
 ```haskell
+{-# LANGUAGE OverloadedStrings #-}
 module Helpers where
+import qualified Agentic as A
+import Agentic.Questions (yesNo, YesNo(..), basisPoints)
+import Control.Arrow ((>>>), arr)
+import qualified Data.Text as Text
+import Kyyn.Agentic (Flow, interpret)
 import Kyyn.Connectors (Tool)
-import Kyyn.Plugin (FetchError(..))
-import Kyyn.Judgement
+import Kyyn.Plugin (FetchError)
 
 type Input = String
-type Output = YesNoAnswer
+type Output = Integer
+
+assessment :: Flow Text.Text Integer
+assessment = A.judge (yesNo "Does this require a reply?")
+  >>> arr (\(YesNo p) -> toInteger (basisPoints p))
 
 assess :: Input -> Tool (Either FetchError Output)
-assess body = do
-  result <- judge (Context body)
-    (ask (yesNo "Does this require a reply?" describe))
-  pure $ case result of
-    Left failure -> Left (FetchError (judgementFailureMessage failure))
-    Right answer -> Right answer
-  where
-    describe True = "The message asks for a response or decision"
-    describe False = "The message is informational; no reply is needed"
+assess = interpret assessment . Text.pack
 ```
 
-This example returns the SDK answer directly. Its `Probability` contains integer
-basis points (`9500` means 95%). Use `atLeast (Probability 9500)` for a threshold
-or `probabilityText` for display. Scale answers contain `Score` in thousandths of
-a level; `scoreText (Score 1250)` displays `1.250`. Register, check and
-accept it as above; then configure the local key and invoke it:
+The result is probability basis points (`9500` means 95%), projected into a
+supported tool result type. Authors choose any decision threshold. Register,
+check and accept the tool, then configure the checkout-local key:
 
 ```sh
 kyyn-v2 --kb PATH secret set JEV_TOKEN
 kyyn-v2 --kb PATH root tool execute assess --input '"Please approve the revised budget"'
 ```
 
-See [typed judgement authoring](../architecture/adr/0027-judgement.md#authoring-is-typed)
-for combining different question types into a single request. Shared question
-types and combinators are discoverable with
-`kyyn-v2 --kb PATH guest module show Kyyn.Judgement`.
+See [judgement workflows](../architecture/adr/0027-judgement.md).
+Use `guest module show Agentic.Questions` for question builders and answers;
+`guest module show Kyyn.Agentic` exposes the generated workflow integration.
+The same flow can be composed into a closed recipe.
 
 ## Model-assisted tools
 
@@ -526,8 +518,7 @@ Select monomorphic data/newtype declarations. For aliases, import the underlying
 type's defining contract; for a standalone list or applied generic contract, use
 a named data/newtype wrapper. Existing primitive library contracts still work.
 Executable closed recipes are not yet exposed.
-The existing `Kyyn.Judgement` API is unchanged; Agentic's System One bridge is not
-yet supplied.
+Agentic's SystemOne uses Jev; SystemTwo uses the configured OpenAI or Anthropic provider.
 
 ## Recipe declarations and curation progress
 
