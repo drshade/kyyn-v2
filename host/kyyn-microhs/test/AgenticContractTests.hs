@@ -8,7 +8,7 @@ import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.DataType
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path (relativeName)
-import Kyyn.Plumbing.Capability.SchemaInspection.Agentic (generateAgenticCodec)
+import Kyyn.Plumbing.Capability.SchemaInspection.Agentic (generateAgenticCodec, generateAgenticInstance)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (getEnv, getEnvironment)
 import System.Exit (ExitCode(..))
@@ -28,12 +28,17 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
         [(Just "status",status),(Just "choices",ListType choice),(Just "note",OptionalType StringType),
          (Just "number",IntegerType),(Just "identity",sdkFactIdType)]]
   generated <- right (generateAgenticCodec "Generated" payload)
+  instanceFiles <- right (generateAgenticInstance 0 "Schema.Payload" payload)
+  forM_ [("Schema.Alias",payload),("Schema.List",ListType payload),("Schema.Parameter",Algebraic "Schema.Parameter" [payload] [])] $ \(name,datatype) ->
+    case generateAgenticInstance 0 name datatype of
+      Left _ -> pure ()
+      Right _ -> fail "Generated competing or non-nominal Contract instance"
   forM_ [Algebraic "Schema.Void" [] [], Algebraic "Schema.Bad" []
     [Constructor "Schema.Bad" [(Nothing,BoolType),(Nothing,BoolType)]]] $ \unsupported ->
       case generateAgenticCodec "Rejected" unsupported of
         Left _ -> pure ()
         Right _ -> fail "Unsupported model contract generated code"
-  forM_ (files generated) $ \(relative,bytes) -> do
+  forM_ (files generated ++ files instanceFiles) $ \(relative,bytes) -> do
     let destination = temporary </> relativeName relative
     createDirectoryIfMissing True (takeDirectory destination)
     Bytes.writeFile destination bytes
@@ -45,6 +50,7 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
   Bytes.writeFile (temporary </> "Main.hs") (Text.encodeUtf8 (Text.unlines
     ["{-# LANGUAGE OverloadedStrings #-}", "module Main where", "import Schema", "import Generated",
      "import Kyyn.Types.Fact", "import qualified Agentic as A", "import qualified Agentic.Runtime as R",
+     "import Kyyn.Contracts.Schema.Payload ()",
      "import Agentic.Runtime (Runtime(..), SystemTwo(..))", "import qualified Agentic.Schema as S",
      "import Control.Monad (unless)",
      "sample = Payload Open [Named \"雪\",Counted 42 True] (Just \"note\") 900719925474099312345 (FactId \"x\")",
@@ -52,11 +58,11 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
      "rt :: Runtime (Either String)",
      "rt = (A.runtimeWith (Left . show)) { systemTwo = SystemTwo turn }",
      "turn c = case R.history c of",
-     "  [] -> if R.output c == A.codecSchema rootCodec && R.state c == encoded then Right (A.Turn (A.Raw A.Null) (A.Respond (A.Object []))) else Left \"Wrong generated contract\"",
+     "  [] -> if S.shape (R.output c) == S.shape (A.codecSchema rootCodec) && R.state c == encoded then Right (A.Turn (A.Raw A.Null) (A.Respond (A.Object []))) else Left \"Wrong generated contract\"",
      "  [A.Rejected _ _] -> Right (A.Turn (A.Raw A.Null) (A.Respond encoded))",
      "  _ -> Left \"Unexpected retry history\"",
      "flow :: A.Agentic (Either String) Payload Payload",
-     "flow = A.Step (A.Draft rootCodec rootCodec \"Draft a value\" [])",
+     "flow = A.draft \"Draft a value\"",
      "main :: IO ()", "main = do",
      "  unless (A.decode rootCodec encoded == Right sample) (fail \"Round trip failed\")",
      "  unless (A.interpret rt flow sample == Right sample) (fail \"Generated-contract draft/retry failed\")",

@@ -38,13 +38,17 @@ import qualified Data.Text as Text
 import Kyyn.Agentic (Flow, interpret)
 import Kyyn.Connectors (Tool)
 import Kyyn.Plugin (FetchError)
+import Summary (Summary)
+import Kyyn.Contracts.Summary.Summary ()
 type Input = String
-type Output = String
-summarise :: Flow Text.Text Text.Text
+type Output = Summary
+summarise :: Flow Text.Text Summary
 summarise = A.draft "Summarise in one sentence"
 summary :: Input -> Tool (Either FetchError Output)
-summary input = fmap (fmap Text.unpack) (interpret summarise (Text.pack input))
+summary input = interpret summarise (Text.pack input)
 `);
+  fs.writeFileSync(path.join(target, 'src/Summary.hs'),
+    'module Summary where\ndata Summary = Summary { text :: String }\n');
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
@@ -53,6 +57,8 @@ summary input = fmap (fmap Text.unpack) (interpret summarise (Text.pack input))
   assert.deepEqual(shown.model, { provider: 'OpenAI', model: 'fixture-model', credential: 'MODEL_FIXTURE_KEY' });
   cli(['guest', 'module', 'show', 'Agentic']);
   cli(['guest', 'module', 'show', 'Kyyn.Agentic']);
+  const contract = cli(['guest', 'module', 'show', 'Kyyn.Contracts.Summary.Summary']);
+  assert.match(JSON.stringify(contract), /codec/);
   const refused = cli(['root', 'tool', 'execute', 'summary', '--input', '"hello"'], 1);
   assert.match(JSON.stringify(refused.diagnostics), /Missing model secret MODEL_FIXTURE_KEY/);
   assert.match(JSON.stringify(refused.diagnostics), /secret set MODEL_FIXTURE_KEY/);

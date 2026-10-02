@@ -159,6 +159,7 @@ checkingMock expected = interpret $ \_ -> \case
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
+  Schema.InspectImports {} -> error "Unexpected import inspection"
   Schema.InspectType {} -> error "Unexpected plain type inspection"
   Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   Schema.InspectSchema source -> do

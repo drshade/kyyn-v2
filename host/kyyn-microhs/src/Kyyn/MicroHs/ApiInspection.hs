@@ -6,11 +6,10 @@ import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, e
 import Control.Monad (foldM)
 import Data.Char (isAlpha, isAlphaNum, isSpace, isSymbol, isPunctuation)
 import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate, find)
-import System.FilePath ((</>))
-import System.Process (readProcess)
 import Kyyn.Domain.GuestApi
 import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
 import Kyyn.MicroHs.Timing (withTimingIO)
+import Kyyn.MicroHs.Source (readParsedSource)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
 import MicroHs.Expr
@@ -19,7 +18,6 @@ import MicroHs.Ident
 import MicroHs.StateIO (runStateIO)
 import MicroHs.TypeCheck (TModule(..), ValueExport(..), TypeExport(..))
 import MicroHs.SymTab (Entry(..))
-import MicroHs.Parse (parse, pTop)
 import MicroHs.Fixity (resolveFixity, defaultFixity)
 import MicroHs.TCMonad (fixTable)
 import qualified MicroHs.IdentMap as IdentMap
@@ -65,22 +63,10 @@ inspectApi compiler sources selected = withTimingIO "api-inspection" (intercalat
 
 readDeclarations :: Flags -> (String, FilePath) -> IO (Either String (String, ([EDef],[String])))
 readDeclarations flags (name,path) = do
-  original <- readFile path
-  source <- if hasCpp original then do
-    let executable = mhsdir flags </> "bin/cpphs"
-    readProcess executable (["--strip", "--noline", "-D__MHS__", "-I" ++ (mhsdir flags </> "src/runtime")]
-      ++ cppArgs flags ++ [path]) ""
-    else pure original
-  pure $ case parse pTop path source of
+  parsed <- readParsedSource flags path
+  pure $ case parsed of
     Left message -> Left message
-    Right (EModule _ _ declarations) -> Right (name,(declarations,lines source))
-
-hasCpp :: String -> Bool
-hasCpp [] = False
-hasCpp ('{':'-':'#':rest) =
-  let (pragma,following) = span (/= '#') rest
-  in "CPP" `elem` words (map (\c -> if c == ',' then ' ' else c) pragma) || hasCpp following
-hasCpp (_:rest) = hasCpp rest
+    Right (EModule _ _ declarations,source) -> Right (name,(declarations,lines source))
 
 project :: [(String,([EDef],[String]))] -> (String,TModule a,[(Ident,Fixity)]) -> Either String ApiModule
 project declarations (selected,checked,fixities) = do

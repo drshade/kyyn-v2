@@ -189,6 +189,7 @@ openingTests contract factFiles = do
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
   Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
+  Schema.InspectImports {} -> error "Unexpected import inspection"
   Schema.InspectType {} -> error "Unexpected plain type inspection"
   Schema.InspectSchema source ->
     let entries = [(relativeName p,b) | (p,b) <- Sources.sourceFiles (Schema.schemaSources source)]

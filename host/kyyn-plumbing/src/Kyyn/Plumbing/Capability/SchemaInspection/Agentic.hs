@@ -1,13 +1,33 @@
-module Kyyn.Plumbing.Capability.SchemaInspection.Agentic (generateAgenticCodec) where
+module Kyyn.Plumbing.Capability.SchemaInspection.Agentic (generateAgenticCodec, generateAgenticInstance) where
 
 import Data.List (intercalate, nub)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.DataType
-import Kyyn.Domain.FileTree (FileTree, fileTree)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
+
+-- | Generate one instance for a nominal, monomorphic type at its defining name.
+generateAgenticInstance :: Int -> String -> DataType -> Either String FileTree
+generateAgenticInstance index selected datatype = case datatype of
+  Algebraic actual [] _ | actual == selected -> do
+    let private = "KyynModelContract" ++ show index
+        public = "Kyyn.Contracts." ++ selected
+    codec <- generateAgenticCodec private datatype
+    path <- relativePath (map (\c -> if c == '.' then '/' else c) public ++ ".hs")
+    let source = unlines
+          ["module " ++ public ++ " (codec) where",
+           "import Agentic.Contract (Contract(..), Codec)",
+           "import qualified " ++ definingModule actual,
+           "import qualified " ++ private ++ " as Generated",
+           "-- | Generated model contract for " ++ actual ++ ".",
+           "codec :: Codec " ++ actual, "codec = Generated.rootCodec",
+           "instance Contract " ++ actual ++ " where", "  contract = codec"]
+    fileTree (files codec ++ [(path,Text.encodeUtf8 (Text.pack source))])
+  Algebraic actual [] _ -> Left ("Import Kyyn.Contracts." ++ actual ++ " at the type's defining name, not alias " ++ selected)
+  _ -> Left (selected ++ ": generated Contract instances require a monomorphic data/newtype declaration; wrap other types in a named data/newtype")
 
 -- | Derive a model contract and its wire codec from one checked Haskell type.
 generateAgenticCodec :: String -> DataType -> Either String FileTree

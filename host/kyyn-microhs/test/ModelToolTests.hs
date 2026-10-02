@@ -4,7 +4,7 @@ module Main (main) where
 import qualified Agentic as A
 import qualified Agentic.Runtime as A
 import Control.Monad (unless, forM_)
-import Data.Aeson (toJSON)
+import Data.Aeson (toJSON, object, (.=))
 import qualified Data.ByteString as Bytes
 import Data.List (isInfixOf)
 import qualified Data.Text as Text
@@ -61,21 +61,27 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
   sdk <- right (fileTree (concatMap files trees ++ jsonFiles))
   initial <- right initialRootFiles
   helperPath <- right (relativePath "src/Helpers.hs")
+  typesPath <- right (relativePath "src/ModelTypes.hs")
+  instancesPath <- right (relativePath "src/ModelInstances.hs")
   modelPath <- right (relativePath "model.dhall")
   let helper = Text.encodeUtf8 (Text.unlines
         ["{-# LANGUAGE OverloadedStrings #-}", "module Helpers where",
+         "import ModelTypes (Answer)",
+         "import ModelInstances ()",
          "import qualified Agentic as A", "import qualified Data.Text as Text",
          "import Kyyn.Agentic (Flow, interpret)", "import Kyyn.Connectors (Tool)", "import Kyyn.Plugin (FetchError)",
-         "type Input = String", "type Output = String",
-         "inner :: Flow Text.Text Text.Text", "inner = A.draft \"inner\"",
-         "outer :: Flow Text.Text Text.Text", "outer = A.draftWith [A.tool \"helper\" \"nested draft\" inner] \"outer\"",
+         "type Input = String", "type Output = Answer",
+         "inner :: Flow Text.Text Answer", "inner = A.draft \"inner\"",
+         "outer :: Flow Text.Text Answer", "outer = A.draftWith [A.tool \"helper\" \"nested draft\" inner] \"outer\"",
          "helper :: Input -> Tool (Either FetchError Output)",
-         "helper input = fmap (fmap Text.unpack) (interpret outer (Text.pack input))"])
+         "helper input = interpret outer (Text.pack input)"])
       declaration = "[{ name = \"draft\", description = \"Model fixture\", implementation = \"Helpers.helper\", inputType = \"Helpers.Input\", resultType = \"Helpers.Output\" }]"
       empty = "[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }"
       manifest (p,b) | relativeName p == "kb.dhall" = (p,Text.encodeUtf8 (Text.replace empty declaration (Text.decodeUtf8 b)))
                      | otherwise = (p,b)
-      base = map manifest (files initial) ++ [(helperPath,helper)]
+      types = "module ModelTypes where\ndata Answer = Answer { message :: String }\ntype Alias = Answer\n"
+      instances = "{-# LANGUAGE CPP #-}\nmodule ModelInstances where\n#if 0\nimport Kyyn.Contracts.NotPresent.Bad ()\n#endif\nimport {- generated -} Kyyn.Contracts.ModelTypes.Answer\n  ()\nimport qualified Kyyn.Contracts.ModelTypes.Answer as Answer ()\n"
+      base = map manifest (files initial) ++ [(helperPath,helper),(typesPath,types),(instancesPath,instances)]
       config = "{ provider = < OpenAI | Anthropic >.Anthropic, model = \"fixture-model\", credential = \"MODEL_KEY\" }"
       prepare tree = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
         . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runSchemaInspectionIO toolchain Nothing . runRootStore
@@ -83,6 +89,17 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
   configured <- right (fileTree (base ++ [(modelPath,config)]))
   (prepared,sources) <- prepare configured >>= right
   selected <- right prepared >>= only
+  forM_ ["Missing","Alias"] $ \selectedType -> do
+    let badInstance = Text.encodeUtf8 (Text.pack ("module ModelInstances where\nimport Kyyn.Contracts.ModelTypes." ++ selectedType ++ " ()\n"))
+    bad <- right (fileTree [(path,if path == instancesPath then badInstance else bytes) | (path,bytes) <- files configured])
+    (refused,compiled) <- prepare bad >>= right
+    assert "Bad contract request compiled a guest" (null compiled)
+    assert "Missing/aliased contract lacked a diagnostic" (hasDiagnostic selectedType refused)
+  cyclic <- right (fileTree [(path,if path == typesPath then
+    "module ModelTypes where\nimport Kyyn.Contracts.ModelTypes.Answer ()\ndata Answer = Answer { message :: String }\n"
+    else bytes) | (path,bytes) <- files configured])
+  (cycleResult,_) <- prepare cyclic >>= right
+  assert "Circular generated contract lacked authoring guidance" (hasDiagnostic "separate module" cycleResult)
   forM_ sources $ \source -> do
     let directory = temporary </> "ghc"
     forM_ (sourceFiles source) $ \(path,bytes) -> do
@@ -109,7 +126,7 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
           executeTool tool (toJSON ("input" :: String))
   (result,turns) <- invoke selected (recording expected) >>= right
   CheckedValue _ value <- right result
-  assert "Wrong final model value" (value == toJSON ("final 雪" :: String))
+  assert "Wrong final model value" (value == object ["message" .= ("final 雪" :: String)])
   assert "Nested draft/retry didn't stay in the guest" (turns == 4)
   missing <- invoke (withoutModel selected) (recording expected) >>= right
   assert "Unconfigured model contacted provider" (snd missing == 0)
@@ -128,9 +145,9 @@ recording expected = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn confi
   pure $ case (n,A.instructionText (A.instruction conversation),A.history conversation) of
     (0,"outer",[]) -> Right (turn (A.CallTools [A.ToolCall "nested" "helper" (A.String "nested input")]))
     (1,"inner",[]) -> Right (turn (A.Respond A.Null))
-    (2,"inner",[A.Rejected (A.Raw (A.Object _)) _]) -> Right (turn (A.Respond (A.String "nested answer")))
-    (3,"outer",[A.Called (A.Raw (A.Object _)) [("nested",A.ToolOk (A.String "nested answer"))]]) ->
-      Right (turn (A.Respond (A.String "final 雪")))
+    (2,"inner",[A.Rejected (A.Raw (A.Object _)) _]) -> Right (turn (A.Respond (A.Object [("message",A.String "nested answer")])))
+    (3,"outer",[A.Called (A.Raw (A.Object _)) [("nested",A.ToolOk (A.Object [("message",A.String "nested answer")]))]]) ->
+      Right (turn (A.Respond (A.Object [("message",A.String "final 雪")])))
     _ -> error ("Unexpected guest model request: " ++ show conversation)
 
 captureCompilation :: GuestCompilation :> es => Eff (GuestCompilation : es) a -> Eff es (a,[GuestSources])

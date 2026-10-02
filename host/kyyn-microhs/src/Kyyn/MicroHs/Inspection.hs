@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Werror #-}
-module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectPluginSignature, inspectionSettings) where
+module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectionSettings) where
 
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
@@ -10,6 +10,7 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..), expectedPluginSignature)
 import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
 import Kyyn.MicroHs.Timing (withTimingIO)
+import Kyyn.MicroHs.Source (readParsedSource)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
 import MicroHs.CompileCache (cachedModules)
 import MicroHs.Expr hiding (subst)
@@ -32,6 +33,19 @@ inspectionFlags compiler sources = defaultFlags { mhsdir = compiler, srcPaths = 
 
 inspectionSettings :: FilePath -> String -> String
 inspectionSettings compiler selected = show (selected, inspectionFlags compiler ["<captured>"])
+
+inspectModuleImports :: FilePath -> FilePath -> IO (Either InspectionError [String])
+inspectModuleImports compiler path = inspect `catch` failure
+  where
+    inspect = do
+      parsed <- readParsedSource (inspectionFlags compiler []) path
+      pure $ case parsed of
+        Left message -> Left (CompilerError message)
+        Right (EModule _ _ declarations,_) -> Right
+          [unIdent name | Import (ImportSpec _ _ name _ _) <- declarations]
+    failure (err :: SomeException)
+      | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
+      | otherwise = pure (Left (NativeError (displayException err)))
 
 inspectDataType :: FilePath -> [FilePath] -> String -> IO (Either InspectionError (DataType, [FilePath]))
 inspectDataType compiler sources selected = withTimingIO "inspection" selected (inspect `catch` failure)

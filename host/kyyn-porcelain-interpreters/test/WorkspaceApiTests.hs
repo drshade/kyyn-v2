@@ -67,6 +67,7 @@ workspaceApiTests = do
                 (error "Discovery included evolution/unused code or lost its captured closure")
               pure (Right expected))
           . interpret (\_ -> \case
+              Schema.InspectImports {} -> error "Unexpected import inspection"
               Schema.InspectType {} -> error "Unexpected plain type inspection"
               Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
               Schema.InspectSchema source -> do

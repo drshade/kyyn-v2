@@ -21,6 +21,7 @@ library
     deepseq, filepath, haskeline, time, process, directory, text, array,
     kyyn-plumbing, kyyn-types, effectful-core ==2.6.1.0, cryptohash-sha256 ==0.11.102.1
   other-modules:
+    Kyyn.MicroHs.Source
     MicroHs.Abstract MicroHs.Builtin MicroHs.Compile MicroHs.CompileCache MicroHs.Config
     MicroHs.Deriving MicroHs.Desugar MicroHs.EncodeData MicroHs.Embed MicroHs.Exp
     MicroHs.Expr MicroHs.Flags MicroHs.Fixity MicroHs.Graph MicroHs.Ident
