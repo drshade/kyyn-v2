@@ -35,5 +35,8 @@ cp vendor/json/Text/JSON/Types.hs vendor/json/Text/JSON/String.hs "$stage_prefix
 cp vendor/MicroHs/LICENSE "$stage_prefix/share/kyyn/licenses/MicroHs"
 cp vendor/json/LICENSE "$stage_prefix/share/kyyn/licenses/json"
 cp vendor/transformers/LICENSE "$stage_prefix/share/kyyn/licenses/transformers"
+for package in agentic agentic-aeson agentic-openai agentic-anthropic; do
+  cp "vendor/$package/LICENSE" "$stage_prefix/share/kyyn/licenses/$package"
+done
 cp docs/dependency-sources.md "$stage_prefix/share/kyyn/licenses/native-source-inventory.md"
 echo "Staged development executable: $stage_prefix/bin/kyyn-v2"

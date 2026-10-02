@@ -19,6 +19,13 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test model-turn-provider --test-show-details=direct` checks both native
+provider configurations, explicit keys from SecretStore, missing/empty credentials,
+refusal before environment fallback, sanitized provider/HTTP failures and propagation
+of cancellation. A recording provider factory avoids network calls. This proves
+the host capability, not guest wire dispatch, persisted model configuration or
+recipe execution. The test belongs to the fast check and does not compile MicroHs.
+
 `cabal test agentic-contracts --test-show-details=direct`, with `KYYN_TEST_ROOT`
 and `KYYN_TEST_TOOLCHAIN` selected, generates Agentic contracts from Kyyn's
 resolved type representation and compiles them with GHC and MicroHs. It checks

@@ -119,6 +119,7 @@ const allowed = {
 };
 
 const domainModules = {
+  'Kyyn.Domain.Model': ['Kyyn.Domain.Secret'],
   'Kyyn.Domain.FactProposal': ['Data.Aeson', 'Kyyn.Types.Curation', 'Kyyn.Types.Evolution'],
   'Kyyn.Domain.Curation': ['Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Fact', 'Kyyn.Domain.Diagnostic', 'Kyyn.Types.Curation', 'Data.List', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
   'Kyyn.Domain.Tool': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Plugin'],
@@ -146,6 +147,7 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Capability.ModelTurn': ['Agentic.Runtime', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Model'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Agentic': ['Data.List', 'Data.Text', 'Data.Text.Encoding',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',
     'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Capability.SchemaInspection.Codecs'],
@@ -247,6 +249,9 @@ const plumbingModules = {
 };
 
 const interpreterModules = {
+  'Kyyn.Plumbing.Interpreter.ModelTurn': ['Agentic.OpenAI', 'Agentic.Anthropic', 'Agentic.Runtime',
+    'Agentic.Settings', 'Control.Exception', 'Data.Char', 'Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic',
+    'Kyyn.Domain.Model', 'Kyyn.Plumbing.Capability.ModelTurn', 'Kyyn.Plumbing.Capability.SecretStore', 'Network.HTTP.Client'],
   'Kyyn.Runtime.AgenticContract': ['Agentic.Contract', 'Agentic.Schema', 'Agentic.Value', 'Data.Text', 'Kyyn.Runtime.Json', 'Text.JSON.Types'],
   'Kyyn.Runtime.PluginHost': ['Kyyn.Runtime.Json', 'Kyyn.Runtime.Plugin', 'Kyyn.Types.PluginHost', 'Kyyn.Types.Plugin', 'Kyyn.Types.Program', 'Kyyn.Types.Evidence'],
   'Kyyn.Porcelain.Protocol.PluginHost': ['Kyyn.Plumbing.Capability.FileAcquisition', 'Data.Aeson', 'Data.Text', 'Data.ByteString.Lazy', 'Effectful', 'Kyyn.Plumbing.Capability.GuestExecution', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Types.Plugin', 'Kyyn.Plumbing.Protocol.PluginMessages', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.HttpTransport', 'Kyyn.Plumbing.Capability.SecretStore', 'Kyyn.Plumbing.Capability.PluginInteraction', 'Kyyn.Plumbing.Protocol.PluginHost', 'Kyyn.Porcelain.Protocol.PluginBroker'],

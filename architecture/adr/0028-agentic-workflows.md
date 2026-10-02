@@ -90,6 +90,12 @@ KB-authored wire schema.
 KB configuration selects provider/model and a secret-store key. The host resolves
 that configuration for a model request; no separate profile registry is needed. Its
 credential value never crosses this boundary or appears in guest diagnostics.
+Support both OpenAI and Anthropic through the upstream native provider packages.
+The host supplies the resolved key explicitly; missing or empty local secrets fail
+before provider construction, without falling back to environment variables or
+dotenv. Provider/HTTP failures become typed, sanitized failures rather than raw
+exception text that may contain request headers or response bodies. Cancellation
+continues to propagate normally.
 This is specific to the model-turn capability; it does not change plugin-owned
 authentication under [ADR 0016](0016-connections.md). Native provider packages
 may inform the host adapter, but their IO dependencies do not enter the guest.

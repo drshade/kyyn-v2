@@ -2,5 +2,15 @@ packages: shared/kyyn-types host/kyyn-domain host/kyyn-plumbing host/kyyn-microh
   host/kyyn-porcelain host/kyyn-porcelain-interpreters
   host/kyyn-surfaces host/kyyn
   guest/kyyn-sdk vendor/json
+  vendor/agentic vendor/agentic-aeson vendor/agentic-openai vendor/agentic-anthropic
 optimization: False
 tests: True
+
+package agentic
+  tests: False
+package agentic-aeson
+  tests: False
+package agentic-openai
+  tests: False
+package agentic-anthropic
+  tests: False

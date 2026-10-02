@@ -50,6 +50,7 @@ cabal test document-persistence --test-show-details=direct
 cabal test file-acquisition --test-show-details=direct
 cabal test secret-store --test-show-details=direct
 cabal test judgement-provider --test-show-details=direct
+cabal test model-turn-provider --test-show-details=direct
 cabal test contract-roles --test-show-details=direct
 cabal test compilation-cache --test-show-details=direct
 cabal test plugin-installation --test-show-details=direct
