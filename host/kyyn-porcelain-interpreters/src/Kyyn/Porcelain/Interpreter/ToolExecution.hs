@@ -21,6 +21,8 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import qualified Kyyn.Plumbing.Capability.Judgement as Judgement
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
+import qualified Kyyn.Plumbing.Capability.ModelTurn as Model
+import qualified Kyyn.Plumbing.Protocol.ModelTurn as Model
 import Kyyn.Plumbing.Protocol.PluginMessages (success, failure)
 import Kyyn.Plumbing.Protocol.Tool (ToolCall(..), decodeToolFrame)
 import Kyyn.Porcelain.Capability.PluginPreparation
@@ -28,13 +30,16 @@ import Kyyn.Porcelain.Capability.PluginRead (PluginRead, loadCapturedInput, exec
 import Kyyn.Porcelain.Capability.Tool
 import Kyyn.Porcelain.Protocol.PluginBroker (conversation, protocolFailure)
 
-runToolExecution :: (PluginRead :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es, Judgement.Judgement :> es)
+runToolExecution :: (PluginRead :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => Eff (ToolExecution : es) a -> Eff es a
-runToolExecution = interpret $ \_ (ExecuteTool (PreparedTool (ToolDescriptor _ _ input output) program plugins) arguments) -> runExceptT $ do
+runToolExecution = interpret $ \_ (ExecuteTool (PreparedTool (ToolDescriptor _ _ input output) program plugins model) arguments) -> runExceptT $ do
   _ <- ExceptT (encodeValue (contractShape input) arguments)
   result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState ([] :: [(ConnectorInstanceRef,CurrentEvidence)]) $
     conversation decodeToolFrame program (Lazy.toStrict (encode arguments)) $ \case
       ToolJudgement request -> Judgement.encodeReply <$> Judgement.judge request
+      ToolModel request -> case model of
+        Nothing -> pure (failure "No model configured; add root/model.dhall through an evolution")
+        Just configuration -> Model.takeModelTurn configuration request >>= either protocolFailure pure . Model.encodeReply
       ToolCall plugin kind instanceName methodName value -> answerPlugin plugins plugin kind instanceName methodName value
   value <- either (\(FetchError message) -> throwE [errorDiagnostic "tool.failed" message]) pure result
   _ <- ExceptT (encodeValue (contractShape output) value)

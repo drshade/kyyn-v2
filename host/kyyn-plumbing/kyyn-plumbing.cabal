@@ -6,7 +6,8 @@ copyright: All rights reserved for Kyyn-owned code; upstream notices remain appl
 build-type: Simple
 
 library
-  hs-source-dirs: src
+  hs-source-dirs: src ../../guest/kyyn-runtime/src
+  other-modules: Kyyn.Runtime.Json Kyyn.Runtime.ModelWire
   exposed-modules: Kyyn.Plumbing.Capability.SchemaInspection.Codecs
     Kyyn.Plumbing.Capability.SchemaInspection.Agentic
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
@@ -47,8 +48,10 @@ library
     Kyyn.Plumbing.Capability.ModelTurn
     Kyyn.Plumbing.Capability.Judgement.Jev
     Kyyn.Plumbing.Protocol.Judgement
+    Kyyn.Plumbing.Protocol.ModelConfiguration
+    Kyyn.Plumbing.Protocol.ModelTurn
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
-    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson ==2.2.5.0, agentic ==0.2.0.2
+    cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson ==2.2.5.0, agentic ==0.2.0.2, json ==0.11

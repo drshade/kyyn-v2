@@ -16,19 +16,22 @@ import Kyyn.Domain.Plugin (QualifiedTypeName(..))
 import Kyyn.Domain.Root (RootDefinition(..))
 import Kyyn.Domain.Tool (ToolDefinition(..), ToolDescriptor(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, InspectedSchema(..), inspectType)
 import Kyyn.Plumbing.Protocol.Tool (ConnectorInterface(..), InstanceBinding(..), toolBindings, toolSources)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition)
 import Kyyn.Porcelain.Capability.Tool
 
-runToolPreparation :: (RootStore :> es, SchemaInspection :> es, GuestCompilation :> es)
+runToolPreparation :: (RootStore :> es, SchemaInspection :> es, GuestCompilation :> es, DhallHandling :> es)
   => FileTree -> Eff (ToolPreparation : es) a -> Eff es a
 runToolPreparation sdk = interpret $ \_ operation -> case operation of
   PrepareToolBindings code plugins -> runExceptT $ do
     (_,_,_,_,sources,names) <- environment sdk code plugins
     pure (sources,names)
   PrepareTools code plugins -> runExceptT $ do
+    model <- ExceptT (readModelConfiguration code)
     (declarations,allSources,interfaces,bindings,inspectionSources,_) <- environment sdk code plugins
     forM declarations $ \(ToolDefinition name description inputName outputName implementation) -> do
       let expected = errorDiagnostic "tool.signature"
@@ -41,7 +44,7 @@ runToolPreparation sdk = interpret $ \_ operation -> case operation of
       InspectedSchema output _ <- ExceptT (withSignature <$> inspectType inspectionSources outputName)
       source <- checked (toolSources interfaces bindings (rootType input) (rootType output) implementation (files allSources))
       compiled <- ExceptT (withSignature <$> compileGuest source)
-      pure (PreparedTool (ToolDescriptor name description input output) compiled plugins)
+      pure (PreparedTool (ToolDescriptor name description input output) compiled plugins model)
 
 environment :: RootStore :> es => FileTree -> FileTree -> [PreparedPlugin]
   -> ExceptT [Diagnostic] (Eff es) ([ToolDefinition],FileTree,[ConnectorInterface],[InstanceBinding],FileTree,[String])

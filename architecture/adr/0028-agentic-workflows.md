@@ -87,8 +87,20 @@ The host does not execute returned tool calls: the guest loop does so through
 the supplied typed tool bodies. Internal library values are not an additional
 KB-authored wire schema.
 
-KB configuration selects provider/model and a secret-store key. The host resolves
-that configuration for a model request; no separate profile registry is needed. Its
+The optional `root/model.dhall` selects one provider/model and a secret-store key:
+
+```dhall
+{ provider = < OpenAI | Anthropic >.Anthropic
+, model = "your-model-name"
+, credential = "MODEL_KEY"
+}
+```
+
+This is accepted-root configuration, changed through an evolution. Root checking
+rejects malformed configuration; absence is valid until a tool requests a model.
+Tool preparation captures the selection with its source tree; each turn uses
+that captured selection, not a fresh read of the working checkout. `root tool show`
+displays the provider/model and secret name. No separate profile registry is needed. Its
 credential value never crosses this boundary or appears in guest diagnostics.
 Support both OpenAI and Anthropic through the upstream native provider packages.
 The host supplies the resolved key explicitly; missing or empty local secrets fail

@@ -19,5 +19,6 @@ cabal test judgements --test-show-details=direct
 node tools/test-agentic.mjs
 cabal test fact-edit-bindings --test-show-details=direct
 cabal test agentic-contracts --test-show-details=direct
+cabal test model-tools --test-show-details=direct
 cabal test evolutions --test-show-details=direct
 cabal test workspace-evolutions --test-show-details=direct

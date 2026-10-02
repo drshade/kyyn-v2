@@ -29,6 +29,7 @@ import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..), compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
+import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
 import Kyyn.Plumbing.Protocol.Tool (ConnectorInterface(..), InstanceBinding(..), toolSources, decodeToolFrame)
@@ -55,6 +56,9 @@ import System.Process (readProcessWithExitCode)
 
 noJudgement :: Eff (Judgement : es) a -> Eff es a
 noJudgement = interpret $ \_ _ -> error "Captured-read fixture unexpectedly requested judgement"
+
+noModel :: Eff (ModelTurn : es) a -> Eff es a
+noModel = interpret $ \_ _ -> error "Captured-read fixture unexpectedly requested a model"
 
 testTools :: DirectoryScope -> GuestToolchain -> FileTree -> FileTree -> [PreparedPlugin] -> IO ()
 testTools scope toolchain sdk pluginCode plugins = do
@@ -88,7 +92,7 @@ testTools scope toolchain sdk pluginCode plugins = do
       (captureCompilation (runToolPreparation sdk (prepareTools code plugins))))))))))) >>= right
   tools <- right prepared
   forM_ sources $ \source -> compileGhc scope source True
-  selected@(PreparedTool (ToolDescriptor _ _ _ result) _ _) <- case tools of
+  selected@(PreparedTool (ToolDescriptor _ _ _ result) _ _ _) <- case tools of
     [one] -> pure one
     _ -> fail "Expected the registered bulk tool"
   forM_ [("absent","Folder","content"),("sales","Other","content"),("sales","Folder","absent")] $ \(instanceName,kind,method) -> do
@@ -97,13 +101,13 @@ testTools scope toolchain sdk pluginCode plugins = do
           "arguments" .= object ["plugin" .= ("local-file" :: String), "instance" .= (instanceName :: String),
             "connectorType" .= (kind :: String), "method" .= (method :: String), "input" .= ("one.txt" :: String)]]))
         response = runPureEff (runFailure (runDhallHandling (emitFrame frame (noReads
-          ((noJudgement . runToolExecution) (executeTool selected (toJSON (["one.txt"] :: [String]))))))))
+          ((noJudgement . noModel . runToolExecution) (executeTool selected (toJSON (["one.txt"] :: [String]))))))))
     assert "Impossible generated request became a user diagnostic" (case response of
       Left (RuntimeUnavailable (ProcessDiagnostic ReadOutput _)) -> True
       _ -> False)
   let invoke input = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
         (runGuestExecution toolchain (runDocumentPersistenceIO (runEvidenceStore scope (runPluginRead
-          (countReads ((noJudgement . runToolExecution) (executeTool selected input))))))))))) >>= right
+          (countReads ((noJudgement . noModel . runToolExecution) (executeTool selected input))))))))))) >>= right
   (response,loads) <- invoke (toJSON (["one.txt","one.txt"] :: [String]))
   value <- right response
   assert "Tool did not compose instances or catch the typed missing-ID failure"
@@ -183,7 +187,8 @@ compileGhc scope sources expected = do
     let target = directory </> relativeName path
     createDirectoryIfMissing True (takeDirectory target)
     Bytes.writeFile target bytes
-  (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fno-code","-i" ++ directory,
+  (status,out,err) <- readProcessWithExitCode ghc ["-v0","-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
+    "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes","-fno-code","-i" ++ directory,
     "-outputdir",directory </> "objects","-main-is",takeBaseName (relativeName (selectedEntry sources)) ++ ".main",
     directory </> relativeName (selectedEntry sources)] ""
   assert ("Unexpected GHC result for generated helper: " ++ out ++ err) ((status == ExitSuccess) == expected)

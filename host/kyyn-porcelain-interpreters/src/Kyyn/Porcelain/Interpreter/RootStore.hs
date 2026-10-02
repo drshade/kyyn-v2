@@ -31,6 +31,7 @@ import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
+import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 import Kyyn.Porcelain.Validated (validatedValue)
 
 runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
@@ -38,6 +39,7 @@ runRootStore = interpret $ \_ -> \case
   ReadRootCuration tree -> decodeRegister (lookup curationLocation (files tree))
   ReadRootRecipes tree -> decodeRecipes (lookup recipesLocation (files tree))
   ReadRootDefinition code -> runExceptT $ do
+    _ <- ExceptT (readModelConfiguration code)
     manifest <- withExceptT (map manifestDiagnostic) $ decodeFile code "kb.dhall"
       (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
