@@ -26,6 +26,11 @@ The recording provider checks nested drafting, malformed-output retry and provid
 refusal across real MicroHs pipes. No credentials or live providers are used.
 This check belongs to full integration, not the fast gate.
 
+`node tools/test-model-tool.mjs INSTALLED_EXECUTABLE` creates and accepts a model
+tool through the installed CLI, inspects its configuration and Agentic APIs, and
+checks that a missing local secret refuses the request despite an ambient key.
+It does not contact a live provider.
+
 `cabal test model-turn-provider --test-show-details=direct` checks both native
 provider configurations, explicit keys from SecretStore, missing/empty credentials,
 refusal before environment fallback, sanitized provider/HTTP failures and propagation

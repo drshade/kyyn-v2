@@ -148,7 +148,7 @@ const domainModules = {
 
 const plumbingModules = {
   'Kyyn.Plumbing.Protocol.ModelConfiguration': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Char', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Model', 'Kyyn.Domain.Secret'],
-  'Kyyn.Plumbing.Protocol.ModelTurn': ['Agentic.Runtime', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Model', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.ModelWire'],
+  'Kyyn.Plumbing.Protocol.ModelTurn': ['Agentic.Runtime', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Model', 'Kyyn.Domain.Secret', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.ModelWire'],
   'Kyyn.Plumbing.Capability.ModelTurn': ['Agentic.Runtime', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Model'],
   'Kyyn.Plumbing.Capability.SchemaInspection.Agentic': ['Data.List', 'Data.Text', 'Data.Text.Encoding',
     'Kyyn.Domain.DataType', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Path',

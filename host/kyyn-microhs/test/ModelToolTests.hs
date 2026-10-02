@@ -115,7 +115,7 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
   assert "Unconfigured model contacted provider" (snd missing == 0)
   assert "Missing model not actionable" (hasDiagnostic "root/model.dhall" (fst missing))
   (failed,_) <- invoke selected refusing >>= right
-  assert "Provider refusal didn't return a tool diagnostic" (hasDiagnostic "ModelRefused" failed)
+  assert "Provider refusal didn't return an actionable tool diagnostic" (hasDiagnostic "model refused" failed)
   putStrLn "Model tools: captured config, root validation, real guest nested calls/retry and typed refusal passed."
 
 recording :: ModelConfiguration -> Eff (ModelTurn : es) a -> Eff es (a,Int)
