@@ -519,6 +519,7 @@ and `score`, using constructor names and declaration order:
 
 ```haskell
 -- In Todos.hs: data Priority = Routine | Important | Urgent
+import Todos (Priority)
 import Kyyn.Contracts.Todos.Priority ()
 
 priority = A.judge (A.choice @Priority "How urgent is this?")
@@ -628,7 +629,7 @@ kyyn-v2 --kb PATH --json root recipe pending list syncTodos local-file documents
 ```
 
 List/show needs no runtime bundle. Pending discovery returns a fixed `scope`
-(`plugin`, `instance`, `fetch`) and `changes` (`id`, `kind`), comparing latest
+(`plugin`, `instance`, `fetch`), `kind: "Changes"` and `changes` (`id`, `kind`), comparing latest
 evidence against this recipe's accepted acknowledgements. It neither fetches nor
 marks anything handled. An incompatible cached producer requires refetching.
 After refetch, a producer change relative to accepted progress returns

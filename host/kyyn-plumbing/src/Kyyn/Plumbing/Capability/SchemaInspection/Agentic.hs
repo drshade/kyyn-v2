@@ -9,7 +9,7 @@ import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
--- | Generate one instance for a nominal, monomorphic type at its defining name.
+-- | Generate a Contract and, for an enum, Options at the type's defining name.
 generateAgenticInstance :: Int -> String -> DataType -> Either String FileTree
 generateAgenticInstance index selected datatype = case datatype of
   Algebraic actual [] constructors | actual == selected -> do
@@ -25,8 +25,7 @@ generateAgenticInstance index selected datatype = case datatype of
            "import qualified " ++ private ++ " as Generated"] ++
           ["import Agentic.Contract (Options(..), Option(..), OptionSet(..))" | enum] ++
           ["import qualified Data.Text as Text" | enum] ++
-          [
-           "-- | Generated model contract for " ++ actual ++ ".",
+          ["-- | Generated model contract for " ++ actual ++ ".",
            "codec :: Codec " ++ actual, "codec = Generated.rootCodec",
            "instance Contract " ++ actual ++ " where", "  contract = codec"] ++
           (if enum then ["instance Options " ++ actual ++ " where",

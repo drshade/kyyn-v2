@@ -37,7 +37,7 @@ recipeText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ entry
 
 pendingResult :: RecipeId -> PendingEvidence -> Response
 pendingResult (RecipeId recipe) (PendingEvidence (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) changes) =
-  success (object ["recipe" .= recipe,
+  success (object ["recipe" .= recipe, "kind" .= ("Changes" :: String),
     "scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
     "changes" .= [object ["id" .= item,"kind" .= show kind] | (EvidenceId item,kind) <- changes]])
     (["Recipe: " ++ recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch,
