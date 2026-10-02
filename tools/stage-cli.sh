@@ -28,6 +28,7 @@ cp "$(cabal list-bin exe:kyyn-v2)" "$stage_prefix/bin/kyyn-v2"
 cp -R shared/kyyn-types/src/. "$stage_prefix/lib/kyyn/sdk/"
 cp -R guest/kyyn-sdk/src/. "$stage_prefix/lib/kyyn/sdk/"
 cp -R guest/kyyn-runtime/src/. "$stage_prefix/lib/kyyn/sdk/"
+cp -R vendor/agentic/src/. "$stage_prefix/lib/kyyn/sdk/"
 cp -R vendor/transformers/Control "$stage_prefix/lib/kyyn/sdk/"
 cp vendor/json/Text/JSON/Types.hs vendor/json/Text/JSON/String.hs "$stage_prefix/lib/kyyn/sdk/Text/JSON/"
 "$(cabal list-bin exe:kyyn-api-catalogue)" \

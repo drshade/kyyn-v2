@@ -18,11 +18,14 @@ import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame, decodeFrameWith)
 import qualified Kyyn.Plumbing.Protocol.Judgement as Judgement
 import Kyyn.Types.Judgement (JudgementRequest)
+import qualified Agentic.Runtime as Agentic
+import qualified Kyyn.Plumbing.Protocol.ModelTurn as Model
 
 data ConnectorInterface = ConnectorInterface PluginName ConnectorTypeName [(MethodName,DataType,DataType)]
 data InstanceBinding = InstanceBinding BindingName PluginName ConnectorTypeName ConnectorName
 data ToolCall = ToolCall PluginName ConnectorTypeName ConnectorName MethodName Value
   | ToolJudgement JudgementRequest
+  | ToolModel Agentic.Conversation
 
 proxyModule :: PluginName -> ConnectorTypeName -> String
 proxyModule plugin kind = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then '_' else c) (pluginNameText plugin) ++ "." ++ coerce kind
@@ -39,12 +42,33 @@ toolBindings interfaces bindings = do
       calls = unlines $ ["{-# LANGUAGE GADTs, EmptyDataDecls #-}",
         "module KyynToolCalls (Calls(..)" ++ concat [", Connector" ++ show i | (i,_) <- indexed] ++ ") where",
         "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)",
-        "import Kyyn.Types.Judgement (JudgementRequest, JudgementFailure, JudgementAnswer)"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
+        "import Kyyn.Types.Judgement (JudgementRequest, JudgementFailure, JudgementAnswer)",
+        "import qualified Agentic.Runtime as Agentic"] ++ imports (concat [[a,b] | (_,_,_,_,a,b) <- requests]) ++
         ["data Connector" ++ show i | (i,_) <- indexed] ++
-        ["data Calls a where", "  JudgementCall :: JudgementRequest -> Calls (Either JudgementFailure [JudgementAnswer])"] ++
+        ["data Calls a where", "  JudgementCall :: JudgementRequest -> Calls (Either JudgementFailure [JudgementAnswer])",
+         "  ModelCall :: Agentic.Conversation -> Calls (Either String Agentic.Turn)"] ++
         ["  " ++ requestName i n ++ " :: ConnectorInstance Connector" ++ show i ++ " -> " ++ haskellType a ++
           " -> Calls (Either FetchError " ++ haskellType b ++ ")" | (i,_,_,n,a,b) <- requests]
   core <- source "KyynToolCalls" calls
+  agenticModule <- source "Kyyn.Agentic" (unlines
+    ["module Kyyn.Agentic (Flow, interpret, liftTool) where",
+     "import qualified Agentic as A", "import qualified Agentic.Runtime as A",
+     "import Agentic.Runtime (Runtime(..))",
+     "import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)",
+     "import Control.Monad.Trans.Class (lift)",
+     "import Kyyn.Types.Plugin (FetchError(..))", "import Kyyn.Types.Program (request)",
+     "import Kyyn.Connectors (Tool)", "import qualified KyynToolCalls as Calls",
+     "-- | An agentic flow using the current tool's host capabilities.",
+     "type Flow input output = A.Agentic (ExceptT FetchError Tool) input output",
+     "-- | Execute a flow; model selection comes from root/model.dhall.",
+     "interpret :: Flow input output -> input -> Tool (Either FetchError output)",
+     "interpret flow input = runExceptT (A.interpret runtime flow input)",
+     "runtime :: A.Runtime (ExceptT FetchError Tool)",
+     "runtime = (A.runtimeWith (throwE . FetchError . show))",
+     "  { systemTwo = A.SystemTwo $ \\conversation ->",
+     "      lift (request (Calls.ModelCall conversation)) >>= either (throwE . FetchError) pure }",
+     "-- | Lift a captured-read or Judgement tool action into a flow's effect monad.",
+     "liftTool :: Tool a -> ExceptT FetchError Tool a", "liftTool = lift"])
   judgementModule <- source "Kyyn.Judgement" (unlines
     ["module Kyyn.Judgement (module Kyyn.Judgement.Question, judge) where",
      "import Kyyn.Judgement.Question", "import Kyyn.Judgement.Internal (judgeWith)",
@@ -75,7 +99,7 @@ toolBindings interfaces bindings = do
      "type Tool a = Program Calls.Calls a"] ++ concat
     [[coerce n ++ " :: " ++ proxyModule p k ++ ".Instance",
       coerce n ++ " = ConnectorInstance " ++ show (coerce instanceName :: String)] | InstanceBinding n p k instanceName <- bindings])
-  pure (core:connectorModule:judgementModule:proxies)
+  pure (core:connectorModule:judgementModule:agenticModule:proxies)
 
 toolSources :: [ConnectorInterface] -> [InstanceBinding] -> DataType -> DataType -> String
   -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
@@ -92,6 +116,7 @@ toolSources interfaces bindings input output implementation authored = do
      "import qualified KyynToolCalls as Calls","import Kyyn.Types.Plugin (ConnectorInstance(..), FetchError)",
      "import Kyyn.Runtime.Json","import Kyyn.Runtime.Plugin (execute, exchange, eitherCodec)",
      "import Kyyn.Runtime.Judgement (exchangeJudgement)",
+     "import Kyyn.Runtime.Model (exchangeModel)",
      "import qualified KyynToolInputCodec as Input","import qualified KyynToolResultCodec as Output"] ++
     ["import qualified " ++ m | (i,_,_,n,_,_) <- methods, m <- [inputCodec i n,resultCodec i n]] ++ imports [input,output] ++
     ["selected :: " ++ haskellType input ++ " -> Connectors.Tool (Either FetchError " ++ haskellType output ++ ")",
@@ -99,7 +124,8 @@ toolSources interfaces bindings input output implementation authored = do
      "  arguments <- either fail pure (parseValue line >>= decodeWith Input.rootCodec)",
      "  execute (eitherCodec Output.rootCodec) dispatch (selected arguments)",
      "dispatch :: Integer -> Calls.Calls a -> IO a",
-     "dispatch requestId (Calls.JudgementCall request) = exchangeJudgement requestId request"] ++
+     "dispatch requestId (Calls.JudgementCall request) = exchangeJudgement requestId request",
+     "dispatch requestId (Calls.ModelCall request) = exchangeModel requestId request"] ++
     concat
       [["dispatch requestId (Calls." ++ requestName i n ++ " (ConnectorInstance instanceName) arguments) =",
         "  exchange requestId \"plugin\" \"read\" (record [",
@@ -125,6 +151,8 @@ decodeToolFrame :: Bytes.ByteString -> Either String (PluginFrame ToolCall)
 decodeToolFrame = decodeFrameWith $ \capability operation arguments ->
   if capability == "judgement" && operation == "evaluate"
   then ToolJudgement <$> Judgement.decodeRequest arguments
+  else if capability == "model" && operation == "turn"
+  then ToolModel <$> Model.decodeRequest arguments
   else decodePlugin capability operation arguments
 
 decodePlugin :: String -> String -> Value -> Parser ToolCall

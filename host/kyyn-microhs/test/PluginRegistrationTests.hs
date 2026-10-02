@@ -105,7 +105,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   let load path = do
         directory <- right (directoryScope (repo </> path))
         runEff (runFailure (runFileSystemIO scope (readTree directory))) >>= right
-  trees <- traverse load ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src"]
+  trees <- traverse load ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src","vendor/agentic/src"]
   json <- load "vendor/json/Text"
   jsonFiles <- traverse (\(p,b) -> (,) <$> right (relativePath ("Text/" ++ relativeName p)) <*> pure b) (files json)
   sdk <- right (fileTree (concatMap files trees ++ jsonFiles))

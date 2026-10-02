@@ -19,6 +19,13 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`cabal test model-tools --test-show-details=direct`, with `KYYN_TEST_ROOT` and
+`KYYN_TEST_TOOLCHAIN` selected, exercises captured model configuration, malformed
+root configuration, generated guest dispatch and the ordinary tool interpreter.
+The recording provider checks nested drafting, malformed-output retry and provider
+refusal across real MicroHs pipes. No credentials or live providers are used.
+This check belongs to full integration, not the fast gate.
+
 `cabal test model-turn-provider --test-show-details=direct` checks both native
 provider configurations, explicit keys from SecretStore, missing/empty credentials,
 refusal before environment fallback, sanitized provider/HTTP failures and propagation

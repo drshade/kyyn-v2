@@ -43,7 +43,7 @@ selectRootTool :: (ToolPreparation :> es, PluginPreparation :> es, RootOpening :
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> MethodName -> Eff es (Either [Diagnostic] PreparedTool)
 selectRootTool kb revision workspace name = runExceptT $ do
   tools <- ExceptT (listRootTools kb revision workspace)
-  case [tool | tool@(PreparedTool (ToolDescriptor actual _ _ _) _ _) <- tools, actual == name] of
+  case [tool | tool@(PreparedTool (ToolDescriptor actual _ _ _) _ _ _) <- tools, actual == name] of
     [tool] -> pure tool
     _ -> throwE [errorDiagnostic "tool.unknown" ("No registered tool named " ++ coerce name)]
 
