@@ -102,6 +102,12 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
   restored <- right (runPureEff (runDhallHandling (decodeValue shape loaded)))
   unless (restored == proposalValue (proposal operations)) (fail "Dhall proposal round trip changed the operations")
   change <- right (runPureEff (runDhallHandling (proposalChange contract (proposal operations))))
+  entryPath <- right (relativePath "Evolution.hs")
+  entry <- maybe (fail "Missing frozen entry") (pure . Text.decodeUtf8) (lookup entryPath (files change))
+  unless ("evolution = frozen\n" `Text.isInfixOf` entry
+      && not ("proposal.decode" `Text.isInfixOf` entry)
+      && not ("case " `Text.isInfixOf` entry))
+    (fail "Frozen entry leaked proposal decoding into authored code")
   renamed <- right (checkContract root (SchemaMetadata [] []
     [CollectionDecl "renamed" "todos" [], CollectionDecl "flags" "flags" []]) >>= checkRootLayout)
   case runPureEff (runDhallHandling (lowerProposal contract renamed change)) of

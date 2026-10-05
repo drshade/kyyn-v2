@@ -59,13 +59,11 @@ proposalChange contract proposal = runExceptT $ do
   path <- checked (relativePath "proposal.dhall")
   entry <- checked (relativePath "Evolution.hs")
   checked (fileTree [(path,Text.encodeUtf8 encoded),(entry,Text.encodeUtf8 (Text.pack (unlines
-    ["module Evolution where", "import Kyyn.Workspace.Evolution", "import Kyyn.Workspace.FactEdits",
+    ["module Evolution where", "import Kyyn.Workspace.Evolution",
      "import qualified " ++ definingModule (case rootType (rootSchema contract) of Algebraic name _ _ -> name; _ -> error "Checked root is not algebraic"),
-     "import qualified KyynFrozenProposal", "import Kyyn.Types.Diagnostic",
+     "import KyynFrozenProposal (frozen)",
      "evolution :: Evolution (KnowledgeBase " ++ root ++ ") (KnowledgeBase " ++ root ++ ")",
-     "evolution = case KyynFrozenProposal.proposal of",
-     "  Right value -> proposalEvolution value",
-     "  Left message -> edit (Rationale \"Decode proposal\" []) (refuse [Diagnostic Error \"proposal.decode\" message Nothing])"])))])
+     "evolution = frozen"])))])
   where root = haskellType (rootType (rootSchema contract))
 
 -- | Decode captured Dhall inputs before compiling their ordinary pure entry.
@@ -83,12 +81,24 @@ lowerProposal before after change = runExceptT $ do
       generated <- checked (relativePath "KyynFrozenProposal.hs")
       let json = Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))
           moduleSource = unlines
-            ["module KyynFrozenProposal (proposal) where", "import Kyyn.Evolution.Proposal (ProposedCuration)",
-             "import Kyyn.Workspace.FactEdits (RootEdit)", "import KyynFactEditCodec (rootCodec)",
+            ["module KyynFrozenProposal (frozen, proposal) where", "import Kyyn.Evolution.Proposal (ProposedCuration)",
+             "import Kyyn.Workspace.FactEdits (RootEdit, proposalEvolution)", "import KyynFactEditCodec (rootCodec)",
+             "import Kyyn.Evolution.Internal (Evolution(..))",
+             "import Kyyn.Types.KnowledgeBase (KnowledgeBase)",
+             "import Kyyn.Types.Evolution (EvolutionFailure(..))",
+             "import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))",
+             "import qualified " ++ definingModule (case rootType (rootSchema before) of
+               Algebraic name _ _ -> name; _ -> error "Checked root is not algebraic"),
              "import Kyyn.Runtime.Json", "import Kyyn.Runtime.Proposal (proposalCodec)",
+             "-- | Apply the captured proposal without invoking its recipe again.",
+             "frozen :: Evolution (KnowledgeBase " ++ root ++ ") (KnowledgeBase " ++ root ++ ")",
+             "frozen = case proposal of",
+             "  Right value -> proposalEvolution value",
+             "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" message Nothing]))",
              "proposal :: Either String (ProposedCuration RootEdit)",
              "proposal = parseValue " ++ show json ++ " >>= decodeWith (proposalCodec rootCodec)"]
       checked (fileTree ((generated,Text.encodeUtf8 (Text.pack moduleSource)) : filter ((/= path) . fst) (files change)))
+  where root = haskellType (rootType (rootSchema before))
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "proposal.invalid") pure
