@@ -4,6 +4,7 @@ module Kyyn.Surfaces.Cli
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   , SecretCommand(..), SecretArgument(..)
   , TapCommand(..), GuideSelection(..)
+  , SchemaCommand(..), CollectionCommand(..), FactCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -61,7 +62,11 @@ data EvidenceCommand
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
-data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand deriving (Eq, Show)
+data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand
+  | RootSchema SchemaCommand | RootCollection CollectionCommand | RootFact FactCommand deriving (Eq, Show)
+data SchemaCommand = ListSchemas (Maybe EvolutionId) | ShowSchema String (Maybe EvolutionId) deriving (Eq, Show)
+data CollectionCommand = ListCollections (Maybe EvolutionId) | ShowCollection String (Maybe EvolutionId) deriving (Eq, Show)
+data FactCommand = ListFacts String | ShowFact String String deriving (Eq, Show)
 data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName
   | RunRecipe RecipeId [(PluginName,ConnectorName)] deriving (Eq, Show)
 data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
@@ -210,6 +215,15 @@ rootParser :: Parser RootCommand
 rootParser = hsubparser
   (group "show" "Inspect the accepted root at the selected revision" (pure ShowRoot)
   <> group "check" "Check the accepted root, including required examples" (pure CheckRoot)
+  <> group "schema" "Explore reachable root schema types" (RootSchema <$> hsubparser
+    (group "list" "List reachable named types" (ListSchemas <$> workspace)
+    <> group "show" "Show a type's structure and field roles" (ShowSchema <$> argument nonempty (metavar "TYPE") <*> workspace)))
+  <> group "collection" "Explore declared fact collections" (RootCollection <$> hsubparser
+    (group "list" "List collections and payload types" (ListCollections <$> workspace)
+    <> group "show" "Show a collection's schema, roles and references" (ShowCollection <$> collection <*> workspace)))
+  <> group "fact" "Read facts from the validated accepted root" (RootFact <$> hsubparser
+    (group "list" "List fact IDs and titles" (ListFacts <$> collection)
+    <> group "show" "Show a fact's payload" (ShowFact <$> collection <*> strArgument (metavar "ID"))))
   <> group "recipe" "Discover curation instructions and pending evidence" (RootRecipe <$> recipeParser)
   <> group "tool" "Discover and invoke KB-authored investigation helpers" (RootTool <$> hsubparser
     (group "list" "List registered KB tools" (ListTools <$> workspace)
@@ -217,6 +231,7 @@ rootParser = hsubparser
     <> group "execute" "Execute an accepted KB tool" (ExecuteTool <$> name
       <*> strOption (long "input" <> metavar "DHALL" <> help "Input value as a hermetic Dhall expression")))))
   where
+    collection = argument nonempty (metavar "COLLECTION")
     name = argument (eitherReader methodName) (metavar "TOOL")
     workspace = optional (option (eitherReader evolutionId) (long "evolution" <> metavar "ID" <> help "Inspect an evolution target"))
 

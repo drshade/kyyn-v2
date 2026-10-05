@@ -1,8 +1,12 @@
-module Kyyn.Porcelain.Capability.Root (checkRootAt, inspectRootAt, sourceCodeAt, listRootTools, selectRootTool) where
+module Kyyn.Porcelain.Capability.Root
+  ( checkRootAt, inspectRootAt, sourceCodeAt, sourceRootAt, listRootTools, selectRootTool
+  , selectSchemaType, selectCollection ) where
 
 import Effectful (Eff, (:>))
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
+import Kyyn.Domain.Contract (RootContract, CollectionContract(..), rootSchema, rootType, collectionContracts)
+import Kyyn.Domain.DataType (DataType(..), reachableTypes, haskellType)
 import Kyyn.Domain.Plugin (MethodName(..))
 import Kyyn.Domain.Tool (ToolDescriptor(..))
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation, PreparedTool(..), prepareTools)
@@ -14,12 +18,34 @@ import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Root (Root, CheckedValue, SourceRoot(..))
-import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt, loadSourceAt)
+import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt, loadSourceAt, openCapturedSource)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.Validation (checkRoot)
 import Kyyn.Porcelain.Validated (Validated, validatedValue)
+
+sourceRootAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> Eff es (Either [Diagnostic] SourceRoot)
+sourceRootAt kb@(KnowledgeBase repository _) revision workspace = runExceptT $ case workspace of
+  Nothing -> do
+    location <- ExceptT (pure (either (Left . pure . errorDiagnostic "kb.path") Right (rootLocation kb)))
+    ExceptT (loadSourceAt repository revision (Subtree location))
+  Just identity -> do
+    WorkspaceSnapshot _ _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
+    ExceptT (openCapturedSource code)
+
+selectSchemaType :: RootContract -> String -> Either [Diagnostic] DataType
+selectSchemaType contract name = case
+  [t | t@(Algebraic _ _ _) <- reachableTypes (rootType (rootSchema contract)), haskellType t == name] of
+    [t] -> Right t
+    _ -> Left [errorDiagnostic "schema.type-unknown" ("Unknown schema type: " ++ name ++ ". Use root schema list for resolved names.")]
+
+selectCollection :: RootContract -> String -> Either [Diagnostic] CollectionContract
+selectCollection contract name = case
+  [c | c@(CollectionContract actual _ _ _) <- collectionContracts (rootSchema contract), actual == name] of
+    [c] -> Right c
+    _ -> Left [errorDiagnostic "fact.collection-unknown" ("Unknown collection: " ++ name)]
 
 sourceCodeAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> Eff es (Either [Diagnostic] FileTree)
