@@ -37,8 +37,7 @@ type Flow input output = Agentic (ExceptT FetchError Tool) input output
 interpret :: Flow input output -> input -> Tool (Either FetchError output)
 ```
 
-Remove the public `Kyyn.Judgement` modules and duplicate shared question/answer
-types. There is no legacy shim. Agentic owns probability, choice and score
+Agentic owns the author-facing question/answer types, probability, choice and score
 semantics, including its basis-point probability representation and weighted
 `Double` score.
 

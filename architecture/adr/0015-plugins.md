@@ -72,8 +72,8 @@ comparison. Installation does not automatically mark the evolution ready or acce
 Install a captured copy under `evolutions/<id>/target/plugins/packages/<name>/source/`, and write
 Kyyn-owned `origin.dhall` beside `source/`, not inside the package. Record the
 absolute discovered local repository root or supplied Git URL, the repository-relative
-package path, and the exact captured Git revision. This remembers where an explicit
-future update should look and which commit supplied the copy; it is
+package path, and the exact captured Git revision. This records the source for
+explicit re-vendoring and which commit supplied the copy; it is
 not a version pin, compatibility promise or live source link. Connector configuration
 remains separate under ADR 0016. Copy the package's source and supporting files,
 excluding `.git`, `.kyyn`, `dist-newstyle` and `.stack-work` directories/entries
