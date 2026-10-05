@@ -299,9 +299,27 @@ the ordinary stale-base rule applies. Do not relabel it as based on a newer head
 
 ### Describe the method and test execution honestly
 
-`root tool show` and `root recipe show` should expose flow structure without
-invoking models. Use the library's description projection, with named opaque
-steps. It describes declared composition and available tools, not the behavior
+`root recipe show` reads the stored definition without compiling the flow.
+`root recipe describe NAME` inspects a closed recipe from the selected accepted
+revision, using the library's `describe` and `renderTree` projection. Mutually
+exclusive `--dot` and `--mermaid` flags select its other renderers. Human output
+is just the rendered text on stdout, suitable for redirection; `--json` wraps
+the text with recipe, flow, revision and format. Open recipes receive a diagnostic
+pointing to `root recipe show`.
+
+Description requires the checked source contract and the referenced flow, not
+fact validation or evidence acquisition. Its interpreter compiles and evaluates
+the description projection with no model, secret or evidence-read handlers. It
+does not interpret the flow's actions. Conceptually:
+
+```haskell
+describeRecipe :: RecipeInspection :> es
+               => SourceRoot -> FlowEntryRef -> DescriptionFormat
+               -> Eff es (Either [Diagnostic] Text)
+```
+
+Use the library's named opaque steps. The projection describes declared
+composition and available tools, not the behavior
 of arbitrary `arr`/`act` functions, the exact future trace, or a proof of safety.
 The ordinary evolution report identifies the producing recipe/flow and captured
 source revision alongside its changes and rationale. It need not retain model
