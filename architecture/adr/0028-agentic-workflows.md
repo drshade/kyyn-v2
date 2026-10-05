@@ -278,6 +278,18 @@ diff through normal observation checks, never from a model's claimed before/afte
 report. The persisted operations make pure re-evaluation possible without model
 calls or serialized closures.
 
+The generated entry exposes the captured proposal as a typed value:
+
+```haskell
+evolution :: Evolution (KnowledgeBase Root) (KnowledgeBase Root)
+evolution = frozen
+```
+
+Kyyn supplies `frozen` from the workspace's persisted proposal, validating the
+Dhall input before guest compilation. Decoding belongs to generated plumbing,
+not authored evolution code; a decode failure is a diagnostic, not a fabricated
+transformation step or rationale.
+
 Checks and acceptance never rerun the flow. Editing the frozen operations or source
 requires fresh checking, just like other source/input edits. A failed or cancelled
 run produces no successful proposal and advances no curation progress. If head
