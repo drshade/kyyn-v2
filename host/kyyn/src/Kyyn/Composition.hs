@@ -23,7 +23,8 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..), EvolutionSumm
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
-import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..))
+import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
+import Kyyn.Surfaces.RootBrowsing (browsingContext)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBaseScope)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
@@ -140,7 +141,7 @@ executeGuest selection@(Cli.Selection path _ runtimeOverride) workspace request 
                 Cli.ListGuestModules -> False
                 Cli.ShowGuestModule name -> any (\(ApiModule moduleName _) -> name == moduleName) modules
                 Cli.ShowGuestSymbol name -> any (\(ApiModule moduleName _) -> isPrefixOf (moduleName ++ ".") name) modules
-              static = runEff (runGuestApiFromCatalogue (Right modules) (guestResult request))
+              static = runEff (catalogueResult request (map (ApiEntry SdkOrigin) modules))
           if fixed || (not hasKb && workspace == Nothing) then static else do
             configured <- configure selection
             result <- case configured of
@@ -208,6 +209,15 @@ guestResult request = case request of
   Cli.ShowGuestModule name -> ApiResult.moduleResult <$> Api.findModule name
   Cli.ShowGuestSymbol name -> ApiResult.symbolResult <$> Api.findSymbol name
 
+apiSelection :: Cli.GuestCommand -> ApiSelection
+apiSelection Cli.ListGuestModules = ListApiModules
+apiSelection (Cli.ShowGuestModule name) = InspectApiModule name
+apiSelection (Cli.ShowGuestSymbol name) = InspectApiSymbol name
+
+catalogueResult :: Cli.GuestCommand -> [ApiEntry] -> Eff es Response
+catalogueResult request entries = ApiResult.withOrigins entries <$>
+  runGuestApiFromCatalogue (Right [m | ApiEntry _ m <- entries]) (guestResult request)
+
 type Discovery = '[WorkspaceApi.WorkspaceApi, ToolPreparation, PluginPreparation, Store.EvolutionStore, WorkspaceStore, RootOpening, ApiInspection, SchemaInspection, GuestCompilation, GuestExecution, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Discovery a -> IO (Either OperationalFailure a)
@@ -223,11 +233,12 @@ dispatchRootApi host@(Host _ _ _ runtime _ _ _) request (SelectedKb kb revision 
     Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do
       installed <- Api.readCatalogue
       source <- Root.sourceCodeAt kb revision Nothing
-      generated <- either (pure . Left) WorkspaceApi.inspectToolApi source
+      generated <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
       case (installed,generated) of
         (Left diagnostics,_) -> pure (refusal diagnostics)
         (_,Left diagnostics) -> pure (refusal diagnostics)
-        (Right modules,Right bindings) -> runGuestApiFromCatalogue (Right (modules ++ bindings)) (guestResult request)
+        (Right modules,Right bindings) -> browsingContext revision Nothing <$>
+          catalogueResult request (map (ApiEntry SdkOrigin) modules ++ bindings)
 
 dispatchWorkspaceApi :: Host -> EvolutionWorkspace -> Cli.GuestCommand -> IO Response
 dispatchWorkspaceApi host@(Host _ _ _ runtime _ _ _) workspace request = withRuntime host $ \toolchain sdk ->
@@ -244,11 +255,11 @@ dispatchWorkspaceApi host@(Host _ _ _ runtime _ _ _) workspace request = withRun
             Right context@(WorkspaceCatalogue _ revision generated) -> do
               let EvolutionWorkspace kb identity = workspace
               source <- Root.sourceCodeAt kb revision (Just identity)
-              tools <- either (pure . Left) WorkspaceApi.inspectToolApi source
+              tools <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
               case tools of
                 Left diagnostics -> pure (refusal diagnostics)
                 Right bindings -> ApiResult.workspaceResult context <$>
-                  runGuestApiFromCatalogue (Right (modules ++ generated ++ bindings)) (guestResult request)
+                  catalogueResult request (map (ApiEntry SdkOrigin) modules ++ map (ApiEntry GeneratedOrigin) generated ++ bindings)
 
 executeInitialization :: Host -> DirectoryScope -> IO Response
 executeInitialization host scope = do
