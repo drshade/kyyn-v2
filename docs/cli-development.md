@@ -590,6 +590,26 @@ be changed to `OpenAgent "..."`; existing stored instruction-only recipes still
 read correctly. Recipe JSON now carries `recipe: { kind, instructions }` or
 `recipe: { kind, flow }`.
 
+Inspect a closed recipe's composition without running its actions:
+
+```sh
+kyyn-v2 --kb ./my-kb root recipe describe syncTodos
+kyyn-v2 --kb ./my-kb root recipe describe syncTodos --dot > flow.dot
+kyyn-v2 --kb ./my-kb root recipe describe syncTodos --mermaid > flow.mmd
+```
+
+The default is Agentic's readable tree. The format flags are mutually exclusive;
+stdout contains only renderer output, or a contextual result envelope with
+`--json`. Description compiles the accepted flow but does not run its actions,
+validate facts, read evidence or call a model. Named steps and declared branches
+are visible; arbitrary pure/effectful functions remain opaque. Open recipes have
+instructions instead of a flow: use `root recipe show NAME`.
+
+`guest module show Tasks` can inspect a recipe's authored module, and
+`guest module show Kyyn.Workspace.FactEdits` shows its generated edit type.
+With `--evolution ID`, recipe bindings describe the target root; the evolution's
+Before/After APIs remain a separate compilation context.
+
 Run a closed recipe against one or more fetched connector instances:
 
 ```sh

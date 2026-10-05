@@ -6,6 +6,7 @@ import Data.List (stripPrefix, isPrefixOf, sortOn)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Contract (rootSchema, collectionContracts)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
@@ -23,9 +24,13 @@ import Kyyn.Porcelain.Capability.WorkspaceApi (WorkspaceApi(..))
 runWorkspaceApi :: (EvolutionStore :> es, RootOpening :> es, ApiInspection :> es, ToolPreparation :> es, PluginPreparation :> es)
   => FileTree -> Eff (WorkspaceApi : es) a -> Eff es a
 runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
-  InspectRootApi code selection -> runExceptT $ do
+  InspectRootApi (SourceRoot contract code _ _) selection -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
-    (sources,names) <- ExceptT (prepareToolBindings code plugins)
+    (toolSources,toolNames) <- ExceptT (prepareToolBindings code plugins)
+    let hasFacts = not (null (collectionContracts (rootSchema contract)))
+        names = toolNames ++ ["Kyyn.Workspace.FactEdits" | hasFacts]
+    recipeBindings <- checked (if hasFacts then evolutionBindings contract contract else fileTree [])
+    sources <- checked (mergeEvolutionSources [toolSources,recipeBindings])
     let authored = sortOn id [map (\c -> if c == '/' then '.' else c) name |
           (path,_) <- files code, Just local <- [stripPrefix "src/" (relativeName path)],
           Just name <- [reverse <$> stripPrefix "sh." (reverse local)]]

@@ -13,6 +13,7 @@ import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Domain.Curation (RecipeId, recipeId)
+import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Data.Coerce (coerce)
 import Kyyn.Domain.Secret (SecretName, secretName)
 import Options.Applicative
@@ -68,6 +69,7 @@ data SchemaCommand = ListSchemas (Maybe EvolutionId) | ShowSchema String (Maybe 
 data CollectionCommand = ListCollections (Maybe EvolutionId) | ShowCollection String (Maybe EvolutionId) deriving (Eq, Show)
 data FactCommand = ListFacts String | ShowFact String String deriving (Eq, Show)
 data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName
+  | DescribeRecipe RecipeId DescriptionFormat
   | RunRecipe RecipeId [(PluginName,ConnectorName)] deriving (Eq, Show)
 data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
   | ExecuteTool MethodName String deriving (Eq, Show)
@@ -239,6 +241,9 @@ recipeParser :: Parser RecipeCommand
 recipeParser = hsubparser
   (group "list" "List recipes in the accepted root" (pure ListRecipes)
   <> group "show" "Read a recipe's instructions" (ShowRecipe <$> recipe)
+  <> group "describe" "Describe a closed flow without running its actions" (DescribeRecipe <$> recipe
+    <*> (flag' Dot (long "dot" <> help "Render Graphviz DOT")
+      <|> flag' Mermaid (long "mermaid" <> help "Render Mermaid") <|> pure Tree))
   <> group "run" "Run a closed recipe and save a draft evolution" (RunRecipe <$> recipe
     <*> some ((,) <$> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))
   <> group "pending" "Inspect net unacknowledged evidence changes" (hsubparser

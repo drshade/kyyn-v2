@@ -42,6 +42,7 @@ import InitializationTests (initializationTests)
 import WorkspaceApiTests (workspaceApiTests)
 import CurationPersistenceTests (curationPersistenceTests, sampleCuration)
 import RecipeTests (recipeTests)
+import RecipeInspectionTests (recipeInspectionTests)
 import ToolBrokerTests (toolBrokerTests)
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
 
@@ -62,6 +63,7 @@ main = do
   unless (emptyReloaded == emptyChecked && map (relativeName . fst) (files emptySnapshot) == ["facts/root.dhall"])
     (fail "Empty root did not round-trip through a single Dhall file")
   contract <- right (checkContract schema metadata >>= checkRootLayout)
+  recipeInspectionTests contract
   other <- right (checkContract schema (SchemaMetadata [RoleDecl "label" "Changed metadata" Title] [] declarations) >>= checkRootLayout)
   code <- tree [("src/Schema.hs", "authored code"), ("kb.dhall", "selected schema")]
   checked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract value))))

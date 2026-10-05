@@ -15,6 +15,8 @@ import Kyyn.Plumbing.Interpreter.ModelTurn (runModelTurnIO)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.RecipeExecution (runRecipeExecution)
+import Kyyn.Porcelain.Capability.RecipeInspection (describeRecipeAt)
+import Kyyn.Porcelain.Interpreter.RecipeInspection (runRecipeInspection)
 import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Capability.RecipeStore (loadRecipesAt)
 import Kyyn.Porcelain.Interpreter.RecipeStore (runRecipeStore)
@@ -33,6 +35,10 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     either refusal recipesResult <$> loadRecipesAt kb revision
   Cli.ShowRecipe recipe -> finish $ runBase host . runRecipeStore $
     either refusal recipeResult <$> findRecipeAt kb revision recipe
+  Cli.DescribeRecipe recipe format -> withRuntime host $ \toolchain sdk -> finish $
+    runRuntime host toolchain . runRootOpening sdk . runRecipeStore . runPluginPreparation sdk
+      . runToolPreparation sdk . runRecipeInspection $
+        either refusal (recipeDescriptionResult revision recipe format) <$> describeRecipeAt kb revision recipe format
   Cli.RunRecipe recipe instances -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
