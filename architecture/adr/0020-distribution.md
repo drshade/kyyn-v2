@@ -4,7 +4,6 @@ title: 'One installation supplies the execution toolchain'
 ---
 # One installation supplies the execution toolchain
 
-
 ## Context
 
 “Works without a toolchain” must hold on an ordinary user's machine, not just
@@ -27,8 +26,8 @@ do not install another package manager or fetch libraries to edit a fact.
 
 The staged compiler is the GHC-built pinned MicroHs described in
 [ADR 0002](0002-runtime.md); GHC is needed to build it, not to execute KB code.
-The source selection is unchanged, but native library dependencies and notices
-still need distribution review; compiler parity is not a clean-machine proof.
+Review native library dependencies and notices for distribution; compiler parity
+alone is not a clean-machine installation proof.
 
 The development executable is temporarily named `kyyn-v2` to coexist with
 kyyn-v1's `kyyn`. The local installer deploys the staged bundle under the selected
@@ -47,8 +46,7 @@ executable or plugin attestation service is required.
 Make installation safe to rerun and provide a structured account
 of installed versions, resolved paths, missing requirements and next actions.
 The bootstrap supplies the initial command; documentation must not assume
-`kyyn install` already exists on a machine with no Kyyn. Exact command names are
-illustrative. A readiness/doctor operation checks the environment and a small
+`kyyn install` already exists on a machine with no Kyyn. A readiness/doctor operation checks the environment and a small
 offline compile/execution without making unrelated changes.
 
 The result must tell an agent what is usable and what still needs attention,

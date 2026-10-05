@@ -4,7 +4,6 @@ title: 'Locally built plugins group source and sink connectors'
 ---
 # Locally built plugins group source and sink connectors
 
-
 ## Context
 
 Open extensibility must work for a user who has installed Kyyn, not a collection
@@ -126,7 +125,7 @@ commands are separate slices; installation does not silently fetch imports or
 invent dependency declarations before those operations exist.
 
 The host boundary keeps package operations in porcelain and native operations in
-plumbing. Illustrative contracts for this slice are:
+plumbing. The installation boundary is:
 
 ```haskell
 data PluginSource
@@ -191,7 +190,7 @@ Git acquisition/entry diagnostics retain their Git codes (including
 misreported as manifest errors. CLI option syntax errors retain the normal usage
 exit; semantic refusals use these codes, and operational failures remain distinct.
 
-Before this slice is complete, test refusal of directories outside Git, packages nested
+Test refusal of directories outside Git, packages nested
 inside local and remote repositories, scoped dirty-source refusals, copy independence,
 exact source revision and repository-relative origin paths,
 exclusion of repository/build metadata, complete re-vendoring and malformed/unsupported package
@@ -201,12 +200,9 @@ acquisition integration test, avoiding network-dependent tests. The first-party
 
 ### Discover packages through KB-local taps
 
-Owner decision (2026-09-29); CLI tap discovery and installed/preinstallation
-guide access are implemented.
 A tap is a Git repository with a Dhall catalogue, not a dependency
 resolver or runtime registry. First- and third-party catalogues use the same
-interface; no central approval service is involved. The first discovery slice
-lists plugins.
+interface; no central approval service is involved. The catalogue lists plugins.
 
 The KB's top-level `taps.dhall` records tap names and upstream Git locations:
 
@@ -273,19 +269,24 @@ The guide path stays inside the selected package and uses the existing package
 file rules. Missing or unreadable guides receive a specific actionable diagnostic.
 
 ```haskell
-data PluginGuideSource
-  = InstalledGuide InstalledPlugin
-  | AvailableGuide PluginSource
+data PluginLocation
+  = AcceptedPlugins KnowledgeBase GitRevision
+  | EvolutionPlugins EvolutionWorkspace
 
 readPluginGuide
-  :: (PluginDocumentation :> es, Failure :> es)
-  => PluginGuideSource -> Eff es Markdown
+  :: PluginDocumentation :> es
+  => PluginLocation -> PluginName -> Eff es (Either [Diagnostic] PluginGuide)
+
+readAvailableGuide
+  :: PluginDiscovery :> es
+  => KnowledgeBase -> TapName -> PluginName
+  -> Eff es (Either [Diagnostic] PluginGuide)
 ```
 
-These illustrative host contracts distinguish reading an installed package from
-acquiring available source. The interpreter uses manifest/file reading and, for
-available source, the existing Git acquisition boundary; it has no guest execution
-or secret-store requirement. CLI, MCP and Web expose the same guide operation.
+Installed documentation reads selected package files without compilation.
+Pre-install discovery resolves a tap entry and acquires its source through Git.
+Both return the guide plus package/origin information, never a second stored copy.
+Their interpreters need neither guest execution nor secrets.
 
 `plugin guide microsoft-graph` reads the accepted vendored package;
 `--evolution ID` instead reads that evolution's target package. Before installation,
@@ -497,58 +498,56 @@ Distinguish installed package identity and selected method. Configuration is
 ordinary typed data, not another plugin-instance lifecycle:
 
 ```haskell
-data PackageKind = PluginPackage | LibraryPackage | TemplatePackage
+data PreparedMethod = PreparedMethod
+  MethodName String CheckedContract CheckedContract CompiledProgram
+-- Name, description, input contract, result contract and compiled entry.
 
-data PackageIdentity  -- selected source contents and resolved dependency identity
+data PreparedConnector -- inspected source connector, contracts and compiled entries
+data ConfiguredConnector =
+  ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue
 
-data ConnectorKind = Source | Sink
+data PreparedPackage = PreparedPackage PluginName PackageIdentity [PreparedConnector]
+data PreparedPlugin = PreparedPlugin PreparedPackage [ConfiguredConnector]
 
-data ConnectorType = ConnectorType
-  { name           :: ConnectorTypeName
-  , kind           :: ConnectorKind
-  , configContract :: CheckedContract
-  , methods        :: [MethodDescriptor]
-  }
+data PluginPreparation :: Effect where
+  PreparePackages :: FileTree -> PluginPreparation m (Either [Diagnostic] [PreparedPackage])
+  PreparePlugins :: FileTree -> PluginPreparation m (Either [Diagnostic] [PreparedPlugin])
+  ValidatePlugins :: [PreparedPlugin] -> PluginPreparation m (Either [Diagnostic] ValidationReport)
 
-data ConnectorInstance = ConnectorInstance
-  { name          :: ConnectorName
-  , binding       :: BindingName
-  , connectorType :: ConnectorTypeName
-  , configuration :: CheckedValue
-  }
+listConnectorMethods
+  :: (RootOpening :> es, EvolutionStore :> es, PluginPreparation :> es)
+  => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName
+  -> Eff es (Either [Diagnostic] [PreparedMethod])
 
-listConnectors
-  :: (RootStore :> es, Failure :> es)
-  => Root -> PluginName -> Eff es [ConnectorInstance]
-
-listMethods
-  :: (PluginInvocation :> es, Failure :> es)
-  => PackageIdentity -> Eff es [MethodDescriptor]
-
-callPlugin
-  :: (PluginInvocation :> es, Failure :> es)
-  => PackageIdentity -> MethodDescriptor -> CheckedValue
-  -> Eff es (Either PluginError CheckedValue)
+data PluginRead :: Effect where
+  LoadCapturedInput :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+    -> PluginRead m (Either [Diagnostic] CurrentEvidence)
+  ExecuteCapturedMethod :: CurrentEvidence -> PreparedMethod -> Value
+    -> PluginRead m (Either [Diagnostic] (Either FetchError CheckedValue))
 ```
 
-These are **host** signatures: they use the structural descriptors from
-[authoring](0008-authoring.md). The interpreter checks that method/package
-and input contract match, then checks the returned contract. A `CheckedValue`
-from another method is not automatically valid input here. `PluginError` is a
-declared method failure; process/protocol loss belongs to [Failure](0019-failures.md).
-The guest-facing generated proxy has native input/output types instead. This
-host boundary is not a public unchecked `call bytes` escape hatch.
-`ConnectorType` comes from the plugin's declarations; `ConnectorInstance` is
-root-owned data loaded under the explicitly selected plugin. Verify its type
-exists there, its config contract matches and names are unique. Provider-specific
-configuration validation remains a pure plugin function under ADR 0016.
-Generated source and sink bindings retain that kind distinction: a source instance
-cannot satisfy a renderer's SinkBinding merely because a method has a similar
-input shape. This expresses intended use, not a claim that generic HTTP can prove
-remote operations read-only. Both kinds still describe host-interpreted effects.
+These are **host** declarations. Preparation inspects/compiles captured source and
+checks configuration without invoking provider methods. `PreparedConnector` retains
+the derived configuration, payload and optional fetch-options contracts, fetch and
+config-validation entries, optional login, and captured-read methods. Its representation
+is not an additional authored registration form.
+
+PluginRead checks a method's structural input before dispatch and validates its
+result contract. Declared FetchError remains distinct from storage/contract
+diagnostics and operational Failure. The explicit CurrentEvidence value lets a
+composed tool reuse one invocation-local capture instead of reopening it for each
+call. Guest proxies retain native input/output types; these structural host values
+do not expose an unchecked byte-call API to authors.
+
+This block defines source preparation and captured reading; it does not grant
+sinks those read-only rows or force delivery through PluginRead.
+[ADR 0017](0017-outputs.md) owns the typed sink binding and invocation boundary.
+A source instance cannot satisfy a renderer's SinkBinding merely because a method
+has a similar input shape. Kind denotes intended use, not proof that generic HTTP
+can only read remote state.
 
 For a connector invocation, the caller selects plugin and connector instance,
-not just a method name with an ambient default account. RootStore loads that
+not just a method name with an ambient default account. PluginPreparation loads that
 instance from the selected snapshot; dispatch verifies the method belongs to its
 connector type. Configuration forms part of the method's declared typed input,
 alongside call arguments, assembled/checked by generated bindings before the
@@ -564,13 +563,12 @@ These boundaries guide authoring and interpretation, not a claim of containment.
 
 ### Explicit updates, ordinary repair
 
-`kyyn plugin update microsoft` illustrates the update operation; the command
-spelling is provisional. It fetches from the recorded remote origin, updates the
-local vendored source, rebuilds and reports compilation/check failures. The unit
-is the plugin package, including its connectors, not an individual connector
-installation. Preserve account/source configuration and credentials; refuse to
-overwrite local source edits silently. An incompatible update remains inspectable
-and repairable, not a reason to invent an automatic compatibility resolver.
+Repeat `plugin install --evolution ID` with an explicit source or tap-qualified
+package to replace the vendored package using the installation contract above.
+The unit is the complete plugin, not an individual connector. Preserve instance
+configuration and credentials outside that package. Compilation/check failures
+remain visible during normal evolution checking; an incompatible update is
+inspectable and repairable, not a reason to add a compatibility resolver.
 
 Fetch/vendor source dependencies during explicit installation or update, outside
 pure checking. Compilation and execution use captured local source and the

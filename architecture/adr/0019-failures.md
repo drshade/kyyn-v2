@@ -5,7 +5,6 @@ title: 'Typed failures, explicit cancellation and modest operational state'
 
 # Typed failures, explicit cancellation and modest operational state
 
-
 ## Context
 
 Untyped `fail`, swallowed IO errors and printed success obscure whether work
@@ -27,39 +26,35 @@ Do not hide all of these behind one exception channel. Host operational failures
 stop an operation; expected domain outcomes remain in its result type:
 
 ```haskell
-data Failure :: Effect where
-  Raise :: OperationalFailure -> Failure m a
+type Failure = Error OperationalFailure
 
-runFailure
-  :: Eff (Failure : es) a -> Eff es (Either OperationalFailure a)
+raiseFailure :: Failure :> es => OperationalFailure -> Eff es a
 
 data OperationalFailure
   = StorageUnavailable StorageDiagnostic
-  | CodeRejected [Diagnostic]
-  | RuntimeUnavailable RuntimeDiagnostic
-  | ProtocolBroken ProtocolDiagnostic
-  | ContractMismatch [ContractDiagnostic]
-  | InvalidRequest [Diagnostic]
-  | OperationCancelled
+  | RuntimeUnavailable ProcessDiagnostic
+  | CompilerUnavailable String
+  | GitUnavailable String
 ```
 
-This is a selected failure vocabulary, not an excuse to convert every validation
-diagnostic into `Raise`. Diagnostic payloads retain available structured locations and repair
+Failure uses effectful's typed Error channel, not another exception framework.
+Asynchronous cancellation propagates through scoped cleanup; it is not converted
+to a successful return or an ordinary failure constructor. This vocabulary is not
+an excuse to convert every validation
+diagnostic into `raiseFailure`. Diagnostic payloads retain available structured locations and repair
 information, with native causes translated at their owning boundary. Missing facts
 use `Maybe` ([storage](0006-storage.md)); failed checks use `CheckResult`
 ([validation](0011-validation.md)); local publication and external delivery have
 their own [acceptance](0012-acceptance.md) and [delivery](0017-outputs.md) outcomes.
 
-`CodeRejected` is for execution outside proposed-work review, for example an
-installed/previously usable program unexpectedly rejected after a toolchain change.
-Do not raise it for ordinary compilation errors in a proposed workspace.
-[Preview](0010-evolutions.md) returns `ProposedCodeRejected` before materialization
-for compilation errors anywhere in the selected proposal's build scope, including
-its target validation, query and evolution entries. [Checking](0011-validation.md) returns
-`Rejected ValidationReport` for semantic/example failures, not a second compilation
-error channel. The compiler helper returns diagnostics so the caller can distinguish
-proposed-work rejection from failure of installed code. `RuntimeUnavailable`
-means the runtime could not execute normally, such as a missing or crashed compiler.
+Compilation errors in authored code are diagnostics at the operation preparing
+that code. [Evaluation](0010-evolutions.md) returns `ProposedCodeRejected` for
+schema/entry rejection before materialization. [Candidate checking](0011-validation.md)
+returns `Rejected ValidationReport` for target checking-code compilation errors,
+semantic failures and required-example failures after materialization. These are
+distinct stages, not conflicting classifications of the same call. Failed checking
+does not erase a saved candidate. Missing/crashed compiler or broken runtime
+execution remains operational Failure, never ordinary authored-code rejection.
 
 For MicroHs compiler errors, preserve the compiler's full source diagnostic,
 including textual file/line/column and multi-line explanation, but remove the

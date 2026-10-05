@@ -5,7 +5,6 @@ title: 'Proprietary now; deliberate dependency and future licensing choices'
 
 # Proprietary now; deliberate dependency and future licensing choices
 
-
 ## Context
 
 A first-/third-party plugin architecture does not require the kernel or SDK to

@@ -5,7 +5,6 @@ title: 'Users and agents resolve upstream Git conflicts'
 
 # Users and agents resolve upstream Git conflicts
 
-
 ## Context
 
 Agents, humans and scheduled jobs may propose against the same root. Git can
@@ -29,7 +28,7 @@ local head, refresh its schema from that commit, repair the transformation, reru
 it against that commit's facts and inspect the new validation results/diff.
 Do not require a new workspace or retained copy of every old attempt. Accepted
 workspaces remain historical records. No permanent Stale lifecycle.
-ADR 0012 defines the proposed ordinary-branch/draft layout and selective acceptance.
+ADR 0012 defines the ordinary-branch/draft layout and selective acceptance.
 Uncommitted drafts are local; sharing one across machines requires ordinary Git
 commit/push or an explicit file transfer. There is no implicit session-sync service.
 

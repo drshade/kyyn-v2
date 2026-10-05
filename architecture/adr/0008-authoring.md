@@ -4,7 +4,6 @@ title: 'Domain authors write typed functions, not adapters'
 ---
 # Domain authors write typed functions, not adapters
 
-
 ## Context
 
 A cleaner wire is insufficient if every helper imports a parser, constructs
@@ -22,7 +21,7 @@ Kyyn generates entry adapters, codecs, transport calls and typed registration
 wrappers. No authored `main :: IO ()`, manual JSON/Dhall decoding, response IDs,
 paths to runtime artifacts or printer callbacks for ordinary KB tools.
 
-Group the installed author API by concept, with seven public SDK modules:
+Group the installed author API by concept:
 
 - `Kyyn.Schema`: identified facts and schema metadata/roles.
 - `Kyyn.Validation`: diagnostics, locations, severities and validation reports.
@@ -31,6 +30,8 @@ Group the installed author API by concept, with seven public SDK modules:
   rationale and evidence, reexporting editing vocabulary.
 - `Kyyn.Edit` and `Kyyn.Optics`: focused editing and optics sub-vocabularies.
 - `Kyyn.Plugin`: abstract Program and evidence-snapshot handles, evidence changes and typed acquisition failures.
+- `Kyyn.Plugin.Host`: typed acquisition, captured-read and login capabilities.
+- `Kyyn.Recipe` and `Kyyn.Evolution.Proposal`: recipe inputs and declarative fact-edit proposals.
 
 These are facades over the existing definitions, not new nominal types. Keep the
 shared `Kyyn.Types.*` wire profile available to host/runtime code but outside the
@@ -47,17 +48,14 @@ workspace-specific combinators, not a mixed collection of schema/runtime modules
 The installed catalogue derives its module inventory only from kyyn-sdk's public
 facade list; shared-profile package exports are not a second author inventory.
 
-Plugin adapters generate `KyynPluginBindings` for the selected entry. An acquisition
-entry receives an `Acquisition a` alias and filesystem/evidence helpers; a captured
-reader receives `CapturedRead a` and evidence helpers only. Both reexport the
-acquisition vocabulary: `Program`, `EvidenceSnapshot`, `FetchError`, `EvidenceId`,
-`Evidence` and `EvidenceChange`. Registration declarations (`SourceConnector` and
-its record fields) stay with the plugin entry module's direct `Kyyn.Plugin` import;
-they do not enter acquisition modules through generated bindings.
-Authors use ordinary `do` notation and explicit typed snapshot
-arguments; the generated helpers inject requests into the selected capability sum
-without exposing codecs or request envelopes. The concrete algebras belong to
-[ADR 0009](0009-capabilities.md).
+Plugins import `Kyyn.Plugin` for registration/data vocabulary and
+`Kyyn.Plugin.Host` for payload-parameterized capabilities and helpers.
+The compiler derives contracts from ordinary authored signatures; no generated
+payload-specific module is needed to typecheck a plugin. Authors use ordinary
+`do` notation and explicit typed snapshot arguments. SDK helpers inject requests
+into the selected row; private generated adapters supply codecs and transport,
+not another author-facing API. [ADR 0009](0009-capabilities.md) owns the algebras
+and [ADR 0015](0015-plugins.md) owns signature-derived registration.
 
 KB-authored code has these entry-point kinds:
 
@@ -186,7 +184,7 @@ RootExecution takes structurally checked Root values so it can evaluate candidat
 examples. ADR 0011's checkRoot now produces Validated Root after code, semantic and
 example checks; query execution alone cannot mint that wrapper. The eventual
 CLI/Web/MCP browsing operations use that validated boundary, not the raw checking
-operation directly. Those surface wrappers are not implemented yet.
+operation directly.
 
 KB helpers call generated bindings for registered plugin methods. Provider interpretation belongs inside the
 plugin or its generated provider client, not in the KB. Generated plugin proxies expose concrete input/output types

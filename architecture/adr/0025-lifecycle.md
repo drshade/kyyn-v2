@@ -5,7 +5,6 @@ title: 'Agent-driven setup and per-KB execution'
 
 # Agent-driven setup and per-KB execution
 
-
 ## Context
 
 Installation, choosing a KB, launching its interfaces and stopping work form one
@@ -13,7 +12,7 @@ product journey. They cannot be left implicit between the distribution and UI
 decisions. Making them easy does not require a global daemon or a graphical
 installer before the product is useful.
 
-## Decision proposed
+## Decision
 
 An agent can bootstrap/install Kyyn, check readiness, locate or create a KB, and
 launch its Web interface for the human. Explain what was installed and any action

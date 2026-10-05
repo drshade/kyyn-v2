@@ -4,7 +4,6 @@ title: 'Materialized facts and runtime data loading'
 ---
 # Materialized facts and runtime data loading
 
-
 ## Context
 
 The prototype's generated fact literals couple data volume to compilation.
@@ -42,7 +41,7 @@ data. The format adapter knows shapes, not collection layout or whole-contract
 identity. RootStore supplies shapes from the selected contract and kernel-owned
 storage structures such as the membership list.
 
-The initial RootStore implements checking runtime values, materialization into
+RootStore owns checking runtime values, materialization into
 immutable file trees, and reopening those trees. It tags a checked value with the
 whole contract identity and compares that identity before materialization. A
 role-only contract change therefore rejects an old checked value. Materialization
@@ -60,12 +59,12 @@ by its complete lowercase UTF-8 hex. The escape prefix cannot occur in a pass-th
 name, and uppercase is escaped to avoid case-folding collisions. This keeps common
 paths such as `facts/todos/todo-001.dhall` readable without interpreting arbitrary
 IDs as paths. Original IDs remain in the envelopes and membership files. Membership
-preserves the guest list order; no unordered-collection metadata is implemented.
+preserves the guest list order.
 RootStore rejects duplicate IDs, missing/unlisted files, malformed UTF-8 and
 path/envelope mismatches. File trees reject duplicate paths and file/directory
 collisions, and canonicalize entry order. RootOpening handles manifest-driven
 schema inspection from a captured tree or Git revision. Supporting configuration
-validation and publication of a complete root remain unimplemented.
+validation belongs to preparation; publication belongs to ADR 0012.
 
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts
@@ -160,8 +159,8 @@ does not claim structural or semantic validation of the facts. Ordinary
 
 The manifest is `kb.dhall` inside the selected root subtree. Its fields are
 `schemaType`, `schemaMetadata`, `validator`, the `queries` and `tools` registration
-lists defined in [authoring](0008-authoring.md), and the `recipes` declarations
-in [ADR 0014](0014-evidence.md). The first three select qualified exports
+lists defined in [authoring](0008-authoring.md). Recipes are separate typed root
+material in `recipes.dhall`, as defined in [ADR 0014](0014-evidence.md), not manifest fields. The first three select qualified exports
 such as `Schema.Root`, `Schema.schemaMetadata` and `Validate.validate`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
 RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,
@@ -191,8 +190,8 @@ The result is Root, not Validated Root. A validator declaration is required;
 there is no implicit successful validation when it is absent. The opener does not
 execute it; RootExecution owns that operation (ADR 0011). Query names must be
 nonempty and unique; their contracts are inspected on discovery/invocation, not
-by the opener. The manifest does not yet advertise plugins, and the opener does
-not validate other supporting files.
+by the opener. Plugin packages/configuration have their own declarations under
+`plugins/`; the opener preserves those files without validating them.
 
 Examples occupy `examples/<encoded-name>/`, using the same readable-name/UTF-8
 escape as facts. Each contains exactly `example.dhall`, `arguments.dhall` and
@@ -323,7 +322,7 @@ change payload shape without accidentally replacing record identity:
 newtype FactId = FactId String
 data Fact a = Fact FactId a
 
-data CollectionBinding a  -- generated collection ID + payload codec/contract
+-- SnapshotRead's two-parameter binding is owned by ADR 0009; not redefined here.
 ```
 
 The generated binding is consumed by [SnapshotRead](0009-capabilities.md).
@@ -361,7 +360,7 @@ data; use an explicit ordered ID list per collection to record membership/order,
 including the empty list. A listed fact must exist; duplicate IDs and unlisted fact
 files are errors. For unordered collections the list is sorted by ID.
 
-Propose that each fact file encodes the full `Fact` envelope, not only its payload.
+Each fact file encodes the full `Fact` envelope, not only its payload.
 The path is derived from its collection and ID, using an unambiguous filename
 encoding; a path/envelope mismatch is an error. The payload's title is never an ID.
 The collection's membership list is storage structure, not another authored schema.

@@ -4,14 +4,13 @@ title: 'One authoritative contract and mechanical projections'
 ---
 # One authoritative contract and mechanical projections
 
-
 ## Context
 
 The host needs schema discovery without knowing domain types. Agents need
 matching types, not a manifest which drifts from the implementation. JSON on a
 pipe does not decide which definition owns the schema.
 
-## Decision proposed
+## Decision
 
 Use one **checked contract algebra** as the internal input to structural checking,
 binding/codec generation, collection routing, JSON Schema, Dhall config types and
@@ -45,7 +44,7 @@ newtype RootContract = RootContract CheckedContract -- constructor private
 checkRootLayout :: CheckedContract -> Either [Diagnostic] RootContract
 rootSchema :: RootContract -> CheckedContract
 
-shapeOf :: CheckedContract -> Shape
+contractShape :: CheckedContract -> Shape
 metadataOf :: CheckedContract -> SchemaMetadata
 contractId :: CheckedContract -> ContractId
 ```
@@ -59,9 +58,9 @@ bindings through the normal regeneration path, even when their encoding would
 be unchanged. Do not split presentation and codec compatibility identities to
 avoid that work. Conservative invalidation keeps one understandable rule.
 
-The initial pure `Kyyn.Domain.Contract.checkContract` combines an inspected
+The pure `Kyyn.Domain.Contract.checkContract` combines an inspected
 `DataType` with decoded `SchemaMetadata`, returning diagnostics or a checked value.
-It accepts every shape in the currently supported algebra, not only records:
+It accepts every supported shape in the algebra, not only records:
 query arguments and results may be scalars, lists, optionals or unions. Roles
 can still refer to reachable record types within those values. Declared collection
 metadata is checked, but a query value containing a list of facts need not declare
@@ -87,14 +86,14 @@ confer semantic validation or introduce a second query-contract representation.
 
 The general checker keeps the resolved type for code generation, checks collection envelopes and
 metadata references, and annotates reference fields in the checked shape. It does
-not establish that referenced IDs exist in particular facts. Title accepts text
-and badge accepts nullary enums (optionally wrapped); timeline assignments remain
-unsupported until a date/instant scalar codec is implemented.
-The initial checker reports the first incoherence. A role may name a single
+not establish that referenced IDs exist in particular facts. Title accepts text, Badge accepts nullary enums, and Timeline requires a recognized
+date/instant scalar codec (each optionally wrapped). A role never makes an otherwise
+unsupported scalar representable; reject unsupported mappings explicitly.
+The checker reports the first incoherence. A role may name a single
 reachable instantiation of a polymorphic record, but multiple distinct reachable
 instantiations of that name are ambiguous and are rejected.
 
-The initial contract identity is SHA-256 of a version-tagged JSON-array encoding
+The contract identity is SHA-256 of a version-tagged JSON-array encoding
 of resolved types and all metadata, including descriptions and declaration order.
 It does not use derived Show output or claim behavioral/source-package identity.
 Declaration reordering may conservatively invalidate it. There is no separate
@@ -104,8 +103,8 @@ A nullary union arm has `Nothing` for its payload shape; that is separate from a
 value of an optional type. Checking rejects duplicate field/case names and invalid
 collection/ID descriptors. Reference shape checking verifies an ID's representation
 and declared target; existence in a particular root is a validation concern.
-This internal algebra is an explicit proposal, not a claim that these constructors
-are native Dhall types. Scalar conventions still need reviewed representations.
+These constructors are Kyyn's checked algebra, not native Dhall types. Scalar
+mappings must carry a reviewed representation and codec, as specified below.
 
 Use **Haskell-authored types as the authoritative KB schema**. The author already writes
 Haskell for transformations, validators, queries and tools; the schema should
@@ -125,55 +124,36 @@ interpretation roles, not program capability grants.
 Authors attach roles through **pure Haskell data declarations alongside the
 schema**, in the schema module or a nearby imported metadata module. They do not
 maintain a JSON/RON sidecar as the rebuild's authoritative authoring surface.
-These sketches label the semantic components. The initial shared implementation
-uses positional constructors in the same order, avoiding different selector APIs
+The shared declarations use positional constructors, avoiding different selector APIs
 between GHC and MicroHs:
 
 ```haskell
 data Affordance = Title | Timeline | Badge
 
-data RoleDecl = RoleDecl
-  { name        :: RoleName
-  , description :: Text
-  , affordance  :: Affordance
-  }
+data RoleDecl = RoleDecl String String Affordance
+-- Role name, description, affordance.
 
-data FieldRole = FieldRole
-  { recordType :: TypeName
-  , field      :: FieldName
-  , role       :: RoleName
-  }
+data FieldRole = FieldRole String String String
+-- Qualified record type, field, role name.
 
-data CollectionDecl = CollectionDecl
-  { collection :: CollectionId
-  , rootField  :: FieldName
-  , references :: [(FieldName, CollectionId)]
-  }
+data CollectionDecl = CollectionDecl String String [(String, String)]
+-- Collection name, root field, reference-field/target-collection pairs.
 
-data SchemaMetadata = SchemaMetadata
-  { roles       :: [RoleDecl]
-  , fieldRoles  :: [FieldRole]
-  , collections :: [CollectionDecl]
-  }
+data SchemaMetadata = SchemaMetadata [RoleDecl] [FieldRole] [CollectionDecl]
 ```
 
-For example, in a KB with `Schema.Todo` fields `title` and an optional
-date field `due`, an authored export could be:
+For example, a KB declares a title and an enum badge alongside its schema:
 
 ```haskell
--- Guest schema/metadata module; string literals denote SDK identifier values.
 schemaMetadata :: SchemaMetadata
 schemaMetadata = SchemaMetadata
-  { roles =
-      [ RoleDecl "task-name" "Names a task in lists and links" Title
-      , RoleDecl "due-date" "Places a task on the due-date timeline" Timeline
-      ]
-  , fieldRoles =
-      [ FieldRole "Schema.Todo" "title" "task-name"
-      , FieldRole "Schema.Todo" "due" "due-date"
-      ]
-  , collections = [CollectionDecl "todos" "todos" []]
-  }
+  [ RoleDecl "task-name" "Names a task in lists and links" Title
+  , RoleDecl "task-status" "Displays a task's status" Badge
+  ]
+  [ FieldRole "Schema.Todo" "title" "task-name"
+  , FieldRole "Schema.Todo" "status" "task-status"
+  ]
+  [CollectionDecl "todos" "todos" []]
 ```
 
 This repeats field **references**, not field types. The initial references are
@@ -189,18 +169,14 @@ ambiguous and rejected. Optional scalar fields may adopt compatible roles; lists
 are not scalar titles or dates. Derive badge alternatives from the checked enum,
 not a manually duplicated variant schema. Neither titles nor dates redefine identity.
 Collection membership and links belong in the same metadata export, but their
-storage/reference semantics are distinct from presentation affordances. Propose
-that a declared root collection field has type `[Fact payload]`, using the SDK's
+storage/reference semantics are distinct from presentation affordances. A declared
+root collection field has type `[Fact payload]`, using the SDK's
 [Fact envelope](0006-storage.md). Inspection derives the payload contract from
 that checked type; identity is the envelope's `FactId`, not another selectable
 payload field. Reject a collection declaration on an incompatible root field.
 There is no `idField` metadata to keep consistent with a second identity model.
 
-The demonstrated extraction route is the pinned MicroHs frontend linked into the
-native GHC host. A separate bounded experiment (`kyyn-v2-experiment/haskell-schema-experiment/README.md`)
-now demonstrates source-linking, checked-type extraction and generated guest
-bindings on Linux, without upstream source edits. It does **not** establish a
-stable library component, production packaging or the whole integration gate.
+Use the pinned MicroHs frontend linked into the native GHC host.
 Extract from checked types, not a debug pretty-printer or a new Haskell-subset parser. Keep the
 compiler coupling behind SchemaInspection, a plumbing capability; it exposes a
 checked algebra and binding information, not compiler ASTs throughout the kernel.
@@ -226,19 +202,19 @@ data InspectedSchema = InspectedSchema
 data SchemaInspection :: Effect where
   InspectSchema
     :: SchemaSource
-    -> SchemaInspection m (Either [ContractDiagnostic] InspectedSchema)
+    -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
 
 inspectSchema
   :: (SchemaInspection :> es, Failure :> es)
   => SchemaSource
-  -> Eff es (Either [ContractDiagnostic] InspectedSchema)
+  -> Eff es (Either [Diagnostic] InspectedSchema)
 
 data UncheckedValue  -- private structural value from the selected parser
 data CheckedValue    -- private pair of contract identity and checked contents
 
 checkValue
   :: CheckedContract -> UncheckedValue
-  -> Either [ContractDiagnostic] CheckedValue
+  -> Either [Diagnostic] CheckedValue
 
 valueContract :: CheckedValue -> ContractId
 ```
@@ -263,32 +239,33 @@ codec does not depend on generating bindings for the KB contract it is helping
 construct. Metadata evaluation is deterministic and takes no root facts, live
 evidence or host capabilities. It does not execute validators or queries.
 
-The proposed native-library interpreter owns frontend initialization and exception
+The native-library interpreter owns frontend initialization and exception
 translation, and uses GuestCompilation to compile the fixed metadata adapter and
-ProcessExecution to evaluate it. These dependencies are explicit; do not smuggle
+GuestExecution to evaluate it. These dependencies are explicit; do not smuggle
 evaluation into pure projection helpers or route it
 through RootExecution, which already depends on schema inspection:
 
 ```haskell
 runSchemaInspectionIO
-  :: (GuestCompilation :> es, FileSystem :> es, ProcessExecution :> es,
-      IOE :> es, Failure :> es)
-  => GuestToolchain -> Eff (SchemaInspection : es) a -> Eff es a
+  :: (GuestCompilation :> es, GuestExecution :> es, FileSystem :> es,
+      DhallHandling :> es, IOE :> es, Failure :> es)
+  => GuestToolchain -> Maybe InspectionCache
+  -> Eff (SchemaInspection : es) a -> Eff es a
 ```
 
 The [runtime capability](0002-runtime.md) owns GuestCompilation and GuestToolchain.
-Its scoped artifact helper needs FileSystem when materializing the metadata entry
-for ProcessExecution; no build-directory handle is retained in the schema value.
+FileSystem supplies scoped source materialization; DhallHandling stores inspection
+cache entries. No build-directory handle is retained in the schema value.
 The metadata adapter uses its fixed SDK codec; compiling it must not call
 SchemaInspection again or require bindings derived from the KB contract being
 inspected. Composition supplies the same toolchain selection to both interpreters.
 
-The initial interpreter now implements this boundary. `schemaSource` captures
+`schemaSource` captures
 supplied module/dependency bytes, the selected type and named metadata export,
 adding a fixed metadata adapter. Duplicate paths and adapter-path collisions are
 rejected. `inspectSchema` returns a checked contract, whose retained `DataType`
-already contains the names required by current codec generation; no separate
-bindings registry is implemented. Native structural inspection materializes those
+contains the names required by codec generation; do not maintain a second bindings
+registry. Native structural inspection materializes those
 same bytes in a temporary scope; metadata evaluation compiles that capture through
 GuestCompilation. It does not read a second live KB source tree. Unsupported or
 ill-typed source is diagnostic output; native frontend infrastructure failures use
@@ -348,35 +325,19 @@ References are IDs, not recursive value embedding. Dates, instants and money
 must use reviewed library representations and semantic checks. No per-field
 byte/list bounds or universal map/type-level programming requirements.
 
-Reuse existing Haskell/MicroHs numeric and date/time libraries rather than create
-Kyyn-owned arithmetic or calendar implementations. The pinned MicroHs includes
-`Data.Fixed` (`Fixed`, `Centi`, `Milli`, and other resolutions); evaluate this
-existing implementation first for decimal use. Fixed versus variable precision,
-arithmetic rounding behavior and cross-host/guest codec compatibility still need
-review and tests. Its presence is not evidence that our inspector already supports
-it. The SDK may re-export selected library types and supply adapters without
-inventing their arithmetic.
+Reuse maintained Haskell/MicroHs numeric and date/time implementations rather
+than create Kyyn-owned arithmetic or calendar types. A scalar adapter must select
+the library type, parameters, canonical encoding and semantic checks together.
+Its conformance tests cover both compilers, exact round trips, range limits and
+negative as well as positive amounts. Business rounding policy remains authored
+KB code, not something schema extraction infers.
 
-If `Fixed` is selected, initially support an explicit set of standard library
-resolutions; reject custom `HasResolution` instances rather than add arbitrary
-instance evaluation. The pinned implementation uses integer `div` for multiplication
-and division, rounding down rather than toward zero; `fromRational` also uses
-`floor`. Test negative amounts as well as positive ones. A different business
-rounding policy needs explicit code using the chosen library, not an assumption
-that its default operations implement that policy.
-
-Recognize supported scalar types by resolved library type identity and actual
-dependency source, including relevant type parameters such as `Fixed`'s resolution.
-The checked contract and generated bindings must retain that codec identity and
-its parameters; the `DecimalScalar` tag alone is not a complete decimal contract.
-Do not infer scalar meaning from an unqualified name or a presentation role.
-The experiment's authored `Decimal { coefficient, scale }` is an ordinary record
-used to exercise exact values, **not** a decimal library or the production decimal
-contract. The proposed `DecimalScalar`/date/instant/natural mappings become usable
-only with an actual selected library type and tested codec. An unrelated KB type
-called `Decimal` remains structural data; guest representation and wire spelling
-may differ only through the selected explicit codec. Business rounding policy is
-still KB code, not something schema extraction infers.
+Recognize scalar types by resolved library identity and captured dependency source,
+including type parameters such as fixed-point resolution. Retain that identity
+and its parameters in the checked contract and generated bindings; a
+`DecimalScalar` tag alone is not a complete decimal contract. Do not infer scalar
+meaning from an unqualified name or presentation role. An unrelated KB type called
+`Decimal` is ordinary structural data, not a built-in numeric codec.
 
 Reject unsupported shapes when a contract is introduced, before it can become
 accepted. Maintain one lowering from checked structure to each target, with
@@ -387,14 +348,13 @@ local dependencies captured with the source, before pure evaluation.
 ## Alternatives and tradeoff
 
 Haskell schema authority is settled, not conditional on another feasibility trial.
-The earlier Dhall-authoritative fallback is no longer part of the design. Do not
-build automatic frontend switching, a second schema authoring language or parallel
+Do not build automatic frontend switching, a second schema authoring language or parallel
 authorities. A future obstacle requires an explicit decision review, not a silent
 format fallback or permission for a substantial compiler fork.
 
 Dhall-authored contracts were considered for their mature structural checking and
 contract/import semantics. Haskell was selected for authoring coherence after the
-experiment demonstrated extraction without upstream source edits. The tradeoff
+compiler adapter demonstrated checked-type extraction. The tradeoff
 is maintaining a pinned compiler adapter and its conformance tests. Collection/ID/
 reference semantics still need explicit descriptors; a type declaration alone
 cannot infer them. Authoring ergonomics remain something to measure, not a claimed
@@ -407,50 +367,28 @@ Storage and runtime encoding have their own owning decisions in ADRs 0006 and
 0007. Dhall storage contracts are derived projections of the Haskell authority,
 not separately authored truth. No Dhall parser is required in the guest.
 
-## Evidence and remaining implementation gates
+## Verification
 
-The separate experiment (`kyyn-v2-experiment/haskell-schema-experiment/README.md`) passed native
-source-linking, checked extraction across imported/aliased/applied types, payload
-unions, nested collections/optionals, exact values and generated bindings against
-the original declarations. It exercises runtime-loaded facts, rejects unsupported
-shapes with diagnostics, and refuses an old response binding before sending a
-request. Guest compilation, host inspection and guest invocation also work with
-an empty PATH after the development build. These results establish the bounded
-feasibility needed for the owner's schema-authority decision.
+Exercise checked extraction across imported, aliased and applied types, payload
+unions, nested collections and optionals, runtime-loaded facts and generated
+bindings against the original declarations. Reject unsupported shapes with
+diagnostics. Test guest compilation, host inspection and guest invocation without
+a development toolchain on PATH after installation.
 
-Retain those conformance tests while implementing SchemaInspection. Review the
-finite supported algebra and scalar conventions, local source-capture integration,
-compiler exception translation, maintained source/library packaging and upgrade
-behavior. The pinned upstream package has no Cabal library component; the proof
-links exported source modules, not a stable supported library API. No upstream
-compiler source patches were needed, but compiler-internal coupling remains real.
-The experiment's JSON descriptor sidecar remains a test fixture, not the selected
-rebuild authoring form. The implementation now evaluates a named Haskell metadata
-export through a fixed JSON adapter, using the shared `kyyn-types` vocabulary.
-`SchemaInspection.Metadata.evaluateMetadata` consumes a complete captured adapter
-input and returns decoded `SchemaMetadata`, not a `CheckedContract`. The pure
-contract checker combines this result with structural inspection; the focused
-integration fixture now uses SchemaInspection to inspect and evaluate the same
-capture, materializes and reopens runtime facts through RootStore, and sends the
-reopened value through the generated real-MicroHs codec. RootOpening now selects
-schema declarations from the captured kb.dhall manifest as specified in ADR 0006;
-RootExecution provides semantic validator execution as specified in ADR 0011.
-Application commands and the complete candidate-checking gate remain outstanding.
-Coherence coverage must include missing/renamed
-fields, incompatible title/timeline/badge assignments and invalid reference targets.
-Test a role-only edit invalidating the complete contract and dependent bindings,
-then recovering through normal regeneration; no presentation-only exception.
-Compiler type errors retain their message and may have no structured location;
-use retained declaration locations for inspector diagnostics where available,
-as specified in ADR 0019. No error-text parser or upstream diagnostic change is
-required to ship that initial policy.
+Compiler-internal coupling remains real: keep source capture, exception translation
+and maintained packaging under conformance tests when updating MicroHs.
+Metadata evaluation consumes the captured source and returns `SchemaMetadata`;
+the pure contract checker combines that value with structural inspection. Test
+this through materialization, reopening and the generated real-MicroHs codec.
 
-Complete the disk/host/guest/browser integration with the selected production
-codecs: preserve exact semantic values and canonical codec round trips, not
-necessarily original numeric spelling. The experiment's Read/Show test transport
-does not choose the production protocol or prove browser integration. Explicitly
-reject types outside the algebra rather than attempting arbitrary Haskell
-introspection. A response-schema change must reject an old binding before invoking
-its consumer. Schema equality cannot establish behavioral equality; package
-identity also matters. ADR 0024 tests authoring ergonomics within the selected
-Haskell surface, not whether to reopen schema authority by default.
+Coherence coverage includes missing or renamed fields, incompatible affordances,
+ambiguous role assignments and invalid reference targets. A role-only edit must
+invalidate the complete contract and dependent bindings, then recover through
+normal regeneration. Compiler type errors retain their messages and may lack a
+structured location; use retained declaration locations when available (ADR 0019).
+
+Disk/host/guest/presentation round trips preserve exact semantic values and
+canonical codec encodings, not original numeric spelling. A response-schema
+change rejects an old binding before invoking its consumer. Schema equality does
+not establish behavioral equality or source-package identity. ADR 0024 measures
+authoring ergonomics against these contracts.

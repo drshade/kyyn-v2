@@ -5,7 +5,6 @@ title: 'CLI, MCP and web share application operations'
 
 # CLI, MCP and web share application operations
 
-
 ## Context
 
 Web and MCP serve different audiences with substantial overlap. MCP's JSON
@@ -42,7 +41,7 @@ encodeEvolutionSummaries :: [EvolutionSummary] -> Aeson.Value
 ```
 
 This is **adapter code**. After decoding and resolving the KB reference through
-[RootStore](0006-storage.md), it invokes the typed `ListEvolutions` operation in
+[Git repository discovery](0006-storage.md), it invokes the typed `ListEvolutions` operation in
 [EvolutionStore](0010-evolutions.md). The Web and CLI adapters reach that same
 operation without routing through MCP. JSON does not leak into its constructor,
 and the operation does not print a response or call a UI. Resolving an unopened KB
@@ -63,7 +62,7 @@ schema, facts and queries belong beneath the selected root. Do not reproduce
 internal module nesting or add duplicate top-level shortcuts. The KB is already
 selected, so ordinary commands do not need a redundant `kb` prefix.
 
-The agreed navigation sketch is:
+The command hierarchy is:
 
 ```text
 kyyn
@@ -74,11 +73,14 @@ kyyn
     show
     check
     schema
-      list
-      show <name>
+      list [--evolution <id>]
+      show <name> [--evolution <id>]
+    collection
+      list [--evolution <id>]
+      show <name> [--evolution <id>]
     fact
-      list
-      show <id>
+      list <collection>
+      show <collection> <id>
     query
       list
       show <name>
@@ -90,6 +92,8 @@ kyyn
     recipe
       list
       show <name>
+      describe <name> [--dot | --mermaid]
+      run <name> <plugin> <instance> [<plugin> <instance> ...]
       pending
         list <name> <plugin> <instance>
   evolution
@@ -101,16 +105,21 @@ kyyn
     draft <id>
     accept <id>
     recover <id>
+  tap
+    add <name> --from <url>
+    remove <name>
+    list
+    update [<name>]
   plugin
-    install <source>
+    install --evolution <id> (--from <source> [--path <subdirectory>] | <tap/plugin>)
     search <text>
     guide <plugin-or-tap/plugin> [--evolution <id>]
     list
     show <plugin>
-    update <plugin>
     connector
       list <plugin>
-      show <plugin> <connector>
+      show <plugin> <instance>
+      login <plugin> <instance>
       schema
         show <plugin>
       method
@@ -118,7 +127,9 @@ kyyn
         show <plugin> <instance> <method> [--evolution <id>]
         execute <plugin> <instance> <method> --input <dhall>
   evidence
-    fetch <plugin> <instance>
+    fetch <plugin> <instance> [--options <dhall>]
+    list <plugin> <instance>
+    clear <plugin> <instance>
     history
       list <plugin> <instance>
     change
@@ -130,6 +141,7 @@ kyyn
     publish <name>
   secret
     list
+    show <name>
     set <name>
     remove <name>
   guest
@@ -145,21 +157,19 @@ kyyn
   doctor
 ```
 
-This establishes navigation, not a comprehensive argument specification or a
-claim that these commands exist. The first evolution CLI slice implements
-`kb init`, `root show/check` and the evolution group. Other groups are designed in their
-own slices; do not install empty groups or placeholder handlers. `doctor` is
-a deliberate standalone readiness command. Collection selection for fact IDs,
-typed query arguments and secret input are details for their respective slices.
+This defines command containment, not every argument. Do not install empty groups
+or placeholder handlers: each command must perform its stated operation.
+`doctor` is a standalone readiness command. The user guide describes available
+commands; this ADR owns the desired navigation.
 `root schema list/show` exposes the selected root contract's types, definitions,
 fields and declared roles, not arbitrary compiler internals.
 
-Tap discovery and packaged-guide commands are proposed in
+Tap discovery and packaged-guide commands are defined in
 [ADR 0015](0015-plugins.md#discover-packages-through-kb-local-taps), including
 `tap add/remove/list/update`, qualified installation and pre-install guide access.
 They share the selected `--kb` scope and do not require a valid executable root.
 
-The plugin-install slice adds `plugin install --evolution ID --from SOURCE [--path SUBDIRECTORY]`
+Installation uses `plugin install --evolution ID --from SOURCE [--path SUBDIRECTORY]`
 under the common `--kb PATH` selection. It prepares a copied source package in that evolution's target and
 returns its installed name, location and origin in human/JSON output; it does not
 compile or invoke the plugin, configure connectors, fetch evidence or commit the
@@ -171,7 +181,7 @@ accepted root; an evolution target can be inspected before its configuration is
 accepted. Schema output is the derived Dhall type for
 `target/plugins/config/PLUGIN.dhall`. Field documentation is a discovery-only
 extension through API inspection, not a dependency of root preparation or fetching;
-the first producer slice emits the exact type without documentation comments.
+the derived type remains authoritative whether or not optional field comments are available.
 Authors write that file and use ordinary check/ready/accept. Schema
 discovery must remain available when the configuration file needs repair.
 
@@ -368,9 +378,13 @@ data WorkspaceApi :: Effect where
   InspectWorkspaceApi
     :: EvolutionWorkspace
     -> WorkspaceApi m (Either [Diagnostic] WorkspaceCatalogue)
-  InspectToolApi
-    :: FileTree
-    -> WorkspaceApi m (Either [Diagnostic] [ApiModule])
+  InspectRootApi
+    :: SourceRoot -> ApiSelection
+    -> WorkspaceApi m (Either [Diagnostic] [ApiEntry])
+
+data ApiSelection = ListApiModules | InspectApiModule String | InspectApiSymbol String
+data ApiOrigin = SdkOrigin | GeneratedOrigin | KbOrigin
+data ApiEntry = ApiEntry ApiOrigin ApiModule
 
 data WorkspaceCatalogue = WorkspaceCatalogue
   { workspace      :: EvolutionWorkspace
@@ -380,7 +394,7 @@ data WorkspaceCatalogue = WorkspaceCatalogue
 
 data ApiInspection :: Effect where
   InspectApiModules
-    :: FileTree -> [ModuleName]
+    :: FileTree -> [String]
     -> ApiInspection m (Either [Diagnostic] [ApiModule])
 ```
 
@@ -417,8 +431,9 @@ using full schema module names and importing internals only for constructors.
 
 The composition root supplies the installed SDK catalogue and workspace catalogue
 to the same navigation functions. It installs WorkspaceApi and its source/compiler
-handlers only for workspace-scoped discovery. Inspection creates no durable cache,
-does not write the workspace or Git refs, and does not save or check a candidate.
+handlers for selected-root/workspace discovery. Native inspection may reuse
+ADR 0005's disposable content-keyed cache; it does not write the workspace or Git
+refs, and does not save or check a candidate.
 Each invocation describes its captured inputs, not a snapshot promised to remain
 current after the command returns. Use the normal source-collision and diagnostic
 rules rather than silently selecting one of two differing same-named modules.
@@ -426,7 +441,7 @@ In workspace-scoped human output, show declarations defined in each generated
 module before its reexports: the workspace-specific operations are why the author
 selected this context. JSON retains a flat symbol list with exact origins.
 
-Before implementation is considered complete, prove discovery in a newly created
+Prove discovery in a newly created
 workspace with an intentionally invalid evolution body; same-schema and changed-schema
 targets; empty and populated collections; repair after an invalid target schema;
 stale Before without a HEAD restriction; mismatched Before copies; and absence of

@@ -5,7 +5,6 @@ title: 'Outputs bind snapshot renderers to typed plugin sinks'
 
 # Outputs bind snapshot renderers to typed plugin sinks
 
-
 ## Context
 
 Browsing the KB and updating an external output are different activities. A report
@@ -72,8 +71,8 @@ monthlySalesReport =
   Output renderSalesReport salesReportFile
 ```
 
-These are guest-side sketches, not implemented SDK declarations. FileSink.Input
-is the file plugin's actual advertised input type, not a kernel-wide document
+These guest declarations define the renderer/sink boundary. In this example,
+FileSink.Input stands for the selected file plugin's advertised input type, not a kernel-wide document
 format. The generated SinkBinding cannot be constructed by casting an arbitrary
 source connector or a sink expecting another type. Configuration selects the
 destination; it comes from the named instance in the selected root.

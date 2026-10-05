@@ -5,7 +5,6 @@ title: 'Fresh-agent scenarios and two-part field reports'
 
 # Fresh-agent scenarios and two-part field reports
 
-
 ## Context
 
 Authors already know the intended tool sequence and can unconsciously compensate

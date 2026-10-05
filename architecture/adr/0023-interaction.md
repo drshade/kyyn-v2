@@ -5,7 +5,6 @@ title: 'Two first-class interfaces with a shared design and review loop'
 
 # Two first-class interfaces with a shared design and review loop
 
-
 ## Context
 
 A web dashboard that only approves completed agent work is not a design tool.
@@ -95,7 +94,7 @@ data/artifact feedback and failed semantic checks as well as successful checks.
 Targets must be meaningful within their subject; capture alone does not invent
 an evaluated fact or artifact. The workspace supplies its owning KB for saving
 examples, avoiding a second KB argument.
-Saving an example writes `target/examples/` under the proposed ADR 0010 layout,
+Saving an example writes `target/examples/` under the ADR 0010 layout,
 marks the workspace Draft and requires recapturing, evaluation and checking;
 it cannot retroactively validate an earlier preview. It becomes current-root
 material on acceptance, following [the example lifecycle](0011-validation.md),

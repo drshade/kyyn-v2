@@ -4,7 +4,6 @@ title: 'Architecture is a tested deliverable before feature volume'
 ---
 # Architecture is a tested deliverable before feature volume
 
-
 ## Context
 
 The prototypes answered useful feasibility questions and accumulated boundary

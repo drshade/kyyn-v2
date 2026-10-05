@@ -4,7 +4,6 @@ title: 'One repository, explicit package boundaries'
 ---
 # One repository, explicit package boundaries
 
-
 ## Context
 
 The kernel, guest SDK, compiler integration and first-party plugins will evolve
