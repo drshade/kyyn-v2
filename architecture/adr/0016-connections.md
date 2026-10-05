@@ -1,15 +1,8 @@
 ---
 id: 0016
 title: 'Local secrets, typed configuration and named connector bindings'
-status: proposed
-date: 2026-09-25
 ---
 # Local secrets, typed configuration and named connector bindings
-
-Basis: **owner-established decision: a
-plugin-independent, checkout-local per-KB key/value secret store, readable through a host
-capability. Trusted plugins receive secret values and own authentication logic.
-No kernel Connection entity or automatic credential injection.**
 
 ## Context
 
@@ -116,22 +109,21 @@ The host capability can be interpreted by a recording handler without filesystem
 access. Install it only in compositions that need secret access; no ambient store
 or universal handler is introduced.
 
-The first implementation exposes this host store and local setup commands.
-Guest request algebras are introduced with their actual consumers, not as unused
-SDK constructors. An integration implemented in a host handler reads its credential
-there, without automatic credential injection or a kernel-owned authentication
-workflow.
+Local setup commands use this host store. A host-side integration reads its
+credential there; guest source/login programs request secret access through
+ADR 0009. Neither route adds automatic credential injection or a kernel-owned
+authentication workflow.
 
 Source connectors can read and replace secrets through the guest request row;
 explicit connector login uses the same per-KB store. Graph client-secret and
-device-code flows are implemented and tested against a recording provider under
-GHC and MicroHs. Real tenant consent/policy remains an opt-in live verification.
+device-code flows must pass recording-provider tests under both GHC and MicroHs,
+with opt-in live verification of tenant consent/policy.
 
 ### Configuration remains ordinary typed root data
 
 Plugins advertise each connector type's configuration through a Haskell type in
 the supported schema subset. A well-known file per plugin, such as
-`root/plugins/config/microsoft.dhall` under the proposed ADR 0006 layout, holds
+`root/plugins/config/microsoft.dhall` under the ADR 0006 layout, holds
 its named connector instances, not one
 opaque plugin-defined configuration blob. RootStore owns its persistence/loading and
 EvolutionStore captures proposed changes. The files belong to the accepted
@@ -150,10 +142,10 @@ heterogeneous instances using a generated union of advertised connector types:
 List { name : Text, binding : Text, connector : < Mail : MailConfig | Meetings : MeetingsConfig | ... > }
 ```
 
-This is the structural shape sketch; Kyyn generates the concrete Dhall type rather
+This is the envelope shape; Kyyn generates the concrete Dhall type rather
 than requiring the user to repeat the Haskell schemas. The selected union case
 identifies the connector type and pairs it with the correctly typed payload; the
-host decodes it into `ConnectorInstance`. No string containing nested Dhall or
+host decodes it into the configured instance representation in ADR 0015. No string containing nested Dhall or
 generic unchecked config blob. Generated bindings supply the selected instance's
 concrete config to the method, not the complete list. Use files from the selected
 snapshot or captured evolution workspace, not changing ambient files during a call.

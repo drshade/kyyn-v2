@@ -1,14 +1,8 @@
 ---
 id: 0002
 title: 'Native Haskell kernel and bundled MicroHs execution'
-status: proposed
-date: 2026-09-09
 ---
 # Native Haskell kernel and bundled MicroHs execution
-
-Basis: owner-established distribution direction. Runtime integration and release
-gates remain outstanding; the scoped process interface below specifies native
-implementation mechanics, not a renewed toolchain choice.
 
 ## Context
 
@@ -28,11 +22,9 @@ third-party plugin executables are not an additional distribution contract.
 
 Stage the pinned MicroHs compiler using its upstream GHC-built `bin/gmhs` target,
 installed at the existing `bin/mhs` path; the self-hosted `make bin/mhs` remains
-the bootstrap/reference build. The metadata-entry comparison measured 1.3 seconds
-versus 30.0 seconds with identical bytecode, without adding a cache or changing
-the guest interface. Full integration includes that bytecode parity fixture and
-the installed journey; existing guest suites also exercise the self-hosted build.
-This changes how the same compiler source is built, not its revision or language.
+the bootstrap/reference build. Both builds use the same compiler source and must
+produce equivalent bytecode for the conformance fixtures. Full integration checks
+this parity and the installed journey; the build choice is not a language fork.
 
 Initially invoke a managed child process with a private typed protocol. A
 generated adapter retains the live continuation while requesting host effects.
@@ -290,10 +282,9 @@ used by schema inspection. A fact-only change must reuse an unchanged code build
 changed source, compiler, SDK or build options must not reuse an incompatible one.
 
 MicroHs compatibility is a release gate, not inferred from valid GHC code.
-The pinned `8bf3d4d` identifies version 0.16.7.0 and includes upstream's
-preprocessor invocation quoting and source-location filename fixes.
-Probes reject type-family syntax used by microlens
-and dhall-haskell even after bundled preprocessing. Updating a pin is deliberate.
+[Vendored inputs](../../vendor/README.md) own the selected compiler and dependency
+revisions. Updating them requires explicit compatibility evidence; bundled
+preprocessing does not imply support for arbitrary GHC language extensions.
 
 Before adopting this runtime for production, pass runtime-data decoding,
 heterogeneous-root evolution, cancellation and clean-install tests with the
@@ -302,6 +293,5 @@ reopen this ADR instead of concealing that cost inside an interpreter.
 Name the compatibility checks separately: compile the GADT/existential request
 tree and rank-N fold under pinned MicroHs; prove the higher-order `WithProcess`
 handler and cleanup under native GHC/effectful. The latter is not guest code.
-ADR 0005 records the passing bounded checked-type extraction experiment and the
-owner's Haskell schema-authority decision. Production schema-adapter integration
-and maintenance remain separate from these runtime compatibility checks.
+ADR 0005 owns checked-type extraction and Haskell schema authority. Schema-adapter
+conformance and maintenance remain distinct from runtime process compatibility.

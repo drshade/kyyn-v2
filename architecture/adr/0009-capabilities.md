@@ -1,20 +1,8 @@
 ---
 id: 0009
 title: 'Typed capability rows describe program effects'
-status: proposed
-date: 2026-09-25
 ---
 # Typed capability rows describe program effects
-
-Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
-captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch connects
-filesystem and snapshot reads to evidence publication. Source registration and
-configured instances, CLI acquisition and captured-read KB-tool composition are
-implemented. Judgement extends the tool row under ADR 0027.
-Installed network connectors receive HTTP, plugin secret access and cancellable
-waits. Explicit connector login additionally receives user instructions on stderr.
-Registration checks the selected context and login signature; compilation and
-discovery do not execute login. File and captured-read contexts remain separate.
 
 ## Context
 
@@ -35,20 +23,20 @@ separate product permission taxonomy. Retain these explicit boundaries:
   [model judgements](0027-judgement.md); they do not acquire evidence, invoke sinks
   or propose/accept roots.
 - Accepted-root publication is not a guest capability.
-- [ADR 0028](0028-agentic-workflows.md) proposes model-turn requests in KB tools
+- [ADR 0028](0028-agentic-workflows.md) defines model-turn requests in KB tools
   and explicit recipe flows, without adding them to evolution, validation,
   query or renderer contexts.
 - Delivery invokes a configured plugin sink with its prepared typed input under
   ADR 0017; it does not implicitly render or accept knowledge.
 
-Illustrative capability sets, not a closed list of mandatory roles:
+Capability boundaries by program context (not a separate permission-role system):
 
 | Program | Available work | Excluded work |
 | --- | --- | --- |
 | Validator / pure transformation helper | Pure input-to-result calculation | Host calls, current time, provider access |
 | Snapshot query/output renderer | Typed reads of one selected immutable snapshot; pure computation and query composition | Proposal writes, live providers, sink invocation |
 | Evolution entry point | [ADR 0010's transformation contract](0010-evolutions.md#pure-evolution-execution) | Accepted-root publication, nested proposal authoring, delivery |
-| KB tool | Typed plugin captured reads and model judgements under ADR 0027 | Evidence acquisition, sinks, proposal/accepted-root writes |
+| KB tool | Typed plugin captured reads, model judgements and agentic model turns under ADRs 0027/0028 | Evidence acquisition, sinks, proposal/accepted-root writes |
 | Source acquisition method | HTTP/filesystem acquisition, secret read/write, prior evidence snapshot reads | Interactive login, KB acceptance, sink invocation |
 | Explicit connector login | HTTP, secret read/write, user instructions and cancellable waits | Evidence publication, KB acceptance |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
@@ -125,10 +113,10 @@ not list every physical read needed to load the root.
 
 Generated bindings give authored modules a root-specific `Query a` alias. Changing
 the storage/transport interpreter must not force business queries to handle wire
-values or continuations themselves. Paging and plugin calls are later additions,
-not speculative constructors in the current request algebra.
+values or continuations themselves. Neither paging nor plugin calls are implicit
+capabilities of SnapshotRead.
 
-Plugin acquisition now composes capability algebras using a typed sum:
+Plugin acquisition composes capability algebras using a typed sum:
 
 ```haskell
 data (left :+: right) a = InLeft (left a) | InRight (right a)
@@ -176,7 +164,7 @@ invocation-local reads and failed acquisitions that leave the previous head unch
 
 Microsoft Graph supplies the concrete consumer for HTTP and secret requests.
 Keep these ordinary typed guest algebras; the broker delegates to host plumbing
-interpreters rather than performing IO itself. These sketches describe the first
+interpreters rather than performing IO itself. These declarations define the
 text-based HTTP boundary, sufficient for JSON Graph and form-encoded token requests:
 
 ```haskell
@@ -273,7 +261,8 @@ owns login registration and authentication behavior.
 
 The initial generated `Tool a` is `Program Calls a`, where `Calls` is a closed
 GADT with one typed constructor per advertised captured-read method, plus the
-judgement operations specified in [ADR 0027](0027-judgement.md). Its input
+judgement and model-turn operations specified in [ADR 0027](0027-judgement.md)
+and [ADR 0028](0028-agentic-workflows.md). Its input
 and output refer to the plugin's actual Haskell types. Generated proxy functions
 hide these constructors and wire codecs from authors:
 
@@ -324,7 +313,8 @@ it dispatches, not GuestCompilation. For example:
 
 ```haskell
 executeAcquisition
-  :: (GuestExecution :> es, FileAcquisition :> es, Failure :> es)
+  :: (GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es,
+      SecretStore :> es, Waiting :> es, Failure :> es)
   => CompiledProgram -> Value -> Maybe CurrentEvidence
   -> Eff es (Either [Diagnostic] Value)
 ```

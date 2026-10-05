@@ -1,14 +1,8 @@
 ---
 id: 0006
 title: 'Materialized facts and runtime data loading'
-status: accepted
-date: 2026-09-07
 ---
 # Materialized facts and runtime data loading
-
-Basis: Dhall fact storage and materialized current facts are owner-selected.
-The file layout, snapshot representation and store signatures specify proposed
-implementation mechanics, not a renewed choice of storage format.
 
 ## Context
 
@@ -47,7 +41,7 @@ data. The format adapter knows shapes, not collection layout or whole-contract
 identity. RootStore supplies shapes from the selected contract and kernel-owned
 storage structures such as the membership list.
 
-The initial RootStore implements checking runtime values, materialization into
+RootStore owns checking runtime values, materialization into
 immutable file trees, and reopening those trees. It tags a checked value with the
 whole contract identity and compares that identity before materialization. A
 role-only contract change therefore rejects an old checked value. Materialization
@@ -65,12 +59,12 @@ by its complete lowercase UTF-8 hex. The escape prefix cannot occur in a pass-th
 name, and uppercase is escaped to avoid case-folding collisions. This keeps common
 paths such as `facts/todos/todo-001.dhall` readable without interpreting arbitrary
 IDs as paths. Original IDs remain in the envelopes and membership files. Membership
-preserves the guest list order; no unordered-collection metadata is implemented.
+preserves the guest list order.
 RootStore rejects duplicate IDs, missing/unlisted files, malformed UTF-8 and
 path/envelope mismatches. File trees reject duplicate paths and file/directory
 collisions, and canonicalize entry order. RootOpening handles manifest-driven
 schema inspection from a captured tree or Git revision. Supporting configuration
-validation and publication of a complete root remain unimplemented.
+validation belongs to preparation; publication belongs to ADR 0012.
 
 Dhall's structural checks do not establish domain validity: exact decimal,
 date and money conventions still need their semantic checks. Storage contracts
@@ -98,14 +92,13 @@ data RootStore :: Effect where
     :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
   ReadRootRecipes
     :: FileTree -> RootStore m (Either [Diagnostic] [Fact Recipe])
+  CheckRootValue
+    :: RootContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)
   LoadRootValueForChecking
-    :: Root -> RootStore m CheckedValue
-  ListFacts
-    :: Validated Root -> CollectionId -> PageRequest
-    -> RootStore m (Page FactId)
-  ReadFact
-    :: Validated Root -> CollectionId -> FactId
-    -> RootStore m (Maybe CheckedValue)
+    :: Root -> RootStore m (Either [Diagnostic] CheckedValue)
+  ReadCollection
+    :: Validated Root -> String
+    -> RootStore m (Either [Diagnostic] [Fact Value])
   ReadExamples
     :: Root -> [QueryDescriptor] -> RootStore m (Either [Diagnostic] [Example])
   EncodeExample
@@ -165,8 +158,9 @@ does not claim structural or semantic validation of the facts. Ordinary
 
 The manifest is `kb.dhall` inside the selected root subtree. Its fields are
 `schemaType`, `schemaMetadata`, `validator`, the `queries` and `tools` registration
-lists defined in [authoring](0008-authoring.md), and the `recipes` declarations
-in [ADR 0014](0014-evidence.md). The first three select qualified exports
+lists defined in [authoring](0008-authoring.md), and the named `outputs`
+registrations defined in [outputs](0017-outputs.md). Recipes are separate typed root
+material in `recipes.dhall`, as defined in [ADR 0014](0014-evidence.md), not manifest fields. The first three select qualified exports
 such as `Schema.Root`, `Schema.schemaMetadata` and `Validate.validate`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
 RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,
@@ -196,8 +190,8 @@ The result is Root, not Validated Root. A validator declaration is required;
 there is no implicit successful validation when it is absent. The opener does not
 execute it; RootExecution owns that operation (ADR 0011). Query names must be
 nonempty and unique; their contracts are inspected on discovery/invocation, not
-by the opener. The manifest does not yet advertise plugins, and the opener does
-not validate other supporting files.
+by the opener. Plugin packages/configuration have their own declarations under
+`plugins/`; the opener preserves those files without validating them.
 
 Examples occupy `examples/<encoded-name>/`, using the same readable-name/UTF-8
 escape as facts. Each contains exactly `example.dhall`, `arguments.dhall` and
@@ -291,35 +285,17 @@ not empty snapshots. Nonzero infrastructure outcomes remain GitUnavailable; the
 interpreter does not classify errors by parsing human-readable stderr. Commit
 construction and publication are described in [ADR 0012](0012-acceptance.md).
 
-`ReadFact` returns `Nothing` only for an absent ID in an existing collection.
-Unknown collections, corrupt data and inaccessible storage are explicit failures.
-`CheckedValue` carries the collection's payload contract, not an arbitrary JSON
-object. Reads remain effects even when the initial interpreter answers from an
-already loaded snapshot.
+ReadCollection takes the logical collection name and returns its complete identified
+values from the explicit validated snapshot. Unknown collections, corrupt data and
+inaccessible storage return diagnostics or operational failures, not empty results.
+Listing IDs/titles and selecting an ID are projections of that result; a missing
+requested ID receives a not-found diagnostic. Reads remain effects even when the
+interpreter answers from an already loaded snapshot.
 `LoadRootValueForChecking` is the explicit diagnostic/execution path for a
 structurally readable but not yet semantically validated root. It is not used to
 silently weaken the validation requirement on ordinary fact browsing.
 Evolution execution uses this path for its source too: domain-invalid facts may
 be transformed into a valid candidate without first earning `Validated`.
-
-Browsing facts needs manageable result pages.
-Paging here is that user-facing operation, not a paged storage engine or an
-incremental evaluator. The initial fact interpreter can slice an already loaded
-collection. A cursor is opaque and tied to its selected snapshot and query; it
-is not a portable offset into whichever root is latest:
-
-```haskell
-data Page a = Page
-  { items :: [a]
-  , next  :: Maybe PageCursor
-  }
-
-data PageRequest = FirstPage | ContinuePage PageCursor
-```
-
-Batch size is an implementation/operation policy, not a per-field contract bound.
-A mismatched cursor is an error. [Evidence](0014-evidence.md) owns fetch batches
-and retained evidence history separately; this does not require paged acquisition.
 
 On the guest side, identity remains outside the typed payload so migration can
 change payload shape without accidentally replacing record identity:
@@ -328,7 +304,7 @@ change payload shape without accidentally replacing record identity:
 newtype FactId = FactId String
 data Fact a = Fact FactId a
 
-data CollectionBinding a  -- generated collection ID + payload codec/contract
+-- SnapshotRead's two-parameter binding is owned by ADR 0009; not redefined here.
 ```
 
 The generated binding is consumed by [SnapshotRead](0009-capabilities.md).
@@ -366,7 +342,7 @@ data; use an explicit ordered ID list per collection to record membership/order,
 including the empty list. A listed fact must exist; duplicate IDs and unlisted fact
 files are errors. For unordered collections the list is sorted by ID.
 
-Propose that each fact file encodes the full `Fact` envelope, not only its payload.
+Each fact file encodes the full `Fact` envelope, not only its payload.
 The path is derived from its collection and ID, using an unambiguous filename
 encoding; a path/envelope mismatch is an error. The payload's title is never an ID.
 The collection's membership list is storage structure, not another authored schema.
@@ -389,8 +365,8 @@ rules for particular edits.
 
 Schema inspection reuse belongs to [ADR 0005](0005-contracts.md); metadata
 evaluation and complete validation remain part of loading/checking. Whole-root
-evaluation is in memory; the page interface above does not promise lazy or
-incremental guest evaluation. Multiple processes may duplicate preparation work;
+evaluation is in memory; collection reads do not promise lazy or incremental
+guest evaluation. Multiple processes may duplicate preparation work;
 no duplicate-work coordinator is needed. Draft and acceptance working-tree
 responsibilities are specified in ADR 0012.
 
@@ -406,5 +382,5 @@ Include many-small-file Dhall parsing/normalization in that measurement rather
 than attributing all loading cost to guest execution. ADR 0021 places this proof
 before the first product slice relies on whole-root performance. If representative
 interactive work is impractical, revisit the execution/storage choice then.
-Browsing pages are not a claim that whole-root computation scales; do not add
+Whole-collection reads are not a claim that whole-root computation scales; do not add
 storage-streaming or incremental-validation APIs in anticipation.

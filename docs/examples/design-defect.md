@@ -106,8 +106,8 @@ one place for the current payment-submission decision.
 
 ## 4. Revise the existing ADR
 
-On the design branch, ADR 0042 changes from `implemented` to `proposed` while
-the revision is under review. Its active sections propose:
+On the design branch, ADR 0042 is rewritten to express the desired contract
+being proposed for review:
 
 ```markdown
 ## Context
@@ -129,8 +129,7 @@ An empty or delayed observation is not proof of absence.
 
 ```
 
-The ADR's `date` is updated for the proposed revision. The obsolete instruction
-is removed completely; it does not remain as apparently concurrent guidance.
+The obsolete instruction is removed completely; it does not remain as apparently concurrent guidance.
 Git history, Issue `#381` and PR `#382` preserve the former wording and why it
 changed.
 
@@ -157,13 +156,13 @@ automatically resubmit based on an empty lookup result.
 The author incorporates that conclusion into ADR 0042. The PR thread contains
 the debate; the ADR contains the durable result.
 
-Before merge, ADR 0042 is changed from `proposed` to `accepted`. The reviewer
-rechecks the final revision and gate. The decision authority merges PR `#382`.
+The reviewer rechecks the final revision and evidence. The decision authority
+merges PR `#382`; no ADR status transition is needed.
 
 That merge means:
 
 - the revised design is authoritative;
-- ADR 0042 is accepted but not yet implemented;
+- implementation must now reconcile with ADR 0042;
 - the software defect remains; and
 - Issue `#381` remains open.
 
@@ -195,7 +194,7 @@ replace blind timeout retry with observation-driven reconciliation.
 - [ ] Bind provider submission to stable attempt identity.
 - [ ] Reconcile indeterminate outcomes without blind retry.
 - [ ] Add the end-to-end regression from #381.
-- [ ] Mark ADR 0042 implemented when all properties hold.
+- [ ] Record evidence that all required properties hold.
 
 ## Verification
 
@@ -239,8 +238,8 @@ PR `#383` eventually records this end-to-end test:
 7. a later observation finds the accepted payment; and
 8. local state converges with exactly one provider payment.
 
-The complete project gate passes for the final PR revision. ADR 0042 is changed
-from `accepted` to `implemented`. The separately tracked dashboard improvement
+The selected verification passes for the final PR revision, with evidence on the
+PR showing that ADR 0042 is satisfied. The separately tracked dashboard improvement
 remains solely in its Issue because it is outside this PR and does not belong in
 the ADR.
 
@@ -250,8 +249,8 @@ The reviewer verifies the code, revised ADR, original evidence and regression
 test. Findings are resolved on PR `#383`, and the reviewer rechecks the final
 head.
 
-Because the PR marks an ADR implemented, the project's decision authority
-merges it after independent review.
+The authorised maintainer merges after independent review. The ADR remains the
+desired contract, without an implementation-status update.
 
 GitHub closes Issue `#381` through `Closes #381`. Issue `#384` remains open
 because it represents intentionally deferred work, not an incomplete task
@@ -266,7 +265,7 @@ Issue #381: duplicate payment after timeout
   |     `-- merged: corrected design accepted
   |
   `-- PR #383: implement and verify ADR 0042
-        |-- merged: ADR 0042 implemented
+        |-- merged: implementation satisfies ADR 0042
         |-- closes #381
         `-- links deferred dashboard Issue #384
 ```

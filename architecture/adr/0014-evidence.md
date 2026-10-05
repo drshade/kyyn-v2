@@ -1,18 +1,8 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: proposed
-date: 2026-09-25
 ---
 # Latest evidence and recipe-scoped declared curation
-
-Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
-recipe evolution data are implemented. Recipes persist separately from the root
-manifest and use the ordinary evolution editing and review surfaces.
-Typed fetch options are implemented through discovery, acquisition and history.
-The Microsoft Graph calendar connector implements the full-listing/changeKey model
-below. Authentication, pagination and scoped comparison have deterministic
-GHC/MicroHs proofs; live provider behavior remains an opt-in verification.
 
 ## Context
 
@@ -298,8 +288,7 @@ The instance component is lowercase hexadecimal UTF-8. `.kyyn/.gitignore` owns t
 checkout-local ignore rule; first publication creates it if absent, preserving
 existing content. Store producer identity, latest values and payload-free fetch
 markers. Timestamps use ISO 8601 UTC.
-The initial implementation may rewrite this document; paging or another storage
-engine is not required by this decision.
+Publication rewrites this document; no paging or separate storage engine is used.
 
 ### Investigation and curation belong to the KB
 
@@ -319,7 +308,7 @@ A recipe is authored knowledge about how to interpret evidence and do useful
 work: for example, synchronize todos or update grocery prices. Its instructions
 are part of the KB's accumulated understanding, not tool configuration. Recipes
 are identified data in the accepted root, edited by the same typed evolution
-that edits domain facts. In the implemented instruction-led mode, an agent follows
+that edits domain facts. In instruction-led mode, an agent follows
 their instructions and uses ordinary investigation and evolution tools.
 [ADR 0028](0028-agentic-workflows.md#open-and-closed-recipes-share-ordinary-curation)
 owns explicit flow execution alongside this mode. This ADR owns the recipe data
@@ -330,8 +319,9 @@ ADR 0028 owns explicit flow execution into a draft evolution.
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.
 data Recipe
-  = OpenAgent { instructions :: Text }
+  = OpenAgent { instructions :: String }
   | ClosedAgent { flow :: FlowEntryRef }
+newtype FlowEntryRef = FlowEntryRef String
 data KnowledgeBase facts = KnowledgeBase facts [Fact Recipe]
 
 -- Author-facing optics/edit handles; their implementation owns the wrapper.
@@ -467,22 +457,17 @@ schema changes need no recipe. Acknowledgement declarations require a named reci
 
 An evolution's result may declare batches or individual items handled for its
 recipe. These are not inferred from reads, citations or changes to facts. The
-following sketches describe the boundary, not final SDK names:
+shared SDK declarations make the scope explicit:
 
 ```haskell
 data EvidenceScope = EvidenceScope
-  { instanceRef :: ConnectorInstanceRef
-  , fetch :: FetchId
-  }
+  { scopePlugin :: String, scopeInstance :: String, scopeFetch :: String }
 
 data Acknowledgement
   = EntireBatch EvidenceScope
   | IndividualRecords EvidenceScope [EvidenceId]
 
-data Curation = Curation
-  { recipe :: RecipeId
-  , handled :: [Acknowledgement]
-  }
+data Curation = Curation RecipeId [Acknowledgement]
 
 withCuration :: Curation -> Evolution a b -> Evolution a b
 ```
@@ -506,7 +491,7 @@ capture's retained identity/change metadata, including deletion states, and
 derives progress from the Before root's register. The guest does not construct
 register maps or look up fingerprints. Unknown scopes
 or insufficient history are explicit diagnostics, never a substitution of latest.
-The current implementation projects the stored header and history, validates the
+The host projects the stored header and history, validates the
 marker chain and reconstructs item states from its first fetch through the named
 fetch. Missing evidence or a chain which no longer contains that fetch gives
 `curation.scope-unavailable`. It does not reconstruct payloads. The resolved
@@ -514,7 +499,7 @@ producer is the stored header's producer, not the currently installed plugin:
 acknowledging an older producer records that producer; pending comparison against
 a newer producer then requires reconciliation with an entire batch.
 
-The guest's `EvidenceScope` currently contains plugin name, instance name and
+The guest's `EvidenceScope` contains plugin name, instance name and
 fetch ID strings. Evolution entries do not receive the generated connector
 handles used by KB tools. Scope data can be copied from evidence discovery;
 preparation checks its identity against retained evidence. `withCuration` appends
@@ -561,13 +546,13 @@ second acknowledgement database. Store resolved states, not references into the
 checkout-local fetch history:
 
 ```haskell
-data CurationProgress = CurationProgress
-  { producer :: EvidenceProducer
-  , acknowledged :: Map EvidenceId EvidenceFingerprint
-  }
+data CurationRegister -- opaque map from (recipe, instance) to producer and acknowledged states
 
-type CurationRegister =
-  Map RecipeId (Map ConnectorInstanceRef CurationProgress)
+type CurationEntry =
+  (RecipeId, ConnectorInstanceRef, EvidenceProducer, [(EvidenceId, EvidenceFingerprint)])
+
+curationEntries :: CurationRegister -> [CurationEntry]
+curationRegister :: [CurationEntry] -> Either String CurationRegister
 ```
 
 Persist the register at `root/curation.dhall`, as host material alongside facts,
@@ -606,8 +591,8 @@ acquisition event. No historical payload is required:
 
 ```haskell
 data PendingEvidence
-  = PendingEvidence EvidenceScope [(EvidenceId, ChangeKind)]
-  | Reconciliation EvidenceScope [EvidenceId]
+  = PendingEvidence EvidenceSnapshotRef [(EvidenceId, ChangeKind)]
+  | Reconciliation EvidenceSnapshotRef [EvidenceId]
 
 -- Pure comparison after host capabilities load progress and evidence metadata.
 pendingEvidence
@@ -616,8 +601,10 @@ pendingEvidence
 ```
 
 `EvidenceCapture` is the snapshot identity plus ID/fingerprint pairs, with no
-payloads. The caller selects the recipe and instance before this comparison. Real discovery
-can include citations/descriptions; the sketch isolates scope and net change kinds.
+payloads. These are host types: EvidenceSnapshotRef also retains the producer.
+The guest projection in ADR 0028 uses EvidenceScope plus typed PendingChange values;
+it cannot fabricate a host producer identity. The caller selects the recipe and
+instance before comparison.
 
 | Acknowledged state | Later acquisition changes | Pending result |
 | --- | --- | --- |
@@ -723,7 +710,7 @@ raw-history fetch IDs. Verify complete capture replacement following a plugin ch
 Keep source citations and accepted KB facts intact after
 scoped evidence clearing. Prove the first-party connector under GHC and MicroHs.
 
-Before implementing persistence, exercise the net-difference table as pure cases,
+Exercise the net-difference table as pure cases,
 including selective acknowledgement between fetches, independent recipes and
 instances, mixed batch/individual declarations, duplicate declarations and authored
 order/last-declaration semantics. Prove acknowledgement-only evolution,

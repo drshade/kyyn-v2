@@ -1,15 +1,8 @@
 ---
 id: 0004
 title: 'Distinguish the KB, its root and its evolutions'
-status: accepted
-date: 2026-09-07
 ---
 # Distinguish the KB, its root and its evolutions
-
-Basis: the KB/root/evolution distinctions and Candidate/Validated wrapper
-conventions are owner-established. Concrete snapshot representations and store
-interfaces are proposed implementation mechanics; the metadata does not reopen
-those established decisions.
 
 ## Context
 
@@ -60,12 +53,12 @@ KB without guessing its location. `WholeTree` denotes the repository root;
 `Subtree` supplies a nonempty relative directory. Stores derive `root/` and
 `evolutions/<id>/` beneath that KB prefix rather than accepting a second,
 independently selected root or workspace path.
-Under the proposed [storage layout](0006-storage.md), the host root's selected
+Under the [storage layout](0006-storage.md), the host root's selected
 source/config files include `root/plugins/config/*.dhall` and `root/examples/`.
 They belong to the accepted snapshot, not to the guest's domain facts type;
 ADR 0016 defines their typed runtime loading. The code snapshot here includes
 supporting files, not just compiler input modules; config values remain runtime data.
-The guest-side query/output declarations in ADR 0017 belong to that code snapshot,
+The authored functions and query/output registrations in ADR 0017 belong to that code snapshot,
 not function-valued fields serialized in the guest Root. The host Root therefore
 selects both the current facts and the definitions that interpret or render them.
 
@@ -102,7 +95,7 @@ newtype Validated a = Validated a  -- constructor private to checking code
 ```
 
 This ADR owns the wrapper convention, not a requirement to define both wrappers
-in the domain package. `Validated` is implemented in a non-public, validation-owned
+in the domain package. `Validated` belongs in a non-public, validation-owned
 module inside `kyyn-porcelain`, alongside the checking implementation that constructs
 it. The dependency-free public `Kyyn.Porcelain.Validated` module exports only the
 abstract type and `validatedValue` accessor for store APIs and other consumers.
@@ -141,12 +134,11 @@ Use ordinary identity newtypes without `unThing` selectors. Prefer `coerce`
 where representation conversion is intended; keep constructors private where
 validation identity matters. Do not rely on wrapper names alone as enforcement.
 
-The implemented `checkRoot` in ADR 0011 is the constructor-owning path for
+`checkRoot` in ADR 0011 is the constructor-owning path for
 Validated Root. `validatedValue :: Validated a -> a` exposes the checked payload
 without granting a constructor or mapping operation. Saved reports do not bypass
-checking. Candidate is implemented as ordinary Functor data in the domain package;
+checking. Candidate is ordinary Functor data in the domain package;
 `checkCandidate` preserves its context and report while checking its Root payload.
-Accepted-load composition remains unimplemented.
 
 ## Alternatives and verification
 

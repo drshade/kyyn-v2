@@ -1,14 +1,8 @@
 ---
 id: 0026
 title: 'One repository, explicit package boundaries'
-status: proposed
-date: 2026-09-07
 ---
 # One repository, explicit package boundaries
-
-Basis: the monorepo layout, interpreter package names and shared-source boundaries
-are owner-agreed. Source-copy/build integration below specifies the initial
-implementation; full distribution mechanics remain to be proved.
 
 ## Context
 
@@ -82,7 +76,7 @@ to become a native Cabal package.
 ### Shared source ownership
 
 `shared/kyyn-types` holds genuinely shared pure vocabulary: fact identity/envelopes,
-diagnostics and validation reports, paging values and schema metadata where both
+diagnostics and validation reports, and schema metadata where both
 host and guest use the same definitions. Native packages and the guest SDK compile
 the same source with GHC and MicroHs respectively. The SDK may re-export this
 vocabulary so authors need no separate knowledge of the repository arrangement.

@@ -1,14 +1,8 @@
 ---
 id: 0012
 title: 'Acceptance is one conditional step from local head'
-status: proposed
-date: 2026-09-07
 ---
 # Acceptance is one conditional step from local head
-
-Basis: the equality check against local Git head and the absence of remote
-coordination are owner-established guarantees. The publication sequence, result
-types and recovery diagnostics are proposed implementation mechanics.
 
 ## Context
 
@@ -112,16 +106,16 @@ history from the final diff. Later history reads can therefore explain intermedi
 changes without running archived code. No separate provenance commit, receipt or
 database is required.
 
-Under the proposed [curation model](0014-evidence.md), root export also includes
+Under the [curation model](0014-evidence.md), root export also includes
 the candidate's resolved host-owned progress register. Facts, progress and the
 archive publish through this same conditional commit. Publication does not consult
 the evidence cache or resolve declarations against a newer fetch. Inspection shows
-the proposed acknowledgements even when the fact diff is empty. This extension
-does not change expected-head, readiness or recovery rules and is not implemented yet.
+the declared acknowledgements even when the fact diff is empty. Expected-head,
+readiness and recovery rules apply unchanged.
 
-Archive export is implemented as described in ADR 0010. Only its notes subtree is
+Archive export is defined in ADR 0010. Only its notes subtree is
 read from the live workspace; captured manifest fields, source and fixed report
-are not replaced by current files. The host-produced JSON record and its durable
+are not replaced by current files. The host-produced Dhall record and its durable
 version/readability policy are owned there. Root export and archive export return
 the two replacements for one commit, not two publication steps.
 
@@ -442,19 +436,7 @@ Ordinary Git commits need not have been produced by Kyyn. Loading an unknown
 accepted root checks it as specified in ADRs 0004 and 0013; selecting an ordinary
 branch does not make every commit valid by definition.
 
-## Implementation responsibilities and exclusions
-
-Root export and Git commit/CAS primitives are implemented and tested together;
-scoped checkout inspection/synchronization is implemented with real-Git tests for
-unrelated staged/working/untracked preservation, tracked and untracked drafts,
-deletions, branch/head refusal and retry after an index-lock failure.
-authoritative FindAcceptance is implemented with real-Git history fixtures.
-Lifecycle reads and Ready/Draft transitions are implemented as specified in ADR 0010.
-RootPublication and `acceptStoredEvolution` implement the publication and saved-result
-application sequence above. Native journey fixtures use real Git, Dhall, stores
-and reporting, with recording schema/guest/validation handlers; they do not claim
-another real-MicroHs execution or an installed CLI journey. Issue #3 still owns
-the executable surface and full integration closeout.
+## Responsibilities and exclusions
 
 Validate the complete result before publication; acceptance writes that checked
 result, preserves unrelated files and reports errors honestly. The publication

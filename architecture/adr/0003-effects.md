@@ -1,14 +1,8 @@
 ---
 id: 0003
 title: 'Effects express architectural dependencies'
-status: proposed
-date: 2026-09-08
 ---
 # Effects express architectural dependencies
-
-Basis: owner-established porcelain/plumbing separation and interpreter/application
-execution naming convention. Concrete filesystem operations and remaining
-implementation mechanics refine those boundaries rather than reopen them.
 
 ## Context
 
@@ -45,10 +39,10 @@ that composes interpreters, and ordinary operation names for the workflows:
 
 | Example | Responsibility | Package |
 | --- | --- | --- |
-| `previewEvolution` | Describes the workflow using explicit semantic effects | `kyyn-porcelain` |
+| `checkEvolution` | Describes the workflow using explicit semantic effects | `kyyn-porcelain` |
 | `runRootStore` | Interprets one semantic effect through other capabilities | `kyyn-porcelain-interpreters` |
 | `runFileSystemIO` | Interprets a plumbing effect through native IO | `kyyn-plumbing-interpreters` |
-| `executePreviewEvolution` | Supplies context, composes interpreters and executes the workflow | `kyyn` |
+| `executeCheckEvolution` | Supplies context, composes interpreters and executes the workflow | `kyyn` |
 
 These names distinguish responsibilities, not two copies of the workflow. An
 `execute…` function supplies handlers and execution context; business logic stays
@@ -65,16 +59,9 @@ The [repository layout](0026-repository-layout.md) maps these responsibilities t
 
 Compilation and execution are distinct plumbing capabilities. A handler that prepares
 and invokes an adapter declares both; a caller executing an existing artifact needs
-only GuestExecution. For example, the native schema-inspection interpreter declares:
-
-```haskell
-runSchemaInspectionIO
-  :: (IOE :> es, FileSystem :> es, GuestCompilation :> es,
-      GuestExecution :> es, Failure :> es)
-  => GuestToolchain -> Eff (SchemaInspection : es) a -> Eff es a
-```
-
-Its IOE is for native compiler-library inspection, not guest execution. The
+only GuestExecution. [ADR 0005](0005-contracts.md) owns the concrete
+`runSchemaInspectionIO` row. Its IOE is for native compiler-library inspection,
+not guest execution. The
 GuestCompilation and GuestExecution interpreters themselves lower through FileSystem
 and ProcessExecution without IOE. Command composition installs those handlers where
 needed; EvidenceStore operations alone do not require either capability.

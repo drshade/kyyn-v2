@@ -1,6 +1,9 @@
-# 0023 — Two first-class interfaces with a shared design and review loop
+---
+id: 0023
+title: 'Two first-class interfaces with a shared design and review loop'
+---
 
-Status: Proposed. Basis: explicit owner feedback on equal Web/MCP importance.
+# Two first-class interfaces with a shared design and review loop
 
 ## Context
 
@@ -39,7 +42,7 @@ settled work; agent-less preparation conveniences are not an initial requirement
 | Shared activity | Human-oriented Web | Agent-oriented MCP |
 | --- | --- | --- |
 | Understand the system | Model browser, examples, assumptions, connected views | Exact contracts, documentation, source/binding locations |
-| Explore knowledge | Tables, filtering, drill-down, alternate policies | Typed queries, stable paging, reusable calculation tools |
+| Explore knowledge | Tables, filtering, drill-down, alternate policies | Typed queries, identified collection reads, reusable calculation tools |
 | Design a change | Describe intent, adjust examples, inspect alternatives | Scaffold/edit workspace, implement functions, execute examples |
 | Review consequences | Data/schema/rule/report comparison; focused diagnostics | Structured diffs, failed examples, affected identities and comments |
 | Explain a record | Timeline of changes, reasons and cited evidence | Revision-scoped record history with step diffs and declared rationale |
@@ -91,7 +94,7 @@ data/artifact feedback and failed semantic checks as well as successful checks.
 Targets must be meaningful within their subject; capture alone does not invent
 an evaluated fact or artifact. The workspace supplies its owning KB for saving
 examples, avoiding a second KB argument.
-Saving an example writes `target/examples/` under the proposed ADR 0010 layout,
+Saving an example writes `target/examples/` under the ADR 0010 layout,
 marks the workspace Draft and requires recapturing, evaluation and checking;
 it cannot retroactively validate an earlier preview. It becomes current-root
 material on acceptance, following [the example lifecycle](0011-validation.md),

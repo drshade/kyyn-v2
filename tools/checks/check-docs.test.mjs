@@ -8,8 +8,6 @@ import { checkAdr, checkMarkdown, checkRepository } from './check-docs.mjs';
 const adr = `---
 id: 0027
 title: 'An example decision'
-status: proposed
-date: 2026-09-07
 ---
 
 # An example decision
@@ -28,23 +26,23 @@ function fixture(t) {
   return { root, write };
 }
 
-test('new ADR metadata and imported prose statuses both work', () => {
+test('all ADRs use the same desired-state metadata', () => {
   assert.deepEqual(checkAdr('0027-example.md', adr), []);
-  assert.deepEqual(checkAdr('0003-effects.md', '# 0003 — Effects\n\nStatus: Proposed mechanics; owner-selected boundaries.\n'), []);
+  assert.match(checkAdr('0003-effects.md', '# 0003 — Effects\n\nStatus: Proposed mechanics; owner-selected boundaries.\n').join('\n'), /requires front matter/);
   assert.match(checkAdr('0027-example.md', '# 0027 — Example\n\nStatus: Proposed.\n').join('\n'), /requires front matter/);
-  assert.deepEqual(checkAdr('0026-layout.md', '# 0026 — Layout\n\nStatus: Accepted.\n'), []);
+  assert.match(checkAdr('0026-layout.md', '# 0026 — Layout\n\nStatus: Accepted.\n').join('\n'), /requires front matter/);
   assert.deepEqual(checkAdr('0026-layout.md', adr.replace('id: 0027', 'id: 0026')), []);
 });
 
-test('metadata errors fail rather than manufacturing a lifecycle state', () => {
+test('metadata errors, status and date fields are rejected', () => {
   for (const [before, after, expected] of [
     ['id: 0027', 'id: 0028', /ID must match/],
-    ['status: proposed', 'status: done', /invalid lifecycle/],
-    ['date: 2026-09-07', 'date: 2026-02-30', /invalid decision date/],
+    ['id: 0027', 'id: 0027\nstatus: implemented', /unknown metadata key status/],
+    ['id: 0027', 'id: 0027\ndate: 2026-09-07', /unknown metadata key date/],
     ['# An example decision', '# Something else', /title must match/],
-    ['status: proposed', 'status: proposed\nstatus: accepted', /duplicate metadata/],
-    ['status: proposed', 'status: proposed\nowner: anyone', /unknown metadata/],
-    ['date: 2026-09-07\n---', 'date: 2026-09-07', /not closed/],
+    ['id: 0027', 'id: 0027\nid: 0027', /duplicate metadata/],
+    ['id: 0027', 'id: 0027\nowner: anyone', /unknown metadata/],
+    ["title: 'An example decision'\n---", "title: 'An example decision'", /not closed/],
   ]) assert.match(checkAdr('0027-example.md', adr.replace(before, after)).join('\n'), expected);
   assert.match(checkAdr('bad-name.md', adr).join('\n'), /filename/);
 });

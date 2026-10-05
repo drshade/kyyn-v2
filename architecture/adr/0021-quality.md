@@ -1,14 +1,8 @@
 ---
 id: 0021
 title: 'Architecture is a tested deliverable before feature volume'
-status: proposed
-date: 2026-09-07
 ---
 # Architecture is a tested deliverable before feature volume
-
-Basis: deliberate implementation with precise, expressive boundaries is an
-owner requirement. Verification must cover real boundaries and useful outcomes, not only
-the existence of interfaces.
 
 ## Context
 
@@ -79,7 +73,7 @@ validation or query-result caches. Start with synthetic scales such as 1k/10k/50
 facts, then representative shapes from the intended KBs. These are experiments,
 not invented product limits.
 If the representative interactive loop is impractical, revisit storage/evaluation
-before building around it. Result paging serves browsing and evidence acquisition,
-not an unimplemented storage-streaming or incremental-evaluation escape hatch.
+before building around it. Provider pagination during acquisition is not a
+storage-streaming or incremental whole-root evaluation mechanism.
 If an operation needs most capabilities, review the design before adding another
 constraint. No mandatory contributor governance beyond normal tests and review.

@@ -46,7 +46,7 @@ be revised.
 | Artifact | Owns | Does not own |
 | --- | --- | --- |
 | GitHub Issue | An unresolved problem, requirement or investigation | Active implementation minutiae |
-| ADR | A significant decision and its lifecycle status | Backlog, implementation plans or code-level tasks |
+| ADR | A significant decision: authoritative desired architecture | Implementation status, undecided options or backlog |
 | Draft PR | Active implementation, its meaningful checklist and current state | Deferred work outside the change |
 | PR review | Examination and discussion of the proposed repository change | The durable wording of a decision |
 | Session plan | Temporary, fine-grained execution steps | Durable project state |
@@ -90,17 +90,28 @@ Use an ADR when a choice:
 Routine bugs, contained features, local refactoring and implementation choices
 do not need ADRs when the existing design already determines their shape.
 
-### ADR states
+### ADRs describe decided desired state
 
-- **proposed** — under design review and not yet authoritative;
-- **accepted** — decided, with some or all implementation still outstanding;
-- **implemented** — the repository satisfies the current decision.
+An ADR defines the architecture the implementation must satisfy, whether the code
+already exists or remains to be built. A single ADR may contain both, so it has no
+implementation status. Issues and PRs track outstanding outcomes; code and tests
+establish actual behavior. Git history records when the decision changed.
 
-An ADR may move from `implemented` back to `accepted` when an explicit
-revision changes the design and new implementation work is required. It may be
-`proposed` on the design PR branch while that revision is still under review.
+Interleave concrete high-level types, signatures and effect rows with the prose
+that explains them. They specify ownership, inputs, results, permitted dependencies
+and failure behavior, not illustrative alternatives that implementers may ignore.
+Omit private representations and routine detail explicitly; do not omit the
+boundary being decided. Other ADRs reference the owner rather than redefine its
+contract.
 
-### ADRs contain current truth
+Reconciliation compares actual code and tests with that desired state. Correct
+stale documentation where the decision is already clear; record implementation
+gaps as unresolved outcomes; raise genuinely different design choices for decision.
+Do not silently redefine the architecture to match incidental implementation.
+Undecided options and possible future work belong in Issues or design discussion,
+not in the authoritative ADR.
+
+### Revise decisions in place
 
 Revise the existing ADR when the same architectural concern evolves. Rewrite
 its active sections so they contain only unambiguous current guidance, and
@@ -209,11 +220,10 @@ A PR may merge when:
 Use `Refs #N` or equivalent when a PR advances an Issue without resolving it.
 Use `Closes #N` only when the merge satisfies that Issue's completion criteria.
 
-An ADR becomes `implemented` only when the repository satisfies its current
-decision. The final implementation PR may update the ADR status when its merge
-also completes the decision. If required verification can happen only after
-the implementation merges, use a small reviewed closeout PR once that evidence
-exists.
+The final implementation PR records evidence that the governing decision is
+satisfied and closes the resolved Issue. It does not change ADR metadata to
+announce implementation. If required verification can happen only after merge,
+record that evidence on the Issue before closing it.
 
 Newly discovered work outside the correct PR boundary becomes a follow-up
 Issue. Do not expand a coherent change indefinitely merely to avoid recording

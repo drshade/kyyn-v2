@@ -92,8 +92,10 @@ private fork or new general-purpose framework.
 
 ## State decisions once; reconcile intent with implementation
 
-Each architectural decision has one owning ADR stating the intended design and
-its rationale. The code's actual types, effect boundaries and behavior show what
+Each architectural decision has one owning ADR stating the decided desired design
+and its rationale, whether built or still to be built. Its high-level types and
+effect rows define concrete contracts, not optional illustrations.
+The code's actual types, effect boundaries and behavior show what
 we have implemented. These are two things to reconcile, not two competing prose
 specifications. Tests exercise that implementation against concrete expectations;
 they are not another place to copy the architectural explanation.
@@ -111,12 +113,13 @@ For a change affecting architecture, review the smallest relevant loop:
 2. If they disagree, explain the discrepancy and decide whether to correct the
    implementation or explicitly revise the decision. Neither an existing ADR
    nor existing code makes the other automatically wrong.
-3. Align the affected code, tests and owning ADR in the change. Search for and
+3. Reconcile the affected code, tests and owning ADR; track remaining implementation
+   gaps in Issues rather than weakening the decision. Search for and
    remove obsolete restatements in the touched area; replace useful pointers
    with references rather than keeping several explanations synchronized.
 
-Where implementation is still absent, say so rather than treating a signature
-sketch or a passing unrelated test as conformance. This is ordinary change review,
+Where implementation is still absent, record that in the Issue or PR rather than
+treating a signature or a passing unrelated test as conformance. This is ordinary change review,
 not a new approval workflow, inventory or automated prose-compliance system.
 
 ## Write for the reader's task, not to demonstrate architectural compliance
@@ -161,4 +164,4 @@ they do not prescribe production structure or prove untested compatibility.
 When revising a design, ask: what must exist now, what can be removed, and what
 evidence would justify more? Remove speculative mechanisms rather than leaving
 them as optional interfaces, stubs or future-work breadcrumbs. Keep genuinely
-unresolved choices explicit in their owning ADR until decided.
+unresolved choices explicit in Issues or design discussion until decided.

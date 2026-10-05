@@ -1,8 +1,6 @@
 ---
 id: 0028
 title: 'Typed agentic tools and explicitly executable recipes'
-status: proposed
-date: 2026-10-01
 ---
 
 # Typed agentic tools and explicitly executable recipes
@@ -25,11 +23,6 @@ SystemOne and SystemTwo use Agentic's types directly. Closed agents propose only
 fact edits, with existing curation declarations, not schema or code changes.
 Flows remain inspectable and testable with deterministic fixtures.
 
-The product choices below are owner-established. Ordinary tool/model execution
-and generated contracts are implemented, including explicit closed-recipe execution
-into draft proposals and Jev-backed SystemOne judgements. The wider workflow signatures below are
-architectural sketches, not a claim that all these APIs exist.
-
 ## Decision
 
 ### A flow belongs to the KB, not to an autonomous kernel
@@ -38,13 +31,15 @@ Use the library's inspectable arrow structure with Kyyn's existing typed guest
 program as its effect parameter:
 
 ```haskell
-type Flow calls input output = Agentic (Program calls) input output
+-- Generated Kyyn.Agentic; Tool is the selected Program row from Kyyn.Connectors.
+type Flow input output = Agentic (ExceptT FetchError Tool) input output
 
-interpret
-  :: Monad m => Runtime m -> Agentic m input output -> input -> m output
+interpret :: Flow input output -> input -> Tool (Either FetchError output)
+liftTool :: Tool a -> ExceptT FetchError Tool a
 ```
 
-`Agentic` and `interpret` are library concepts, not new Kyyn effect interpreters.
+`Agentic` is the library's arrow. The generated `interpret` wrapper supplies its
+runtime and returns typed tool failures; it does not implement another agent loop.
 The runtime supplied by the generated adapter implements requests through
 [ADR 0009](0009-capabilities.md). `arr` composes pure transformations; `act`
 uses the selected guest capabilities, not ambient IO. `draft` asks a model to
@@ -66,22 +61,16 @@ capabilities do not gain model access.
 
 ### The host provides a turn, not a provider SDK to the guest
 
-Illustrative request/result boundary:
+The host plumbing boundary uses Agentic.Runtime's types directly:
 
 ```haskell
-data ModelTurn result where
-  TakeModelTurn :: ModelConfiguration -> TurnRequest
-               -> ModelTurn (Either ModelFailure TurnResponse)
-
-data TurnRequest = TurnRequest
-  { conversation :: Conversation
-  , outputContract :: CheckedContract
-  , availableTools :: [CheckedToolContract]
-  }
+data ModelTurn :: Effect where
+  TakeModelTurn :: ModelConfiguration -> Conversation
+               -> ModelTurn m (Either ModelFailure Turn)
 ```
 
-`Conversation` here denotes the library's instruction, state and exchange
-history. The transport adapter projects those into provider messages and maps
+`Conversation` carries the library's instructions, exchange history and tool/result
+contracts. There is no Kyyn-owned conversation or turn shim. The transport adapter projects those into provider messages and maps
 one response back to the library's `Turn` (tool calls or a final value).
 The host does not execute returned tool calls: the guest loop does so through
 the supplied typed tool bodies. Internal library values are not an additional
@@ -197,10 +186,7 @@ payloads: after a run, [latest-only storage](0014-evidence.md) still applies.
 closedRecipe
   :: Flow (RecipeInput Root) (ProposedCuration RootEdit)
 
-data ProposedCuration edits = ProposedCuration
-  { steps :: [ProposedStep edits]
-  , curation :: Curation
-  }
+data ProposedCuration edits = ProposedCuration [ProposedStep edits] Curation
 ```
 
 `Kyyn.Recipe.RecipeInput root` contains the recipe ID, selected domain root and
@@ -233,13 +219,10 @@ a replacement root. Use a small typed description of existing collection edits:
 ```haskell
 data FactEdit a
   = Append (Fact a)
-  | Replace FactId a
+  | Replace { factId :: FactId, replacement :: a }
   | Remove FactId
 
-data ProposedStep edits = ProposedStep
-  { rationale :: Rationale
-  , edits :: [edits]
-  }
+data ProposedStep edits = ProposedStep Rationale [edits]
 
 -- Generated for an example root's domain fact collections.
 data RootEdit
@@ -274,13 +257,17 @@ unchanged. Running a recipe does not mark its workspace Ready or accept it.
 
 ```haskell
 -- Host application operation, not a guest capability.
-prepareRecipeEvolution
-  :: RecipeInvocation -> Eff es (Either RecipeFailure EvolutionWorkspace)
+proposeFromRecipe
+  :: (RootOpening :> es, PluginPreparation :> es, PluginRead :> es,
+      RecipeExecution :> es, EvolutionAuthoring :> es)
+  => KnowledgeBase -> GitRevision -> RecipeId -> [(PluginName, ConnectorName)]
+  -> Eff es (Either [Diagnostic] EvolutionWorkspace)
 ```
 
-This signature elides the existing execution/authoring/store effects; it does
-not permit ambient IO in porcelain. The implementation must give the operation
-an explicit effect row when those dependencies are known.
+RootOpening selects the explicit Before revision; PluginPreparation and PluginRead
+supply checked connectors and invocation-local evidence captures. RecipeExecution
+executes the authored flow, and EvolutionAuthoring writes its frozen proposal as
+a draft. No publication capability appears in this row.
 
 Persist the returned steps and curation declaration through the ordinary Dhall
 path. A generated conventional evolution entry applies them to the actual
@@ -331,43 +318,23 @@ captured-evidence handlers, to test the complete flow deterministically. Upstrea
 Replay-only tests must refuse missing recordings and must not contact providers.
 Production response caching or mandatory transcript retention is not selected.
 
-## Compatibility evidence and required proof
+## Verification
 
-Verified library commit
-[`9c74f01`](https://github.com/drshade/haskell-agentic/tree/9c74f019424d88c20ac457b2e655585c5df7c30f),
-package `agentic` 0.2.0.2, against Kyyn's pinned MicroHs
-[`8bf3d4d`](https://github.com/augustss/MicroHs/tree/8bf3d4d4242c8707b31c2338716977d24a95ad39)
-on 2026-10-01. Using the installed native compiler, libraries and bundled cpphs,
-with cleared package/module paths and explicit core/library include directories:
+Use the pinned unmodified library sources recorded in
+[vendored inputs](../../vendor/README.md). Core portability and Kyyn integration
+are separate obligations: the former does not prove generated codecs, provider
+adapters or recipe persistence.
 
-- `mhs ... -fno-code Agentic` passed.
-- Compiled upstream's `agentic/test/Portable.hs` to a combinator artifact and
-  executed it using `mhseval +RTS -r<artifact> -RTS`: all 14 checks passed.
-- The proof covers explicit record and payload-bearing sum codecs, typed tool
-  calls/results, a nested drafting tool, malformed output followed by correction,
-  an applicative Judgement batch, and flow descriptions. Interpretation uses a
-  pure non-IO monad with scripted handlers.
-- Upstream runs the same portable test under GHC and has a MicroHs workflow
-  pinned to the same compiler revision. This local verification ran MicroHs;
-  it did not independently rerun the GHC suite or call live providers.
+Exercise explicit record/sum contracts, typed tools, nested drafts, malformed
+output followed by correction, applicative judgements and flow descriptions under
+both GHC and MicroHs with scripted handlers. Test a generated-contract flow through
+Kyyn's real guest/host protocol, including cancellation and provider failures.
 
-The earlier text-operation and Generic-metadata blockers are resolved upstream:
-portable helpers replace unsupported operations and Generic deriving is excluded
-under MicroHs. Explicit codecs remain available. No Kyyn fork or source patch
-was required. This establishes core portability, not Kyyn's generated-codec,
-wire, provider or recipe integration; no dependency was vendored by this proof.
-
-The one-turn provider abstractions and generic monadic interpreter already exist;
-reuse them for both SystemOne and SystemTwo.
-
-Before production integration, demonstrate a generated-contract flow under GHC
-and pinned MicroHs with a recording host: typed draft, nested tool, malformed
-response retry, Judgement and cancellation/failure. Then demonstrate one closed
-recipe producing a reviewable frozen ordinary evolution, partial/deletion
-acknowledgements, failed-run preservation and repeated checking without model
-calls. Cover edit ordering, missing/duplicate IDs, rationale preservation and
-unchanged non-fact artifacts. That proof must establish the generated bindings;
-documentation approval alone is not evidence they work.
+A closed recipe must produce a reviewable frozen ordinary evolution. Verify partial
+and deletion acknowledgements, failed-run preservation, repeated checking without
+model calls, edit ordering, missing/duplicate IDs, rationale and unchanged non-fact
+artifacts. Live-provider verification uses opt-in credentials and does not replace
+deterministic error-path tests.
 
 ## Consequences and alternatives
 

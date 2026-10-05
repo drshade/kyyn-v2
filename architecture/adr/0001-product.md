@@ -1,6 +1,9 @@
-# 0001 — Kyyn is a runtime and design workbench
+---
+id: 0001
+title: 'Kyyn is a runtime and design workbench'
+---
 
-Status: Proposed. Basis: owner-established direction; [scope](../scope.md).
+# Kyyn is a runtime and design workbench
 
 ## Context
 
@@ -19,7 +22,7 @@ Treat exploration and improved understanding as useful outcomes before reporting
 or automation is complete. Preserve unknown and disputed domain values rather
 than forcing every accepted fact to mean “verified true”. External schedulers
 and agent harnesses call ordinary Kyyn operations; Kyyn does not autonomously
-orchestrate agents. Explicitly invoked KB-authored agentic flows are proposed in
+orchestrate agents. Explicitly invoked KB-authored agentic flows are defined in
 [ADR 0028](0028-agentic-workflows.md); they do not make the kernel an agent scheduler.
 
 ## Boundaries and alternatives

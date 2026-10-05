@@ -1,14 +1,8 @@
 ---
 id: 0010
 title: 'One evolution mechanism for facts, schema and meaning'
-status: proposed
-date: 2026-09-07
 ---
 # One evolution mechanism for facts, schema and meaning
-
-Basis: one composable evolution mechanism, retained archives and distinct schema
-module names with friendly qualified aliases are owner-established. Capture,
-persistence and workspace operation signatures are proposed mechanics.
 
 ## Context
 
@@ -226,8 +220,8 @@ incremental execution or bounded memory.
 Changing a reporting policy while leaving facts unchanged is ordinary useful
 evolution, not an exceptional migration case. Review its source, changed checks
 and resulting report alongside the empty fact diff. It needs no separate command,
-type or lifecycle. The first reporting slice also includes a schema-changing
-edge, so both uses of the same mechanism are exercised early (ADR 0021).
+type or lifecycle. Verification covers both code-only and schema-changing
+evolutions through this same mechanism (ADR 0021).
 
 `Before` identifies an existing root by its **Git commit revision** and schema.
 The revision selects the actual source facts, schema and code. Kyyn derives the
@@ -409,15 +403,15 @@ Kyyn can scaffold these imports without compiler namespace rewriting. The accept
 root retains only the current definitions; previous definitions live in evolution
 archives and Git. See the [authoring guide](../../docs/guide.md#create-check-and-accept-an-evolution).
 
-Captured material contains the projected target bytes, not a stored compiler
-adapter or independently selected schema descriptor. During build preparation,
-EvolutionExecution reads `target/kb.dhall` through RootStore's
-`ReadRootDefinition`, then constructs `SchemaSource` from those captured modules,
-selected exports and the installed SDK. That compiler input is derived, not
-persisted in the context. Capture does not require even an unfinished target
-manifest or proposed source to compile;
-the context exists even when deriving `After` or compiling the evolution fails.
-That permits reviewing failed proposals under ADR 0023.
+Workspace material contains the projected target bytes, not a stored compiler
+adapter or independently selected schema descriptor. `ReadWorkspace` can capture
+and inspect those bytes without compiling them, including unfinished proposals.
+`CaptureEvolution` then prepares both source endpoints through RootOpening:
+the manifest selects schema/metadata exports, and inspection derives their checked
+contracts from captured modules plus installed SDK sources. A malformed or
+unsupported target schema returns diagnostics before evaluation. A successfully
+captured evolution retains the prepared After, so execution does not inspect it again.
+Raw workspace review remains available when this preparation fails (ADR 0023).
 Module inventory and collision diagnostics belong to build preparation inside
 `EvaluateEvolution`, not capture. Assemble target modules, evolution-only modules,
 generated adapters and the Before schema's import closure. Identical shared modules
@@ -491,7 +485,7 @@ data EvolutionAuthoring :: Effect where
 
 runEvolutionAuthoring
   :: (EvolutionStore :> es, RootOpening :> es,
-      WorkspaceStore :> es, FileSystem :> es)
+      WorkspaceStore :> es, FileSystem :> es, DhallHandling :> es)
   => Eff (EvolutionAuthoring : es) a -> Eff es a
 ```
 
@@ -518,16 +512,16 @@ RootOpening supplies the source commit's derived contract
 through `LoadSourceAt` (ADR 0006); RootStore remains Dhall-only. WorkspaceStore
 decodes workspace manifests through DhallHandling; it does not execute proposed
 Haskell. Listing needs no compiler frontend,
-and capturing proposed bytes does not compile them. Creation/capture may derive
-the source schema on a cold load through RootOpening's SchemaInspection dependency,
-including evaluation of its pure schema metadata export under ADR 0005. This does
-not decode facts or run root validators/transformations. Operation-specific composition installs
+and reading workspace bytes does not compile them. Creation derives the source
+schema; capture prepares both Before and After through RootOpening, including pure
+metadata evaluation under ADR 0005. Capture then adds Before's fact material
+without semantic validation or executing a transformation. Operation-specific composition installs
 the semantic handlers needed by the command.
 Do not use partial handlers that fail on the store's other operations.
 
-The implemented store handler requires `FileSystem`, `WorkspaceStore`, `RootOpening`,
-`RootStore`, `DhallHandling`, `Git` and `Failure`. Git supplies the implemented
-FindAcceptance lookup from ADR 0012. Capture reads the workspace at the derived location,
+EvolutionStore's handler dependencies are listed above; Git supplies its
+FindAcceptance lookup from ADR 0012. EvolutionAuthoring adds the source-opening
+dependencies for capture. Capture reads the workspace at the derived location,
 decodes its manifest, and calls `LoadSourceAt` for that manifest's Before revision
 and the owning KB's root subtree. The projected `before/` tree must equal that
 source root's entire authored `src/` tree (prefix stripped) exactly, including
@@ -535,7 +529,7 @@ helper additions, deletions and byte edits. A mismatch returns a diagnostic aski
 the author to refresh the copy; it does not choose edited definitions over Git.
 The resulting Before contract comes from the selected source root, never the
 target or copied modules. The captured context and files are immutable values;
-this operation does not yet save them to local storage.
+this operation does not save them to local storage.
 
 Live `MatchesCapturedInputs` reads and decodes the current workspace and applies
 the pure comparison above. It does not load the source root or require its compiler
@@ -568,7 +562,7 @@ The manifest's state field never establishes acceptance: the committed archive
 and its introducing commit do (ADR 0012). A local `Accepted` label alone is not
 a successful acceptance lookup.
 
-The implemented lifecycle operations return diagnostics for unknown or malformed
+The lifecycle operations return diagnostics for unknown or malformed
 workspaces. Their summaries and filter are ordinary data:
 
 ```haskell
@@ -665,7 +659,7 @@ from captured evaluation inputs, not silently dropped when replacing the archive
 Publication calls this operation only for a checked candidate. It can therefore
 fail before publication without changing the workspace lifecycle.
 
-The implemented export returns the `Subtree` prefix and FileTree pair consumed by
+The export returns the `Subtree` prefix and FileTree pair consumed by
 GitTree. It admits a Candidate (Validated Root), checks that the captured target
 code and Before revision agree, then emits an Accepted manifest from the captured
 manifest values, exact before/target/change bytes, and the fixed report. The only
@@ -780,14 +774,14 @@ data EvaluatedEvolution = EvaluatedEvolution
   }
 
 runEvolutionExecution
-  :: (RootStore :> es, PluginInvocation :> es, EvidenceStore :> es,
-      GuestCompilation :> es, ProcessExecution :> es,
-      FileSystem :> es, SchemaInspection :> es,
-      Failure :> es)
-  => Eff (EvolutionExecution : es) a -> Eff es a
+  :: (RootStore :> es, GuestCompilation :> es, GuestExecution :> es,
+      DhallHandling :> es, Failure :> es)
+  => FileTree -- installed SDK/runtime sources
+  -> Eff (EvolutionExecution : es) a -> Eff es a
 
 applyEvolution
-  :: (RootStore :> es, EvolutionStore :> es, EvolutionExecution :> es)
+  :: (RootStore :> es, EvolutionStore :> es, EvolutionExecution :> es,
+      EvidenceStore :> es)
   => CapturedEvolution
   -> Eff es (Either PreviewRejection (Candidate Root))
 
@@ -799,8 +793,8 @@ data PreviewRejection
 EvolutionExecution owns source/adapter preparation, entry/schema compilation and
 execution of the compiled transformation.
 It delegates compilation to [GuestCompilation](0002-runtime.md), not a locally
-assembled MicroHs command. ProcessExecution remains necessary for the compiled
-entry's execution and protocol, separately from compiler invocation.
+assembled MicroHs command. GuestExecution invokes the compiled pure entry;
+native process lifetime and protocol remain below that plumbing boundary.
 The row is a lowering contract, not IO in porcelain. RootExecution in ADR 0011
 retains validation and snapshot queries without acquiring plugin/acquisition
 handlers merely to check a root. Source, dependency and config bytes are fixed
@@ -839,7 +833,9 @@ runs; candidate checking answers whether its result is acceptable. Both outcomes
 remain visible on the same proposal. Do not construct an empty-facts Root merely
 to invoke code checking earlier.
 
-After materialization, `applyEvolution` calls `SaveCandidate` before returning
+After materialization, `applyEvolution` resolves declared curation through
+EvidenceStore against the captured Before progress, as owned by ADR 0014, then
+calls `SaveCandidate` before returning
 `Right candidate`. Subsequent semantic/example rejection leaves that unchecked
 result available for inspection; compilation or transformation rejection creates
 no replacement candidate. An earlier saved candidate is not a successful outcome
@@ -851,12 +847,12 @@ Porcelain also owns the workspace-level application operations:
 ```haskell
 evaluateWorkspace
   :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
-      EvolutionStore :> es, RootStore :> es)
+      EvolutionStore :> es, RootStore :> es, EvidenceStore :> es)
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
 
 checkEvolution
   :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
-      EvolutionStore :> es, RootExecution :> es, RootStore :> es)
+      EvolutionStore :> es, RootExecution :> es, RootStore :> es, EvidenceStore :> es)
   => EvolutionWorkspace
   -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
 
@@ -1066,11 +1062,11 @@ still require fresh evaluation and checking. No second approval token is introdu
 ```haskell
 data EvolutionState = Draft | Ready | Accepted
 
-data EvolutionFilter = Reviewable | AllEvolutions
+data EvolutionFilter = AllEvolutions | ExcludeDrafts
 ```
 
-Here `Reviewable` selects Ready entries; `AllEvolutions` includes drafts and
-accepted archaeology. This filter is data passed to the store, not a second
+`AllEvolutions` includes drafts, ready work and accepted archaeology;
+`ExcludeDrafts` includes Ready and Accepted entries. This filter is data passed to the store, not a second
 state machine. Accepted workspace deletion is not part of draft removal.
 
 Keep accepted workspaces, their before/after definitions, source, step reports and
@@ -1105,7 +1101,7 @@ Test rebasing both with and without a schema change: the new input comes from
 the selected commit and the diff compares the result with that base, not the old
 root. Acceptance requires `Before.revision == local head` under ADR 0012.
 
-The implemented SDK and generated-binding proof runs the same source under GHC
+The SDK and generated-binding conformance test runs the same source under GHC
 and pinned MicroHs. It covers ordered per-step observations, associative composition,
 identity, failed-step short-circuiting with no partial success, cancelling changes,
 schema changes and a same-type metadata-only transition. Both compilers reject
@@ -1125,7 +1121,7 @@ Changed unrelated Before validators/metadata modules do not enter the compilatio
 Native recording-handler tests cover preparation/compilation errors, guest refusal,
 runtime/protocol failure, closure collisions and rejection of unknown contracts.
 
-The implemented execution adapter lifts pure Evolution evaluation into
-`Program NoRequests` for the runtime; no plugin handlers are installed yet.
+The execution adapter lifts pure Evolution evaluation into
+`Program NoRequests` for the runtime; no plugin handlers are installed.
 Successful execution returns `EvaluatedEvolution`, which `applyEvolution`
 materializes and saves before returning a Candidate.

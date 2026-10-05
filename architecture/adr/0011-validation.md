@@ -1,15 +1,8 @@
 ---
 id: 0011
 title: 'Validation checks a complete candidate, not reality'
-status: accepted
-date: 2026-09-09
 ---
 # Validation checks a complete candidate, not reality
-
-Basis: complete-root checking and the distinction between Candidate and Validated
-follow owner direction. Saved examples, root checking and candidate checking are
-implemented, including selected-revision loading and the installed
-schema-changing proposal journey with inherited required examples.
 
 ## Context
 
@@ -114,6 +107,7 @@ data RootExecution :: Effect where
 
 runRootExecution
   :: (RootStore :> es, GuestCompilation :> es,
+      GuestExecution :> es, PluginPreparation :> es, ToolPreparation :> es,
       SchemaInspection :> es, DhallHandling :> es, Failure :> es)
   => FileTree -- explicitly installed SDK/runtime sources
   -> Eff (RootExecution : es) a -> Eff es a
@@ -135,7 +129,9 @@ Compiled programs are the domain values from [ADR 0002](0002-runtime.md), not
 callbacks, process handles or paths depending on a live build scope. Subsequent
 validation/query operations consume this same prepared snapshot without compiling
 or inspecting schemas again. Each independent root/candidate check prepares afresh;
-there is no retained interpreter state or persistent artifact cache.
+prepared values do not depend on retained interpreter state. Compilation may reuse
+artifacts under ADR 0002's content-keyed cache; schema inspection reuse is owned by
+ADR 0005. Neither cache substitutes for semantic checking.
 
 RootStore's `ReadRootDefinition`
 decodes the captured manifest and extracts captured authored sources; its
@@ -152,8 +148,8 @@ Preparation's `Left` means captured definition/schema/source rejection. Validati
 report contains semantic errors. Process failures and malformed protocol replies
 remain Failure, identifying the selected validator. This operation alone does not
 mint `Validated Root`: the checking function below owns that decision.
-Query discovery/execution use the same captured-source boundary;
-PrepareOutput remains unimplemented.
+Query discovery/execution use the same captured-source boundary; output preparation
+uses that boundary under ADR 0017.
 
 Query contracts are selected through the named declarations in ADR 0008.
 PrepareRoot inspects input/result contracts without executing the query;
@@ -171,9 +167,8 @@ not this snapshot-checking/query effect. It derives `After`, generates bindings,
 compiles the proposed program and returns the target contract with its structurally
 checked result. The application materializes that result before candidate checking.
 RootExecution checks the selected snapshot; it does not invoke the evolution again.
-It delegates builds and execution of checking/query/output adapters to
-[GuestCompilation](0002-runtime.md), which supplies ProcessExecution for the resulting
-entry. Checking a loaded candidate compiles its checking code as needed;
+It delegates adapter builds to [GuestCompilation](0002-runtime.md) and invocation
+to GuestExecution. Their interpreters own process execution. Checking a loaded candidate compiles its checking code as needed;
 loading the saved value itself does not compile or execute code.
 Compiler flags and toolchain paths remain in the compilation interpreter.
 
@@ -184,14 +179,14 @@ calls. Their compilation diagnostics reject checking without erasing the saved
 candidate. Before contributes schema/decoding definitions, not its unrelated
 validators. ADR 0010 owns the evaluation/materialization boundary.
 
-The current root checker calls PrepareRoot before semantic/example evaluation.
+The root checker calls PrepareRoot before semantic/example evaluation.
 It compiles the validator and every registered query entry using generated typed
 adapters, including queries no example invokes, without executing those entries.
 Only entries selected by this root's declarations and their imports participate;
-unrelated source files, drafts and archives do not. When evolution/output/plugin
-entries are implemented, their proposal-level compilation must join this gate.
-This initial check returns compiler diagnostics in CheckResult.Rejected; the
-distinct proposal-level outcome belongs to the later evolution integration.
+unrelated source files, drafts and archives do not. Registered plugin methods, tools, closed recipes and output renderers also belong
+to this compilation gate; preparing them must not execute their effects.
+The evolution entry itself is compiled at the separate evaluation boundary in
+ADR 0010. Checking returns compiler diagnostics in CheckResult.Rejected.
 
 The source input need only be structurally readable; semantic errors in its
 validation report are information for review, not a prerequisite failure for
@@ -217,10 +212,10 @@ Output adapters/renderers and their query dependencies belong to the proposed
 code compilation gate, including outputs the evolution does not execute.
 
 Examples are current-root material, not only attachments to a pending evolution.
-Under the proposed [storage layout](0006-storage.md), they live in `root/examples/`;
+Under the [storage layout](0006-storage.md), they live in `root/examples/`;
 authoring edits the workspace's `target/examples/`. Materialization includes them
 in the candidate's CodeSnapshot, and publication installs that complete set.
-Both `checkCandidate` and `loadAcceptedRoot` obtain examples through RootStore's
+Both `checkCandidate` and `checkRootAt` obtain examples through RootStore's
 `ReadExamples` and execute them alongside semantic validation. Loading an accepted
 root therefore retains their meaning after the authoring workspace becomes an
 archive. Deleting or weakening an example is an ordinary visible root change.
@@ -269,21 +264,17 @@ checkCandidate
   => Candidate Root
   -> Eff es (CheckResult (Candidate (Validated Root)))
 
-loadAcceptedRoot
-  :: (RootStore :> es, RootExecution :> es, Failure :> es)
-  => KnowledgeBase -> GitRevision
-  -> Eff es (CheckResult (Validated Root))
 ```
 
-`checkRoot` is implemented as composition of RootStore and RootExecution, not a
+`checkRoot` is composition of RootStore and RootExecution, not a
 new effect or IO interpreter. It prepares code and query contracts, loads examples
 using the prepared descriptors, runs the validator and checks every example against
 that same prepared root.
 Errors reject; warnings remain attached to a returned Validated value. Runtime
 Failure propagates unchanged. A root with no examples still requires code and
 semantic checking. `checkCandidate` composes this checker, preserving context and
-report and wrapping only the returned Validated payload. Accepted-load composition
-remains unimplemented.
+report and wrapping only the returned Validated payload. `checkRootAt`, defined
+above, adds RootOpening to load the explicit accepted revision before checking.
 
 `checkExample` uses `ExecuteQuery`, not another effect. That operation resolves
 the named query in the supplied root, checks arguments and checks the response
@@ -328,12 +319,12 @@ not prove the declared explanation or evidence justified the change.
 Its `Rejected` result reports checking-code compilation, semantic and example
 failures, including incompatible example contracts. Editing the proposed code
 requires a fresh capture and evaluation before checking the new result.
-`loadAcceptedRoot` pins an explicit accepted revision
+`checkRootAt` pins an explicit accepted revision
 at the call site and admits failure of an unknown ordinary Git commit. A failing
 validator therefore does not manufacture `Validated Root` or erase its report.
-Callers obtain a local revision through RootStore's explicit `ResolveHead`, or
+Callers obtain a local revision through Git's explicit `ResolveRevision`, or
 use the revision already recorded in Before. For repair, use `LoadRootAt` instead
-of requiring a successful `loadAcceptedRoot`. The preview application retains
+of requiring a successful `checkRootAt`. The preview application retains
 the source's validation report alongside the evaluation/checking outcome;
 source errors do not earn validation
 and do not by themselves reject the repair. Actual runtime failure remains Failure.
@@ -341,10 +332,10 @@ and do not by themselves reject the repair. Actual runtime failure remains Failu
 Capture source/configuration, dependencies and supporting input files before entry
 evaluation. The workspace's `evolution` binding selects its helper and binds its
 arguments in source (ADR 0010), not in a separate invocation manifest.
-The entry may gather external inputs through declared capabilities;
-its pure transformation helpers receive those as values. Candidate checks use
+Tools and closed-recipe flows may gather inputs through their declared capabilities;
+the evolution entry itself is pure and receives captured inputs as values (ADR 0010). Candidate checks use
 only the materialized result and captured checking inputs, never fresh acquisition
-or rerunning the effectful entry. Time-dependent checks take a declared as-of
+or rerunning the evolution entry. Time-dependent checks take a declared as-of
 value; no hidden “now”. Checks apply to the actual evaluated
 result and the schema, validators, examples, dependencies and inputs used to
 produce/check it. Editing any of them or rebasing `Before` requires evaluation,

@@ -41,7 +41,7 @@ design work.
 
 ## 2. Accept the design through an ADR PR
 
-Draft PR `#501` adds proposed ADR 0008, **Authenticated identity boundary**,
+Draft PR `#501` proposes ADR 0008, **Authenticated identity boundary**,
 and uses `Refs #500`.
 
 The ADR decides:
@@ -52,7 +52,7 @@ The ADR decides:
 - how local and background operation identify their principal.
 
 Review debate happens on PR `#501`. The decision authority resolves material
-alternatives, the author updates the ADR, its status becomes `accepted`, and
+alternatives, the author updates the ADR to state the chosen design, and
 the reviewed PR merges. Issue `#500` remains open with the requirement's
 completion criteria; as work becomes active, each draft PR owns its own slice
 and checklist.
@@ -99,8 +99,8 @@ external routes on their existing adapter until later slices migrate them.
 ```
 
 The merge leaves main correct: the new boundary exists, tests cover it and
-unmigrated entry points still use an explicit transitional adapter documented
-by the ADR.
+unmigrated entry points still use an explicit transitional adapter. The PR records
+this implementation gap; the ADR continues to specify the desired boundary.
 
 ### PR #503 — prove one complete journey
 
@@ -127,11 +127,11 @@ The final PR:
 - verifies every externally reachable entry point;
 - adds the system-level regression matrix;
 - updates public and contributor documentation;
-- changes ADR 0008 from `accepted` to `implemented`;
 - uses `Closes #500`.
 
 The independent reviewer verifies the final repository against the Issue and
-ADR. The decision authority merges because the PR changes the ADR's lifecycle.
+ADR. The authorised maintainer merges after independent review; ADR metadata
+does not change to record implementation progress.
 
 ## 4. Create follow-up Issues only when work leaves the programme
 
@@ -152,7 +152,7 @@ Issue #500: authenticated identity requirement
   +-- PR #502: identity boundary                 Refs #500
   +-- PR #503: one vertical authenticated path   Refs #500
   +-- PR #504: remaining entry points            Refs #500
-  `-- PR #505: system proof + ADR implemented    Closes #500
+  `-- PR #505: system proof + documentation      Closes #500
 ```
 
 Authentication is one foundational feature. The PRs are implementation slices,
