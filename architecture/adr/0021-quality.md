@@ -1,14 +1,9 @@
 ---
 id: 0021
 title: 'Architecture is a tested deliverable before feature volume'
-status: proposed
-date: 2026-09-07
 ---
 # Architecture is a tested deliverable before feature volume
 
-Basis: deliberate implementation with precise, expressive boundaries is an
-owner requirement. Verification must cover real boundaries and useful outcomes, not only
-the existence of interfaces.
 
 ## Context
 

@@ -1,14 +1,9 @@
 ---
 id: 0003
 title: 'Effects express architectural dependencies'
-status: proposed
-date: 2026-09-08
 ---
 # Effects express architectural dependencies
 
-Basis: owner-established porcelain/plumbing separation and interpreter/application
-execution naming convention. Concrete filesystem operations and remaining
-implementation mechanics refine those boundaries rather than reopen them.
 
 ## Context
 

@@ -1,14 +1,9 @@
 ---
 id: 0026
 title: 'One repository, explicit package boundaries'
-status: proposed
-date: 2026-09-07
 ---
 # One repository, explicit package boundaries
 
-Basis: the monorepo layout, interpreter package names and shared-source boundaries
-are owner-agreed. Source-copy/build integration below specifies the initial
-implementation; full distribution mechanics remain to be proved.
 
 ## Context
 

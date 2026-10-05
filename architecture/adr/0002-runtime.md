@@ -1,14 +1,9 @@
 ---
 id: 0002
 title: 'Native Haskell kernel and bundled MicroHs execution'
-status: proposed
-date: 2026-09-09
 ---
 # Native Haskell kernel and bundled MicroHs execution
 
-Basis: owner-established distribution direction. Runtime integration and release
-gates remain outstanding; the scoped process interface below specifies native
-implementation mechanics, not a renewed toolchain choice.
 
 ## Context
 

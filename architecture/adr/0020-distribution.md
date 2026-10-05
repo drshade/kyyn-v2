@@ -1,13 +1,9 @@
 ---
 id: 0020
 title: 'One installation supplies the execution toolchain'
-status: proposed
-date: 2026-09-09
 ---
 # One installation supplies the execution toolchain
 
-Basis: owner-established scope: Linux, macOS and Windows; Windows via WSL is
-acceptable initially. Installation feasibility remains to be proved.
 
 ## Context
 

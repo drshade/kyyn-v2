@@ -1,15 +1,9 @@
 ---
 id: 0011
 title: 'Validation checks a complete candidate, not reality'
-status: accepted
-date: 2026-09-09
 ---
 # Validation checks a complete candidate, not reality
 
-Basis: complete-root checking and the distinction between Candidate and Validated
-follow owner direction. Saved examples, root checking and candidate checking are
-implemented, including selected-revision loading and the installed
-schema-changing proposal journey with inherited required examples.
 
 ## Context
 

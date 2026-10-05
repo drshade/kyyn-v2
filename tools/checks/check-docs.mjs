@@ -3,9 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const adrName = /^(\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
-const metadataKeys = ['id', 'title', 'status', 'date'];
-// Fixed imported baseline; see docs/PROJECT-PRACTICES.md, "Decisions and active work".
-const lastImportedAdrId = 26;
+const metadataKeys = ['id', 'title'];
 
 export function checkAdr(name, source) {
   const errors = [];
@@ -13,12 +11,7 @@ export function checkAdr(name, source) {
   if (!match || match[1] === '0000') return [`${name}: invalid ADR filename`];
   const id = match[1];
 
-  if (!source.startsWith('---\n')) {
-    if (Number(id) > lastImportedAdrId) return [`${name}: new ADR requires front matter`];
-    if (!source.startsWith(`# ${id} — `)) errors.push(`${name}: imported ADR heading must match its ID`);
-    if (!/^Status: \S.+$/m.test(source)) errors.push(`${name}: imported ADR needs its existing Status text`);
-    return errors;
-  }
+  if (!source.startsWith('---\n')) return [`${name}: ADR requires front matter`];
 
   const lines = source.split('\n');
   const end = lines.indexOf('---', 1);
@@ -34,14 +27,6 @@ export function checkAdr(name, source) {
   }
   for (const key of metadataKeys) if (!fields.get(key)) errors.push(`${name}: missing ${key}`);
   if (fields.get('id') !== id) errors.push(`${name}: metadata ID must match filename`);
-  if (!['proposed', 'accepted', 'implemented'].includes(fields.get('status'))) {
-    errors.push(`${name}: invalid lifecycle status`);
-  }
-  const date = fields.get('date') || '';
-  const parsed = new Date(`${date}T00:00:00Z`);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
-    errors.push(`${name}: invalid decision date`);
-  }
   const heading = lines.slice(end + 1).find(line => line.startsWith('# '));
   if (heading?.slice(2) !== fields.get('title')) errors.push(`${name}: title must match H1`);
   return errors;

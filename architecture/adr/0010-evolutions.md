@@ -1,14 +1,9 @@
 ---
 id: 0010
 title: 'One evolution mechanism for facts, schema and meaning'
-status: proposed
-date: 2026-09-07
 ---
 # One evolution mechanism for facts, schema and meaning
 
-Basis: one composable evolution mechanism, retained archives and distinct schema
-module names with friendly qualified aliases are owner-established. Capture,
-persistence and workspace operation signatures are proposed mechanics.
 
 ## Context
 

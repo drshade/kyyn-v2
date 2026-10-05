@@ -1,8 +1,6 @@
 ---
 id: 0000
 title: 'Decision title'
-status: proposed
-date: YYYY-MM-DD
 ---
 
 # Decision title
@@ -14,8 +12,10 @@ motivating Issue.
 
 ## Decision
 
-State the current proposed or accepted decision unambiguously. Intermix types and
-signatures where they clarify the boundary, rather than making a second specification.
+State the decided desired architecture unambiguously, independent of implementation
+progress. Intermix concrete types, signatures and effect rows with the prose that
+explains ownership and behavior. Name any deliberately omitted private details;
+link another ADR's contract rather than redefining it here.
 
 ## Consequences and verification
 

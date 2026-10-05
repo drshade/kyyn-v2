@@ -1,8 +1,10 @@
-# 0017 — Outputs bind snapshot renderers to typed plugin sinks
+---
+id: 0017
+title: 'Outputs bind snapshot renderers to typed plugin sinks'
+---
 
-Status: Accepted. Output implementation remains outstanding. Renderers compose
-queries over one selected root and produce the input of a configured plugin sink.
-Preparation and external mutation are separate operations.
+# Outputs bind snapshot renderers to typed plugin sinks
+
 
 ## Context
 

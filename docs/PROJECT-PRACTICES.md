@@ -107,11 +107,6 @@ results; a selected run still resolves, builds and tests its current inputs.
 
 - **ADR directory:** `architecture/adr/`; [file conventions](../architecture/adr/README.md)
   retain the literate types/signatures in the existing architecture.
-- **Imported baseline:** ADRs 0001–0026 retain their existing status/basis text.
-  Some combine owner-established choices with unresolved mechanics. Do not interpret
-  the adoption as making every proposal authoritative or every decision undecided.
-  A substantive revision reconciles the affected decision and adopts the standard
-  lifecycle metadata, without requiring a mass rewrite now.
 - **Unresolved outcomes:** GitHub Issues, not a second backlog in process documents
   or an issue for every package, effect or implementation step. Immediately active
   contained work may be owned directly by its PR as described in the SDLC examples.
@@ -129,6 +124,6 @@ results; a selected run still resolves, builds and tests its current inputs.
 
 ## Additional practices
 
-ADR 0024 owns the proposed field-experience method. Its scenarios apply when the
+ADR 0024 owns the field-experience method. Its scenarios apply when the
 relevant product paths exist; this adoption does not require a field run for every
 documentation change.

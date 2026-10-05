@@ -1,14 +1,10 @@
 ---
 id: 0018
 title: 'CLI, MCP and web share application operations'
-status: proposed
-date: 2026-09-11
 ---
 
 # CLI, MCP and web share application operations
 
-Basis: owner-established equal importance of Web and MCP, and owner-agreed CLI
-navigation and KB selection. Remaining transport mechanics are proposed.
 
 ## Context
 

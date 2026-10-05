@@ -1,8 +1,6 @@
 ---
 id: 0028
 title: 'Typed agentic tools and explicitly executable recipes'
-status: proposed
-date: 2026-10-01
 ---
 
 # Typed agentic tools and explicitly executable recipes

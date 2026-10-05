@@ -1,8 +1,10 @@
-# 0022 — Proprietary now; deliberate dependency and future licensing choices
+---
+id: 0022
+title: 'Proprietary now; deliberate dependency and future licensing choices'
+---
 
-Status: Owner-established decision. Kyyn-owned project code is proprietary,
-all rights reserved, for now. A future permissive open-source release is a possible
-direction, not a current license grant or release commitment.
+# Proprietary now; deliberate dependency and future licensing choices
+
 
 ## Context
 

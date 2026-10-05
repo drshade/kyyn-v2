@@ -1,14 +1,9 @@
 ---
 id: 0012
 title: 'Acceptance is one conditional step from local head'
-status: proposed
-date: 2026-09-07
 ---
 # Acceptance is one conditional step from local head
 
-Basis: the equality check against local Git head and the absence of remote
-coordination are owner-established guarantees. The publication sequence, result
-types and recovery diagnostics are proposed implementation mechanics.
 
 ## Context
 

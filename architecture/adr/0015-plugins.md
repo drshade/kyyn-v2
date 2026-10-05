@@ -1,20 +1,9 @@
 ---
 id: 0015
 title: 'Locally built plugins group source and sink connectors'
-status: proposed
-date: 2026-09-29
 ---
 # Locally built plugins group source and sink connectors
 
-Basis: **owner-established direction: uniform
-MicroHs runtime, source vendoring and local compilation, with related connectors
-and account setup in one plugin. One KB has many plugins; each plugin can have
-many named connector instances, including multiple instances of the same type.
-Explicit source updates without plugin version
-pinning or SDK/runtime compatibility machinery are the first-release model.**
-
-Owner decision (2026-09-14): installation targets an evolution; the accepted root
-is changed only by accepting that evolution.
 
 ## Context
 

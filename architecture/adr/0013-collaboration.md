@@ -1,6 +1,10 @@
-# 0013 — Users and agents resolve upstream Git conflicts
+---
+id: 0013
+title: 'Users and agents resolve upstream Git conflicts'
+---
 
-Status: Proposed. Basis: owner-established separation of local acceptance and upstream work.
+# Users and agents resolve upstream Git conflicts
+
 
 ## Context
 

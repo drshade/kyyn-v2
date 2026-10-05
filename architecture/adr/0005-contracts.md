@@ -1,16 +1,9 @@
 ---
 id: 0005
 title: 'One authoritative contract and mechanical projections'
-status: proposed
-date: 2026-09-08
 ---
 # One authoritative contract and mechanical projections
 
-Basis: schema authority was accepted by the owner on 5 September 2026: authored
-Haskell types, following the bounded MicroHs experiment. Pure Haskell metadata
-alongside the schema and reuse of existing numeric libraries are owner-selected.
-Interface mechanics and production integration remain under review; this status
-does not reopen those established choices.
 
 ## Context
 

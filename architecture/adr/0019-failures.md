@@ -1,6 +1,10 @@
-# 0019 — Typed failures, explicit cancellation and modest operational state
+---
+id: 0019
+title: 'Typed failures, explicit cancellation and modest operational state'
+---
 
-Status: Proposed. No general durable workflow engine is intended.
+# Typed failures, explicit cancellation and modest operational state
+
 
 ## Context
 

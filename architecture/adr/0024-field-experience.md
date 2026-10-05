@@ -1,7 +1,10 @@
-# 0024 — Fresh-agent scenarios and two-part field reports
+---
+id: 0024
+title: 'Fresh-agent scenarios and two-part field reports'
+---
 
-Status: Proposed. Basis: owner-established importance of agent experience and
-the useful field-report practice in kyyn-v1.
+# Fresh-agent scenarios and two-part field reports
+
 
 ## Context
 

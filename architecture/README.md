@@ -5,10 +5,10 @@ Kyyn is the rebuild; **kyyn-v1** is the legacy implementation. Start with
 [boundary map](boundaries.md). Use [the guide](../docs/guide.md) for implemented
 CLI workflows and [project practices](../docs/PROJECT-PRACTICES.md) for development.
 
-Each ADR owns its decision and lifecycle status. The index is navigation, not an
-implementation checklist. Read signatures as architectural sketches unless the
-record identifies an implemented interface; production source and tests establish
-what runs. Significant changes follow [the SDLC](../docs/SDLC.md).
+Each ADR owns a decided desired-state contract, whether already implemented or
+still to be built. The index is navigation, not an implementation checklist.
+Source and tests establish actual behavior; issues track gaps. Significant changes
+and reconciliation follow [the SDLC](../docs/SDLC.md#5-significant-decisions-are-adrs).
 
 ## Decisions
 
@@ -22,7 +22,7 @@ what runs. Significant changes follow [the SDLC](../docs/SDLC.md).
 | [0006](adr/0006-storage.md) | Dhall materialized facts and runtime loading |
 | [0007](adr/0007-wire.md) | Library-backed, restricted JSON runtime protocol |
 | [0008](adr/0008-authoring.md) | Typed authoring; generated bindings hide plumbing |
-| [0009](adr/0009-capabilities.md) | Typed capability rows, illustrative program roles |
+| [0009](adr/0009-capabilities.md) | Typed capability rows and program roles |
 | [0010](adr/0010-evolutions.md) | One typed evolution for data and schema |
 | [0011](adr/0011-validation.md) | Full-root validity, explicit diagnostics and examples |
 | [0012](adr/0012-acceptance.md) | One conditional acceptance step from local head |
@@ -46,8 +46,9 @@ what runs. Significant changes follow [the SDLC](../docs/SDLC.md).
 ## Reading and changing decisions
 
 The ADRs interleave prose and type signatures to explain ownership and permitted
-operations. Host and guest examples are distinct contexts; sketches may omit
-representations and routine error fields. They are not files to copy verbatim.
+operations. Host and guest declarations are distinct contexts. Signatures specify
+the architectural boundary; explicitly omitted private representations or routine
+detail leave implementation freedom without making that boundary optional.
 
 Start with 0001/0003/0004 for the model, 0005–0009 for authoring and execution,
 0010–0013 for change/acceptance, and 0014–0018 for integrations and surfaces.

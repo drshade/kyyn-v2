@@ -1,20 +1,9 @@
 ---
 id: 0009
 title: 'Typed capability rows describe program effects'
-status: proposed
-date: 2026-09-25
 ---
 # Typed capability rows describe program effects
 
-Basis: the typed Program, snapshot-read encoding and generated plugin acquisition/
-captured-read adapters pass the pinned MicroHs/GHC proofs. Native dispatch connects
-filesystem and snapshot reads to evidence publication. Source registration and
-configured instances, CLI acquisition and captured-read KB-tool composition are
-implemented. Judgement extends the tool row under ADR 0027.
-Installed network connectors receive HTTP, plugin secret access and cancellable
-waits. Explicit connector login additionally receives user instructions on stderr.
-Registration checks the selected context and login signature; compilation and
-discovery do not execute login. File and captured-read contexts remain separate.
 
 ## Context
 

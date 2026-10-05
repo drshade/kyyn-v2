@@ -1,15 +1,9 @@
 ---
 id: 0016
 title: 'Local secrets, typed configuration and named connector bindings'
-status: proposed
-date: 2026-09-25
 ---
 # Local secrets, typed configuration and named connector bindings
 
-Basis: **owner-established decision: a
-plugin-independent, checkout-local per-KB key/value secret store, readable through a host
-capability. Trusted plugins receive secret values and own authentication logic.
-No kernel Connection entity or automatic credential injection.**
 
 ## Context
 

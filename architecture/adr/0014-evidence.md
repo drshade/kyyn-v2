@@ -1,18 +1,9 @@
 ---
 id: 0014
 title: 'Latest evidence and recipe-scoped declared curation'
-status: proposed
-date: 2026-09-25
 ---
 # Latest evidence and recipe-scoped declared curation
 
-Basis: latest-only evidence, recipe-scoped acknowledgements and first-class typed
-recipe evolution data are implemented. Recipes persist separately from the root
-manifest and use the ordinary evolution editing and review surfaces.
-Typed fetch options are implemented through discovery, acquisition and history.
-The Microsoft Graph calendar connector implements the full-listing/changeKey model
-below. Authentication, pagination and scoped comparison have deterministic
-GHC/MicroHs proofs; live provider behavior remains an opt-in verification.
 
 ## Context
 

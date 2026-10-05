@@ -1,13 +1,9 @@
 ---
 id: 0008
 title: 'Domain authors write typed functions, not adapters'
-status: accepted
-date: 2026-09-11
 ---
 # Domain authors write typed functions, not adapters
 
-Basis: typed authoring is accepted; the KB-tool entry-point addition is under
-design review. Full authoring surfaces remain under implementation.
 
 ## Context
 

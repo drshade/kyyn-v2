@@ -1,7 +1,10 @@
-# 0025 — Agent-driven setup and per-KB execution
+---
+id: 0025
+title: 'Agent-driven setup and per-KB execution'
+---
 
-Status: Proposed. Basis: owner direction on simple per-KB operation, regular-user
-accessibility, agent-driven installation and headless automation.
+# Agent-driven setup and per-KB execution
+
 
 ## Context
 

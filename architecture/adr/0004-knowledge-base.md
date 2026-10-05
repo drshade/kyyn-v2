@@ -1,15 +1,9 @@
 ---
 id: 0004
 title: 'Distinguish the KB, its root and its evolutions'
-status: accepted
-date: 2026-09-07
 ---
 # Distinguish the KB, its root and its evolutions
 
-Basis: the KB/root/evolution distinctions and Candidate/Validated wrapper
-conventions are owner-established. Concrete snapshot representations and store
-interfaces are proposed implementation mechanics; the metadata does not reopen
-those established decisions.
 
 ## Context
 

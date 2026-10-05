@@ -1,6 +1,10 @@
-# 0001 — Kyyn is a runtime and design workbench
+---
+id: 0001
+title: 'Kyyn is a runtime and design workbench'
+---
 
-Status: Proposed. Basis: owner-established direction; [scope](../scope.md).
+# Kyyn is a runtime and design workbench
+
 
 ## Context
 

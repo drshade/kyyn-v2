@@ -1,14 +1,9 @@
 ---
 id: 0006
 title: 'Materialized facts and runtime data loading'
-status: accepted
-date: 2026-09-07
 ---
 # Materialized facts and runtime data loading
 
-Basis: Dhall fact storage and materialized current facts are owner-selected.
-The file layout, snapshot representation and store signatures specify proposed
-implementation mechanics, not a renewed choice of storage format.
 
 ## Context
 

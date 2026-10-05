@@ -1,6 +1,10 @@
-# 0023 — Two first-class interfaces with a shared design and review loop
+---
+id: 0023
+title: 'Two first-class interfaces with a shared design and review loop'
+---
 
-Status: Proposed. Basis: explicit owner feedback on equal Web/MCP importance.
+# Two first-class interfaces with a shared design and review loop
+
 
 ## Context
 
