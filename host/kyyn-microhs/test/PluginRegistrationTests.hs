@@ -98,7 +98,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   api <- inspectApi runtime (map (repo </>) ["shared/kyyn-types/src","guest/kyyn-sdk/src"]) ["Kyyn.Plugin"] >>= right
   forM_ ["name","fetch","validateConfig","login"] $ \field ->
     assert ("Missing reflected connector field documentation: " ++ field)
-      (not (null [() | ApiModule _ symbols <- api, ApiSymbol name ValueNamespace origin _ _ (Just doc) <- symbols,
+      (not (null [() | ApiModule _ symbols _ <- api, ApiSymbol name ValueNamespace origin _ _ (Just doc) <- symbols,
         name == field, "SourceConnector" `isInfixOf` origin, not (null doc)]))
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope runtime)

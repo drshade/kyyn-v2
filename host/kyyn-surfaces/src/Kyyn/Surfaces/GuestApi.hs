@@ -19,7 +19,7 @@ withOrigins :: [ApiEntry] -> Response -> Response
 withOrigins entries (Response outcome (Object fields) messages diagnostics)
   | outcome == Succeeded = Response outcome (Object enriched) displayed diagnostics
   where
-    origins = [(name,label origin) | ApiEntry origin (ApiModule name _) <- entries]
+    origins = [(name,label origin) | ApiEntry origin (ApiModule name _ _) <- entries]
     label SdkOrigin = "sdk" :: String
     label GeneratedOrigin = "generated"
     label KbOrigin = "kb"
@@ -35,7 +35,7 @@ availableCatalogue :: Bool -> [ApiModule] -> Response -> Response
 availableCatalogue listing modules response@(Response outcome _ _ diagnostics)
   | outcome == Succeeded = response
   | any missingSymbol diagnostics = response
-  | otherwise = case withOrigins (map (ApiEntry SdkOrigin) modules) (modulesResult (Right [name | ApiModule name _ <- modules])) of
+  | otherwise = case withOrigins (map (ApiEntry SdkOrigin) modules) (modulesResult (Right [name | ApiModule name _ _ <- modules])) of
       Response _ value messages _ -> Response (if listing then Succeeded else outcome) value messages
         (Diagnostic (if listing then Warning else Error) "guest.bindings-unavailable"
           "KB API inspection failed; the installed SDK catalogue is shown. Fix the reported problem and retry."
@@ -61,15 +61,17 @@ modulesResult :: Either [Diagnostic] [String] -> Response
 modulesResult = either refusal (\modules -> success (object ["modules" .= modules]) modules)
 
 moduleResult :: Either [Diagnostic] ApiModule -> Response
-moduleResult = either refusal (\(ApiModule name symbols) -> result name symbols)
+moduleResult = either refusal (\(ApiModule name symbols instances) -> result name symbols instances)
 
 symbolResult :: Either [Diagnostic] (String,[ApiSymbol]) -> Response
-symbolResult = either refusal (uncurry result)
+symbolResult = either refusal (\(name,symbols) -> result name symbols [])
 
-result :: String -> [ApiSymbol] -> Response
-result name symbols = success (object ["module" .= name, "symbols" .= map symbolJson symbols])
-  (("module " ++ name) : concatMap symbolText ordered)
+result :: String -> [ApiSymbol] -> [String] -> Response
+result name symbols instances = success (object
+  ["module" .= name, "symbols" .= map symbolJson symbols, "instances" .= instances])
+  ((("module " ++ name) : concatMap symbolText ordered) ++ instanceText)
   where
+    instanceText = if null instances then [] else ["", "-- Explicit instances declared here"] ++ instances
     ordered | "Kyyn.Workspace." `isPrefixOf` name = let (local, exports) = partition definedHere symbols in local ++ exports
             | otherwise = symbols
     definedHere (ApiSymbol _ _ origin _ _ _) = (name ++ ".") `isPrefixOf` origin

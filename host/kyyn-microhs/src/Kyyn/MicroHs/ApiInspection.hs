@@ -50,7 +50,8 @@ inspectApi compiler sources selected = withTimingIO "api-inspection" (intercalat
           owners = [owner | origin <- origins, Just owner <- [find (\n -> (n ++ ".") `isPrefixOf` origin) names]]
       declarations <- mapM (readDeclarations flags)
         [(unIdent (tModuleName m), slocFile (slocIdent (tModuleName m)))
-        | m <- cached, "Kyyn." `isPrefixOf` unIdent (tModuleName m) || unIdent (tModuleName m) `elem` owners]
+        | m <- cached, "Kyyn." `isPrefixOf` unIdent (tModuleName m)
+          || unIdent (tModuleName m) `elem` (selected ++ owners)]
       result <- evaluate (force (sequence declarations >>= \table -> mapM (project table) modules))
       pure (either (Left . ApiSourceError) Right result)
     compile (modules,cache) selectedModule = do
@@ -73,7 +74,9 @@ project declarations (selected,checked,fixities) = do
   types <- mapM typeSymbol (tTypeExps checked)
   values <- mapM valueSymbol [v | v@(ValueExport name _) <- tValueExps checked ++ concat
     [associated | TypeExport _ _ associated <- tTypeExps checked], sourceName (unIdent name)]
-  pure (ApiModule selected (sortOn key (nubBy (\a b -> key a == key b) (types ++ values))))
+  instances <- mapM (fmap (("instance " ++) . presentType) . resolveType selected fixities)
+    [header | (defs,_) <- maybe [] pure (lookup selected declarations), Instance header _ _ <- defs]
+  pure (ApiModule selected (sortOn key (nubBy (\a b -> key a == key b) (types ++ values))) instances)
   where
     key (ApiSymbol n ns origin _ _ _) = (n,ns,origin)
     exportedConstructors = [conIdent c | ValueExport _ (Entry (ECon c) _) <-

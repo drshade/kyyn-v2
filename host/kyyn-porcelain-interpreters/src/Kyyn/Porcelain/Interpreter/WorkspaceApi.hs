@@ -45,9 +45,9 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
           InspectApiSymbol symbol -> take 1 (sortOn (negate . length)
             [name | name <- names, (name ++ ".") `isPrefixOf` symbol]) ++ selected
     inspected <- if null requested then pure [] else ExceptT (inspectApiModules sources requested)
-    let entry origin name = ApiEntry origin (case [m | m@(ApiModule actual _) <- inspected, actual == name] of
+    let entry origin name = ApiEntry origin (case [m | m@(ApiModule actual _ _) <- inspected, actual == name] of
           [m] -> m
-          _ -> ApiModule name [])
+          _ -> ApiModule name [] [])
     pure (map (entry GeneratedOrigin) names ++ map (entry KbOrigin) authored)
   InspectWorkspaceApi workspace -> runExceptT $ do
     PreparedEvolution (EvolutionContext _ _ (Before revision _) _)

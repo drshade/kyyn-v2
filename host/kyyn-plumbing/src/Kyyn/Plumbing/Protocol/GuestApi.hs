@@ -14,7 +14,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decod
 
 encodeCatalogue :: DhallHandling :> es => [ApiModule] -> Eff es (Either [Diagnostic] ByteString)
 encodeCatalogue modules = fmap (fmap Text.encodeUtf8) $ encodeValue catalogueShape
-  (object ["version" .= ("1" :: String), "modules" .= map moduleValue modules])
+  (object ["version" .= ("2" :: String), "modules" .= map moduleValue modules])
 
 decodeCatalogue :: DhallHandling :> es => ByteString -> Eff es (Either [Diagnostic] [ApiModule])
 decodeCatalogue bytes = case Text.decodeUtf8' bytes of
@@ -26,13 +26,14 @@ decodeCatalogue bytes = case Text.decodeUtf8' bytes of
 
 catalogueShape :: Shape
 catalogueShape = Record [("version",Scalar IntegerScalar), ("modules",List (Record
-  [("name",text), ("symbols",List (Record
+  [("name",text), ("instances",List text), ("symbols",List (Record
     [("name",text), ("namespace",Union [("Type",Nothing),("Value",Nothing)]), ("definedAs",text), ("checkedSignature",text),
      ("declaration",Optional text), ("documentation",Optional text)]))]))]
   where text = Scalar TextScalar
 
 moduleValue :: ApiModule -> Value
-moduleValue (ApiModule name symbols) = object ["name" .= name, "symbols" .= map symbolValue symbols]
+moduleValue (ApiModule name symbols instances) = object
+  ["name" .= name, "symbols" .= map symbolValue symbols, "instances" .= instances]
 
 symbolValue :: ApiSymbol -> Value
 symbolValue (ApiSymbol name namespace origin signature declaration documentation) = object
@@ -51,9 +52,9 @@ namespaceName ValueNamespace = "Value"
 parseCatalogue :: Value -> Parser [ApiModule]
 parseCatalogue = withObject "guest catalogue" $ \fields -> do
   version <- fields .: "version"
-  unless (version == ("1" :: String)) (fail "Unsupported guest catalogue format; reinstall Kyyn")
+  unless (version == ("2" :: String)) (fail "Unsupported guest catalogue format; reinstall Kyyn")
   fields .: "modules" >>= mapM (withObject "module" $ \entry ->
-    ApiModule <$> entry .: "name" <*> (entry .: "symbols" >>= mapM parseSymbol))
+    ApiModule <$> entry .: "name" <*> (entry .: "symbols" >>= mapM parseSymbol) <*> entry .: "instances")
 
 parseSymbol :: Value -> Parser ApiSymbol
 parseSymbol = withObject "symbol" $ \fields -> do

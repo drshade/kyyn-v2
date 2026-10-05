@@ -19,20 +19,21 @@ main = do
         ApiSymbol "Item" ValueNamespace "Example.Item" "String -> Item" Nothing Nothing,
         ApiSymbol "make" ValueNamespace "Original.make" "String -> Item" (Just "make :: String -> Item")
           (Just "Create an item: café.\n  Example indentation.")]
-      catalogue = [ApiModule "Example" symbols]
+      instances = ["instance Eq a => Eq (Item a)"]
+      catalogue = [ApiModule "Example" symbols instances]
       scope = either error id (directoryScope "/test/runtime")
       bytes = either (error . show) id (runPureEff (runDhallHandling (encodeCatalogue catalogue)))
       readApi stored = runPureEff . runDhallHandling . onlyCatalogue scope stored . runGuestApi scope
   assert "real Dhall round trip" (runPureEff (runDhallHandling (decodeCatalogue bytes)) == Right catalogue)
   assert "list modules" (readApi (Just bytes) Api.listModules == Right ["Example"])
-  assert "module projection" (readApi (Just bytes) (Api.findModule "Example") == Right (ApiModule "Example" symbols))
+  assert "module projection" (readApi (Just bytes) (Api.findModule "Example") == Right (ApiModule "Example" symbols instances))
   assert "type/value namespaces" (readApi (Just bytes) (Api.findSymbol "Example.Item") == Right ("Example",take 2 symbols))
   assert "unknown module" (refused (readApi (Just bytes) (Api.findModule "Missing")))
   assert "unknown symbol" (refused (readApi (Just bytes) (Api.findSymbol "make")))
   assert "missing catalogue" (refused (readApi Nothing Api.readCatalogue))
   assert "malformed catalogue" (refused (readApi (Just "not dhall") Api.readCatalogue))
   assert "wrong catalogue shape" (refused (readApi (Just "{ version = +1, modules = [1] }") Api.readCatalogue))
-  assert "unsupported version" (refused (readApi (Just "{ version = +2, modules = [] : List { name : Text, symbols : List { name : Text, namespace : < Type | Value >, definedAs : Text, checkedSignature : Text, declaration : Optional Text, documentation : Optional Text } } }") Api.readCatalogue))
+  assert "unsupported version" (refused (readApi (Just "{ version = +3, modules = [] : List { name : Text, instances : List Text, symbols : List { name : Text, namespace : < Type | Value >, definedAs : Text, checkedSignature : Text, declaration : Optional Text, documentation : Optional Text } } }") Api.readCatalogue))
   putStrLn "Guest catalogue Dhall round trips, read-only discovery and refusal tests passed."
 
 onlyCatalogue :: DirectoryScope -> Maybe Bytes.ByteString -> Eff (FileSystem : es) a -> Eff es a

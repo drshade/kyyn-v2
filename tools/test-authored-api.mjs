@@ -26,7 +26,8 @@ try {
   const draft = cli(['evolution', 'new', 'helpers']).result;
   const source = path.join(draft.path, 'target/src');
   fs.mkdirSync(path.join(source, 'Helpers'));
-  const helpers = `module Helpers (Greeting(..), greet) where
+  const helpers = `module Helpers (Greeting(..), Priority(..), greet) where
+data Priority = Low | High
 -- | A greeting for a person.
 data Greeting = Greeting { message :: String }
 -- | Build a friendly greeting without running any host capability.
@@ -36,6 +37,24 @@ privatePrefix :: String
 privatePrefix = "Hello "
 `;
   fs.writeFileSync(path.join(source, 'Helpers.hs'), helpers);
+  fs.writeFileSync(path.join(source, 'Instances.hs'), `{-# LANGUAGE CPP #-}
+module Instances () where
+import qualified Helpers as H
+data Box a = Box a
+instance Eq a => Eq (Box a) where
+  Box a == Box b = a == b
+#ifdef __MHS__
+instance Show H.Greeting where
+  show (H.Greeting message) = message
+#else
+instance Show H.Priority where
+  show _ = "wrong compiler branch"
+#endif
+`);
+  fs.writeFileSync(path.join(source, 'ContractUser.hs'), `module ContractUser () where
+import Kyyn.Contracts.Helpers.Priority ()
+import Instances ()
+`);
   fs.writeFileSync(path.join(source, 'Helpers/Nested.hs'), `module Helpers.Nested where
 import Helpers
 -- | Greet twice.
@@ -57,6 +76,25 @@ twice name = [greet name, greet name]
   assert(shown.symbols.some(s => s.name === 'Greeting' && s.namespace === 'type'));
   assert(!shown.symbols.some(s => s.name === 'privatePrefix'));
   assert.match(shown.symbols.find(s => s.name === 'greet').documentation, /friendly greeting/);
+  const instances = cli(['guest', 'module', 'show', 'Instances', ...selection]).result;
+  assert.deepEqual(instances.symbols, [], 'instance-only module has no named exports');
+  assert.deepEqual(instances.instances, ['instance Eq a => Eq (Box a)', 'instance Show H.Greeting']);
+  assert.deepEqual(cli(['guest', 'module', 'show', 'ContractUser', ...selection]).result.instances, [],
+    'imported instances are not claimed as local declarations');
+  const contracts = cli(['guest', 'module', 'show', 'Kyyn.Contracts.Helpers.Priority', ...selection]).result;
+  assert(contracts.instances.some(s => /instance .*Contract .*Priority/.test(s)), JSON.stringify(contracts));
+  assert(contracts.instances.some(s => /instance .*Options .*Priority/.test(s)), JSON.stringify(contracts));
+  const humanContracts = cli(['guest', 'module', 'show', 'Kyyn.Contracts.Helpers.Priority', ...selection], 0, false);
+  assert.match(humanContracts, /-- Explicit instances declared here/);
+  assert.match(humanContracts, /instance .*Options .*Priority/);
+  fs.writeFileSync(path.join(source, 'BadInstance.hs'), `module BadInstance () where
+data Bad = Bad
+instance Show Bad where
+  show _ = True
+`);
+  assert(cli(['guest', 'module', 'show', 'BadInstance', ...selection], 1).diagnostics
+    .some(d => d.code === 'guest.api-compiler-rejected'));
+  fs.unlinkSync(path.join(source, 'BadInstance.hs'));
   const symbol = cli(['guest', 'symbol', 'show', 'Helpers.Nested.twice', ...selection]).result;
   assert.equal(symbol.module, 'Helpers.Nested');
   assert.equal(symbol.origin, 'kb');
@@ -80,7 +118,7 @@ twice name = [greet name, greet name]
   assert.deepEqual(cli(['guest', 'module', 'show', 'Helpers']).result, accepted);
   git('restore', 'root/src/Helpers.hs');
   assert.equal(git('status', '--porcelain'), status);
-  console.log('Authored API discovery: exported types/signatures/docs, private hiding, origins, selected checking, nested symbols and accepted/draft source passed.');
+  console.log('Authored API discovery: exports/docs, checked explicit instance headers, generated Options/Contract, private hiding, origins, selected checking and accepted/draft source passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
