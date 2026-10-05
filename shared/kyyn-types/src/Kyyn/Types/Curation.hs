@@ -3,7 +3,7 @@ module Kyyn.Types.Curation
 
 import Kyyn.Types.Evidence (EvidenceId)
 
--- | The name of a recipe declared in the KB manifest.
+-- | The name of an identified recipe in the selected root.
 newtype RecipeId = RecipeId String deriving (Eq, Show)
 
 -- | A connector instance and the particular fetch being acknowledged.

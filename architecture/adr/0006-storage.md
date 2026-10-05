@@ -92,8 +92,10 @@ data RootStore :: Effect where
     :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
   ReadRootRecipes
     :: FileTree -> RootStore m (Either [Diagnostic] [Fact Recipe])
+  CheckRootValue
+    :: RootContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)
   LoadRootValueForChecking
-    :: Root -> RootStore m CheckedValue
+    :: Root -> RootStore m (Either [Diagnostic] CheckedValue)
   ListFacts
     :: Validated Root -> CollectionId -> PageRequest
     -> RootStore m (Page FactId)

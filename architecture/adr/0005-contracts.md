@@ -205,18 +205,12 @@ data SchemaInspection :: Effect where
     -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
 
 inspectSchema
-  :: (SchemaInspection :> es, Failure :> es)
+  :: SchemaInspection :> es
   => SchemaSource
   -> Eff es (Either [Diagnostic] InspectedSchema)
 
-data UncheckedValue  -- private structural value from the selected parser
-data CheckedValue    -- private pair of contract identity and checked contents
-
-checkValue
-  :: CheckedContract -> UncheckedValue
-  -> Either [Diagnostic] CheckedValue
-
-valueContract :: CheckedValue -> ContractId
+data CheckedValue = CheckedValue ContractId Value
+-- Value is the host's structural JSON representation, not a guest domain type.
 ```
 
 `inspectSchema` reports unsupported/ill-typed source as diagnostics. Runtime or
@@ -226,8 +220,11 @@ declarations; it does not erase them into wire shapes alone. `loadedSources` lis
 captured files loaded by the compiler while inspecting that type. It excludes the
 installed compiler library and metadata-evaluation-only imports. Build preparation
 uses this closure to select old schema dependencies; it is not another component
-of contract identity or a hand-maintained dependency registry. A `CheckedValue` proves
-only conformity to its recorded contract, not KB semantic validity. Whenever a
+of contract identity or a hand-maintained dependency registry. A `CheckedValue` records
+structural conformity to its contract, not KB semantic validity. The wrapper is
+ordinary data, not a sealed certificate. Shape-directed checking belongs to
+DhallHandling, with root-level identity/layout checking through RootStore's
+`CheckRootValue` in ADR 0006. Whenever a
 different expected contract is supplied, compare identities or perform an explicit
 checked conversion; the wrapper alone does not establish that they match.
 
