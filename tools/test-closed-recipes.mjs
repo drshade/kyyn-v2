@@ -117,12 +117,12 @@ reconcile = A.note (T.pack "Read λ notes") (T.pack "Inspect captured notes") (A
   }
   const targetScope = ['--evolution', changed.id];
   const recipeApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.FactEdits', ...targetScope]).result;
-  assert.match(recipeApi.symbols.find(s => s.name === 'proposalEvolution').checkedSignature, /RootV3.Root/);
-  assert.doesNotMatch(recipeApi.symbols.find(s => s.name === 'proposalEvolution').checkedSignature, /RootV2.Root/);
+  assert.match(recipeApi.symbols.find(s => s.name === 'proposalEvolution').declaration, /RootV3.Root/);
+  assert.doesNotMatch(recipeApi.symbols.find(s => s.name === 'proposalEvolution').declaration, /RootV2.Root/);
   assert(cli(['guest', 'module', 'show', 'Tasks', ...targetScope]).result.symbols.some(s => s.name === 'reconcile'));
   const evolutionApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Evolution', ...targetScope]).result;
-  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /Before.Root/);
-  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /After.Root/);
+  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /RootV2.Root/);
+  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /RootV3.Root/);
   fs.writeFileSync(path.join(kb, 'root/src/Validate.hs'), 'not valid Haskell');
   fs.writeFileSync(path.join(kb, 'root/facts/root.dhall'), 'False');
   for (const args of [['add', 'root/src/Validate.hs', 'root/facts/root.dhall'], ['commit', '-m', 'Broken validation fixture']]) {

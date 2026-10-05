@@ -48,6 +48,12 @@ references through the installed CLI: missing exports and wrong signatures are
 rejected; a correctly typed flow is compiled but never invoked during checking.
 It accepts and inspects an open-to-closed recipe change and its archive without
 a compiler. This is preparation evidence, not recipe execution or provider use.
+It also discovers closed-flow and generated FactEdits APIs in accepted, draft
+and schema-changing contexts. Tree/DOT/Mermaid description checks use a composed
+flow with a failing action to prove it is not invoked; corrupt accepted facts
+and validator code do not block description. Human output is raw renderer text.
+The roots suite separately records one-shot description execution, rejecting
+malformed/request-shaped output and nonzero guest exits without action handlers.
 It belongs to full installed integration, not the fast gate.
 
 `cabal test model-tools --test-show-details=direct`, with `KYYN_TEST_ROOT` and
