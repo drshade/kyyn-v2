@@ -80,7 +80,7 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   assert.equal(facts.context.evolution, null);
   assert.match(cli(['root', 'fact', 'list', 'tasks'], 0, false), /some\/♥ id — Review λ/);
   assert.deepEqual(cli(['root', 'fact', 'show', 'tasks', 'some/♥ id']).result.value,
-    { title: 'Review λ', parent: null });
+    { title: { tag: 'Some', value: 'Review λ' }, parent: { tag: 'None' } });
   assert.equal(cli(['root', 'fact', 'show', 'tasks', '']).result.id, '');
   assert.equal(cli(['root', 'fact', 'show', 'tasks', 'missing'], 1).diagnostics[0].code, 'fact.unknown');
   assert.equal(cli(['root', 'fact', 'list', 'missing'], 1).diagnostics[0].code, 'fact.collection-unknown');

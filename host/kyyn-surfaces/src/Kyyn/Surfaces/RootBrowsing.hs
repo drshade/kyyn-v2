@@ -82,11 +82,13 @@ factListResult root (CollectionContract collection _ payload _) facts = success
     titleFields = [field | FieldRole record field role <- assignments, record `elem` names,
       RoleDecl name _ Title <- declarations, name == role]
     title (Object fields) = case titleFields of
-      [field] -> case Keys.lookup (Key.fromString field) fields of
-        Just (String value) -> Just (Text.unpack value)
-        _ -> Nothing
+      [field] -> Keys.lookup (Key.fromString field) fields >>= titleText
       _ -> Nothing
     title _ = Nothing
+    titleText (String value) = Just (Text.unpack value)
+    titleText (Object fields)
+      | Keys.lookup "tag" fields == Just (String "Some") = Keys.lookup "value" fields >>= titleText
+    titleText _ = Nothing
 
 factResult :: String -> Fact Value -> Text.Text -> Response
 factResult collection (Fact (FactId identity) value) rendered = success
