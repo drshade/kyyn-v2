@@ -123,7 +123,7 @@ reconcile = A.note (T.pack "Read λ notes") (T.pack "Inspect captured notes") (A
   const evolutionApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Evolution', ...targetScope]).result;
   assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /RootV2.Root/);
   assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /RootV3.Root/);
-  fs.writeFileSync(path.join(kb, 'root/src/Validate.hs'), 'not valid Haskell');
+  fs.writeFileSync(path.join(kb, 'root/src/Validate.hs'), 'module Validate where\nvalidate :: Bool\nvalidate = "wrong type"\n');
   fs.writeFileSync(path.join(kb, 'root/facts/root.dhall'), 'False');
   for (const args of [['add', 'root/src/Validate.hs', 'root/facts/root.dhall'], ['commit', '-m', 'Broken validation fixture']]) {
     const result = spawnSync('git', ['-C', kb, ...args], { env, encoding: 'utf8' });
