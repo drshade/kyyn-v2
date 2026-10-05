@@ -10,12 +10,12 @@ executable kyyn-v2
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
     Kyyn.Composition.Tools Kyyn.Composition.Recipes Kyyn.Composition.Taps
-    Kyyn.Composition.Secrets Kyyn.Composition.Timings
+    Kyyn.Composition.Secrets Kyyn.Composition.Timings Kyyn.Composition.RootBrowsing
     Kyyn.Build
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror -threaded -rtsopts
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-porcelain, kyyn-porcelain-interpreters,
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters,
     kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-microhs, kyyn-surfaces,
     effectful-core ==2.6.1.0, directory, filepath, time, transformers, aeson, bytestring, text,
     optparse-applicative ==0.19.0.0

@@ -30,6 +30,19 @@ main = do
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
+  succeeds ["root","schema","list"] (Invocation selected Human (Root (RootSchema (ListSchemas Nothing))))
+  succeeds ["root","schema","show","Todos.Root","--evolution","abc123"]
+    (Invocation selected Human (Root (RootSchema (ShowSchema "Todos.Root" (Just identity)))))
+  succeeds ["root","collection","list","--evolution","abc123"]
+    (Invocation selected Human (Root (RootCollection (ListCollections (Just identity)))))
+  succeeds ["root","collection","show","todos"]
+    (Invocation selected Human (Root (RootCollection (ShowCollection "todos" Nothing))))
+  succeeds ["root","fact","list","todos"] (Invocation selected Human (Root (RootFact (ListFacts "todos"))))
+  succeeds ["root","fact","show","todos","some/♥ id"]
+    (Invocation selected Human (Root (RootFact (ShowFact "todos" "some/♥ id"))))
+  forM_ [["root","schema","show"], ["root","collection","show"], ["root","fact","list"],
+    ["root","fact","show","todos"], ["root","fact","list","todos","--evolution","abc123"],
+    ["root","fact","show","todos","one","--evolution","abc123"]] refuses
   let key = either error id (secretName "JEV_TOKEN")
   succeeds ["secret","set","JEV_TOKEN"] (Invocation selected Human (Secret (SetSecret key Nothing)))
   succeeds ["secret","set","JEV_TOKEN","fixture-secret"]

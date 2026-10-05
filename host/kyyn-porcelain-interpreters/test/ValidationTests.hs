@@ -17,6 +17,7 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.Query
 import Kyyn.Domain.Root
 import Kyyn.Types.SchemaMetadata
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -55,6 +56,13 @@ validationTests contract facts = do
   case valid of
     Passed checked (ValidationReport diagnostics) -> do
       unless (validatedValue checked == root && diagnostics == [semanticWarning]) (fail "Validation changed the snapshot/report")
+      case storage (readCollection checked "todos") of
+        Right members -> unless ([identity | Fact (FactId identity) _ <- members] == ["a", "A/../🌍"])
+          (fail ("Collection read changed IDs or ordering: " ++ show members))
+        Left errors -> fail (show errors)
+      case storage (readCollection checked "missing") of
+        Left [Diagnostic Error "fact.collection-unknown" _ _] -> pure ()
+        other -> fail ("Missing collection was not refused: " ++ show other)
       unless (fmap (filter ((/= "recipes.dhall") . relativeName . fst) . files) (storage (exportRootFiles checked)) == Right (files (tree (files facts ++ files encoded))))
         (fail "Root export dropped saved examples or changed their bytes")
     _ -> fail (show valid)

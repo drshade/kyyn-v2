@@ -18,6 +18,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Curation (checkRecipes, emptyCurationRegister, curationEntries)
 import qualified Kyyn.Types.KnowledgeBase as Value
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister, decodeRegister)
 import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes, decodeRecipes)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
@@ -76,6 +77,19 @@ runRootStore = interpret $ \_ -> \case
     pure (CheckedValue (contractId contract) value)
   MaterializeRoot contract code checked -> runExceptT (materialize contract code checked)
   LoadRootValueForChecking root -> runExceptT (loadValue root)
+  ReadCollection checked name -> runExceptT $ do
+    let root@(Root selected _ _ _ _) = validatedValue checked
+    collection <- case [c | c@(CollectionContract actual _ _ _) <- collectionContracts (rootSchema selected), actual == name] of
+      [c] -> pure c
+      _ -> throwE [errorDiagnostic "fact.collection-unknown" ("Unknown collection: " ++ name)]
+    CheckedValue _ value <- loadValue root
+    let CollectionContract _ rootField _ _ = collection
+    members <- record value >>= field rootField >>= list
+    forM members $ \member -> do
+      fields <- record member
+      identity <- field "id" fields >>= text
+      payload <- field "value" fields
+      pure (Fact (FactId (Text.unpack identity)) payload)
   ReadExamples (Root _ _ code _ _) descriptors -> runExceptT (loadExamples code descriptors)
   EncodeExample example -> runExceptT (saveExample example)
   ExportRootFiles checked -> runExceptT $ do

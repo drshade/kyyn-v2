@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootStore
   ( RootStore(..), readRootDefinition, checkRootValue, materializeRoot, loadRootValueForChecking
-  , readExamples, encodeExample, exportRootFiles, readRootCuration, readRootRecipes, rootLocation ) where
+  , readExamples, encodeExample, exportRootFiles, readRootCuration, readRootRecipes, readCollection, rootLocation ) where
 
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -29,6 +29,7 @@ data RootStore :: Effect where
   CheckRootValue :: RootContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)
   MaterializeRoot :: RootContract -> FileTree -> Value.KnowledgeBase CheckedValue -> RootStore m (Either [Diagnostic] Root)
   LoadRootValueForChecking :: Root -> RootStore m (Either [Diagnostic] CheckedValue)
+  ReadCollection :: Validated Root -> String -> RootStore m (Either [Diagnostic] [Fact Value])
   ReadExamples :: Root -> [QueryDescriptor] -> RootStore m (Either [Diagnostic] [Example])
   EncodeExample :: Example -> RootStore m (Either [Diagnostic] FileTree)
   ExportRootFiles :: Validated Root -> RootStore m (Either [Diagnostic] FileTree)
@@ -52,6 +53,9 @@ materializeRoot contract code = send . MaterializeRoot contract code
 
 loadRootValueForChecking :: RootStore :> es => Root -> Eff es (Either [Diagnostic] CheckedValue)
 loadRootValueForChecking = send . LoadRootValueForChecking
+
+readCollection :: RootStore :> es => Validated Root -> String -> Eff es (Either [Diagnostic] [Fact Value])
+readCollection root = send . ReadCollection root
 
 readExamples :: RootStore :> es => Root -> [QueryDescriptor] -> Eff es (Either [Diagnostic] [Example])
 readExamples root = send . ReadExamples root

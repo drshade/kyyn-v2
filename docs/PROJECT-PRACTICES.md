@@ -19,6 +19,13 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`node tools/test-root-browsing.mjs INSTALLED_EXECUTABLE` checks source-only
+schema/collection browsing in a draft with a broken validator, reachable types,
+roles/references, exact fact IDs and optional titles, unknown-item refusals and
+accepted Git selection. After accepting a populated root it checks read-only
+fact browsing and refusal when accepted facts are corrupt. Fact commands reject
+`--evolution`. This is part of full installed integration, not the fast check.
+
 `node tools/test-recipe-run.mjs INSTALLED_EXECUTABLE` executes a closed recipe
 against two local-file instances, saves a frozen Draft, checks it repeatedly and
 accepts it through the ordinary workflow. It checks recipe/scope/ID refusals,
