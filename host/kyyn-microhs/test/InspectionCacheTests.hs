@@ -89,7 +89,8 @@ main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
   createDirectory key
   unreadable <- cached sources (Right value)
   assert "unreadable entry propagates operational failure" (case unreadable of Left _ -> True; _ -> False)
-  let api = [ApiModule "A" [ApiSymbol "value" ValueNamespace "A.value" "String" (Just "value :: String") (Just "Helpful documentation")]]
+  let api = [ApiModule "A" [ApiSymbol "value" ValueNamespace "A.value" "String" (Just "value :: String") (Just "Helpful documentation")]
+        ["instance Show Item"]]
       apiInspect outcome = run $ cachedInspection cache "api-inspection" "A" "A.Root flags" sources
         encodeCatalogue decodeCatalogue (pure outcome)
   apiFirst <- apiInspect (Right api)

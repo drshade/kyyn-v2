@@ -24,7 +24,9 @@ symbol and documentation discovery alongside SDK/generated bindings. It checks
 that listing names and inspecting a selected helper tolerate a type-invalid
 unrelated helper, while inspecting that helper fails. It verifies private-export
 hiding, nested module names, origin labels, accepted Git versus draft selection
-and read-only behavior. It belongs to full installed integration.
+and read-only behavior. It also checks explicit instance headers in an export-empty
+module (constraints, qualified names and CPP), generated Contract/Options headers,
+and rejection of an ill-typed instance. It belongs to full installed integration.
 
 `node tools/test-root-browsing.mjs INSTALLED_EXECUTABLE` checks source-only
 schema/collection browsing in a draft with a broken validator, reachable types,

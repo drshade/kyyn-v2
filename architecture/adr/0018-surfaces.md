@@ -234,6 +234,12 @@ all catalogue entries are compiler-checked. Human function/constructor signature
 have no `value` prefix; kind summaries retain `type`. Display generated accessor
 origins as module-qualified field names, preserving exact compiler identities in JSON.
 
+Module inspection also shows explicit instance headers declared in that module,
+using its compiler-preprocessed source after successful type-checking. Keep these
+in a separate `instances` list, not the named-export namespaces. This makes generated
+`Contract` and `Options` instances discoverable without exposing dictionary internals.
+It is not an inventory of imported or derived instances.
+
 Documentation uses a small source convention: a `-- |` block immediately above
 a signature or type declaration, continued by adjacent `--` lines. Attach it to
 the defining symbol and retain it through reexports. Store the text with the

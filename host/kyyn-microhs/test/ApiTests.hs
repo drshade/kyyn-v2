@@ -31,7 +31,7 @@ main = do
       inspect paths names = inspectApi compiler paths names >>= either (fail . show) pure
   modules <- inspect sources public
   qualified <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.QualifiedFixture"]
-  let qualifiedDeclarations = [(n,d) | ApiModule _ symbols <- qualified, ApiSymbol n _ _ _ (Just d) _ <- symbols]
+  let qualifiedDeclarations = [(n,d) | ApiModule _ symbols _ <- qualified, ApiSymbol n _ _ _ (Just d) _ <- symbols]
   forM_ [("before", "before :: Edit Before.Root ()"), ("after", "after :: Edit After.Root ()"),
     ("convert", "convert :: Before.Root -> After.Root"), ("Both", "type Both = (Before.Root, [After.Root])")] $ \(name,expected) ->
       assert ("Authored qualification lost: " ++ name ++ " " ++ show qualifiedDeclarations) (lookup name qualifiedDeclarations == Just expected)
@@ -42,19 +42,19 @@ main = do
         "import qualified Kyyn.EndpointBefore as Before", "import qualified Kyyn.EndpointAfter as After"]
         ++ map snd qualifiedDeclarations ++ ["before = pure ()", "after = pure ()", "convert Before.Root = After.Root"]))
     presented <- inspect (temporary : (repo </> "host/kyyn-microhs/test/api-docs") : sources) ["Kyyn.QualifiedWitness"]
-    let checkedSignatures ms = [(n,ns,alphaSignature t) | ApiModule _ symbols <- ms, ApiSymbol n ns _ t _ _ <- symbols]
+    let checkedSignatures ms = [(n,ns,alphaSignature t) | ApiModule _ symbols _ <- ms, ApiSymbol n ns _ t _ _ <- symbols]
     assert "qualified declarations recompile without changing types" (checkedSignatures qualified == checkedSignatures presented)
-  let symbolsIn m = concat [symbols | ApiModule name symbols <- modules, name == m]
+  let symbolsIn m = concat [symbols | ApiModule name symbols _ <- modules, name == m]
       matches m n ns = [s | s@(ApiSymbol name space _ _ _ _) <- symbolsIn m, name == n, space == ns]
-  assert "SDK module inventory" (map (\(ApiModule name _) -> name) modules == public)
+  assert "SDK module inventory" (map (\(ApiModule name _ _) -> name) modules == public)
   implicit <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.ImplicitExports"]
-  let implicitNames = [n | ApiModule _ symbols <- implicit, ApiSymbol n _ _ _ _ _ <- symbols]
+  let implicitNames = [n | ApiModule _ symbols _ <- implicit, ApiSymbol n _ _ _ _ _ <- symbols]
   assert "implicit exports hide instance machinery" (all (\n -> not ("inst$" `isInfixOf` n || "@" `isInfixOf` n)) implicitNames)
   assert "source operators and apostrophes remain discoverable" (all (`elem` implicitNames) ["$", "named'", "Public"])
   cpp <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.CppFixture"]
   assert "CPP signature and documentation use compiler branch" (case cpp of
     [ApiModule _ [ApiSymbol "selected" ValueNamespace _ _ (Just "selected :: String")
-      (Just "The MicroHs branch, including its source documentation.")]] -> True
+      (Just "The MicroHs branch, including its source documentation.")] []] -> True
     _ -> False)
   assert "private function leaked" (null (matches "Kyyn.Edit" "unique" ValueNamespace))
   assert "abstract constructor leaked" (null (matches "Kyyn.Edit" "Collection" ValueNamespace))
@@ -62,7 +62,7 @@ main = do
   assert "constructor namespace lost" (length (matches "Kyyn.Schema" "Fact" ValueNamespace) == 1
     && length (matches "Kyyn.Schema" "Fact" TypeNamespace) == 1)
   assert "record selector missing" (not (null (matches "Kyyn.Evolution" "explanation" ValueNamespace)))
-  assert "runtime exports hidden" (null [n | ApiModule _ symbols <- modules,
+  assert "runtime exports hidden" (null [n | ApiModule _ symbols _ <- modules,
     ApiSymbol n _ _ _ _ _ <- symbols, n `elem`
       ["Pure", "Request", "EvidenceRead", "FileRead", "SnapshotRead", "ReadAccess", "CheckResult", "checkReport", "runLocally",
        "request", "interpretProgram", "evaluateEvolution", "EvolutionOutput"]])
@@ -83,7 +83,7 @@ main = do
       assert ("Missing documentation on authored SDK declaration: " ++ show s)
         (case s of ApiSymbol _ _ _ _ _ (Just text) -> not (null text); _ -> False)
   docs <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DocFixture","Kyyn.DocReexport"]
-  let docsIn m = [(n,ns,d) | ApiModule moduleName symbols <- docs, moduleName == m,
+  let docsIn m = [(n,ns,d) | ApiModule moduleName symbols _ <- docs, moduleName == m,
                             ApiSymbol n ns _ _ _ d <- symbols]
       documentationFor n ns = [d | (name,namespace,d) <- docsIn "Kyyn.DocFixture", name == n, namespace == ns]
   assert "reexport documentation" (docsIn "Kyyn.DocFixture" == docsIn "Kyyn.DocReexport")
@@ -117,7 +117,7 @@ main = do
   assert "missing module is a compiler diagnostic" (case missingResult of
     Right (Left [Diagnostic _ "guest.api-compiler-rejected" _ _]) -> True
     _ -> False)
-  let declarationIn m n = case [d | ApiModule name symbols <- dataModules, name == m,
+  let declarationIn m n = case [d | ApiModule name symbols _ <- dataModules, name == m,
           ApiSymbol name' TypeNamespace _ _ (Just d) _ <- symbols, name' == n] of
         [d] -> d
         _ -> error ("Missing data declaration: " ++ m ++ "." ++ n)
@@ -140,7 +140,7 @@ main = do
       (["{-# LANGUAGE GADTs, ExistentialQuantification #-}", "module Kyyn.PresentedData where"]
       ++ map originalDeclaration ["Choice", "Record", "Wrapped", "Partial", "HiddenFields", "Expr"]))
     presented <- inspect [temporary] ["Kyyn.PresentedData"]
-    let constructors name modules' = [(n,alphaSignature t) | ApiModule m symbols <- modules', m == name,
+    let constructors name modules' = [(n,alphaSignature t) | ApiModule m symbols _ <- modules', m == name,
           ApiSymbol n ValueNamespace _ t _ _ <- symbols,
           n `elem` ["Empty", "Full", "Record", "Wrapped", "Visible", "HiddenFields", "Number", "Apply"]]
     assert "presented constructors recompile with unchanged types"
@@ -188,7 +188,7 @@ main = do
       rewritten <- either fail pure (rewrite selected (lines original))
       length rewritten `seq` writeFile path (unlines rewritten)
     roundTrip <- inspect (temporary:sources) public
-    forM_ (zip modules roundTrip) $ \(ApiModule m before, ApiModule _ after) -> do
+    forM_ (zip modules roundTrip) $ \(ApiModule m before _, ApiModule _ after _) -> do
       let signatures symbols = [(n,ns,origin,t) | ApiSymbol n ns origin t _ _ <- symbols]
       assert ("Displayed declarations changed checked exports of " ++ m)
         (signatures before == signatures after)

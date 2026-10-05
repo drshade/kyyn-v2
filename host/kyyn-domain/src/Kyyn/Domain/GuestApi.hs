@@ -12,7 +12,8 @@ data WorkspaceCatalogue = WorkspaceCatalogue
   { workspace :: EvolutionWorkspace, beforeRevision :: GitRevision, modules :: [ApiModule] }
   deriving (Eq, Show)
 
-data ApiModule = ApiModule String [ApiSymbol]
+-- Explicit instance headers declared in this module, excluding imported/derived instances.
+data ApiModule = ApiModule String [ApiSymbol] [String]
   deriving (Eq, Show, Generic, NFData)
 
 data ApiSelection = ListApiModules | InspectApiModule String | InspectApiSymbol String

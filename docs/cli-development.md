@@ -305,11 +305,18 @@ declarations show public constructors and record fields. Abstract types show onl
 their header; selective reexports show only their exported constructors. If a
 constructor's record labels are not all exported, its arguments appear positionally
 and any public selectors remain separate entries. These are API summaries, not
-an instance inventory or a source-file dump. Constructor and record-accessor
+a source-file dump. Constructor and record-accessor
 signatures are derived from these declarations, retaining aliases such as `String`.
 GADT signatures specialize root-parameter equalities; parameter names follow the
 source where unambiguous. Constructors with refined result types use `where`
 syntax; existential-only constructors may use equivalent `forall` syntax.
+
+Module output also lists explicit instance headers declared there, separately from
+exported symbols (`instances` in JSON). For example,
+`guest module show Kyyn.Contracts.Todos.Priority` shows the generated `Contract`
+and `Options` instances for that enum. Headers come from the same preprocessed
+source that passed type-checking; method bodies, imported instances and `deriving`
+are not included. An empty list does not mean the type has no usable instances.
 
 Entries marked `-- [compiler signature]` use the compiler's expanded type or kind instead;
 all entries are compiler-checked. JSON distinguishes
@@ -335,7 +342,7 @@ Origins are labelled `sdk`, `generated` or `kb` (JSON `origins` for a list and
 `origin` for a module/symbol). KB module names follow their paths under `root/src`,
 for example `Helpers/Email.hs` defines `Helpers.Email`. Listing does not type-check
 every helper body; showing a module or symbol checks that module and its dependencies.
-Only exports are shown. Accepted-root discovery reads the selected Git revision,
+Private definitions are omitted. Accepted-root discovery reads the selected Git revision,
 not uncommitted working-tree edits; use a draft to explore edits before acceptance.
 
 Add `--evolution ID` to explore generated bindings and authored target modules for a draft:

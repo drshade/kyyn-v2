@@ -139,8 +139,8 @@ executeGuest selection@(Cli.Selection path _ runtimeOverride) workspace request 
           hasKb <- doesFileExist (path </> "root/kb.dhall")
           let fixed = case request of
                 Cli.ListGuestModules -> False
-                Cli.ShowGuestModule name -> any (\(ApiModule moduleName _) -> name == moduleName) modules
-                Cli.ShowGuestSymbol name -> any (\(ApiModule moduleName _) -> isPrefixOf (moduleName ++ ".") name) modules
+                Cli.ShowGuestModule name -> any (\(ApiModule moduleName _ _) -> name == moduleName) modules
+                Cli.ShowGuestSymbol name -> any (\(ApiModule moduleName _ _) -> isPrefixOf (moduleName ++ ".") name) modules
               static = runEff (catalogueResult request (map (ApiEntry SdkOrigin) modules))
           if fixed || (not hasKb && workspace == Nothing) then static else do
             configured <- configure selection

@@ -49,7 +49,7 @@ workspaceApiTests = do
       sdk = tree [("Sdk.hs","installed sdk")]
       snapshot beforeCopy targetCode change = WorkspaceSnapshot
         (WorkspaceManifest revision "Test" "" Draft) beforeCopy targetCode change (tree [])
-      expected = map (\name -> ApiModule name [])
+      expected = map (\name -> ApiModule name [] [])
         ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After"]
       perform :: WorkspaceSnapshot -> IO (Either [Diagnostic] WorkspaceCatalogue, [String])
       perform material = do
@@ -60,7 +60,7 @@ workspaceApiTests = do
           . interpret (\_ (Api.InspectApiModules source names) -> do
               record "api"
               let entries = [(relativeName p,b) | (p,b) <- files source]
-              unless (names == map (\(ApiModule name _) -> name) expected
+              unless (names == map (\(ApiModule name _ _) -> name) expected
                 && lookup "Before.hs" entries == Just "before schema"
                 && lookup "Evolution.hs" entries == Nothing && lookup "Unused.hs" entries == Nothing
                 && lookup "Sdk.hs" entries == Just "installed sdk")

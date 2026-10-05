@@ -4,7 +4,7 @@ module Main (main) where
 import Kyyn.Domain.Curation (emptyCurationRegister, RecipeId(..), PendingEvidence(..))
 import Kyyn.Surfaces.Recipes (pendingResult)
 import Control.Monad (unless)
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), object, (.=), toJSON)
 import Data.List (isInfixOf, elemIndex)
 import Effectful (Eff, (:>), runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
@@ -145,7 +145,7 @@ main = do
   assert "Missing candidate invoked validation" (missingCalls == ["candidate"] && exitStatus missing == 1)
   let reexport = Api.ApiSymbol "append" Api.ValueNamespace "Kyyn.Edit.append" "a" (Just "append :: a") Nothing
       local = Api.ApiSymbol "edit" Api.ValueNamespace "Kyyn.Workspace.Evolution.edit" "b" (Just "edit :: b") (Just "Edit this root.")
-      apiModule = Api.ApiModule "Kyyn.Workspace.Evolution" [reexport,local]
+      apiModule = Api.ApiModule "Kyyn.Workspace.Evolution" [reexport,local] ["instance Options Priority"]
       catalogue = Api.WorkspaceCatalogue workspace revision [apiModule]
       rendered = GuestApi.moduleResult (Right apiModule)
       unavailable = refusal [errorDiagnostic "plugin.config" "Repair connector configuration"]
@@ -163,9 +163,14 @@ main = do
   assert "Unknown module misreported as broken bindings" (GuestApi.availableCatalogue False [apiModule] unknown == unknown)
   assert "Successful discovery changed" (GuestApi.availableCatalogue True [apiModule] rendered == rendered)
   case rendered of
-    Response _ _ messages _ ->
+    Response _ payload messages _ -> do
       assert "Workspace local declarations precede reexports"
         (elemIndex "edit :: b" messages < elemIndex "append :: a" messages)
+      assert "Instance headers rendered separately from exports"
+        ("-- Explicit instances declared here" `elem` messages && "instance Options Priority" `elem` messages)
+      assert "Instance headers in JSON" (case payload of
+        Object fields -> KeyMap.lookup "instances" fields == Just (toJSON (["instance Options Priority"] :: [String]))
+        _ -> False)
   case GuestApi.workspaceResult catalogue (GuestApi.modulesResult (Right ["Kyyn.Workspace.Evolution"])) of
     Response _ payload messages _ -> do
       assert "Discovery context lost KB, workspace or declared revision"
