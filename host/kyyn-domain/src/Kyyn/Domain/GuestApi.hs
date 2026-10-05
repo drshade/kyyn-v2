@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Kyyn.Domain.GuestApi
-  ( ApiModule(..), ApiSymbol(..), Namespace(..), WorkspaceCatalogue(..) ) where
+  ( ApiModule(..), ApiSymbol(..), Namespace(..), WorkspaceCatalogue(..)
+  , ApiSelection(..), ApiOrigin(..), ApiEntry(..) ) where
 
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
@@ -13,6 +14,11 @@ data WorkspaceCatalogue = WorkspaceCatalogue
 
 data ApiModule = ApiModule String [ApiSymbol]
   deriving (Eq, Show, Generic, NFData)
+
+data ApiSelection = ListApiModules | InspectApiModule String | InspectApiSymbol String
+  deriving (Eq, Show)
+data ApiOrigin = SdkOrigin | GeneratedOrigin | KbOrigin deriving (Eq, Show)
+data ApiEntry = ApiEntry ApiOrigin ApiModule deriving (Eq, Show)
 
 data Namespace = TypeNamespace | ValueNamespace
   deriving (Eq, Ord, Show, Generic, NFData)

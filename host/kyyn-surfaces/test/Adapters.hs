@@ -152,7 +152,8 @@ main = do
   case GuestApi.availableCatalogue True [apiModule] unavailable of
     Response outcome payload _ diagnostics -> do
       assert "Unavailable bindings erased the fixed catalogue" (outcome == Succeeded &&
-        payload == object ["modules" .= (["Kyyn.Workspace.Evolution"] :: [String])])
+        payload == object ["modules" .= (["Kyyn.Workspace.Evolution"] :: [String]),
+          "origins" .= object ["Kyyn.Workspace.Evolution" .= ("sdk" :: String)]])
       assert "Partial catalogue lacks warning" (case diagnostics of
         Diagnostic Warning "guest.bindings-unavailable" _ _ : Diagnostic Warning "plugin.config" _ _ : [] -> True
         _ -> False)

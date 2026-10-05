@@ -114,7 +114,7 @@ invocation = Invocation <$> selectionParser
       (group "init" "Initialize an empty knowledge base and commit its validated root" (pure (Kb InitKb))))
     <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
     <> group "tap" "Manage KB-local plugin catalogues" (Tap <$> tapParser)
-    <> group "guest" "Explore the guest SDK and workspace bindings" guestParser
+    <> group "guest" "Explore the guest SDK, KB modules and generated bindings" guestParser
     <> group "plugin" "Manage plugins and connector configuration" (Plugin <$> hsubparser
       (group "install" "Install or replace a plugin from source HEAD in an evolution target"
         (pluginInstallParser)

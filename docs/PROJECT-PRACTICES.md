@@ -19,6 +19,13 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
+`node tools/test-authored-api.mjs INSTALLED_EXECUTABLE` checks authored module,
+symbol and documentation discovery alongside SDK/generated bindings. It checks
+that listing names and inspecting a selected helper tolerate a type-invalid
+unrelated helper, while inspecting that helper fails. It verifies private-export
+hiding, nested module names, origin labels, accepted Git versus draft selection
+and read-only behavior. It belongs to full installed integration.
+
 `node tools/test-root-browsing.mjs INSTALLED_EXECUTABLE` checks source-only
 schema/collection browsing in a draft with a broken validator, reachable types,
 roles/references, exact fact IDs and optional titles, unknown-item refusals and
