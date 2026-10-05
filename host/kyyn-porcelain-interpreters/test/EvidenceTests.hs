@@ -1,3 +1,7 @@
+-- Real Dhall/filesystem plus recording document persistence: latest-only payloads,
+-- ordered deltas, isolation, CAS publication, cursors, producer changes, clear/refetch
+-- and corrupt-data refusal. No plugin invocation or compiler.
+
 {-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main (main) where
 

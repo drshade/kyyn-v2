@@ -1,3 +1,6 @@
+-- Captured model config, generated instances and tool dispatch through real MicroHs
+-- pipes with a recording provider: nested records, retry and refusal. No live model.
+
 {-# LANGUAGE DataKinds, GADTs, OverloadedStrings, TypeApplications #-}
 module Main (main) where
 

@@ -1,3 +1,7 @@
+-- Generate Agentic contracts from checked types and compile under GHC/MicroHs.
+-- Covers records/sums/optionals/FactIds/exact integers, malformed retry and unsupported
+-- shapes; no production provider, CLI acceptance or credential use.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

@@ -1,3 +1,6 @@
+// Measure cold/warm compilation on a disposable KB and verify artifact reuse.
+// --timings checks inspection hits and stderr-only timing events; no live provider.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

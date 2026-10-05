@@ -1,3 +1,7 @@
+-- GHC/MicroHs pipe tests for typed acquisition and captured reads, plus native
+-- broker/store fixtures: delta publication, failure preservation and snapshot reuse.
+-- --network-only selects HTTP/secrets/wait/login frames; no live provider.
+
 {-# LANGUAGE OverloadedStrings, GADTs #-}
 module PluginFetchTests (main, compileBoth, brokerWith, Scenario(..)) where
 

@@ -1,3 +1,6 @@
+-- Jev provider mapping with explicit local credentials, sanitized errors and
+-- cancellation via a recording transport; no live requests.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 

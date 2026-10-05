@@ -1,3 +1,7 @@
+-- Source-install interpreter with refusal-recording handlers and real Git/Dhall/
+-- filesystem: local/file URLs, nested KBs, origins, replacement and unchanged HEAD.
+-- No guest compiler.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 

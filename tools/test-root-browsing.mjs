@@ -1,3 +1,7 @@
+// Installed schema/collection/fact browsing: reachable types, roles/references,
+// IDs/titles, Dhall payloads, accepted Git selection and draft source inspection.
+// Checks corrupt-fact refusal and rejects --evolution on fact commands.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

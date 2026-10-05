@@ -1,3 +1,6 @@
+-- Native plugin package capture and source-structure/path/refusal checks using
+-- disposable files/repositories; no guest invocation.
+
 {-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main (main) where
 

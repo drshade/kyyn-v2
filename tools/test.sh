@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Fast native/docs checks by default; --full adds real guest and installed journeys.
+# Suite coverage/setup belongs in test headers, not the process document.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -24,7 +26,6 @@ node --check tools/checks/check-docs.mjs
 node --check tools/checks/check-docs.test.mjs
 node --check tools/test-local-install.mjs
 node --check tools/test-guest-api.mjs
-node --check architecture/evidence/json-probe/check.mjs
 node tools/checks/check-docs.test.mjs
 node tools/checks/check-docs.mjs
 node tools/checks/check-toolchain-pin.mjs

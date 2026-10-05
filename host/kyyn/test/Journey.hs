@@ -1,3 +1,7 @@
+-- Installed real-Git/Dhall/MicroHs journey: schema-changing evaluation and acceptance
+-- in separate processes, source/fact deletion, archive review without cache, and
+-- inherited required examples. Needs KYYN_TEST_ROOT and KYYN_TEST_CLI.
+
 module Main (main) where
 
 import Control.Monad (forM_, unless, void)

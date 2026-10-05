@@ -1,3 +1,7 @@
+-- OpenAI/Anthropic native adapters with recording provider factories: explicit
+-- SecretStore keys, missing/empty refusal before environment fallback, sanitized
+-- failures and cancellation. No network or guest protocol test.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 

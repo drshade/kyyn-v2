@@ -1,3 +1,6 @@
+-- Recording one-shot recipe projection: tree/DOT/Mermaid, typed wrapper, malformed
+-- or request-shaped replies and guest failures; no model/evidence/secret broker.
+
 {-# LANGUAGE GADTs, LambdaCase, OverloadedStrings #-}
 module RecipeInspectionTests (recipeInspectionTests) where
 

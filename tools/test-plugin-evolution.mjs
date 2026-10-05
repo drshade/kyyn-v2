@@ -1,3 +1,6 @@
+// Install into an evolution target, reject stale candidates/accepted workspaces,
+// check/accept source and preserve inherited plugins through another evolution.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

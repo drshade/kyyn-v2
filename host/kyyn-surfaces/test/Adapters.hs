@@ -1,3 +1,7 @@
+-- Pure recording surface handlers: snapshot selection, validation-before-read,
+-- candidate checking/refusals, JSON/human output, diagnostics and exit outcomes.
+-- No real compiler or publication.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 

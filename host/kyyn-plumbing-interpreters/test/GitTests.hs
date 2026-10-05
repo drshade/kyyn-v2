@@ -1,3 +1,6 @@
+-- Real disposable Git repositories: discovery, revision-stable filtered capture,
+-- commit construction, CAS publication and scoped checkout/recovery. No guest compiler.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

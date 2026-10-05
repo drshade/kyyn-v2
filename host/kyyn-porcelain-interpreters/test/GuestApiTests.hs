@@ -1,3 +1,6 @@
+-- Read-only catalogue capability and real Dhall round trips, namespace/instance
+-- preservation and missing/malformed/version refusal; no compiler.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main where
 

@@ -30,7 +30,7 @@ The intended layout is:
 kyyn-v2/
 ├── README.md
 ├── cabal.project
-├── architecture/                      ADRs, principles and walkthroughs
+├── architecture/                      ADRs, principles and field templates
 │
 ├── shared/
 │   └── kyyn-types/                    Pure vocabulary compiled by GHC and MicroHs

@@ -1,3 +1,6 @@
+// Copied executable/catalogue-only SDK discovery without KB, Git, source or compiler.
+// Checks public exports, docs, human/JSON signatures and missing/malformed refusals.
+
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';

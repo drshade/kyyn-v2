@@ -1,3 +1,7 @@
+-- Actual Graph adapters under GHC/MicroHs with recording providers: auth modes,
+-- polling, rotation, throttling, pagination and scoped/full acquisition failures.
+-- No live credentials, consent or mailbox coverage.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

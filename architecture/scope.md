@@ -1,10 +1,8 @@
 # Outcomes that determine the architecture
 
-Read-only review on 5 September 2026: Exco `ca0a44a`, BEE `c91b2a7f`, kyyn-v1
-`8b31a3c`. No provider calls, financial verification, eligibility assessment, or
-publication was performed. The owner reports both KBs useful while still in
-progress. A repository's old report scripts are not proof that its current KB
-generated those reports.
+This is product scope, not a claim that every surface is implemented. The
+[current guide](../docs/guide.md) describes usable CLI workflows; ADRs own the
+architecture and issues own implementation work.
 
 ## Two representative systems, not two built-in verticals
 
@@ -14,26 +12,15 @@ related views; surface unresolved anomalies; refresh inputs and preview/publish
 dashboards. Shared business calculations should live in ordinary KB modules,
 not be independently reimplemented in each renderer.
 
-Evidence: schema (`exco-sales-reporting/kb-1/schema/src/model.rs`),
-professional-services calculations (`exco-sales-reporting/kb-1/renderers/ps-detail-ron-v1/src/model.rs`),
-publication runbook (`exco-sales-reporting/docs/publications.md`).
-Related report sources contain differing overlap caveats. That motivates visible
-assumptions and shared computations, not a claim that a particular number is wrong.
-
 **BEE:** group observer copies into one meeting occurrence; distinguish invitations
 from attendance, and attendance from learning time; represent teaching segments,
 trainer identity, evidence basis and uncertainty independently; update people and
 sessions together; apply alternative reporting policies without recuration.
 
-Evidence: schema (`bee-skills-development/kb/schema/src/model.rs`),
-warning/error validation (`bee-skills-development/kb/schema/src/validate.rs`),
-occurrence helper (`bee-skills-development/kb/agent-tools/training/tier-0-graph-org-meetings/src/lib.rs`),
-coherent staging helper (`bee-skills-development/kb/agent-tools/training/stage-training-session/src/lib.rs`).
-The last currently accepts nested `record_ron` strings. Eliminating that plumbing
-from the authored domain operation is a concrete design target.
-
-Anomalies and curation/audit records are legitimate KB models. They are not
-mandatory kernel lifecycles. Warnings can coexist with useful accepted knowledge.
+These requirements came from the owner's Exco sales-reporting and BEE
+skills-development KBs. They motivate shared calculations, useful evidence access
+and coherent changes, not domain logic hardcoded in the kernel. Anomalies and
+curation records are legitimate KB models, not mandatory kernel lifecycles.
 
 ## Required journeys and architectural coverage
 
@@ -75,16 +62,9 @@ Changing its weighting policy changes the candidate report; the accepted report
 is unchanged until acceptance. Missing is not silently zero and decimal values
 survive the host/guest/browser boundaries exactly.
 
-Use reporting for the first product slice. Include a payload-union anomaly kind,
-and evolve forecast records to add optional confidence alongside a policy change.
-Exercise add/edit/delete and both same-schema and schema-changing composition.
-A small evolution workspace prepared by the agent is evaluated through ordinary
-MCP/Web/CLI operations. Its fixed entry inspects open anomalies using
-multiple typed snapshot requests, with a later request depending on an earlier
-result, then returns the proposed root for Kyyn to materialize as a candidate.
-No live provider is needed to prove the guest capability/continuation boundary.
-Host structural browsing and an explicit guest calculation serve the human's
-report/counterexample loop; the browser does not reimplement the calculation.
+Use these shapes to assess complete workflows, including add/edit/delete, schema
+change, shared calculations and uncertainty. They are not a prescribed implementation
+sequence. Guest capability tests should use synthetic providers.
 
 Include a fresh-agent exercise: discover a named tool, inspect its contract,
 change a rule, inspect a candidate, and explain the remaining uncertainty. Record
@@ -106,17 +86,10 @@ an external runner with explicit acceptance intent, no interactive UI or daemon.
 ## Deliberate exclusions
 
 No kyyn-v1 compatibility layer; universal workflow graph; mandatory causal ledger;
-per-record governance ceremony; hosted identity/account service; built-in agent
-or scheduler; generic RAG platform; durable continuation store; automatic semantic
+per-record governance ceremony; hosted identity/account service; autonomous scheduler; generic RAG platform; durable continuation store; automatic semantic
 merge; historical connector-schema negotiation; arbitrary native-program plugin
 ABI; or standalone execution requirement for KBs.
 
 Domain complexity is not excluded. Exact arithmetic, heterogeneous roots,
 relationships, payload unions, warnings, uncertainty and partial evidence are
 required now. Transport simplicity must not erase these distinctions.
-
-Historical context: working-KB synthesis (`kyyn-v2-experiment/design-notes/working-kbs.md`),
-August review (`kyyn/docs/review/2026-08-26/README.md`), and
-website page charters (`kyyn-public-website/docs/site-page-charters.md`).
-The site's collaborative-workspace emphasis survives; its kyyn-v1 containment
-and governance claims are not promises inherited by this design.

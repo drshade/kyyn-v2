@@ -1,3 +1,6 @@
+// Executable KB selection in disposable Git repositories: root/nested/multiple KBs,
+// cwd default, symlinks, missing paths and detached recovery; no guest compilation.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

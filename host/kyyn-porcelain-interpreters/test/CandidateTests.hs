@@ -1,3 +1,7 @@
+-- Dhall candidate/context/report round trips, contract references, repeated saves,
+-- missing/stale/corrupt selection and failed publication preservation.
+-- Reload neither recompiles nor restores validation authority.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module CandidateTests (candidateTests) where
 

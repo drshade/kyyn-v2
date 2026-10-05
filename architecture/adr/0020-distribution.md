@@ -39,7 +39,8 @@ kyyn-v1's `kyyn`. The local installer deploys the staged bundle under the select
 prefix's `lib/kyyn-v2` and links `bin/kyyn-v2` to it. Runtime discovery resolves
 that link before locating the bundled assets. Cabal's executable installation alone
 does not provision these assets; the development script reuses the complete
-staging build. [Developer usage](../../docs/cli-development.md) owns the commands.
+staging build. The [user guide](../../docs/guide.md#install) owns installation
+commands; the [staging script](../../tools/stage-cli.sh) documents developer staging.
 This is a source-build convenience, not the cross-platform release installer.
 
 Installing Kyyn itself may download and verify pinned release artifacts and

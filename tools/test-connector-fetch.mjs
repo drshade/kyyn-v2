@@ -1,3 +1,8 @@
+// Installed acquisition: typed configuration, independent instances, latest payloads,
+// payload-free history, refresh/removal, clear/refetch and failed-fetch preservation.
+// --options-smoke covers option contracts; --read-smoke covers captured methods;
+// --tool-smoke covers a registered helper composing sources. Uses disposable files.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

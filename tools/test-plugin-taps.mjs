@@ -1,3 +1,6 @@
+// Disposable local tap remotes: declarations, offline search/guides, refresh,
+// qualified install, cache rebuild/isolation and preservation of installed source.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

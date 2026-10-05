@@ -1,3 +1,6 @@
+// Installed source vendoring from committed local/file-URL repositories without a
+// runtime. Checks nested KBs, exclusions, origins, independent copies and refusals.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

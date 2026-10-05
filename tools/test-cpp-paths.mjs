@@ -1,3 +1,6 @@
+// Installed CPP inspection/compilation with spaces, quotes and Unicode in KB,
+// runtime and compiler-temporary paths. Checks qualified schema identity.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

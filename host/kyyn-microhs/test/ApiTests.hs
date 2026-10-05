@@ -1,3 +1,7 @@
+-- Real MicroHs export/reexport discovery, abstraction, CPP and documentation.
+-- Recompile displayed aliases/signatures/constructors and compare checked exports;
+-- requires KYYN_TEST_ROOT and KYYN_TEST_TOOLCHAIN.
+
 module Main where
 
 import Control.Monad (unless, forM_)

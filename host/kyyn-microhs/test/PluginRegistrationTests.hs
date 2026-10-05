@@ -1,3 +1,7 @@
+-- Actual local-file registration/configuration and derived function contracts.
+-- Checks native acquisition, captured-read dispatch and generated tool bindings under
+-- GHC/MicroHs, including wrong-instance/signature refusals; not an installed journey.
+
 {-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main (main) where
 

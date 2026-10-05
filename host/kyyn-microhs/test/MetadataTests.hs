@@ -1,3 +1,6 @@
+-- Named schema metadata inspection/evaluation, role contracts and runtime facts.
+-- --codec-only avoids guest compilation; full mode uses the selected MicroHs toolchain.
+
 {-# LANGUAGE DataKinds, OverloadedStrings #-}
 module Main (main) where
 

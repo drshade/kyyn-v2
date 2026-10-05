@@ -1,3 +1,7 @@
+// Installed empty-KB initialization through first schema-changing acceptance.
+// Checks identity, nested/existing repositories, candidate retention, source-only
+// discovery, unrelated-file preservation, refusals and checkout recovery.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

@@ -1,3 +1,7 @@
+// Installed authored API discovery: accepted/draft sources, private exports, docs,
+// origins, nested symbols, generated Contract/Options and checked explicit instances.
+// Checks CPP/qualified/constrained instance-only modules and ill-typed refusal.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

@@ -19,194 +19,45 @@ does not become another specification of the product's runtime workflows.
 
 ## Verification
 
-`node tools/test-authored-api.mjs INSTALLED_EXECUTABLE` checks authored module,
-symbol and documentation discovery alongside SDK/generated bindings. It checks
-that listing names and inspecting a selected helper tolerate a type-invalid
-unrelated helper, while inspecting that helper fails. It verifies private-export
-hiding, nested module names, origin labels, accepted Git versus draft selection
-and read-only behavior. It also checks explicit instance headers in an export-empty
-module (constraints, qualified names and CPP), generated Contract/Options headers,
-and rejection of an ill-typed instance. It belongs to full installed integration.
+Choose checks proportional to the change and record the exact revision, commands
+and results in the PR. Independent review is the merge gate, not a blanket test
+run. Reviewers do not routinely repeat the author's tests.
 
-`node tools/test-root-browsing.mjs INSTALLED_EXECUTABLE` checks source-only
-schema/collection browsing in a draft with a broken validator, reachable types,
-roles/references, exact fact IDs and optional titles, unknown-item refusals and
-accepted Git selection. After accepting a populated root it checks read-only
-fact browsing and refusal when accepted facts are corrupt. Fact commands reject
-`--evolution`. This is part of full installed integration, not the fast check.
+| Entry point | Scope |
+| --- | --- |
+| `bash tools/test.sh` | Fast checks: docs/import boundaries, native build and focused native/pure tests |
+| `bash tools/test.sh --full` | Fast checks plus real MicroHs and installed-CLI integration |
+| `bash tools/test-installed.sh` | Disposable local installation, installed journeys and native/self-hosted compiler parity |
 
-`node tools/test-recipe-run.mjs INSTALLED_EXECUTABLE` executes a closed recipe
-against two local-file instances, saves a frozen Draft, checks it repeatedly and
-accepts it through the ordinary workflow. It checks recipe/scope/ID refusals,
-authored failure, local model-secret refusal, newer fetches staying pending, and
-deletion acknowledgement. The same journey replaces a plugin producer and checks explicit reconciliation
-inputs, refusal of individual acknowledgements, omission remaining pending, and
-whole-batch acceptance for populated and empty current captures. No live model
-provider is contacted. It belongs to the full installed check. The native roots suite separately proves the shared broker
-reuses supplied evidence captures for repeated reads without loading latest.
+The scripts own suite membership. Each test entry file's header comment describes
+its coverage, important exclusions and unusual setup or focused modes. Keep that
+comment current when changing the test; do not append per-test inventories here.
+Fixtures and assertions supply the detailed examples.
 
-`node tools/test-closed-recipes.mjs INSTALLED_EXECUTABLE` checks closed-recipe
-references through the installed CLI: missing exports and wrong signatures are
-rejected; a correctly typed flow is compiled but never invoked during checking.
-It accepts and inspects an open-to-closed recipe change and its archive without
-a compiler. This is preparation evidence, not recipe execution or provider use.
-It also discovers closed-flow and generated FactEdits APIs in accepted, draft
-and schema-changing contexts. Tree/DOT/Mermaid description checks use a composed
-flow with a failing action to prove it is not invoked; corrupt accepted facts
-and validator code do not block description. Human output is raw renderer text.
-The roots suite separately records one-shot description execution, rejecting
-malformed/request-shaped output and nonzero guest exits without action handlers.
-It belongs to full installed integration, not the fast gate.
+For a contained fix, select the relevant native check and installed journey.
+For a large outcome, run full integration on its terminal PR before closing the
+issue. Documentation-only work normally needs the documentation/link check,
+not compilation:
 
-`cabal test model-tools --test-show-details=direct`, with `KYYN_TEST_ROOT` and
-`KYYN_TEST_TOOLCHAIN` selected, exercises captured model configuration, malformed
-root configuration, generated guest dispatch and the ordinary tool interpreter.
-The recording provider checks generated instances requested by parsed imports,
-nested drafting over an authored record, malformed-output retry and provider
-refusal across real MicroHs pipes. No credentials or live providers are used.
-This check belongs to full integration, not the fast gate.
+```sh
+node tools/checks/check-docs.mjs
+```
 
-`node tools/test-model-tool.mjs INSTALLED_EXECUTABLE` creates and accepts a model
-tool through the installed CLI, inspects its configuration and Agentic APIs, and
-checks that a missing local secret refuses the request despite an ambient key.
-It does not contact a live provider.
+This checks repository-local Markdown links, not external URLs or heading anchors.
+Run `node tools/checks/check-imports.mjs` when changing source dependencies.
+Native tests can be selected with `cabal test SUITE --test-show-details=direct`;
+installed journey scripts accept the executable path (see their header/usage).
 
-`cabal test model-turn-provider --test-show-details=direct` checks both native
-provider configurations, explicit keys from SecretStore, missing/empty credentials,
-refusal before environment fallback, sanitized provider/HTTP failures and propagation
-of cancellation. A recording provider factory avoids network calls. This proves
-the host capability, not guest wire dispatch, persisted model configuration or
-recipe execution. The test belongs to the fast check and does not compile MicroHs.
+### Development setup
 
-`cabal test agentic-contracts --test-show-details=direct`, with `KYYN_TEST_ROOT`
-and `KYYN_TEST_TOOLCHAIN` selected, generates Agentic contracts from Kyyn's
-resolved type representation and compiles them with GHC and MicroHs. It checks
-typed drafting with malformed-output retry, records, payload sums, optional tags,
-FactIds and exact integer strings. Unsupported shapes fail during generation.
-This focused proof uses an in-memory provider; it does not exercise a production
-model capability, KB model configuration, provider HTTP or the recipe-run CLI.
-It belongs to full integration, not the fast check.
+Build tools: Bash 3.2+, Node.js 22+, GHC 9.10.3, Cabal 3.16.1.0, Make and a C
+compiler. Git is needed for repository operations. Fetch native dependencies with
+`cabal update` on a new machine. Node is build/test tooling, not an installed
+runtime dependency. See [the guide](guide.md#install) for local installation and
+[vendored inputs](../vendor/README.md) for guest libraries.
 
-`cabal test fact-edit-bindings --test-show-details=direct`, with `KYYN_TEST_ROOT`
-and `KYYN_TEST_TOOLCHAIN` set, checks generated fact-edit bindings for a same-schema
-workspace under GHC and MicroHs. It round-trips edit data through Dhall, applies
-it using the public proposal SDK and generated interpreter, checks observations
-with the ordinary host diff derivation, and materializes/reloads facts through
-RootStore. It also checks failure after a preceding successful edit returns no
-partial root. The fixture intentionally has no Eq/Show instances on domain types.
-The complete proposal (including rationale, citations and curation) round-trips
-through Dhall and the generated frozen evolution produces the same observations.
-This does not yet exercise a model provider, guest validators, candidate acceptance
-or a recipe CLI. It is in full integration,
-not the fast check.
-
-`node tools/test-fact-proposal.mjs INSTALLED_EXECUTABLE` exercises a captured
-Dhall proposal through repeated checking, review, stale-input refusal, malformed
-proposal preservation and ordinary Git acceptance. It verifies retained citations,
-unchanged schema/recipes and archived proposal data. The fixture authors the
-workspace directly; the `roots` suite separately checks `createFactProposal`.
-This installed journey is in full integration and does not call a model.
-
-`KYYN_TEST_TOOLCHAIN=/path/to/staged/microhs node tools/test-agentic.mjs`
-compiles the proof fixture under GHC 9.10.3 (override with `KYYN_TEST_GHC`) and
-MicroHs. A scripted host exchanges real pipe frames with the guest's Agentic
-interpreter: nested drafting, malformed-output correction, provider refusal and
-wrong response IDs. Typed edits for two collections are then applied through the
-ordinary pure Evolution SDK in a separate invocation with no model handler.
-The proof checks ordering, observations, curation attachment, repeatability and
-missing/duplicate-ID failures. It uses handwritten fixture codecs/bindings;
-it does not establish production generation, Dhall proposal persistence, host
-report validation, recipe CLI, Jev alignment or live providers. The test is part
-of full guest integration, not the fast check. No installed CLI behavior changes.
-
-`cabal test plugin-fetch plugin-registration graph-calendar inspection-cache --test-show-details=direct`
-with the selected guest toolchain checks signature-derived registration: concrete
-entry contracts, aliases and applied data, malformed signatures, validator/login
-Config mismatches, reader Payload mismatches and obsolete import diagnostics.
-The generic `ReadsEvidence` class/helpers compile under GHC and MicroHs in both
-acquisition and captured-read programs. Run these signature proofs when changing
-the pinned MicroHs compiler; inspection matches its resolved type identities.
-The installed Graph and mixed-connector journeys below exercise derived schemas
-through the packaged CLI without live provider credentials.
-
-`cabal test plugin-host --test-show-details=direct` checks the native text HTTP
-handler with recording and loopback transports, sanitized failures, rejected
-method/header injection, UTF-8, redirect refusal and cancellable waits.
-`cabal test plugin-fetch --test-options=--network-only --test-show-details=direct`,
-with the guest toolchain selected below, checks HTTP, secret read/write, waiting
-and explicit login instructions across real GHC and MicroHs pipes. It also rejects
-malformed replies and login interaction in the acquisition row. These are transport
-proofs, not connector registration, CLI login or live Graph authentication tests.
-The default `plugin-fetch` suite includes this proof alongside file acquisition.
-`node tools/test-network-connector.mjs INSTALLED_EXECUTABLE` exercises registration,
-accepted configuration, explicit login, per-KB secret storage, successive fetches
-and failed-fetch preservation against a loopback HTTP fixture. One fetch combines
-HTTP, file, secret, waiting and evidence requests through the same adapter/dispatcher. It does not use
-real credentials or claim live Graph authentication coverage.
-`cabal test graph-calendar --test-show-details=direct`, with the selected guest
-toolchain, compiles actual Graph fetch/login adapters with both GHC and MicroHs.
-A recording provider exercises both auth modes, polling, rotation, throttling,
-pagination, scoped upserts/full-list removals and failure paths without credentials.
-`node tools/test-graph-install.mjs INSTALLED_EXECUTABLE` checks the actual plugin's
-vendoring, discovered contracts, accepted configuration and missing-secret failures
-without provider calls. Live consent/mailbox behavior is a separate user opt-in.
-
-`cabal test inspection-cache roots --test-show-details=direct` checks persistent
-Dhall inspection results, source/selection/settings/build invalidation, refusal
-and storage behavior, and the shared type codec's existing contract round trips.
-The installed cache measurement below clears both compilation and inspection
-caches; warm timing must show inspection hits without compiler reinspection.
-`tools/stage-cli.sh` embeds the checkout's Git commit for this cache. Plain
-`cabal build` has no such identity and disables inspection caching.
-
-`cabal test compilation-cache --test-show-details=direct` uses a recording compiler
-and real filesystem to check artifact reuse, changed-input misses, empty-entry
-repair, uncached mode and storage failures without running MicroHs.
-`node tools/measure-compile-cache.mjs INSTALLED_EXECUTABLE` measures cold/warm
-evolution checks and tool execution on a disposable local-file/judgement KB,
-verifies warm artifacts are not rewritten and uses no live provider.
-With `--timings`, it checks cold misses, warm hits, named inspection/execution
-events and stderr-only output, then prints the warm trace for analysis.
-`node tools/test-timings.mjs INSTALLED_EXECUTABLE` checks opt-in semantics,
-unchanged help/JSON/diagnostics and preserved exit statuses without compilation.
-
-`cabal test compiler-diagnostics roots --test-show-details=direct`, with the
-guest toolchain selected below, checks compiler-message preservation, stack
-removal and contextual rejection codes. `node tools/test-compiler-diagnostics.mjs
-INSTALLED_EXECUTABLE` checks authored schema and tool type errors through the
-installed evolution-check command.
-
-`cabal test judgement-provider --test-show-details=direct` checks the upstream
-Jev adapter mapping, explicit local credentials, sanitized failures and cancellation
-without live requests. `cabal test judgements --test-show-details=direct`, with the
-guest toolchain selected, compiles a captured-read/Agentic judgement flow under
-GHC and MicroHs and exchanges real pipe frames with a recording host. It checks
-heterogeneous answer assembly, flow failure, malformed replies and query/validation/
-dependent-question rejection. `node tools/test-judgement.mjs INSTALLED_EXECUTABLE`
-checks API discovery and missing-secret refusal through ordinary registered tools.
-No live Jev request is made.
-`cabal test contract-roles --test-show-details=direct` checks distinct badge roles
-and refusal of duplicate roles, ambiguous titles and incompatible badge fields.
-
-`cabal test secret-store cli-arguments --test-show-details=direct` checks the
-typed secret store with recording and native Dhall/filesystem handlers and CLI
-parsing. `node tools/test-secrets.mjs INSTALLED_EXECUTABLE` checks local setup,
-masked display, isolation, failure redaction and ignored storage using a copied
-executable without a runtime bundle or valid schema. On Linux, `--terminal` adds
-a real hidden-prompt check using `script`. Neither check invokes MicroHs or a
-provider.
-
-Broad guest integration tests use the shipped native MicroHs compiler, not the
-self-hosted compiler. `tools/stage-microhs.sh` is shared by CLI packaging and
-`tools/test-guest.sh`: it builds `gmhs`, `mhseval` and `cpphs`, and stages `gmhs`
-as `bin/mhs` alongside the evaluator, preprocessor and libraries. The guest-test
-script selects that temporary toolchain through `KYYN_TEST_TOOLCHAIN` and removes
-it when finished. Compiler-library inspection still runs in process.
-Only the focused native/self-hosted parity step in `tools/test-installed.sh`
-builds and invokes the self-hosted `bin/mhs`.
-
-For the direct real-guest commands below, first stage and select a toolchain
-(choose a destination that does not already exist):
+Full integration stages the toolchain automatically. For a focused real-guest
+test, stage it once in a new directory and select it explicitly:
 
 ```sh
 bash tools/stage-microhs.sh /tmp/kyyn-test-toolchain
@@ -214,403 +65,21 @@ export KYYN_TEST_ROOT="$PWD"
 export KYYN_TEST_TOOLCHAIN=/tmp/kyyn-test-toolchain
 export MHSDIR="$KYYN_TEST_TOOLCHAIN"
 export MHSCPPHS="$KYYN_TEST_TOOLCHAIN/bin/cpphs"
+cabal test guest-api --test-show-details=direct
 ```
 
-Pure/codec-only test modes do not need this setup. `bash tools/test.sh --full`
-performs it automatically.
+Do not silently skip a failing selected check. Record environmental limitations;
+some process tests require POSIX, and installed journeys need a writable disposable
+Git workspace. On a harness that inserts ancestor `/tmp/.git` metadata, select a
+different `TMPDIR` for initialization tests.
 
-`cabal test plugin-fetch --test-show-details=direct` uses that toolchain plus the
-matching versioned GHC executable to compile the same folder acquisition and
-captured-read fixtures under both compilers. A recording host exchanges real JSON
-pipe frames: typed config/prior evidence, new/updated/removed changes, Unicode,
-enumeration/read failures and malformed replies. Both compilers reject filesystem
-calls from the captured-read entry. The native MicroHs broker also fetches real files,
-publishes successive Dhall evidence batches, reads latest captured input and verifies
-that unchanged files and failed acquisitions do not manufacture changes. Recording
-handlers check that malformed, unknown-snapshot and out-of-row requests are refused.
-They also check one current-evidence load before guest execution and the loaded
-fetch as publication's expected base; the broker has no storage capability. A native fixture
-publishes another fetch between callbacks and verifies that the invocation still
-sees its original input. This focused check does not exercise plugin registration
-or a CLI command.
+### CI
 
-`cabal test plugin-registration --test-show-details=direct` uses the same toolchain
-to load the actual first-party local-file package, evaluate its declaration,
-inspect Haskell config/payload contracts and compile fetch/config-validation
-adapters. The first-party acquisition adapter also compiles with the matching
-versioned GHC executable, checking generated exports against both compilers.
-It decodes two configured instances, fetches real files independently,
-and rejects invalid config through the whole-root checker. It also compiles the
-local-file content reader with both compilers and invokes it through PluginRead,
-checking missing captures/IDs and malformed input. It also checks reflected
-record-field documentation, invalid registration/instance names and a mismatched
-fetch signature. This is a focused native integration check, not an installed CLI journey.
-
-`node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE` runs the installed
-producer journey in a disposable nested KB: discover the emitted Dhall schema,
-configure and accept two instances, fetch and change real files, inspect retained
-history and payload-free deltas, and preserve the head after acquisition failures.
-`--options-smoke` checks an options-aware fixture: schema discovery, an outdated
-registration diagnostic, type refusal without publication, explicit versus omitted
-guest options and normalized Dhall history. The `plugin-fetch` dual-compiler test
-also covers typed record options and refusal before any store or guest access.
-It checks superseded/removed payload absence, invalid-data repair and scoped
-clear/refetch without a runtime bundle, without adding a generic evidence-view endpoint.
-It belongs to the full installed check and can be run independently for changes
-to this boundary. `--read-smoke` focuses on method discovery (including draft
-targets), reads while the source folder is unavailable, independent instances,
-refresh/removal, input refusal and Dhall/JSON outputs. `--tool-smoke` instead adds
-and accepts a registered helper, discovers its contracts, and composes captured
-reads across two configured instances while the source directory is unavailable.
-It checks structured and Dhall results, invalid arguments and typed method failure.
-
-The plugin-registration suite also exercises generated tool bindings in GHC and
-MicroHs: an empty request row, wrong-instance compile refusal, two-instance reads,
-catchable missing-item failures, one captured-input load per instance, and
-invocation-level not-fetched refusal. These tests reuse the configured plugin
-fixture; no second acquisition setup or full integration gate is required.
-
-`cabal test plugin-packages --test-show-details=direct` checks source classification,
-hermetic plugin manifest/origin codecs, scoped Git source changes and shallow
-no-checkout acquisition from a local Git remote. It uses real Dhall
-and Git handlers, without network access, a guest compiler or plugin invocation.
-It is included in the fast check.
-
-`cabal test curation-core --test-show-details=direct` checks pure recipe/instance
-acknowledgements and net pending comparison: batch/individual ordering, deletion,
-producer mismatch and reconciliation, independent recipes/instances and comparison
-without old fetch history. It runs in the fast check and needs no guest compiler,
-Git repository, evidence store or filesystem. This does not claim acceptance or
-manifest/persistence integration.
-
-The `roots` suite also exercises the curation Dhall codec, canonical ordering,
-recipe declarations, nonempty candidate save/reload and register preservation
-through opening and Git export. `node tools/test-curation-persistence.mjs
-INSTALLED_EXECUTABLE` checks recipe creation, edits, removal/reuse, invalid-ID
-candidate preservation, archived reports, target data refusal and register preservation.
-It does not declare acknowledgements
-through guest code or claim pending-work CLI discovery.
-
-`node tools/test-curation-declarations.mjs INSTALLED_EXECUTABLE` exercises actual
-guest declarations against local-file fetches: older-scope resolution, failed
-preparation retaining the candidate, cache-free acceptance, archived declarations
-and selective deletion after a fresh refetch. It is included in the full installed
-check. The journey also covers recipe discovery without a runtime, net pending
-changes, independent recipes/instances and mixed acknowledgements with a fact edit.
-Native `roots` and `evidence-store` checks cover declaration resolution,
-canonical report round trips (including version-one archives) and historical
-metadata replay without guest compilation.
-The `roots` suite records the recipe reader's Git operations, checking explicit
-KB/revision selection, recipe-file-only list/show and absent/invalid registers without
-a schema or guest compiler.
-
-`cabal test evidence-store --test-show-details=direct` checks ordered delta application,
-real Dhall persistence, instance isolation, latest-only payloads and payload-free change
-summaries, concurrent expected-base publication, cursor refusal, scoped clear,
-producer-change refusal/reset and malformed-data repair. It requires no guest compiler,
-plugin invocation or external provider. [ADR 0014](../architecture/adr/0014-evidence.md)
-owns the store layout and persistence contract.
-This suite lives in `kyyn-porcelain-interpreters`; it includes a pure recording
-DocumentPersistence proof of semantic publication and conflict refusal, plus the
-existing real-Dhall/filesystem integration assertions.
-
-`cabal test document-persistence --test-show-details=direct` in
-`kyyn-plumbing-interpreters` checks scoped native locking across read/modify/replace,
-scoped clearing (including lock continuity across clear), replacement-failure cleanup and lock release on
-cancellation. It uses bytes, not evidence types or a guest compiler.
-
-`cabal test file-acquisition --test-show-details=direct` checks native text/fingerprint
-capture, repeated reads, changed paths/bytes and invalid UTF-8.
-It requires no guest compiler and is included in the fast check.
-
-`cabal test plugin-installation --test-show-details=direct` checks the installation
-handler with write-forbidding refusal handlers and real Git/filesystem/Dhall
-integration: local and file-URL sources, nested KBs, persisted origins, independent
-copies, repeat installation (including an empty destination), and
-unchanged KB HEAD. The filesystem suite checks complete tree replacement, staging
-failure preservation and file/symlink refusal. These checks do not compile or invoke guests.
-
-Plugin installation targets an evolution, not the accepted root. The installed
-`node tools/test-plugin-evolution.mjs EXECUTABLE` journey checks install into a Ready
-target, stale-candidate refusal, check/accept, accepted-workspace refusal and plugin
-inheritance through creation and acceptance of the next evolution. It uses real
-Git, Dhall and MicroHs, and belongs to the full installed check.
-
-`node tools/test-plugin-install.mjs EXECUTABLE` copies the host executable without
-its runtime and tests CLI installation from committed local/file-URL packages into
-a nested KB. It includes the first-party package, human/JSON results, origin revisions,
-source and destination refusals, exclusions, independent copies and unchanged HEAD.
-It runs in the installed integration check; the source fixture is committed in a
-disposable repository, so the developer checkout need not be clean.
-
-`node tools/test-plugin-guides.mjs EXECUTABLE` checks installed plugin list/show/guide
-without a runtime bundle, valid root schema or compilable plugin source. It covers
-accepted Git material versus live evolution targets, source identity, Unicode,
-missing/invalid guides and symlink refusal. It is included in the installed gate.
-
-`node tools/test-plugin-taps.mjs EXECUTABLE` checks tap declarations, offline
-search/guides, explicit refresh, qualified installation and cache reconstruction
-using disposable local Git remotes. It also checks cloned-KB cache isolation and
-that updates/removal leave installed source unchanged, without a guest runtime.
-The installed initialization check verifies the default declaration is committed
-without downloading a tap. `node tools/checks/check-plugin-catalogue.mjs` checks
-the literal first-party catalogue against package directories in the fast gate.
-
-Guest API discovery has two focused checks: `cabal test guest-catalogue
---test-show-details=direct` exercises the read-only catalogue capability and real
-Dhall codec, and `KYYN_TEST_ROOT="$PWD"
-cabal test guest-api --test-show-details=direct` checks real MicroHs exports,
-reexports and abstraction. The latter recompiles copies of the SDK with all
-displayed signatures/aliases substituted and compares checked exports; it is in full
-integration. Data/newtype fixtures additionally recompile projected public
-constructors and compare their types up to variable renaming, covering records,
-GADTs, abstract headers and selective reexports. These compiler checks are not in fast
-checks. Constructor/accessor and upstream transformer signatures are compiled as
-annotation witnesses; a CPP fixture checks branch selection and documentation.
-`node tools/test-guest-api.mjs INSTALLED_EXECUTABLE`
-tests a copied executable/catalogue-only bundle with no KB, Git, SDK sources or
-compiler, including human/JSON results and refusals. It is included in the
-installed integration check.
-
-- **Available fast check:** `bash tools/test.sh`: documentation/import checks, native
-  compilation, process/filesystem tests and pure metadata codec/adapter/contract tests.
-  `cabal test cli-arguments --test-show-details=direct` checks pure CLI parsing,
-  KB-selection defaults/overrides, command routing, help and invalid arguments.
-  It does not execute KB operations or prove the installed CLI journey.
-  `cabal test cli-adapters --test-show-details=direct` uses pure recording handlers
-  to check explicit snapshot selection, validation before root browsing, candidate
-  checking without root reopening/evolution execution, missing-candidate refusal,
-  Unicode rendering, structured diagnostics and publication/interruption exit codes.
-  `node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"` exercises the
-  actual executable against disposable Git repositories without a runtime or
-  valid schema: nested/multiple KBs, cwd default, symlink resolution, missing
-  selections and detached recovery. It does not compile guests.
-  Git discovery tests cover root/nested directories, non-repositories and bare
-  repositories, with missing directories/executables remaining operational failures.
-  Publication fixtures inspect a draft's saved report and an accepted archive
-  after its candidate pointer is removed and its live manifest is malformed.
-  The native Dhall boundary has a focused `cabal test dhall-values --test-show-details=direct`
-  check, also included in the fast check; it does not compile guest code.
-  `cabal test roots --test-show-details=direct` checks RootStore materialization
-  and reopening from immutable file trees through the Dhall interpreter. It is
-  included in the fast check and does not compile guest code or publish Git refs.
-  The same suite exercises manifest-driven RootOpening with the real Dhall and
-  RootStore handlers and recording schema/Git test handlers. It checks source/SDK
-  capture and revision forwarding, not a second real-compiler execution.
-  Source-only Git capture excludes fact blobs before loading bytes, retaining
-  examples and other non-fact files. Git tests temporarily make an excluded blob
-  unavailable: filtered capture succeeds, unfiltered capture fails, and the blob
-  is restored. Exclusion matching preserves similarly prefixed sibling paths.
-  Source-only opening is checked with absent/corrupt facts and explicit revision
-  forwarding. Workspace tests use real Dhall with pure projection/matching:
-  malformed manifests/layout, input additions/edits/deletions, and exclusion of
-  lifecycle state and notes. They neither compile drafts nor verify archives.
-  Evolution capture tests combine real filesystem/Dhall with recording RootOpening:
-  repository-root/nested KB paths, exact Before copies, revision changes,
-  target preparation, live matching without source loading, and diagnostics versus operational
-  failures. No new MicroHs or Git execution is involved in those capture tests.
-  Evolution execution tests use real Dhall/filesystem/process handling and recording
-  schema/compiler handlers. They check captured Before input reuse without RootOpening,
-  contract/source mismatch, closure deduplication/collisions, generated endpoint steps,
-  generated entry selection and preparation/refusal/runtime/protocol failure distinctions.
-  Recording counts forbid repeated Before opening and any schema inspection during
-  execution. Workspace discovery tests use real RootOpening/RootStore/Dhall with
-  recorded Git/schema/API handlers: each tree read excludes facts, each endpoint is
-  inspected once, Before mismatch stops before target inspection, bad targets stop
-  before API inspection, and repair does not reuse stale results. Missing/invalid
-  evolution bodies are excluded; candidate, lifecycle, validator and execution
-  operations are unavailable or rejected. No real guest compilation is involved
-  in these native tests.
-  Candidate tests in the roots suite check Dhall contract-description round trips
-  (all type constructors and metadata), refusal of forward/cyclic/out-of-range
-  type references,
-  exact context/root/report persistence, immutable repeated saves, missing/stale/corrupt
-  selections and failed publication preserving the last result. Application uses a
-  recording evolution handler with real RootStore/Dhall; checking records RootExecution
-  calls. Combined check tests cover capture/evaluation, saving before validation,
-  rejected-candidate retention, failed evaluation leaving the pointer unchanged and
-  passing warnings through. Reload has no source-opening/compiler path and does not restore Validated.
-  Acceptance-history tests use real Git and Dhall: original introducing commit,
-  inherited archive, revert/removal, reacceptance, all-parent merges, ambiguous and
-  malformed histories. They forbid live-file/root-opening calls, check exact commit
-  parents and optional file reads, and do not publish a ref or run guest code.
-  Lifecycle fixtures reuse that temporary Git history with explicit test-only ref
-  updates. They check duplicate names, Draft filtering, unknown/malformed diagnostics,
-  manifest-only Ready/Draft transitions preserving captured inputs, authoritative
-  Accepted state despite stale/missing/malformed local manifests, and refusal to edit
-  accepted workspaces. Recording filesystem forwarding rejects recursive reads and
-  non-manifest writes; no source opening/compiler or candidate loading occurs.
-  Archive export tests retain captured source/manifest/report despite live edits,
-  preserve current review-note bytes and deletions, reject inconsistent captured
-  target code, and distinguish unsupported durable record versions from private
-  candidate staleness. Root-export integration writes root and archive replacements
-  into one real Git commit and reopens both exactly, including FindAcceptance of
-  that commit. It exercises export/commit/CAS primitives, not the full acceptance
-  readiness/overlap/checkout-synchronization workflow.
-  Publication fixtures separately compose the full native application/store/Git
-  path: create/capture, recording guest output with real report construction,
-  save/fresh checks, refusal, atomic publication, reopening and explicit recovery.
-  They cover two drafts, root-level/nested KBs, deletion, stale/rebased and shared
-  drafts, invalid/missing candidates, workspace/root edits, detached/changed branch,
-  same/different-workspace CAS races, index-lock synchronization failure, injected
-  asynchronous interruption immediately after a successful ref update, recovery
-  without candidate files or a valid live manifest, later-head repair, archive
-  removal and reacceptance. Direct publication/recovery forbid source-opening and
-  validation calls. Schema inspection, guest computation and validation are recording
-  handlers: these fixtures are not a real-MicroHs or installed-CLI integration check.
-  Creation is checked by immediately capturing its returned workspace, including
-  repeated labels, source rejection before allocation and failed writes. Workspace
-  encoding round-trips through real Dhall, preserving non-manifest file bytes.
-  Creation/capture use EvolutionAuthoring. Candidate and lifecycle/history tests
-  install EvolutionStore with no RootOpening effect or placeholder handler; their
-  interpreter rows require no compiler or SDK.
-  RootExecution tests use a recording compiler handler, a separate GuestExecution
-  handler and small shell fixtures
-  for process exits/malformed replies; they check pre-execution rejection and
-  failure classification without compiling MicroHs. These fixtures require `sh`.
-  They also check that registered query entries are compiled without executing
-  them. Saved-example tests use the real Dhall/store handler and recording
-  RootExecution: path/contract round trips, required/illustrative mismatches,
-  unchanged-root Validated minting and operational-failure propagation. The
-  private constructor boundary has an import-check regression test.
-  The roots suite also requires Git for export integration: a checked root is
-  exported, committed as a complete subtree replacement, conditionally published
-  and reopened with identical Root/files. Git and Dhall are real; validation and
-  schema inspection are recording handlers, not another guest compilation run.
-  It checks deletions and unrelated committed/staged/unstaged preservation; it
-  does not exercise evolution acceptance or checkout synchronization.
-  `cabal test git-snapshots --test-show-details=direct` exercises fixed-revision
-  capture, isolated commit construction and expected-head ref updates against Git
-  in a temporary repository; it is included in the fast check
-  and requires an installed Git executable (tested locally with Git 2.55.0).
-  Scoped checkout fixtures also check branch/head refusal, staged/working changes
-  that cancel each other, ignored root files, deletion, preservation of unrelated
-  staged/working/untracked files and another draft, tracked/untracked selected
-  workspaces, and synchronization retry after an index-lock failure. This is Git
-  plumbing evidence, not a complete acceptance workflow.
-  `cabal test file-trees --test-show-details=direct` checks local directory capture
-  without running the process cancellation or MicroHs suites; it is included in
-  the fast check.
-  It also checks exclusive named directory reservation, one winner under concurrent
-  creation, existing-file/directory preservation and missing-parent errors.
-  Random private-directory allocation has a seeded collision
-  retry with existing contents preserved, concurrent allocations and parent failure.
-  Optional reads distinguish absence from failure. Atomic replacement tests cover
-  initial creation, concurrent complete-value reads/writes, temporary cleanup and
-  failed replacement preserving the existing directory.
-  Authors choose relevant local checks and record their revision and results;
-  this command is not mandatory for every PR.
-  `cabal test queries --test-options=--pure --test-show-details=direct` exercises
-  typed query composition, read traces, binding generation and reply decoding
-  without invoking MicroHs. It is included in the fast check.
-  `cabal test evolution-core --test-show-details=direct` exercises pure SDK
-  composition, observations and failure behavior. `cabal test evolutions
-  --test-options=--pure --test-show-details=direct` checks binding generation;
-  both are included in the fast check and neither invokes a guest compiler.
-  `cabal test evolution-reports --test-show-details=direct` checks observation
-  chains, structural values and identity-based reports through real RootStore/Dhall,
-  plus malformed protocol rejection. It is included in the fast check and needs
-  neither Git nor a guest compiler.
-- **Full integration check:** `bash tools/test.sh --full` adds real MicroHs
-  compilation and codec tests. Run it before declaring an Issue complete, or when
-  needed for a particular change or investigation; not for every PR or merge.
-- **Development prerequisites for this gate:** Bash 3.2+, Node.js 22+, GHC 9.10.3,
-  Cabal 3.16.1.0, Make and a C compiler; no npm packages. Fetch native dependencies
-  with `cabal update` on a new development machine.
-  Node is development/build tooling, not an installed Kyyn runtime dependency (ADR 0020).
-- **CI:** `.github/workflows/check.yml` is manual-dispatch only, with a `full`
-  checkbox. No automatic PR/push runs or remote-CI merge requirement. After merge,
-  sync and continue. This policy applies during private, pre-release development.
-  CI caches Cabal's compiled dependency store by platform, toolchain and resolved
-  build configuration. Compatible older stores can seed changed dependency plans;
-  Cabal still resolves and builds the current plan. Project build outputs and test
-  results are not cached, and the selected check runs on cache hits and misses.
-- **Current scope:** documentation/ADR checks, checker regressions, explicit pure-module
-  import allowlists, native package builds, scoped process lifetime tests and actual MicroHs generated-codec tests.
-  `tools/test-guest.sh` stages the native compiler/evaluator/preprocessor and the
-  native test suite inspects authored types, generates codecs, compiles them and
-  exchanges runtime values with the resulting guest. It does not substitute GHC
-  for guest execution. Captured source compilation uses GuestCompilation and
-  emits bytecode consumed through GuestExecution by the bundled evaluator, not
-  C-compiled guest binaries. GuestExecution owns both one-shot and conversational
-  invocation; compile-only tests do not install execution handlers.
-  Process and filesystem tests exercise scoped cleanup, real children, byte pipes, failures and
-  cancellation; their reaping assertions currently require POSIX (Linux in CI).
-  The first CLI is under development; plugin and Web builds do not exist yet.
-  For the named metadata export boundary alone, after building the bundled tools,
-  run `KYYN_TEST_ROOT="$PWD" cabal test metadata --test-show-details=direct`.
-  This compiles the shared metadata declarations with MicroHs and evaluates the
-  named export through the fixed SDK codec, without running the full codec suite.
-  It combines structural inspection and metadata evaluation from the same captured
-  sources, then materializes/reopens runtime facts through RootStore and passes
-  the resulting value through a generated guest codec. It also executes the real
-  RootExecution handler over materialized snapshots with a manifest-selected pure
-  guest validator, including warning-only and semantic-error outcomes with
-  structured locations. It does not open a KB from Git or implement the full
-  candidate/required-example validation gate.
-  `KYYN_TEST_ROOT="$PWD" cabal test queries --test-show-details=direct` is the
-  focused real-MicroHs query integration check: named input/result metadata,
-  generated bindings, dependent reads over distinct payload types, typed result
-  plus ordered trace, and rejection of a mismatched collection payload. It is
-  included in the full check, not a mandatory per-PR command.
-  `KYYN_TEST_ROOT="$PWD" cabal test evolutions --test-show-details=direct` compiles
-  one generated-binding fixture and the SDK with both GHC and MicroHs, compares
-  their results, and checks rejection of wrong binding types and private output
-  constructors. It also compiles the identity scaffold used by creation. This
-  focused SDK/encoding proof is in the full check, not a per-PR requirement; it
-  additionally checks guest JSON replies through the native decoder and report
-  capability. It does not claim workspace evolution execution or candidate persistence.
-  `KYYN_TEST_ROOT="$PWD" cabal test workspace-evolutions --test-show-details=direct`
-  exercises the actual EvolutionExecution handler with real RootOpening, schema
-  inspection, MicroHs, RootStore and Dhall. A recording Git handler supplies only
-  the selected Before revision/subtree; the test verifies a schema-changing chain,
-  exclusion of unrelated old modules, preserved context and exact After materialization
-  and reopening. It is part of full integration, not a per-PR requirement. It does
-  not save Candidates or accept proposals.
-- **As implementation arrives:** keep the default check fast and extend full
-  integration coverage separately. Do not silently skip failures in a selected check.
-
-`bash tools/test-installed.sh` locally installs the development CLI and bundled runtime in
-a disposable prefix, compares native/self-hosted MicroHs bytecode for a
-metadata entry, then runs the `installed-journey` suite. It is included
-only in `--full`, not the default check. The fixture uses real Git, Dhall and
-MicroHs: a schema-changing evolution is evaluated and accepted in separate
-processes, its archived report survives cache removal, and an inherited required
-example rejects a later deletion until the author deliberately retires that
-assertion. Fixture setup uses the existing example encoder; it is not a second
-on-disk format or a schema-aware production kernel. This complements the native
-recording-handler tests for publication races and absence of evolution replay.
-
-`node tools/test-cpp-paths.mjs INSTALLED_EXECUTABLE` is a focused installed check
-for native schema/API inspection and guest compilation with CPP enabled. It copies
-the runtime into a path containing spaces, single quotes and Unicode, and uses
-a similarly named KB directory. It is included in the full
-installed check and can be run independently for compiler updates.
-Its compiler temporary directory also contains spaces and single quotes;
-workspace discovery must retain the CPP schema's `RootV1.Root` source identity.
-
-The installed check also runs `tools/test-initialization.mjs`: an empty KB is
-initialized through the CLI and evolved into its first collection. It checks
-new/existing/nested repositories, edited entries/validators through the single check
-command, rejected candidate inspection and earlier-result retention after compilation
-failure, unrelated staged/working-file preservation,
-read-only refusals and explicit recovery after an index-lock synchronization
-failure. Run it independently with the installed executable path, or pass a
-runtime directory as its second argument when using a development executable.
-
-On hosts where a sandbox creates transient ancestor `/tmp/.git` metadata, initialization-test refusals are environmental; run the installed journey with `TMPDIR` elsewhere, for example `TMPDIR=/var/tmp bash tools/test-installed.sh`.
-
-The documentation check validates project-owned documentation, not third-party/vendor/cache trees.
-Historical evidence in neighbouring repositories is cited as source paths rather
-than required local links; a clean checkout is sufficient for this gate. External
-HTTP links and heading anchors are not validated. The small checker handles inline
-links outside top-level fenced blocks and single-line backtick code spans; it is
-not a full Markdown parser. Multiline code spans and fences nested at four or more
-spaces inside lists are not interpreted as code. Use top-level fenced examples
-when demonstrating links that are not actual documentation references.
-HTML comments are not excluded from inline-link checks, and reference-style link
-definitions are not validated; use ordinary inline links for checked references.
-Do not configure the optional `check` workflow as a required merge check.
+`.github/workflows/check.yml` is manual-dispatch only, with an optional full run.
+There are no automatic PR/push tests or remote-CI merge requirement during private
+development. After a reviewed merge, sync and continue. Do not configure the
+optional workflow as a required check. CI caches compiled dependencies, not test
+results; a selected run still resolves, builds and tests its current inputs.
 
 ## Review and merge
 
@@ -652,7 +121,7 @@ Do not configure the optional `check` workflow as a required merge check.
 
 ## Releases
 
-- **Published releases:** none. The repo contains design, process and initial codec implementation.
+- **Published releases:** none. The CLI and bundled runtime are available as development source builds.
 - **Release runbook:** not yet applicable. Establish and verify one before publishing
   a build; ADRs 0020 and 0022 own distribution and licensing decisions.
 - **Dependency evidence:** [native runtime source inventory](dependency-sources.md)
@@ -662,4 +131,4 @@ Do not configure the optional `check` workflow as a required merge check.
 
 ADR 0024 owns the proposed field-experience method. Its scenarios apply when the
 relevant product paths exist; this adoption does not require a field run for every
-documentation change. Further extensions follow [EXTENDING.md](EXTENDING.md).
+documentation change.

@@ -1,3 +1,7 @@
+-- Real Dhall/filesystem cache round trips, hits, source/settings/build invalidation,
+-- disabled mode and corrupt-entry refusal. Recording handlers verify metadata still
+-- executes on a type-inspection hit; no guest compiler required.
+
 {-# LANGUAGE OverloadedStrings, GADTs, LambdaCase, DataKinds #-}
 module Main where
 

@@ -1,3 +1,6 @@
+// Check opt-in KYYN_TIMINGS semantics, unchanged help/JSON/diagnostics and exit
+// statuses without guest compilation.
+
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';

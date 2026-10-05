@@ -1,3 +1,6 @@
+// Installed curation register/recipe persistence and refusal cases in disposable KBs.
+// Uses authored recipe edits and stored register data; no live provider.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

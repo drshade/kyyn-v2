@@ -1,3 +1,7 @@
+-- Pure binding/encoding tests; full mode compiles generated evolution/scaffold
+-- bindings under GHC and MicroHs, checking wrong types and private constructors.
+-- --pure skips compilers. Does not exercise publication or candidate persistence.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

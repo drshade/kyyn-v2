@@ -1,3 +1,6 @@
+-- Recording/loopback HTTP handling: UTF-8, sanitized failures, method/header
+-- injection refusal, redirects and cancellable waits; no provider credentials.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

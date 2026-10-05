@@ -1,3 +1,6 @@
+// Install actual Graph source, discover contracts, accept configuration and check
+// missing-secret failures. No consent flow, live mailbox or provider requests.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

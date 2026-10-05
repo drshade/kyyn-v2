@@ -1,3 +1,7 @@
+// GHC/MicroHs proof over real pipe frames: nested typed drafting, malformed-output
+// retry, provider refusal, response IDs, fact-edit ordering and failures.
+// Uses scripted providers/handwritten codecs, not production binding generation.
+
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';

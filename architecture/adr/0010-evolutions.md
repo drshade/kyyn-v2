@@ -126,7 +126,7 @@ no extra zoom, and recipe edits use the same syntax. An existing unaccepted
 draft using the former bare-Root entry must update its signature, wrap whole-root
 schema functions with `onFacts`, and focus manual root state actions with `zoom facts`;
 the ordinary compiler error reports the mismatch, and the
-[CLI guide](../../docs/cli-development.md#recipe-declarations-and-curation-progress)
+[CLI guide](../../docs/guide.md#recipes-and-curation)
 describes the repair. Do not add a second
 legacy entry adapter. Accepted archives remain readable without recompiling entries.
 
@@ -407,7 +407,7 @@ ordinary modules update their import declaration but retain the friendly `Schema
 alias. Actual schema changes may of course require changes to their code too.
 Kyyn can scaffold these imports without compiler namespace rewriting. The accepted
 root retains only the current definitions; previous definitions live in evolution
-archives and Git, as illustrated in the [walkthrough](../walkthroughs/todo-evolution.md).
+archives and Git. See the [authoring guide](../../docs/guide.md#create-check-and-accept-an-evolution).
 
 Captured material contains the projected target bytes, not a stored compiler
 adapter or independently selected schema descriptor. During build preparation,

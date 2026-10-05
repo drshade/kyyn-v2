@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Install in a disposable prefix, exercise CLI journeys and compare native versus
+# self-hosted MicroHs output. Real Git/Dhall/guests; no live provider credentials.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

@@ -1,3 +1,6 @@
+// Installed model-tool registration, configuration and Agentic API discovery.
+// Missing checkout-local credentials must refuse despite an ambient key; no live provider.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

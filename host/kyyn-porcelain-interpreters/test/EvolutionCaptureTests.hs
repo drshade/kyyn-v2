@@ -1,3 +1,7 @@
+-- Real filesystem/Dhall with recorded source opening: nested/root KB capture,
+-- Before revisions/copies, target preparation, live matching and creation failures.
+-- No compiler or Git execution.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module EvolutionCaptureTests (evolutionCaptureTests) where
 

@@ -1,3 +1,7 @@
+-- Recorded Git/schema/API plus real source/store/Dhall: source-only discovery,
+-- endpoint inspection counts, mismatch/refusal/repair and exclusion of unfinished
+-- evolution bodies. No candidate, validation or execution handlers.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module WorkspaceApiTests (workspaceApiTests) where
 

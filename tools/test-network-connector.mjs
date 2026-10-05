@@ -1,3 +1,6 @@
+// Installed connector registration/login/fetch against a loopback HTTP fixture.
+// Exercises local secrets, typed options and mixed host calls; no real credentials.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

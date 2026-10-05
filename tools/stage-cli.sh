@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Developer staging: bash tools/stage-cli.sh NEW_DIRECTORY (must not exist).
+# Builds the complete native CLI/runtime/SDK bundle without installing it.
+# This is not a portable release build or a dependency-license audit.
 set -euo pipefail
 
 if [[ $# != 1 ]]; then
