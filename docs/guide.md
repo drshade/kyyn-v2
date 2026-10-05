@@ -464,6 +464,17 @@ kyyn-v2 --kb ./my-kb evolution check 000003-curate-synctodos
 Use the evolution ID returned by `run`. It creates a Draft with
 `change/proposal.dhall`; checking and acceptance use that saved proposal, not
 another model invocation. Review it before marking it ready and accepting it.
+Its generated `Evolution.hs` imports `frozen` from `KyynFrozenProposal`:
+
+```haskell
+evolution :: Evolution (KnowledgeBase RootV3.Root) (KnowledgeBase RootV3.Root)
+evolution = frozen
+```
+
+The root type is your KB's current type. `frozen` applies the saved proposal's
+edits, rationales and curation declaration. Kyyn prepares that value from
+`change/proposal.dhall` when checking; the evolution itself does not read files.
+
 Each selected instance supplies its pending changes and fetch scope. Its evidence
 contents are captured once for the invocation, including subsequent plugin reads.
 Reads of other instances capture lazily as ordinary tools do, but the proposal

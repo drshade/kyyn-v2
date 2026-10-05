@@ -124,6 +124,9 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   invoke(executable, ['--kb', kb, 'root', 'recipe', 'run', 'sync', 'local-file'], 2);
   const proposal = run('sync', ['local-file', 'prices']).result;
   const frozen = fs.readFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'utf8');
+  const entry = fs.readFileSync(path.join(proposal.path, 'change/Evolution.hs'), 'utf8');
+  assert.match(entry, /^evolution = frozen$/m);
+  assert.doesNotMatch(entry, /proposal\.decode|case /);
   assert.match(frozen, /Captured task/);
   assert.match(frozen, /prices/);
   assert.match(JSON.stringify(cli(['evolution', 'show', proposal.id])), /Draft/);
