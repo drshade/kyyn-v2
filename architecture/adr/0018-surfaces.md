@@ -320,10 +320,8 @@ readCollection :: RootStore :> es => Validated Root -> String
                -> Eff es (Either [Diagnostic] [Fact Value])
 ```
 
-No pagination, filtering, extra persistence or fact mutation commands are needed
-for this slice. Fact commands refuse `--evolution`: target source is not a saved
-candidate. Candidate fact browsing requires a future explicit candidate selector;
-the existing evolution report remains the candidate review surface. JSON responses
+Fact commands refuse `--evolution`: target source is not a saved candidate.
+The evolution report is the candidate review surface. JSON responses
 identify their kind and selected revision/evolution; human output remains concise.
 
 #### Tool authoring bindings
