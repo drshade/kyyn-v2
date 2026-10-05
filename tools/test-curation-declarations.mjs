@@ -1,3 +1,7 @@
+// Installed authored acknowledgements over local-file fetches: older scopes,
+// failed preparation, cache-free acceptance, archives and selective deletion.
+// Checks recipe discovery, net pending changes and recipe/instance independence.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

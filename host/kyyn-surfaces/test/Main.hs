@@ -1,3 +1,6 @@
+-- Pure CLI parsing/routing, defaults, shared options, help and invalid arguments.
+-- Does not execute KB operations or guest code.
+
 module Main (main) where
 
 import Control.Monad (forM_, unless)

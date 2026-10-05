@@ -1,3 +1,6 @@
+-- Typed secrets with recording and real Dhall/filesystem handlers: storage,
+-- missing/empty values, scoped access and sanitized failures; no guest compiler.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 

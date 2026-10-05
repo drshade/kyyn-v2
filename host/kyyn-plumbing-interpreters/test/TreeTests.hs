@@ -1,3 +1,6 @@
+-- Real file-tree capture/replacement and scoped directory reservation: collisions,
+-- concurrency, absence versus failure, symlink/file refusals and cleanup.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

@@ -1,3 +1,6 @@
+-- Structural before/after observations, step chains and identity-based reports
+-- through real RootStore/Dhall; malformed guest protocol refusal. No Git/compiler.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

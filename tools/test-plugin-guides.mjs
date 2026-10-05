@@ -1,3 +1,6 @@
+// Discover installed guides/list/show without runtime, valid schema or compilable
+// plugin code. Checks accepted Git versus draft, Unicode and path/guide refusals.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

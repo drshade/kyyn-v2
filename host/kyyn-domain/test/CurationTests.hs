@@ -1,3 +1,6 @@
+-- Pure curation acknowledgement/pending calculations and malformed declaration
+-- refusals; no evidence acquisition, guest runtime or Git publication.
+
 module Main (main) where
 
 import Control.Monad (unless)

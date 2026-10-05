@@ -148,7 +148,9 @@ PR that establishes the completion criteria closes it.
 
 ## 7. Verification is proportional to the change
 
-`PROJECT-PRACTICES.md` names the available local checks and full integration check.
+`PROJECT-PRACTICES.md` identifies the verification entry points and setup. The
+scripts select suites; coverage belongs in the test entry files' header comments,
+not a parallel inventory in the process document.
 The author chooses proportionate verification and records the tested revision,
 commands and results in the PR. No blanket test command or remote CI run is required
 for every PR. Independent review is the merge gate. A fix-sized Issue closes on
@@ -250,7 +252,7 @@ days.
 ## 12. Tailoring and extension
 
 Projects record configurable mechanics in `PROJECT-PRACTICES.md`: repository
-host, workspace convention, verification command, CI, review requirements,
+host, workspace convention, verification entry points, CI, review requirements,
 merge strategy and release approach.
 
 Additional practices may extend this lifecycle for a particular context. They

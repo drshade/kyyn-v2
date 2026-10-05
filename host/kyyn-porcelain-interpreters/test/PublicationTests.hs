@@ -1,3 +1,7 @@
+-- Native application/store/Git publication with recording guest results: readiness,
+-- input/head races, separate drafts, staged/untracked preservation, post-ref-update
+-- interruption and recovery. Does not execute MicroHs or a CLI.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, TypeApplications #-}
 module PublicationTests (publicationTests) where
 

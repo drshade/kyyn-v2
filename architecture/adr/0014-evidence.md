@@ -733,5 +733,5 @@ cache; refetch with the same producer and obtain correct pending additions, upda
 and deletions without old fetch history. Cover acknowledgement of deletion after
 that refetch, failed fetch versus empty capture, and producer mismatch/reconciliation.
 
-The [curation walkthrough](../walkthroughs/evidence-curation.md) illustrates the
-complete intended journey with the implemented CLI and guest acknowledgement helpers.
+The [curation guide](../../docs/guide.md#recipes-and-curation) shows the CLI and
+guest acknowledgement helpers.

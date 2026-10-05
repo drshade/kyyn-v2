@@ -1,3 +1,7 @@
+-- Captured-read/Agentic judgement flows under GHC/MicroHs with a recording host.
+-- Checks answer assembly, failure, malformed replies and restricted request rows;
+-- no live Jev call.
+
 {-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main (main) where
 

@@ -1,3 +1,7 @@
+-- Actual EvolutionExecution with MicroHs/RootOpening/Dhall and recorded Git input:
+-- schema-changing chain, source closure, materialization/reopen and context.
+-- Does not save candidates or publish proposals.
+
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Main (main) where
 

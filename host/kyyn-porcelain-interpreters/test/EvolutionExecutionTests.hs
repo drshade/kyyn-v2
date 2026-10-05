@@ -1,3 +1,7 @@
+-- Recording compiler/schema with real process/Dhall/filesystem: captured input
+-- reuse, closure conflicts, endpoint generation and preparation/runtime/protocol
+-- refusals. Forbids redundant source reopening or schema inspection.
+
 {-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module EvolutionExecutionTests (evolutionExecutionTests) where
 

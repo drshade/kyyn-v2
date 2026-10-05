@@ -339,7 +339,7 @@ not a tagged constructor; unrelated authored newtypes retain their normal encodi
 No native host function imports the payload type `a`; its corresponding data is
 checked structurally through the collection contract.
 
-Propose one complete `root/` subtree for accepted executable knowledge:
+Use one complete `root/` subtree for accepted executable knowledge:
 
 ```text
 root/
@@ -353,8 +353,8 @@ taps.dhall                 tracked discovery configuration, outside root publica
 .kyyn/                     ignored checkout-local data and disposable caches
 ```
 
-This is a proposed layout for review, illustrated by the
-[todo walkthrough](../walkthroughs/todo-evolution.md), not an implemented format.
+The [user guide](../../docs/guide.md#create-check-and-accept-an-evolution)
+walks through creating and accepting a root.
 The important distinction is one complete publication subtree versus evolution
 archaeology and local runtime data. RootStore exports the whole subtree, so absence
 from the new tree means deletion; acceptance does not guess which old files to keep.

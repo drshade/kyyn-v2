@@ -1,3 +1,6 @@
+-- Native process lifetime/pipe exchange, failure, cancellation and filesystem tests.
+-- Process reaping assertions require POSIX; no MicroHs compilation.
+
 {-# LANGUAGE DataKinds, OverloadedStrings #-}
 module Main (main) where
 

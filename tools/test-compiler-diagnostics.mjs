@@ -1,3 +1,6 @@
+// Authored schema/tool type errors through installed evolution check; preserve
+// useful compiler locations/messages without internal stack traces.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

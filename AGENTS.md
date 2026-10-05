@@ -1,5 +1,7 @@
 # Working on Kyyn
 
+Use [the user guide](docs/guide.md) for current CLI workflows and authoring examples.
+
 Read [the SDLC](docs/SDLC.md) and [project practices](docs/PROJECT-PRACTICES.md)
 before working here. They own development process; do not duplicate those rules
 in agent instructions. The adoption is prospective, not a rewrite of past work.

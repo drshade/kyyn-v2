@@ -47,7 +47,8 @@ the implications are unclear; no particular combined-artifact licensing conclusi
 is established by this ADR.
 
 The selected host/guest JSON libraries are recorded in [ADR 0007](0007-wire.md),
-with source/license evidence in the [protocol investigation](../protocol-investigation.md).
+with source/license inventory in [vendored inputs](../../vendor/README.md) and
+[native dependency sources](../../docs/dependency-sources.md).
 Check the exact selected source/dependency terms alongside the compatibility proof;
 API convenience alone is not distribution clearance. This is one
 dependency-selection check, not a new runtime enforcement mechanism.

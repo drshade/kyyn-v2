@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Real MicroHs integration with a disposable bundled native toolchain.
+# Selects KYYN_TEST_ROOT/TOOLCHAIN and CPP explicitly; no live provider credentials.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export KYYN_TEST_ROOT="$PWD"

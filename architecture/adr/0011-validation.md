@@ -334,8 +334,8 @@ validator therefore does not manufacture `Validated Root` or erase its report.
 Callers obtain a local revision through RootStore's explicit `ResolveHead`, or
 use the revision already recorded in Before. For repair, use `LoadRootAt` instead
 of requiring a successful `loadAcceptedRoot`. The preview application retains
-the source's validation report alongside the evaluation/checking outcome (see
-the [composition sketch](../boundaries.md)); source errors do not earn validation
+the source's validation report alongside the evaluation/checking outcome;
+source errors do not earn validation
 and do not by themselves reject the repair. Actual runtime failure remains Failure.
 
 Capture source/configuration, dependencies and supporting input files before entry

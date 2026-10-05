@@ -1,3 +1,6 @@
+// Local installer behavior and bundled-runtime lookup in disposable prefixes.
+// Checks replacement, failed-build preservation and refusals without altering the user's installation.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

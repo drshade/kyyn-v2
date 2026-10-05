@@ -260,6 +260,19 @@ before pipes are closed. This is ownership of the directly launched child, not a
 process-tree supervisor or a promise of forced termination of arbitrary programs
 that ignore termination. Those are not capabilities required by the bundled guest.
 
+## Development diagnostics
+
+`KYYN_TIMINGS=1` emits timing events to stderr without changing normal/JSON
+results. Events distinguish inspection, compilation/cache hits, guest execution
+and command wall time. Durations are inclusive: nested guest calls must not be
+summed as independent costs. Other values leave timing disabled.
+
+Native schema/API inspection has a separate checkout-local Dhall cache keyed by
+captured sources, selection, compiler settings and the installed Kyyn build
+revision. The staging script embeds that revision; unidentified plain Cabal
+builds disable inspection caching. Corrupt cache diagnostics identify the entry
+to remove. Neither cache stores validation authority or replaces checking.
+
 ## Boundaries and alternatives
 
 The native host must not import KB-specific types; it operates on checked

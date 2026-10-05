@@ -1,3 +1,6 @@
+-- Recording compiler plus real filesystem: artifact reuse, changed-input misses,
+-- empty-entry repair, disabled cache and storage failures; no MicroHs compilation.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main where
 

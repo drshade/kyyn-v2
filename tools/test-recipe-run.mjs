@@ -1,3 +1,7 @@
+// Installed closed-recipe run: two captured sources, frozen draft, repeated checks,
+// acceptance, deletion acknowledgement and newer evidence remaining pending.
+// Checks producer reconciliation, bad scopes/IDs and missing secrets; no live model.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

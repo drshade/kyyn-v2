@@ -1,3 +1,6 @@
+-- Pure SDK evolution/edit composition, observations, recipe changes and failures.
+-- No host interpreter, guest compiler or external provider.
+
 module EvolutionCore (main) where
 
 import Kyyn.Evolution

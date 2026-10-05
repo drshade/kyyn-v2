@@ -1,3 +1,6 @@
+-- Real Dhall schema/value conversion and validation at the format boundary.
+-- No guest compiler or repository operations.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

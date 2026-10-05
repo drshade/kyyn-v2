@@ -1,3 +1,8 @@
+// Installed recipe references and description: entry/signature refusal, accepted
+// open/closed changes, archive inspection, FactEdits discovery and schema changes.
+// Tree/DOT/Mermaid project a flow with a failing action without invoking it;
+// type-invalid validators/corrupt facts do not block description. No live provider.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

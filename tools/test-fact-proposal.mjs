@@ -1,3 +1,7 @@
+// Captured Dhall fact proposal through repeated checks, review and acceptance.
+// Checks stale/malformed input preservation, citations, recipes and archive;
+// no model invocation.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

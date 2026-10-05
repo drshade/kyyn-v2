@@ -1,3 +1,7 @@
+-- Typed query composition, binding generation, trace and reply decoding.
+-- --pure skips compilation; full mode checks selected metadata and actual MicroHs
+-- requests with dependent collection reads. No provider or publication.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

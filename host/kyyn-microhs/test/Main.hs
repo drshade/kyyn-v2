@@ -1,3 +1,6 @@
+-- Real MicroHs schema inspection, generated codec round trips and refusal tests.
+-- Uses the integration fixtures and selected KYYN_TEST_ROOT/KYYN_TEST_TOOLCHAIN.
+
 module Main where
 
 import Control.Monad (unless, forM_)

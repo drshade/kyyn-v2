@@ -1,3 +1,6 @@
+-- Native text/fingerprint capture: stable reads, changed paths/contents and invalid
+-- UTF-8 refusal. No guest compiler.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 

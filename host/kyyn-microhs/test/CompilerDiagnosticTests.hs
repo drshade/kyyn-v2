@@ -1,3 +1,6 @@
+-- Compiler diagnostic cleanup and contextual rejection: preserve useful messages,
+-- remove internal stacks and retain error categories. Uses the selected test toolchain.
+
 module Main where
 
 import Control.Monad (unless, forM_)

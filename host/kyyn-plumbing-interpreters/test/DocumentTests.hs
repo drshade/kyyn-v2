@@ -1,3 +1,6 @@
+-- Scoped native document locking across read/modify/replace/clear, concurrent
+-- access, replacement failure and cancellation cleanup. No domain or guest code.
+
 {-# LANGUAGE DataKinds, OverloadedStrings #-}
 module Main (main) where
 

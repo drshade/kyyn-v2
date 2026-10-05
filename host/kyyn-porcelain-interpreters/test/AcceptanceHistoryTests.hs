@@ -1,3 +1,7 @@
+-- Real Git/Dhall archive history: introducing commit, inheritance, revert/removal,
+-- reacceptance, all-parent merges, ambiguity and malformed histories. Forbids live
+-- root/source reads and publication.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module AcceptanceHistoryTests (acceptanceHistoryTests) where
 

@@ -1,3 +1,6 @@
+// Installed secret setup, masking, refusal, checkout isolation and ignored storage
+// without runtime/schema preparation. --terminal adds a real hidden-prompt PTY check.
+
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, copyFileSync, chmodSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

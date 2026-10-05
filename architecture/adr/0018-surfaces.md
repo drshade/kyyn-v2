@@ -624,9 +624,8 @@ complete. Evolution review presents the recipe and batch/individual declarations
 alongside fact changes, including acknowledgement-only proposals. Fetching and
 reading never implicitly acknowledge anything. No agent launcher or workflow
 manager is required to expose these tools.
-The [curation walkthrough](../walkthroughs/evidence-curation.md) supplies the next
-journey. Final CLI spellings belong to its implementation slice, following the
-noun-path convention above, not a second generic command-string API.
+The [user guide](../../docs/guide.md#recipes-and-curation) shows current commands,
+following the noun-path convention above.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
 Web is designed for human understanding, high-level design, exploration and

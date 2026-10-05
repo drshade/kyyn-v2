@@ -1,3 +1,7 @@
+-- Root/store/application integration using real Dhall/filesystem/Git and recording
+-- schema/compiler/execution handlers. Includes capture, validation, candidate,
+-- publication, recovery, recipes and discovery; not a real MicroHs journey.
+
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Main (main) where
 

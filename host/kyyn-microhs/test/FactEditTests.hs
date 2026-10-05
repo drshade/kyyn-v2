@@ -1,3 +1,7 @@
+-- Generated same-schema edits under GHC/MicroHs, real Dhall proposals and RootStore
+-- materialization. Checks rationale/curation, reports, repeated frozen evaluation and
+-- failure without partial state; no CLI acceptance or live model.
+
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
