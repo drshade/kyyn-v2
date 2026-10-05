@@ -96,12 +96,9 @@ data RootStore :: Effect where
     :: RootContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)
   LoadRootValueForChecking
     :: Root -> RootStore m (Either [Diagnostic] CheckedValue)
-  ListFacts
-    :: Validated Root -> CollectionId -> PageRequest
-    -> RootStore m (Page FactId)
-  ReadFact
-    :: Validated Root -> CollectionId -> FactId
-    -> RootStore m (Maybe CheckedValue)
+  ReadCollection
+    :: Validated Root -> String
+    -> RootStore m (Either [Diagnostic] [Fact Value])
   ReadExamples
     :: Root -> [QueryDescriptor] -> RootStore m (Either [Diagnostic] [Example])
   EncodeExample
@@ -161,7 +158,8 @@ does not claim structural or semantic validation of the facts. Ordinary
 
 The manifest is `kb.dhall` inside the selected root subtree. Its fields are
 `schemaType`, `schemaMetadata`, `validator`, the `queries` and `tools` registration
-lists defined in [authoring](0008-authoring.md). Recipes are separate typed root
+lists defined in [authoring](0008-authoring.md), and the named `outputs`
+registrations defined in [outputs](0017-outputs.md). Recipes are separate typed root
 material in `recipes.dhall`, as defined in [ADR 0014](0014-evidence.md), not manifest fields. The first three select qualified exports
 such as `Schema.Root`, `Schema.schemaMetadata` and `Validate.validate`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
@@ -287,35 +285,17 @@ not empty snapshots. Nonzero infrastructure outcomes remain GitUnavailable; the
 interpreter does not classify errors by parsing human-readable stderr. Commit
 construction and publication are described in [ADR 0012](0012-acceptance.md).
 
-`ReadFact` returns `Nothing` only for an absent ID in an existing collection.
-Unknown collections, corrupt data and inaccessible storage are explicit failures.
-`CheckedValue` carries the collection's payload contract, not an arbitrary JSON
-object. Reads remain effects even when the initial interpreter answers from an
-already loaded snapshot.
+ReadCollection takes the logical collection name and returns its complete identified
+values from the explicit validated snapshot. Unknown collections, corrupt data and
+inaccessible storage return diagnostics or operational failures, not empty results.
+Listing IDs/titles and selecting an ID are projections of that result; a missing
+requested ID receives a not-found diagnostic. Reads remain effects even when the
+interpreter answers from an already loaded snapshot.
 `LoadRootValueForChecking` is the explicit diagnostic/execution path for a
 structurally readable but not yet semantically validated root. It is not used to
 silently weaken the validation requirement on ordinary fact browsing.
 Evolution execution uses this path for its source too: domain-invalid facts may
 be transformed into a valid candidate without first earning `Validated`.
-
-Browsing facts needs manageable result pages.
-Paging here is that user-facing operation, not a paged storage engine or an
-incremental evaluator. The initial fact interpreter can slice an already loaded
-collection. A cursor is opaque and tied to its selected snapshot and query; it
-is not a portable offset into whichever root is latest:
-
-```haskell
-data Page a = Page
-  { items :: [a]
-  , next  :: Maybe PageCursor
-  }
-
-data PageRequest = FirstPage | ContinuePage PageCursor
-```
-
-Batch size is an implementation/operation policy, not a per-field contract bound.
-A mismatched cursor is an error. [Evidence](0014-evidence.md) owns fetch batches
-and retained evidence history separately; this does not require paged acquisition.
 
 On the guest side, identity remains outside the typed payload so migration can
 change payload shape without accidentally replacing record identity:
@@ -385,8 +365,8 @@ rules for particular edits.
 
 Schema inspection reuse belongs to [ADR 0005](0005-contracts.md); metadata
 evaluation and complete validation remain part of loading/checking. Whole-root
-evaluation is in memory; the page interface above does not promise lazy or
-incremental guest evaluation. Multiple processes may duplicate preparation work;
+evaluation is in memory; collection reads do not promise lazy or incremental
+guest evaluation. Multiple processes may duplicate preparation work;
 no duplicate-work coordinator is needed. Draft and acceptance working-tree
 responsibilities are specified in ADR 0012.
 
@@ -402,5 +382,5 @@ Include many-small-file Dhall parsing/normalization in that measurement rather
 than attributing all loading cost to guest execution. ADR 0021 places this proof
 before the first product slice relies on whole-root performance. If representative
 interactive work is impractical, revisit the execution/storage choice then.
-Browsing pages are not a claim that whole-root computation scales; do not add
+Whole-collection reads are not a claim that whole-root computation scales; do not add
 storage-streaming or incremental-validation APIs in anticipation.

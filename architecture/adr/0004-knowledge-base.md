@@ -58,7 +58,7 @@ source/config files include `root/plugins/config/*.dhall` and `root/examples/`.
 They belong to the accepted snapshot, not to the guest's domain facts type;
 ADR 0016 defines their typed runtime loading. The code snapshot here includes
 supporting files, not just compiler input modules; config values remain runtime data.
-The guest-side query/output declarations in ADR 0017 belong to that code snapshot,
+The authored functions and query/output registrations in ADR 0017 belong to that code snapshot,
 not function-valued fields serialized in the guest Root. The host Root therefore
 selects both the current facts and the definitions that interpret or render them.
 

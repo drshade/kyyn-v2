@@ -76,7 +76,7 @@ to become a native Cabal package.
 ### Shared source ownership
 
 `shared/kyyn-types` holds genuinely shared pure vocabulary: fact identity/envelopes,
-diagnostics and validation reports, paging values and schema metadata where both
+diagnostics and validation reports, and schema metadata where both
 host and guest use the same definitions. Native packages and the guest SDK compile
 the same source with GHC and MicroHs respectively. The SDK may re-export this
 vocabulary so authors need no separate knowledge of the repository arrangement.

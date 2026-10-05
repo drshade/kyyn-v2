@@ -542,7 +542,7 @@ do not expose an unchecked byte-call API to authors.
 This block defines source preparation and captured reading; it does not grant
 sinks those read-only rows or force delivery through PluginRead.
 [ADR 0017](0017-outputs.md) owns the typed sink binding and invocation boundary.
-A source instance cannot satisfy a renderer's SinkBinding merely because a method
+A source instance cannot satisfy an output's sink reference merely because a method
 has a similar input shape. Kind denotes intended use, not proof that generic HTTP
 can only read remote state.
 

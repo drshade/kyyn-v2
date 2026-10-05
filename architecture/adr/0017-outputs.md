@@ -27,32 +27,43 @@ is a KB code/configuration change and follows the ordinary evolution route.
 
 ### Root data and authored declarations
 
-The guest's Root remains the concrete state type. Queries and output declarations
-belong to the KB's code, not function-valued fields serialized into its facts.
-Use one registered query/renderer form, returning the snapshot-read Program from
-ADR 0009. This is a pure description interpreted against the selected snapshot;
-ordinary business calculations need not themselves acquire an effect parameter.
-The type relationships are:
+The guest's Root is the concrete state type. Query and renderer implementations
+belong to authored code, not function-valued fields serialized into facts.
+Register outputs in `kb.dhall` by naming a renderer and a configured plugin sink,
+using the same named-entry convention as [authoring](0008-authoring.md).
+The registration contains names and descriptions, not duplicated data schemas:
 
 ```haskell
--- Generated for this KB; the SDK representation is owned by ADR 0009.
-type Query a = SDK.Query Root a
+-- Host representation of an output registration in kb.dhall.
+data OutputDefinition = OutputDefinition
+  { name :: String
+  , description :: String
+  , renderer :: String        -- qualified authored Haskell export
+  , sink :: SinkReference
+  }
 
-data SinkBinding input
-  -- Generated typed reference to a plugin, configured sink instance and operation.
-
-data Output root args where
-  Output
-    :: (args -> SDK.Query root input)
-    -> SinkBinding input
-    -> Output root args
+data SinkReference = SinkReference
+  { plugin :: PluginName
+  , instanceName :: ConnectorName
+  , method :: MethodName
+  }
 ```
 
-The renderer is just the first function argument to Output, not another component
-requiring independent registration or a lifecycle. There is no single query slot
-on Output: query composition belongs inside the function.
+Resolve the sink from the same selected root's plugin declarations and configuration.
+Inspect the renderer's checked signature to derive its argument/result contracts.
+Inspect the sink's registered signature to derive its input contract, then generate
+an adapter that type-checks the renderer result against that input. Reject an
+unknown entry, unsupported shape, mismatched type or source connector used as a
+sink; matching textual names alone does not establish compatibility.
+The manifest is the registration authority; generated adapters are disposable.
+
+The renderer is an ordinary function in the snapshot-query context. It can combine
+several queries, including dependent calls:
 
 ```haskell
+-- Generated for this KB; SDK.Query is owned by ADR 0009.
+type Query a = SDK.Query Root a
+
 salesSummary :: Month -> Query SalesSummary
 monthlyBudget :: Month -> Query Budget
 salesAnomalies :: Month -> Query [Anomaly]
@@ -63,49 +74,17 @@ renderSalesReport month = do
   budget   <- monthlyBudget month
   warnings <- salesAnomalies month
   pure (renderFile sales budget warnings)
-
-salesReportFile :: SinkBinding FileSink.Input
-
-monthlySalesReport :: Output Root Month
-monthlySalesReport =
-  Output renderSalesReport salesReportFile
 ```
 
-These guest declarations define the renderer/sink boundary. In this example,
-FileSink.Input stands for the selected file plugin's advertised input type, not a kernel-wide document
-format. The generated SinkBinding cannot be constructed by casting an arbitrary
-source connector or a sink expecting another type. Configuration selects the
-destination; it comes from the named instance in the selected root.
+Here FileSink.Input denotes the selected plugin's advertised input type, not a
+kernel-wide document format. The output registration names this renderer and its
+configured sink; it needs no single-query slot, per-renderer lifecycle or authored
+codec. A renderer needing no reads simply returns its calculation with pure.
 
-Queries obtain typed collections/facts through generated bindings and can pass
-the resulting values to ordinary pure calculations. A renderer that needs no query requests can likewise
-return its result with pure. There is one Output constructor, not separate pure
-and effectful renderer variants. SnapshotRead permits no live source acquisition,
-sink invocation or accepted-root publication. Its interpreter supplies reads from
-the selected snapshot, so this signature does not weaken repeatable preparation.
-
-A KB can declare several differently typed queries and outputs:
-
-```haskell
-data SomeQuery root where
-  SomeQuery :: (args -> SDK.Query root result) -> SomeQuery root
-
-data SomeOutput root where
-  SomeOutput :: Output root args -> SomeOutput root
-
-data KbDefinition root = KbDefinition
-  { queries :: [SomeQuery root]
-  , outputs :: [SomeOutput root]
-  }
-```
-
-These selected declaration fields do not replace the host's KnowledgeBase/Root
-types or the existing validation/schema exports. Generated registration supplies
-names, descriptions, contracts and codecs from the checked declarations. Hiding
-types existentially does not itself make values serializable or discoverable.
-That adapter work must be proved; authors do not write protocol wrappers or repeat
-structural schemas. Both query results and sink inputs use the supported contract
-subset. The host need not import a KB's domain types to inspect or invoke them.
+SnapshotRead permits no live acquisition, sink invocation or root publication.
+All component queries use the same selected snapshot. The host uses checked
+structural descriptors without importing the KB's domain types. Query registration
+and independent query invocation remain owned by ADRs 0008 and 0011.
 
 ### Preparing an output
 
@@ -269,8 +248,8 @@ Change head during preparation and verify every query still uses the selected
 root. Include dependent query calls as well as independent calculations.
 
 Reject a renderer/sink type mismatch and a source connector supplied as a sink
-binding. Prove generated registration retains the codecs/contracts hidden by
-existential declarations. Exercise snapshot-read capabilities without granting
+binding. Prove named-entry inspection derives the argument/result contracts and
+generated adapters enforce the renderer-to-sink type match. Exercise snapshot-read capabilities without granting
 the renderer sink/HTTP access. Browsing and preparation must perform no sink calls.
 
 Preview a file output, discard the intermediate result, then update it by rendering

@@ -42,7 +42,7 @@ settled work; agent-less preparation conveniences are not an initial requirement
 | Shared activity | Human-oriented Web | Agent-oriented MCP |
 | --- | --- | --- |
 | Understand the system | Model browser, examples, assumptions, connected views | Exact contracts, documentation, source/binding locations |
-| Explore knowledge | Tables, filtering, drill-down, alternate policies | Typed queries, stable paging, reusable calculation tools |
+| Explore knowledge | Tables, filtering, drill-down, alternate policies | Typed queries, identified collection reads, reusable calculation tools |
 | Design a change | Describe intent, adjust examples, inspect alternatives | Scaffold/edit workspace, implement functions, execute examples |
 | Review consequences | Data/schema/rule/report comparison; focused diagnostics | Structured diffs, failed examples, affected identities and comments |
 | Explain a record | Timeline of changes, reasons and cited evidence | Revision-scoped record history with step diffs and declared rationale |

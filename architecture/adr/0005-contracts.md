@@ -209,8 +209,7 @@ inspectSchema
   => SchemaSource
   -> Eff es (Either [Diagnostic] InspectedSchema)
 
-data CheckedValue = CheckedValue ContractId Value
--- Value is the host's structural JSON representation, not a guest domain type.
+data CheckedValue -- private constructor: checked contract identity and structural value
 ```
 
 `inspectSchema` reports unsupported/ill-typed source as diagnostics. Runtime or
@@ -220,11 +219,13 @@ declarations; it does not erase them into wire shapes alone. `loadedSources` lis
 captured files loaded by the compiler while inspecting that type. It excludes the
 installed compiler library and metadata-evaluation-only imports. Build preparation
 uses this closure to select old schema dependencies; it is not another component
-of contract identity or a hand-maintained dependency registry. A `CheckedValue` records
-structural conformity to its contract, not KB semantic validity. The wrapper is
-ordinary data, not a sealed certificate. Shape-directed checking belongs to
-DhallHandling, with root-level identity/layout checking through RootStore's
-`CheckRootValue` in ADR 0006. Whenever a
+of contract identity or a hand-maintained dependency registry. A `CheckedValue`
+establishes structural conformity to its recorded contract, not KB semantic
+validity. Keep its constructor private to checking code; callers cannot attach
+an arbitrary contract identity to unchecked contents. Shape-directed checking
+belongs to DhallHandling, with root-level identity/layout checking through
+RootStore's `CheckRootValue` in ADR 0006. Loading persisted values must recheck
+them rather than manufacture this wrapper from saved metadata. Whenever a
 different expected contract is supplied, compare identities or perform an explicit
 checked conversion; the wrapper alone does not establish that they match.
 
