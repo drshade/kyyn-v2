@@ -290,6 +290,13 @@ private definitions or function execution. Distinguish `sdk`, `generated` and
 `kb` origins in human and structured output. Accepted discovery reads a fixed Git
 revision; `--evolution ID` selects that workspace's target source.
 
+Recipe-flow modules receive the same root-specific fact-edit bindings used to
+check and execute closed recipes. Expose `Kyyn.Workspace.FactEdits` when the
+selected root has fact collections. Recipe inspection uses a same-schema binding
+for that root (the target root in a draft); it must not merge those modules with
+the draft evolution's distinct Before/After bindings. Inspect each context with
+its own generated sources.
+
 ### Root browsing
 
 The CLI exposes read-only knowledge inspection:
