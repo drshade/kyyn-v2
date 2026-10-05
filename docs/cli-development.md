@@ -259,10 +259,31 @@ Review the target changes, check the evolution, mark it ready and accept it norm
 New evolutions inherit accepted plugins. Reinstallation replaces any local edits
 inside that evolution's named package; review them with Git before updating.
 
-## Discover the guest SDK
+## Explore schemas, collections and facts
+
+```sh
+kyyn-v2 --kb PATH root schema list
+kyyn-v2 --kb PATH root schema show Tasks.Todo
+kyyn-v2 --kb PATH root collection list
+kyyn-v2 --kb PATH root collection show tasks
+kyyn-v2 --kb PATH root fact list tasks
+kyyn-v2 --kb PATH root fact show tasks todo-001
+```
+
+Schema commands list reachable named types and show their Dhall shape and field
+roles. Collection commands show logical names, root fields, payload types and
+references. Add `--evolution ID` to either group to inspect target source without
+running the evolution or its validator; fact material is not needed.
+
+Fact commands validate the accepted root and read its records. Lists show exact
+IDs with Title-role text where available; `show` prints the selected payload as
+Dhall. `--json` exposes structured values and selection context. Facts do not take
+`--evolution`: use `evolution show ID` to review a saved candidate's changes.
+
+## Discover guest and KB APIs
 
 Outside a KB these commands show the installed SDK without needing a source
-checkout. Inside a KB they also show its generated tool bindings:
+checkout. Inside a KB they also show its generated bindings and authored modules:
 
 ```sh
 kyyn-v2 guest module list
@@ -270,6 +291,8 @@ kyyn-v2 guest module show Kyyn.Edit
 kyyn-v2 guest symbol show Kyyn.Edit.update
 kyyn-v2 guest symbol show 'Kyyn.Evolution.>=>'
 kyyn-v2 --json guest symbol show Kyyn.Schema.Fact
+kyyn-v2 --kb PATH guest module show Helpers
+kyyn-v2 --kb PATH guest symbol show Helpers.greet
 ```
 
 Module output lists exported types, constructors and functions. Symbol output
@@ -304,12 +327,18 @@ use a bare `--` line for a paragraph break within the documentation. Reexports
 retain the defining declaration's documentation. Other Haddock forms and ordinary
 implementation comments are not collected.
 
-The catalogue covers seven author-facing modules: `Kyyn.Schema`, `Kyyn.Validation`,
-`Kyyn.Query`, `Kyyn.Evolution`, `Kyyn.Edit`, `Kyyn.Optics` and `Kyyn.Plugin`. Shared `Kyyn.Types.*`
+Use `guest module list` for the installed author-facing modules. Shared `Kyyn.Types.*`
 modules and runtime operations are implementation APIs, not catalogue entries.
 Reexports retain their real defining identities.
 
-Add `--evolution ID` to explore generated bindings for a draft:
+Origins are labelled `sdk`, `generated` or `kb` (JSON `origins` for a list and
+`origin` for a module/symbol). KB module names follow their paths under `root/src`,
+for example `Helpers/Email.hs` defines `Helpers.Email`. Listing does not type-check
+every helper body; showing a module or symbol checks that module and its dependencies.
+Only exports are shown. Accepted-root discovery reads the selected Git revision,
+not uncommitted working-tree edits; use a draft to explore edits before acceptance.
+
+Add `--evolution ID` to explore generated bindings and authored target modules for a draft:
 
 ```sh
 kyyn-v2 --kb PATH guest module list --evolution 000001-add-todos

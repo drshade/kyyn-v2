@@ -38,7 +38,7 @@ availableCatalogue listing modules response@(Response outcome _ _ diagnostics)
   | otherwise = case withOrigins (map (ApiEntry SdkOrigin) modules) (modulesResult (Right [name | ApiModule name _ <- modules])) of
       Response _ value messages _ -> Response (if listing then Succeeded else outcome) value messages
         (Diagnostic (if listing then Warning else Error) "guest.bindings-unavailable"
-          "Generated bindings are unavailable; the installed SDK catalogue is shown. Fix the reported problem and retry."
+          "KB API inspection failed; the installed SDK catalogue is shown. Fix the reported problem and retry."
           Nothing : map severity diagnostics)
   where
     missingSymbol (Diagnostic _ code _ _) = code == "guest.module-not-found" || code == "guest.symbol-not-found"
