@@ -30,7 +30,7 @@ curation records are legitimate KB models, not mandatory kernel lifecycles.
 | Install an external integration | First-/third-party code runs using the Kyyn distribution | 0002, 0015, 0016, 0020 |
 | Ask an agent to install and open Kyyn | Readiness checked; human reaches their KB in a browser without toolchain knowledge | 0020, 0025 |
 | Connect the agent to a selected KB | Tested per-KB MCP invocation and discoverable typed methods | 0018, 0025 |
-| Examine source evidence | Typed discovery, stable paging, useful source references | 0007–0009, 0014 |
+| Examine source evidence | Typed discovery, useful source references | 0007–0009, 0014 |
 | Curate a coherent change | Related records change together; unresolved cases remain visible | 0004, 0010, 0011, 0019 |
 | Evolve the model | Before/after types, records, checks and tools change together | 0005, 0010–0012 |
 | Inspect before adopting | Actual data and report differences against a precise base | 0011, 0012, 0017, 0018 |

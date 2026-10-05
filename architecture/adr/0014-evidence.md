@@ -288,8 +288,7 @@ The instance component is lowercase hexadecimal UTF-8. `.kyyn/.gitignore` owns t
 checkout-local ignore rule; first publication creates it if absent, preserving
 existing content. Store producer identity, latest values and payload-free fetch
 markers. Timestamps use ISO 8601 UTC.
-The initial implementation may rewrite this document; paging or another storage
-engine is not required by this decision.
+Publication rewrites this document; no paging or separate storage engine is used.
 
 ### Investigation and curation belong to the KB
 
