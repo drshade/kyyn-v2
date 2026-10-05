@@ -232,7 +232,7 @@ dispatchRootApi host@(Host _ _ _ runtime _ _ _) request (SelectedKb kb revision 
     Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
     Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do
       installed <- Api.readCatalogue
-      source <- Root.sourceCodeAt kb revision Nothing
+      source <- Root.sourceRootAt kb revision Nothing
       generated <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
       case (installed,generated) of
         (Left diagnostics,_) -> pure (refusal diagnostics)
@@ -254,7 +254,7 @@ dispatchWorkspaceApi host@(Host _ _ _ runtime _ _ _) workspace request = withRun
             Left diagnostics -> pure (refusal diagnostics)
             Right context@(WorkspaceCatalogue _ revision generated) -> do
               let EvolutionWorkspace kb identity = workspace
-              source <- Root.sourceCodeAt kb revision (Just identity)
+              source <- Root.sourceRootAt kb revision (Just identity)
               tools <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
               case tools of
                 Left diagnostics -> pure (refusal diagnostics)

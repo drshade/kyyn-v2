@@ -8,6 +8,7 @@ import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
 import Kyyn.Domain.Evidence (FetchId(..))
 import Kyyn.Domain.Curation (RecipeId(..))
+import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Domain.Secret (secretName)
 import Kyyn.Surfaces.Cli
 import Options.Applicative (ParserResult(..), renderFailure)
@@ -53,6 +54,11 @@ main = do
   assert "Show leaks secret" (not ("fixture-secret" `isInfixOf` show (SecretArgument "fixture-secret")))
   forM_ [["secret","set","../escape","x"], ["secret","show"], ["secret","remove",""]] refuses
   succeeds ["root","recipe","list"] (Invocation selected Human (Root (RootRecipe ListRecipes)))
+  forM_ [([],Tree),(["--dot"],Dot),(["--mermaid"],Mermaid)] $ \(flags,format) ->
+    succeeds (["root","recipe","describe","syncTodos"] ++ flags)
+      (Invocation selected Human (Root (RootRecipe (DescribeRecipe (RecipeId "syncTodos") format))))
+  forM_ [["root","recipe","describe"], ["root","recipe","describe","syncTodos","--dot","--mermaid"],
+    ["root","recipe","describe","syncTodos","--evolution","abc123"]] refuses
   succeeds ["root","recipe","show","syncTodos"]
     (Invocation selected Human (Root (RootRecipe (ShowRecipe (RecipeId "syncTodos")))))
   succeeds ["root","recipe","run","syncTodos","local-file","sales","local-file","sales"]

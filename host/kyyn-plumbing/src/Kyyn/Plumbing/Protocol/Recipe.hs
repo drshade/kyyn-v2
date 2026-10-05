@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Recipe (recipeCheckSources, recipeSources, recipeInputValue) where
+module Kyyn.Plumbing.Protocol.Recipe (recipeCheckSources, recipeDescriptionSources, recipeSources, recipeInputValue) where
 
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -10,6 +10,7 @@ import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..), ConnectorInstanceRef(..), 
 import Kyyn.Domain.Plugin (pluginNameText)
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (relativePath)
+import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings)
 import Kyyn.Plumbing.Protocol.FactEdits (factEditType)
@@ -17,7 +18,18 @@ import Kyyn.Plumbing.Protocol.Tool (ConnectorInterface, InstanceBinding, toolBin
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 
 recipeCheckSources :: RootContract -> FlowEntryRef -> FileTree -> Either String GuestSources
-recipeCheckSources contract (FlowEntryRef entry) sources = do
+recipeCheckSources = recipeProjectionSources [] ["main = pure ()"]
+
+recipeDescriptionSources :: RootContract -> FlowEntryRef -> DescriptionFormat -> FileTree -> Either String GuestSources
+recipeDescriptionSources contract entry format = recipeProjectionSources
+  ["import qualified Agentic.Describe as Describe", "import qualified Data.Text as Text",
+   "import Kyyn.Runtime.Json (encodeWith, stringCodec, printValue)"]
+  ["main = either fail putStrLn (printValue (encodeWith stringCodec (Text.unpack (Describe." ++ renderer ++ " (Describe.describe selected)))))"]
+  contract entry
+  where renderer = case format of Tree -> "renderTree"; Dot -> "dot"; Mermaid -> "mermaid"
+
+recipeProjectionSources :: [String] -> [String] -> RootContract -> FlowEntryRef -> FileTree -> Either String GuestSources
+recipeProjectionSources imports body contract (FlowEntryRef entry) sources = do
   if null (collectionContracts (rootSchema contract))
     then Left "Closed recipes need at least one domain fact collection"
     else pure ()
@@ -25,18 +37,18 @@ recipeCheckSources contract (FlowEntryRef entry) sources = do
   bindings <- evolutionBindings contract contract
   path <- relativePath "KyynRecipeCheck.hs"
   let root = haskellType (rootType (rootSchema contract))
-      source = unlines
+      source = unlines $
         [ "module KyynRecipeCheck where"
         , "import qualified " ++ selectedModule
         , "import qualified " ++ definingModule root
         , "import Kyyn.Agentic (Flow)"
         , "import Kyyn.Recipe (RecipeInput, ProposedCuration)"
         , "import Kyyn.Workspace.FactEdits (RootEdit)"
-        , "selected :: Flow (RecipeInput " ++ root ++ ") (ProposedCuration RootEdit)"
+        ] ++ imports ++
+        [ "selected :: Flow (RecipeInput " ++ root ++ ") (ProposedCuration RootEdit)"
         , "selected = " ++ entry
         , "main :: IO ()"
-        , "main = pure ()"
-        ]
+        ] ++ body
   guestSources path (files sources ++ files bindings ++ [(path,Text.encodeUtf8 (Text.pack source))])
 
 recipeSources :: RootContract -> FlowEntryRef -> [ConnectorInterface] -> [InstanceBinding] -> FileTree

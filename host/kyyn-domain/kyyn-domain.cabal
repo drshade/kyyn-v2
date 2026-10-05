@@ -19,6 +19,7 @@ library
     Kyyn.Domain.Secret
     Kyyn.Domain.Model
     Kyyn.Domain.FactProposal
+    Kyyn.Domain.Recipe
     Kyyn.Domain.KnowledgeBase Kyyn.Domain.Evolution Kyyn.Domain.EvolutionReport Kyyn.Domain.Publication
   default-language: GHC2021
   default-extensions: NoFieldSelectors
