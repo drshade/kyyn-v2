@@ -282,11 +282,56 @@ Discovery outside a KB remains catalogue-only.
 
 #### Tool authoring discovery
 
+KB-authored modules under the selected root's source tree participate in the same
+`guest module list/show` and `guest symbol show` commands. List names without
+type-checking every authored helper; showing a module or symbol checks that
+module and its dependencies. Show exported declarations and documentation, not
+private definitions or function execution. Distinguish `sdk`, `generated` and
+`kb` origins in human and structured output. Accepted discovery reads a fixed Git
+revision; `--evolution ID` selects that workspace's target source.
+
+### Root browsing
+
+The CLI exposes read-only knowledge inspection:
+
+```text
+root schema list [--evolution ID]
+root schema show TYPE [--evolution ID]
+root collection list [--evolution ID]
+root collection show COLLECTION [--evolution ID]
+root fact list COLLECTION
+root fact show COLLECTION ID
+```
+
+Schema browsing uses the checked RootContract and lists reachable named types,
+not every helper type in the KB. Show concrete resolved type names, structural
+shape and associated field roles. Collection browsing shows logical names, root
+fields, payload types, roles and declared references. These operations use source
+loading and schema inspection without loading fact material or executing validators
+or model calls. Draft browsing checks the target source without running its evolution.
+
+Fact browsing loads and validates the accepted root through the existing path.
+List fact IDs and titles where the payload has a Title role; show the selected
+fact's payload. Preserve IDs exactly and refuse unknown collections or IDs. This
+is an effectful store read over an explicit validated root:
+
+```haskell
+readCollection :: RootStore :> es => Validated Root -> String
+               -> Eff es (Either [Diagnostic] [Fact Value])
+```
+
+No pagination, filtering, extra persistence or fact mutation commands are needed
+for this slice. Fact commands refuse `--evolution`: target source is not a saved
+candidate. Candidate fact browsing requires a future explicit candidate selector;
+the existing evolution report remains the candidate review surface. JSON responses
+identify their kind and selected revision/evolution; human output remains concise.
+
+#### Tool authoring bindings
+
 For the accepted root and an evolution target, expose `Kyyn.Connectors`,
 `Kyyn.Agentic` and each generated `Kyyn.Plugins.P_*.*` facade in the same
 list/show/symbol commands. Omit internal request rows such as `KyynToolCalls`.
-The public judgement facade reexports the question vocabulary alongside `judge`;
-it is not advertised as a separate runner-less module.
+Agentic's question vocabulary is available through the installed SDK catalogue.
 
 Tool bindings are generated from the selected plugin declarations and configured
 instances, even before a tool is registered. Discovery inspects these bindings,
