@@ -14,7 +14,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decod
 
 encodeCatalogue :: DhallHandling :> es => [ApiModule] -> Eff es (Either [Diagnostic] ByteString)
 encodeCatalogue modules = fmap (fmap Text.encodeUtf8) $ encodeValue catalogueShape
-  (object ["version" .= ("1" :: String), "modules" .= map moduleValue modules])
+  (object ["version" .= ("2" :: String), "modules" .= map moduleValue modules])
 
 decodeCatalogue :: DhallHandling :> es => ByteString -> Eff es (Either [Diagnostic] [ApiModule])
 decodeCatalogue bytes = case Text.decodeUtf8' bytes of
@@ -52,7 +52,7 @@ namespaceName ValueNamespace = "Value"
 parseCatalogue :: Value -> Parser [ApiModule]
 parseCatalogue = withObject "guest catalogue" $ \fields -> do
   version <- fields .: "version"
-  unless (version == ("1" :: String)) (fail "Unsupported guest catalogue format; reinstall Kyyn")
+  unless (version == ("2" :: String)) (fail "Unsupported guest catalogue format; reinstall Kyyn")
   fields .: "modules" >>= mapM (withObject "module" $ \entry ->
     ApiModule <$> entry .: "name" <*> (entry .: "symbols" >>= mapM parseSymbol) <*> entry .: "instances")
 
