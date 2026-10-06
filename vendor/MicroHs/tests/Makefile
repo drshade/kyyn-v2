@@ -3,9 +3,10 @@ MHSOUTPUT=
 MHS=../bin/gmhs
 TMHS=$(MHS) $(MHSTARGET) $(MHSOUTPUT)
 EVAL=../bin/mhseval +RTS -H1M -RTS
+EVALUATOR?=../bin/mhseval
 .PHONY: test nfib clean errtest alltest cache info
 
-alltest: info test errtest testforimp testforexp testforimpexp testapplysp testpipenonblockio testpreprocessorpaths
+alltest: info test errtest testforimp testforexp testforimpexp testapplysp testpipenonblockio testpreprocessorpaths testlargegetline
 # interactivetest
 
 cache:
@@ -112,6 +113,7 @@ test:
 	$(TMHS) ThrSt      && $(EVAL) > ThrSt.out      && diff ThrSt.ref ThrSt.out
 	$(TMHS) Throw      && $(EVAL) > Throw.out      && diff Throw.ref Throw.out
 	$(TMHS) ThrowMVar  && $(EVAL) > ThrowMVar.out  && diff ThrowMVar.ref ThrowMVar.out
+	$(TMHS) ThrowToSync && $(EVAL) > ThrowToSync.out && diff ThrowToSync.ref ThrowToSync.out
 	$(TMHS) RtsExn     && $(EVAL) > RtsExn.out     && diff RtsExn.ref RtsExn.out
 	$(TMHS) Mask       && $(EVAL) > Mask.out       && diff Mask.ref Mask.out
 	$(TMHS) EmptyData  && $(EVAL) > EmptyData.out  && diff EmptyData.ref EmptyData.out
@@ -132,6 +134,16 @@ test:
 .PHONY: testpreprocessorpaths
 testpreprocessorpaths:
 	sh preprocessor-paths.sh $(TMHS)
+
+.PHONY: testlargegetline
+testlargegetline:
+	$(TMHS) LargeGetLine -oout.comb
+	awk 'BEGIN { for (line = 0; line < 2; line++) { \
+	    for (i = 0; i < 100000; i++) printf "0123456789"; \
+	    printf "\n"; } printf "\nend\n"; }' > LargeGetLine.tmp
+	# Use defaults first, then vary GC timing and constrain the evaluator stack.
+	$(EVALUATOR) < LargeGetLine.tmp > LargeGetLine.out && diff LargeGetLine.ref LargeGetLine.out
+	$(EVALUATOR) +RTS -H8M -K4096 -RTS < LargeGetLine.tmp > LargeGetLine.out && diff LargeGetLine.ref LargeGetLine.out
 
 testforimp:
 	$(TMHS) ForeignC -of.exe && ./f.exe > ForeignC.out && diff ForeignC.ref ForeignC.out
@@ -160,6 +172,19 @@ testpipenonblockio:
 
 testpipenonblockioem:
 	$(TMHS) PipeNonBlockIO && $(EVAL) > PipeNonBlockIO.out && diff PipeNonBlockIO.ref PipeNonBlockIO.out
+
+# A FILE.js argument embeds a JavaScript file in the output (--pre-js for emscripten)
+testjsflag:
+	cp JSFlag.pre jsflag.js
+	$(TMHS) jsflag.js JSFlag && $(EVAL) > JSFlag.out && diff JSFlag.ref JSFlag.out && rm -f jsflag.js
+
+# The .js files in the jsbits directory of a package are embedded too.
+# Install JSBitsLib as package JSBits, with jsbits as MicroCabal installs js-sources.
+testjsbits:
+	rm -rf jsbitsdb
+	$(MHS) -ijsbitspkg -PJSBits-1.0 -oJSBits-1.0.pkg JSBitsLib && $(MHS) -Q JSBits-1.0.pkg jsbitsdb
+	mkdir -p jsbitsdb/packages/JSBits-1.0/jsbits && cp jsbitspkg/jsbitslib.pre jsbitsdb/packages/JSBits-1.0/jsbits/jsbitslib.js
+	$(TMHS) -ajsbitsdb JSBits && $(EVAL) > JSBits.out && diff JSBits.ref JSBits.out && rm -rf jsbitsdb JSBits-1.0.pkg
 
 errtest:
 	sh errtester.sh $(MHS) < errmsg.test
