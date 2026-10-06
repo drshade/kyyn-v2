@@ -4,12 +4,13 @@ module Kyyn.Recipe
   , RecipeId(..), EvidenceScope(..), EvidenceId(..)
   , Curation(..), Acknowledgement(..)
   , ProposedCuration(..), ProposedStep(..), FactEdit(..)
-  , pendingItems, removedItems, scopes, acknowledgeAll, cite
+  , pendingItems, removedItems, scopes, acknowledgeAll, acknowledgeItems, cite
   ) where
 
 import Kyyn.Types.Curation
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceRef(EvidenceRef))
 import Kyyn.Evolution.Proposal
+import Data.List (partition)
 
 -- | The selected root and captured pending evidence supplied to a recipe flow.
 data RecipeInput root = RecipeInput
@@ -51,10 +52,21 @@ scopes = map selected
     selected (Reconciliation scope _) = scope
 
 -- | Explicitly declare every supplied batch fully handled, including producer
--- reconciliation. Call only after completing that work; this makes no decision
--- about whether processing succeeded.
+-- reconciliation. Use only for flows that process the whole supplied source,
+-- after completing that work. For partial processing use acknowledgeItems;
+-- neither helper decides whether processing succeeded.
 acknowledgeAll :: RecipeInput root -> Curation
 acknowledgeAll (RecipeInput recipe _ batches) = Curation recipe (map EntireBatch (scopes batches))
+
+-- | Group explicitly handled items into one IndividualRecords per scope,
+-- preserving first-seen scope order and item order (including duplicates).
+-- No reconciliation is inferred: the host refuses individual acknowledgements
+-- for reconciliation scopes; explicitly declare EntireBatch after that work.
+acknowledgeItems :: [(EvidenceScope, EvidenceId)] -> [Acknowledgement]
+acknowledgeItems [] = []
+acknowledgeItems ((scope, ident) : rest) =
+  let (matching, remaining) = partition ((== scope) . fst) rest
+  in IndividualRecords scope (ident : map snd matching) : acknowledgeItems remaining
 
 -- | Cite an opaque item ID within its connector instance. Add external links to
 -- the reference separately when available; this does not resolve a source URI.

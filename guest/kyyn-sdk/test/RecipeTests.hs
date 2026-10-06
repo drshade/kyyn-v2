@@ -20,5 +20,15 @@ main = do
   check "explicit whole-batch declaration" (acknowledgeAll (RecipeInput (RecipeId "sync") () batches)
     == Curation (RecipeId "sync") (map EntireBatch [a,b,c,c]))
   check "opaque citation without invented links" (cite b ident == EvidenceRef "files" "two" "same" [])
+  check "handled items group interleaved scopes in first-seen order"
+    (acknowledgeItems [(b,ident),(a,gone),(b,gone),(a,ident)]
+      == [IndividualRecords b [ident,gone], IndividualRecords a [gone,ident]])
+  check "grouping preserves duplicate items for host validation"
+    (acknowledgeItems [(a,ident),(a,ident)] == [IndividualRecords a [ident,ident]])
+  let newer = EvidenceScope "files" "one" "f2"
+  check "different fetch scopes stay distinct"
+    (acknowledgeItems [(a,ident),(newer,ident)]
+      == [IndividualRecords a [ident], IndividualRecords newer [ident]])
+  check "empty handled input" (acknowledgeItems [] == [])
   check "empty input" (null (pendingItems []) && null (removedItems []) && null (scopes [])
     && acknowledgeAll (RecipeInput (RecipeId "sync") () []) == Curation (RecipeId "sync") [])
