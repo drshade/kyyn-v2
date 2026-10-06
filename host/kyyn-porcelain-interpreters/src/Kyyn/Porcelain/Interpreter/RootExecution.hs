@@ -5,6 +5,7 @@ import Control.Monad (unless, forM, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode, object, (.=))
 import Data.Bifunctor (first)
+import qualified Data.Text as Text
 import qualified Data.ByteString as Strict
 import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
@@ -46,7 +47,7 @@ runRootExecution sdk = interpret $ \_ -> \case
       forM_ closed $ \(name,entry@(FlowEntryRef selected)) -> do
         source <- checked "recipe.signature" (recipeCheckSources contract entry sources)
         let context = errorDiagnostic "recipe.signature"
-              ("Recipe " ++ name ++ ": expected " ++ selected ++ " :: Flow (RecipeInput Root) (ProposedCuration RootEdit)")
+              ("Recipe " ++ Text.unpack name ++ ": expected " ++ Text.unpack selected ++ " :: Flow (RecipeInput Root) (ProposedCuration RootEdit)")
         _ <- ExceptT (first (context :) <$> compileGuest source)
         pure ()
     RootDefinition _ _ validator declarations _ authored <- ExceptT (readRootDefinition code)

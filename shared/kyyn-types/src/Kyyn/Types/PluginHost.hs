@@ -1,17 +1,20 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, DuplicateRecordFields #-}
 module Kyyn.Types.PluginHost
   ( HttpRequest(..), HttpResponse(..), HttpError(..), Http(..)
   , SecretError(..), Secrets(..), Waiting(..), LoginInteraction(..), LoginError(..)
   ) where
 
+import Data.Text (Text)
+
 -- | A text HTTP request. Headers and body may contain credentials.
 data HttpRequest = HttpRequest
-  { method :: String, url :: String, headers :: [(String, String)], body :: String }
+  { method :: Text, url :: Text, headers :: [(Text, Text)], body :: Text }
   deriving Eq
 
 -- | A text HTTP response, including non-success statuses for the plugin to handle.
 data HttpResponse = HttpResponse
-  { status :: Int, headers :: [(String, String)], body :: String }
+  { status :: Int, headers :: [(Text, Text)], body :: Text }
   deriving Eq
 
 -- | Transport failures contain no request or response values.
@@ -21,16 +24,16 @@ data HttpError = InvalidHttpRequest | HttpTimedOut | HttpConnectionFailed | Http
 data Http a where
   SendHttp :: HttpRequest -> Http (Either HttpError HttpResponse)
 
-data SecretError = SecretNotFound String deriving (Eq, Show)
+data SecretError = SecretNotFound Text deriving (Eq, Show)
 
 data Secrets a where
-  GetSecret :: String -> Secrets (Either SecretError String)
-  PutSecret :: String -> String -> Secrets ()
+  GetSecret :: Text -> Secrets (Either SecretError Text)
+  PutSecret :: Text -> Text -> Secrets ()
 
 data Waiting a where
   WaitSeconds :: Int -> Waiting ()
 
 data LoginInteraction a where
-  DisplayInstructions :: String -> LoginInteraction ()
+  DisplayInstructions :: Text -> LoginInteraction ()
 
-newtype LoginError = LoginError String deriving (Eq, Show)
+newtype LoginError = LoginError Text deriving (Eq, Show)

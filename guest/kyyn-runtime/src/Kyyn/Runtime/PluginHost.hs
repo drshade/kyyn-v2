@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
 module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeLogin) where
 
@@ -38,14 +39,14 @@ executeLogin configCodec selected = withTransport $ \transport -> do
     handler transport identity (InRight (InLeft call)) = secretRequest transport identity call
     handler transport identity (InRight (InRight (InLeft call))) = waitingRequest transport identity call
     handler transport identity (InRight (InRight (InRight call))) = loginRequest transport identity call
-    loginErrorCodec = Codec (\(LoginError message) -> encodeWith stringCodec message)
-      (fmap LoginError . decodeWith stringCodec)
+    loginErrorCodec = Codec (\(LoginError message) -> encodeWith textCodec message)
+      (fmap LoginError . decodeWith textCodec)
 
 httpRequest :: Transport -> Integer -> Http a -> IO a
 httpRequest transport identity (SendHttp (HttpRequest method url headers body)) = do
   (value,raw) <- exchangeBody transport identity "http" "send"
-    (record [("method",encodeWith stringCodec method),("url",encodeWith stringCodec url),
-      ("headers",encodeWith headersCodec headers)]) (TE.encodeUtf8 (T.pack body))
+    (record [("method",encodeWith textCodec method),("url",encodeWith textCodec url),
+      ("headers",encodeWith headersCodec headers)]) (TE.encodeUtf8 body)
   result <- either fail pure (decodeWith (resultCodec httpErrorCodec (responseCodec raw)) value)
   case result of
     Left _ | not (B.null raw) -> fail "Raw body accompanies failed HTTP request"
@@ -53,9 +54,9 @@ httpRequest transport identity (SendHttp (HttpRequest method url headers body)) 
 
 secretRequest :: Transport -> Integer -> Secrets a -> IO a
 secretRequest transport identity (GetSecret key) = exchange transport identity "secrets" "get"
-  (record [("key",encodeWith stringCodec key)]) (resultCodec secretErrorCodec stringCodec)
+  (record [("key",encodeWith textCodec key)]) (resultCodec secretErrorCodec textCodec)
 secretRequest transport identity (PutSecret key value) = exchange transport identity "secrets" "put"
-  (record [("key",encodeWith stringCodec key),("value",encodeWith stringCodec value)]) unitCodec
+  (record [("key",encodeWith textCodec key),("value",encodeWith textCodec value)]) unitCodec
 
 waitingRequest :: Transport -> Integer -> Waiting a -> IO a
 waitingRequest transport identity (WaitSeconds seconds) = exchange transport identity "waiting" "seconds"
@@ -63,15 +64,15 @@ waitingRequest transport identity (WaitSeconds seconds) = exchange transport ide
 
 loginRequest :: Transport -> Integer -> LoginInteraction a -> IO a
 loginRequest transport identity (DisplayInstructions message) = exchange transport identity "login" "display"
-  (record [("message",encodeWith stringCodec message)]) unitCodec
+  (record [("message",encodeWith textCodec message)]) unitCodec
 
-headersCodec :: Codec [(String,String)]
+headersCodec :: Codec [(T.Text,T.Text)]
 headersCodec = listCodec (Codec encode decode)
   where
-    encode (name,value) = record [("name",encodeWith stringCodec name),("value",encodeWith stringCodec value)]
+    encode (name,value) = record [("name",encodeWith textCodec name),("value",encodeWith textCodec value)]
     decode value = do
       values <- fields ["name","value"] value
-      (,) <$> field "name" stringCodec values <*> field "value" stringCodec values
+      (,) <$> field "name" textCodec values <*> field "value" textCodec values
 
 responseCodec :: B.ByteString -> Codec HttpResponse
 responseCodec raw = Codec encode decode
@@ -82,7 +83,7 @@ responseCodec raw = Codec encode decode
       values <- fields ["status","headers"] value
       status <- field "status" integerCodec values
       if status < 100 || status > 599 then Left "Invalid HTTP status" else
-        HttpResponse (fromInteger status) <$> field "headers" headersCodec values <*> pure (T.unpack (TE.decodeUtf8 raw))
+        HttpResponse (fromInteger status) <$> field "headers" headersCodec values <*> pure (TE.decodeUtf8 raw)
 
 httpErrorCodec :: Codec HttpError
 httpErrorCodec = Codec encode decode
@@ -99,12 +100,12 @@ httpErrorCodec = Codec encode decode
         _ -> Left "Unknown HTTP error"
 
 secretErrorCodec :: Codec SecretError
-secretErrorCodec = Codec (\(SecretNotFound key) -> tagged "SecretNotFound" (Just (encodeWith stringCodec key))) decode
+secretErrorCodec = Codec (\(SecretNotFound key) -> tagged "SecretNotFound" (Just (encodeWith textCodec key))) decode
   where
     decode value = do
       pair <- variant value
       case pair of
-        ("SecretNotFound",Just key) -> SecretNotFound <$> decodeWith stringCodec key
+        ("SecretNotFound",Just key) -> SecretNotFound <$> decodeWith textCodec key
         _ -> Left "Unknown secret error"
 
 unitCodec :: Codec ()

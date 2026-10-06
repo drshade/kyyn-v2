@@ -25,32 +25,32 @@ rationaleCodec :: Codec Rationale
 rationaleCodec = Codec encode decode
   where
     encode (Rationale explanation evidence) = record
-      [("explanation",encodeWith stringCodec explanation),("evidence",encodeWith (listCodec evidenceCodec) evidence)]
+      [("explanation",encodeWith textCodec explanation),("evidence",encodeWith (listCodec evidenceCodec) evidence)]
     decode value = do
       values <- fields ["explanation","evidence"] value
-      Rationale <$> field "explanation" stringCodec values <*> field "evidence" (listCodec evidenceCodec) values
+      Rationale <$> field "explanation" textCodec values <*> field "evidence" (listCodec evidenceCodec) values
     evidenceCodec = Codec encodeEvidence decodeEvidence
     encodeEvidence (EvidenceRef producer connector source references) = record
-      [("producer",encodeWith stringCodec producer),("connector",encodeWith stringCodec connector),
-       ("source",encodeWith stringCodec source),("references",encodeWith (listCodec stringCodec) references)]
+      [("producer",encodeWith textCodec producer),("connector",encodeWith textCodec connector),
+       ("source",encodeWith textCodec source),("references",encodeWith (listCodec textCodec) references)]
     decodeEvidence value = do
       values <- fields ["producer","connector","source","references"] value
-      EvidenceRef <$> field "producer" stringCodec values <*> field "connector" stringCodec values
-        <*> field "source" stringCodec values <*> field "references" (listCodec stringCodec) values
+      EvidenceRef <$> field "producer" textCodec values <*> field "connector" textCodec values
+        <*> field "source" textCodec values <*> field "references" (listCodec textCodec) values
 
 curationCodec :: Codec Curation
 curationCodec = Codec encode decode
   where
     encode (Curation (RecipeId recipe) handled) = record
-      [("recipe",encodeWith stringCodec recipe),("handled",encodeWith (listCodec acknowledgementCodec) handled)]
+      [("recipe",encodeWith textCodec recipe),("handled",encodeWith (listCodec acknowledgementCodec) handled)]
     decode value = do
       values <- fields ["recipe","handled"] value
-      Curation <$> (RecipeId <$> field "recipe" stringCodec values)
+      Curation <$> (RecipeId <$> field "recipe" textCodec values)
         <*> field "handled" (listCodec acknowledgementCodec) values
     acknowledgementCodec = Codec encodeAcknowledgement decodeAcknowledgement
     encodeAcknowledgement (EntireBatch scope) = tagged "EntireBatch" (Just (encodeWith scopeCodec scope))
     encodeAcknowledgement (IndividualRecords scope ids) = tagged "IndividualRecords" (Just (record
-      [("scope",encodeWith scopeCodec scope),("ids",encodeWith (listCodec stringCodec) [name | EvidenceId name <- ids])]))
+      [("scope",encodeWith scopeCodec scope),("ids",encodeWith (listCodec textCodec) [name | EvidenceId name <- ids])]))
     decodeAcknowledgement value = do
       selected <- variant value
       case selected of
@@ -58,11 +58,11 @@ curationCodec = Codec encode decode
         ("IndividualRecords",Just payload) -> do
           values <- fields ["scope","ids"] payload
           IndividualRecords <$> field "scope" scopeCodec values
-            <*> (map EvidenceId <$> field "ids" (listCodec stringCodec) values)
+            <*> (map EvidenceId <$> field "ids" (listCodec textCodec) values)
         _ -> Left "Unknown evidence acknowledgement"
     scopeCodec = Codec encodeScope decodeScope
     encodeScope (EvidenceScope plugin instanceName fetch) = record
-      [("plugin",encodeWith stringCodec plugin),("instance",encodeWith stringCodec instanceName),("fetch",encodeWith stringCodec fetch)]
+      [("plugin",encodeWith textCodec plugin),("instance",encodeWith textCodec instanceName),("fetch",encodeWith textCodec fetch)]
     decodeScope value = do
       values <- fields ["plugin","instance","fetch"] value
-      EvidenceScope <$> field "plugin" stringCodec values <*> field "instance" stringCodec values <*> field "fetch" stringCodec values
+      EvidenceScope <$> field "plugin" textCodec values <*> field "instance" textCodec values <*> field "fetch" textCodec values

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Runtime.SchemaMetadata (encodeMetadata) where
 
 import Kyyn.Types.SchemaMetadata
@@ -11,7 +12,7 @@ encodeMetadata (SchemaMetadata rs fs cs) = printValue $ record
   , ("collections", JSArray (map collectionValue cs))
   ]
   where
-    text = encodeWith stringCodec
+    text = encodeWith textCodec
     roleValue (RoleDecl n d a) = record
       [("name", text n), ("description", text d), ("affordance", tagged (affordanceTag a) Nothing)]
     affordanceTag Title = "Title"

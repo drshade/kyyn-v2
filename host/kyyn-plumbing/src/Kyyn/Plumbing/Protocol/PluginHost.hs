@@ -8,7 +8,6 @@ import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
 import Data.List (sort)
 import qualified Data.ByteString as Bytes
-import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Secret (SecretName, secretName, secretNameText, SecretError(..))
 import Kyyn.Types.PluginHost (HttpRequest(..), HttpResponse(..), HttpError)
@@ -19,7 +18,7 @@ data PluginHostCall = HttpCall HttpRequest | GetSecret SecretName | PutSecret Se
 decodePluginHostCall :: Bytes.ByteString -> String -> String -> Value -> Parser PluginHostCall
 decodePluginHostCall body capability method arguments = case (capability,method) of
   ("http","send") -> exact ["method","url","headers"] (\a -> do
-    text <- either (const (fail "Invalid UTF-8 HTTP body")) (pure . Text.unpack) (Text.decodeUtf8' body)
+    text <- either (const (fail "Invalid UTF-8 HTTP body")) pure (Text.decodeUtf8' body)
     HttpCall <$> (HttpRequest <$> a .: "method" <*> a .: "url" <*>
       (a .: "headers" >>= traverse (exact ["name","value"] (\h -> (,) <$> h .: "name" <*> h .: "value"))) <*> pure text)) arguments
   ("secrets","get") -> exact ["key"] (\a -> GetSecret <$> key a) arguments
@@ -37,7 +36,7 @@ decodePluginHostCall body capability method arguments = case (capability,method)
 httpResult :: Either HttpError HttpResponse -> (Value,Bytes.ByteString)
 httpResult (Left problem) = (left (object ["tag" .= show problem]), Bytes.empty)
 httpResult (Right (HttpResponse status headers body)) = (right (object
-  ["status" .= show status,"headers" .= [object ["name" .= n,"value" .= v] | (n,v) <- headers]]), Text.encodeUtf8 (Text.pack body))
+  ["status" .= show status,"headers" .= [object ["name" .= n,"value" .= v] | (n,v) <- headers]]), Text.encodeUtf8 body)
 
 secretResult :: Either SecretError String -> Value
 secretResult (Left (SecretNotFound key)) = left (object ["tag" .= ("SecretNotFound" :: String),"value" .= secretNameText key])

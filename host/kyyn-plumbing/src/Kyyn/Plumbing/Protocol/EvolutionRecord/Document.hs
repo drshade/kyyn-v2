@@ -7,6 +7,7 @@ import Data.Aeson.Types (Parser, parseEither, parseJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
 import Data.List (nub, sort, sortOn)
+import qualified Data.Text as Text
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -43,7 +44,7 @@ recordDocument identity before after (EvolutionReport plugins steps curation) = 
           [(ident,old,new) | FactChange name ident old new <- changes, name == collection]
         pure (Key.fromString collection .= values)) collections
       recipes <- traverse (\(ident,old,new) -> do
-        _ <- either invalid pure (recipeId ident)
+        _ <- either invalid pure (recipeId (Text.unpack ident))
         unless (old /= Nothing || new /= Nothing) (invalid "Recipe change has no value")
         pure (object ["id" .= ident,"before" .= optional recipeValue old,"after" .= optional recipeValue new]))
         [(ident,old,new) | RecipeChange (FactId ident) old new <- changes]
@@ -139,7 +140,7 @@ decodeRecord before after = parseEither $ withObject "Evolution record" $ \recor
           old <- fields .: "before" >>= parseOptional parseRecipe
           new <- fields .: "after" >>= parseOptional parseRecipe
           unless (old /= Nothing || new /= Nothing) (fail "Recipe change has no value")
-          pure (RecipeChange (FactId name) old new))
+          pure (RecipeChange (FactId (Text.pack name)) old new))
       pure (StepReport (Rationale explanation evidence) (changes ++ recipes))
     parseChanges endpoints collection values = do
       entries <- parseJSON values

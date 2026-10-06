@@ -1,29 +1,31 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 module MicrosoftGraph.Types where
 
+import Data.Text (Text)
 data GraphAuth
-  = ClientSecret { tenant :: String, clientId :: String, secretKey :: String }
-  | DeviceCode { tenant :: String, clientId :: String, tokenKey :: String }
+  = ClientSecret { tenant :: Text, clientId :: Text, secretKey :: Text }
+  | DeviceCode { tenant :: Text, clientId :: Text, tokenKey :: Text }
   deriving (Eq, Show)
 
 data CalendarConfig = CalendarConfig
   { auth :: GraphAuth
-  , mailbox :: String
-  , calendarId :: Maybe String
+  , mailbox :: Text
+  , calendarId :: Maybe Text
   , sharedCalendar :: Bool
   } deriving (Eq, Show)
 
 data CalendarFetch = CalendarFetch
-  { modifiedFrom :: Maybe String, modifiedTo :: Maybe String } deriving (Eq, Show)
+  { modifiedFrom :: Maybe Text, modifiedTo :: Maybe Text } deriving (Eq, Show)
 
-data EventTime = EventTime { dateTime :: String, timeZone :: String } deriving (Eq, Show)
-data Person = Person { name :: String, address :: String } deriving (Eq, Show)
+data EventTime = EventTime { dateTime :: Text, timeZone :: Text } deriving (Eq, Show)
+data Person = Person { name :: Text, address :: Text } deriving (Eq, Show)
 data Event = Event
-  { subject :: String, bodyPreview :: String
+  { subject :: Text, bodyPreview :: Text
   , start :: EventTime, end :: EventTime
   , organizer :: Person, attendees :: [Person]
-  , location :: String, isAllDay :: Bool, isCancelled :: Bool
-  , eventType :: String, iCalUId :: String
-  , lastModifiedDateTime :: String, webLink :: String
+  , location :: Text, isAllDay :: Bool, isCancelled :: Bool
+  , eventType :: Text, iCalUId :: Text
+  , lastModifiedDateTime :: Text, webLink :: Text
   } deriving (Eq, Show)
-type EventId = String
+type EventId = Text

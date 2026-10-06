@@ -51,7 +51,7 @@ evidenceListResult (EvidenceCapture snapshot items) = success
   (object ["selection" .= context snapshot, "items" .=
     [object ["id" .= key,"fingerprint" .= fingerprint] | (EvidenceId key,EvidenceFingerprint fingerprint) <- items]])
   (if null items then ["No current evidence."] else
-    [key ++ "  " ++ fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
+    [Text.unpack key ++ "  " ++ Text.unpack fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
 
 historyResult :: EvidenceSnapshotRef -> [FetchSummary] -> Response
 historyResult snapshot fetches = success (object ["selection" .= context snapshot,"fetches" .=
@@ -63,7 +63,7 @@ historyResult snapshot fetches = success (object ["selection" .= context snapsho
 changesResult :: EvidenceSnapshotRef -> [EvidenceChangeSummary] -> Response
 changesResult snapshot changes = success (object ["selection" .= context snapshot,"changes" .= map value changes])
   (if null changes then ["No evidence changes in the selected interval."] else
-    [fetchName identity ++ "  " ++ show kind ++ "  " ++ key | EvidenceChangeSummary identity _ kind (EvidenceId key) _ _ <- changes])
+    [fetchName identity ++ "  " ++ show kind ++ "  " ++ Text.unpack key | EvidenceChangeSummary identity _ kind (EvidenceId key) _ _ <- changes])
   where
     value (EvidenceChangeSummary identity previous kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef producer connector source refs)) = object
       ["fetch" .= fetchName identity,"previous" .= fmap fetchName previous,"kind" .= show kind,"id" .= key,

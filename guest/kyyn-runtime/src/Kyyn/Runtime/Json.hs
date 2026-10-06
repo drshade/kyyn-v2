@@ -1,12 +1,13 @@
 module Kyyn.Runtime.Json
-  ( Codec(..), encodeWith, decodeWith, parseValue, printValue
-  , stringCodec, integerCodec, boolCodec, listCodec, optionalCodec
+  ( Codec(..), encodeWith, decodeWith, parseValue, printValue, printChunks
+  , stringCodec, textCodec, integerCodec, boolCodec, listCodec, optionalCodec
   , record, fields, field, tagged, variant, at
   ) where
 
 import Data.List (sort)
 import Text.JSON.Types
 import Text.JSON.String
+import qualified Data.Text as T
 
 data Codec a = Codec (a -> JSValue) (JSValue -> Either String a)
 
@@ -23,6 +24,38 @@ printValue :: JSValue -> Either String String
 printValue value = do
   checked <- profile value
   pure (showJSValue checked "")
+
+-- Validate and encode incrementally. String escaping remains the JSON library's
+-- responsibility; only container punctuation is emitted here.
+printChunks :: JSValue -> [Either String String]
+printChunks JSNull = [Left "null is outside the wire profile"]
+printChunks (JSRational _ _) = [Left "numbers must use strings"]
+printChunks (JSBool value) = [Right (showJSValue (JSBool value) "")]
+printChunks (JSString value) = stringChunks (fromJSString value)
+printChunks (JSArray values) = Right "[" : separated (map printChunks values) ++ [Right "]"]
+printChunks (JSObject object) = Right "{" : separated (members [] (fromJSObject object)) ++ [Right "}"]
+  where
+    members _ [] = []
+    members seen ((key,value):rest)
+      | key `elem` seen = members seen rest
+      | otherwise = (stringChunks key ++ Right ":" : printChunks value) : members (key:seen) rest
+
+separated :: [[Either String String]] -> [Either String String]
+separated [] = []
+separated [value] = value
+separated (value:rest) = value ++ Right "," : separated rest
+
+stringChunks :: String -> [Either String String]
+stringChunks value = Right "\"" : parts value
+  where
+    parts [] = [Right "\""]
+    parts characters =
+      let (part,rest) = splitAt 1024 characters
+          encoded = do
+            checked <- scalarText part
+            let quoted = showJSValue (JSString (toJSString checked)) ""
+            pure (take (length quoted - 2) (drop 1 quoted))
+      in encoded : parts rest
 
 profile :: JSValue -> Either String JSValue
 profile JSNull = Left "null is outside the wire profile"
@@ -62,6 +95,14 @@ integerCodec = Codec (encodeWith stringCodec . show) decodeInteger
       case reads text of
         [(n, "")] | show (n :: Integer) == text -> Right n
         _ -> Left "expected canonical integer string"
+
+textCodec :: Codec T.Text
+textCodec = Codec (encodeWith stringCodec . T.unpack) decodeText
+  where
+    decodeText value = do
+      characters <- decodeWith stringCodec value
+      let packed = T.pack characters
+      packed `seq` Right packed
 
 boolCodec :: Codec Bool
 boolCodec = Codec JSBool decodeBool

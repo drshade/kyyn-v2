@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 
 -- Resolved data declarations only; a complete KB contract also needs metadata.
 data DataType
-  = StringType | IntegerType | BoolType | ProbabilityType
+  = StringType | TextType | IntegerType | BoolType | ProbabilityType
   | ListType DataType | OptionalType DataType
   | Algebraic String [DataType] [Constructor]
   deriving (Eq, Show, Generic, NFData)
@@ -27,6 +27,7 @@ data ScalarKind = TextScalar | IntegerScalar | BoolScalar | ProbabilityScalar de
 -- Constructor/module information binds this structural projection to authored code.
 shapeOf :: DataType -> Either String Shape
 shapeOf StringType = Right (Scalar TextScalar)
+shapeOf TextType = Right (Scalar TextScalar)
 shapeOf IntegerType = Right (Scalar IntegerScalar)
 shapeOf BoolType = Right (Scalar BoolScalar)
 shapeOf ProbabilityType = Right (Scalar ProbabilityScalar)
@@ -57,7 +58,7 @@ isRecord _ = False
 
 sdkFactIdType :: DataType
 sdkFactIdType = Algebraic "Kyyn.Types.Fact.FactId" []
-  [Constructor "Kyyn.Types.Fact.FactId" [(Nothing, StringType)]]
+  [Constructor "Kyyn.Types.Fact.FactId" [(Nothing, TextType)]]
 
 sdkFactPayload :: DataType -> Maybe DataType
 sdkFactPayload (Algebraic "Kyyn.Types.Fact.Fact" [p]
@@ -70,6 +71,7 @@ recordFields fs = mapM (\(name,t) -> (,) name <$> shapeOf t) [(name,t) | (Just n
 
 haskellType :: DataType -> String
 haskellType StringType = "String"
+haskellType TextType = "Data.Text.Text"
 haskellType IntegerType = "Integer"
 haskellType BoolType = "Bool"
 haskellType ProbabilityType = "Agentic.Questions.Probability"
@@ -94,4 +96,5 @@ typeModules = nub . concatMap selected . reachableTypes
   where
     selected (Algebraic name _ _) = [definingModule name]
     selected ProbabilityType = ["Agentic.Questions"]
+    selected TextType = ["Data.Text"]
     selected _ = []

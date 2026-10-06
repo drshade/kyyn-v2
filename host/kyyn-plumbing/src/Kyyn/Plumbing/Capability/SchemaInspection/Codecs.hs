@@ -26,13 +26,14 @@ generateWith probability moduleName root = do
       body <- definition (ref t) t
       pure ([ref t ++ " :: Codec " ++ haskellType t] ++ body)
     definition name StringType = pure [name ++ " = stringCodec"]
+    definition name TextType = pure [name ++ " = textCodec"]
     definition name IntegerType = pure [name ++ " = integerCodec"]
     definition name BoolType = pure [name ++ " = boolCodec"]
     definition name ProbabilityType = pure [name ++ " = " ++ probability]
     definition name (ListType t) = pure [name ++ " = listCodec " ++ ref t]
     definition name (OptionalType t) = pure [name ++ " = optionalCodec " ++ ref t]
     definition name t | t == sdkFactIdType = pure
-      [name ++ " = Codec (\\(Kyyn.Types.Fact.FactId value) -> encodeWith stringCodec value) (\\value -> Kyyn.Types.Fact.FactId <$> decodeWith stringCodec value)"]
+      [name ++ " = Codec (\\(Kyyn.Types.Fact.FactId value) -> encodeWith textCodec value) (\\value -> Kyyn.Types.Fact.FactId <$> decodeWith textCodec value)"]
     definition name t@(Algebraic _ _ original) = do
       let constructors = case sdkFactPayload t of
             Just p -> [Constructor "Kyyn.Types.Fact.Fact" [(Just "id", sdkFactIdType), (Just "value", p)]]

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Config (validate) where
 
 import Kyyn.Validation

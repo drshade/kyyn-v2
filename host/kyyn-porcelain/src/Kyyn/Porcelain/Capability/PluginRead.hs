@@ -2,6 +2,7 @@
 module Kyyn.Porcelain.Capability.PluginRead
   ( PluginRead(..), loadCapturedInput, executeCapturedMethod, callCapturedMethod ) where
 
+import qualified Data.Text as Text
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Data.Aeson (Value)
@@ -26,7 +27,7 @@ callCapturedMethod :: PluginRead :> es
 callCapturedMethod instanceRef producer payload method value = runExceptT $ do
   current <- ExceptT (loadCapturedInput instanceRef producer payload)
   output <- ExceptT (executeCapturedMethod current method value)
-  either (\(FetchError message) -> throwE [errorDiagnostic "plugin.read-failed" message]) pure output
+  either (\(FetchError message) -> throwE [errorDiagnostic "plugin.read-failed" (Text.unpack message)]) pure output
 
 loadCapturedInput :: PluginRead :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either [Diagnostic] CurrentEvidence)

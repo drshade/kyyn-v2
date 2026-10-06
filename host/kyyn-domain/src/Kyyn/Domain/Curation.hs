@@ -6,6 +6,7 @@ module Kyyn.Domain.Curation
   ) where
 
 import Data.List (nub, sortOn)
+import qualified Data.Text as Text
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin (bindingName, bindingModule, pluginNameText, PackageIdentity(..))
 import Kyyn.Types.Curation (RecipeId(..))
@@ -14,16 +15,16 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 
 recipeId :: String -> Either String RecipeId
-recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId value))) (bindingName value)
+recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId (Text.pack value)))) (bindingName value)
 checkRecipes :: [Fact Recipe] -> Either [Diagnostic] [Fact Recipe]
 checkRecipes values = do
   mapM_ check names
-  mapM_ checkFlow [(name,entry) | Fact (FactId name) (ClosedAgent (FlowEntryRef entry)) <- values]
+  mapM_ checkFlow [(Text.unpack name,Text.unpack entry) | Fact (FactId name) (ClosedAgent (FlowEntryRef entry)) <- values]
   case [name | name <- nub names, length (filter (== name) names) > 1] of
     name : _ -> Left [errorDiagnostic "recipe.duplicate" ("Duplicate recipe ID: " ++ name)]
     [] -> Right values
   where
-    names = [name | Fact (FactId name) _ <- values]
+    names = [Text.unpack name | Fact (FactId name) _ <- values]
     check name = either (\message -> Left [errorDiagnostic "recipe.invalid-id" (name ++ ": " ++ message)])
       (const (Right ())) (recipeId name)
     checkFlow (name,entry) = either
@@ -62,13 +63,13 @@ curationRegister entries
   where
     keys = [(recipe, instanceRef) | (recipe, instanceRef, _, _) <- entries]
     entry (recipe@(RecipeId name), instanceRef@(ConnectorInstanceRef _ instanceName), producer@(EvidenceProducer (PackageIdentity package) _), items) = do
-      _ <- recipeId name
+      _ <- recipeId (Text.unpack name)
       if null instanceName || null package then Left "Empty curation instance or producer" else Right ()
       let ids = map fst items
       if length ids /= length (nub ids) || any invalid items
         then Left "Duplicate/empty acknowledged IDs or fingerprints"
         else Right ((recipe, instanceRef), Progress producer items)
-    invalid (EvidenceId item, EvidenceFingerprint token) = null item || null token
+    invalid (EvidenceId item, EvidenceFingerprint token) = Text.null item || Text.null token
 
 emptyCurationRegister :: CurationRegister
 emptyCurationRegister = CurationRegister []
@@ -115,7 +116,7 @@ fingerprints (EvidenceCapture _ values)
   | otherwise = Right values
   where
     keys = map fst values
-    invalid (EvidenceId item, EvidenceFingerprint token) = null item || null token
+    invalid (EvidenceId item, EvidenceFingerprint token) = Text.null item || Text.null token
 
 replace :: Eq k => k -> v -> [(k,v)] -> [(k,v)]
 replace key value [] = [(key,value)]

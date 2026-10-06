@@ -1,7 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators, DuplicateRecordFields #-}
 module Kyyn.Plugin.Host
   ( NetworkHost, Acquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
   , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions, listFiles, readTextFile ) where
+
+import Data.Text (Text)
 
 import Kyyn.Types.Program
 import Kyyn.Types.Plugin (FileRead(..), EvidenceRead, FetchError, CapturedText)
@@ -27,11 +30,11 @@ sendHttp :: HttpRequest -> Program (Http :+: rest) (Either HttpError HttpRespons
 sendHttp = request . InLeft . SendHttp
 
 -- | Read a named secret from this KB's local store.
-getSecret :: String -> Program (Http :+: (Secrets :+: rest)) (Either SecretError String)
+getSecret :: Text -> Program (Http :+: (Secrets :+: rest)) (Either SecretError Text)
 getSecret = request . InRight . InLeft . GetSecret
 
 -- | Replace a named secret, including a rotated refresh token.
-putSecret :: String -> String -> Program (Http :+: (Secrets :+: rest)) ()
+putSecret :: Text -> Text -> Program (Http :+: (Secrets :+: rest)) ()
 putSecret key = request . InRight . InLeft . PutSecret key
 
 -- | Wait a nonnegative number of seconds. Cancellation interrupts the wait.
@@ -39,5 +42,5 @@ waitSeconds :: Int -> Program (Http :+: (Secrets :+: (Waiting :+: rest))) ()
 waitSeconds = request . InRight . InRight . InLeft . WaitSeconds
 
 -- | Show instructions during an explicitly invoked login.
-displayInstructions :: String -> PluginLogin ()
+displayInstructions :: Text -> PluginLogin ()
 displayInstructions = request . InRight . InRight . InRight . DisplayInstructions

@@ -1,14 +1,17 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Types.Curation
   ( RecipeId(..), EvidenceScope(..), Acknowledgement(..), Curation(..) ) where
+
+import Data.Text (Text)
 
 import Kyyn.Types.Evidence (EvidenceId)
 
 -- | The name of an identified recipe in the selected root.
-newtype RecipeId = RecipeId String deriving (Eq, Show)
+newtype RecipeId = RecipeId Text deriving (Eq, Show)
 
 -- | A connector instance and the particular fetch being acknowledged.
 data EvidenceScope = EvidenceScope
-  { scopePlugin :: String, scopeInstance :: String, scopeFetch :: String }
+  { scopePlugin :: Text, scopeInstance :: Text, scopeFetch :: Text }
   deriving (Eq, Show)
 
 -- | Declare all evidence in a fetch handled, or only the selected IDs.

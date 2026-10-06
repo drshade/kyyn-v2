@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Read (content) where
 
 import Kyyn.Plugin
@@ -8,5 +9,5 @@ content key snapshot = do
   found <- readEvidence snapshot (EvidenceId key)
   pure $ case found of
     Left problem -> Left problem
-    Right Nothing -> Left (FetchError ("No fetched file with evidence ID " ++ key))
+    Right Nothing -> Left (FetchError ("No fetched file with evidence ID " <> key))
     Right (Just (Evidence _ _ (Document text))) -> Right text

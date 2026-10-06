@@ -17,7 +17,7 @@ executeQuery rootCodec argumentCodec resultCodec selected input = do
     ("trace", JSArray (map encodeAccess trace))])
   where
     encodeAccess (CollectionRead collection) = record
-      [("tag", encodeWith stringCodec "Collection"), ("collection", encodeWith stringCodec collection)]
+      [("tag", encodeWith stringCodec "Collection"), ("collection", encodeWith textCodec collection)]
     encodeAccess (FactRead collection (FactId identity)) = record
-      [("tag", encodeWith stringCodec "Fact"), ("collection", encodeWith stringCodec collection),
-       ("factId", encodeWith stringCodec identity)]
+      [("tag", encodeWith stringCodec "Fact"), ("collection", encodeWith textCodec collection),
+       ("factId", encodeWith textCodec identity)]

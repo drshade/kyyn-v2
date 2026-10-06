@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Login (login) where
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types

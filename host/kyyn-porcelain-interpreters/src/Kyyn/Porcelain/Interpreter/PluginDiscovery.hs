@@ -115,7 +115,7 @@ syncTap kb tap@(Tap _ source) = do
   exists <- liftEff (FS.entryExists repoScope gitMarker)
   let acquire action = ExceptT (fmap (either (Left . map accessHint) Right) action)
       accessHint (Diagnostic severity code message location) = Diagnostic severity code
-        (message ++ "\nCheck access to the tap repository; private repositories need a configured Git credential helper.") location
+        (message <> "\nCheck access to the tap repository; private repositories need a configured Git credential helper.") location
   revision <- if exists then acquire (Git.fetchRevision repository source) else do
     liftEff (FS.ensureDirectory repoScope)
     cloned <- acquire (Git.cloneRepository source repoScope)

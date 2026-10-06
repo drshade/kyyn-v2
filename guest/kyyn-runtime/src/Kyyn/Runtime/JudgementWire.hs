@@ -2,7 +2,7 @@ module Kyyn.Runtime.JudgementWire (requestCodec, replyCodec) where
 
 import Agentic.Questions
 import Kyyn.Runtime.Json
-import Kyyn.Runtime.ModelWire (valueCodec, textCodec, pairCodec)
+import Kyyn.Runtime.ModelWire (valueCodec, pairCodec)
 import qualified Data.Text as T
 
 requestCodec :: Codec JudgeRequest

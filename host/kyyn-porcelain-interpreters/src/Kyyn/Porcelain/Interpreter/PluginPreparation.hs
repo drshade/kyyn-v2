@@ -7,7 +7,8 @@ import Data.Aeson (encode)
 import Data.Coerce (coerce)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
-import Data.List (nub, stripPrefix, isPrefixOf, isInfixOf)
+import Data.List (nub, stripPrefix, isPrefixOf)
+import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Numeric (showHex)
 import Effectful (Eff, (:>))
@@ -137,9 +138,9 @@ configure code packages = do
 located :: String -> Eff es (Either [Diagnostic] a) -> ExceptT [Diagnostic] (Eff es) a
 located label action = ExceptT (fmap (either (Left . map (locate label)) Right) action)
 locate :: String -> Diagnostic -> Diagnostic
-locate label (Diagnostic severity code message location) = Diagnostic severity selectedCode (label ++ ": " ++ message ++ hint) location
+locate label (Diagnostic severity code message location) = Diagnostic severity selectedCode (Text.pack label <> ": " <> message <> hint) location
   where
-    legacy = "KyynPluginBindings" `isInfixOf` message
+    legacy = "KyynPluginBindings" `Text.isInfixOf` message
     selectedCode = if legacy then "plugin.preparation" else code
     hint = if legacy then "\nImport Kyyn.Plugin / Kyyn.Plugin.Host instead; use Acquisition Payload and CapturedRead Payload signatures." else ""
 checked :: String -> Either String a -> ExceptT [Diagnostic] (Eff es) a

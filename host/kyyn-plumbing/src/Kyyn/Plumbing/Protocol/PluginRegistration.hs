@@ -41,14 +41,17 @@ decodeConnectors bytes = do
   declarations <- eitherDecodeStrict bytes >>= parseEither (withArray "connectors" (traverse connector . toList))
   let names = [name | SourceConnector name _ _ _ _ <- declarations]
   unless (length names == length (nub names)) (Left "Connector type names must be unique within a plugin")
-  forM declarations $ \(SourceConnector name fetch validate methods login) -> do
+  forM declarations $ \(SourceConnector nameText fetchText validateText methods loginText) -> do
+    let name = Text.unpack nameText; fetch = Text.unpack fetchText; validate = Text.unpack validateText
+        login = fmap Text.unpack loginText
     checkedName <- connectorTypeName name
     _ <- either (Left . ((name ++ ": fetch: ") ++)) Right (bindingModule fetch)
     _ <- either (Left . ((name ++ ": validateConfig: ") ++)) Right (bindingModule validate)
     _ <- traverse (either (Left . ((name ++ ": login: ") ++)) Right . bindingModule) login
     let methodNames = [n | CapturedMethod n _ _ <- methods]
     unless (length methodNames == length (nub methodNames)) (Left (name ++ ": Method names must be unique"))
-    checkedMethods <- forM methods $ \(CapturedMethod n description implementation) -> do
+    checkedMethods <- forM methods $ \(CapturedMethod methodText descriptionText implementationText) -> do
+      let n = Text.unpack methodText; description = Text.unpack descriptionText; implementation = Text.unpack implementationText
       let located = either (Left . ((name ++ "/" ++ n ++ ": ") ++)) Right
       checkedMethod <- located (methodName n)
       _ <- located (bindingModule implementation)

@@ -241,24 +241,24 @@ reportText (EvolutionReport plugins steps curation) = concatMap pluginLines plug
       ++ ["  before source: " ++ maybe "(absent)" originText old, "  after source:  " ++ maybe "(absent)" originText new]
       ++ ["  changed: " ++ relativeName path | path <- paths]
     revision = maybe "(absent)" (\(PluginOrigin _ _ selected) -> take 8 (revisionName selected))
-    declaration (Curation (RecipeId recipe) handled) = ("Recipe: " ++ recipe) : map acknowledgement handled
-    scope (EvidenceScope plugin instanceName fetch) = plugin ++ "/" ++ instanceName ++ " at fetch " ++ fetch
+    declaration (Curation (RecipeId recipe) handled) = ("Recipe: " ++ Text.unpack recipe) : map acknowledgement handled
+    scope (EvidenceScope plugin instanceName fetch) = Text.unpack (plugin <> "/" <> instanceName <> " at fetch " <> fetch)
     acknowledgement (EntireBatch selected) = "  Handled entire batch: " ++ scope selected
     acknowledgement (IndividualRecords selected ids) = "  Handled records: " ++ scope selected
-      ++ " [" ++ unwords [item | EvidenceId item <- ids] ++ "]"
-    step (StepReport (Rationale explanation evidence) changes) = [explanation]
+      ++ " [" ++ unwords [Text.unpack item | EvidenceId item <- ids] ++ "]"
+    step (StepReport (Rationale explanation evidence) changes) = [Text.unpack explanation]
       ++ ["  Declared citations:" | not (null evidence)]
-      ++ ["    " ++ source ++ " " ++ unwords references | EvidenceRef _ _ source references <- evidence]
+      ++ ["    " ++ Text.unpack source ++ " " ++ unwords (map Text.unpack references) | EvidenceRef _ _ source references <- evidence]
       ++ concatMap change changes
     change (FactChange collection (FactId identity) before after) =
-      ["  " ++ collection ++ "/" ++ identity]
+      ["  " ++ collection ++ "/" ++ Text.unpack identity]
       ++ ["    before: " ++ maybe "(absent)" value before, "    after:  " ++ maybe "(absent)" value after]
     change (RecipeChange (FactId identity) before after) =
-      ["  Recipe: " ++ identity,
+      ["  Recipe: " ++ Text.unpack identity,
        "    before: " ++ maybe "(absent)" recipeText before,
        "    after:  " ++ maybe "(absent)" recipeText after]
-    recipeText (OpenAgent instructions) = "Open agent: " ++ instructions
-    recipeText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ entry
+    recipeText (OpenAgent instructions) = "Open agent: " ++ Text.unpack instructions
+    recipeText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ Text.unpack entry
     value (RecordedFact _ contents) = jsonText contents
 
 originJson :: PluginOrigin -> Value
@@ -277,11 +277,11 @@ originRepository (RemoteRepository url) = gitUrlText url
 
 diagnosticText :: Diagnostic -> String
 diagnosticText (Diagnostic severity code message location) =
-  show severity ++ " [" ++ code ++ "] " ++ message ++ maybe "" (\value -> " (" ++ locationText value ++ ")") location
+  show severity ++ " [" ++ Text.unpack code ++ "] " ++ Text.unpack message ++ maybe "" (\value -> " (" ++ locationText value ++ ")") location
   where
-    locationText (FactLocation collection identity field) = collection ++ "/" ++ identity ++ maybe "" ('.' :) field
-    locationText (SourceLocation path line column) = path ++ ":" ++ show line ++ ":" ++ show column
-    locationText (ExampleLocation name) = "example " ++ name
+    locationText (FactLocation collection identity field) = Text.unpack collection ++ "/" ++ Text.unpack identity ++ maybe "" (('.' :) . Text.unpack) field
+    locationText (SourceLocation path line column) = Text.unpack path ++ ":" ++ show line ++ ":" ++ show column
+    locationText (ExampleLocation name) = "example " ++ Text.unpack name
 
 diagnosticJson :: Diagnostic -> Value
 diagnosticJson (Diagnostic severity code message location) = object

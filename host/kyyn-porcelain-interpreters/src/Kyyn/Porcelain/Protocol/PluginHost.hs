@@ -26,7 +26,7 @@ executeAcquisition :: (GuestExecution :> es, FileAcquisition :> es, Http.HttpTra
     Interaction.Waiting :> es, Failure :> es)
   => CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
 executeAcquisition program config prior = fmap (either
-  (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" message]) Right) $
+  (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
   conversationWithBody (decodeHostFrame decode) program (initialInput config)
     (either (fmap (,Bytes.empty) . answerAcquisition prior) answerNetwork)
   where
@@ -40,7 +40,7 @@ executeLogin :: (GuestExecution :> es, Http.HttpTransport :> es, Secrets.SecretS
 executeLogin program config = do
   output <- conversationWithBody (decodeHostFrame decodePluginHostCall) program (Lazy.toStrict (encode config)) answerLogin
   case output of
-    Left (FetchError message) -> pure (Left [errorDiagnostic "plugin.login-failed" message])
+    Left (FetchError message) -> pure (Left [errorDiagnostic "plugin.login-failed" (Text.unpack message)])
     Right value | value == unitResult -> pure (Right ())
                 | otherwise -> protocolFailure "Invalid login result"
 

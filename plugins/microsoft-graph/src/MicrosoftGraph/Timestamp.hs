@@ -2,10 +2,14 @@ module MicrosoftGraph.Timestamp (timestamp) where
 
 import Data.Char (isDigit)
 import Data.Ratio ((%))
+import qualified Data.Text as Text
 
 -- | Calendar date/time with seconds, optional fraction, and Z or a numeric offset.
-timestamp :: String -> Either String Rational
-timestamp input = do
+timestamp :: Text.Text -> Either Text.Text Rational
+timestamp = either (Left . Text.pack) Right . parseTimestamp . Text.unpack
+
+parseTimestamp :: String -> Either String Rational
+parseTimestamp input = do
   (year,r1) <- digits 4 input
   (month,r2) <- separator '-' r1 >>= digits 2
   (day,r3) <- separator '-' r2 >>= digits 2

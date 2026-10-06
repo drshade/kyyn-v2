@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport) where
 
+import qualified Data.Text as Text
 import Control.Monad (unless)
 import Data.Aeson (Value, withObject, withArray, (.:))
 import Data.Aeson.Types (parseEither)
@@ -83,7 +84,7 @@ identifiedFacts contract value = either (reject . ("Invalid fact membership: " +
 
 diff :: IdentifiedFacts -> IdentifiedFacts -> [Change]
 diff before after =
-  [FactChange collection (FactId identifier) old new |
+  [FactChange collection (FactId (Text.pack identifier)) old new |
     key@(collection,identifier) <- sort (nub (map fst before ++ map fst after)),
     let old = lookup key before, let new = lookup key after, old /= new]
 

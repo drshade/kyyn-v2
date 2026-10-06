@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 module Kyyn.Runtime.Transport
-  ( Transport, withTransport, readFrame, writeFrame, readJson, writeJson ) where
+  ( Transport, withTransport, readFrame, writeFrame, readJson, writeJson, writeValueFrame ) where
 
 import Control.Exception (evaluate)
 import qualified Data.ByteString as B
@@ -8,6 +8,8 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import System.IO
+import Kyyn.Runtime.Json (printChunks)
+import Text.JSON.Types (JSValue)
 
 data Transport = Transport Handle Handle
 
@@ -72,3 +74,25 @@ writeJson transport text = writeFrame transport (chunks text) B.empty
     chunks [] = []
     chunks input = let (part,rest) = splitAt 8192 input
                   in TE.encodeUtf8 (T.pack part) : chunks rest
+
+writeValueFrame :: Transport -> JSValue -> B.ByteString -> IO ()
+writeValueFrame (Transport input output) value body = do
+  emit [] 0 (printChunks value)
+  -- writeFrame finishes the metadata section, then writes the body section.
+  writeFrame (Transport input output) [] body
+  where
+    emit pending _ [] = flush pending
+    emit _ _ (Left message:_) = fail message
+    emit pending size (Right characters:rest) = do
+      let (part,remaining) = splitAt (8192-size) characters
+          size' = size + length part
+          pending' = part : pending
+      if size' == 8192 then do
+        flush pending'
+        emit [] 0 (Right remaining:rest)
+      else emit pending' size' rest
+    flush pending = do
+      let bytes = TE.encodeUtf8 (T.pack (concat (reverse pending)))
+      if B.null bytes then pure () else do
+        B.hPut output (C.pack (show (B.length bytes) ++ "\n"))
+        B.hPut output bytes

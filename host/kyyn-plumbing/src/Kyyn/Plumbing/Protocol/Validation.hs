@@ -61,10 +61,10 @@ parseReport = withArray "ValidationReport" (fmap ValidationReport . traverse dia
           SourceLocation <$> p .: "file" <*> (p .: "line" >>= integer) <*> (p .: "column" >>= integer)) value
         "Example" -> ExampleLocation <$> pureText value
         _ -> fail "Unknown diagnostic location"
-    pureText :: Value -> Parser String
+    pureText :: Value -> Parser Text.Text
     pureText = parseJSON
     integer value = do
-      source <- pureText value
+      source <- Text.unpack <$> pureText value
       case reads source of
         [(n, "")] | n > 0 && show (n :: Integer) == source -> pure n
         _ -> fail "Expected positive canonical source coordinate"

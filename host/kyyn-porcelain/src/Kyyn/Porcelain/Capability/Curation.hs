@@ -1,6 +1,7 @@
 module Kyyn.Porcelain.Capability.Curation (resolveCuration) where
 
 import Control.Monad (foldM, unless)
+import qualified Data.Text as Text
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Curation
@@ -15,24 +16,24 @@ resolveCuration :: EvidenceStore :> es => [Fact Recipe] -> Maybe Declaration.Cur
   -> CurationRegister -> Eff es (Either [Diagnostic] CurationRegister)
 resolveCuration _ Nothing register = pure (Right register)
 resolveCuration recipes (Just (Declaration.Curation recipe@(RecipeId name) handled)) register = runExceptT $ do
-  _ <- either (reject "curation.recipe-invalid") pure (recipeId name)
+  _ <- either (reject "curation.recipe-invalid") pure (recipeId (Text.unpack name))
   unless (name `elem` [identity | Fact (FactId identity) _ <- recipes])
-    (reject "curation.recipe-unknown" ("No recipe named " ++ name ++ " exists in the returned knowledge base"))
+    (reject "curation.recipe-unknown" ("No recipe named " ++ Text.unpack name ++ " exists in the returned knowledge base"))
   foldM apply register handled
   where
     apply progress declaration = do
       let (Declaration.EvidenceScope plugin instanceName fetch, selection) = case declaration of
             Declaration.EntireBatch scope -> (scope, EntireBatch)
             Declaration.IndividualRecords scope ids -> (scope, IndividualRecords ids)
-      selected <- either (reject "curation.scope-invalid") pure (pluginName plugin)
-      unless (not (null instanceName || null fetch))
+      selected <- either (reject "curation.scope-invalid") pure (pluginName (Text.unpack plugin))
+      unless (not (Text.null instanceName || Text.null fetch))
         (reject "curation.scope-invalid" "Evidence scope requires an instance and fetch")
       case selection of
-        IndividualRecords ids -> unless (all (\(EvidenceId item) -> not (null item)) ids)
+        IndividualRecords ids -> unless (all (\(EvidenceId item) -> not (Text.null item)) ids)
           (reject "curation.scope-invalid" "Acknowledged evidence IDs must not be empty")
         EntireBatch -> pure ()
       capture <- ExceptT $ fmap (either (Left . pure . scopeProblem) Right)
-        (resolveEvidenceCapture (ConnectorInstanceRef selected instanceName) (FetchId fetch))
+        (resolveEvidenceCapture (ConnectorInstanceRef selected (Text.unpack instanceName)) (FetchId (Text.unpack fetch)))
       either (reject "curation.progress" . problemMessage) pure (acknowledgeEvidence recipe selection capture progress)
     scopeProblem NotFetched = errorDiagnostic "curation.scope-unavailable"
       "The declared evidence fetch is unavailable; fetch and inspect evidence again, then update the declaration"

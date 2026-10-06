@@ -86,7 +86,7 @@ conversationWithBody decode program arguments respond = do
     case frame of
       Completed value -> case parseResult value of
         Left message -> protocolFailure message
-        Right (Left message) -> pure (Left (FetchError message))
+        Right (Left message) -> pure (Left (FetchError (Text.pack message)))
         Right (Right result) -> pure (Right result)
       _ -> protocolFailure "Guest did not complete"
 
