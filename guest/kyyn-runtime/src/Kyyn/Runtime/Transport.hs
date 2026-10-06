@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
 module Kyyn.Runtime.Transport
-  ( Transport, withTransport, readFrame, writeFrame, readJson, writeJson, writeValueFrame ) where
+  ( Transport, withTransport, readFrame, writeFrame, readJson, writeJson, writeValue, writeValueFrame ) where
 
 import Control.Exception (evaluate)
 import qualified Data.ByteString as B
@@ -75,7 +75,11 @@ writeJson transport text = writeFrame transport (chunks text) B.empty
     chunks input = let (part,rest) = splitAt 8192 input
                   in TE.encodeUtf8 (T.pack part) : chunks rest
 
+writeValue :: Transport -> JSValue -> IO ()
+writeValue transport value = writeValueFrame transport value B.empty
+
 writeValueFrame :: Transport -> JSValue -> B.ByteString -> IO ()
+-- A failed write may leave a partial frame: the guest must terminate, not retry.
 writeValueFrame (Transport input output) value body = do
   emit [] 0 (printChunks value)
   -- writeFrame finishes the metadata section, then writes the body section.

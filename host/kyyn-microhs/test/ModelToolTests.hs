@@ -171,7 +171,7 @@ noJudgement = interpret $ \_ _ -> error "Model fixture unexpectedly requested Ju
 withoutModel :: PreparedTool -> PreparedTool
 withoutModel (PreparedTool a b c _) = PreparedTool a b c Nothing
 hasDiagnostic :: String -> Either [Diagnostic] a -> Bool
-hasDiagnostic text (Left diagnostics) = any (\(Diagnostic _ _ message _) -> text `isInfixOf` message) diagnostics
+hasDiagnostic text (Left diagnostics) = any (\(Diagnostic _ _ message _) -> text `isInfixOf` Text.unpack message) diagnostics
 hasDiagnostic _ _ = False
 only :: [a] -> IO a
 only [x] = pure x

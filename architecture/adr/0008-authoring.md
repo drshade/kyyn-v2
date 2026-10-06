@@ -222,8 +222,8 @@ import Kyyn.Connectors (Tool)
 import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_local_file.Folder as Files
 
-type DocumentIds = [String]
-type Contents = [String]
+type DocumentIds = [Text]
+type Contents = [Text]
 
 bulkContent :: DocumentIds -> Tool (Either FetchError Contents)
 bulkContent ids = sequence <$> mapM (Files.content Connectors.documents) ids

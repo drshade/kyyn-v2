@@ -262,12 +262,12 @@ The plugin, not Kyyn core, owns this configuration type:
 
 ```haskell
 data GraphAuth
-  = ClientSecret { tenant :: String, clientId :: String, secretKey :: String }
-  | DeviceCode { tenant :: String, clientId :: String, tokenKey :: String
-               , scopes :: [String] }
+  = ClientSecret { tenant :: Text, clientId :: Text, secretKey :: Text }
+  | DeviceCode { tenant :: Text, clientId :: Text, tokenKey :: Text
+               , scopes :: [Text] }
 
 data CalendarConfig = CalendarConfig
-  { auth :: GraphAuth, mailbox :: String, calendarId :: Maybe String
+  { auth :: GraphAuth, mailbox :: Text, calendarId :: Maybe Text
   , sharedCalendar :: Bool }
 ```
 

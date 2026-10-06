@@ -190,7 +190,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   wrong <- runPreparation scope toolchain sdk (preparePlugins wrongCode)
   case wrong of
     Left diagnostics -> assert "Wrong fetch type diagnostic lost connector context"
-      (any (\(Diagnostic _ _ message _) -> "local-file/Folder" `isInfixOf` message) diagnostics)
+      (any (\(Diagnostic _ _ message _) -> "local-file/Folder" `isInfixOf` Text.unpack message) diagnostics)
     Right _ -> fail "Registration accepted a config validator as its fetch function"
   let packagePath file = "plugins/packages/local-file/source/src/LocalFile/" ++ file
       replaceFile file source = map (\(path,bytes) ->
@@ -199,7 +199,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         tree <- right (fileTree entries)
         result <- runPreparation scope toolchain sdk (preparePlugins tree)
         assert label (case result of
-          Left diagnostics -> all (\fragment -> any (\(Diagnostic _ _ message _) -> fragment `isInfixOf` message) diagnostics) fragments
+          Left diagnostics -> all (\fragment -> any (\(Diagnostic _ _ message _) -> fragment `isInfixOf` Text.unpack message) diagnostics) fragments
           Right _ -> False)
   expectProblem "validator Config mismatch accepted" ["LocalFile.Config.validate","expected Config"] $
     replaceFile "Config.hs" "module LocalFile.Config where\nimport Kyyn.Validation\nvalidate :: String -> ValidationReport\nvalidate _ = ValidationReport []\n"

@@ -6,6 +6,7 @@ import Agentic ((:/\), pattern (:/\))
 import qualified Data.Text as T
 import Control.Monad.Trans.Except (runExceptT)
 import Kyyn.Runtime.Plugin (execute)
+import Kyyn.Runtime.Transport (withTransport)
 import qualified Kyyn.Runtime.Json as J
 import Kyyn.Runtime.Evolution (encodeEvolutionReply)
 import qualified Kyyn.Evolution.Internal as E
@@ -45,7 +46,7 @@ main = do
       let selected = withCuration curation (proposalEvolution steps)
       either fail putStrLn (encodeEvolutionReply rootCodec (E.evaluateEvolution selected before))
     ["describe"] -> putStrLn (T.unpack (A.renderTree (A.describe flow)))
-    [] -> execute resultCodec modelRequest (runExceptT (A.interpret runtime flow "captured evidence 雪"))
+    [] -> withTransport $ \transport -> execute transport resultCodec (modelRequest transport) (runExceptT (A.interpret runtime flow "captured evidence 雪"))
     _ -> fail "Expected apply, describe or no arguments"
   where
     resultCodec = J.Codec

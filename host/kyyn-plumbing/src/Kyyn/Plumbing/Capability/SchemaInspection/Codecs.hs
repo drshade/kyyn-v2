@@ -17,7 +17,7 @@ generateWith probability moduleName root = do
     ["module " ++ moduleName ++ " (rootCodec) where", "import Kyyn.Runtime.Json"] ++
     (if ProbabilityType `elem` types then
       ["import qualified Agentic.Questions", "import Kyyn.Runtime.Probability (" ++ probability ++ ")"] else []) ++
-    ["import qualified " ++ name | name <- nub [definingModule n | Algebraic n _ _ <- types]] ++
+    ["import qualified " ++ name | name <- nub (concatMap typeModules types)] ++
     ["rootCodec :: Codec " ++ haskellType root, "rootCodec = codec0"] ++ concat definitions
   where
     types = reachableTypes root

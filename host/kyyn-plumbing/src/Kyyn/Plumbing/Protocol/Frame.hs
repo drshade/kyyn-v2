@@ -26,8 +26,16 @@ encodeFrame (Frame metadata body) = section metadata ++ section body
                     in C.pack (show (B.length chunk) ++ "\n") : chunk : section rest
 
 readFrame :: Monad m => m (Maybe B.ByteString) -> B.ByteString -> m (Either String (Frame, B.ByteString))
-readFrame next buffered = runExceptT (runStateT (Frame <$> section <*> section) buffered)
+readFrame next buffered
+  | B.null buffered = do
+      first <- next
+      case first of
+        Nothing -> pure (Left "Guest exited without a response")
+        Just bytes | B.null bytes -> pure (Left "Empty transport read")
+                   | otherwise -> parse bytes
+  | otherwise = parse buffered
   where
+    parse = runExceptT . runStateT (Frame <$> section <*> section)
     section = chunks []
     chunks acc = do
       count <- header []

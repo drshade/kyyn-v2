@@ -6,6 +6,7 @@ import Data.Aeson (toJSON, object, (.=), encode)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (isInfixOf)
 import qualified Data.ByteString as Bytes
+import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Version (showVersion)
@@ -122,7 +123,7 @@ testTools scope toolchain sdk pluginCode plugins = do
         (runEvidenceStore scope (clearEvidence (ConnectorInstanceRef plugin "sales"))))))) >>= right
       (absent,_) <- invoke (toJSON (["one.txt"] :: [String]))
       assert "Missing capture was catchable or lost instance context" (case absent of
-        Left diagnostics -> any (\(Diagnostic _ name message _) -> name == "evidence.not-fetched" && "local-file/sales" `isInfixOf` message) diagnostics
+        Left diagnostics -> any (\(Diagnostic _ name message _) -> name == "evidence.not-fetched" && "local-file/sales" `isInfixOf` Text.unpack message) diagnostics
         Right _ -> False)
     _ -> fail "Expected local-file plugin in helper fixture"
   putStrLn "KB tools: generated proxies compiled in GHC/MicroHs; two-instance composition and catchable missing evidence passed."
@@ -146,8 +147,8 @@ emitFrame :: Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
 emitFrame frame = interpret $ \env operation -> case operation of
   ExecuteCompiled {} -> error "Tool unexpectedly requested one-shot execution"
   ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> do
-    _ <- unlift (respond frame)
-    pure (frame,ProcessExit 0 Bytes.empty)
+    _ <- unlift (respond (Wire.jsonFrame frame))
+    pure (Wire.jsonFrame frame,ProcessExit 0 Bytes.empty)
 
 testBindingShapes :: DirectoryScope -> GuestToolchain -> FileTree -> IO ()
 testBindingShapes scope toolchain sdk = do

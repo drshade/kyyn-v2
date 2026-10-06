@@ -35,7 +35,8 @@ import System.Environment (getEnv)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>), takeDirectory)
 import System.Info (compilerVersion)
-import System.IO (hGetLine, hPutStrLn, hFlush, hClose, hIsEOF, hGetContents)
+import System.IO (hFlush, hClose, hIsEOF, hGetContents, hSetBinaryMode)
+import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process
 import System.Timeout (timeout)
@@ -129,11 +130,17 @@ broker scenario program = do
   result <- timeout 20000000 $ withCreateProcess program { std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe } $ \input output errors process ->
     case (input,output,errors) of
       (Just toGuest,Just fromGuest,Just diagnostics) -> do
-        let emit bytes = hPutStrLn toGuest (Text.unpack (Text.decodeUtf8 bytes)) >> hFlush toGuest
-            loop trace = do
+        hSetBinaryMode toGuest True
+        hSetBinaryMode fromGuest True
+        let emit bytes = mapM_ (Bytes.hPut toGuest) (Wire.encodeFrame (Wire.jsonFrame bytes)) >> hFlush toGuest
+            next = do
+              bytes <- Bytes.hGetSome fromGuest 32768
+              pure (if Bytes.null bytes then Nothing else Just bytes)
+            loop buffered trace = do
               eof <- hIsEOF fromGuest
-              if eof then pure (Nothing,trace) else do
-                line <- Text.encodeUtf8 . Text.pack <$> hGetLine fromGuest
+              if eof && Bytes.null buffered then pure (Nothing,trace) else do
+                (Wire.Frame line body,rest) <- Wire.readFrame next buffered >>= right
+                assert "non-HTTP frame has raw body" (Bytes.null body)
                 frame <- right (decodeToolFrame line)
                 case frame of
                   Completed value -> pure (Just value,trace)
@@ -153,9 +160,9 @@ broker scenario program = do
                           then object ["tag" .= ("Right" :: String), "value" .= [object ["tag" .= ("YesNo" :: String), "value" .= ("10001" :: String)]]]
                           else encoded)
                     emit (encodeResponse identity reply)
-                    loop (trace ++ [label])
+                    loop rest (trace ++ [label])
         emit (Lazy.toStrict (encode (String "item")))
-        (value,trace) <- loop []
+        (value,trace) <- loop Bytes.empty []
         hClose toGuest
         diagnostic <- hGetContents diagnostics
         length diagnostic `seq` pure ()

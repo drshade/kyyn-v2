@@ -301,7 +301,7 @@ On the guest side, identity remains outside the typed payload so migration can
 change payload shape without accidentally replacing record identity:
 
 ```haskell
-newtype FactId = FactId String
+newtype FactId = FactId Text
 data Fact a = Fact FactId a
 
 -- SnapshotRead's two-parameter binding is owned by ADR 0009; not redefined here.

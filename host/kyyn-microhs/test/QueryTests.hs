@@ -102,7 +102,7 @@ integration = withSystemTempDirectory "kyyn-queries" $ \temporary -> do
   sdkFiles <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["SchemaMetadata","Fact","Program","Query","Diagnostic"]] ++
     [load "guest/kyyn-sdk/src" ("Kyyn/" ++ name ++ ".hs") | name <- ["Schema","Query","Validation"]] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","SchemaMetadata","Query","Validation"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","SchemaMetadata","Query","Validation"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let sdk = tree sdkFiles
       registration = "{ name = \"owner\", description = \"Look up the task owner\", implementation = \"Queries.ownerOf\", inputType = \"Schema.Input\", inputMetadata = \"Schema.inputMetadata\", resultType = \"Schema.Result\", resultMetadata = \"Schema.resultMetadata\" }"

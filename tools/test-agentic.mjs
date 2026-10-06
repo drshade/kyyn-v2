@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, cpSync, readdirSync, readFileSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createInterface } from 'node:readline';
+import { readFrames, encodeFrame } from './lib/framing.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const toolchain = process.env.KYYN_TEST_TOOLCHAIN;
@@ -56,7 +56,8 @@ const curation = { recipe: 'sync', handled: [
 const proposal = { steps: plans, curation };
 
 async function broker(bin, args, scenario) {
-  const child = spawn(bin, args, { cwd: temporary, env, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn('bash', ['-c', 'set -o pipefail; cat | "$@" | cat', 'kyyn-agentic', bin, ...args],
+    { cwd: temporary, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let diagnostic = '';
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', s => { diagnostic += s; });
@@ -64,13 +65,13 @@ async function broker(bin, args, scenario) {
     child.once('error', reject);
     child.once('close', code => resolve(code));
   });
-  const timer = setTimeout(() => child.kill('SIGKILL'), 20000);
-  const lines = createInterface({ input: child.stdout });
+  const stop = () => { if (child.exitCode === null) { try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } } };
+  const timer = setTimeout(stop, 20000);
   const trace = [];
   let result;
   try {
-    for await (const line of lines) {
-      const frame = JSON.parse(line);
+    for await (const { metadata: frame, body } of readFrames(child.stdout)) {
+      assert.equal(body.length, 0);
       if (frame.tag === 'Completed') { result = frame.result; child.stdin.end(); continue; }
       assert.equal(frame.tag, 'HostRequest');
       assert.equal(frame.id, String(trace.length + 1));
@@ -105,7 +106,7 @@ async function broker(bin, args, scenario) {
         }
         response = tag('Right', { raw: encode({ turn: String(trace.length) }), action });
       }
-      child.stdin.write(`${JSON.stringify({ tag: 'HostResponse', id: scenario === 'wrong-id' ? '999' : frame.id, result: response })}\n`);
+      child.stdin.write(encodeFrame({ tag: 'HostResponse', id: scenario === 'wrong-id' ? '999' : frame.id, result: response }));
     }
     const code = await completed;
     if (scenario === 'malformed' || scenario === 'wrong-id') {
@@ -116,7 +117,7 @@ async function broker(bin, args, scenario) {
       else { assert.equal(result.tag, 'Right'); assert.deepEqual(decode(result.value), proposal); }
     }
     return result;
-  } finally { clearTimeout(timer); lines.close(); if (child.exitCode === null) child.kill('SIGKILL'); }
+  } finally { clearTimeout(timer); stop(); }
 }
 
 try {

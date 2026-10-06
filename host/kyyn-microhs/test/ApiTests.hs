@@ -2,6 +2,7 @@
 -- Recompile displayed aliases/signatures/constructors and compare checked exports;
 -- requires KYYN_TEST_ROOT and KYYN_TEST_TOOLCHAIN.
 
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Control.Monad (unless, forM_)
@@ -225,7 +226,7 @@ alphaSignature source = map canonical tokens
     tokenize [] = []
     tokenize (c:cs) | isSpace c = tokenize cs
     tokenize s@(c:cs)
-      | isAlpha c || c == '_' = let (name,rest) = span (\x -> isAlphaNum x || x `elem` "_'$") s
+      | isAlpha c || c == '_' = let (name,rest) = span (\x -> isAlphaNum x || x `elem` ("_'$" :: String)) s
                                in name : tokenize rest
       | otherwise = [c] : tokenize cs
 

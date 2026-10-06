@@ -52,15 +52,18 @@ knowledgeBaseCodec valueCodec = Codec encode decode
 
 executeEvolution :: Codec a -> Codec b
   -> (a -> Program NoRequests (Either EvolutionFailure (EvolutionOutput b)))
-  -> String -> Either String String
+  -> String -> Either String JSValue
 executeEvolution beforeCodec afterCodec selected input = do
   before <- parseValue input >>= decodeWith beforeCodec
   case selected before of
-    Pure result -> encodeEvolutionReply afterCodec result
+    Pure result -> evolutionReplyValue afterCodec result
     Request operation _ -> case operation of {}
 
 encodeEvolutionReply :: Codec a -> Either EvolutionFailure (EvolutionOutput a) -> Either String String
-encodeEvolutionReply codec result = do
+encodeEvolutionReply codec result = evolutionReplyValue codec result >>= printValue
+
+evolutionReplyValue :: Codec a -> Either EvolutionFailure (EvolutionOutput a) -> Either String JSValue
+evolutionReplyValue codec result = do
   value <- case result of
     Left (EvolutionFailure diagnostics) -> do
       report <- encodeReportValue (ValidationReport diagnostics)
@@ -68,7 +71,7 @@ encodeEvolutionReply codec result = do
     Right (EvolutionOutput output steps curation) -> pure (tagged "Succeeded" (Just (record
       [("after", encodeWith codec output), ("steps", JSArray (map encodeStep steps)),
        ("curation",encodeCuration curation)])))
-  printValue value
+  pure value
   where
     text = encodeWith textCodec
     encodeCuration Nothing = tagged "None" Nothing

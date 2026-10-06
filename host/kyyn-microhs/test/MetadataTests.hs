@@ -98,6 +98,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
      ("shared/kyyn-types/src", "Kyyn/Types/Fact.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/SchemaMetadata.hs"),
      ("guest/kyyn-runtime/src", "Kyyn/Runtime/Json.hs"),
+     ("guest/kyyn-runtime/src", "Kyyn/Runtime/Transport.hs"),
      ("vendor/json", "Text/JSON/Types.hs"), ("vendor/json", "Text/JSON/String.hs")]
   selected <- either fail pure (schemaSource files "Authored.Root" "Authored.schemaMetadata")
   let sources = schemaSources selected
@@ -121,10 +122,10 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     Right (Left _) -> pure ()
     _ -> fail ("recursive schema not rejected as diagnostics: " ++ show rejectedSchema)
   generated <- either fail pure (generateCodecs "KyynFactCodec" (rootType checked))
-  let entrySource = unlines ["module FactRoundTrip where", "import KyynFactCodec", "import Kyyn.Runtime.Json",
-        "main :: IO ()", "main = do", "  input <- getContents",
+  let entrySource = unlines ["module FactRoundTrip where", "import KyynFactCodec", "import Kyyn.Runtime.Json", "import Kyyn.Runtime.Transport",
+        "main :: IO ()", "main = withTransport $ \\transport -> do", "  input <- readJson transport",
         "  value <- either fail pure (parseValue input >>= decodeWith rootCodec)",
-        "  output <- either fail pure (printValue (encodeWith rootCodec value))", "  putStrLn output"]
+        "  writeValue transport (encodeWith rootCodec value)"]
   roundTripSources <- either fail pure (guestSources (path "FactRoundTrip.hs")
     (sourceFiles sources ++ [(path "FactRoundTrip.hs", utf8 entrySource), (path "KyynFactCodec.hs", utf8 generated)]))
   compiled <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain Nothing $

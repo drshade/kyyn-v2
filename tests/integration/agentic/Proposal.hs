@@ -21,9 +21,9 @@ instance A.Contract EvidenceRef where
   contract = A.record "Evidence citation" $ EvidenceRef
     <$> stringField "producer" producer <*> stringField "connector" instanceName
     <*> stringField "source" source
-    <*> (map T.unpack <$> A.required "references" "References" (map T.pack . references))
+    <*> A.required "references" "References" references
 
-stringField name getter = T.unpack <$> A.required name "" (T.pack . getter)
+stringField name getter = A.required name "" getter
 
 instance A.Contract EvidenceScope where
   contract = A.record "Evidence scope" $ EvidenceScope
@@ -37,7 +37,7 @@ instance A.Contract Acknowledgement where
        (EntireBatch <$> A.required "scope" "Capture" scope),
      A.constructor "IndividualRecords" "Selected items" individual
        (IndividualRecords <$> A.required "scope" "Capture" scope
-         <*> (map (EvidenceId . T.unpack) <$> A.required "ids" "Items" ids))]
+         <*> (map EvidenceId <$> A.required "ids" "Items" ids))]
     where
       entire (EntireBatch _) = True
       entire _ = False
@@ -45,7 +45,7 @@ instance A.Contract Acknowledgement where
       individual _ = False
       scope (EntireBatch s) = s
       scope (IndividualRecords s _) = s
-      ids (IndividualRecords _ keys) = [T.pack key | EvidenceId key <- keys]
+      ids (IndividualRecords _ keys) = [key | EvidenceId key <- keys]
       ids _ = []
 
 instance A.Contract Curation where
@@ -67,7 +67,7 @@ instance A.Contract a => A.Contract (FactEdit a) where
     , A.constructor "Remove" "Remove an existing ID" isRemove (Remove <$> ident)
     ]
     where
-      ident = FactId . T.unpack <$> A.required "id" "Fact ID" (T.pack . identifier)
+      ident = FactId <$> A.required "id" "Fact ID" identifier
       payload = A.required "value" "New payload" value
       identifier (Append (Fact (FactId key) _)) = key
       identifier (Replace (FactId key) _) = key
@@ -101,11 +101,11 @@ instance A.Contract RootEdit where
 
 instance A.Contract ProposedStep where
   contract = A.record "Annotated edits" $
-    ProposedStep <$> (Rationale . T.unpack <$> A.required "reason" "Explanation" reason
+    ProposedStep <$> (Rationale <$> A.required "reason" "Explanation" reason
       <*> A.required "citations" "Evidence citations" citations)
       <*> A.required "edits" "Ordered edits" edits
     where
-      reason (ProposedStep (Rationale text _) _) = T.pack text
+      reason (ProposedStep (Rationale text _) _) = text
       edits (ProposedStep _ values) = values
       citations (ProposedStep (Rationale _ evidence) _) = evidence
 
@@ -134,11 +134,10 @@ rootCodec :: J.Codec Root
 rootCodec = J.Codec encode (const (Left "Fixture root is output only"))
   where
     encode (Root values bools) = J.record
-      [("todos", J.encodeWith (J.listCodec (factCodec (J.Codec (J.encodeWith J.stringCodec . T.unpack)
-         (fmap T.pack . J.decodeWith J.stringCodec)))) values),
+      [("todos", J.encodeWith (J.listCodec (factCodec J.textCodec)) values),
        ("flags", J.encodeWith (J.listCodec (factCodec J.boolCodec)) bools)]
     factCodec codec = J.Codec (\(Fact (FactId key) value) -> J.record
-      [("id",J.encodeWith J.stringCodec key),("value",J.encodeWith codec value)])
+      [("id",J.encodeWith J.textCodec key),("value",J.encodeWith codec value)])
       (const (Left "Fixture fact is output only"))
 
 before :: Root

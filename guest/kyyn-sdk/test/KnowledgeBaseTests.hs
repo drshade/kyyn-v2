@@ -25,7 +25,7 @@ main = do
   assert "ambiguous recipe refuses" (isFailure
     (execute (within recipes $ update ident (put (OpenAgent "changed"))) (KnowledgeBase (7 :: Integer) [task,task])))
   assert "type-changing facts lens preserves recipes"
-    (set facts "seven" withTask == KnowledgeBase "seven" [task])
+    (set facts ("seven" :: String) withTask == KnowledgeBase "seven" [task])
   assert "onFacts preserves recipes during schema change"
     (onFacts (Right . show) withTask == Right (KnowledgeBase "7" [task]))
   let failure = EvolutionFailure [errorDiagnostic "test.refused" "No change"]
@@ -35,7 +35,7 @@ main = do
     (do appendTask; modifying facts (+ 1); refuse [errorDiagnostic "test.refused" "No change"])
     initial == Left failure)
   let domain = Internal.Collection "recipes" (facts . lens id (\_ next -> next))
-      sameName = KnowledgeBase [Fact ident "domain value"] [task]
+      sameName = KnowledgeBase [Fact ident ("domain value" :: String)] [task]
   assert "domain collection and recipe names stay independent" (execute
     (within domain $ update ident $ put "updated domain value") sameName ==
     Right (KnowledgeBase [Fact ident "updated domain value"] [task]))

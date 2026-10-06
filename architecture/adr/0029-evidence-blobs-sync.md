@@ -20,10 +20,10 @@ The SDK supplies a recognized nominal type, not a convention inferred from field
 
 ```haskell
 data BlobRef = BlobRef
-  { sha256 :: String
+  { sha256 :: Text
   , size :: Integer
-  , mediaType :: String
-  , name :: Maybe String
+  , mediaType :: Text
+  , name :: Maybe Text
   }
 ```
 
@@ -51,14 +51,14 @@ row; they do not grant downloads to captured readers or KB tools:
 ```haskell
 data BlobDownload = BlobDownload
   { request :: HttpRequest
-  , name :: Maybe String
-  , mediaType :: Maybe String
+  , name :: Maybe Text
+  , mediaType :: Maybe Text
   , maxBytes :: Maybe Integer
   }
 
 data BlobResponse = BlobResponse
   { status :: Int
-  , headers :: [(String, String)]
+  , headers :: [(Text, Text)]
   , blob :: Maybe BlobRef
   }
 
@@ -98,7 +98,7 @@ data BlobRead a where
   ReadBlob :: BlobRef -> BlobRead (Either FetchError ByteString)
 
 readBlob :: BlobRef -> CapturedRead payload (Either FetchError ByteString)
-readBlobText :: BlobRef -> CapturedRead payload (Either FetchError String)
+readBlobText :: BlobRef -> CapturedRead payload (Either FetchError Text)
 
 type CapturedRead payload a = Program (EvidenceRead payload :+: BlobRead) a
 ```
@@ -187,7 +187,7 @@ Stateful fetch signatures extend the stateless forms in [ADR 0015](0015-plugins.
 
 ```haskell
 data FetchContext position = FetchContext
-  { startedAt :: String
+  { startedAt :: Text
   , priorPosition :: Maybe position
   }
 data FetchResult payload position = FetchResult
