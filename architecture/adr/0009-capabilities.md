@@ -90,7 +90,7 @@ The first snapshot interpreter is entirely local and pure. Its generated binding
 associates a collection's declared identity with its typed root selector:
 
 ```haskell
-data CollectionBinding root fact = CollectionBinding String (root -> [Fact fact])
+data CollectionBinding root fact = CollectionBinding Text (root -> [Fact fact])
 
 data SnapshotRead root a where
   ReadCollection :: CollectionBinding root fact -> SnapshotRead root [Fact fact]
@@ -100,7 +100,7 @@ data SnapshotRead root a where
 newtype Query root a = Query (Program (SnapshotRead root) a)
 
 runLocally :: root -> Program (SnapshotRead root) a -> (a, [ReadAccess])
-data ReadAccess = CollectionRead String | FactRead String FactId
+data ReadAccess = CollectionRead Text | FactRead Text FactId
 ```
 
 The adapter receives the whole root and query arguments on stdin and returns the
@@ -131,7 +131,7 @@ data FileRead a where
   ListFiles :: FilePath -> Bool -> FileRead (Either FetchError [FilePath])
   ReadTextFile :: FilePath -> FileRead (Either FetchError CapturedText)
 
-data CapturedText = CapturedText String EvidenceFingerprint
+data CapturedText = CapturedText Text EvidenceFingerprint
 
 type CapturedRead payload a = Program (EvidenceRead payload :+: BlobRead) a
 ```
@@ -169,25 +169,27 @@ invocation-local reads and failed acquisitions that leave the previous head unch
 Microsoft Graph supplies the concrete consumer for HTTP and secret requests.
 Keep these ordinary typed guest algebras; the broker delegates to host plumbing
 interpreters rather than performing IO itself. These declarations define the
-text-based HTTP boundary, sufficient for JSON Graph and form-encoded token requests:
+UTF-8 text HTTP boundary, sufficient for JSON Graph and form-encoded token requests.
+The adapter transports bodies in ADR 0007's raw byte section, not inside the JSON
+envelope; the author still receives packed `Text`:
 
 ```haskell
 data HttpRequest = HttpRequest
-  { method :: String, url :: String
-  , headers :: [(String, String)], body :: String
+  { method :: Text, url :: Text
+  , headers :: [(Text, Text)], body :: Text
   }
 data HttpResponse = HttpResponse
-  { status :: Int, headers :: [(String, String)], body :: String }
+  { status :: Int, headers :: [(Text, Text)], body :: Text }
 
 data Http a where
   SendHttp :: HttpRequest -> Http (Either HttpError HttpResponse)
 
 data Secrets a where
-  GetSecret :: String -> Secrets (Either SecretError String)
-  PutSecret :: String -> String -> Secrets ()
+  GetSecret :: Text -> Secrets (Either SecretError Text)
+  PutSecret :: Text -> Text -> Secrets ()
 
 data LoginInteraction a where
-  DisplayInstructions :: String -> LoginInteraction ()
+  DisplayInstructions :: Text -> LoginInteraction ()
 
 data Waiting a where
   WaitSeconds :: Int -> Waiting ()
