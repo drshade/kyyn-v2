@@ -474,6 +474,8 @@ evolution = frozen
 The root type is your KB's current type. `frozen` applies the saved proposal's
 edits, rationales and curation declaration. Kyyn prepares that value from
 `change/proposal.dhall` when checking; the evolution itself does not read files.
+Inspect its generated signature with
+`kyyn-v2 guest module show KyynFrozenProposal --evolution ID`.
 
 Each selected instance supplies its pending changes and fetch scope. Its evidence
 contents are captured once for the invocation, including subsequent plugin reads.
