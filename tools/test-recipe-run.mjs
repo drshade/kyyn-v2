@@ -60,7 +60,7 @@ import qualified Agentic as A
 import qualified Agentic.Questions as Q
 import qualified Data.Text as Text
 import Control.Monad.Trans.Except (throwE)
-import Kyyn.Agentic (Flow, liftTool, interpret)
+import Kyyn.Agentic (Step, Flow, liftTool, interpret)
 import Kyyn.Recipe
 import Kyyn.Schema (Fact(..), FactId(..))
 import Kyyn.Evolution (Rationale(..))
@@ -70,8 +70,10 @@ import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_local_file.Folder as Folder
 import qualified RootV2
 reconcile :: Flow (RecipeInput RootV2.Root) (ProposedCuration RootEdit)
-reconcile = A.act $ \\(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batches) -> do
-  let removed = or [case change of Removed _ -> True; _ -> False | PendingEvidence _ changes <- batches, change <- changes]
+reconcile = A.act reconcileStep
+reconcileStep :: RecipeInput RootV2.Root -> Step (ProposedCuration RootEdit)
+reconcileStep input@(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batches) = do
+  let removed = not (null (removedItems batches))
         || or [null ids | Reconciliation _ ids <- batches]
       repairing = or [True | Reconciliation _ _ <- batches]
   text <- if removed || name == "empty" then pure "" else liftTool (Folder.content Connectors.documents "todo.txt") >>= either throwE pure
@@ -84,17 +86,17 @@ reconcile = A.act $ \\(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) ba
     _ <- liftTool (interpret (A.judge (Q.yesNo (Text.pack "Does this need action?")) :: Flow Text.Text Q.YesNo) (Text.pack text)) >>= either throwE pure
     pure ()
     else pure ()
-  let scopes = [case batch of PendingEvidence scope _ -> scope; Reconciliation scope _ -> scope | batch <- batches]
+  let capturedScopes = scopes batches
       handled = if name == "empty" || text == "omit" then []
-        else if repairing && text == "individual" then [IndividualRecords scope [EvidenceId "todo.txt"] | scope <- scopes]
+        else if repairing && text == "individual" then [IndividualRecords scope [EvidenceId "todo.txt"] | scope <- capturedScopes]
         else if name == "wrongScope" then [EntireBatch (EvidenceScope "local-file" "documents" "invented")]
-        else if name == "wrongId" then [IndividualRecords scope [EvidenceId "not-pending"] | scope <- scopes]
-        else map EntireBatch scopes
+        else if name == "wrongId" then [IndividualRecords scope [EvidenceId "not-pending"] | scope <- capturedScopes]
+        else case acknowledgeAll input of Curation _ declarations -> declarations
       selected = if name == "wrongRecipe" then RecipeId "someoneElse" else recipe
       change = if removed then Remove (FactId "todo.txt")
         else if null facts then Append (Fact (FactId "todo.txt") (RootV2.Todo text))
         else Replace (FactId "todo.txt") (RootV2.Todo text)
-      steps = if name == "empty" || text == "omit" then [] else [ProposedStep (Rationale "Use captured evidence" []) [Edit_todos change]]
+      steps = if name == "empty" || text == "omit" then [] else [ProposedStep (Rationale "Use captured evidence" [cite scope ident | (scope, ident) <- pendingItems batches]) [Edit_todos change]]
   pure (ProposedCuration steps (Curation selected handled))
 `);
   fs.writeFileSync(path.join(setup.path, 'change/Evolution.hs'), `module Evolution where
