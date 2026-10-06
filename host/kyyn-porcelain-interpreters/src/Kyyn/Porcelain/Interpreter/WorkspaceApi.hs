@@ -12,8 +12,11 @@ import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection, inspectApiModules)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, mergeEvolutionSources)
+import Kyyn.Plumbing.Protocol.FactProposal (lowerProposal)
 import Kyyn.Porcelain.Capability.EvolutionPreparation (prepareEvolution)
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
@@ -21,7 +24,7 @@ import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareToolBindings)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins)
 import Kyyn.Porcelain.Capability.WorkspaceApi (WorkspaceApi(..))
 
-runWorkspaceApi :: (EvolutionStore :> es, RootOpening :> es, ApiInspection :> es, ToolPreparation :> es, PluginPreparation :> es)
+runWorkspaceApi :: (EvolutionStore :> es, RootOpening :> es, ApiInspection :> es, ToolPreparation :> es, PluginPreparation :> es, DhallHandling :> es)
   => FileTree -> Eff (WorkspaceApi : es) a -> Eff es a
 runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
   InspectRootApi (SourceRoot contract code _ _) selection -> runExceptT $ do
@@ -50,15 +53,20 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
           _ -> ApiModule name [] [])
     pure (map (entry GeneratedOrigin) names ++ map (entry KbOrigin) authored)
   InspectWorkspaceApi workspace -> runExceptT $ do
-    PreparedEvolution (EvolutionContext _ _ (Before revision _) _)
+    PreparedEvolution (EvolutionContext _ _ (Before revision _) (WorkspaceSnapshot _ _ _ change _))
       (SourceRoot before _ (RootDefinition _ _ _ _ _ beforeSources) closure)
       (SourceRoot after _ (RootDefinition _ _ _ _ _ afterSources) afterClosure) <- ExceptT (prepareEvolution workspace)
     old <- checked (fileTree [(p,b) | (p,b) <- files beforeSources, p `elem` closure])
     new <- checked (fileTree [(p,b) | (p,b) <- files afterSources, p `elem` afterClosure])
     bindings <- checked (evolutionBindings before after)
-    sources <- checked (mergeEvolutionSources [old,new,sdk,bindings])
+    lowered <- ExceptT (lowerProposal before after change)
+    let hasProposal = any ((== "proposal.dhall") . relativeName . fst) (files change)
+    frozen <- checked (fileTree [(p,b) | (p,b) <- files lowered,
+      hasProposal, relativeName p == "KyynFrozenProposal.hs"])
+    sources <- checked (mergeEvolutionSources [old,new,sdk,bindings,frozen])
     modules <- ExceptT (inspectApiModules sources
-      ["Kyyn.Workspace.Evolution", "Kyyn.Workspace.Before", "Kyyn.Workspace.After"])
+      (["Kyyn.Workspace.Evolution", "Kyyn.Workspace.Before", "Kyyn.Workspace.After"]
+        ++ ["KyynFrozenProposal" | not (null (files frozen))]))
     pure (WorkspaceCatalogue workspace revision modules)
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a

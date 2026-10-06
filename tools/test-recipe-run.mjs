@@ -35,6 +35,7 @@ try {
   invoke('git', ['-C', plugin, '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Plugin fixture']);
   cli(['kb', 'init']);
   const setup = cli(['evolution', 'new', 'configure-recipes']).result;
+  assert(!cli(['guest', 'module', 'list', '--evolution', setup.id]).result.modules.includes('KyynFrozenProposal'));
   cli(['plugin', 'install', '--evolution', setup.id, '--from', plugin]);
   const target = path.join(setup.path, 'target');
   fs.writeFileSync(path.join(target, 'model.dhall'),
@@ -127,6 +128,18 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   const entry = fs.readFileSync(path.join(proposal.path, 'change/Evolution.hs'), 'utf8');
   assert.match(entry, /^evolution = frozen$/m);
   assert.doesNotMatch(entry, /proposal\.decode|case /);
+  const selection = ['--evolution', proposal.id];
+  const modules = cli(['guest', 'module', 'list', ...selection]).result;
+  assert(modules.modules.includes('KyynFrozenProposal'));
+  assert.equal(modules.origins.KyynFrozenProposal, 'generated');
+  const api = cli(['guest', 'module', 'show', 'KyynFrozenProposal', ...selection]).result;
+  const binding = api.symbols.find(symbol => symbol.name === 'frozen');
+  assert.match(binding.declaration, /Evolution.*KnowledgeBase.*RootV2.Root/);
+  assert.equal(api.origin, 'generated');
+  assert.match(JSON.stringify(cli(['guest', 'symbol', 'show', 'KyynFrozenProposal.frozen', ...selection])), /RootV2.Root/);
+  fs.writeFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'True');
+  assert(cli(['guest', 'module', 'show', 'KyynFrozenProposal', ...selection], 1).diagnostics.length > 0);
+  fs.writeFileSync(path.join(proposal.path, 'change/proposal.dhall'), frozen);
   assert.match(frozen, /Captured task/);
   assert.match(frozen, /prices/);
   assert.match(JSON.stringify(cli(['evolution', 'show', proposal.id])), /Draft/);
