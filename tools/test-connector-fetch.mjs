@@ -139,12 +139,13 @@ fetch config options snapshot = case options of
     fs.writeFileSync(manifestPath, manifest.replace(emptyTools,
       '[{ name = "bulk", description = "Read captured folders", implementation = "Helpers.bulk", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));
     fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `module Helpers where
+import Data.Text (Text)
 import Kyyn.Plugin (FetchError)
 import Kyyn.Connectors (Tool)
 import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_local_file.Folder as Files
-type Input = [String]
-type Output = [String]
+type Input = [Text]
+type Output = [Text]
 bulk :: Input -> Tool (Either FetchError Output)
 bulk ids = do
   sales <- mapM (Files.content Connectors.sales) ids
