@@ -1,6 +1,7 @@
 // GHC/MicroHs proof over real pipe frames: nested typed drafting, malformed-output
 // retry, provider refusal, response IDs, fact-edit ordering and failures.
 // Uses scripted providers/handwritten codecs, not production binding generation.
+// Also checks pair-pattern authoring and branch-selecting diagrams under both compilers.
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
@@ -136,6 +137,10 @@ try {
   const programs = [[native, []], [path.join(toolchain, 'bin/mhseval'), ['+RTS', `-r${bytecode}`, '-RTS']]];
   const outputs = [];
   for (const [bin, args] of programs) {
+    const pairs = run(bin, [...args, 'pairs']);
+    assert.match(pairs, /n1 --> n2/);
+    assert.doesNotMatch(pairs, /n0 --> n2/);
+    assert.match(pairs, /digraph/);
     assert.match(run(bin, [...args, 'describe']), /tool review/);
     const result = await broker(bin, args, 'normal');
     for (const scenario of ['refuse', 'malformed', 'wrong-id']) await broker(bin, args, scenario);

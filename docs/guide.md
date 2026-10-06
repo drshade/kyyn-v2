@@ -559,6 +559,12 @@ validate facts, read evidence or call a model. Named steps and declared branches
 are visible; arbitrary pure/effectful functions remain opaque. Open recipes have
 instructions instead of a flow: use `root recipe show NAME`.
 
+Use `takeFirst` and `takeSecond` instead of `arr fst` and `arr snd` when selecting
+from a pair: diagrams can then follow the selected branch. For nested pairs,
+Agentic's `:/\` type and pattern let `(a, (b, c))` read as `a :/\ b :/\ c`.
+Import the type and pattern with `import Agentic ((:/\), pattern (:/\))` and
+enable `TypeOperators` and `PatternSynonyms` for portable GHC authoring.
+
 `guest module show Tasks` can inspect a recipe's authored module, and
 `guest module show Kyyn.Workspace.FactEdits` shows its generated edit type.
 With `--evolution ID`, recipe bindings describe the target root; the evolution's
