@@ -1,3 +1,4 @@
 module Fixture.Types where
-data Config = Config { endpoint :: String, secretKey :: String, localPath :: String }
-type Payload = String
+import Data.Text (Text)
+data Config = Config { endpoint :: Text, secretKey :: Text, localPath :: FilePath }
+type Payload = Text
