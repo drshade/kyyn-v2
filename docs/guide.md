@@ -453,6 +453,7 @@ pendingItems :: [PendingEvidence] -> [(EvidenceScope, EvidenceId)]
 removedItems :: [PendingEvidence] -> [(EvidenceScope, EvidenceId)]
 scopes :: [PendingEvidence] -> [EvidenceScope]
 acknowledgeAll :: RecipeInput root -> Curation
+acknowledgeItems :: [(EvidenceScope, EvidenceId)] -> [Acknowledgement]
 cite :: EvidenceScope -> EvidenceId -> EvidenceRef
 ```
 
@@ -460,10 +461,19 @@ cite :: EvidenceScope -> EvidenceId -> EvidenceRef
 `removedItems` includes only explicit removals. Both preserve scope and order.
 Use `cite scope ident` in a rationale; it identifies the connector/item without
 inventing an external link. `acknowledgeAll input` explicitly declares all supplied
-batches handled, including reconciliation: call it only when you have completed
-that work. For partial handling, construct `IndividualRecords` yourself; partial
-producer reconciliation remains unsupported. None of these helpers decides what
-your flow has successfully processed.
+batches handled, including reconciliation: use it only for flows that process
+the whole supplied source, after completing that work. For partial processing,
+pass only the items actually handled to `acknowledgeItems`:
+
+```haskell
+curation = Curation recipe (acknowledgeItems handledItems)
+```
+
+It groups `(EvidenceScope, EvidenceId)` pairs into one `IndividualRecords` per
+scope, preserving first-seen scope order and item order. It does not deduplicate
+IDs or decide what succeeded. Include handled deletions explicitly too.
+The host refuses individual acknowledgements for producer reconciliation scopes;
+authors explicitly add `EntireBatch scope` after completing that reconciliation.
 
 For effectful actions inside a flow, import `Step` from `Kyyn.Agentic`:
 

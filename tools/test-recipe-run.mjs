@@ -88,9 +88,10 @@ reconcileStep input@(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batc
     else pure ()
   let capturedScopes = scopes batches
       handled = if name == "empty" || text == "omit" then []
-        else if repairing && text == "individual" then [IndividualRecords scope [EvidenceId "todo.txt"] | scope <- capturedScopes]
+        else if repairing && text == "individual" then acknowledgeItems [(scope, EvidenceId "todo.txt") | scope <- capturedScopes]
         else if name == "wrongScope" then [EntireBatch (EvidenceScope "local-file" "documents" "invented")]
-        else if name == "wrongId" then [IndividualRecords scope [EvidenceId "not-pending"] | scope <- capturedScopes]
+        else if name == "wrongId" then acknowledgeItems [(scope, EvidenceId "not-pending") | scope <- capturedScopes]
+        else if not repairing then acknowledgeItems (pendingItems batches ++ removedItems batches)
         else case acknowledgeAll input of Curation _ declarations -> declarations
       selected = if name == "wrongRecipe" then RecipeId "someoneElse" else recipe
       change = if removed then Remove (FactId "todo.txt")
