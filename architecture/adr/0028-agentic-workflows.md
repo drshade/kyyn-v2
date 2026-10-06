@@ -114,6 +114,9 @@ Kyyn schema and an independently written `Contract` for the same public value.
 The library's model-facing schema may need a different projection from the
 runtime protocol; make that conversion explicit rather than silently changing
 the guest wire encoding. Unsupported projections fail before making model calls.
+The known `Probability` scalar follows [ADR 0005's model and storage
+projections](0005-contracts.md): reuse its upstream model contract rather than
+generating a competing instance.
 
 Keep authored type definitions in modules independent of flows and generated
 contracts. A flow requests a generated instance through an ordinary import:

@@ -1,6 +1,6 @@
 -- Generate Agentic contracts from checked types and compile under GHC/MicroHs.
--- Covers records/sums/optionals/FactIds/exact integers, malformed retry and unsupported
--- shapes; no production provider, CLI acceptance or credential use.
+-- Covers records/sums/optionals/FactIds/exact integers, exhaustive Probability wire/model
+-- roundtrips, malformed retry and unsupported shapes; no live provider or CLI acceptance.
 
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
@@ -13,6 +13,7 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Plumbing.Capability.SchemaInspection.Agentic (generateAgenticCodec, generateAgenticInstance)
+import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import System.Directory (createDirectoryIfMissing, listDirectory, doesDirectoryExist)
 import System.Environment (getEnv, getEnvironment)
 import System.Exit (ExitCode(..))
@@ -28,11 +29,15 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
   stageAgentic (repo </> "vendor/agentic/src") temporary
   let status = Algebraic "Schema.Status" [] [Constructor "Schema.Open" [],Constructor "Schema.Done" []]
       choice = Algebraic "Schema.Choice" [] [Constructor "Schema.Named" [(Nothing,StringType)],
+        Constructor "Schema.Confidence" [(Nothing,ProbabilityType)],
         Constructor "Schema.Counted" [(Just "count",IntegerType),(Just "enabled",BoolType)]]
       payload = Algebraic "Schema.Payload" [] [Constructor "Schema.Payload"
         [(Just "status",status),(Just "choices",ListType choice),(Just "note",OptionalType StringType),
-         (Just "number",IntegerType),(Just "identity",sdkFactIdType)]]
+         (Just "number",IntegerType),(Just "identity",sdkFactIdType), (Just "confidence", OptionalType ProbabilityType)]]
   generated <- right (generateAgenticCodec "Generated" payload)
+  probabilityModel <- right (generateAgenticCodec "ProbabilityModel" ProbabilityType)
+  probabilityWire <- right (generateCodecs "ProbabilityWire" ProbabilityType)
+  Bytes.writeFile (temporary </> "ProbabilityWire.hs") (Text.encodeUtf8 (Text.pack probabilityWire))
   instanceFiles <- right (generateAgenticInstance 0 "Schema.Payload" payload)
   enumFiles <- right (generateAgenticInstance 1 "Schema.Status" status)
   commitmentFiles <- right (generateAgenticInstance 3 "Schema.Commitment"
@@ -49,28 +54,30 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
       case generateAgenticCodec "Rejected" unsupported of
         Left _ -> pure ()
         Right _ -> fail "Unsupported model contract generated code"
-  forM_ (files generated ++ files instanceFiles ++ files enumFiles ++ files sumFiles ++ files commitmentFiles) $ \(relative,bytes) -> do
+  forM_ (files generated ++ files probabilityModel ++ files instanceFiles ++ files enumFiles ++ files sumFiles ++ files commitmentFiles) $ \(relative,bytes) -> do
     let destination = temporary </> relativeName relative
     createDirectoryIfMissing True (takeDirectory destination)
     Bytes.writeFile destination bytes
   Bytes.writeFile (temporary </> "Schema.hs") (Text.encodeUtf8 (Text.unlines
-    ["module Schema where", "import Kyyn.Types.Fact (FactId)",
+    ["module Schema where", "import Kyyn.Types.Fact (FactId)", "import Agentic.Questions (Probability)",
      "data Status = Open | Done deriving (Eq,Show)",
      "data Commitment = Committed | NotCommitted | Unclear deriving (Eq,Show)",
-     "data Choice = Named String | Counted { count :: Integer, enabled :: Bool } deriving (Eq,Show)",
-     "data Payload = Payload { status :: Status, choices :: [Choice], note :: Maybe String, number :: Integer, identity :: FactId } deriving (Eq,Show)"]))
+     "data Choice = Named String | Confidence Probability | Counted { count :: Integer, enabled :: Bool } deriving (Eq,Show)",
+     "data Payload = Payload { status :: Status, choices :: [Choice], note :: Maybe String, number :: Integer, identity :: FactId, confidence :: Maybe Probability } deriving (Eq,Show)"]))
   Bytes.writeFile (temporary </> "Main.hs") (Text.encodeUtf8 (Text.unlines
     ["{-# LANGUAGE OverloadedStrings, OverloadedRecordDot, TypeApplications #-}", "module Main where", "import Schema", "import Generated",
      "import Kyyn.Contracts.Schema.Status ()",
      "import Kyyn.Contracts.Schema.Commitment ()",
      "import qualified Agentic.Questions as Q",
      "import qualified Data.Text as Text",
+     "import qualified ProbabilityModel as PM", "import qualified ProbabilityWire as PW",
+     "import qualified Kyyn.Runtime.Json as Wire",
      "import Agentic.Contract (options)",
      "import Kyyn.Types.Fact", "import qualified Agentic as A", "import qualified Agentic.Runtime as R",
      "import Kyyn.Contracts.Schema.Payload ()",
      "import Agentic.Runtime (Runtime(..), SystemTwo(..))", "import qualified Agentic.Schema as S",
      "import Control.Monad (unless)",
-     "sample = Payload Open [Named \"雪\",Counted 42 True] (Just \"note\") 900719925474099312345 (FactId \"x\")",
+     "sample = Payload Open [Named \"雪\",Confidence 0.42,Counted 42 True] (Just \"note\") 900719925474099312345 (FactId \"x\") (Just 0.85)",
      "encoded = rootCodec.encode sample",
      "rt :: Runtime (Either String)",
      "rt = (A.runtimeWith (Left . show)) { systemTwo = SystemTwo turn }",
@@ -86,6 +93,12 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
      "classify :: A.Agentic (Either String) Text.Text Commitment",
      "classify = A.judge (Q.choice \"Is this a concrete commitment?\") A.>>> A.arr route",
      "main :: IO ()", "main = do",
+     "  mapM_ (\\n -> let p = Q.fromBasisPoints n in do",
+     "    unless (Wire.decodeWith PW.rootCodec (Wire.encodeWith PW.rootCodec p) == Right p) (fail \"Probability wire round trip\")",
+     "    unless (PM.rootCodec.decode (PM.rootCodec.encode p) == Right p) (fail \"Probability model round trip\")) [0..10000]",
+     "  unless (PM.rootCodec.encode 0.85 == A.Number 0.85 && PM.rootCodec.schema == (A.contract :: A.Codec Q.Probability).schema) (fail \"Upstream probability model contract diverged\")",
+     "  mapM_ (\\s -> case Wire.parseValue s >>= Wire.decodeWith PW.rootCodec of Left _ -> pure (); Right _ -> fail \"Invalid stored probability accepted\") [\"\\\"-1\\\"\",\"\\\"10001\\\"\",\"\\\"08500\\\"\",\"\\\"0.85\\\"\",\"0.85\"]",
+     "  mapM_ (\\v -> unless (either (const Nothing) Just (PM.rootCodec.decode v) == either (const Nothing) Just ((A.contract :: A.Codec Q.Probability).decode v)) (fail \"Upstream model probability decode diverged\")) [A.Number 0.12345,A.Number (-1),A.Number 2,A.Integer 1,A.String \"8500\"]",
      "  mapM_ (\\(chosen, confidence, expected) -> unless (route (Q.Choice chosen [] confidence) == expected) (fail \"Three-way routing failed\")) [(Committed,0.7,Committed),(NotCommitted,0.9,NotCommitted),(Unclear,0.9,Unclear),(Committed,0.69,Unclear)]",
      "  let opts = (options @Status).options",
      "  unless (map (.label) opts == [\"Open\",\"Done\"] && map (.value) opts == [Open,Done] && map (.doc) opts == [Nothing,Nothing]) (fail \"Generated enum options differed\")",

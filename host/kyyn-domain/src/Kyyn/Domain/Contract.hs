@@ -174,6 +174,7 @@ shortName = reverse . takeWhile (/= '.') . reverse
 typeValue :: DataType -> Value
 typeValue StringType = toJSON ["text" :: String]
 typeValue IntegerType = toJSON ["integer" :: String]
+typeValue ProbabilityType = toJSON ["probability-basis-points" :: String]
 typeValue BoolType = toJSON ["bool" :: String]
 typeValue (ListType t) = toJSON ("list" :: String, typeValue t)
 typeValue (OptionalType t) = toJSON ("optional" :: String, typeValue t)

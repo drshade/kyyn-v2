@@ -7,7 +7,7 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (bindingModule)
-import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
+import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateModelCodecs)
 
 -- | Generate a Contract and, for an enum, Options at the type's defining name.
 generateAgenticInstance :: Int -> String -> DataType -> Either String FileTree
@@ -40,12 +40,14 @@ generateAgenticInstance index selected datatype = case datatype of
 generateAgenticCodec :: String -> DataType -> Either String FileTree
 generateAgenticCodec name datatype = do
   _ <- bindingModule (name ++ ".rootCodec")
-  wire <- generateCodecs (name ++ "Wire") datatype
+  wire <- generateModelCodecs (name ++ "Wire") datatype
   shape <- shapeOf datatype >>= renderSchema
   let source = unlines $
         ["module " ++ name ++ " (rootCodec) where", "import qualified Agentic.Contract as A",
          "import qualified Agentic.Schema as S", "import qualified Data.Text as Text",
          "import Kyyn.Runtime.AgenticContract (fromWireCodec)", "import qualified " ++ name ++ "Wire as Wire"] ++
+        (if ProbabilityType `elem` reachableTypes datatype then
+          ["import Kyyn.Runtime.Probability (probabilitySchema)", "import qualified Agentic.Questions"] else []) ++
         ["import qualified " ++ m | m <- nub [definingModule n | Algebraic n _ _ <- reachableTypes datatype]] ++
         ["rootCodec :: A.Codec " ++ haskellType datatype,
          "rootCodec = fromWireCodec " ++ shape ++ " Wire.rootCodec"]
@@ -59,6 +61,7 @@ renderSchema (Scalar TextScalar) = pure "(S.schemaOf (S.SString Nothing))"
 renderSchema (Scalar IntegerScalar) = pure
   "(S.Schema Nothing Nothing [Text.pack \"Canonical decimal integer string, with no leading zeros or plus sign\"] (S.SString Nothing))"
 renderSchema (Scalar BoolScalar) = pure "(S.schemaOf S.SBool)"
+renderSchema (Scalar ProbabilityScalar) = pure "probabilitySchema"
 renderSchema (List inner) = (\schema -> "(S.schemaOf (S.SArray " ++ schema ++ "))") <$> renderSchema inner
 renderSchema (Record fields) = (\members -> "(S.schemaOf (S.SObject " ++ list members ++ "))") <$> traverse field fields
 renderSchema (Optional inner) = renderSchema (Union [("None",Nothing),("Some",Just inner)])

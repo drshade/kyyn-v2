@@ -11,7 +11,7 @@ import Data.List (sort, nub)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Diagnostic
-import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, reachableTypes)
+import Kyyn.Domain.DataType (DataType(..), haskellType, typeModules)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
@@ -24,7 +24,7 @@ validationSources root selected sources = do
   codecPath <- relativePath "KyynValidationCodec.hs"
   let entry = unlines $
         ["module KyynValidationEntry where"] ++
-        ["import qualified " ++ name | name <- nub (moduleName : [definingModule name | Algebraic name _ _ <- reachableTypes root])] ++
+        ["import qualified " ++ name | name <- nub (moduleName : typeModules root)] ++
         [
          "import KyynValidationCodec", "import Kyyn.Runtime.Json",
          "import Kyyn.Runtime.Validation", "import Kyyn.Types.Diagnostic (ValidationReport)",

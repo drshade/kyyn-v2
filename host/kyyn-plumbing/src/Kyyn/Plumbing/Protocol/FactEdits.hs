@@ -41,7 +41,7 @@ factEditBindings contract = do
          "import Kyyn.Workspace.Evolution (Evolution, KnowledgeBase, Edit, identityEvolution, (>=>), withCuration, edit, within)",
          "import qualified Kyyn.Workspace.After as Collections"] ++
         ["import qualified " ++ name | name <- nub
-          [definingModule name | Algebraic name _ _ <- reachableTypes (rootType (rootSchema contract))]] ++
+          (typeModules (rootType (rootSchema contract)))] ++
         ["data RootEdit = " ++ intercalate " | "
            [constructor field ++ " (Proposal.FactEdit " ++ haskellType payload ++ ")" |
              CollectionContract _ field payload _ <- declarations],

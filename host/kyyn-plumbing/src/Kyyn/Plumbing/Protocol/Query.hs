@@ -10,7 +10,7 @@ import Data.List (nub, intercalate, sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Contract (RootContract, rootSchema, rootType, collectionContracts, CollectionContract(..))
-import Kyyn.Domain.DataType (DataType(..), Constructor(..), haskellType, definingModule, reachableTypes)
+import Kyyn.Domain.DataType (DataType(..), Constructor(..), haskellType, typeModules)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Types.Fact (FactId(..))
 import Kyyn.Types.Query (ReadAccess(..))
@@ -66,7 +66,7 @@ querySources selected input result implementation sources = do
 
 imports :: [DataType] -> [String]
 imports types = ["import qualified " ++ name | name <- nub
-  [definingModule name | t <- types, Algebraic name _ _ <- reachableTypes t]]
+  (concatMap typeModules types)]
 
 utf8 :: String -> Bytes.ByteString
 utf8 = Text.encodeUtf8 . Text.pack

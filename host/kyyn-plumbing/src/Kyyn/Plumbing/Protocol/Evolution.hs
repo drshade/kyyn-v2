@@ -12,7 +12,7 @@ import Data.ByteString (ByteString)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Contract (RootContract, rootSchema, rootType, contractId, contractFingerprint, collectionContracts, CollectionContract(..))
-import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, reachableTypes)
+import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, typeModules)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionObservation(..), StepObservation(..), ObservedRoot(..))
@@ -55,8 +55,7 @@ evolutionSources before after authored = do
       afterType = rootType (rootSchema after)
       entry = unlines $
         ["module KyynEvolutionEntry where", "import qualified Evolution"] ++
-        ["import qualified " ++ name | name <- nub [definingModule name |
-          t <- [beforeType,afterType], Algebraic name _ _ <- reachableTypes t]] ++
+        ["import qualified " ++ name | name <- nub (concatMap typeModules [beforeType,afterType])] ++
         ["import qualified KyynEvolutionCodec0 as BeforeCodec", "import qualified KyynEvolutionCodec1 as AfterCodec",
          "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure, KnowledgeBase)",
          "import Kyyn.Evolution.Internal (EvolutionOutput, evaluateEvolution)",
@@ -85,8 +84,7 @@ evolutionBindings before after = do
          "import Kyyn.Evolution.Internal (RootBinding(..))",
          "import qualified Kyyn.Evolution.Internal as Internal", "import Kyyn.Runtime.Json (encodeWith)",
          "import Kyyn.Runtime.Evolution (knowledgeBaseCodec)"] ++
-        ["import qualified " ++ name | name <- nub [definingModule name |
-          (_,contract) <- declarations, Algebraic name _ _ <- reachableTypes (rootType (rootSchema contract))]] ++
+        ["import qualified " ++ name | name <- nub (concatMap (typeModules . rootType . rootSchema . snd) declarations)] ++
         ["import qualified " ++ codecName index | (index,_) <- zip [0..] declarations] ++
         concat [[name ++ " :: RootBinding (KnowledgeBase " ++ haskellType (rootType (rootSchema contract)) ++ ")",
           name ++ " = RootBinding " ++ show (contractFingerprint (contractId (rootSchema contract))) ++
@@ -119,7 +117,7 @@ collectionBindings endpoint contract = do
         ["module Kyyn.Workspace." ++ endpoint ++ " (" ++ comma [field | CollectionContract _ field _ _ <- declarations] ++ ") where",
          "import Kyyn.Edit (Collection)", "import Kyyn.Evolution (KnowledgeBase, facts)",
          "import qualified Kyyn.Edit.Internal as Internal", "import qualified Kyyn.Optics as Optics"] ++
-        ["import qualified " ++ name | name <- nub [definingModule name | Algebraic name _ _ <- reachableTypes root]] ++
+        ["import qualified " ++ name | name <- typeModules root] ++
         concat [["-- | Collection " ++ show name ++ " in " ++ haskellType root ++ ".",
                  "-- Root field: " ++ field ++ "; fact type: " ++ haskellType payload ++ ".",
                  field ++ " :: Collection (KnowledgeBase " ++ haskellType root ++ ") " ++ haskellType payload,
