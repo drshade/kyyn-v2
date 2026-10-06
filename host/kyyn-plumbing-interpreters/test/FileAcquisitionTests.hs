@@ -6,6 +6,7 @@ module Main (main) where
 
 import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
+import qualified Data.Text as Text
 import Effectful (runEff)
 import Kyyn.Domain.Path (directoryScope, relativePath)
 import Kyyn.Plumbing.Capability.FileAcquisition
@@ -25,7 +26,7 @@ main = withSystemTempDirectory "kyyn-file-acquisition-" $ \directory -> do
   unless (repeated == first) (fail "Stable file capture changed")
   case first of
     Right (CapturedText "abc" (EvidenceFingerprint token))
-      | length token == 64 && all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
+      | Text.length token == 64 && Text.all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
     _ -> fail "Expected captured content and lowercase SHA-256 fingerprint"
   Bytes.writeFile (directory </> "other.txt") "abc"
   moved <- runEff (runFileAcquisitionIO (readSourceText scope (either error id (relativePath "other.txt"))))
