@@ -62,7 +62,7 @@ itemA = EvidenceId "a.txt"
 itemB = EvidenceId "b.txt"
 
 value :: String -> Evidence CheckedValue
-value name = Evidence (EvidenceFingerprint name) ["/source/" ++ name] (CheckedValue (contractId contract) (String (Text.pack ("payload-only-" ++ name))))
+value name = Evidence (EvidenceFingerprint (Text.pack name)) [Text.pack ("/source/" ++ name)] (CheckedValue (contractId contract) (String (Text.pack ("payload-only-" ++ name))))
 
 execute :: DirectoryScope -> Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
 execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope action)))) >>= right

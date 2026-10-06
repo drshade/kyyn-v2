@@ -1,10 +1,12 @@
 -- Pure curation acknowledgement/pending calculations and malformed declaration
 -- refusals; no evidence acquisition, guest runtime or Git publication.
 
+{-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
 import Control.Monad (unless)
 import Data.Either (isLeft)
+import qualified Data.Text as Text
 import Kyyn.Domain.Contract (ContractId, checkContract, contractId)
 import Kyyn.Domain.Curation
 import Kyyn.Domain.DataType (DataType(StringType))
@@ -36,7 +38,7 @@ instanceB = ConnectorInstanceRef (either error id (pluginName "files")) "b"
 capture :: ConnectorInstanceRef -> EvidenceProducer -> String -> [(String,String)] -> EvidenceCapture
 capture instanceRef source fetch entries = EvidenceCapture
   (EvidenceSnapshotRef instanceRef source (FetchId fetch))
-  [(EvidenceId key, EvidenceFingerprint token) | (key,token) <- entries]
+  [(EvidenceId (Text.pack key), EvidenceFingerprint (Text.pack token)) | (key,token) <- entries]
 
 at :: String -> [(String,String)] -> EvidenceCapture
 at = capture instanceA producer
@@ -46,7 +48,7 @@ expect label selected register current expected = do
   PendingEvidence scope actual <- right (pendingEvidence selected register current)
   let EvidenceCapture original _ = current
   assert (label ++ " scope") (scope == original)
-  assert label (actual == [(EvidenceId key,kind) | (key,kind) <- expected])
+  assert label (actual == [(EvidenceId (Text.pack key),kind) | (key,kind) <- expected])
 
 main :: IO ()
 main = do

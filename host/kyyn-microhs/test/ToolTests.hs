@@ -68,12 +68,13 @@ testTools scope toolchain sdk pluginCode plugins = do
   helperPath <- right (relativePath "src/Helpers.hs")
   let helper = Text.encodeUtf8 (Text.unlines
         [ "module Helpers where"
+        , "import Data.Text (Text)"
         , "import Kyyn.Plugin (FetchError)"
         , "import Kyyn.Connectors (Tool)"
         , "import qualified Kyyn.Connectors as Connectors"
         , "import qualified Kyyn.Plugins.P_local_file.Folder as Files"
-        , "type Input = [String]"
-        , "type Output = [String]"
+        , "type Input = [Text]"
+        , "type Output = [Text]"
         , "bulk :: Input -> Tool (Either FetchError Output)"
         , "bulk ids = do"
         , "  a <- mapM (Files.content Connectors.salesFiles) ids"
@@ -187,7 +188,9 @@ compileGhc scope sources expected = do
   forM_ (sourceFiles sources) $ \(path,bytes) -> do
     let target = directory </> relativeName path
     createDirectoryIfMissing True (takeDirectory target)
-    Bytes.writeFile target bytes
+    let agentic = take 8 (relativeName path) == "Agentic/" || relativeName path == "Agentic.hs"
+        extensions = "{-# LANGUAGE DuplicateRecordFields, NoFieldSelectors, OverloadedRecordDot #-}\n"
+    Bytes.writeFile target (if agentic then extensions <> bytes else bytes)
   (status,out,err) <- readProcessWithExitCode ghc ["-v0","-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
     "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes","-fno-code","-i" ++ directory,
     "-outputdir",directory </> "objects","-main-is",takeBaseName (relativeName (selectedEntry sources)) ++ ".main",

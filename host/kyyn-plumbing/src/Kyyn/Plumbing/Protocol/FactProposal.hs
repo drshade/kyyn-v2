@@ -81,7 +81,7 @@ lowerProposal before after change = runExceptT $ do
       generated <- checked (relativePath "KyynFrozenProposal.hs")
       let json = Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))
           moduleSource = unlines
-            ["module KyynFrozenProposal (frozen, proposal) where", "import Kyyn.Evolution.Proposal (ProposedCuration)",
+            ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where", "import Kyyn.Evolution.Proposal (ProposedCuration)",
              "import Kyyn.Workspace.FactEdits (RootEdit, proposalEvolution)", "import KyynFactEditCodec (rootCodec)",
              "import Kyyn.Evolution.Internal (Evolution(..))",
              "import Kyyn.Types.KnowledgeBase (KnowledgeBase)",
@@ -89,12 +89,12 @@ lowerProposal before after change = runExceptT $ do
              "import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))",
              "import qualified " ++ definingModule (case rootType (rootSchema before) of
                Algebraic name _ _ -> name; _ -> error "Checked root is not algebraic"),
-             "import Kyyn.Runtime.Json", "import Kyyn.Runtime.Proposal (proposalCodec)",
+             "import Kyyn.Runtime.Json", "import qualified Data.Text as Text", "import Kyyn.Runtime.Proposal (proposalCodec)",
              "-- | Apply the captured proposal without invoking its recipe again.",
              "frozen :: Evolution (KnowledgeBase " ++ root ++ ") (KnowledgeBase " ++ root ++ ")",
              "frozen = case proposal of",
              "  Right value -> proposalEvolution value",
-             "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" message Nothing]))",
+             "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing]))",
              "proposal :: Either String (ProposedCuration RootEdit)",
              "proposal = parseValue " ++ show json ++ " >>= decodeWith (proposalCodec rootCodec)"]
       checked (fileTree ((generated,Text.encodeUtf8 (Text.pack moduleSource)) : filter ((/= path) . fst) (files change)))

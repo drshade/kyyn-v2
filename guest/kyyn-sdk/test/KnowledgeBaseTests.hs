@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module KnowledgeBaseTests (main) where
 
 import Kyyn.Evolution

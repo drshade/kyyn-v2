@@ -41,4 +41,4 @@ test-suite curation-core
   main-is: CurationTests.hs
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson, text

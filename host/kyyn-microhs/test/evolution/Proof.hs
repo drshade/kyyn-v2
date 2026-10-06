@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Proof where
 
 import qualified EvolutionCore

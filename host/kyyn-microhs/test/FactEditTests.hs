@@ -120,7 +120,7 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
     Right _ -> fail "Malformed Dhall reached the guest compiler"
   lowered <- right (runPureEff (runDhallHandling (lowerProposal contract contract change)))
   forM_ (files lowered) $ \(relative,bytes) -> Bytes.writeFile (temporary </> relativeName relative) bytes
-  compile (command "ghc-9.10.3" (["-v0","-i"] ++ include ++ ["-outputdir",temporary </> "objects","Main.hs","-o",native]))
+  compile (command "ghc-9.10.3" (["-v0","-XOverloadedStrings","-i"] ++ include ++ ["-outputdir",temporary </> "objects","Main.hs","-o",native]))
   compile ((command (toolchain </> "bin/mhs")
     (["-DMIN_VERSION_base(x,y,z)=1","-a","-i"] ++ include ++ ["-i" ++ toolchain </> "lib","Main.hs","-o" ++ artifact])) { env = Just mhsEnv })
   let input = KnowledgeBase (object ["todos" .= [object ["id" .= ("old" :: String),"value" .= todoValue "old"]],"flags" .= ([] :: [Value])]) []

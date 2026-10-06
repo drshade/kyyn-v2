@@ -78,12 +78,12 @@ reconcileStep input@(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batc
       repairing = or [True | Reconciliation _ _ <- batches]
   text <- if removed || name == "empty" then pure "" else liftTool (Folder.content Connectors.documents "todo.txt") >>= either throwE pure
   if name == "needsModel" then do
-    _ <- liftTool (interpret (A.draft (A.Instruction (Text.pack "Summarise")) :: Flow Text.Text Text.Text) (Text.pack text)) >>= either throwE pure
+    _ <- liftTool (interpret (A.draft (A.Instruction (Text.pack "Summarise")) :: Flow Text.Text Text.Text) text) >>= either throwE pure
     pure ()
     else pure ()
   if name == "failFlow" then throwE (FetchError "Authored refusal") else pure ()
   if name == "needsJev" then do
-    _ <- liftTool (interpret (A.judge (Q.yesNo (Text.pack "Does this need action?")) :: Flow Text.Text Q.YesNo) (Text.pack text)) >>= either throwE pure
+    _ <- liftTool (interpret (A.judge (Q.yesNo (Text.pack "Does this need action?")) :: Flow Text.Text Q.YesNo) text) >>= either throwE pure
     pure ()
     else pure ()
   let capturedScopes = scopes batches
@@ -95,8 +95,8 @@ reconcileStep input@(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batc
         else case acknowledgeAll input of Curation _ declarations -> declarations
       selected = if name == "wrongRecipe" then RecipeId "someoneElse" else recipe
       change = if removed then Remove (FactId "todo.txt")
-        else if null facts then Append (Fact (FactId "todo.txt") (RootV2.Todo text))
-        else Replace (FactId "todo.txt") (RootV2.Todo text)
+        else if null facts then Append (Fact (FactId "todo.txt") (RootV2.Todo (Text.unpack text)))
+        else Replace (FactId "todo.txt") (RootV2.Todo (Text.unpack text))
       steps = if name == "empty" || text == "omit" then [] else [ProposedStep (Rationale "Use captured evidence" [cite scope ident | (scope, ident) <- pendingItems batches]) [Edit_todos change]]
   pure (ProposedCuration steps (Curation selected handled))
 `);
