@@ -45,16 +45,19 @@ The guest envelope separates stable item identity, change detection and content:
 ```haskell
 newtype EvidenceFingerprint = EvidenceFingerprint String
 
+data EvidencePayload a = Available a | Truncated
+
 data Evidence a = Evidence
   { fingerprint :: EvidenceFingerprint
   , references :: [String]
-  , payload :: a
+  , payload :: EvidencePayload a
   }
 
 data EvidenceChange a
   = NewEvidence EvidenceId (Evidence a)
   | UpdatedEvidence EvidenceId (Evidence a)
   | RemovedEvidence EvidenceId
+  | SetEvidencePayload EvidenceId EvidenceFingerprint (EvidencePayload a)
 
 fetch
   :: Config -> EvidenceSnapshot Payload
@@ -65,7 +68,11 @@ Every supplied item has a nonempty connector-supplied fingerprint. It is an opaq
 equality token for the captured content of that item, scoped to its connector and
 producer. An unchanged captured representation has the same token; changed content
 has a different token. Item IDs identify items; fingerprints compare their captured
-content. The host does not attempt to infer business equivalence.
+content. The host does not attempt to infer business equivalence. Fingerprints
+describe the observed evidence version, not whether its bytes are retained.
+A newly discovered item may already have a Truncated payload: the connector must
+still supply a meaningful fingerprint, from a provider token or a stable observed
+projection. Never fingerprint the Truncated constructor as the item's version.
 
 For local files, host acquisition returns lowercase hexadecimal SHA-256 over the
 UTF-8 source path and captured bytes, each prefixed by its unsigned 64-bit
@@ -80,8 +87,8 @@ from the same read, so guest authors need neither native IO nor a hashing librar
 
 Connectors still declare New/Updated/Removed; adding fingerprints does not move
 change derivation into the host. A provider delta feed is translated into these
-same operations, supplying full replacement payloads and suitable revision tokens
-for changed items. Acquisition compares with the current prior capture. Unchanged items produce no
+same operations, supplying replacement evidence envelopes and suitable revision tokens
+for changed items. Acquisition compares with the current prior capture. Unchanged evidence produces no semantic
 delta. An update supplies the full replacement value, not a field patch. The host
 checks payload contracts, nonempty fingerprints and delta consistency: new IDs must
 be absent and updated/removed IDs present. An update with the same fingerprint as
@@ -89,6 +96,47 @@ the current item is refused as `evidence.invalid-delta`. The snapshot read handl
 returns `Evidence a`, including its fingerprint, for that comparison.
 The host applies changes in order. It does not
 manufacture changes by comparing arbitrary payloads.
+
+### Payload availability is independent of evidence changes
+
+Truncation discards a payload, not an evidence entry. The ID, fingerprint and
+source references remain present in the current snapshot. Available and Truncated
+are payload states, not alternatives to New, Updated or Removed. A truncated item
+can be newly discovered, changed, acknowledged or pending like any other item.
+
+`SetEvidencePayload` operates only on an existing ID; its supplied fingerprint
+must equal that entry's current fingerprint or the operation is refused. It
+preserves the fingerprint and references. It allows Available-to-Truncated retention and restoration to
+Available without violating the same-fingerprint UpdatedEvidence rejection.
+Apply it in batch order with the other operations; unknown IDs are invalid deltas.
+Restoration must supply the same evidence version. If the connector observes
+changed content, it emits UpdatedEvidence with the new fingerprint instead.
+Repeatedly setting Truncated is a harmless no-op. All Available values undergo
+the payload contract checks, including blob-reference checks under ADR 0029.
+
+Payload-only operations produce no New/Updated/Removed change marker and do not
+alter recipe acknowledgements. They still publish atomically with the successful
+fetch and its sync position. No expiry event or append-only connector category is
+needed. A source removal is exclusively the connector's domain declaration about
+an existing item; truncation, missing bytes and local cache clearing never imply it.
+
+Snapshot reads distinguish an absent ID from a present Evidence with Truncated
+payload. Plugin methods handle the latter explicitly, returning a useful unavailable
+payload result rather than an empty successful value or an implicit provider fetch.
+A method requiring content returns a typed FetchError identifying payload truncation,
+distinct in its diagnostic from a missing ID or corrupt/missing blob. CLI/MCP
+presentation must expose that distinction rather than claim the item was deleted.
+Discovery shows payload availability alongside identity/fingerprint; pending results
+must not silently omit truncated items. Recipes decide whether to acknowledge,
+follow source references or leave the item pending. EntireBatch acknowledgement
+includes truncated entries too; it is an explicit declaration, not proof of reading.
+
+Retained references are source citations, not references keeping discarded blobs
+alive. Only Available payloads own blob references. Metadata persists until an
+explicit connector removal or instance cache clearing; payload retention does not
+promise bounded metadata storage or current upstream liveness. Truncated entries
+still contribute to whole-document read/rewrite cost in `state.dhall`; truncation
+reduces payload storage, not that scaling cost. It introduces no paging engine.
 
 The first-party folder connector starts with:
 
@@ -231,7 +279,9 @@ silently reinterpret `since` as a new cursor: reject a supplied initial boundary
 once a position exists, with clear/refetch guidance. Follow all pages; failed
 pagination publishes neither messages nor cursors. If a cursor expires, rebuild
 that folder's enumeration, deduplicate against retained IDs and publish only on
-success. Retention remains instance configuration, not a historical-read promise.
+success. `retentionDays` truncates older message payloads based on received time,
+preserving their IDs/fingerprints/references; it does not remove evidence. A retained
+truncated ID still participates in deduplication. Retention is not a historical-read promise.
 The [message delta contract](https://learn.microsoft.com/en-us/graph/api/message-delta)
 owns available filters and continuation semantics; do not infer a general query
 language from it.
@@ -279,7 +329,9 @@ blob. Fetch every available page of attendance records, preserving all attendees
 No longest-transcript selection, heuristic occurrence linkage or connector-authored
 meeting judgement. Curation links artifacts to calendar facts and cites them.
 
-Provider deletions are not tracked. Discovery is a bounded look-back, not a guarantee
+Provider deletions are not tracked. Retention truncates older artifact payloads
+using their ended time, retaining identity/fingerprint/references and deduplication.
+Discovery is a bounded look-back, not a guarantee
 of finding arbitrarily late artifacts; authors can request a wider window.
 The [transcript API](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-list-transcripts)
 and [attendance API](https://learn.microsoft.com/en-us/graph/api/meetingattendancereport-list)
@@ -425,7 +477,8 @@ An unknown fetch ID or unavailable marker history is an error for raw history
 requests, never an empty result claiming nothing changed. Recipe pending discovery
 does not require this history.
 `evidence list PLUGIN INSTANCE` lists the latest capture's current IDs and
-fingerprints, without payloads or recipe filtering; it changes no curation progress.
+fingerprints and payload availability, without payload contents or recipe filtering;
+it changes no curation progress.
 An unfetched instance returns `evidence.not-fetched`; a fetched empty set lists no items.
 Clearing evidence removes the local capture and marker history, not accepted facts,
 rationales or accepted curation progress. No mandatory per-item review queue, inferred
@@ -689,7 +742,9 @@ Preparation diagnostics give the author a concrete repair:
 For an individual declaration, presence at the selected fetch supplies its
 fingerprint; absence removes its acknowledged entry. Absence can be established
 from a complete capture even after a fresh clone/refetch, without a historical
-deletion marker. Removing an already absent register entry is a no-op.
+deletion marker. This is an explicit acknowledgement operation, not inference of
+a pending source deletion. A present truncated item supplies its retained fingerprint.
+Removing an already absent register entry is a no-op.
 
 The prepared candidate contains the resolved register update and declarations for
 inspection. Acceptance publishes that fixed register with facts and the evolution
@@ -748,8 +803,8 @@ Fetch identities are needed to resolve declarations during preparation, not to
 interpret accepted progress. Bare fingerprints are not comparable across producer
 replacements; retain the producing context with the map.
 
-Pending discovery compares each item's acknowledged state with the current capture,
-without consulting fetch history. It does not return every intervening
+Pending discovery compares each item's acknowledged state with the current capture
+and explicit connector removal evidence. It does not return every intervening
 acquisition event. No historical payload is required:
 
 ```haskell
@@ -763,8 +818,12 @@ pendingEvidence
   -> Either CurationProblem PendingEvidence
 ```
 
-`EvidenceCapture` is the snapshot identity plus ID/fingerprint pairs, with no
-payloads. These are host types: EvidenceSnapshotRef also retains the producer.
+`EvidenceCapture` contains the snapshot identity, current ID/fingerprint pairs
+(including truncated items), and the IDs whose latest relevant source change is
+an explicit removal. Derive the latter from retained change markers, not missing
+payloads. New or Updated for an ID supersedes its earlier removal. These are host
+types: EvidenceSnapshotRef also retains the producer. No historical payloads enter
+the comparison.
 The guest projection in ADR 0028 uses EvidenceScope plus typed PendingChange values;
 it cannot fabricate a host producer identity. The caller selects the recipe and
 instance before comparison.
@@ -776,11 +835,17 @@ instance before comparison.
 | Present | Updated, Updated | Updated if fingerprint differs |
 | Present | Updated, Removed | Removed |
 | Present | Removed, New | Updated, or none if fingerprint matches |
+| Absent/unseen | New with Truncated payload | New |
+| Present | Payload truncated or restored, same fingerprint | None |
+| Present | Absent after cache clear/refetch, no removal marker | None |
 
 If the New state was individually acknowledged before removal, removal remains
 pending. Acknowledgements by another recipe have no effect on this comparison.
-Deleting evidence does not itself delete facts. Present/absent and fingerprint
-comparison are operational state comparisons, not judgments about meaning.
+An absent ID is pending Removed only if it was acknowledged and the captured
+producer has an explicit, unsuperseded removal marker for it. Presence always
+uses fingerprint comparison, regardless of payload availability. Accepting the
+removal acknowledgement drops that ID from the recipe map, so the retained marker
+does not keep reporting it. Deleting evidence does not itself delete facts.
 
 An empty pending result means only no net unacknowledged evidence changes. It
 does not mean the task is complete or prohibit inspecting current evidence,
@@ -790,7 +855,11 @@ completion judgment belong to the agent, not Kyyn.
 
 A missing current capture requires fetching, not reconstructing old history.
 After a fresh clone or cache clear, a successful fetch from the same producer is
-enough to compare against the committed register, including detecting deletions.
+enough to compare present IDs against the committed register. Clearing the cache
+loses unprocessed removal markers: absence after refetch cannot reconstruct a
+source deletion. Such deletions may no longer be pending and derived facts can
+remain stale until a recipe explicitly reconciles them. This is an accepted local
+cache-loss limitation, not grounds to invent removals from missing IDs.
 A failed/unavailable fetch is not an empty capture. Producer mismatch is explicit:
 do not compare incompatible fingerprints or silently report no work. The agent
 receives `Reconciliation scope currentIds` through pending discovery and closed
@@ -879,9 +948,13 @@ instances, mixed batch/individual declarations, duplicate declarations and autho
 order/last-declaration semantics. Prove acknowledgement-only evolution,
 failed/rejected work leaving progress untouched, and acceptance after a newer fetch
 without skipping its changes. Reopen the register from Git without the evidence
-cache; refetch with the same producer and obtain correct pending additions, updates
-and deletions without old fetch history. Cover acknowledgement of deletion after
-that refetch, failed fetch versus empty capture, and producer mismatch/reconciliation.
+cache; refetch with the same producer and obtain correct pending additions/updates,
+but no invented removals for absent IDs whose markers were lost. Cover explicit
+acknowledgement of an absent ID after that refetch, failed fetch versus empty
+capture, and producer mismatch/reconciliation. Verify New and Updated with
+Truncated payloads remain pending, same-fingerprint truncation/restoration leaves
+progress and change markers unchanged, mismatched-fingerprint payload operations
+fail, and re-addition supersedes an old removal even if its payload is later truncated.
 
 The [curation guide](../../docs/guide.md#recipes-and-curation) shows the CLI and
 guest acknowledgement helpers.

@@ -125,7 +125,10 @@ replacement, so readers cannot observe published references to incomplete files.
 Evidence, change markers and sync position commit together under the existing
 expected-fetch check. Failure leaves that document unchanged.
 
-After publication, reclaim bytes no longer referenced by latest evidence. Also
+After publication, reclaim bytes no longer referenced by Available payloads in
+latest evidence. Truncated payloads retain evidence metadata but no BlobRefs;
+their former bytes are reclaimed unless another available item or active invocation
+still needs them. Source references/fingerprints do not retain bytes. Also
 reclaim temporary/unpublished downloads after failure or cancellation. In-flight
 captured readers and concurrent acquisitions keep their required bytes alive
 until their scoped use ends; cleanup cannot race them, including across local
@@ -162,6 +165,7 @@ owns the filesystem/resource mechanics.
 No fetch history, citation or curation register retains a blob. Retaining bytes
 briefly for an active invocation is not offering historical fetch selection.
 Clearing an instance clears its blobs along with its evidence and sync position.
+Payload truncation/restoration follows ADR 0014 and is not a source-removal event.
 
 ### Surface results expose files, not binary transcripts
 
@@ -237,3 +241,9 @@ Check positions across empty batches, pagination failure, local base conflict,
 restart and producer changes. A cursor must never describe changes that were not
 published. Fake Graph responses prove adapter behavior; live permissions and
 provider identities require their own opt-in field proof.
+
+Verify new/updated evidence with Truncated payloads, same-fingerprint restoration,
+and truncation of pending as well as acknowledged items. Truncation releases blobs
+without changing evidence fingerprints or curation progress; explicit source removal
+still removes the entry. Check that shared blobs survive until their final Available
+reference and active invocation are released.
