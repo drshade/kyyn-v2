@@ -157,6 +157,7 @@ lowerType table active env original =
     -- These identities are specific to the vendored MicroHs revision.
     (EVar n,[]) | unIdent n == "Data.Integer_Type.Integer" -> Right IntegerType
     (EVar n,[]) | unIdent n == "Data.Bool_Type.Bool" -> Right BoolType
+    (EVar n,[]) | unIdent n == "Agentic.Questions.Probability" -> Right ProbabilityType
     (EVar n,_) | not (null (unIdent n)) && all (== ',') (unIdent n) -> bad "tuples are outside the data algebra"
     (EVar n,[EVar c]) | unIdent n == "Data.List_Type.[]", unIdent c == "Primitives.Char" -> Right StringType
     (EVar n,[x]) | unIdent n == "Data.List_Type.[]" -> ListType <$> lowerType table active env x

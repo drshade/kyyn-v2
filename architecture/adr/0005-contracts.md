@@ -35,7 +35,7 @@ data Shape
 
 data ScalarKind
   = TextScalar | BoolScalar | IntegerScalar | NaturalScalar
-  | DecimalScalar | DateScalar | InstantScalar
+  | DecimalScalar | DateScalar | InstantScalar | ProbabilityScalar
 
 data CheckedContract  -- supported shape + checked metadata/codec descriptors + identity
 
@@ -336,6 +336,20 @@ and its parameters in the checked contract and generated bindings; a
 `DecimalScalar` tag alone is not a complete decimal contract. Do not infer scalar
 meaning from an unqualified name or presentation role. An unrelated KB type called
 `Decimal` is ordinary structural data, not a built-in numeric codec.
+
+Recognize upstream `Agentic.Questions.Probability` as `ProbabilityScalar`, without
+inspecting its private constructor or generating a replacement Contract instance.
+Authored code retains that type and fractional literals such as `0.85`. Its exact
+storage representation is basis points: Dhall `Natural` in `0..10000`, and a
+canonical integer string on the guest value wire (`"8500"`). Reject out-of-range
+stored/wire inputs before calling upstream's clamping constructor. Nested fields,
+collections, optional values and union payloads use this same leaf codec.
+
+Model contracts instead use upstream's `Contract Probability` schema and numeric
+codec (`0.85`), including upstream rounding/clamping semantics. This projection
+does not make arbitrary numeric JSON valid for Integer fields, nor broaden the
+guest wire profile. Contract identity distinguishes Probability from an ordinary
+integer. Model and persistence encodings are projections of the same semantic type.
 
 Reject unsupported shapes when a contract is introduced, before it can become
 accepted. Maintain one lowering from checked structure to each target, with

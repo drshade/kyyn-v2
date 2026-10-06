@@ -367,10 +367,12 @@ such as `Q.choiceConfidence answer` with `answer.confidence`. MicroHs still acce
 some unchanged selectors such as `Q.chosen` and `Q.yes`; GHC respects the upstream
 `NoFieldSelectors` setting, so prefer record-dot for portable authoring.
 
-`Probability` works inside flows, but is not currently supported as a field in
-Kyyn-generated model contracts, tool result contracts or fact schemas. Return a
-supported domain decision as above, or explicitly project confidence to Integer
-basis points when it must cross those boundaries.
+`Probability` is supported in generated model contracts, tool results and fact
+schemas. Authors use the upstream type and literals such as `0.85`; generated
+code handles its representation. Dhall stores exact basis points (`8500` means
+85%, with a range of `0..10000`), while model responses use upstream's numeric
+probability contract (`0.85`). Invalid stored basis points are rejected, not
+clamped. General floating-point fields are not supported.
 
 ### Drafting with a configured model
 

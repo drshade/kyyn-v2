@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 module Kyyn.Domain.DataType
   ( DataType(..), Constructor(..), Shape(..), ScalarKind(..), shapeOf, isRecord
-  , haskellType, reachableTypes, definingModule, sdkFactIdType, sdkFactPayload ) where
+  , haskellType, reachableTypes, typeModules, definingModule, sdkFactIdType, sdkFactPayload ) where
 
 import Data.List (nub)
 import Control.DeepSeq (NFData)
@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 
 -- Resolved data declarations only; a complete KB contract also needs metadata.
 data DataType
-  = StringType | IntegerType | BoolType
+  = StringType | IntegerType | BoolType | ProbabilityType
   | ListType DataType | OptionalType DataType
   | Algebraic String [DataType] [Constructor]
   deriving (Eq, Show, Generic, NFData)
@@ -22,13 +22,14 @@ data Shape
   | Union [(String, Maybe Shape)] | Scalar ScalarKind | Reference String
   deriving (Eq, Show)
 
-data ScalarKind = TextScalar | IntegerScalar | BoolScalar deriving (Eq, Show)
+data ScalarKind = TextScalar | IntegerScalar | BoolScalar | ProbabilityScalar deriving (Eq, Show)
 
 -- Constructor/module information binds this structural projection to authored code.
 shapeOf :: DataType -> Either String Shape
 shapeOf StringType = Right (Scalar TextScalar)
 shapeOf IntegerType = Right (Scalar IntegerScalar)
 shapeOf BoolType = Right (Scalar BoolScalar)
+shapeOf ProbabilityType = Right (Scalar ProbabilityScalar)
 shapeOf (ListType t) = List <$> shapeOf t
 shapeOf (OptionalType t) = Optional <$> shapeOf t
 shapeOf t@(Algebraic "Kyyn.Types.Fact.FactId" _ _)
@@ -71,6 +72,7 @@ haskellType :: DataType -> String
 haskellType StringType = "String"
 haskellType IntegerType = "Integer"
 haskellType BoolType = "Bool"
+haskellType ProbabilityType = "Agentic.Questions.Probability"
 haskellType (ListType t) = "[" ++ haskellType t ++ "]"
 haskellType (OptionalType t) = "(Maybe " ++ haskellType t ++ ")"
 haskellType (Algebraic name [] _) = name
@@ -86,3 +88,10 @@ reachableTypes t = nub (t : case t of
 
 definingModule :: String -> String
 definingModule = reverse . drop 1 . dropWhile (/= '.') . reverse
+
+typeModules :: DataType -> [String]
+typeModules = nub . concatMap selected . reachableTypes
+  where
+    selected (Algebraic name _ _) = [definingModule name]
+    selected ProbabilityType = ["Agentic.Questions"]
+    selected _ = []

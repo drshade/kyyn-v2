@@ -4,7 +4,7 @@ import qualified Data.ByteString as Bytes
 import Data.List (nub)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, reachableTypes)
+import Kyyn.Domain.DataType (DataType(..), haskellType, typeModules)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
@@ -61,7 +61,7 @@ loginSources config implementation authored = do
 
 imports :: [DataType] -> [String]
 imports datatypes = ["import qualified " ++ name | name <- nub
-  [definingModule name | datatype <- datatypes, Algebraic name _ _ <- reachableTypes datatype]]
+  (concatMap typeModules datatypes)]
 
 utf8 :: String -> Bytes.ByteString
 utf8 = Text.encodeUtf8 . Text.pack

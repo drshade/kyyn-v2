@@ -1,14 +1,22 @@
-module Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs) where
+module Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs, generateModelCodecs) where
 
 import Data.List (intercalate, nub, elemIndex)
 import Kyyn.Domain.DataType
 
 generateCodecs :: String -> DataType -> Either String String
-generateCodecs moduleName root = do
+generateCodecs = generateWith "probabilityCodec"
+
+generateModelCodecs :: String -> DataType -> Either String String
+generateModelCodecs = generateWith "modelProbabilityCodec"
+
+generateWith :: String -> String -> DataType -> Either String String
+generateWith probability moduleName root = do
   _ <- shapeOf root
   definitions <- mapM codec types
   pure $ unlines $
     ["module " ++ moduleName ++ " (rootCodec) where", "import Kyyn.Runtime.Json"] ++
+    (if ProbabilityType `elem` types then
+      ["import qualified Agentic.Questions", "import Kyyn.Runtime.Probability (" ++ probability ++ ")"] else []) ++
     ["import qualified " ++ name | name <- nub [definingModule n | Algebraic n _ _ <- types]] ++
     ["rootCodec :: Codec " ++ haskellType root, "rootCodec = codec0"] ++ concat definitions
   where
@@ -20,6 +28,7 @@ generateCodecs moduleName root = do
     definition name StringType = pure [name ++ " = stringCodec"]
     definition name IntegerType = pure [name ++ " = integerCodec"]
     definition name BoolType = pure [name ++ " = boolCodec"]
+    definition name ProbabilityType = pure [name ++ " = " ++ probability]
     definition name (ListType t) = pure [name ++ " = listCodec " ++ ref t]
     definition name (OptionalType t) = pure [name ++ " = optionalCodec " ++ ref t]
     definition name t | t == sdkFactIdType = pure

@@ -10,7 +10,7 @@ import Data.Coerce (coerce)
 import Data.List (nub, sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Kyyn.Domain.DataType (DataType(..), definingModule, haskellType, reachableTypes)
+import Kyyn.Domain.DataType (DataType(..), haskellType, typeModules)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Plugin
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
@@ -146,7 +146,7 @@ resultCodec i n = "KyynToolResult" ++ show i ++ "_" ++ coerce n
 
 imports :: [DataType] -> [String]
 imports types = ["import qualified " ++ name | name <- nub
-  [definingModule name | datatype <- types, Algebraic name _ _ <- reachableTypes datatype]]
+  (concatMap typeModules types)]
 
 decodeToolFrame :: Bytes.ByteString -> Either String (PluginFrame ToolCall)
 decodeToolFrame = decodeFrameWith $ \capability operation arguments ->

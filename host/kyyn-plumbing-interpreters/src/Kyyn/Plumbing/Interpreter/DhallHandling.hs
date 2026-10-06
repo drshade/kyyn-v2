@@ -46,6 +46,9 @@ fromWire (Scalar IntegerScalar) (String text) = case reads (Text.unpack text) of
   [(n, "")] | Text.pack (show (n :: Integer)) == text -> Right (D.IntegerLit n)
   _ -> Left "Expected canonical integer string"
 fromWire (Scalar BoolScalar) (Bool b) = Right (D.BoolLit b)
+fromWire (Scalar ProbabilityScalar) (String text) = case reads (Text.unpack text) of
+  [(n, "")] | n >= (0 :: Integer), n <= 10000, Text.pack (show n) == text -> Right (D.NaturalLit (fromInteger n))
+  _ -> Left "Expected probability basis points in 0..10000"
 fromWire (List s) (Array values) = do
   items <- traverse (fromWire s) (toList values)
   pure (D.ListLit (if null items then Just (D.App D.List (project s)) else Nothing) (Seq.fromList items))
@@ -95,6 +98,7 @@ project :: Shape -> D.Expr Src Void
 project (Scalar TextScalar) = D.Text
 project (Scalar IntegerScalar) = D.Integer
 project (Scalar BoolScalar) = D.Bool
+project (Scalar ProbabilityScalar) = D.Natural
 project (Reference _) = D.Text
 project (List s) = D.App D.List (project s)
 project (Optional s) = D.App D.Optional (project s)
@@ -119,6 +123,9 @@ toWire (Scalar TextScalar) (D.TextLit (D.Chunks [] text)) = Right (toJSON text)
 toWire (Reference _) value = toWire (Scalar TextScalar) value
 toWire (Scalar IntegerScalar) (D.IntegerLit n) = Right (toJSON (show n))
 toWire (Scalar BoolScalar) (D.BoolLit b) = Right (toJSON b)
+toWire (Scalar ProbabilityScalar) (D.NaturalLit n)
+  | n <= 10000 = Right (toJSON (show n))
+  | otherwise = Left "Expected probability basis points in 0..10000"
 toWire (List s) (D.ListLit _ values) = toJSON <$> traverse (toWire s) (toList values)
 toWire (Optional _) (D.App D.None _) = Right (tagged "None" Nothing)
 toWire (Optional s) (D.Some value) = tagged "Some" . Just <$> toWire s value

@@ -7,6 +7,7 @@ module Main (main) where
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), eitherDecodeStrict', object, (.=), toJSON)
 import Data.Aeson.Key (Key)
+import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Text.Encoding as Text
 import Data.Text (Text)
@@ -15,10 +16,31 @@ import Kyyn.Domain.DataType
 import Kyyn.Plumbing.Capability.DhallHandling
 import Kyyn.Domain.Contract
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
+import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataType)
 import Kyyn.Types.SchemaMetadata
 
 main :: IO ()
 main = do
+  let probability = Scalar ProbabilityScalar
+  forM_ ["0", "8500", "10000"] $ \n -> do
+    encoded <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue probability (String n))))
+    decoded <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue probability encoded)))
+    unless (decoded == String n && encoded == n <> "\n") (fail "Probability basis points changed")
+  forM_ ["-1", "10001", "0.85", "8500.0"] $ \invalidSource ->
+    case runPureEff (runDhallHandling (decodeValue probability invalidSource)) of
+      Left _ -> pure ()
+      Right _ -> fail "Invalid probability storage accepted"
+  forM_ ["-1", "10001", "08500", "+8500", "0.85"] $ \value ->
+    case runPureEff (runDhallHandling (encodeValue probability (String value))) of
+      Left _ -> pure ()
+      Right _ -> fail "Invalid probability wire encoded"
+  forM_ [ProbabilityType, OptionalType ProbabilityType, ListType ProbabilityType] $ \datatype -> do
+    persisted <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue dataTypeShape (dataTypeValue datatype))))
+    restored <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue dataTypeShape persisted)))
+    unless (parseEither parseDataType restored == Right datatype) (fail "Probability descriptor changed")
+  probabilityContract <- either (fail . show) pure (checkContract ProbabilityType (SchemaMetadata [] [] []))
+  integerContract <- either (fail . show) pure (checkContract IntegerType (SchemaMetadata [] [] []))
+  unless (contractId probabilityContract /= contractId integerContract) (fail "Probability and Integer identities collided")
   let choice = Algebraic "Query.Choice" []
         [Constructor "Query.All" [], Constructor "Query.Named" [(Just "name", StringType)]]
       fact = Algebraic "Kyyn.Types.Fact.Fact" [StringType]
