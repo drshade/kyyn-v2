@@ -7,7 +7,7 @@ import qualified Data.Text as Text
 import qualified Kyyn.Runtime.Json as Wire
 import Text.JSON.Types
 
--- | Keep generated model contracts in the same value representation as the guest wire.
+-- | Adapt generated codecs to Agentic values; numeric leaves are model-only.
 fromWireCodec :: A.Schema -> Wire.Codec a -> A.Codec a
 fromWireCodec schema codec = A.Codec schema (toModel . Wire.encodeWith codec) decode
   where
