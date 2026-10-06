@@ -31,8 +31,9 @@ registrationSources entryModule sources = do
   _ <- bindingModule (entryModule ++ ".connectors")
   path <- relativePath "KyynPluginRegistrationEntry.hs"
   let adapter = unlines ["module KyynPluginRegistrationEntry where","import qualified " ++ entryModule,
-        "import Kyyn.Runtime.PluginRegistration (encodeConnectors)","main :: IO ()",
-        "main = either fail putStrLn (encodeConnectors " ++ entryModule ++ ".connectors)"]
+        "import Kyyn.Runtime.PluginRegistration (encodeConnectors)",
+        "import Kyyn.Runtime.Transport (withTransport, writeJson)","main :: IO ()",
+        "main = withTransport $ \\transport -> either fail (writeJson transport) (encodeConnectors " ++ entryModule ++ ".connectors)"]
   guestSources path (sources ++ [(path, Text.encodeUtf8 (Text.pack adapter))])
 
 decodeConnectors :: Bytes.ByteString -> Either String [ConnectorDeclaration]

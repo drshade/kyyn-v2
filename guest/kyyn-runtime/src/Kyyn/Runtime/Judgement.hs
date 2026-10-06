@@ -4,7 +4,8 @@ import Agentic.Questions (JudgeRequest, Answer)
 import Kyyn.Runtime.Json (encodeWith)
 import Kyyn.Runtime.JudgementWire (requestCodec, replyCodec)
 import Kyyn.Runtime.Plugin (exchange)
+import Kyyn.Runtime.Transport (Transport)
 
-exchangeJudgement :: Integer -> JudgeRequest -> IO (Either String [Answer])
-exchangeJudgement identity request =
-  exchange identity "judgement" "evaluate" (encodeWith requestCodec request) replyCodec
+exchangeJudgement :: Transport -> Integer -> JudgeRequest -> IO (Either String [Answer])
+exchangeJudgement transport identity request =
+  exchange transport identity "judgement" "evaluate" (encodeWith requestCodec request) replyCodec

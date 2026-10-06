@@ -60,10 +60,11 @@ evolutionSources before after authored = do
          "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure, KnowledgeBase)",
          "import Kyyn.Evolution.Internal (EvolutionOutput, evaluateEvolution)",
          "import Kyyn.Types.Program (Program)",
+         "import Kyyn.Runtime.Transport (withTransport, readJson, writeJson)",
          "selected :: KnowledgeBase " ++ haskellType beforeType ++ " -> Program NoRequests (Either EvolutionFailure (EvolutionOutput (KnowledgeBase " ++ haskellType afterType ++ ")))",
-         "selected = pure . evaluateEvolution Evolution.evolution", "main :: IO ()", "main = do", "  input <- getContents",
+         "selected = pure . evaluateEvolution Evolution.evolution", "main :: IO ()", "main = withTransport $ \\transport -> do", "  input <- readJson transport",
          "  output <- either fail pure (executeEvolution (knowledgeBaseCodec BeforeCodec.rootCodec) (knowledgeBaseCodec AfterCodec.rootCodec) selected input)",
-         "  putStrLn output"]
+         "  writeJson transport output"]
   guestSources entryPath (files authored ++ files bindings ++ [(entryPath,Text.encodeUtf8 (Text.pack entry))])
 
 evolutionBindings :: RootContract -> RootContract -> Either String FileTree

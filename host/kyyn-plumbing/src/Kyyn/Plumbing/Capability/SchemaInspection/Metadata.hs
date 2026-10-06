@@ -23,7 +23,8 @@ metadataAdapter selected = do
   moduleName <- bindingModule selected
   pure (unlines ["module KyynMetadataEntry where", "import qualified " ++ moduleName,
       "import Kyyn.Runtime.SchemaMetadata (encodeMetadata)",
-      "main :: IO ()", "main = either fail putStrLn (encodeMetadata " ++ selected ++ ")"])
+      "import Kyyn.Runtime.Transport (withTransport, writeJson)",
+      "main :: IO ()", "main = withTransport $ \\transport -> either fail (writeJson transport) (encodeMetadata " ++ selected ++ ")"])
 
 decodeMetadata :: Bytes.ByteString -> Either String SchemaMetadata
 decodeMetadata bytes = eitherDecodeStrict bytes >>= parseEither metadata

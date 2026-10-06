@@ -116,20 +116,21 @@ toolSourcesWithCodecs interfaces bindings input output implementation inputSourc
      "import qualified " ++ implementationModule,"import qualified Kyyn.Connectors as Connectors",
      "import qualified KyynToolCalls as Calls","import Kyyn.Types.Plugin (ConnectorInstance(..), FetchError)",
      "import Kyyn.Runtime.Json","import Kyyn.Runtime.Plugin (execute, exchange, eitherCodec)",
+     "import Kyyn.Runtime.Transport (Transport, withTransport, readJson)",
      "import Kyyn.Runtime.Judgement (exchangeJudgement)",
      "import Kyyn.Runtime.Model (exchangeModel)",
      "import qualified KyynToolInputCodec as Input","import qualified KyynToolResultCodec as Output"] ++
     ["import qualified " ++ m | (i,_,_,n,_,_) <- methods, m <- [inputCodec i n,resultCodec i n]] ++ imports [input,output] ++
     ["selected :: " ++ haskellType input ++ " -> Connectors.Tool (Either FetchError " ++ haskellType output ++ ")",
-     "selected = " ++ implementation,"main :: IO ()","main = do","  line <- getLine",
+     "selected = " ++ implementation,"main :: IO ()","main = withTransport $ \\transport -> do","  line <- readJson transport",
      "  arguments <- either fail pure (parseValue line >>= decodeWith Input.rootCodec)",
-     "  execute (eitherCodec Output.rootCodec) dispatch (selected arguments)",
-     "dispatch :: Integer -> Calls.Calls a -> IO a",
-     "dispatch requestId (Calls.JudgementCall request) = exchangeJudgement requestId request",
-     "dispatch requestId (Calls.ModelCall request) = exchangeModel requestId request"] ++
+     "  execute transport (eitherCodec Output.rootCodec) (dispatch transport) (selected arguments)",
+     "dispatch :: Transport -> Integer -> Calls.Calls a -> IO a",
+     "dispatch transport requestId (Calls.JudgementCall request) = exchangeJudgement transport requestId request",
+     "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request"] ++
     concat
-      [["dispatch requestId (Calls." ++ requestName i n ++ " (ConnectorInstance instanceName) arguments) =",
-        "  exchange requestId \"plugin\" \"read\" (record [",
+      [["dispatch transport requestId (Calls." ++ requestName i n ++ " (ConnectorInstance instanceName) arguments) =",
+        "  exchange transport requestId \"plugin\" \"read\" (record [",
         "    (\"plugin\", encodeWith stringCodec " ++ show (pluginNameText p) ++ "),",
         "    (\"connectorType\", encodeWith stringCodec " ++ show (coerce k :: String) ++ "),",
         "    (\"instance\", encodeWith stringCodec instanceName),",

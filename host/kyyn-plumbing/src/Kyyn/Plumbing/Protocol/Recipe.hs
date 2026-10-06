@@ -23,8 +23,9 @@ recipeCheckSources = recipeProjectionSources [] ["main = pure ()"]
 recipeDescriptionSources :: RootContract -> FlowEntryRef -> DescriptionFormat -> FileTree -> Either String GuestSources
 recipeDescriptionSources contract entry format = recipeProjectionSources
   ["import qualified Agentic.Describe as Describe", "import qualified Data.Text as Text",
-   "import Kyyn.Runtime.Json (encodeWith, stringCodec, printValue)"]
-  ["main = either fail putStrLn (printValue (encodeWith stringCodec (Text.unpack (Describe." ++ renderer ++ " (Describe.describe selected)))))"]
+   "import Kyyn.Runtime.Json (encodeWith, stringCodec, printValue)",
+   "import Kyyn.Runtime.Transport (withTransport, writeJson)"]
+  ["main = withTransport $ \\transport -> either fail (writeJson transport) (printValue (encodeWith stringCodec (Text.unpack (Describe." ++ renderer ++ " (Describe.describe selected)))))"]
   contract entry
   where renderer = case format of Tree -> "renderTree"; Dot -> "dot"; Mermaid -> "mermaid"
 

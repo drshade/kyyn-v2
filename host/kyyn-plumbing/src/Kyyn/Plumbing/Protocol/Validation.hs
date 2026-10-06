@@ -28,10 +28,11 @@ validationSources root selected sources = do
         [
          "import KyynValidationCodec", "import Kyyn.Runtime.Json",
          "import Kyyn.Runtime.Validation", "import Kyyn.Types.Diagnostic (ValidationReport)",
+         "import Kyyn.Runtime.Transport (withTransport, readJson, writeJson)",
          "validate :: " ++ haskellType root ++ " -> ValidationReport", "validate = " ++ selected,
-         "main :: IO ()", "main = do", "  input <- getContents",
+         "main :: IO ()", "main = withTransport $ \\transport -> do", "  input <- readJson transport",
          "  value <- either fail pure (parseValue input >>= decodeWith rootCodec)",
-         "  output <- either fail pure (encodeReport (validate value))", "  putStrLn output"]
+         "  output <- either fail pure (encodeReport (validate value))", "  writeJson transport output"]
       utf8 = Text.encodeUtf8 . Text.pack
   guestSources entryPath (sources ++ [(entryPath, utf8 entry), (codecPath, utf8 codec)])
 
