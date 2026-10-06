@@ -51,7 +51,7 @@ toolBindings interfaces bindings = do
           " -> Calls (Either FetchError " ++ haskellType b ++ ")" | (i,_,_,n,a,b) <- requests]
   core <- source "KyynToolCalls" calls
   agenticModule <- source "Kyyn.Agentic" (unlines
-    ["module Kyyn.Agentic (Flow, interpret, liftTool) where",
+    ["module Kyyn.Agentic (Step, Flow, interpret, liftTool) where",
      "import qualified Agentic as A", "import qualified Agentic.Runtime as A",
      "import Agentic.Runtime (Runtime(..))",
      "import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)",
@@ -59,18 +59,20 @@ toolBindings interfaces bindings = do
      "import Kyyn.Types.Plugin (FetchError(..))", "import Kyyn.Types.Program (request)",
      "import Kyyn.Connectors (Tool)", "import qualified KyynToolCalls as Calls",
      "-- | An agentic flow using the current tool's host capabilities.",
-     "type Flow input output = A.Agentic (ExceptT FetchError Tool) input output",
+     "type Flow input output = A.Agentic Step input output",
+     "-- | A tool action that can fail with a fetch error, used inside a flow.",
+     "type Step = ExceptT FetchError Tool",
      "-- | Execute a flow; model selection comes from root/model.dhall.",
      "interpret :: Flow input output -> input -> Tool (Either FetchError output)",
      "interpret flow input = runExceptT (A.interpret runtime flow input)",
-     "runtime :: A.Runtime (ExceptT FetchError Tool)",
+     "runtime :: A.Runtime Step",
      "runtime = (A.runtimeWith (throwE . FetchError . show))",
      "  { systemOne = A.SystemOne $ \\question ->",
      "      lift (request (Calls.JudgementCall question)) >>= either (throwE . FetchError) pure",
      "  , systemTwo = A.SystemTwo $ \\conversation ->",
      "      lift (request (Calls.ModelCall conversation)) >>= either (throwE . FetchError) pure }",
      "-- | Lift a captured-read tool action into a flow's effect monad.",
-     "liftTool :: Tool a -> ExceptT FetchError Tool a", "liftTool = lift"])
+     "liftTool :: Tool a -> Step a", "liftTool = lift"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
     ["module " ++ proxyModule plugin kind ++ " (Instance" ++ concat [", " ++ coerce n | (n,_,_) <- methods] ++ ") where",
      "import Kyyn.Types.Plugin (ConnectorInstance, FetchError)","import Kyyn.Types.Program (Program)",

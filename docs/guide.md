@@ -130,6 +130,18 @@ edit without returning partial state. Use `editBefore` for an edit before the
 schema transition. Compose separate steps with `>=>` when they deserve
 separate rationales and diffs.
 
+Record updates such as `todo { After.title = "New title" }` preserve all other
+fields; you do not need to reconstruct the record for a same-type edit.
+
+When multiple root versions use unchanged domain types, you can define those
+types in a shared module and import it from both roots. For example, both
+`RootV3` and `RootV4` can import `Status(..)` from `TaskTypes`; their Todo records
+then share exactly the same Status type and migration can copy it directly.
+Moving an existing declaration into that module creates a new nominal type once,
+so that initial move still requires conversion. Keep the shared module unchanged
+while compiling both endpoints; if its types change, give the changed module a
+distinct name. This is optional, not a requirement to split small schemas.
+
 ### Review and accept
 
 ```sh
@@ -434,7 +446,48 @@ as `Edit_todos`, containing `Append`, `Replace` or `Remove`; group edits in
 bindings require a root with fact collections; for an evolution context its
 Before/After schema and metadata must match. Use `evolve` for schema changes.
 
-Inspect a closed recipe's composition without running its actions:
+`Kyyn.Recipe` provides pure helpers for the captured input:
+
+```haskell
+pendingItems :: [PendingEvidence] -> [(EvidenceScope, EvidenceId)]
+removedItems :: [PendingEvidence] -> [(EvidenceScope, EvidenceId)]
+scopes :: [PendingEvidence] -> [EvidenceScope]
+acknowledgeAll :: RecipeInput root -> Curation
+cite :: EvidenceScope -> EvidenceId -> EvidenceRef
+```
+
+`pendingItems` includes New/Updated items and reconciliation's current IDs;
+`removedItems` includes only explicit removals. Both preserve scope and order.
+Use `cite scope ident` in a rationale; it identifies the connector/item without
+inventing an external link. `acknowledgeAll input` explicitly declares all supplied
+batches handled, including reconciliation: call it only when you have completed
+that work. For partial handling, construct `IndividualRecords` yourself; partial
+producer reconciliation remains unsupported. None of these helpers decides what
+your flow has successfully processed.
+
+For effectful actions inside a flow, import `Step` from `Kyyn.Agentic`:
+
+```haskell
+type Step = ExceptT FetchError Tool
+type Flow input output = Agentic Step input output
+```
+
+String literals can be typed directly as `Text`, avoiding `Text.pack` around each
+literal. For example, with `Agentic` imported as `A` and `Data.Text` as `Text`:
+
+```haskell
+instruction :: Text.Text
+instruction = Text.unlines ["Read the note.", "Extract concrete tasks only."]
+
+summarise :: Flow Text.Text Text.Text
+summarise = A.draft (A.Instruction instruction)
+```
+
+MicroHs supports these literals directly; add `{-# LANGUAGE OverloadedStrings #-}`
+for GHC too. Existing `String` values (including `show` results) still need
+`Text.pack` when passed to a Text API.
+
+Inspect the flow:
 
 ```sh
 kyyn-v2 --kb ./my-kb root recipe describe syncTodos
