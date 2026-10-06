@@ -292,7 +292,7 @@ Expose an Agentic judgement flow through an ordinary registered helper. For
 example, `Helpers.assess` takes `Helpers.Input` and returns `Helpers.Output`:
 
 ```haskell
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Helpers where
 import qualified Agentic as A
 import Agentic.Questions (yesNo, YesNo(..), basisPoints)
@@ -307,7 +307,7 @@ type Output = Integer
 
 assessment :: Flow Text.Text Integer
 assessment = A.judge (yesNo "Does this require a reply?")
-  >>> arr (\(YesNo p) -> toInteger (basisPoints p))
+  >>> arr (\answer -> toInteger (basisPoints answer.yes))
 
 assess :: Input -> Tool (Either FetchError Output)
 assess = interpret assessment . Text.pack
@@ -326,6 +326,43 @@ See [judgement workflows](../architecture/adr/0027-judgement.md).
 Use `guest module show Agentic.Questions` for question builders and answers;
 `guest module show Kyyn.Agentic` exposes the generated workflow integration.
 The same flow can be composed into a closed recipe.
+
+For three-way routing, define the domain decision in its own module:
+
+```haskell
+module Decisions where
+data Commitment = Committed | NotCommitted | Unclear deriving (Eq, Show)
+```
+
+Import its generated contract/options in the flow module. Confidence thresholds
+are your policy, expressed directly with `Probability` literals:
+
+```haskell
+{-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
+module Routing where
+import qualified Agentic as A
+import qualified Agentic.Questions as Q
+import Control.Arrow ((>>>), arr)
+import qualified Data.Text as Text
+import Kyyn.Agentic (Flow)
+import Decisions
+import Kyyn.Contracts.Decisions.Commitment ()
+
+classify :: Flow Text.Text Commitment
+classify = A.judge (Q.choice "Is this a concrete commitment?") >>> arr route
+
+route :: Q.Choice Commitment -> Commitment
+route answer
+  | answer.confidence >= 0.7 = answer.chosen
+  | otherwise = Unclear
+```
+
+The result can select your flow's keep/drop/review branches. `Unclear` remains
+possible even with high confidence; low confidence routes there regardless of
+the chosen answer. Neither Kyyn nor Agentic sets that threshold for you.
+Use record-dot access for library records (`answer.chosen`, `answer.confidence`,
+`answer.yes`), rather than the former selector functions. MicroHs supports this
+syntax directly; the pragma also makes the source explicit for GHC.
 
 ### Drafting with a configured model
 

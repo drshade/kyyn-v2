@@ -108,7 +108,8 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
     forM_ (sourceFiles source) $ \(path,bytes) -> do
       let target = directory </> relativeName path
       createDirectoryIfMissing True (takeDirectory target)
-      Bytes.writeFile target bytes
+      Bytes.writeFile target (if take 7 (relativeName path) == "Agentic"
+        then "{-# LANGUAGE NoFieldSelectors, OverloadedRecordDot, DuplicateRecordFields #-}\n" <> bytes else bytes)
     (status,output,errors) <- readProcessWithExitCode "ghc-9.10.3"
       ["-v0","-fno-code","-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
        "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes",

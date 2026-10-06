@@ -55,7 +55,7 @@ main = do
     check "sanitized HTTP error" (refused == Left expected)
   malformed <- invoke (Just "local-key") (\_ -> throwIO (Jev.UnexpectedResponse "private"))
   check "sanitized malformed response" (malformed == Left InvalidModelResponse)
-  let body = Jev.requestBody "jev-1.13.0" request
+  let body = Jev.requestBody (Jev.jev { Jev.model = "jev-1.13.0" }) request
   check "upstream state preserved" (case body of Value.Object fs -> lookup "state" fs == Just (Value.String "private input"); _ -> False)
   let response = object ["answers" .= object
         ["q0" .= object ["noul" .= (0.9 :: Double)],
