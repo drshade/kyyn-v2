@@ -292,7 +292,10 @@ mode rather than presenting it as empty evidence.
 #### SharePoint and OneDrive files
 
 ```haskell
-data FilesScope = SiteLibrary String String | OneDrive String | SharedUrl String
+data FilesScope
+  = SiteLibrary { site :: String, library :: String }
+  | OneDrive { user :: String }
+  | SharedUrl { url :: String }
 data FilesConfig = FilesConfig
   { auth :: GraphAuth, scope :: FilesScope
   , folderPath :: String, includeGlobs :: [String] }
