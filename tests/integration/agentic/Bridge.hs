@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, OverloadedStrings #-}
+{-# LANGUAGE GADTs, OverloadedStrings, OverloadedRecordDot #-}
 module Bridge where
 
 import qualified Agentic as A
@@ -89,11 +89,11 @@ replyCodec = J.Codec (const (error "Host reply decoder only")) $ \value -> do
 
 conversationValue :: A.Conversation -> JSValue
 conversationValue c = J.record
-  [("instruction",text (T.unpack (A.instructionText (A.instruction c)))),
-   ("state",value (A.state c)),("stateSchema",schema (A.stateSchema c)),
-   ("output",schema (A.output c)),
-   ("tools",J.encodeWith (J.listCodec toolCodec) (A.tools c)),
-   ("history",J.encodeWith (J.listCodec historyCodec) (A.history c))]
+  [("instruction",text (T.unpack (c.instruction.text))),
+   ("state",value (c.input)),("stateSchema",schema (c.inputSchema)),
+   ("output",schema (c.outputSchema)),
+   ("tools",J.encodeWith (J.listCodec toolCodec) (c.tools)),
+   ("history",J.encodeWith (J.listCodec historyCodec) (c.history))]
   where
     value = J.encodeWith valueCodec
     toolCodec = J.Codec (\(A.ToolSpec name description input) -> J.record
@@ -110,9 +110,9 @@ conversationValue c = J.record
     toolResult (A.ToolFailed message) = J.tagged "Failed" (Just (text (T.unpack message)))
 
 schema :: S.Schema -> JSValue
-schema s = J.record [("title",maybeText (S.title s)),("doc",maybeText (S.doc s)),
-  ("checks",J.encodeWith (J.listCodec J.stringCodec) (map T.unpack (S.checks s))),
-  ("shape",shape (S.shape s))]
+schema s = J.record [("title",maybeText (s.title)),("doc",maybeText (s.doc)),
+  ("checks",J.encodeWith (J.listCodec J.stringCodec) (map T.unpack (s.checks))),
+  ("shape",shape (s.shape))]
   where
     maybeText = J.encodeWith (J.optionalCodec J.stringCodec) . fmap T.unpack
     list f xs = J.encodeWith (J.listCodec (J.Codec f (const (Left "Outbound schema")))) xs

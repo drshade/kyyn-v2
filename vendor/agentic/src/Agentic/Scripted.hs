@@ -7,7 +7,7 @@ module Agentic.Scripted
   , callTools
     -- * System One
   , answering
-  , alwaysYes
+  , fixedAnswers
   ) where
 
 import Agentic.Contract (Codec (..), Contract (..))
@@ -33,19 +33,19 @@ replyingWith f = SystemTwo (pure . Turn (Raw Null) . f)
 
 -- | A final answer, encoded with its contract.
 respond :: Contract a => a -> Action
-respond = Respond . encode contract
+respond = Respond . contract.encode
 
 callTools :: [(Text, Value)] -> Action
 callTools calls = CallTools [ToolCall ("call-" <> name) name input | (name, input) <- calls]
 
 -- | Answer every question with a pure function of it.
 answering :: Applicative m => (QuestionSpec -> Answer) -> SystemOne m
-answering f = SystemOne (pure . map f . requestQuestions)
+answering f = SystemOne (pure . map f . (.questions))
 
 -- | Yes/no questions get probability @p@; choices and scores pick the first
 -- option with certainty.
-alwaysYes :: Applicative m => Probability -> SystemOne m
-alwaysYes p = answering $ \case
+fixedAnswers :: Applicative m => Probability -> SystemOne m
+fixedAnswers p = answering $ \case
   AskYesNo _ -> YesNoAnswer p
   AskChoice _ ((l, _) : _) -> ChoiceAnswer l [(l, 1)] 1
   AskChoice _ [] -> ChoiceAnswer "" [] 0

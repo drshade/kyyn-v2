@@ -33,7 +33,7 @@ runJudgementWithProvider connect = interpret $ \_ (Judge question) -> do
 
 providerFailure :: Jev.JevError -> ModelFailure
 providerFailure = \case
-  Jev.MissingToken -> InvalidModelConfiguration
+  Jev.MissingKey -> InvalidModelConfiguration
   Jev.UnexpectedResponse _ -> InvalidModelResponse
   Jev.HttpError status _
     | status == 401 || status == 403 -> ModelAuthenticationRejected

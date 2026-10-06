@@ -47,11 +47,11 @@ try {
   fs.writeFileSync(path.join(target, 'src/Tools.hs'), `module Tools where
 import Kyyn.Plugin (FetchError)
 import Kyyn.Connectors (Tool)
-import Agentic.Questions (YesNo(..), yes)
+import Agentic.Questions (YesNo(..))
 type Input = String
 type Output = String
 stale :: Double
-stale = yes (YesNo 0.95)
+stale = case YesNo 0.95 of YesNo p -> p
 assess :: Input -> Tool (Either FetchError Output)
 assess _ = pure (Right (show stale))
 `);

@@ -123,7 +123,7 @@ try {
   const bytecode = path.join(temporary, 'proof.comb');
   run(process.env.KYYN_TEST_GHC || 'ghc-9.10.3', ['-v0', '-XGHC2021', '-XDataKinds',
     '-XDefaultSignatures', '-XDeriveAnyClass', '-XDerivingVia', '-XGADTs', '-XLambdaCase',
-    '-XOverloadedStrings', '-XRankNTypes', '-i', ...includes, '-outputdir', path.join(temporary, 'objects'),
+    '-XOverloadedStrings', '-XRankNTypes', '-XNoFieldSelectors', '-XOverloadedRecordDot', '-XDuplicateRecordFields', '-i', ...includes, '-outputdir', path.join(temporary, 'objects'),
     path.join(fixture, 'Main.hs'), '-o', native]);
   run(path.join(toolchain, 'bin/mhs'), ['-DMIN_VERSION_base(x,y,z)=1', '-a', '-i', ...includes,
     `-i${path.join(toolchain, 'lib')}`, path.join(fixture, 'Main.hs'), `-o${bytecode}`]);

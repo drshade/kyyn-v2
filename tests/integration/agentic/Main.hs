@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, TypeApplications #-}
+{-# LANGUAGE OverloadedStrings, OverloadedRecordDot, TypeApplications #-}
 module Main where
 
 import qualified Agentic as A
@@ -26,7 +26,7 @@ main = do
       -- Frozen data, not another run of the model-backed flow.
       line <- getLine
       value <- either fail pure (J.parseValue line >>= J.decodeWith valueCodec)
-      Proposal steps curation <- either (fail . T.unpack) pure (A.decode A.contract value)
+      Proposal steps curation <- either (fail . T.unpack) pure (((A.contract :: A.Codec Proposal).decode) value)
       let selected = withCuration curation (proposalEvolution steps)
       either fail putStrLn (encodeEvolutionReply rootCodec (E.evaluateEvolution selected before))
     ["describe"] -> putStrLn (T.unpack (A.renderTree (A.describe flow)))
@@ -35,5 +35,5 @@ main = do
   where
     resultCodec = J.Codec
       (either (J.tagged "Left" . Just . J.encodeWith J.stringCodec)
-        (J.tagged "Right" . Just . J.encodeWith valueCodec . A.encode A.contract))
+        (J.tagged "Right" . Just . J.encodeWith valueCodec . ((A.contract :: A.Codec Proposal).encode)))
       (const (Left "Flow result is output only"))

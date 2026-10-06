@@ -1,7 +1,7 @@
 -- Captured model config, generated instances and tool dispatch through real MicroHs
 -- pipes with a recording provider: nested records, retry and refusal. No live model.
 
-{-# LANGUAGE DataKinds, GADTs, OverloadedStrings, TypeApplications #-}
+{-# LANGUAGE DataKinds, GADTs, OverloadedStrings, OverloadedRecordDot, TypeApplications #-}
 module Main (main) where
 
 import qualified Agentic as A
@@ -145,7 +145,7 @@ recording expected = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn confi
   unless (configuration == expected) (error "Changed captured model selection")
   let raw = A.Raw (A.Object [("n",A.Integer (900719925474099312345 + toInteger n)),("float",A.Number 0.25)])
       turn = A.Turn raw
-  pure $ case (n,A.instructionText (A.instruction conversation),A.history conversation) of
+  pure $ case (n,conversation.instruction.text,conversation.history) of
     (0,"outer",[]) -> Right (turn (A.CallTools [A.ToolCall "nested" "helper" (A.String "nested input")]))
     (1,"inner",[]) -> Right (turn (A.Respond A.Null))
     (2,"inner",[A.Rejected (A.Raw (A.Object _)) _]) -> Right (turn (A.Respond (A.Object [("message",A.String "nested answer")])))

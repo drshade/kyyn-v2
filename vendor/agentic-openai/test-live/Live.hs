@@ -15,9 +15,9 @@ data Joke = Joke {genre :: Text, setup :: Text, punchline :: Text}
   deriving (Generic, Show, Contract)
 
 data BetterJoke
-  = DadJoke {setup' :: Text, punchline' :: Text}
+  = DadJoke {setup :: Text, punchline :: Text}
   | OneLiner {line :: Text}
-  | KnockKnock {whosThere :: Text, punchline' :: Text}
+  | KnockKnock {whosThere :: Text, punchline :: Text}
   deriving (Generic, Show, Contract)
 
 data Groan = Mild | Solid | Unbearable
@@ -25,7 +25,7 @@ data Groan = Mild | Solid | Unbearable
 
 instance Options Groan where
   options =
-    described
+    documentedOptions
       "How much the audience groans"
       [option Mild "A polite smile", option Solid "An audible groan", option Unbearable "People get up and leave"]
 
