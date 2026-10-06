@@ -73,7 +73,7 @@ distributionCodec label = pairCodec "probabilities"
 probabilityCodec :: Codec Probability
 probabilityCodec = Codec (encodeWith integerCodec . toInteger . basisPoints) $ \v -> do
   n <- decodeWith integerCodec v
-  if n >= 0 && n <= 10000 then Right (fromBasisPoints (fromInteger n / 10000))
+  if n >= 0 && n <= 10000 then Right (fromBasisPoints (fromInteger n))
     else Left "Invalid probability basis points"
 
 indexCodec :: Codec Int

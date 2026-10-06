@@ -1,7 +1,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
--- | Questions for a System One model such as Jev. Following Jev's terms, a step
--- asks t'Questions' about its input, the /state/.
+-- | Questions for a System One model such as Jev: a step asks t'Questions'
+-- about its input.
 module Agentic.Questions
   ( -- * Questions
     Questions (..)
@@ -11,8 +11,9 @@ module Agentic.Questions
     -- * Answers
   , Probability
   , probability
-  , fromBasisPoints
+  , toProbability
   , basisPoints
+  , fromBasisPoints
   , YesNo (..)
   , Choice (..)
   , Score (..)
@@ -59,11 +60,14 @@ probability :: Probability -> Double
 probability (Probability bp) = fromIntegral bp / 10000
 
 -- | Convert a provider's probability, rounding once (half to even).
-fromBasisPoints :: Double -> Probability
-fromBasisPoints d = clamp (round (d * 10000))
+toProbability :: Double -> Probability
+toProbability d = clamp (round (d * 10000))
 
 basisPoints :: Probability -> Int
 basisPoints (Probability bp) = bp
+
+fromBasisPoints :: Int -> Probability
+fromBasisPoints = clamp
 
 -- ---------------------------------------------------------------------------
 -- Answers
@@ -74,42 +78,42 @@ newtype YesNo = YesNo {yes :: Probability}
 
 data Choice a = Choice
   { chosen :: a
-  , choiceProbabilities :: [(a, Probability)]
-  , choiceConfidence :: Probability
+  , probabilities :: [(a, Probability)]
+  , confidence :: Probability
   }
   deriving (Eq, Show)
 
 data Score a = Score
   { position :: Double
     -- ^ The probability-weighted position, from 0 (the first option) upwards.
-  , scoreProbabilities :: [(a, Probability)]
-  , scoreConfidence :: Probability
+  , probabilities :: [(a, Probability)]
+  , confidence :: Probability
   }
   deriving (Eq, Show)
 
 -- Answers have contracts, so a judgement can be a tool's output.
 
 instance Contract Probability where
-  contract = mapCodec fromBasisPoints probability (contract @Double)
+  contract = mapCodec toProbability probability (contract @Double)
 
 instance Contract YesNo where
-  contract = record "A yes/no judgement" (YesNo <$> required "yes" "The probability that the answer is yes" yes)
+  contract = record "A yes/no judgement" (YesNo <$> required "yes" "The probability that the answer is yes" (.yes))
 
 instance Contract a => Contract (Choice a) where
   contract =
     record "A choice between options" $
       Choice
-        <$> required "chosen" "The most likely option" chosen
-        <*> required "probabilities" "Each option's probability" choiceProbabilities
-        <*> required "confidence" "How concentrated the probabilities are" choiceConfidence
+        <$> required "chosen" "The most likely option" (.chosen)
+        <*> required "probabilities" "Each option's probability" (.probabilities)
+        <*> required "confidence" "How concentrated the probabilities are" (.confidence)
 
 instance Contract a => Contract (Score a) where
   contract =
     record "A position on ordered levels" $
       Score
-        <$> required "position" "The probability-weighted position, from 0 upwards" position
-        <*> required "probabilities" "Each level's probability" scoreProbabilities
-        <*> required "confidence" "How concentrated the probabilities are" scoreConfidence
+        <$> required "position" "The probability-weighted position, from 0 upwards" (.position)
+        <*> required "probabilities" "Each level's probability" (.probabilities)
+        <*> required "confidence" "How concentrated the probabilities are" (.confidence)
 
 -- ---------------------------------------------------------------------------
 -- Wire types
@@ -130,17 +134,17 @@ data Answer
     -- ^ The position, each level's probability (by index), and the confidence.
   deriving (Eq, Show)
 
--- | What a System One provider receives: the encoded state and the questions.
+-- | What a System One provider receives: the encoded input and the questions.
 data JudgeRequest = JudgeRequest
-  { requestState :: Value
-  , requestQuestions :: [QuestionSpec]
+  { input :: Value
+  , questions :: [QuestionSpec]
   }
   deriving (Eq, Ord, Show)
 
 -- ---------------------------------------------------------------------------
 -- Questions
 
--- | One or more questions about the same state, sent as one request. Combine
+-- | One or more questions about the same input, sent as one request. Combine
 -- them applicatively:
 --
 -- > judge (Review <$> funny <*> groan)
@@ -150,7 +154,7 @@ data Questions a = Questions
   }
 
 instance Functor Questions where
-  fmap f q = q {decoder = fmap f . decoder q}
+  fmap f q = q {decoder = fmap f . q.decoder}
 
 instance Applicative Questions where
   pure x = Questions [] (\case [] -> Right x; _ -> Left "too many answers")
@@ -159,7 +163,7 @@ instance Applicative Questions where
      in dl before <*> dr after
 
 decodeAnswers :: Questions a -> [Answer] -> Either Text a
-decodeAnswers = decoder
+decodeAnswers = (.decoder)
 
 single :: QuestionSpec -> (Answer -> Either Text a) -> Questions a
 single spec decode = Questions [spec] $ \case
@@ -179,22 +183,22 @@ choice q = single (AskChoice q (labels opts)) $ \case
     Choice <$> byLabel opts picked <*> traverse (\(l, p) -> (,p) <$> byLabel opts l) ps <*> pure conf
   other -> Left ("expected a choice answer, got " <> T.pack (show other))
   where
-    opts = optionList (options @a)
+    opts = (options @a).options
 
--- | Place the state on an 'Options' type's levels, lowest first.
+-- | Place the input on an 'Options' type's levels, lowest first.
 score :: forall a. Options a => Text -> Questions (Score a)
 score q = single (AskScore q (labels opts)) $ \case
   ScoreAnswer pos ps conf ->
     Score pos <$> traverse (\(i, p) -> (,p) <$> byIndex i) ps <*> pure conf
   other -> Left ("expected a score answer, got " <> T.pack (show other))
   where
-    opts = optionList (options @a)
+    opts = (options @a).options
     byIndex i = case drop i opts of
-      o : _ | i >= 0 -> Right (optionValue o)
+      o : _ | i >= 0 -> Right o.value
       _ -> Left ("no level " <> T.pack (show i))
 
 labels :: [Option a] -> [(Text, Maybe Text)]
-labels = map (\o -> (optionLabel o, optionDoc o))
+labels = map (\o -> (o.label, o.doc))
 
 byLabel :: [Option a] -> Text -> Either Text a
-byLabel opts l = maybe (Left ("unknown option " <> l)) (Right . optionValue) (find ((== l) . optionLabel) opts)
+byLabel opts l = maybe (Left ("unknown option " <> l)) (Right . (.value)) (find ((== l) . (.label)) opts)

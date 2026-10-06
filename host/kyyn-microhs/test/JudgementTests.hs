@@ -61,7 +61,8 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
   forM_ (sourceFiles sources) $ \(file,bytes) -> do
     let target = temporary </> relativeName file
     createDirectoryIfMissing True (takeDirectory target)
-    Bytes.writeFile target bytes
+    Bytes.writeFile target (if take 7 (relativeName file) == "Agentic"
+      then "{-# LANGUAGE NoFieldSelectors, OverloadedRecordDot, DuplicateRecordFields #-}\n" <> bytes else bytes)
   let executable = temporary </> "native"
   let extensions = ["-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
         "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes"]

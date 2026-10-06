@@ -1,7 +1,7 @@
 -- Captured model config, generated instances and tool dispatch through real MicroHs
 -- pipes with a recording provider: nested records, retry and refusal. No live model.
 
-{-# LANGUAGE DataKinds, GADTs, OverloadedStrings, TypeApplications #-}
+{-# LANGUAGE DataKinds, GADTs, OverloadedStrings, OverloadedRecordDot, TypeApplications #-}
 module Main (main) where
 
 import qualified Agentic as A
@@ -108,7 +108,8 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
     forM_ (sourceFiles source) $ \(path,bytes) -> do
       let target = directory </> relativeName path
       createDirectoryIfMissing True (takeDirectory target)
-      Bytes.writeFile target bytes
+      Bytes.writeFile target (if take 7 (relativeName path) == "Agentic"
+        then "{-# LANGUAGE NoFieldSelectors, OverloadedRecordDot, DuplicateRecordFields #-}\n" <> bytes else bytes)
     (status,output,errors) <- readProcessWithExitCode "ghc-9.10.3"
       ["-v0","-fno-code","-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
        "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes",
@@ -145,7 +146,7 @@ recording expected = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn confi
   unless (configuration == expected) (error "Changed captured model selection")
   let raw = A.Raw (A.Object [("n",A.Integer (900719925474099312345 + toInteger n)),("float",A.Number 0.25)])
       turn = A.Turn raw
-  pure $ case (n,A.instructionText (A.instruction conversation),A.history conversation) of
+  pure $ case (n,conversation.instruction.text,conversation.history) of
     (0,"outer",[]) -> Right (turn (A.CallTools [A.ToolCall "nested" "helper" (A.String "nested input")]))
     (1,"inner",[]) -> Right (turn (A.Respond A.Null))
     (2,"inner",[A.Rejected (A.Raw (A.Object _)) _]) -> Right (turn (A.Respond (A.Object [("message",A.String "nested answer")])))

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedRecordDot #-}
 module Kyyn.Runtime.ModelWire (conversationCodec, replyCodec, valueCodec, textCodec, pairCodec) where
 
 import qualified Agentic.Core as A
@@ -112,7 +113,7 @@ variantCodec = Codec (\(S.Variant name doc fs) -> record
 conversationCodec :: Codec A.Conversation
 conversationCodec = Codec (\(A.Conversation path instruction state stateSchema tools output history) -> record
   [("path",encodeWith (listCodec noteCodec) path),
-   ("instruction",encodeWith textCodec (A.instructionText instruction)),("state",encodeWith valueCodec state),
+   ("instruction",encodeWith textCodec (instruction.text)),("state",encodeWith valueCodec state),
    ("stateSchema",encodeWith schemaCodec stateSchema),("tools",encodeWith (listCodec toolCodec) tools),
    ("output",encodeWith schemaCodec output),("history",encodeWith (listCodec exchangeCodec) history)])
   (\v -> do

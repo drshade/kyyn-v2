@@ -9,12 +9,12 @@ notices; Kyyn's proprietary policy does not replace them.
 | MicroHs | [8bf3d4d4242c8707b31c2338716977d24a95ad39](https://github.com/augustss/MicroHs/archive/8bf3d4d4242c8707b31c2338716977d24a95ad39.tar.gz), version 0.16.7.0 | `528f4669dc5e406a6a67f068e0ef4bfe50b4f3be00d8bc8381beaf2783b48351` | Apache-2.0; retain included notices |
 | json | [json-0.11](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz) | `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690` | BSD-3-Clause |
 | transformers | [transformers-0.6.1.1](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) | `81d2548e0f100a174fba36b332c0efd7c960e79d3c21ad6e1ff5f538b992d725` | BSD-3-Clause |
-| agentic | [9c74f019424d88c20ac457b2e655585c5df7c30f](https://github.com/drshade/haskell-agentic/tree/9c74f019424d88c20ac457b2e655585c5df7c30f/agentic), version 0.2.0.2 | `586bfaef83251e831a70d7d1ce5161769a4040da1f003fdcc9556bfa80cef713` (Git archive below) | BSD-2-Clause |
-| agentic-aeson, agentic-openai, agentic-anthropic | [9c74f019424d88c20ac457b2e655585c5df7c30f](https://github.com/drshade/haskell-agentic/tree/9c74f019424d88c20ac457b2e655585c5df7c30f), version 0.2.0.2 | `eee570c67c8629461aaaa860fcaa4082198551f75cafe703aa31535e3b2b9233` (combined Git archive below) | BSD-2-Clause |
-| agentic-jev | [9c74f019424d88c20ac457b2e655585c5df7c30f](https://github.com/drshade/haskell-agentic/tree/9c74f019424d88c20ac457b2e655585c5df7c30f/agentic-jev), version 0.2.0.2 | `693b2f8b6dc7e7cd854aba39797313a7d860e852728228618655dcd1434357f6` (`git archive 9c74f019424d88c20ac457b2e655585c5df7c30f agentic-jev`) | BSD-2-Clause |
+| agentic | [e546c8a903ee82caac1653926e6270f05107f665](https://github.com/drshade/haskell-agentic/tree/e546c8a903ee82caac1653926e6270f05107f665/agentic), version 0.2.0.4 | `86cfd5dba388232c668879ffd90509d00f92d12df9b8643edce6829cd7054e0c` (Git archive below) | BSD-2-Clause |
+| agentic-aeson, agentic-openai, agentic-anthropic | [e546c8a903ee82caac1653926e6270f05107f665](https://github.com/drshade/haskell-agentic/tree/e546c8a903ee82caac1653926e6270f05107f665), version 0.2.0.4 | `1a2948170c1f0bf5fd742219d945093aa6d7c9293f7c793ee7b0eb53cb490222` (combined Git archive below) | BSD-2-Clause |
+| agentic-jev | [e546c8a903ee82caac1653926e6270f05107f665](https://github.com/drshade/haskell-agentic/tree/e546c8a903ee82caac1653926e6270f05107f665/agentic-jev), version 0.2.0.4 | `1a134653129a2a0236f3b5b38eed8322d5ccb74fa236c414e4ed3be702b59cda` (`git archive e546c8a903ee82caac1653926e6270f05107f665 agentic-jev`) | BSD-2-Clause |
 
 The agentic source is the unmodified `agentic/` subtree produced by
-`git archive 9c74f019424d88c20ac457b2e655585c5df7c30f agentic` in its upstream
+`git archive e546c8a903ee82caac1653926e6270f05107f665 agentic` in its upstream
 repository (the table hashes that tar stream). Its upstream README symlink is
 materialized from the same revision's root README so it cannot resolve to Kyyn's
 vendor documentation. It is used by native model-turn handling and the focused agentic
@@ -22,7 +22,7 @@ integration proof and is included in the installed SDK. Generic deriving is
 GHC-only; the MicroHs path uses explicit codecs and the bundled cpphs. The proof
 supplies the Cabal default language/extensions explicitly to GHC. The native provider
 packages are the unmodified subtrees from
-`git archive 9c74f019424d88c20ac457b2e655585c5df7c30f agentic-openai agentic-anthropic agentic-aeson`.
+`git archive e546c8a903ee82caac1653926e6270f05107f665 agentic-openai agentic-anthropic agentic-aeson`.
 Their tests (including opt-in live tests) are disabled in Kyyn's Cabal project;
 Kyyn runs its own focused credential/handler tests without live requests.
 The provider packages are not copied into the guest SDK. No agentic-io package is vendored.

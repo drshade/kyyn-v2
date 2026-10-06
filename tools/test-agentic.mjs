@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, cpSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -119,11 +119,17 @@ async function broker(bin, args, scenario) {
 }
 
 try {
+  const upstream = path.join(temporary, 'agentic');
+  cpSync(path.join(root, 'vendor/agentic/src'), upstream, { recursive: true });
+  for (const file of readdirSync(upstream, { recursive: true }).filter(p => p.endsWith('.hs'))) {
+    const target = path.join(upstream, file);
+    writeFileSync(target, '{-# LANGUAGE NoFieldSelectors, OverloadedRecordDot, DuplicateRecordFields #-}\n' + readFileSync(target, 'utf8'));
+  }
   const native = path.join(temporary, 'native');
   const bytecode = path.join(temporary, 'proof.comb');
   run(process.env.KYYN_TEST_GHC || 'ghc-9.10.3', ['-v0', '-XGHC2021', '-XDataKinds',
     '-XDefaultSignatures', '-XDeriveAnyClass', '-XDerivingVia', '-XGADTs', '-XLambdaCase',
-    '-XOverloadedStrings', '-XRankNTypes', '-i', ...includes, '-outputdir', path.join(temporary, 'objects'),
+    '-XOverloadedStrings', '-XRankNTypes', '-i', `-i${upstream}`, ...includes, '-outputdir', path.join(temporary, 'objects'),
     path.join(fixture, 'Main.hs'), '-o', native]);
   run(path.join(toolchain, 'bin/mhs'), ['-DMIN_VERSION_base(x,y,z)=1', '-a', '-i', ...includes,
     `-i${path.join(toolchain, 'lib')}`, path.join(fixture, 'Main.hs'), `-o${bytecode}`]);

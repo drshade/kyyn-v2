@@ -13,7 +13,7 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Plumbing.Capability.SchemaInspection.Agentic (generateAgenticCodec, generateAgenticInstance)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, listDirectory, doesDirectoryExist)
 import System.Environment (getEnv, getEnvironment)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>), takeDirectory)
@@ -25,6 +25,7 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
   repo <- getEnv "KYYN_TEST_ROOT"
   toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
   environment <- getEnvironment
+  stageAgentic (repo </> "vendor/agentic/src") temporary
   let status = Algebraic "Schema.Status" [] [Constructor "Schema.Open" [],Constructor "Schema.Done" []]
       choice = Algebraic "Schema.Choice" [] [Constructor "Schema.Named" [(Nothing,StringType)],
         Constructor "Schema.Counted" [(Just "count",IntegerType),(Just "enabled",BoolType)]]
@@ -34,6 +35,8 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
   generated <- right (generateAgenticCodec "Generated" payload)
   instanceFiles <- right (generateAgenticInstance 0 "Schema.Payload" payload)
   enumFiles <- right (generateAgenticInstance 1 "Schema.Status" status)
+  commitmentFiles <- right (generateAgenticInstance 3 "Schema.Commitment"
+    (Algebraic "Schema.Commitment" [] [Constructor ("Schema." ++ name) [] | name <- ["Committed","NotCommitted","Unclear"]]))
   sumFiles <- right (generateAgenticInstance 2 "Schema.Choice" choice)
   unless (all (not . Text.isInfixOf "instance Options" . Text.decodeUtf8 . snd) (files instanceFiles ++ files sumFiles))
     (fail "Options generated for a non-enum")
@@ -46,52 +49,61 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
       case generateAgenticCodec "Rejected" unsupported of
         Left _ -> pure ()
         Right _ -> fail "Unsupported model contract generated code"
-  forM_ (files generated ++ files instanceFiles ++ files enumFiles ++ files sumFiles) $ \(relative,bytes) -> do
+  forM_ (files generated ++ files instanceFiles ++ files enumFiles ++ files sumFiles ++ files commitmentFiles) $ \(relative,bytes) -> do
     let destination = temporary </> relativeName relative
     createDirectoryIfMissing True (takeDirectory destination)
     Bytes.writeFile destination bytes
   Bytes.writeFile (temporary </> "Schema.hs") (Text.encodeUtf8 (Text.unlines
     ["module Schema where", "import Kyyn.Types.Fact (FactId)",
      "data Status = Open | Done deriving (Eq,Show)",
+     "data Commitment = Committed | NotCommitted | Unclear deriving (Eq,Show)",
      "data Choice = Named String | Counted { count :: Integer, enabled :: Bool } deriving (Eq,Show)",
      "data Payload = Payload { status :: Status, choices :: [Choice], note :: Maybe String, number :: Integer, identity :: FactId } deriving (Eq,Show)"]))
   Bytes.writeFile (temporary </> "Main.hs") (Text.encodeUtf8 (Text.unlines
-    ["{-# LANGUAGE OverloadedStrings, TypeApplications #-}", "module Main where", "import Schema", "import Generated",
+    ["{-# LANGUAGE OverloadedStrings, OverloadedRecordDot, TypeApplications #-}", "module Main where", "import Schema", "import Generated",
      "import Kyyn.Contracts.Schema.Status ()",
+     "import Kyyn.Contracts.Schema.Commitment ()",
      "import qualified Agentic.Questions as Q",
-     "import Agentic.Contract (options, optionList, optionLabel, optionValue, optionDoc)",
+     "import qualified Data.Text as Text",
+     "import Agentic.Contract (options)",
      "import Kyyn.Types.Fact", "import qualified Agentic as A", "import qualified Agentic.Runtime as R",
      "import Kyyn.Contracts.Schema.Payload ()",
      "import Agentic.Runtime (Runtime(..), SystemTwo(..))", "import qualified Agentic.Schema as S",
      "import Control.Monad (unless)",
      "sample = Payload Open [Named \"雪\",Counted 42 True] (Just \"note\") 900719925474099312345 (FactId \"x\")",
-     "encoded = A.encode rootCodec sample",
+     "encoded = rootCodec.encode sample",
      "rt :: Runtime (Either String)",
      "rt = (A.runtimeWith (Left . show)) { systemTwo = SystemTwo turn }",
-     "turn c = case R.history c of",
-     "  [] -> if S.shape (R.output c) == S.shape (A.codecSchema rootCodec) && R.state c == encoded then Right (A.Turn (A.Raw A.Null) (A.Respond (A.Object []))) else Left \"Wrong generated contract\"",
+     "turn :: R.Conversation -> Either String A.Turn",
+     "turn c = case c.history of",
+     "  [] -> if c.outputSchema.shape == rootCodec.schema.shape && c.input == encoded then Right (A.Turn (A.Raw A.Null) (A.Respond (A.Object []))) else Left \"Wrong generated contract\"",
      "  [A.Rejected _ _] -> Right (A.Turn (A.Raw A.Null) (A.Respond encoded))",
      "  _ -> Left \"Unexpected retry history\"",
      "flow :: A.Agentic (Either String) Payload Payload",
      "flow = A.draft \"Draft a value\"",
+     "route :: Q.Choice Commitment -> Commitment",
+     "route answer | answer.confidence >= 0.7 = answer.chosen | otherwise = Unclear",
+     "classify :: A.Agentic (Either String) Text.Text Commitment",
+     "classify = A.judge (Q.choice \"Is this a concrete commitment?\") A.>>> A.arr route",
      "main :: IO ()", "main = do",
-     "  let opts = optionList (options @Status)",
-     "  unless (map optionLabel opts == [\"Open\",\"Done\"] && map optionValue opts == [Open,Done] && map optionDoc opts == [Nothing,Nothing]) (fail \"Generated enum options differed\")",
+     "  mapM_ (\\(chosen, confidence, expected) -> unless (route (Q.Choice chosen [] confidence) == expected) (fail \"Three-way routing failed\")) [(Committed,0.7,Committed),(NotCommitted,0.9,NotCommitted),(Unclear,0.9,Unclear),(Committed,0.69,Unclear)]",
+     "  let opts = (options @Status).options",
+     "  unless (map (.label) opts == [\"Open\",\"Done\"] && map (.value) opts == [Open,Done] && map (.doc) opts == [Nothing,Nothing]) (fail \"Generated enum options differed\")",
      "  unless (Q.decodeAnswers (Q.choice @Status \"State?\") [Q.ChoiceAnswer \"Done\" [(\"Open\",0.1),(\"Done\",0.9)] 0.8] == Right (Q.Choice Done [(Open,0.1),(Done,0.9)] 0.8)) (fail \"Generated choice options failed\")",
      "  unless (Q.decodeAnswers (Q.score @Status \"Position?\") [Q.ScoreAnswer 0.75 [(0,0.25),(1,0.75)] 0.7] == Right (Q.Score 0.75 [(Open,0.25),(Done,0.75)] 0.7)) (fail \"Generated score options failed\")",
-     "  unless (A.decode rootCodec encoded == Right sample) (fail \"Round trip failed\")",
+     "  unless (rootCodec.decode encoded == Right sample) (fail \"Round trip failed\")",
      "  unless (A.interpret rt flow sample == Right sample) (fail \"Generated-contract draft/retry failed\")",
      "  let absent = sample { note = Nothing }",
-     "  unless (A.decode rootCodec (A.encode rootCodec absent) == Right absent) (fail \"Optional round trip failed\")",
+     "  unless (rootCodec.decode (rootCodec.encode absent) == Right absent) (fail \"Optional round trip failed\")",
      "  case encoded of",
      "    A.Object fs -> do",
      "      unless (lookup \"number\" fs == Just (A.String \"900719925474099312345\")) (fail \"Integer lost precision\")",
      "      unless (lookup \"identity\" fs == Just (A.String \"x\")) (fail \"FactId is not text\")",
-     "      mapM_ (\\v -> case A.decode rootCodec (A.Object ((\"number\",v):filter ((/= \"number\") . fst) fs)) of Left _ -> pure (); Right _ -> fail \"Invalid integer accepted\")",
+     "      mapM_ (\\v -> case rootCodec.decode (A.Object ((\"number\",v):filter ((/= \"number\") . fst) fs)) of Left _ -> pure (); Right _ -> fail \"Invalid integer accepted\")",
      "        [A.Number 42, A.Null, A.String \"01\", A.String \"+1\"]",
      "    _ -> fail \"Expected record\"",
-     "  case S.shape (A.codecSchema rootCodec) of",
-     "    S.SObject fs -> case [S.shape s | S.Field \"number\" s True <- fs] of",
+     "  case rootCodec.schema.shape of",
+     "    S.SObject fs -> case [s.shape | S.Field \"number\" s True <- fs] of",
      "      [S.SString Nothing] -> pure ()",
      "      _ -> fail \"Integer model schema disagrees with codec\"",
      "    _ -> fail \"Expected object schema\"",
@@ -119,3 +131,16 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
+
+-- Apply upstream's Cabal-only record defaults to staged sources, not to json.
+stageAgentic :: FilePath -> FilePath -> IO ()
+stageAgentic source target = do
+  createDirectoryIfMissing True target
+  entries <- listDirectory source
+  forM_ entries $ \name -> do
+    let from = source </> name
+        to = target </> name
+    directory <- doesDirectoryExist from
+    if directory then stageAgentic from to else do
+      bytes <- Bytes.readFile from
+      Bytes.writeFile to ("{-# LANGUAGE NoFieldSelectors, OverloadedRecordDot, DuplicateRecordFields #-}\n" <> bytes)
