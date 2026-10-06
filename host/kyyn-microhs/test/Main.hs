@@ -60,7 +60,7 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
     generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
     second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
     files <- mapM (\(base, path) -> (,) (checkedPath path) <$> Bytes.readFile (base </> path))
-      [(fixtures, "Model.hs"), (fixtures, "RoundTrip.hs"), (guest, "Kyyn/Runtime/Json.hs"),
+      [(fixtures, "Model.hs"), (fixtures, "RoundTrip.hs"), (guest, "Kyyn/Runtime/Json.hs"), (guest, "Kyyn/Runtime/Transport.hs"),
        (json, "Text/JSON/Types.hs"), (json, "Text/JSON/String.hs")]
     sources <- either fail pure (guestSources (checkedPath "RoundTrip.hs")
       (files ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),
@@ -108,7 +108,7 @@ testEmptyRoot temporary toolchain compiler fixtures guest json = do
   generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
   second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
   captured <- mapM (\(base, path) -> (,) (checkedPath path) <$> Bytes.readFile (base </> path))
-    [(fixtures,"Empty.hs"), (fixtures,"RoundTrip.hs"), (guest,"Kyyn/Runtime/Json.hs"),
+    [(fixtures,"Empty.hs"), (fixtures,"RoundTrip.hs"), (guest,"Kyyn/Runtime/Json.hs"), (guest,"Kyyn/Runtime/Transport.hs"),
      (json,"Text/JSON/Types.hs"), (json,"Text/JSON/String.hs")]
   sources <- either fail pure (guestSources (checkedPath "RoundTrip.hs")
     (captured ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),

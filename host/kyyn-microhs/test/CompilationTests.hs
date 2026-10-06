@@ -2,7 +2,7 @@
 module CompilationTests (testCompilation) where
 
 import Control.Monad (unless, forM_)
-import Data.List (isInfixOf)
+import qualified Data.Text as Text
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, runEff)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
@@ -24,7 +24,7 @@ testCompilation :: DirectoryScope -> GuestToolchain -> IO ()
 testCompilation temporary toolchain = do
   let path = either error id . relativePath
       make = guestSources (path "Program.hs")
-      files = [(path "Program.hs", "{-# LANGUAGE CPP #-}\nmodule Program where\nimport Helper\n#define MESSAGE message\nmain :: IO ()\nmain = putStrLn MESSAGE\n"),
+      files = [(path "Program.hs", "{-# LANGUAGE CPP #-}\nmodule Program where\nimport Helper\n#define MESSAGE message\nmain :: IO ()\nmain = putStr (\"9\\n\" ++ MESSAGE ++ \"\\n0\\n0\\n\")\n"),
                (path "Helper.hs", "module Helper where\nmessage :: String\nmessage = \"captured\"\n")]
       compileWith selected sources = runEff . runFailure . runProcessExecutionIO . runFileSystemIO temporary . runGuestCompilation selected Nothing $
         compileGuest sources
@@ -55,7 +55,7 @@ testCompilation temporary toolchain = do
     rejected <- compile invalid
     case rejected of
       Right (Left [Diagnostic{code = "guest.compiler-rejected", message}]) ->
-        assert "compiler diagnostic must retain message without stacks" (not (null message) && not ("CallStack" `isInfixOf` message) && not ("backtrace:" `isInfixOf` message))
+        assert "compiler diagnostic must retain message without stacks" (not (Text.null message) && not ("CallStack" `Text.isInfixOf` message) && not ("backtrace:" `Text.isInfixOf` message))
       Left err -> fail ("source rejection became operational failure: " ++ show err)
       _ -> fail "invalid captured code compiled"
   absentScope <- either fail pure (directoryScope (scopePath temporary ++ "/absent-toolchain"))

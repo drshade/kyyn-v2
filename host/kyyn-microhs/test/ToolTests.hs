@@ -6,6 +6,7 @@ import Data.Aeson (toJSON, object, (.=), encode)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (isInfixOf)
 import qualified Data.ByteString as Bytes
+import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Data.Version (showVersion)
@@ -67,12 +68,13 @@ testTools scope toolchain sdk pluginCode plugins = do
   helperPath <- right (relativePath "src/Helpers.hs")
   let helper = Text.encodeUtf8 (Text.unlines
         [ "module Helpers where"
+        , "import Data.Text (Text)"
         , "import Kyyn.Plugin (FetchError)"
         , "import Kyyn.Connectors (Tool)"
         , "import qualified Kyyn.Connectors as Connectors"
         , "import qualified Kyyn.Plugins.P_local_file.Folder as Files"
-        , "type Input = [String]"
-        , "type Output = [String]"
+        , "type Input = [Text]"
+        , "type Output = [Text]"
         , "bulk :: Input -> Tool (Either FetchError Output)"
         , "bulk ids = do"
         , "  a <- mapM (Files.content Connectors.salesFiles) ids"
@@ -122,7 +124,7 @@ testTools scope toolchain sdk pluginCode plugins = do
         (runEvidenceStore scope (clearEvidence (ConnectorInstanceRef plugin "sales"))))))) >>= right
       (absent,_) <- invoke (toJSON (["one.txt"] :: [String]))
       assert "Missing capture was catchable or lost instance context" (case absent of
-        Left diagnostics -> any (\(Diagnostic _ name message _) -> name == "evidence.not-fetched" && "local-file/sales" `isInfixOf` message) diagnostics
+        Left diagnostics -> any (\(Diagnostic _ name message _) -> name == "evidence.not-fetched" && "local-file/sales" `isInfixOf` Text.unpack message) diagnostics
         Right _ -> False)
     _ -> fail "Expected local-file plugin in helper fixture"
   putStrLn "KB tools: generated proxies compiled in GHC/MicroHs; two-instance composition and catchable missing evidence passed."
@@ -146,8 +148,8 @@ emitFrame :: Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
 emitFrame frame = interpret $ \env operation -> case operation of
   ExecuteCompiled {} -> error "Tool unexpectedly requested one-shot execution"
   ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> do
-    _ <- unlift (respond frame)
-    pure (frame,ProcessExit 0 Bytes.empty)
+    _ <- unlift (respond (Wire.jsonFrame frame))
+    pure (Wire.jsonFrame frame,ProcessExit 0 Bytes.empty)
 
 testBindingShapes :: DirectoryScope -> GuestToolchain -> FileTree -> IO ()
 testBindingShapes scope toolchain sdk = do
@@ -186,7 +188,9 @@ compileGhc scope sources expected = do
   forM_ (sourceFiles sources) $ \(path,bytes) -> do
     let target = directory </> relativeName path
     createDirectoryIfMissing True (takeDirectory target)
-    Bytes.writeFile target bytes
+    let agentic = take 8 (relativeName path) == "Agentic/" || relativeName path == "Agentic.hs"
+        extensions = "{-# LANGUAGE DuplicateRecordFields, NoFieldSelectors, OverloadedRecordDot #-}\n"
+    Bytes.writeFile target (if agentic then extensions <> bytes else bytes)
   (status,out,err) <- readProcessWithExitCode ghc ["-v0","-XGHC2021","-XDataKinds","-XDefaultSignatures","-XDeriveAnyClass",
     "-XDerivingVia","-XGADTs","-XLambdaCase","-XOverloadedStrings","-XRankNTypes","-fno-code","-i" ++ directory,
     "-outputdir",directory </> "objects","-main-is",takeBaseName (relativeName (selectedEntry sources)) ++ ".main",

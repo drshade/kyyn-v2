@@ -139,7 +139,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let futureRecord = "(" <> metadata <> ") // { version = +6 }"
   case runPureEff (runDhallHandling (decodeEvolutionRecord futureRecord)) of
     Right (Left [Diagnostic Error "evolution.record-format" message _])
-      | not ("apply" `isInfixOf` message) -> pure ()
+      | not ("apply" `isInfixOf` Text.unpack message) -> pure ()
     other -> fail ("Unsupported archive format was corruption or requested replay: " ++ show other)
   case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +6, content = True }")) of
     Right (Left [Diagnostic Error "evolution.record-format" _ _]) -> pure ()

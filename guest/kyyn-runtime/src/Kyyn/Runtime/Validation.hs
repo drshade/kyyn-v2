@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Runtime.Validation (encodeReport, encodeReportValue) where
 
 import Kyyn.Types.Diagnostic
@@ -14,8 +15,8 @@ encodeReportValue (ValidationReport diagnostics)
   where
     invalidPosition (Diagnostic _ _ _ (Just (SourceLocation _ line column))) = line <= 0 || column <= 0
     invalidPosition _ = False
-    text = encodeWith stringCodec
-    optionalText = encodeWith (optionalCodec stringCodec)
+    text = encodeWith textCodec
+    optionalText = encodeWith (optionalCodec textCodec)
     encodeDiagnostic (Diagnostic level diagnosticCode diagnosticMessage diagnosticLocation) = record
       [("severity", tagged (case level of Warning -> "Warning"; Error -> "Error") Nothing),
        ("code", text diagnosticCode), ("message", text diagnosticMessage),

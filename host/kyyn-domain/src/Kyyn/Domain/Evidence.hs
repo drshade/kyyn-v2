@@ -10,6 +10,7 @@ module Kyyn.Domain.Evidence
 
 import Control.Monad (foldM, unless)
 import Data.List (nub)
+import qualified Data.Text as Text
 import Kyyn.Domain.Plugin (PluginName, pluginNameText, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -102,11 +103,11 @@ applyChanges = foldM step
       RemovedEvidence key | missing key values -> Left (InvalidDelta "Removed evidence ID is missing")
                           | otherwise -> pure [(k,v) | (k,v) <- values, k /= key]
     missing key = not . any ((== key) . fst)
-    valid (EvidenceId key) | null key = Left (InvalidDelta "Evidence ID must not be empty")
+    valid (EvidenceId key) | Text.null key = Left (InvalidDelta "Evidence ID must not be empty")
                           | otherwise = Right ()
     fingerprint (Evidence token _ _) = token
     validFingerprint (Evidence (EvidenceFingerprint token) _ _)
-      | null token = Left (InvalidDelta "Evidence fingerprint must not be empty")
+      | Text.null token = Left (InvalidDelta "Evidence fingerprint must not be empty")
       | otherwise = Right ()
 
 recordChanges :: ConnectorInstanceRef -> [(EvidenceId, Evidence a)] -> [EvidenceChange a]
@@ -122,7 +123,7 @@ recordChanges (ConnectorInstanceRef plugin instanceName) initial = foldM step (i
           (\value -> pure (key,Removed,value)) (lookup key values)
       let Evidence fingerprint refs _ = value
       pure (next,markers ++ [EvidenceChangeMarker kind key fingerprint
-        (EvidenceRef (pluginNameText plugin) instanceName source refs)])
+        (EvidenceRef (Text.pack (pluginNameText plugin)) (Text.pack instanceName) source refs)])
 
 fetchesSince :: EvidenceState a -> Maybe FetchId -> Either EvidenceProblem [Fetch]
 fetchesSince (EvidenceState _ _ history) = maybe (Right history) after
@@ -143,8 +144,8 @@ validateState :: EvidenceState a -> Either EvidenceProblem ()
 validateState (EvidenceState current values history) = do
   let ids = [key | Fetch key _ _ _ _ <- history]
       memberIds = map fst values
-      validMember (EvidenceId key,Evidence (EvidenceFingerprint token) _ _) = not (null key || null token)
-      validMarker (EvidenceChangeMarker _ (EvidenceId key) (EvidenceFingerprint token) _) = not (null key || null token)
+      validMember (EvidenceId key,Evidence (EvidenceFingerprint token) _ _) = not (Text.null key || Text.null token)
+      validMarker (EvidenceChangeMarker _ (EvidenceId key) (EvidenceFingerprint token) _) = not (Text.null key || Text.null token)
   unless (length ids == length (nub ids) && all (\(FetchId key) -> not (null key)) ids &&
     length memberIds == length (nub memberIds) && all validMember values &&
     all (\(Fetch _ _ _ markers _) -> all validMarker markers) history)

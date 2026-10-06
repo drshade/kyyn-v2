@@ -84,7 +84,7 @@ localExchange = do
           assert "empty GET sent a Content-Length header" (not ("content-length:" `Bytes.isInfixOf` Bytes.map lowerAscii received))
           Socket.sendAll connection "HTTP/1.1 302 Found\r\nLocation: /must-not-follow\r\nRetry-After: 2\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody"
     withAsync server $ \worker -> do
-      response <- runEff . runHttpTransportIO $ sendHttp (HttpRequest "GET" ("http://127.0.0.1:" ++ port ++ "/") [] "")
+      response <- runEff . runHttpTransportIO $ sendHttp (HttpRequest "GET" (Text.pack ("http://127.0.0.1:" ++ port ++ "/")) [] "")
       assert "native transport followed redirect or lost headers" (case response of
         Right (HttpResponse 302 fields "body") -> lookup "Retry-After" fields == Just "2"
         _ -> False)

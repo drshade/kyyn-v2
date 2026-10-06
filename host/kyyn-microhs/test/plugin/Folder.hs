@@ -1,6 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Folder (fetch) where
 
 import Kyyn.Plugin
+import qualified Data.Text as Text
 import Kyyn.Plugin.Host
 import qualified FolderSchema as Schema
 
@@ -19,8 +21,8 @@ fetch (Schema.Config directory recursive) prior
               pure $ do
                 texts <- sequence contents
                 let old = [(key,value) | (key,Just value) <- zip previousIds previous]
-                    current = [(EvidenceId path,Evidence token
-                      [fullPath path] (Schema.Document text)) | (path,CapturedText text token) <- zip paths texts]
+                    current = [(EvidenceId (Text.pack path),Evidence token
+                      [Text.pack (fullPath path)] (Schema.Document text)) | (path,CapturedText text token) <- zip paths texts]
                     changes = concatMap (changed old) current
                     removed = [RemovedEvidence key | key <- previousIds, key `notElem` map fst current]
                 pure (changes ++ removed)

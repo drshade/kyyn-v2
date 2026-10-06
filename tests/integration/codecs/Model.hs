@@ -1,6 +1,8 @@
 module Model where
 
-type Label = String
+import Data.Text (Text)
+
+type Label = Text
 data Box a = Box { contents :: a }
 newtype Wrapped = Wrapped String
 data Status = Open | Blocked String | Done

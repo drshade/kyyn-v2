@@ -22,6 +22,7 @@ import qualified Kyyn.Plumbing.Capability.HttpTransport as Http
 import qualified Kyyn.Plumbing.Capability.PluginInteraction as Interaction
 import qualified Kyyn.Plumbing.Protocol.PluginHost as Host
 import qualified Kyyn.Porcelain.Protocol.PluginHost as Host
+import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import Kyyn.Domain.DataType (DataType(..))
 import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..))
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -39,7 +40,7 @@ import System.Environment (getEnv, getArgs)
 import System.Exit (ExitCode(..))
 import System.FilePath ((</>), takeDirectory, dropExtension)
 import System.Info (compilerVersion)
-import System.IO (hGetLine, hPutStrLn, hFlush, hClose, hIsEOF, hGetContents)
+import System.IO (hFlush, hClose, hIsEOF, hGetContents, hSetBinaryMode)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process
 import System.Timeout (timeout)
@@ -67,7 +68,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["Evidence","Program","Plugin","PluginHost"]] ++
     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
     [load "host/kyyn-microhs/test/plugin" name | name <- ["FolderSchema.hs","SignatureCases.hs"]])
   let schemaDirectory = temporary </> "schema"
@@ -105,7 +106,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
       assert "typed options/default did not reach acquisition unchanged"
         (result == Just (failure message) && null trace && status == ExitSuccess)
   acquisition <- right (acquisitionSources config payload Nothing "Folder.fetch" (folder:common))
-  captured <- right (capturedReadSources StringType payload StringType "ReadDocument.view" (view:common))
+  captured <- right (capturedReadSources StringType payload TextType "ReadDocument.view" (view:common))
   forM_ ["KyynPluginEntry.hs","KyynPluginPayloadCodec.hs"] $ \name ->
     assert "generated adapter overwrote authored source" (case acquisitionSources config payload Nothing "Folder.fetch" ((path name,"collision"):folder:common) of
       Left _ -> True; Right _ -> False)
@@ -184,36 +185,44 @@ rejectBoth temporary toolchain ghc sources = do
 data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload deriving (Eq)
 
 broker :: Scenario -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
-broker scenario = brokerWith scenario (respond scenario)
+broker scenario = brokerWith scenario (\body capability method args -> do
+  assert "non-HTTP request has a raw body" (Bytes.null body)
+  (,Bytes.empty) <$> respond scenario capability method args)
 
-brokerWith :: Scenario -> (String -> String -> Value -> IO Value) -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
+brokerWith :: Scenario -> (Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString)) -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
 brokerWith scenario respondTo program input = do
   result <- timeout 20000000 $ withCreateProcess program {std_in = CreatePipe,std_out = CreatePipe,std_err = CreatePipe} $ \stdin stdout stderr process ->
     case (stdin,stdout,stderr) of
       (Just toGuest,Just fromGuest,Just errors) -> do
-        let emit value = hPutStrLn toGuest (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))) >> hFlush toGuest
-            loop trace = do
+        hSetBinaryMode toGuest True
+        hSetBinaryMode fromGuest True
+        let emit value body = mapM_ (Bytes.hPut toGuest) (Wire.encodeFrame (Wire.Frame (Lazy.toStrict (encode value)) body)) >> hFlush toGuest
+            next = do
+              bytes <- Bytes.hGetSome fromGuest 32768
+              pure (if Bytes.null bytes then Nothing else Just bytes)
+            loop buffered trace = do
               done <- hIsEOF fromGuest
-              if done then pure (Nothing,trace) else do
-                line <- hGetLine fromGuest
-                message <- right (eitherDecodeStrict (Text.encodeUtf8 (Text.pack line)))
+              if done && Bytes.null buffered then pure (Nothing,trace) else do
+                (Wire.Frame metadata body,rest) <- Wire.readFrame next buffered >>= right
+                message <- right (eitherDecodeStrict metadata)
                 tag <- right (parseEither (withObject "frame" (.: "tag")) message)
                 case tag :: String of
                   "Completed" -> do
+                    assert "terminal result has a raw body" (Bytes.null body)
                     output <- right (parseEither (withObject "completed" (.: "result")) message)
                     pure (Just output,trace)
                   "HostRequest" -> do
                     (identity,capability,method,args) <- right (parseEither (withObject "request" $ \fields ->
                       (,,,) <$> fields .: "id" <*> fields .: "capability" <*> fields .: "method" <*> fields .: "arguments") message)
                     assert "request IDs are not sequential" (identity == show (length trace + 1))
-                    answer <- respondTo capability method args
+                    (answer,responseBody) <- respondTo body capability method args
                     emit (object ["tag" .= ("HostResponse" :: String),"id" .=
                       (if scenario == WrongId then "wrong" else identity),"result" .=
-                      (if scenario == WrongPayload then success (Bool True) else answer)])
-                    loop (trace ++ [(capability,method)])
+                      (if scenario == WrongPayload then success (Bool True) else answer)]) responseBody
+                    loop rest (trace ++ [(capability,method)])
                   _ -> fail "Unknown guest frame"
-        emit input
-        (output,trace) <- loop []
+        emit input Bytes.empty
+        (output,trace) <- loop Bytes.empty []
         hClose toGuest
         diagnostics <- hGetContents errors
         length diagnostics `seq` pure ()
@@ -269,7 +278,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["Evidence","Program","Plugin","PluginHost"]] ++
     [load "guest/kyyn-sdk/src" "Kyyn/Plugin/Host.hs"] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin/Network.hs")
   sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
@@ -277,8 +286,8 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
   forM_ programs $ \program -> do
     secret <- newIORef Nothing
     displays <- newIORef []
-    let respondTo capability method arguments = do
-          call <- right (parseEither (Host.decodePluginHostCall capability method) arguments)
+    let respondTo body capability method arguments = do
+          call <- right (parseEither (Host.decodePluginHostCall body capability method) arguments)
           runEff (runFailure (recordHttp (recordSecrets secret (recordWait (recordLogin displays (Host.answerLogin call)))))) >>= right
     (result,trace,status) <- brokerWith Normal respondTo program (object [])
     assert "network guest result" (result == Just (success (String "complete")) && status == ExitSuccess)
@@ -293,7 +302,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
       (Host.answerNetwork (Host.DisplayInstructions "must not display"))))))
     assert "acquisition permitted interaction" (case denied of Left _ -> True; _ -> False)
   forM_ ["-1","01","1.0","99999999999999999999999999"] $ \seconds ->
-    assert "invalid wait accepted" (case parseEither (Host.decodePluginHostCall "waiting" "seconds")
+    assert "invalid wait accepted" (case parseEither (Host.decodePluginHostCall Bytes.empty "waiting" "seconds")
       (object ["seconds" .= (seconds :: String)]) of Left _ -> True; Right _ -> False)
   let forbidden = Text.encodeUtf8 (Text.unlines ["module KyynPluginEntry where","import Kyyn.Plugin.Host",
         "main :: IO ()","main = pure ()","bad :: Acquisition String ()","bad = displayInstructions \"no\""])
@@ -306,7 +315,7 @@ recordHttp = interpret $ \_ (Http.SendHttp request) ->
   if request == Http.HttpRequest "POST" "https://fixture.test/token" [("Authorization","rotated 雪")] "body 雪"
   then pure (Right (Http.HttpResponse 429 [("Retry-After","2")] "response 雪"))
   else case [problem | problem <- [Http.HttpTimedOut,Http.HttpConnectionFailed,Http.HttpUnavailable],
-        request == Http.HttpRequest "GET" ("https://fixture.test/" ++ show problem) [] ""] of
+        request == Http.HttpRequest "GET" ("https://fixture.test/" <> Text.pack (show problem)) [] ""] of
     [problem] -> pure (Left problem)
     _ -> error "Unexpected HTTP request"
 

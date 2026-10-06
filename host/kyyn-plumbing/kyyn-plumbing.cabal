@@ -14,6 +14,7 @@ library
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
     Kyyn.Plumbing.Capability.GuestExecution Kyyn.Plumbing.Capability.FileAcquisition
     Kyyn.Plumbing.Protocol.PluginMessages
+    Kyyn.Plumbing.Protocol.Frame
     Kyyn.Plumbing.Capability.GuestCompilation.Types
     Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Protocol.Query
@@ -55,3 +56,13 @@ library
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, bytestring, effectful-core ==2.6.1.0, transformers,
     cryptohash-sha256 ==0.11.102.1, text, filepath, kyyn-types, aeson ==2.2.5.0, agentic ==0.2.0.5, json ==0.11
+
+test-suite frames
+  type: exitcode-stdio-1.0
+  main-is: FrameTests.hs
+  hs-source-dirs: test ../../guest/kyyn-runtime/src
+  other-modules: Kyyn.Runtime.Json
+  default-language: GHC2021
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Werror
+  build-depends: base, kyyn-plumbing, kyyn-types, bytestring, text, transformers, json ==0.11

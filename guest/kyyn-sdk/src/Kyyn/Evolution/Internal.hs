@@ -1,5 +1,8 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Evolution.Internal
   ( RootBinding(..), RecordedRoot(..), StepObservation(..), EvolutionOutput(..), Evolution(..), evolve, edit, evaluateEvolution ) where
+
+import Data.Text (Text)
 
 import Kyyn.Types.Evolution (Rationale, EvolutionFailure)
 import Kyyn.Types.Curation (Curation)
@@ -7,8 +10,8 @@ import Text.JSON.Types (JSValue)
 import Kyyn.Edit (Edit)
 import Kyyn.Edit.Internal (execStateT)
 
-data RootBinding a = RootBinding String (a -> JSValue)
-data RecordedRoot = RecordedRoot String JSValue deriving (Eq, Show)
+data RootBinding a = RootBinding Text (a -> JSValue)
+data RecordedRoot = RecordedRoot Text JSValue deriving (Eq, Show)
 data StepObservation = StepObservation Rationale RecordedRoot RecordedRoot deriving (Eq, Show)
 -- | The final root and ordered observations produced by a successful evolution.
 data EvolutionOutput a = EvolutionOutput a [StepObservation] (Maybe Curation) deriving (Eq, Show)

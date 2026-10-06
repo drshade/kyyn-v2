@@ -11,6 +11,7 @@ import Control.Monad.Trans.Class (lift)
 import Kyyn.Types.Program (Program, request)
 import qualified Kyyn.Runtime.Json as J
 import Kyyn.Runtime.Plugin (exchange)
+import Kyyn.Runtime.Transport (Transport)
 import Text.JSON.Types (JSValue)
 
 -- Proof-only single-turn capability. No provider IO or credentials in the flow.
@@ -24,9 +25,9 @@ runtime = (A.runtimeWith (throwE . show))
   { systemTwo = A.SystemTwo $ \conversation ->
       lift (request (Turn conversation)) >>= either throwE pure }
 
-modelRequest :: Integer -> Model a -> IO a
-modelRequest identity (Turn conversation) =
-  exchange identity "model" "turn" (conversationValue conversation) replyCodec
+modelRequest :: Transport -> Integer -> Model a -> IO a
+modelRequest transport identity (Turn conversation) =
+  exchange transport identity "model" "turn" (conversationValue conversation) replyCodec
 
 -- A lossless tagged transport for the library's internal Value, not KB schema.
 valueCodec :: J.Codec A.Value

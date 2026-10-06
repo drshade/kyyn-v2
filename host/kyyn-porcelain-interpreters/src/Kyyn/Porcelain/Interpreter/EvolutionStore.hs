@@ -7,6 +7,7 @@ import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Char8 as Bytes
 import Data.List (stripPrefix, isPrefixOf, nub, sort)
+import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -268,7 +269,7 @@ checkSavedReport operation (EvolutionReport _ steps _) = forM_ steps $ \(StepRep
   forM_ changes check
   where
     check (RecipeChange (FactId identity) before after) = do
-      _ <- stored operation "candidate.dhall" (recipeId identity)
+      _ <- stored operation "candidate.dhall" (recipeId (Text.unpack identity))
       unless (before /= Nothing || after /= Nothing)
         (storageFailure operation "candidate.dhall" "Recipe change has neither a before nor an after value")
     check (FactChange collection (FactId identity) before after) = do

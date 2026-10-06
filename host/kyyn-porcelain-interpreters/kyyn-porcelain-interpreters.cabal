@@ -74,7 +74,7 @@ test-suite evolution-reports
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
     kyyn-porcelain-interpreters, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
-    kyyn-plumbing, aeson, bytestring
+    kyyn-plumbing, aeson, bytestring, text
 
 test-suite roots
   type: exitcode-stdio-1.0

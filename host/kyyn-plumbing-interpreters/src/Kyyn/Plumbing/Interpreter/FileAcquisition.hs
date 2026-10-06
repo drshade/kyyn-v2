@@ -27,11 +27,11 @@ runFileAcquisitionIO = interpret $ \_ -> \case
     let source = scopedPath scope path
     refuseLink source
     bytes <- Bytes.readFile source
-    contents <- either (ioError . userError . show) (pure . Text.unpack) (Text.decodeUtf8' bytes)
+    contents <- either (ioError . userError . show) pure (Text.decodeUtf8' bytes)
     let fingerprint = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
           (Bytes.unpack (SHA256.hash (Lazy.toStrict (Builder.toLazyByteString
             (framed (Text.encodeUtf8 (Text.pack source)) <> framed bytes)))))
-    pure (CapturedText contents (EvidenceFingerprint fingerprint))
+    pure (CapturedText contents (EvidenceFingerprint (Text.pack fingerprint)))
   where
     framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes
 

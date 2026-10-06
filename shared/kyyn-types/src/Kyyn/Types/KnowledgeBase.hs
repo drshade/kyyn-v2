@@ -1,4 +1,7 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..), FlowEntryRef(..)) where
+
+import Data.Text (Text)
 
 import Kyyn.Types.Fact (Fact)
 
@@ -8,9 +11,9 @@ data KnowledgeBase a = KnowledgeBase a [Fact Recipe] deriving (Eq, Show)
 -- | A task guided by instructions or implemented by an authored flow.
 -- The containing fact's ID is the recipe's name.
 data Recipe
-  = OpenAgent { instructions :: String }
+  = OpenAgent { instructions :: Text }
   | ClosedAgent { flow :: FlowEntryRef }
   deriving (Eq, Show)
 
 -- | The qualified name of an authored flow, for example Tasks.reconcile.
-newtype FlowEntryRef = FlowEntryRef String deriving (Eq, Show)
+newtype FlowEntryRef = FlowEntryRef Text deriving (Eq, Show)

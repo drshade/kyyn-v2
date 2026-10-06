@@ -28,7 +28,8 @@ import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 
 identityEvolutionSource :: String -> ByteString
 identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
-  [ "module Evolution where"
+  [ "{-# LANGUAGE OverloadedStrings #-}"
+  , "module Evolution where"
   , "import Kyyn.Workspace.Evolution"
   , "import qualified " ++ selectedModule ++ " as Before"
   , "import qualified " ++ selectedModule ++ " as After"
@@ -60,10 +61,11 @@ evolutionSources before after authored = do
          "import Kyyn.Runtime.Evolution", "import Kyyn.Evolution (EvolutionFailure, KnowledgeBase)",
          "import Kyyn.Evolution.Internal (EvolutionOutput, evaluateEvolution)",
          "import Kyyn.Types.Program (Program)",
+         "import Kyyn.Runtime.Transport (withTransport, readJson, writeValue)",
          "selected :: KnowledgeBase " ++ haskellType beforeType ++ " -> Program NoRequests (Either EvolutionFailure (EvolutionOutput (KnowledgeBase " ++ haskellType afterType ++ ")))",
-         "selected = pure . evaluateEvolution Evolution.evolution", "main :: IO ()", "main = do", "  input <- getContents",
+         "selected = pure . evaluateEvolution Evolution.evolution", "main :: IO ()", "main = withTransport $ \\transport -> do", "  input <- readJson transport",
          "  output <- either fail pure (executeEvolution (knowledgeBaseCodec BeforeCodec.rootCodec) (knowledgeBaseCodec AfterCodec.rootCodec) selected input)",
-         "  putStrLn output"]
+         "  writeValue transport output"]
   guestSources entryPath (files authored ++ files bindings ++ [(entryPath,Text.encodeUtf8 (Text.pack entry))])
 
 evolutionBindings :: RootContract -> RootContract -> Either String FileTree
@@ -79,7 +81,7 @@ evolutionBindings before after = do
     pure (path,utf8 source) | (index,(_,contract)) <- zip [0..] declarations]
   path <- relativePath "Kyyn/Workspace/Evolution.hs"
   let source = unlines $
-        ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
+        ["{-# LANGUAGE OverloadedStrings #-}", "module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
          "import Kyyn.Evolution",
          "import Kyyn.Evolution.Internal (RootBinding(..))",
          "import qualified Kyyn.Evolution.Internal as Internal", "import Kyyn.Runtime.Json (encodeWith)",
@@ -114,7 +116,7 @@ collectionBindings endpoint contract = do
       declarations = collectionContracts (rootSchema contract)
       rootModule = case root of Algebraic name _ _ -> definingModule name; _ -> error "Checked root is not a record"
       source = unlines $
-        ["module Kyyn.Workspace." ++ endpoint ++ " (" ++ comma [field | CollectionContract _ field _ _ <- declarations] ++ ") where",
+        ["{-# LANGUAGE OverloadedStrings #-}", "module Kyyn.Workspace." ++ endpoint ++ " (" ++ comma [field | CollectionContract _ field _ _ <- declarations] ++ ") where",
          "import Kyyn.Edit (Collection)", "import Kyyn.Evolution (KnowledgeBase, facts)",
          "import qualified Kyyn.Edit.Internal as Internal", "import qualified Kyyn.Optics as Optics"] ++
         ["import qualified " ++ name | name <- typeModules root] ++

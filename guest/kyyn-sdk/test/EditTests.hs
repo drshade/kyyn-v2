@@ -1,7 +1,8 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings #-}
 module EditTests (main) where
 
 import Kyyn.Evolution
+import qualified Data.Text as Text
 import Kyyn.Edit.Internal (Collection(..), execStateT)
 import qualified Kyyn.Evolution.Internal as Internal
 import Kyyn.Types.Diagnostic (Diagnostic(Diagnostic), Severity(Error), DiagnosticLocation(FactLocation), errorDiagnostic)
@@ -41,7 +42,7 @@ main = do
       expected = Root [Fact one (Todo "Write report" 2),Fact (FactId "three") (Todo "Review" 2)] [Fact one "Ready"] "September"
       failure code ident run = assert code $ case execStateT run input of
         Left (EvolutionFailure [Diagnostic Error actual _ loc]) ->
-          actual == code && loc == Just (FactLocation "work-items" ident Nothing)
+          actual == Text.pack code && loc == Just (FactLocation "work-items" ident Nothing)
         _ -> False
   assert "scoped edits preserve IDs/order/unrelated fields" (execStateT action input == Right expected)
   assert "current is read-only" (execStateT (within todoCollection (current one)) input == Right input)

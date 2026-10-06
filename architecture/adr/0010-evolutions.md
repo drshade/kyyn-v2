@@ -130,7 +130,7 @@ even when its state action edits several facts or collections:
 
 ```haskell
 type Edit root = StateT root (Either EvolutionFailure)
-type CollectionEdit a = ReaderT String (Edit [Fact a])
+type CollectionEdit a = ReaderT Text (Edit [Fact a])
 data Collection root a -- abstract publicly; generated name and collection lens
 
 within :: Collection root a -> CollectionEdit a r -> Edit root r

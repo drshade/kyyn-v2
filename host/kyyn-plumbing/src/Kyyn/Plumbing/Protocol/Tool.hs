@@ -33,7 +33,7 @@ proxyModule plugin kind = "Kyyn.Plugins.P_" ++ map (\c -> if c == '-' then '_' e
 source :: String -> String -> Either String (RelativePath,Bytes.ByteString)
 source name body = do
   path <- relativePath (map (\c -> if c == '.' then '/' else c) name ++ ".hs")
-  pure (path,Text.encodeUtf8 (Text.pack body))
+  pure (path,Text.encodeUtf8 (Text.pack ("{-# LANGUAGE OverloadedStrings #-}\n" ++ body)))
 
 toolBindings :: [ConnectorInterface] -> [InstanceBinding] -> Either String [(RelativePath,Bytes.ByteString)]
 toolBindings interfaces bindings = do
@@ -56,7 +56,7 @@ toolBindings interfaces bindings = do
      "import Agentic.Runtime (Runtime(..))",
      "import Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)",
      "import Control.Monad.Trans.Class (lift)",
-     "import Kyyn.Types.Plugin (FetchError(..))", "import Kyyn.Types.Program (request)",
+     "import Kyyn.Types.Plugin (FetchError(..))", "import Kyyn.Types.Program (request)", "import qualified Data.Text as Text",
      "import Kyyn.Connectors (Tool)", "import qualified KyynToolCalls as Calls",
      "-- | An agentic flow using the current tool's host capabilities.",
      "type Flow input output = A.Agentic Step input output",
@@ -66,11 +66,11 @@ toolBindings interfaces bindings = do
      "interpret :: Flow input output -> input -> Tool (Either FetchError output)",
      "interpret flow input = runExceptT (A.interpret runtime flow input)",
      "runtime :: A.Runtime Step",
-     "runtime = (A.runtimeWith (throwE . FetchError . show))",
+     "runtime = (A.runtimeWith (throwE . FetchError . Text.pack . show))",
      "  { systemOne = A.SystemOne $ \\question ->",
-     "      lift (request (Calls.JudgementCall question)) >>= either (throwE . FetchError) pure",
+     "      lift (request (Calls.JudgementCall question)) >>= either (throwE . FetchError . Text.pack) pure",
      "  , systemTwo = A.SystemTwo $ \\conversation ->",
-     "      lift (request (Calls.ModelCall conversation)) >>= either (throwE . FetchError) pure }",
+     "      lift (request (Calls.ModelCall conversation)) >>= either (throwE . FetchError . Text.pack) pure }",
      "-- | Lift a captured-read tool action into a flow's effect monad.",
      "liftTool :: Tool a -> Step a", "liftTool = lift"])
   proxies <- traverse (\(i,ConnectorInterface plugin kind methods) -> source (proxyModule plugin kind) (unlines $
@@ -116,23 +116,24 @@ toolSourcesWithCodecs interfaces bindings input output implementation inputSourc
      "import qualified " ++ implementationModule,"import qualified Kyyn.Connectors as Connectors",
      "import qualified KyynToolCalls as Calls","import Kyyn.Types.Plugin (ConnectorInstance(..), FetchError)",
      "import Kyyn.Runtime.Json","import Kyyn.Runtime.Plugin (execute, exchange, eitherCodec)",
+     "import Kyyn.Runtime.Transport (Transport, withTransport, readJson)",
      "import Kyyn.Runtime.Judgement (exchangeJudgement)",
      "import Kyyn.Runtime.Model (exchangeModel)",
      "import qualified KyynToolInputCodec as Input","import qualified KyynToolResultCodec as Output"] ++
     ["import qualified " ++ m | (i,_,_,n,_,_) <- methods, m <- [inputCodec i n,resultCodec i n]] ++ imports [input,output] ++
     ["selected :: " ++ haskellType input ++ " -> Connectors.Tool (Either FetchError " ++ haskellType output ++ ")",
-     "selected = " ++ implementation,"main :: IO ()","main = do","  line <- getLine",
+     "selected = " ++ implementation,"main :: IO ()","main = withTransport $ \\transport -> do","  line <- readJson transport",
      "  arguments <- either fail pure (parseValue line >>= decodeWith Input.rootCodec)",
-     "  execute (eitherCodec Output.rootCodec) dispatch (selected arguments)",
-     "dispatch :: Integer -> Calls.Calls a -> IO a",
-     "dispatch requestId (Calls.JudgementCall request) = exchangeJudgement requestId request",
-     "dispatch requestId (Calls.ModelCall request) = exchangeModel requestId request"] ++
+     "  execute transport (eitherCodec Output.rootCodec) (dispatch transport) (selected arguments)",
+     "dispatch :: Transport -> Integer -> Calls.Calls a -> IO a",
+     "dispatch transport requestId (Calls.JudgementCall request) = exchangeJudgement transport requestId request",
+     "dispatch transport requestId (Calls.ModelCall request) = exchangeModel transport requestId request"] ++
     concat
-      [["dispatch requestId (Calls." ++ requestName i n ++ " (ConnectorInstance instanceName) arguments) =",
-        "  exchange requestId \"plugin\" \"read\" (record [",
+      [["dispatch transport requestId (Calls." ++ requestName i n ++ " (ConnectorInstance instanceName) arguments) =",
+        "  exchange transport requestId \"plugin\" \"read\" (record [",
         "    (\"plugin\", encodeWith stringCodec " ++ show (pluginNameText p) ++ "),",
         "    (\"connectorType\", encodeWith stringCodec " ++ show (coerce k :: String) ++ "),",
-        "    (\"instance\", encodeWith stringCodec instanceName),",
+        "    (\"instance\", encodeWith textCodec instanceName),",
         "    (\"method\", encodeWith stringCodec " ++ show (coerce n :: String) ++ "),",
         "    (\"input\", encodeWith " ++ inputCodec i n ++ ".rootCodec arguments)])",
         "    (eitherCodec " ++ resultCodec i n ++ ".rootCodec)"] | (i,p,k,n,_,_) <- methods])

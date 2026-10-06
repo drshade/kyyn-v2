@@ -13,6 +13,7 @@ import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types (parseEither, withObject)
 import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.ByteString as Bytes
 import qualified Data.Text.Encoding as Text
 import Data.IORef (newIORef, readIORef, modifyIORef')
 import Data.List (isInfixOf, isSuffixOf)
@@ -32,7 +33,26 @@ import System.Exit (ExitCode(..))
 import System.FilePath ((</>))
 import System.Info (compilerVersion)
 import System.IO.Temp (withSystemTempDirectory)
-import PluginFetchTests (compileBoth, brokerWith, Scenario(..))
+import System.Process (CreateProcess)
+import PluginFetchTests (compileBoth, Scenario(..))
+import qualified PluginFetchTests as Broker
+
+-- Provider fixtures describe HTTP responses; adapt their body to the raw section.
+brokerWith :: Scenario -> (String -> String -> Value -> IO Value) -> CreateProcess -> Value
+  -> IO (Maybe Value,[(String,String)],ExitCode)
+brokerWith scenario respond = Broker.brokerWith scenario $ \body capability method args -> do
+  enriched <- if capability == "http" then case args of
+    Object fields -> do
+      assert "HTTP metadata still embeds its body" (not (KeyMap.member "body" fields))
+      pure (Object (KeyMap.insert "body" (String (Text.decodeUtf8 body)) fields))
+    _ -> fail "Expected HTTP request object"
+    else assert "Non-HTTP request carries raw body" (Bytes.null body) >> pure args
+  answer <- respond capability method enriched
+  pure $ case (capability,answer) of
+    ("http",Object outer) | Just (Object fields) <- KeyMap.lookup "value" outer,
+      Just (String contents) <- KeyMap.lookup "body" fields ->
+        (Object (KeyMap.insert "value" (Object (KeyMap.delete "body" fields)) outer),Text.encodeUtf8 contents)
+    _ -> (answer,Bytes.empty)
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do

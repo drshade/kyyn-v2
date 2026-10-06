@@ -27,7 +27,7 @@ queryBindings selected = do
     _ -> Left "Query bindings require a root record"
   bindings <- traverse (binding root constructor fields) (collectionContracts contract)
   pure (path, utf8 (unlines
-    (["module KyynQueryBindings (Query" ++ concatMap ((", " ++) . bindingName) (collectionContracts contract) ++ ") where",
+    (["{-# LANGUAGE OverloadedStrings #-}", "module KyynQueryBindings (Query" ++ concatMap ((", " ++) . bindingName) (collectionContracts contract) ++ ") where",
       "import qualified Kyyn.Types.Query as SDK"] ++ imports [root] ++
       ["type Query a = SDK.Query " ++ haskellType root ++ " a"] ++ concat bindings)))
   where
@@ -57,11 +57,12 @@ querySources selected input result implementation sources = do
          "import qualified KyynQueryInputCodec as InputCodec",
          "import qualified KyynQueryResultCodec as ResultCodec",
          "import qualified Kyyn.Types.Query as SDK", "import Kyyn.Runtime.Query",
+         "import Kyyn.Runtime.Transport (withTransport, readJson, writeValue)",
          "selected :: " ++ haskellType input ++ " -> SDK.Query " ++ haskellType root ++ " " ++ haskellType result,
          "selected = " ++ implementation,
-         "main :: IO ()", "main = do", "  input <- getContents",
+         "main :: IO ()", "main = withTransport $ \\transport -> do", "  input <- readJson transport",
          "  output <- either fail pure (executeQuery RootCodec.rootCodec InputCodec.rootCodec ResultCodec.rootCodec selected input)",
-         "  putStrLn output"]
+         "  writeValue transport output"]
   guestSources entryPath (sources ++ [bindings, (entryPath, utf8 entry)] ++ codecs)
 
 imports :: [DataType] -> [String]

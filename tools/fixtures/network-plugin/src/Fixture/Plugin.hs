@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Fixture.Plugin where
 import Kyyn.Plugin
 connectors :: [SourceConnector]

@@ -1,8 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Calendar (fetch) where
 
+import qualified Data.Text as Text
+import Data.Text (Text)
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (group, isPrefixOf, sort, sortOn)
+import Data.List (group, sort, sortOn)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types
@@ -17,10 +20,10 @@ fetch :: CalendarConfig -> Maybe CalendarFetch -> EvidenceSnapshot Event -> Acqu
 fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
   bounds <- either throwE pure (traverse checkedBounds options)
   token <- ExceptT (Auth.accessToken auth (scope config))
-  let base = "https://graph.microsoft.com/v1.0/users/" ++ Json.escape mailbox ++
-        maybe "/calendar" (("/calendars/" ++) . Json.escape) calendar ++ "/events"
+  let base = "https://graph.microsoft.com/v1.0/users/" <> Json.escape mailbox <>
+        maybe "/calendar" (("/calendars/" <>) . Json.escape) calendar <> "/events"
       select = "?$select=id,changeKey,subject,bodyPreview,start,end,organizer,attendees,location,isAllDay,isCancelled,type,iCalUId,lastModifiedDateTime,webLink&$top=100"
-  events <- pages token [] (base ++ select)
+  events <- pages token [] (base <> select)
   let keys = [key | (key,_,_) <- events]
       sortedKeys = sort keys
   if any ((> 1) . length) (group sortedKeys) then throwE "Calendar changed during pagination (duplicate IDs); retry the fetch." else pure ()
@@ -30,26 +33,26 @@ fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (e
     if not selected then pure [] else do
       old <- ExceptT (fmap fetchResult (readEvidence snapshot (EvidenceId key)))
       let Event _ _ _ _ _ _ _ _ _ _ _ _ link = event
-          evidence = Evidence (EvidenceFingerprint version) (if null link then [base ++ "/" ++ Json.escape key] else [link]) event
+          evidence = Evidence (EvidenceFingerprint version) (if Text.null link then [base <> "/" <> Json.escape key] else [link]) event
       pure $ case old of
         Nothing -> [NewEvidence (EvidenceId key) evidence]
         Just (Evidence fingerprint _ _) | fingerprint == EvidenceFingerprint version -> []
         Just _ -> [UpdatedEvidence (EvidenceId key) evidence]
-  pure (concat updates ++ map RemovedEvidence (removedIds prior sortedKeys))
+  pure (concat updates <> map RemovedEvidence (removedIds prior sortedKeys))
   where
     fetchResult = either (\(FetchError message) -> Left message) Right
     pages token seen url
       | url `elem` seen = throwE "Calendar pagination repeated a page; retry the fetch."
-      | not ("https://graph.microsoft.com/" `isPrefixOf` url) = throwE "Unexpected Graph pagination URL."
+      | not ("https://graph.microsoft.com/" `Text.isPrefixOf` url) = throwE "Unexpected Graph pagination URL."
       | otherwise = do
-          response <- ExceptT (Http.send (HttpRequest "GET" url [("Authorization","Bearer " ++ token),("Prefer","outlook.timezone=\"UTC\"")] ""))
+          response <- ExceptT (Http.send (HttpRequest "GET" url [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")] ""))
           value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
           entries <- either throwE pure (Json.member "value" value >>= Json.array >>= mapM eventValue)
           next <- either throwE pure (Json.optionalText "@odata.nextLink" value)
           rest <- maybe (pure []) (pages token (url:seen)) next
-          pure (entries ++ rest)
+          pure (entries <> rest)
 
-removedIds :: [EvidenceId] -> [String] -> [EvidenceId]
+removedIds :: [EvidenceId] -> [Text] -> [EvidenceId]
 removedIds prior current = map snd (sortOn fst (missing ordered current))
   where
     ordered = sortOn fst [(value,(index,key)) | (index,key@(EvidenceId value)) <- zip [0 :: Int ..] prior]
@@ -60,7 +63,7 @@ removedIds prior current = map snd (sortOn fst (missing ordered current))
       EQ -> missing rest now
       GT -> missing old values
 
-checkedBounds :: CalendarFetch -> Either String (Maybe Rational,Maybe Rational)
+checkedBounds :: CalendarFetch -> Either Text (Maybe Rational,Maybe Rational)
 checkedBounds (CalendarFetch lower upper) = do
   from <- traverse timestamp lower
   to <- traverse timestamp upper
@@ -68,20 +71,20 @@ checkedBounds (CalendarFetch lower upper) = do
     (Just start,Just end) | start > end -> Left "modifiedFrom must not be later than modifiedTo"
     _ -> Right (from,to)
 
-within :: Maybe (Maybe Rational,Maybe Rational) -> Event -> Either String Bool
+within :: Maybe (Maybe Rational,Maybe Rational) -> Event -> Either Text Bool
 within Nothing _ = Right True
 within (Just (lower,upper)) (Event _ _ _ _ _ _ _ _ _ _ _ modified _) = do
   value <- timestamp modified
   pure (maybe True (<= value) lower && maybe True (>= value) upper)
 
-eventValue :: JSValue -> Either String (String,String,Event)
+eventValue :: JSValue -> Either Text (Text,Text,Event)
 eventValue value = do
   key <- fieldText "id"
-  either (Left . (("Graph event " ++ key ++ ": ") ++)) Right (decodeEvent key)
+  either (Left . (("Graph event " <> key <> ": ") <>)) Right (decodeEvent key)
   where
     decodeEvent key = do
       version <- fieldText "changeKey"
-      if null key || null version then Left "Graph event has no ID or changeKey" else pure ()
+      if Text.null key || Text.null version then Left "Graph event has no ID or changeKey" else pure ()
       event <- Event <$> descriptive ["subject"] value <*> descriptive ["bodyPreview"] value
         <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
         <*> (Json.member "organizer" value >>= person)
@@ -94,8 +97,8 @@ eventValue value = do
     eventTime item = EventTime <$> (Json.member "dateTime" item >>= Json.text) <*> (Json.member "timeZone" item >>= Json.text)
     person item = Person <$> descriptive ["emailAddress","name"] item <*> descriptive ["emailAddress","address"] item
 
-descriptive :: [String] -> JSValue -> Either String String
+descriptive :: [Text] -> JSValue -> Either Text Text
 descriptive _ JSNull = Right ""
 descriptive [] value = Json.text value
-descriptive (key:rest) (JSObject fields) = descriptive rest (maybe JSNull id (lookup key (fromJSObject fields)))
+descriptive (key:rest) (JSObject fields) = descriptive rest (maybe JSNull id (lookup (Text.unpack key) (fromJSObject fields)))
 descriptive _ _ = Left "Expected descriptive response object"

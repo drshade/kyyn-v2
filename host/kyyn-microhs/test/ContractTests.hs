@@ -1,7 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
 module ContractTests (contractTests) where
 
 import Control.Monad (unless, forM_)
 import Data.List (isInfixOf)
+import qualified Data.Text as Text
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic(Diagnostic))
 import Kyyn.Domain.Contract
@@ -21,7 +23,7 @@ contractTests = do
     (fail "Root refinement changed the contract or its identity")
   unregistered <- either (fail . show) pure (checkContract root (SchemaMetadata [] [] []))
   case checkRootLayout unregistered of
-    Left [Diagnostic _ "schema.incoherent" message _] | "missing collection declaration" `isInfixOf` message -> pure ()
+    Left [Diagnostic _ "schema.incoherent" message _] | "missing collection declaration" `isInfixOf` Text.unpack message -> pure ()
     result -> fail ("Unregistered persistent collection accepted: " ++ show result)
   forM_ [StringType, IntegerType, BoolType, ListType payload, OptionalType payload,
       Algebraic "Model.Choice" [] [Constructor "Model.Yes" [], Constructor "Model.No" []]] $ \valueType -> do
@@ -61,12 +63,12 @@ contractTests = do
     ("duplicate Model.Todo fields", record "Model.Root" [("todos", factList (record "Model.Todo" [("title",StringType),("title",StringType)]))], metadata),
     ("constructor tags", record "Model.Root" [("x",Algebraic "Model.Bad" [] [Constructor "A.Same" [],Constructor "B.Same" []])], SchemaMetadata [] [] [])
     ] $ \(expected,t,m) -> case checkContract t m of
-      Left [Diagnostic _ _ message _] | expected `isInfixOf` message -> pure ()
+      Left [Diagnostic _ _ message _] | expected `isInfixOf` Text.unpack message -> pure ()
       other -> fail (expected ++ ": " ++ show other)
   putStrLn "Contract coherence, reference projection and whole-contract identity checks passed."
   where
     record name fs = Algebraic name [] [Constructor name [(Just n,t) | (n,t) <- fs]]
-    factId = Algebraic "Kyyn.Types.Fact.FactId" [] [Constructor "Kyyn.Types.Fact.FactId" [(Nothing,StringType)]]
+    factId = sdkFactIdType
     factList t = ListType (Algebraic "Kyyn.Types.Fact.Fact" [t]
       [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,factId),(Nothing,t)]])
     payload = record "Model.Todo" [("title",OptionalType StringType),

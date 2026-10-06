@@ -1,5 +1,6 @@
 module Kyyn.Plumbing.Protocol.Plugin (decodeManifest, encodeOrigin, decodeOrigin, originShape, originValue, parseOrigin) where
 
+import qualified Data.Text as Text
 import Data.Aeson (Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
 import Data.ByteString (ByteString)
@@ -67,6 +68,6 @@ decode code shape parser bytes = case Text.decodeUtf8' bytes of
   Right source -> do
     decoded <- decodeValue shape source
     pure $ case decoded of
-      Left diagnostics -> Left [Diagnostic severity code message location | Diagnostic severity _ message location <- diagnostics]
+      Left diagnostics -> Left [Diagnostic severity (Text.pack code) message location | Diagnostic severity _ message location <- diagnostics]
       Right value -> either bad Right (parseEither parser value)
   where bad = Left . pure . errorDiagnostic code

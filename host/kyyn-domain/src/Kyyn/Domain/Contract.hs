@@ -10,6 +10,7 @@ import Data.Aeson (Value, toJSON, encode)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub)
+import qualified Data.Text as Text
 import Numeric (showHex, readHex)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -60,9 +61,9 @@ checkContract root meta = either (Left . pure . errorDiagnostic "schema.incohere
   validateStructure root
   let rootFields = either (const []) id (recordFields root)
   let SchemaMetadata roles assignments declarations = meta
-      roleNames = [n | RoleDecl n _ _ <- roles]
-      collectionNames = [n | CollectionDecl n _ _ <- declarations]
-      rootNames = [f | CollectionDecl _ f _ <- declarations]
+      roleNames = [Text.unpack n | RoleDecl n _ _ <- roles]
+      collectionNames = [Text.unpack n | CollectionDecl n _ _ <- declarations]
+      rootNames = [Text.unpack f | CollectionDecl _ f _ <- declarations]
   unique "role names" roleNames
   unique "collection names" collectionNames
   unique "collection root fields" rootNames
@@ -112,8 +113,9 @@ validateStructure root = do
     _ -> pure ()
 
 checkRole :: DataType -> [RoleDecl] -> FieldRole -> Either String (String, Affordance)
-checkRole root roles (FieldRole record field role) = do
-  affordance <- case [a | RoleDecl n _ a <- roles, n == role] of
+checkRole root roles (FieldRole recordText fieldText roleText) = do
+  let record = Text.unpack recordText; field = Text.unpack fieldText; role = Text.unpack roleText
+  affordance <- case [a | RoleDecl n _ a <- roles, n == roleText] of
     [a] -> Right a
     _ -> Left (role ++ ": unknown role")
   selected <- case [t | t@(Algebraic name _ _) <- reachableTypes root, name == record] of
@@ -128,6 +130,7 @@ checkRole root roles (FieldRole record field role) = do
 compatible :: Affordance -> DataType -> Bool
 compatible a (OptionalType t) = compatible a t
 compatible Title StringType = True
+compatible Title TextType = True
 compatible Badge (Algebraic _ _ cs) = not (null cs) && all (\(Constructor _ fs) -> null fs) cs
 compatible _ _ = False
 
@@ -136,7 +139,9 @@ factPayload (ListType t) = sdkFactPayload t
 factPayload _ = Nothing
 
 checkCollection :: [(String, DataType)] -> [String] -> CollectionDecl -> Either String CollectionContract
-checkCollection fields names (CollectionDecl name field references) = do
+checkCollection fields names (CollectionDecl nameText fieldText refs) = do
+  let name = Text.unpack nameText; field = Text.unpack fieldText
+      references = [(Text.unpack f,Text.unpack c) | (f,c) <- refs]
   t <- maybe (Left (field ++ ": missing root field")) Right (lookup field fields)
   payload <- maybe (Left (field ++ ": expected [Kyyn.Types.Fact.Fact payload]")) Right (factPayload t)
   unique (name ++ " reference fields") (map fst references)
@@ -173,6 +178,7 @@ shortName = reverse . takeWhile (/= '.') . reverse
 
 typeValue :: DataType -> Value
 typeValue StringType = toJSON ["text" :: String]
+typeValue TextType = toJSON ["packed-text" :: String]
 typeValue IntegerType = toJSON ["integer" :: String]
 typeValue ProbabilityType = toJSON ["probability-basis-points" :: String]
 typeValue BoolType = toJSON ["bool" :: String]

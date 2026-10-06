@@ -1,28 +1,31 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Types.Diagnostic
   ( Severity(..), DiagnosticLocation(..), Diagnostic(..), errorDiagnostic
   , ValidationReport(..), CheckResult(..), checkReport
   ) where
+
+import Data.Text (Text)
 
 -- | Warnings permit a check to pass; errors reject it.
 data Severity = Warning | Error deriving (Eq, Show)
 
 -- | Locate a problem in a fact (collection, ID, optional field), source (file, line, column), or named example.
 data DiagnosticLocation
-  = FactLocation String String (Maybe String)
-  | SourceLocation String Integer Integer
-  | ExampleLocation String
+  = FactLocation Text Text (Maybe Text)
+  | SourceLocation Text Integer Integer
+  | ExampleLocation Text
   deriving (Eq, Show)
 
 -- | A severity, machine-readable code, explanatory message and optional location.
 data Diagnostic = Diagnostic
   { severity :: Severity
-  , code :: String
-  , message :: String
+  , code :: Text
+  , message :: Text
   , location :: Maybe DiagnosticLocation
   } deriving (Eq, Show)
 
 -- | Create an error from a code and message, without a specific location.
-errorDiagnostic :: String -> String -> Diagnostic
+errorDiagnostic :: Text -> Text -> Diagnostic
 errorDiagnostic diagnosticCode diagnosticMessage =
   Diagnostic Error diagnosticCode diagnosticMessage Nothing
 

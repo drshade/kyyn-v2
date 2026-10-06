@@ -1,6 +1,7 @@
 -- Pure role contracts: distinct badges, duplicate/ambiguous roles and incompatible
 -- field shapes.
 
+{-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
 import Control.Monad (unless)

@@ -11,6 +11,7 @@ bash tools/stage-microhs.sh "$KYYN_TEST_TOOLCHAIN"
 export MHSDIR="$KYYN_TEST_TOOLCHAIN"
 export MHSCPPHS="$KYYN_TEST_TOOLCHAIN/bin/cpphs"
 node tools/test-large-lines.mjs
+node tools/test-framing.mjs
 cabal test guest-api --test-show-details=direct
 cabal test codecs --test-show-details=direct
 cabal test metadata --test-show-details=direct

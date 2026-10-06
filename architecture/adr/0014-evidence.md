@@ -43,13 +43,13 @@ belong to the plugin, not provider-specific rules in the host.
 The guest envelope separates stable item identity, change detection and content:
 
 ```haskell
-newtype EvidenceFingerprint = EvidenceFingerprint String
+newtype EvidenceFingerprint = EvidenceFingerprint Text
 
 data EvidencePayload a = Available a | Truncated
 
 data Evidence a = Evidence
   { fingerprint :: EvidenceFingerprint
-  , references :: [String]
+  , references :: [Text]
   , payload :: EvidencePayload a
   }
 
@@ -190,7 +190,7 @@ advertises optional per-fetch scope:
 
 ```haskell
 data CalendarFetch = CalendarFetch
-  { modifiedFrom :: Maybe String, modifiedTo :: Maybe String }
+  { modifiedFrom :: Maybe Text, modifiedTo :: Maybe Text }
 ```
 
 Supplied bounds are timezone-qualified ISO 8601 instants compared inclusively
@@ -236,21 +236,21 @@ sync positions. Provider citations remain separate from these operational tokens
 
 ```haskell
 data MailConfig = MailConfig
-  { auth :: GraphAuth, mailbox :: String
+  { auth :: GraphAuth, mailbox :: Text
   , folders :: [MailFolder], retentionDays :: Integer }
-data MailFolder = WellKnownFolder String | FolderPath String
+data MailFolder = WellKnownFolder Text | FolderPath Text
 data MailFetch = MailFetch
-  { since :: Maybe String
+  { since :: Maybe Text
   , maxAttachmentBytes :: Maybe Integer
-  , attachmentMediaTypes :: [String] }
+  , attachmentMediaTypes :: [Text] }
 data MailPosition = MailPosition
   { folders :: [FolderPosition] }
 data FolderPosition = FolderPosition
-  { folderId :: String, deltaLink :: String }
+  { folderId :: Text, deltaLink :: Text }
 
-data AttachmentContent = Stored BlobRef | Link String | Skipped String
+data AttachmentContent = Stored BlobRef | Link Text | Skipped Text
 data Attachment = Attachment
-  { name :: String, mediaType :: String, size :: Integer
+  { name :: Text, mediaType :: Text, size :: Integer
   , inline :: Bool, content :: AttachmentContent }
 ```
 
@@ -303,12 +303,12 @@ All actual downloads use the same status-aware retry route as metadata requests.
 
 ```haskell
 data MeetingRef = MeetingRef
-  { onlineMeetingId :: String, joinUrl :: String
-  , subject :: String, organizer :: String }
+  { onlineMeetingId :: Text, joinUrl :: Text
+  , subject :: Text, organizer :: Text }
 data MeetingArtifact
-  = Transcript { meeting :: MeetingRef, started :: String, ended :: String
+  = Transcript { meeting :: MeetingRef, started :: Text, ended :: Text
                , content :: BlobRef }
-  | Attendance { meeting :: MeetingRef, started :: String, ended :: String
+  | Attendance { meeting :: MeetingRef, started :: Text, ended :: Text
                , attendees :: [AttendanceRecord] }
 ```
 
@@ -345,18 +345,18 @@ mode rather than presenting it as empty evidence.
 
 ```haskell
 data FilesScope
-  = SiteLibrary { site :: String, library :: String }
-  | OneDrive { user :: String }
-  | SharedUrl { url :: String }
+  = SiteLibrary { site :: Text, library :: Text }
+  | OneDrive { user :: Text }
+  | SharedUrl { url :: Text }
 data FilesConfig = FilesConfig
   { auth :: GraphAuth, scope :: FilesScope
-  , folderPath :: String, includeGlobs :: [String] }
-data FileContent = StoredFile BlobRef | SkippedFile String
+  , folderPath :: Text, includeGlobs :: [Text] }
+data FileContent = StoredFile BlobRef | SkippedFile Text
 data FilePayload = FilePayload
-  { name :: String, path :: String, webUrl :: String
-  , mediaType :: String, size :: Integer
-  , modified :: String, modifiedBy :: String
-  , cTag :: Maybe String, content :: FileContent }
+  { name :: Text, path :: Text, webUrl :: Text
+  , mediaType :: Text, size :: Integer
+  , modified :: Text, modifiedBy :: Text
+  , cTag :: Maybe Text, content :: FileContent }
 ```
 
 Resolve the configured site/library, user drive or pasted URL to drive/item IDs
@@ -428,7 +428,7 @@ markers. These describe acquisition, independently of any recipe's processing:
 data Fetch = Fetch
   { identity :: FetchId
   , previous :: Maybe FetchId
-  , fetchedAt :: String
+  , fetchedAt :: Text
   , suppliedOptions :: Maybe DhallText
   , changes :: [EvidenceChangeMarker]
   }
@@ -535,9 +535,9 @@ ADR 0028 owns explicit flow execution into a draft evolution.
 ```haskell
 -- Shared SDK data; the KB author still defines the domain facts type.
 data Recipe
-  = OpenAgent { instructions :: String }
+  = OpenAgent { instructions :: Text }
   | ClosedAgent { flow :: FlowEntryRef }
-newtype FlowEntryRef = FlowEntryRef String
+newtype FlowEntryRef = FlowEntryRef Text
 data KnowledgeBase facts = KnowledgeBase facts [Fact Recipe]
 
 -- Author-facing optics/edit handles; their implementation owns the wrapper.
@@ -677,7 +677,7 @@ shared SDK declarations make the scope explicit:
 
 ```haskell
 data EvidenceScope = EvidenceScope
-  { scopePlugin :: String, scopeInstance :: String, scopeFetch :: String }
+  { scopePlugin :: Text, scopeInstance :: Text, scopeFetch :: Text }
 
 data Acknowledgement
   = EntireBatch EvidenceScope
@@ -882,10 +882,10 @@ curate it. The host does not infer support from observed calls.
 
 ```haskell
 data EvidenceRef = EvidenceRef
-  { producer :: String
-  , instanceName :: String
-  , source :: String
-  , references :: [String]
+  { producer :: Text
+  , instanceName :: Text
+  , source :: Text
+  , references :: [Text]
   }
 ```
 

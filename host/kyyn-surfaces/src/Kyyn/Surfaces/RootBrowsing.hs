@@ -53,36 +53,36 @@ collectionResult root (CollectionContract name field payload _) rendered = succe
     "payloadType" .= haskellType payload, "dhallType" .= rendered, "roles" .= roles,
     "references" .= [object ["field" .= f,"collection" .= target] | (f,target) <- references]])
   ([name ++ " (root." ++ field ++ ")", "Payload: " ++ haskellType payload, Text.unpack rendered]
-    ++ roleLines ++ ["Reference: " ++ f ++ " → " ++ target | (f,target) <- references])
+    ++ roleLines ++ ["Reference: " ++ Text.unpack f ++ " → " ++ Text.unpack target | (f,target) <- references])
   where
     metadata@(SchemaMetadata _ _ declarations) = metadataOf (rootSchema root)
     (roles,roleLines) = fieldRoles metadata payload
-    references = concat [refs | CollectionDecl actual _ refs <- declarations, actual == name]
+    references = concat [refs | CollectionDecl actual _ refs <- declarations, actual == Text.pack name]
 
 fieldRoles :: SchemaMetadata -> DataType -> ([Value],[String])
 fieldRoles (SchemaMetadata declarations assignments _) selected = (map asJson roles, map asText roles)
   where
-    names = [name | Algebraic name _ _ <- [selected]]
+    names = [Text.pack name | Algebraic name _ _ <- [selected]]
     roles = [(field,name,description,affordance) |
       FieldRole record field role <- assignments, record `elem` names,
       RoleDecl name description affordance <- declarations, role == name]
     asJson (field,name,description,affordance) = object
       ["field" .= field,"role" .= name,"description" .= description,"affordance" .= show affordance]
-    asText (field,name,_,affordance) = "Role: " ++ field ++ " — " ++ name ++ " (" ++ show affordance ++ ")"
+    asText (field,name,_,affordance) = "Role: " ++ Text.unpack field ++ " — " ++ Text.unpack name ++ " (" ++ show affordance ++ ")"
 
 factListResult :: RootContract -> CollectionContract -> [Fact Value] -> Response
 factListResult root (CollectionContract collection _ payload _) facts = success
   (object ["kind" .= ("facts" :: String), "collection" .= collection,
     "facts" .= [object ["id" .= identity,"title" .= title value] | Fact (FactId identity) value <- facts]])
   (if null facts then ["No facts in " ++ collection ++ "."] else
-    [identity ++ maybe "" (" — " ++) (title value) | Fact (FactId identity) value <- facts])
+    [Text.unpack identity ++ maybe "" (" — " ++) (title value) | Fact (FactId identity) value <- facts])
   where
     SchemaMetadata declarations assignments _ = metadataOf (rootSchema root)
-    names = [name | Algebraic name _ _ <- [payload]]
+    names = [Text.pack name | Algebraic name _ _ <- [payload]]
     titleFields = [field | FieldRole record field role <- assignments, record `elem` names,
       RoleDecl name _ Title <- declarations, name == role]
     title (Object fields) = case titleFields of
-      [field] -> Keys.lookup (Key.fromString field) fields >>= titleText
+      [field] -> Keys.lookup (Key.fromText field) fields >>= titleText
       _ -> Nothing
     title _ = Nothing
     titleText (String value) = Just (Text.unpack value)
@@ -93,4 +93,4 @@ factListResult root (CollectionContract collection _ payload _) facts = success
 factResult :: String -> Fact Value -> Text.Text -> Response
 factResult collection (Fact (FactId identity) value) rendered = success
   (object ["kind" .= ("fact" :: String),"collection" .= collection,"id" .= identity,"value" .= value])
-  [collection ++ "/" ++ identity, Text.unpack rendered]
+  [collection ++ "/" ++ Text.unpack identity, Text.unpack rendered]

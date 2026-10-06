@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module RecipeTests (main) where
 
 import Control.Monad (unless)

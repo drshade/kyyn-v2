@@ -1,15 +1,18 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, ScopedTypeVariables #-}
 module Kyyn.Types.Query
   ( Query(..), SnapshotRead(..), CollectionBinding(..), ReadAccess(..)
   , readCollection, readFact, runLocally
   ) where
 
+import Data.Text (Text)
+
 import Data.List (find)
 import Kyyn.Types.Fact (Fact(..), FactId)
 import Kyyn.Types.Program (Program(..), request)
 
 -- | A collection's logical name paired with the function selecting its facts from a root.
-data CollectionBinding root fact = CollectionBinding String (root -> [Fact fact])
+data CollectionBinding root fact = CollectionBinding Text (root -> [Fact fact])
 
 -- | Typed requests to read a collection or one fact from a selected root snapshot.
 data SnapshotRead root a where
@@ -30,7 +33,7 @@ instance Monad (Query root) where
   Query program >>= f = Query (program >>= \value -> case f value of Query next -> next)
 
 -- | A collection or fact access recorded while executing a query.
-data ReadAccess = CollectionRead String | FactRead String FactId deriving (Eq, Show)
+data ReadAccess = CollectionRead Text | FactRead Text FactId deriving (Eq, Show)
 
 -- | Read every fact in the selected collection.
 readCollection :: CollectionBinding root fact -> Query root [Fact fact]

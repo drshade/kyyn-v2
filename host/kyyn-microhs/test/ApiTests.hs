@@ -2,6 +2,7 @@
 -- Recompile displayed aliases/signatures/constructors and compare checked exports;
 -- requires KYYN_TEST_ROOT and KYYN_TEST_TOOLCHAIN.
 
+{-# LANGUAGE OverloadedStrings #-}
 module Main where
 
 import Control.Monad (unless, forM_)
@@ -159,8 +160,8 @@ main = do
   let signature m n = case matches m n ValueNamespace of
         [ApiSymbol _ _ _ _ (Just text) _] -> text
         _ -> error ("Missing source signature: " ++ m ++ "." ++ n)
-  assert "constructor keeps String alias" (signature "Kyyn.Schema" "FactId" == "FactId :: String -> FactId")
-  assert "selector keeps String alias" (signature "Kyyn.Evolution" "source" == "source :: EvidenceRef -> String")
+  assert "constructor exposes packed Text" (signature "Kyyn.Schema" "FactId" == "FactId :: Text -> FactId")
+  assert "selector exposes packed Text" (signature "Kyyn.Evolution" "source" == "source :: EvidenceRef -> Text")
   withSystemTempDirectory "kyyn-api-values-" $ \temporary -> do
     createDirectoryIfMissing True (temporary </> "Kyyn")
     let symbols = nubBy (\(_,a) (_,b) -> sameOrigin a b)
@@ -174,7 +175,7 @@ main = do
             (if valueName n == n then m ++ "." ++ n else "(" ++ m ++ "." ++ n ++ ")")]
     writeFile (temporary </> "Kyyn/ValueProof.hs") (unlines
       (["{-# LANGUAGE GADTs, RankNTypes #-}", "module Kyyn.ValueProof where",
-        "import Control.Monad.Trans.State.Strict (StateT)"]
+        "import Control.Monad.Trans.State.Strict (StateT)", "import Data.Text (Text)"]
       ++ map ("import " ++) public ++ concatMap witness (zip [1 :: Int ..] signatures)))
     _ <- inspect (temporary:sources) ["Kyyn.ValueProof"]
     pure ()
@@ -225,7 +226,7 @@ alphaSignature source = map canonical tokens
     tokenize [] = []
     tokenize (c:cs) | isSpace c = tokenize cs
     tokenize s@(c:cs)
-      | isAlpha c || c == '_' = let (name,rest) = span (\x -> isAlphaNum x || x `elem` "_'$") s
+      | isAlpha c || c == '_' = let (name,rest) = span (\x -> isAlphaNum x || x `elem` ("_'$" :: String)) s
                                in name : tokenize rest
       | otherwise = [c] : tokenize cs
 

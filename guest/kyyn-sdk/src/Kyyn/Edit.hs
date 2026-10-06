@@ -1,9 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 module Kyyn.Edit
   ( Edit, Collection, CollectionEdit, within, current, update, append, remove
   , get, gets, put, modify, zoom, modifying, assigning, refuse
   , module Kyyn.Optics
   ) where
+
+import Data.Text (Text)
 
 import Control.Monad.Trans.State.Strict (StateT(..), get, gets, put, modify)
 import Control.Monad.Trans.Reader (ReaderT(..), runReaderT)
@@ -16,7 +19,7 @@ import Kyyn.Edit.Internal (Collection(..))
 -- | A state edit that can fail with evolution diagnostics.
 type Edit s = StateT s (Either EvolutionFailure)
 -- | Edits to one fact collection, selected with within.
-type CollectionEdit a = ReaderT String (Edit [Fact a])
+type CollectionEdit a = ReaderT Text (Edit [Fact a])
 
 -- | Stop this edit with diagnostics; no partial edited value is returned.
 refuse :: [Diagnostic] -> Edit s a
@@ -72,13 +75,13 @@ append fact@(Fact selected _) = ReaderT $ \name -> StateT $ \facts ->
     then Left (factFailure name selected "edit.fact-duplicate" "Fact already exists")
     else Right ((), facts ++ [fact])
 
-unique :: String -> FactId -> [Fact a] -> Either EvolutionFailure a
+unique :: Text -> FactId -> [Fact a] -> Either EvolutionFailure a
 unique name selected facts = case [value | Fact ident value <- facts, ident == selected] of
   [value] -> Right value
   [] -> Left (factFailure name selected "edit.fact-missing" "Fact does not exist")
   _ -> Left (factFailure name selected "edit.fact-ambiguous" "More than one fact has this ID")
 
-factFailure :: String -> FactId -> String -> String -> EvolutionFailure
+factFailure :: Text -> FactId -> Text -> Text -> EvolutionFailure
 factFailure collection (FactId ident) diagnosticCode description = EvolutionFailure
-  [Diagnostic Error diagnosticCode (description ++ ": " ++ ident)
+  [Diagnostic Error diagnosticCode (description <> ": " <> ident)
     (Just (FactLocation collection ident Nothing))]

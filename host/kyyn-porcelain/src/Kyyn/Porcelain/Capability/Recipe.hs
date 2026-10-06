@@ -4,6 +4,7 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad (unless, forM)
 import Data.Coerce (coerce)
 import Data.List (nub)
+import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Curation
 import Kyyn.Types.Fact (Fact(..), FactId(..))
@@ -34,7 +35,7 @@ findRecipeAt kb revision (RecipeId name) = runExceptT $ do
   recipes <- ExceptT (loadRecipesAt kb revision)
   case [recipe | recipe@(Fact (FactId identity) _) <- recipes, identity == name] of
     [recipe] -> pure recipe
-    _ -> throwE [errorDiagnostic "curation.recipe-unknown" ("No recipe named " ++ name ++ " is declared in the selected root")]
+    _ -> throwE [errorDiagnostic "curation.recipe-unknown" ("No recipe named " ++ Text.unpack name ++ " is declared in the selected root")]
 
 proposeFromRecipe :: (RootOpening :> es, PluginPreparation :> es, PluginRead :> es,
   RecipeExecution :> es, EvolutionAuthoring :> es)
@@ -48,7 +49,7 @@ proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name
   entry <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
     [ClosedAgent value] -> pure value
     [OpenAgent _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
-    _ -> failure "curation.recipe-unknown" ("No recipe named " ++ name)
+    _ -> failure "curation.recipe-unknown" ("No recipe named " ++ Text.unpack name)
   plugins <- ExceptT (preparePlugins code)
   captured <- forM selected $ \(plugin,instanceName) -> do
     (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload}) _) <-
@@ -59,7 +60,7 @@ proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name
     pure (pending,current)
   proposal@(FactProposal _ declaration) <- ExceptT (executeRecipeFlow root plugins entry recipe captured)
   ExceptT (pure (checkRecipeCuration recipe (map fst captured) declaration))
-  ExceptT (createFactProposal kb (EvolutionName ("curate " ++ name)) revision proposal)
+  ExceptT (createFactProposal kb (EvolutionName ("curate " ++ Text.unpack name)) revision proposal)
   where failure code message = throwE [errorDiagnostic code message]
 
 checkRecipeCuration :: RecipeId -> [PendingEvidence] -> Declaration.Curation -> Either [Diagnostic] ()
@@ -73,7 +74,7 @@ checkRecipeCuration recipe inputs (Declaration.Curation declared handled) = do
       PendingEvidence snapshot changes -> (scopeOf snapshot, Just (map fst changes))
       Reconciliation snapshot _ -> (scopeOf snapshot, Nothing)
     scopeOf (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) =
-      Declaration.EvidenceScope (pluginNameText plugin) instanceName fetch
+      Declaration.EvidenceScope (Text.pack (pluginNameText plugin)) (Text.pack instanceName) (Text.pack fetch)
     check item = do
       let scope = case item of Declaration.EntireBatch value -> value; Declaration.IndividualRecords value _ -> value
       ids <- maybe (failure "recipe.curation-scope" "The proposal acknowledges a scope not supplied to this invocation") Right (lookup scope available)

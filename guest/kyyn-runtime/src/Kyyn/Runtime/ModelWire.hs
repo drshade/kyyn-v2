@@ -5,15 +5,11 @@ import qualified Agentic.Core as A
 import qualified Agentic.Runtime as A
 import qualified Agentic.Schema as S
 import qualified Agentic.Value as A
-import qualified Data.Text as T
 import Kyyn.Runtime.Json
 import Text.JSON.Types (JSValue)
 
 mapped :: (a -> b) -> (b -> a) -> Codec a -> Codec b
 mapped forward backward codec = Codec (encodeWith codec . backward) (fmap forward . decodeWith codec)
-
-textCodec :: Codec T.Text
-textCodec = mapped T.pack T.unpack stringCodec
 
 pairCodec :: String -> Codec a -> String -> Codec b -> Codec (a,b)
 pairCodec left a right b = Codec

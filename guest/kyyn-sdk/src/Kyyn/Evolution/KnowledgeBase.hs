@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings #-}
 module Kyyn.Evolution.KnowledgeBase
   ( KnowledgeBase(..), Recipe(..), FlowEntryRef(..), facts, recipes, onFacts ) where
 

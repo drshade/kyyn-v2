@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Options where
 
 import Kyyn.Plugin

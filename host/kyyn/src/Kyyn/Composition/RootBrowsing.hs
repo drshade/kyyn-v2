@@ -1,6 +1,7 @@
 module Kyyn.Composition.RootBrowsing (dispatchSchema, dispatchCollection, dispatchFacts) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import qualified Data.Text as Text
 import Kyyn.Configuration (Host, SelectedKb(..))
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Contract (CollectionContract(..))
@@ -62,7 +63,7 @@ dispatchFacts host command (SelectedKb kb revision _) = withRuntime host $ \tool
           facts <- ExceptT (readCollection root collection)
           case command of
             Cli.ListFacts _ -> pure (factListResult contract selected facts)
-            Cli.ShowFact _ identity -> case [fact | fact@(Fact (FactId actual) _) <- facts, actual == identity] of
+            Cli.ShowFact _ identity -> case [fact | fact@(Fact (FactId actual) _) <- facts, actual == Text.pack identity] of
               [fact@(Fact _ value)] -> do
                 rendered <- ExceptT (encodeValue shape value)
                 pure (factResult collection fact rendered)

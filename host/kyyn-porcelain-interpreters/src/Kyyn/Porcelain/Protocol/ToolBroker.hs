@@ -5,6 +5,7 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, encode)
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Coerce (coerce)
+import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
 import Effectful.State.Static.Local (evalState, get, modify)
@@ -39,7 +40,7 @@ executeToolProgram program plugins model captured arguments = runExceptT $ do
         Nothing -> pure (failure "No model configured; add root/model.dhall through an evolution")
         Just configuration -> Model.takeModelTurn configuration request >>= either protocolFailure pure . Model.encodeReply
       ToolCall plugin kind instanceName methodName value -> answerPlugin plugins plugin kind instanceName methodName value
-  value <- either (\(FetchError message) -> throwE [errorDiagnostic "tool.failed" message]) pure result
+  value <- either (\(FetchError message) -> throwE [errorDiagnostic "tool.failed" (Text.unpack message)]) pure result
   pure value
   where
     answerPlugin configured plugin kind instanceName methodName value = do
@@ -59,4 +60,4 @@ executeToolProgram program plugins model captured arguments = runExceptT $ do
           modify ((instanceRef,current):)
           pure current
       reply <- executeCapturedMethod current method value >>= either throwError pure
-      pure (either (\(FetchError message) -> failure message) (\(CheckedValue _ resultValue) -> success resultValue) reply)
+      pure (either (\(FetchError message) -> failure (Text.unpack message)) (\(CheckedValue _ resultValue) -> success resultValue) reply)

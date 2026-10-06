@@ -1,5 +1,7 @@
 module LocalFile.Types where
 
+import Data.Text (Text)
+
 -- | Read UTF-8 text files from a local folder.
 data FolderConfig = FolderConfig
   { -- | Absolute directory to read.
@@ -9,7 +11,7 @@ data FolderConfig = FolderConfig
   } deriving (Eq, Show)
 
 -- | Captured contents of one text file.
-data Document = Document { text :: String } deriving (Eq, Show)
+data Document = Document { text :: Text } deriving (Eq, Show)
 
-type ContentId = String
-type Content = String
+type ContentId = Text
+type Content = Text

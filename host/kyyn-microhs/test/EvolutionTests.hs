@@ -23,14 +23,11 @@ import Kyyn.Domain.Path
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply)
 import Kyyn.Plumbing.Capability.GuestCompilation
-import Kyyn.Plumbing.Capability.GuestExecution (executeCompiled)
-import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.MicroHs.Toolchain
 import Kyyn.MicroHs.Interpreter.GuestCompilation
-import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (getArgs, getEnv)
 import System.Exit (ExitCode(..))
@@ -83,7 +80,7 @@ checked moduleName fields label = right $ checkContract root metadata >>= checkR
     fact = Algebraic "Kyyn.Types.Fact.Fact" [todo]
       [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,todo)]]
     root = Algebraic (moduleName ++ ".Root") [] [Constructor (moduleName ++ ".Root") [(Just "todos",ListType fact)]]
-    metadata = SchemaMetadata [RoleDecl "title" label Title] [] [CollectionDecl "todos" "todos" []]
+    metadata = SchemaMetadata [RoleDecl "title" (Text.pack label) Title] [] [CollectionDecl "todos" "todos" []]
 
 integration :: RootContract -> RootContract -> RootContract -> FileTree -> IO ()
 integration before renamed after bindings = withSystemTempDirectory "kyyn-evolution-proof" $ \temporary -> do
@@ -100,7 +97,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Evolution/Proposal.hs","Kyyn/Recipe.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-sdk/test" name | name <- ["EvolutionCore.hs","EditTests.hs","KnowledgeBaseTests.hs","RecipeTests.hs"]] ++
-     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Evolution","Validation"]] ++
+     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Evolution","Validation"]] ++
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource "SchemaV1.Root")))
@@ -120,11 +117,12 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   unless (nativeStatus == ExitSuccess) (fail nativeError)
   (status,expected,errors) <- readCreateProcessWithExitCode (proc (temporary </> "native/proof") []) ""
   unless (status == ExitSuccess) (fail errors)
-  compiled <- compileGuestFiles captured >>= right >>= right
-  guest <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain $
-    executeCompiled compiled Bytes.empty
-  actual <- right guest
-  unless (actual == (Text.encodeUtf8 (Text.pack expected),ProcessExit 0 "")) (fail ("GHC/MicroHs evolution proof differed: " ++ show actual))
+  CompiledProgram _ (_,artifact) <- compileGuestFiles captured >>= right >>= right
+  let proof = temporary </> "proof.comb"
+  Bytes.writeFile proof artifact
+  -- This pure SDK proof prints test assertions, not the guest wire protocol.
+  actual <- readCreateProcessWithExitCode (proc (compiler </> "bin/mhseval") ["+RTS","-r" ++ proof,"-RTS"]) ""
+  unless (actual == (ExitSuccess,expected,"")) (fail ("GHC/MicroHs evolution proof differed: " ++ show actual))
   replies <- traverse (right . decodeEvolutionReply . Text.encodeUtf8 . Text.pack)
     [line | line <- lines expected, take 1 line == "{"]
   case replies of

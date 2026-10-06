@@ -1,10 +1,12 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
-module PluginNativeTests (nativeTests, noNetwork) where
+module PluginNativeTests (nativeTests, noNetwork, runStore) where
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value, object, (.=), encode, eitherDecodeStrict, toJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.Text as Text
+import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
 import qualified Effectful.State.Static.Local as State
@@ -74,7 +76,7 @@ nativeTests temporary toolchain configType payloadType program = do
       firstOld = lookup (EvidenceId "changed.txt") firstItems
   assert "first capture lost content or fingerprint" (case firstOld of
     Just (Evidence (EvidenceFingerprint token) refs (CheckedValue _ value)) ->
-      not (null token) && refs == [directory </> "changed.txt"] && value == object ["text" .= ("old" :: String)]
+      not (Text.null token) && refs == [Text.pack (directory </> "changed.txt")] && value == object ["text" .= ("old" :: String)]
     _ -> False)
   assert "first real acquisition did not publish all files"
     (firstIds == map EvidenceId ["changed.txt","gone.txt","same.txt"])
@@ -192,20 +194,20 @@ exchangeFrames requests answers result between = interpret $ \env -> \case
               "capability" .= ("evidence" :: String),"method" .= (if identity == 1 then "list" else "read" :: String),
               "arguments" .= args]
             expected = object ["tag" .= ("HostResponse" :: String),"id" .= show identity,"result" .= answer]
-        reply <- unlift (respond (Lazy.toStrict (encode request)))
-        case fmap eitherDecodeStrict reply of
+        reply <- unlift (respond (Wire.jsonFrame (Lazy.toStrict (encode request))))
+        case fmap (\(Wire.Frame metadata _) -> eitherDecodeStrict metadata) reply of
           Just (Right value) | value == expected -> pure ()
           _ -> error ("Unexpected snapshot reply: " ++ show reply)
         if identity == 1 then between else pure ()
-      pure (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),"result" .=
-        object ["tag" .= ("Right" :: String),"value" .= result]])),ProcessExit 0 Bytes.empty)
+      pure (Wire.jsonFrame (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),"result" .=
+        object ["tag" .= ("Right" :: String),"value" .= result]]))),ProcessExit 0 Bytes.empty)
 
 emitFrame :: Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
 emitFrame frame = interpret $ \env -> \case
   ExecuteCompiled {} -> error "Plugin invocation requested one-shot execution"
   ExecuteGuest _ _ respond ->   localSeqUnlift env $ \unlift -> do
-    _ <- unlift (respond frame)
-    pure (frame,ProcessExit 0 Bytes.empty)
+    _ <- unlift (respond (Wire.jsonFrame frame))
+    pure (Wire.jsonFrame frame,ProcessExit 0 Bytes.empty)
 
 runStore :: DirectoryScope -> Eff StoreEffects a -> IO a
 runStore kb action = runEff (runFailure (runProcessExecutionIO (runFileSystemIO kb

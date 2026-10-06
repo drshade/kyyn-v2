@@ -5,6 +5,7 @@
 module Main (main) where
 
 import Control.Monad (unless, forM_)
+import qualified Data.Text as Text
 import Data.Aeson (Value(..), object, (.=), encode)
 import qualified Data.ByteString.Lazy as Lazy
 import Effectful (runPureEff)
@@ -187,7 +188,7 @@ contract namespace label fields collections = right (checkContract schema metada
     envelope = Algebraic "Kyyn.Types.Fact.Fact" [payload]
       [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,payload)]]
     schema = Algebraic (namespace ++ ".Root") [] [Constructor (namespace ++ ".Root") [(Just name,ListType envelope) | name <- collections]]
-    metadata = SchemaMetadata [RoleDecl "title" label Title] [] [CollectionDecl name name [] | name <- collections]
+    metadata = SchemaMetadata [RoleDecl "title" (Text.pack label) Title] [] [CollectionDecl (Text.pack name) (Text.pack name) [] | name <- collections]
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

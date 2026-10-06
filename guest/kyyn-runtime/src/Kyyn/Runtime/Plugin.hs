@@ -1,11 +1,14 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, eitherCodec, withOptionsCodec, input, fileRequest, evidenceRequest, changeCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, input, fileRequest, evidenceRequest, changeCodec) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
 import Kyyn.Types.Plugin
 import Kyyn.Types.Program
-import System.IO (hFlush, stdout)
+import Kyyn.Runtime.Transport
+import qualified Data.ByteString as B
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 import Text.JSON.Types (JSValue)
 
 withOptionsCodec :: Codec config -> Codec options -> Codec (config, Maybe options)
@@ -19,76 +22,81 @@ withOptionsCodec configCodec optionsCodec = Codec encode decode
 
 executeCapturedRead :: Codec arguments -> Codec payload -> Codec result
   -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload) (Either FetchError result)) -> IO ()
-executeCapturedRead argumentCodec payloadCodec resultCodec selected = do
-  (arguments, snapshot) <- input argumentCodec
-  execute (eitherCodec resultCodec) (evidenceRequest payloadCodec) (selected arguments snapshot)
+executeCapturedRead argumentCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
+  (arguments, snapshot) <- input transport argumentCodec
+  execute transport (eitherCodec resultCodec) (evidenceRequest transport payloadCodec) (selected arguments snapshot)
 
-input :: Codec a -> IO (a, EvidenceSnapshot payload)
-input codec = do
-  line <- getLine
+input :: Transport -> Codec a -> IO (a, EvidenceSnapshot payload)
+input transport codec = do
+  line <- readJson transport
   either fail pure $ do
     values <- parseValue line >>= fields ["arguments","snapshot"]
     arguments <- field "arguments" codec values
-    snapshot <- EvidenceSnapshot <$> field "snapshot" stringCodec values
+    snapshot <- EvidenceSnapshot <$> field "snapshot" textCodec values
     pure (arguments,snapshot)
 
-execute :: Codec result -> (forall a. Integer -> request a -> IO a) -> Program request result -> IO ()
-execute codec handler = go 1
+execute :: Transport -> Codec result -> (forall a. Integer -> request a -> IO a) -> Program request result -> IO ()
+execute transport codec handler = go 1
   where
-    go _ (Pure result) = emit (record [("tag",encodeWith stringCodec "Completed"),("result",encodeWith codec result)])
+    go _ (Pure result) = emit transport (record [("tag",encodeWith stringCodec "Completed"),("result",encodeWith codec result)])
     go identity (Request operation next) = handler identity operation >>= go (identity + 1) . next
 
-fileRequest :: Integer -> FileRead a -> IO a
-fileRequest identity (ListFiles directory recursive) = exchange identity "files" "list"
+fileRequest :: Transport -> Integer -> FileRead a -> IO a
+fileRequest transport identity (ListFiles directory recursive) = exchange transport identity "files" "list"
   (record [("directory",encodeWith stringCodec directory),("recursive",encodeWith boolCodec recursive)])
   (eitherCodec (listCodec stringCodec))
-fileRequest identity (ReadTextFile path) = exchange identity "files" "read"
+fileRequest transport identity (ReadTextFile path) = exchange transport identity "files" "read"
   (record [("path",encodeWith stringCodec path)]) (eitherCodec capturedTextCodec)
 
 capturedTextCodec :: Codec CapturedText
 capturedTextCodec = Codec encode decode
   where
     encode (CapturedText contents (EvidenceFingerprint fingerprint)) = record
-      [("contents",encodeWith stringCodec contents),("fingerprint",encodeWith stringCodec fingerprint)]
+      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint)]
     decode value = do
       values <- fields ["contents","fingerprint"] value
-      CapturedText <$> field "contents" stringCodec values
-        <*> (EvidenceFingerprint <$> field "fingerprint" stringCodec values)
+      CapturedText <$> field "contents" textCodec values
+        <*> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
 
-evidenceRequest :: Codec payload -> Integer -> EvidenceRead payload a -> IO a
-evidenceRequest _ identity (ListEvidenceIds (EvidenceSnapshot snapshot)) = exchange identity "evidence" "list"
-  (record [("snapshot",encodeWith stringCodec snapshot)]) (eitherCodec (listCodec identityCodec))
-evidenceRequest payloadCodec identity (ReadEvidence (EvidenceSnapshot snapshot) key) = exchange identity "evidence" "read"
-  (record [("snapshot",encodeWith stringCodec snapshot),("id",encodeWith identityCodec key)])
+evidenceRequest :: Transport -> Codec payload -> Integer -> EvidenceRead payload a -> IO a
+evidenceRequest transport _ identity (ListEvidenceIds (EvidenceSnapshot snapshot)) = exchange transport identity "evidence" "list"
+  (record [("snapshot",encodeWith textCodec snapshot)]) (eitherCodec (listCodec identityCodec))
+evidenceRequest transport payloadCodec identity (ReadEvidence (EvidenceSnapshot snapshot) key) = exchange transport identity "evidence" "read"
+  (record [("snapshot",encodeWith textCodec snapshot),("id",encodeWith identityCodec key)])
   (eitherCodec (optionalCodec (evidenceCodec payloadCodec)))
 
-exchange :: Integer -> String -> String -> JSValue -> Codec a -> IO a
-exchange identity capability method arguments codec = do
-  emit (record [("tag",encodeWith stringCodec "HostRequest"),("id",encodeWith integerCodec identity),
-    ("capability",encodeWith stringCodec capability),("method",encodeWith stringCodec method),("arguments",arguments)])
-  line <- getLine
+exchange :: Transport -> Integer -> String -> String -> JSValue -> Codec a -> IO a
+exchange transport identity capability method arguments codec = do
+  (value,body) <- exchangeBody transport identity capability method arguments B.empty
+  if B.null body then either fail pure (decodeWith codec value) else fail "Unexpected raw body"
+
+exchangeBody :: Transport -> Integer -> String -> String -> JSValue -> B.ByteString -> IO (JSValue,B.ByteString)
+exchangeBody transport identity capability method arguments body = do
+  writeValueFrame transport (record [("tag",encodeWith stringCodec "HostRequest"),("id",encodeWith integerCodec identity),
+    ("capability",encodeWith stringCodec capability),("method",encodeWith stringCodec method),("arguments",arguments)]) body
+  (bytes,raw) <- readFrame transport
   either fail pure $ do
-    values <- parseValue line >>= fields ["tag","id","result"]
+    values <- parseValue (T.unpack (TE.decodeUtf8 bytes)) >>= fields ["tag","id","result"]
     tag <- field "tag" stringCodec values
     actual <- field "id" integerCodec values
-    if tag == "HostResponse" && actual == identity then field "result" codec values
+    if tag == "HostResponse" && actual == identity then (,) <$> field "result" (Codec id Right) values <*> pure raw
     else Left "Unexpected host response tag or request ID"
 
-emit :: JSValue -> IO ()
-emit value = either fail (\line -> putStrLn line >> hFlush stdout) (printValue value)
+emit :: Transport -> JSValue -> IO ()
+emit transport value = writeValueFrame transport value B.empty
 
 identityCodec :: Codec EvidenceId
-identityCodec = Codec (\(EvidenceId value) -> encodeWith stringCodec value) (fmap EvidenceId . decodeWith stringCodec)
+identityCodec = Codec (\(EvidenceId value) -> encodeWith textCodec value) (fmap EvidenceId . decodeWith textCodec)
 
 eitherCodec :: Codec a -> Codec (Either FetchError a)
 eitherCodec codec = Codec encode decode
   where
-    encode (Left (FetchError message)) = tagged "Left" (Just (encodeWith stringCodec message))
+    encode (Left (FetchError message)) = tagged "Left" (Just (encodeWith textCodec message))
     encode (Right value) = tagged "Right" (Just (encodeWith codec value))
     decode value = do
       (tag,payload) <- variant value
       case (tag,payload) of
-        ("Left",Just message) -> Left . FetchError <$> decodeWith stringCodec message
+        ("Left",Just message) -> Left . FetchError <$> decodeWith textCodec message
         ("Right",Just result) -> Right <$> decodeWith codec result
         _ -> Left "Expected a typed Left or Right response"
 
@@ -96,12 +104,12 @@ evidenceCodec :: Codec a -> Codec (Evidence a)
 evidenceCodec codec = Codec encode decode
   where
     encode (Evidence (EvidenceFingerprint fingerprint) references payload) = record
-      [("fingerprint",encodeWith stringCodec fingerprint),("references",encodeWith (listCodec stringCodec) references),
+      [("fingerprint",encodeWith textCodec fingerprint),("references",encodeWith (listCodec textCodec) references),
       ("payload",encodeWith codec payload)]
     decode value = do
       values <- fields ["fingerprint","references","payload"] value
-      Evidence <$> (EvidenceFingerprint <$> field "fingerprint" stringCodec values)
-        <*> field "references" (listCodec stringCodec) values <*> field "payload" codec values
+      Evidence <$> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
+        <*> field "references" (listCodec textCodec) values <*> field "payload" codec values
 
 changeCodec :: Codec a -> Codec (EvidenceChange a)
 changeCodec codec = Codec encode decode

@@ -136,13 +136,13 @@ between GHC and MicroHs:
 ```haskell
 data Affordance = Title | Timeline | Badge
 
-data RoleDecl = RoleDecl String String Affordance
+data RoleDecl = RoleDecl Text Text Affordance
 -- Role name, description, affordance.
 
-data FieldRole = FieldRole String String String
+data FieldRole = FieldRole Text Text Text
 -- Qualified record type, field, role name.
 
-data CollectionDecl = CollectionDecl String String [(String, String)]
+data CollectionDecl = CollectionDecl Text Text [(Text, Text)]
 -- Collection name, root field, reference-field/target-collection pairs.
 
 data SchemaMetadata = SchemaMetadata [RoleDecl] [FieldRole] [CollectionDecl]

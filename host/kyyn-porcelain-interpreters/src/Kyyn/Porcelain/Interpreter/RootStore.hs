@@ -89,7 +89,7 @@ runRootStore = interpret $ \_ -> \case
       fields <- record member
       identity <- field "id" fields >>= text
       payload <- field "value" fields
-      pure (Fact (FactId (Text.unpack identity)) payload)
+      pure (Fact (FactId identity) payload)
   ReadExamples (Root _ _ code _ _) descriptors -> runExceptT (loadExamples code descriptors)
   EncodeExample example -> runExceptT (saveExample example)
   ExportRootFiles checked -> runExceptT $ do
@@ -104,7 +104,7 @@ type Result es = ExceptT [Diagnostic] (Eff es)
 
 manifestDiagnostic :: Diagnostic -> Diagnostic
 manifestDiagnostic (Diagnostic severity code message location) = Diagnostic severity code
-  (message ++ "\nCheck kb.dhall. If this KB has no tools, include: tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }") location
+  (message <> "\nCheck kb.dhall. If this KB has no tools, include: tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }") location
 
 problem :: String -> Result es a
 problem = throwE . pure . errorDiagnostic "root.storage"
@@ -254,7 +254,7 @@ loadExamples code descriptors = do
     let withLocation action = ExceptT $ do
           outcome <- runExceptT action
           pure (either (Left . map (\(Diagnostic level diagnosticCode message _) ->
-            Diagnostic level diagnosticCode message (Just (ExampleLocation name)))) Right outcome)
+            Diagnostic level diagnosticCode message (Just (ExampleLocation (Text.pack name))))) Right outcome)
     withLocation $ do
       ensure (not (null name) && prefix == exampleDirectory name) "Example name does not match its directory"
       queryName <- Text.unpack <$> (field "query" values >>= text)

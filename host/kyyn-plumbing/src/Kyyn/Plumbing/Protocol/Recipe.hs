@@ -23,13 +23,15 @@ recipeCheckSources = recipeProjectionSources [] ["main = pure ()"]
 recipeDescriptionSources :: RootContract -> FlowEntryRef -> DescriptionFormat -> FileTree -> Either String GuestSources
 recipeDescriptionSources contract entry format = recipeProjectionSources
   ["import qualified Agentic.Describe as Describe", "import qualified Data.Text as Text",
-   "import Kyyn.Runtime.Json (encodeWith, stringCodec, printValue)"]
-  ["main = either fail putStrLn (printValue (encodeWith stringCodec (Text.unpack (Describe." ++ renderer ++ " (Describe.describe selected)))))"]
+   "import Kyyn.Runtime.Json (encodeWith, stringCodec, printValue)",
+   "import Kyyn.Runtime.Transport (withTransport, writeJson)"]
+  ["main = withTransport $ \\transport -> either fail (writeJson transport) (printValue (encodeWith stringCodec (Text.unpack (Describe." ++ renderer ++ " (Describe.describe selected)))))"]
   contract entry
   where renderer = case format of Tree -> "renderTree"; Dot -> "dot"; Mermaid -> "mermaid"
 
 recipeProjectionSources :: [String] -> [String] -> RootContract -> FlowEntryRef -> FileTree -> Either String GuestSources
-recipeProjectionSources imports body contract (FlowEntryRef entry) sources = do
+recipeProjectionSources imports body contract (FlowEntryRef entryText) sources = do
+  let entry = Text.unpack entryText
   if null (collectionContracts (rootSchema contract))
     then Left "Closed recipes need at least one domain fact collection"
     else pure ()
@@ -53,7 +55,8 @@ recipeProjectionSources imports body contract (FlowEntryRef entry) sources = do
 
 recipeSources :: RootContract -> FlowEntryRef -> [ConnectorInterface] -> [InstanceBinding] -> FileTree
   -> Either String GuestSources
-recipeSources contract (FlowEntryRef entry) interfaces instances sources = do
+recipeSources contract (FlowEntryRef entryText) interfaces instances sources = do
+  let entry = Text.unpack entryText
   selectedModule <- bindingModule entry
   bindings <- evolutionBindings contract contract
   generated <- toolBindings interfaces instances
@@ -81,7 +84,7 @@ recipeInputValue (RecipeId name) root pending = object
     selected (PendingEvidence snapshot changes) = batch snapshot "Changes"
       [object ["tag" .= show kind,"value" .= item] | (EvidenceId item,kind) <- changes]
     selected (Reconciliation snapshot ids) = batch snapshot "Reconciliation"
-      [Text.pack item | EvidenceId item <- ids]
+      [item | EvidenceId item <- ids]
     batch (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) (kind :: String) values = object
       ["scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
        "batch" .= object ["tag" .= kind,"value" .= values]]

@@ -7,7 +7,7 @@ import Data.List (nub, elemIndex)
 import Kyyn.Domain.DataType
 
 dataTypeShape :: Shape
-dataTypeShape = List (Union [("Text",Nothing), ("Integer",Nothing), ("Bool",Nothing),
+dataTypeShape = List (Union [("Text",Nothing), ("PackedText",Nothing), ("Integer",Nothing), ("Bool",Nothing),
   ("List",Just index), ("Optional",Just index),
   ("Data",Just (Record [("name",text),("arguments",List index),
     ("constructors",List (Record [("name",text),("fields",List
@@ -20,6 +20,7 @@ dataTypeValue root = toJSON (map node types)
     types = nub (ordered root)
     reference t = maybe (error "Type encoding omitted a dependency") (toJSON . show) (elemIndex t types)
     node StringType = tagged "Text" Nothing
+    node TextType = tagged "PackedText" Nothing
     node IntegerType = tagged "Integer" Nothing
     node BoolType = tagged "Bool" Nothing
     node ProbabilityType = node (Algebraic "Agentic.Questions.Probability" [] [])
@@ -48,6 +49,7 @@ parseDataType input = do
       tag <- record .: "tag" :: Parser String
       case tag of
         "Text" -> pure StringType
+        "PackedText" -> pure TextType
         "Integer" -> pure IntegerType
         "Bool" -> pure BoolType
         "List" -> ListType <$> (record .: "value" >>= reference previous)

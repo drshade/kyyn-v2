@@ -1,7 +1,8 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (answerAcquisition, executeCapturedRead, conversation, answerEvidence, protocolFailure) where
+module Kyyn.Porcelain.Protocol.PluginBroker (answerAcquisition, executeCapturedRead, conversation, conversationWithBody, answerEvidence, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>), raise)
@@ -20,6 +21,7 @@ import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
 import qualified Kyyn.Plumbing.Capability.FileAcquisition as Files
 import Kyyn.Plumbing.Protocol.PluginMessages
+import Kyyn.Plumbing.Protocol.Frame (Frame(..), jsonFrame)
 import System.FilePath (takeDirectory, takeFileName)
 
 answerAcquisition :: (Failure :> es, Files.FileAcquisition :> es)
@@ -62,14 +64,21 @@ conversation :: (GuestExecution :> es, Failure :> es)
   => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
   -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
 conversation decode program arguments respond = do
-  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program arguments $ \bytes -> do
+  conversationWithBody (\(Frame bytes body) -> if Bytes.null body then decode bytes else Left "Unexpected raw body")
+    program arguments (\call -> (,) <$> respond call <*> pure Bytes.empty)
+
+conversationWithBody :: (GuestExecution :> es, Failure :> es)
+  => (Frame -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  -> (call -> Eff es (Value,ByteString)) -> Eff es (Either FetchError Value)
+conversationWithBody decode program arguments respond = do
+  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program (jsonFrame arguments) $ \bytes -> do
     frame <- either protocolFailure pure (decode bytes)
     case frame of
       HostRequest identity call -> do
         expected <- get
         if identity /= expected then protocolFailure "Unexpected guest request ID" else put (expected + 1)
-        value <- raise (respond call)
-        pure (Just (encodeResponse identity value))
+        (value,body) <- raise (respond call)
+        pure (Just (Frame (encodeResponse identity value) body))
       Completed _ -> pure Nothing
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
     ("Plugin exited " ++ show status ++ ": " ++ diagnostics stderr))) else do
@@ -77,7 +86,7 @@ conversation decode program arguments respond = do
     case frame of
       Completed value -> case parseResult value of
         Left message -> protocolFailure message
-        Right (Left message) -> pure (Left (FetchError message))
+        Right (Left message) -> pure (Left (FetchError (Text.pack message)))
         Right (Right result) -> pure (Right result)
       _ -> protocolFailure "Guest did not complete"
 

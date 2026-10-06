@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, OverloadedStrings #-}
 module QueryCore (main) where
 
 import Kyyn.Types.Fact

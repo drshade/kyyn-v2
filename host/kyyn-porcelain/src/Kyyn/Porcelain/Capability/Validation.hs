@@ -1,5 +1,6 @@
 module Kyyn.Porcelain.Capability.Validation (checkRoot, checkPreparedRoot, checkCandidate, checkExample) where
 
+import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Diagnostic
@@ -56,5 +57,5 @@ checkExample root (Example name descriptor@(QueryDescriptor _ _ input result)
           | otherwise -> ValidationReport [diagnostic (case requirement of Required -> Error; Illustrative -> Warning)
               "example.mismatch" ("Expected " ++ show expected ++ "; received " ++ show actual)]
   where
-    diagnostic level code message = Diagnostic level code message (Just (ExampleLocation name))
-    locate (Diagnostic level code message _) = diagnostic level code message
+    diagnostic level code message = Diagnostic level (Text.pack code) (Text.pack message) (Just (ExampleLocation (Text.pack name)))
+    locate (Diagnostic level code message _) = Diagnostic level code message (Just (ExampleLocation (Text.pack name)))

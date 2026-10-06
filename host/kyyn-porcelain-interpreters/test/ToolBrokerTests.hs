@@ -5,6 +5,7 @@ import Control.Monad (unless)
 import Data.Aeson (Value, object, (.=), encode, toJSON)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy
+import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, reinterpret, localSeqUnlift)
 import Effectful.State.Static.Local (runState, modify)
@@ -61,9 +62,9 @@ runConversation :: Eff (GuestExecution : es) a -> Eff es a
 runConversation = interpret $ \env operation -> case operation of
   ExecuteCompiled {} -> error "Unexpected one-shot execution"
   ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> do
-    mapM_ (unlift . respond . frame) ["1","2"]
-    pure (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),
-      "result" .= object ["tag" .= ("Right" :: String),"value" .= ("completed" :: String)]])), ProcessExit 0 "")
+    mapM_ (unlift . respond . Wire.jsonFrame . frame) ["1","2"]
+    pure (Wire.jsonFrame (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),
+      "result" .= object ["tag" .= ("Right" :: String),"value" .= ("completed" :: String)]]))), ProcessExit 0 "")
   where
     frame :: String -> ByteString
     frame ident = Lazy.toStrict (encode (object ["tag" .= ("HostRequest" :: String),"id" .= ident,

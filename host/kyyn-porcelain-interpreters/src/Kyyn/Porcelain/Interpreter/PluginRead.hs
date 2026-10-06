@@ -2,6 +2,7 @@
 module Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (contractId, contractShape)
@@ -23,7 +24,7 @@ runPluginRead = interpret $ \_ -> \case
   LoadCapturedInput instanceRef@(ConnectorInstanceRef plugin name) producer payload -> runExceptT $ do
     let problem failure = case evidenceProblemDiagnostic failure of
           Diagnostic severity code message location -> [Diagnostic severity code
-            (pluginNameText plugin ++ "/" ++ name ++ ": " ++ message) location]
+            (Text.pack (pluginNameText plugin ++ "/" ++ name ++ ": ") <> message) location]
     loaded <- ExceptT (fmap (either (Left . problem) Right) (Store.loadCurrentEvidence instanceRef producer payload))
     maybe (throwE (problem NotFetched)) pure loaded
   ExecuteCapturedMethod current (PreparedMethod _ _ input output program) value -> runExceptT $ do

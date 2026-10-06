@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Evolution
   ( Evolution, Rationale(..), EvolutionFailure(..)
   , EvidenceRef(..), EvidenceId(..), (>=>), identityEvolution, withCuration
