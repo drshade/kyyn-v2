@@ -8,7 +8,7 @@ module Kyyn.Recipe
   ) where
 
 import Kyyn.Types.Curation
-import Kyyn.Types.Evidence (EvidenceId(..), EvidenceRef(..))
+import Kyyn.Types.Evidence (EvidenceId(..), EvidenceRef(EvidenceRef))
 import Kyyn.Evolution.Proposal
 
 -- | The selected root and captured pending evidence supplied to a recipe flow.
