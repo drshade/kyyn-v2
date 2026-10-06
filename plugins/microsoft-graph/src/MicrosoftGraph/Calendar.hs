@@ -2,7 +2,7 @@ module MicrosoftGraph.Calendar (fetch) where
 
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (isPrefixOf, nub)
+import Data.List (group, isPrefixOf, sort, sortOn)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types
@@ -22,7 +22,8 @@ fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (e
       select = "?$select=id,changeKey,subject,bodyPreview,start,end,organizer,attendees,location,isAllDay,isCancelled,type,iCalUId,lastModifiedDateTime,webLink&$top=100"
   events <- pages token [] (base ++ select)
   let keys = [key | (key,_,_) <- events]
-  if length keys /= length (nub keys) then throwE "Calendar changed during pagination (duplicate IDs); retry the fetch." else pure ()
+      sortedKeys = sort keys
+  if any ((> 1) . length) (group sortedKeys) then throwE "Calendar changed during pagination (duplicate IDs); retry the fetch." else pure ()
   prior <- ExceptT (fmap fetchResult (listEvidenceIds snapshot))
   updates <- forM events $ \(key,version,event) -> do
     selected <- either throwE pure (within bounds event)
@@ -34,7 +35,7 @@ fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (e
         Nothing -> [NewEvidence (EvidenceId key) evidence]
         Just (Evidence fingerprint _ _) | fingerprint == EvidenceFingerprint version -> []
         Just _ -> [UpdatedEvidence (EvidenceId key) evidence]
-  pure (concat updates ++ [RemovedEvidence key | key@(EvidenceId value) <- prior, value `notElem` keys])
+  pure (concat updates ++ map RemovedEvidence (removedIds prior sortedKeys))
   where
     fetchResult = either (\(FetchError message) -> Left message) Right
     pages token seen url
@@ -47,6 +48,17 @@ fetch config@(CalendarConfig auth mailbox calendar _) options snapshot = fmap (e
           next <- either throwE pure (Json.optionalText "@odata.nextLink" value)
           rest <- maybe (pure []) (pages token (url:seen)) next
           pure (entries ++ rest)
+
+removedIds :: [EvidenceId] -> [String] -> [EvidenceId]
+removedIds prior current = map snd (sortOn fst (missing ordered current))
+  where
+    ordered = sortOn fst [(value,(index,key)) | (index,key@(EvidenceId value)) <- zip [0 :: Int ..] prior]
+    missing [] _ = []
+    missing old [] = map snd old
+    missing old@((key,item):rest) now@(value:values) = case compare key value of
+      LT -> item : missing rest now
+      EQ -> missing rest now
+      GT -> missing old values
 
 checkedBounds :: CalendarFetch -> Either String (Maybe Rational,Maybe Rational)
 checkedBounds (CalendarFetch lower upper) = do

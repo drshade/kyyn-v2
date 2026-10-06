@@ -1,12 +1,14 @@
 -- Actual Graph adapters under GHC/MicroHs with recording providers: auth modes,
 -- polling, rotation, throttling, pagination and scoped/full acquisition failures.
+-- Includes 1,000 long-ID events with populated prior evidence, ordered deltas and
+-- duplicate refusal under the broker's 20-second per-invocation timeout.
 -- No live credentials, consent or mailbox coverage.
 
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
 import Control.Monad (unless, forM_)
-import Data.Aeson (Value(..), FromJSON, object, (.=), (.:), encode, toJSON)
+import Data.Aeson (Value(..), FromJSON, parseJSON, object, (.=), (.:), encode, toJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types (parseEither, withObject)
@@ -125,7 +127,57 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
     (refreshFailed,_,_) <- brokerWith Normal revoked program (input True none)
     assert "revoked refresh did not request explicit login" (case resultError refreshFailed of Right message -> "run connector login" `isInfixOf` message; _ -> False)
     assert "revoked refresh changed state" . (== ["get:refresh"]) =<< refreshEvents
+    forM_ [False,True] $ \duplicate -> do
+      large <- scaleProvider duplicate
+      (scaled,trace,status) <- brokerWith Normal large program (input False none)
+      assert "large calendar guest exit" (status == ExitSuccess)
+      if duplicate then do
+        assert "large calendar duplicate refused" (case resultError scaled of
+          Right message -> "duplicate IDs" `isInfixOf` message
+          _ -> False)
+        assert "duplicate calendar read prior evidence" (not (any ((== "evidence") . fst) trace))
+      else do
+        changes <- maybe (fail "missing scale result") (get "value") scaled
+        actual <- mapM (\change -> do
+          tag <- get "tag" change
+          value <- get "value" change
+          key <- if tag == ("Removed" :: String) then right (parseEither parseJSON value) else get "id" value
+          pure (tag,key)) (changes :: [Value])
+        let expected = [("New",scaleKey n) | n <- [1001..1100]] ++
+              [("Updated",scaleKey n) | n <- reverse [1..100]] ++
+              [("Removed",scaleKey n) | n <- reverse [901..1000]]
+        assert "large calendar exact delta and source/prior order" (actual == expected)
   putStrLn "Graph calendar/authentication passed under GHC and MicroHs (recording provider, no live credentials)."
+
+scaleKey :: Int -> String
+scaleKey n = replicate 140 'A' ++ replicate (10 - length suffix) '0' ++ suffix
+  where suffix = show n
+
+scaleProvider :: Bool -> IO (String -> String -> Value -> IO Value)
+scaleProvider duplicate = do
+  pages <- newIORef (0 :: Int)
+  let upstream = [1001..1100] ++ reverse [1..900] ++ [1001 | duplicate]
+  pure $ \capability method args -> case (capability,method) of
+    ("secrets","get") -> pure (success (String "synthetic"))
+    ("http","send") -> do
+      url <- get "url" args
+      if "/token" `isInfixOf` url then pure (http 200 [] (object ["access_token" .= ("synthetic" :: String)]))
+      else do
+        page <- readIORef pages
+        modifyIORef' pages (+1)
+        let entries = take 100 (drop (page*100) upstream)
+            next = ["@odata.nextLink" .= ("https://graph.microsoft.com/page/" ++ show (page+1))
+              | (page+1)*100 < length upstream]
+        pure (http 200 [] (object (["value" .=
+          [event (scaleKey n) "current" "2026-09-01T00:00:00Z" | n <- entries]] ++ next)))
+    ("evidence","list") -> pure (success (toJSON (map scaleKey (reverse [1..1000]))))
+    ("evidence","read") -> do
+      key <- get "id" args
+      let n = read (drop 140 key) :: Int
+      pure (success (if n > 1000 then none else some (object
+        ["fingerprint" .= (if n <= 100 then "old" else "current" :: String),
+         "references" .= ([] :: [String]), "payload" .= captured])))
+    _ -> fail "unexpected scale fixture request"
 
 configuration :: Bool -> Value
 configuration device = object ["auth" .= object ["tag" .= (if device then "DeviceCode" else "ClientSecret" :: String),
