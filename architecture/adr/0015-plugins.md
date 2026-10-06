@@ -435,6 +435,14 @@ fetch :: Config -> Maybe Options -> EvidenceSnapshot Payload
       -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 ```
 
+[ADR 0029](0029-evidence-blobs-sync.md#sync-positions-are-typed-connector-data)
+adds stateful signatures carrying a typed `FetchContext Position` and returning
+`FetchResult Payload Position`. Derive Position from the checked signature, just
+as Config, Payload and Options are derived; no position-type registration string.
+Preserve that contract in PreparedConnector and generated dispatch. Existing
+stateless entry forms have no position. BlobRefs in payloads/results retain their
+SDK identity for checked capture, reading and surface file presentation.
+
 Authored functions import ordinary SDK types and helpers, not a generated
 payload-specific bindings module. `Acquisition payload a` and `CapturedRead payload a`
 are parameterised SDK types; helpers preserve that payload parameter. This lets the
@@ -560,6 +568,22 @@ The [capability broker](0009-capabilities.md) installs the method's selected hos
 handlers; installing a package alone grants no caller an ambient all-plugin API.
 Grouping methods in one source package does not union their capability rows.
 These boundaries guide authoring and interpretation, not a claim of containment.
+
+### Microsoft Graph source family
+
+The single `microsoft-graph` package contains Calendar, Mail, Meetings and Files
+source types. Every instance has its own configuration, evidence and sync position;
+they share ordinary plugin authentication code and may share an app/token key under
+[ADR 0016](0016-connections.md#microsoft-graph-authentication). This is not another
+kernel connection entity or a separate plugin per endpoint.
+
+Mail exposes typed message/body/attachment reads; Meetings exposes transcript and
+attendance reads; Files exposes metadata and BlobRefs. These operate on captured
+evidence only. Large binary content is referenced, not eagerly inserted into a
+method's text response. KB helpers can compose those methods through existing
+generated bindings. Payload capture policy belongs to
+[ADR 0014](0014-evidence.md#microsoft-graph-mail-meeting-artifacts-and-files),
+and blob/sync mechanics to [ADR 0029](0029-evidence-blobs-sync.md).
 
 ### Explicit updates, ordinary repair
 

@@ -26,7 +26,10 @@ without modifying accepted KB facts. There is no format migration commitment.
 Each configured connector instance has one latest captured evidence state, stored
 as Dhall in an ignored checkout-local store. A successful fetch replaces changed
 items, adds new items and removes deleted items. Persistent payload storage contains
-only the resulting current values.
+only the resulting current values. Binary and large-text payloads use typed
+BlobRefs under [ADR 0029](0029-evidence-blobs-sync.md), not embedded file contents.
+That ADR owns atomic connector sync positions and blob lifetime. Neither is
+historical evidence or a curation watermark.
 
 All new evidence-read invocations use the latest successful fetch. Latest means latest successfully
 captured input, not a claim of continuous synchronization with the provider.
@@ -173,6 +176,160 @@ of the remote calendar. Provider ID behavior and changes during pagination need
 live verification; fake-server tests do not establish those properties.
 Authentication is owned by ADR 0016, not this fetch contract.
 
+### Microsoft Graph mail, meeting artifacts and files
+
+These sources share the Microsoft Graph package, authentication and download/retry
+helpers under ADRs 0015, 0016 and 0029. They expose provider data rather than
+classifying what it means to a KB. Payload fingerprints hash the connector's
+stable captured projection, excluding fetch times, transient download URLs and
+sync positions. Provider citations remain separate from these operational tokens.
+
+#### Mail
+
+```haskell
+data MailConfig = MailConfig
+  { auth :: GraphAuth, mailbox :: String
+  , folders :: [MailFolder], retentionDays :: Integer }
+data MailFolder = WellKnownFolder String | FolderPath String
+data MailFetch = MailFetch
+  { since :: Maybe String
+  , maxAttachmentBytes :: Maybe Integer
+  , attachmentMediaTypes :: [String] }
+data MailPosition = MailPosition
+  { folders :: [FolderPosition] }
+data FolderPosition = FolderPosition
+  { folderId :: String, deltaLink :: String }
+
+data AttachmentContent = Stored BlobRef | Link String | Skipped String
+data Attachment = Attachment
+  { name :: String, mediaType :: String, size :: Integer
+  , inline :: Bool, content :: AttachmentContent }
+```
+
+The payload is one message: subject, from/to/cc addresses, sent/received instants,
+conversationId, internetMessageId, first-seen folder, text body and attachments.
+Resolve configured well-known names (such as inbox/sentitems) or custom folder
+paths to provider folder IDs. Keep one delta continuation per folder and publish
+all folder results/positions together. Configure one mailbox per instance.
+
+Use Graph's immutable message ID, with `Prefer: IdType="ImmutableId"` on every
+relevant request, including pagination. Deduplicate across selected folders by
+that ID; do not prefix it with the current folder or replace it with a timestamp.
+The first-seen folder is recorded once, using configured folder order to break a
+first-fetch tie. The immutable-ID guarantee is mailbox-scoped; archive-mailbox
+moves and export/reimport can create a different identity. See
+[Graph immutable IDs](https://learn.microsoft.com/en-us/graph/outlook-immutable-id).
+
+This connector captures newly encountered mail, not a mirror of read flags or
+folder membership. Ignore provider deletions/moves and changes to already captured
+messages; fingerprint the captured payload, not `changeKey`. No owner-address
+direction inference. Message-to-fact interpretation belongs to curation.
+
+Initial backfill uses `since`, defaulting to 30 days before the invocation's
+captured start time; later fetches follow saved folder continuations. Do not
+silently reinterpret `since` as a new cursor: reject a supplied initial boundary
+once a position exists, with clear/refetch guidance. Follow all pages; failed
+pagination publishes neither messages nor cursors. If a cursor expires, rebuild
+that folder's enumeration, deduplicate against retained IDs and publish only on
+success. Retention remains instance configuration, not a historical-read promise.
+The [message delta contract](https://learn.microsoft.com/en-us/graph/api/message-delta)
+owns available filters and continuation semantics; do not infer a general query
+language from it.
+
+Request text bodies; do not dump HTML as the agent's normal reading surface.
+Capture inline attachment metadata too. Download policy uses declared size/media
+type and the streaming byte limit; an intentionally omitted attachment records a
+Skipped reason, not an empty successful file. Missing metadata must not silently
+claim a download passed a policy check. Transient transport/throttling failures
+fail/retry acquisition rather than becoming permanent Skipped results.
+
+File attachments use raw bytes. Attached messages use MIME `.eml`; attached contacts
+and events retain their actual `.vcf`/`.ics` representations. Reference attachments
+remain links rather than attempted `$value` downloads. These distinctions follow
+[Graph attachment content](https://learn.microsoft.com/en-us/graph/api/attachment-get).
+All actual downloads use the same status-aware retry route as metadata requests.
+
+#### Teams meeting artifacts
+
+```haskell
+data MeetingRef = MeetingRef
+  { onlineMeetingId :: String, joinUrl :: String
+  , subject :: String, organizer :: String }
+data MeetingArtifact
+  = Transcript { meeting :: MeetingRef, started :: String, ended :: String
+               , content :: BlobRef }
+  | Attendance { meeting :: MeetingRef, started :: String, ended :: String
+               , attendees :: [AttendanceRecord] }
+```
+
+`AttendanceRecord` preserves the provider's participant identity and attendance
+intervals; its ordinary record definition is plugin-owned. Instance configuration
+selects the user and retention days. Fetch options select a look-back window,
+defaulting to three days before acquisition start. Discover recently ended online
+meeting events with calendarView, resolve onlineMeeting by join URL, and enumerate
+its transcript/report resources. Use actual artifact/session times, not the
+calendar start as an item key.
+
+An item is an artifact, not a selected "best" transcript or an inferred occurrence.
+Use an unambiguous encoding of artifact kind, onlineMeeting ID and Graph artifact
+ID; this preserves provider identity even if IDs are only unique within a meeting
+or collide across transcript/report families. Keep every returned transcript/report,
+skip already captured IDs, and fingerprint the captured payload. VTT content is a
+blob. Fetch every available page of attendance records, preserving all attendees.
+No longest-transcript selection, heuristic occurrence linkage or connector-authored
+meeting judgement. Curation links artifacts to calendar facts and cites them.
+
+Provider deletions are not tracked. Discovery is a bounded look-back, not a guarantee
+of finding arbitrarily late artifacts; authors can request a wider window.
+The [transcript API](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-list-transcripts)
+and [attendance API](https://learn.microsoft.com/en-us/graph/api/meetingattendancereport-list)
+have their own permissions, supported meeting kinds and availability limits.
+In particular, report listing exposes at most the latest 50 reports; fetching every
+returned page cannot remove that provider limit. A missing eligible artifact is not
+proof that a meeting did not happen. Fail clearly on authorization or unsupported
+mode rather than presenting it as empty evidence.
+
+#### SharePoint and OneDrive files
+
+```haskell
+data FilesScope = SiteLibrary String String | OneDrive String | SharedUrl String
+data FilesConfig = FilesConfig
+  { auth :: GraphAuth, scope :: FilesScope
+  , folderPath :: String, includeGlobs :: [String] }
+data FileContent = StoredFile BlobRef | SkippedFile String
+data FilePayload = FilePayload
+  { name :: String, path :: String, webUrl :: String
+  , mediaType :: String, size :: Integer
+  , modified :: String, modifiedBy :: String
+  , cTag :: Maybe String, content :: FileContent }
+```
+
+Resolve the configured site/library, user drive or pasted URL to drive/item IDs
+on initial acquisition and retain them in the typed sync position. A changed
+source configuration starts a new producer, not a cursor pointed at another drive.
+The selected folder is rooted by ID after resolution. Include globs match relative
+slash-separated paths beneath it: `*`/`?` stay within a segment, `**` crosses
+segments, and an empty list includes every file. No separate recursive flag.
+
+Use drive-root delta for the business-drive path, filtering results to the selected
+subtree and globs in plugin code. Evidence ID is an unambiguous driveId/itemId pair,
+not a path. Retain the folder hierarchy in the connector-owned position so folder
+renames/moves update descendants' paths and scope even when the provider omits
+those descendants. Coalesce repeated item entries before deriving one consistent
+delta against the prior capture. A failed page/hydration leaves the capture and
+position unchanged. A provider-invalidated cursor triggers complete reconciliation,
+not blind deletion from a partial response.
+
+Hydrate metadata absent from delta before content decisions. Compare `cTag` to the
+previous payload: unchanged content reuses its blob; changed/absent tags require
+retrieval rather than treating absent tags as equal proof of unchanged content.
+A rename/path/metadata change updates the payload fingerprint but does not itself
+require downloading identical bytes. Download URLs are transient acquisition data,
+not stable payload fields. Provider deletions and moving out of the selected scope
+emit RemovedEvidence. Files have no age-out retention; the capture mirrors their
+latest scoped state. Follow the [drive delta contract](https://learn.microsoft.com/en-us/graph/api/driveitem-delta)
+for cursor reset, repeated entries and hierarchy omissions.
+
 ### Atomic refresh and invocation-local reads
 
 Publish one complete successful batch atomically. Failure leaves the current
@@ -184,7 +341,8 @@ A plugin invocation reads one immutable in-memory view of the latest captured
 evidence. The host owns its lifetime and releases the store lock before running
 guest code or external acquisition. Refresh does not change an already-loaded
 invocation's input; the next invocation uses the latest capture. That in-memory
-view lasts only for its invocation.
+view lasts only for its invocation. Referenced blobs share that scoped lifetime
+under ADR 0029; refresh must not reclaim bytes an active reader still needs.
 
 ```haskell
 -- Host-side materialization of current captured evidence.
@@ -287,8 +445,10 @@ Use one current typed document at
 The instance component is lowercase hexadecimal UTF-8. `.kyyn/.gitignore` owns the
 checkout-local ignore rule; first publication creates it if absent, preserving
 existing content. Store producer identity, latest values and payload-free fetch
-markers. Timestamps use ISO 8601 UTC.
+markers, and the connector's optional checked sync position. Timestamps use ISO 8601 UTC.
 Publication rewrites this document; no paging or separate storage engine is used.
+Blob bytes live beside the document under ADR 0029; the document remains metadata
+and typed current values, never base64 file contents.
 
 ### Investigation and curation belong to the KB
 
