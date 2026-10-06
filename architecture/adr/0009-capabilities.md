@@ -133,8 +133,12 @@ data FileRead a where
 
 data CapturedText = CapturedText String EvidenceFingerprint
 
-type CapturedRead payload a = Program (EvidenceRead payload) a
+type CapturedRead payload a = Program (EvidenceRead payload :+: BlobRead) a
 ```
+
+`BlobRead` and acquisition-only `BlobAcquisition` are defined by
+[ADR 0029](0029-evidence-blobs-sync.md). Both read contexts remain tied to the same
+invocation-local evidence capture; blob reads do not grant filesystem browsing.
 
 A registered captured method implements:
 
@@ -149,7 +153,7 @@ the latest captured evidence at invocation start; method failure does not fetch 
 change that evidence. ADR 0015 owns registration and checked native dispatch.
 
 The snapshot argument is explicit. `Host.Acquisition` is the SDK row defined below;
-captured readers have only the two snapshot questions above. Native text
+captured readers have the snapshot questions above and reads of its referenced blobs. Native text
 acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
 from the same captured bytes. The SDK's `readTextFile` returns both together.
 The folder
@@ -189,7 +193,7 @@ data Waiting a where
   WaitSeconds :: Int -> Waiting ()
 
 type AcquisitionRequests payload =
-  Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))
+  Http :+: (BlobAcquisition :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
 type Acquisition payload a = Program (AcquisitionRequests payload) a
 type PluginLogin a =
   Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) a
@@ -202,11 +206,11 @@ reads. A small class supplies their request injection, with two explicit instanc
 class ReadsEvidence row payload where
   injectEvidence :: EvidenceRead payload a -> row a
 
-instance ReadsEvidence (EvidenceRead payload) payload where
-  injectEvidence = id
+instance ReadsEvidence (EvidenceRead payload :+: BlobRead) payload where
+  injectEvidence = InLeft
 
 instance ReadsEvidence (AcquisitionRequests payload) payload where
-  injectEvidence = InRight . InRight . InRight . InRight
+  injectEvidence = InRight . InRight . InRight . InRight . InRight
 
 listEvidenceIds
   :: ReadsEvidence row payload
@@ -236,7 +240,7 @@ durations and remain cancellable. No host OAuth implementation is introduced.
 
 Every source connector uses this one acquisition row, generated adapter and host
 dispatcher. Generated helpers hide sum injections and protocol codecs; a fetch can
-combine file, HTTP, secret, waiting and evidence requests without another registration
+combine file, HTTP, streamed-blob, secret, waiting and evidence requests without another registration
 declaration. Acquisition can save a rotated credential and wait, but cannot display
 interactive instructions. Optional login uses its separate row and can guide a user
 but cannot publish evidence. Absent capabilities fail compilation or protocol dispatch.
@@ -313,7 +317,7 @@ it dispatches, not GuestCompilation. For example:
 
 ```haskell
 executeAcquisition
-  :: (GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es,
+  :: (GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, BlobStorage :> es,
       SecretStore :> es, Waiting :> es, Failure :> es)
   => CompiledProgram -> Value -> Maybe CurrentEvidence
   -> Eff es (Either [Diagnostic] Value)

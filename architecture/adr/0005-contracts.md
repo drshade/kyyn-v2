@@ -32,6 +32,7 @@ data Shape
   | Union [(CaseName, Maybe Shape)]
   | Scalar ScalarKind
   | Reference CollectionId
+  | BlobReference
 
 data ScalarKind
   = TextScalar | BoolScalar | IntegerScalar | NaturalScalar
@@ -48,6 +49,11 @@ contractShape :: CheckedContract -> Shape
 metadataOf :: CheckedContract -> SchemaMetadata
 contractId :: CheckedContract -> ContractId
 ```
+
+`BlobReference` retains the resolved SDK BlobRef identity through structural
+lowering. Its storage record and surface projection are owned by
+[ADR 0029](0029-evidence-blobs-sync.md#captured-bytes-have-typed-references);
+it is not inferred from an authored record's field names.
 
 `CheckedContract` carries the checked roles/affordances as well as collection and
 codec descriptors. `InspectedSchema.contract` is the common source for bindings,

@@ -256,15 +256,15 @@ or create an evolution. Its secret writes are local setup, not accepted-root wri
 ### Microsoft Graph authentication
 
 One vendored `microsoft-graph` plugin shares ordinary authentication code among
-its connector types. Start with a user-calendar connector. Mail, Teams and files
-belong to this plugin too, but each API needs its own permission/support proof;
+its Calendar, Mail, Meetings and Files connector types. Each API needs its own permission/support proof;
 sharing token code does not prove an API supports both authentication modes.
 The plugin, not Kyyn core, owns this configuration type:
 
 ```haskell
 data GraphAuth
   = ClientSecret { tenant :: String, clientId :: String, secretKey :: String }
-  | DeviceCode { tenant :: String, clientId :: String, tokenKey :: String }
+  | DeviceCode { tenant :: String, clientId :: String, tokenKey :: String
+               , scopes :: [String] }
 
 data CalendarConfig = CalendarConfig
   { auth :: GraphAuth, mailbox :: String, calendarId :: Maybe String
@@ -287,10 +287,10 @@ Delegated access to the signed-in user's own calendar uses `Calendars.Read`.
 Another user's shared/delegated calendar requires `Calendars.Read.Shared` and
 actual sharing/delegation to that user; consent alone does not grant mailbox
 access. See Microsoft's [shared calendar access](https://learn.microsoft.com/en-us/graph/outlook-get-shared-events-calendars).
-The calendar plugin requests the shared-read scope when `sharedCalendar` is true,
-not application permissions in a delegated token.
+The calendar validator requires the configured delegated scopes to include shared
+read when `sharedCalendar` is true, not application permissions in a delegated token.
 
-Device-code login requests the applicable delegated calendar scope and `offline_access`,
+Device-code login requests the shared application's configured delegated scopes and `offline_access`,
 displays the verification URI and user code, and polls using the provider's
 interval. Pending responses continue; denial/expiry stop with an actionable
 diagnostic. The app registration must support public-client device authorization
@@ -313,6 +313,33 @@ know tenants, scopes, token expiry, refresh-token format or provider endpoints.
 Acquisition failure leaves evidence unchanged, but does not roll back a successful
 refresh-token replacement: external authentication and local secret setup are
 not part of evidence publication's transaction.
+
+Use one app registration and shared authentication configuration for the selected
+Graph connectors. In DeviceCode configuration, `scopes` supplies the combined
+delegated scope set; compatible instances repeat that ordinary data and share
+`tokenKey`. Login uses that set, not just the scope of whichever connector initiated
+login. Refresh must not silently narrow it. Adding a required scope means explicitly
+logging in/consenting again, not starting interaction during fetch. ClientSecret
+continues to use `.default` and the app's consented application permissions.
+
+Mail requires Mail.Read (and shared-mailbox delegated permissions/access where
+applicable). Meetings needs calendar discovery, online-meeting lookup, transcript
+and attendance permissions: Calendars.Read, OnlineMeetings.Read for delegated
+lookup (OnlineMeetings.Read.All application), OnlineMeetingTranscript.Read.All
+and OnlineMeetingArtifact.Read.All, as applicable to the selected endpoints.
+Files uses delegated Files.Read.All; application SharePoint access uses
+Sites.Selected with explicit site grants. Do not assume a pasted sharing URL
+or OneDrive target is accessible with a site grant: resolve only endpoints the
+selected mode supports and report missing permissions clearly.
+
+Use `/users/{id}` for user-addressed operations, never `/me` as an app-only
+fallback. Drive/site-addressed endpoints use their resolved IDs. Shared auth
+does not override organizer/meeting-type restrictions or tenant policy. Document
+Exchange application access policy/RBAC, Teams application access policy and
+[Sites.Selected grants](https://learn.microsoft.com/en-us/graph/permissions-selected-overview)
+in the plugin guide; Kyyn does not provision or govern them. Support both configured
+auth modes for supported endpoints, with explicit errors for combinations Graph
+does not support. Do not translate forbidden operations to empty successful data.
 
 ## Trust and consequences
 
