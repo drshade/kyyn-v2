@@ -212,7 +212,7 @@ runtestgsan: bin/mhsevalsane bin/gmhs
 
 # Run test examples going via JavaScript
 runtestemscripten: bin/mhseval bin/mhs bin/cpphs
-	cd tests; $(MAKE) MHS=../bin/mhs cache; MHSDIR=.. $(MAKE) MHSTARGET="-temscripten" MHS="../bin/mhs -CR -oout.js" EVAL="$(NODE) $(NODEFLAGS) out.js" info test errtest testpipenonblockioem
+	cd tests; $(MAKE) MHS=../bin/mhs cache; MHSDIR=.. $(MAKE) MHSTARGET="-temscripten" MHS="../bin/mhs -CR -oout.js" EVAL="$(NODE) $(NODEFLAGS) out.js" info test errtest testpipenonblockioem testjsflag testjsbits
 
 runtestinstemscripten:
 	cd tests; $(MAKE) MHSTARGET="-temscripten" MHS="mhs.js -oout.js" EVAL="$(NODE) $(NODEFLAGS) out.js" test
@@ -315,8 +315,8 @@ nfibtest: bin/mhs bin/mhseval
 
 ######
 
-VERSION=0.16.7.0
-HVERSION=0,16,7,0
+VERSION=0.16.8.0
+HVERSION=0,16,8,0
 MCABAL=$(HOME)/.mcabal
 MCABALMHS=$(MCABAL)/mhs-$(VERSION)
 MDATA=$(MCABALMHS)/packages/mhs-$(VERSION)/data

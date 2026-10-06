@@ -6,12 +6,18 @@ notices; Kyyn's proprietary policy does not replace them.
 
 | Directory | Source | Archive SHA-256 | License |
 | --- | --- | --- | --- |
-| MicroHs | [8bf3d4d4242c8707b31c2338716977d24a95ad39](https://github.com/augustss/MicroHs/archive/8bf3d4d4242c8707b31c2338716977d24a95ad39.tar.gz), version 0.16.7.0 | `528f4669dc5e406a6a67f068e0ef4bfe50b4f3be00d8bc8381beaf2783b48351` | Apache-2.0; retain included notices |
+| MicroHs | [be2d30dedd7bdae49c29ec7562c6b5a6f82de486](https://github.com/drshade/MicroHs/tree/be2d30dedd7bdae49c29ec7562c6b5a6f82de486), version 0.16.8.0 | `f055034797174c3ad0ee95048d3fccfa862eb05da3a11b5c01c349a377545862` (Git archive below) | Apache-2.0; retain included notices |
 | json | [json-0.11](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz) | `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690` | BSD-3-Clause |
 | transformers | [transformers-0.6.1.1](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) | `81d2548e0f100a174fba36b332c0efd7c960e79d3c21ad6e1ff5f538b992d725` | BSD-3-Clause |
 | agentic | [08ff9315f4c0fa0da10bfaf679f473dd58f40ae1](https://github.com/drshade/haskell-agentic/tree/08ff9315f4c0fa0da10bfaf679f473dd58f40ae1/agentic), version 0.2.0.5 | `8b2fd4a31399ee6fa2d5a0f2bc1b95e3bb0ea0b890ef7fdb2f0807aebac90532` (Git archive below) | BSD-2-Clause |
 | agentic-aeson, agentic-openai, agentic-anthropic | [08ff9315f4c0fa0da10bfaf679f473dd58f40ae1](https://github.com/drshade/haskell-agentic/tree/08ff9315f4c0fa0da10bfaf679f473dd58f40ae1), version 0.2.0.5 | `c501d891ced27c693b9e7cc16c2bf0670843d5814bce30c7b6b29e56ce249752` (combined Git archive below) | BSD-2-Clause |
 | agentic-jev | [08ff9315f4c0fa0da10bfaf679f473dd58f40ae1](https://github.com/drshade/haskell-agentic/tree/08ff9315f4c0fa0da10bfaf679f473dd58f40ae1/agentic-jev), version 0.2.0.5 | `309ae47798b33e97ec81664025c4c5e20ff5ca25f9dacf22ffaf2689e2f9a21a` (`git archive 08ff9315f4c0fa0da10bfaf679f473dd58f40ae1 agentic-jev`) | BSD-2-Clause |
+
+MicroHs temporarily uses the owner's fork with the large-line GC stack fix,
+pending upstream integration. The source is the unmodified output of
+`git archive be2d30dedd7bdae49c29ec7562c6b5a6f82de486` in `drshade/MicroHs`;
+the table hashes that tar stream. Both native frontend and guest runtime use
+this revision.
 
 The agentic source is the unmodified `agentic/` subtree produced by
 `git archive 08ff9315f4c0fa0da10bfaf679f473dd58f40ae1 agentic` in its upstream
