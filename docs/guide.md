@@ -361,8 +361,16 @@ The result can select your flow's keep/drop/review branches. `Unclear` remains
 possible even with high confidence; low confidence routes there regardless of
 the chosen answer. Neither Kyyn nor Agentic sets that threshold for you.
 Use record-dot access for library records (`answer.chosen`, `answer.confidence`,
-`answer.yes`), rather than the former selector functions. MicroHs supports this
-syntax directly; the pragma also makes the source explicit for GHC.
+`answer.yes`). MicroHs supports this syntax directly; the pragma also makes the
+source explicit for GHC. Upgrading older flows requires replacing renamed fields
+such as `Q.choiceConfidence answer` with `answer.confidence`. MicroHs still accepts
+some unchanged selectors such as `Q.chosen` and `Q.yes`; GHC respects the upstream
+`NoFieldSelectors` setting, so prefer record-dot for portable authoring.
+
+`Probability` works inside flows, but is not currently supported as a field in
+Kyyn-generated model contracts, tool result contracts or fact schemas. Return a
+supported domain decision as above, or explicitly project confidence to Integer
+basis points when it must cross those boundaries.
 
 ### Drafting with a configured model
 
