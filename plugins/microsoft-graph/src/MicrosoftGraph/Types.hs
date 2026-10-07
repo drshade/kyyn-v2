@@ -13,10 +13,11 @@ data CalendarConfig = CalendarConfig
   , mailbox :: Text
   , calendarId :: Maybe Text
   , sharedCalendar :: Bool
+  , windowStart :: Text
+  , windowEnd :: Text
   } deriving (Eq, Show)
 
-data CalendarFetch = CalendarFetch
-  { modifiedFrom :: Maybe Text, modifiedTo :: Maybe Text } deriving (Eq, Show)
+newtype CalendarPosition = CalendarPosition { deltaLink :: Text } deriving (Eq, Show)
 
 data EventTime = EventTime { dateTime :: Text, timeZone :: Text } deriving (Eq, Show)
 data Person = Person { name :: Text, address :: Text } deriving (Eq, Show)

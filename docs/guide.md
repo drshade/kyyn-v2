@@ -265,7 +265,10 @@ Inspect the optional type with `plugin connector show PLUGIN INSTANCE`;
 omitting options uses connector defaults. Local-file has no fetch options.
 Options appear in history, so use secrets for credentials.
 
-`evidence clear PLUGIN INSTANCE` discards that instance's local cache.
+`evidence fetch PLUGIN INSTANCE --restart-sync` keeps existing evidence but starts a
+fresh provider sync; stateless connectors report that the flag has no effect.
+`evidence clear PLUGIN INSTANCE` deletes the local evidence and position, so the next
+fetch starts empty and reports everything as new.
 Refetch to rebuild it. Clearing evidence does not remove accepted facts or recipe
 acknowledgements.
 

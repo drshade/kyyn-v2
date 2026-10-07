@@ -11,7 +11,7 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
-import Kyyn.Domain.Evidence (FetchId(..))
+import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
 import Kyyn.Domain.Curation (RecipeId, recipeId)
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Data.Coerce (coerce)
@@ -55,7 +55,7 @@ data ConnectorCommand
   | ExecuteConnectorMethod PluginName ConnectorName MethodName String
   deriving (Eq, Show)
 data EvidenceCommand
-  = FetchConnector PluginName ConnectorName (Maybe String)
+  = FetchConnector PluginName ConnectorName (Maybe String) SyncMode
   | ListCurrentEvidence PluginName ConnectorName
   | ListFetchHistory PluginName ConnectorName
   | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
@@ -99,7 +99,7 @@ progressMessage :: Command -> Maybe String
 progressMessage request = case request of
   Kb InitKb -> Just "Checking and initializing the knowledge base..."
   Plugin (InstallPlugin selectedId _ _) -> Just ("Installing plugin source into evolution " ++ evolutionIdName selectedId ++ "...")
-  Evidence (FetchConnector plugin connector _) -> Just
+  Evidence (FetchConnector plugin connector _ _) -> Just
     ("Checking the root and fetching " ++ pluginNameText plugin ++ "/" ++ coerce connector ++ "...")
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
@@ -191,7 +191,8 @@ pluginEvolution = optional (option (eitherReader evolutionId)
 evidenceParser :: Parser EvidenceCommand
 evidenceParser = hsubparser
   (group "fetch" "Fetch evidence from an accepted connector instance" (FetchConnector <$> plugin <*> instanceName
-    <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Connector-specific fetch options as hermetic Dhall")))
+    <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Connector-specific fetch options as hermetic Dhall"))
+    <*> flag ContinueSync RestartSync (long "restart-sync" <> help "Start a fresh sync while keeping existing evidence for comparison"))
   <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
   <> group "history" "Inspect retained fetch history" (hsubparser
       (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))

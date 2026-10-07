@@ -92,12 +92,12 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     Right scope -> finish $ runBase host . runDocumentPersistenceIO . runEvidenceStore scope $ do
       existed <- clearConnectorEvidence plugin name
       pure (clearResult plugin name existed)
-  Cli.FetchConnector plugin name options -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
+  Cli.FetchConnector plugin name options mode -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
       . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
       . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
-        (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options)
+        (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $

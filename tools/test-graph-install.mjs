@@ -43,16 +43,17 @@ try {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `(let Auth = < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
     | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text } >
-    let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool } >
+    let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
-      , mailbox = "user@example.test", calendarId = None Text, sharedCalendar = False } } ]) : (${schema})`);
+      , mailbox = "user@example.test", calendarId = None Text, sharedCalendar = False
+      , windowStart = "2026-01-01T00:00:00Z", windowEnd = "2027-01-01T00:00:00Z" } } ]) : (${schema})`);
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   const head = git(kb, 'rev-parse', 'HEAD');
   const descriptor = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'test']).result;
-  assert.match(descriptor.fetchOptionsType, /modifiedFrom/);
+  assert.equal(descriptor.fetchOptionsType, null);
   const method = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'test', 'event']).result;
   assert.match(method.resultType, /bodyPreview/);
   for (const args of [['plugin', 'connector', 'login', 'microsoft-graph', 'test'], ['evidence', 'fetch', 'microsoft-graph', 'test']]) {

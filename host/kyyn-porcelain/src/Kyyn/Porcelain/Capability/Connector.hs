@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector, loginConfiguredConnector
   , connectorCurrentEvidence, connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
@@ -6,10 +7,10 @@ module Kyyn.Porcelain.Capability.Connector
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
-import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..), ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
 import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
 import Kyyn.Domain.DataType (Shape)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, FetchId, FetchSummary, EvidenceChangeSummary)
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, FetchId, FetchSummary, EvidenceChangeSummary, SyncMode(..))
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
@@ -124,9 +125,9 @@ selectConnectorEvidence kb revision plugin name = runExceptT $ do
 
 fetchConfiguredConnector
   :: (RootOpening :> es, RootExecution :> es, RootStore :> es, EvidenceAcquisition :> es)
-  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Maybe String
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Maybe String -> SyncMode
   -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, ValidationReport))
-fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name supplied = runExceptT $ do
+fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name supplied mode = runExceptT $ do
   location <- checked (pathResult (rootLocation kb))
   root <- ExceptT (loadRootAt repository revision (Subtree location))
   prepared <- ExceptT (prepareRoot root)
@@ -136,8 +137,11 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name su
     Passed _ diagnostics -> pure diagnostics
   (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options, syncPositionContract = position}) config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
-  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options position supplied)
-  pure (snapshot,report)
+  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options position mode supplied)
+  let ValidationReport warnings = report
+      notes = [Diagnostic Warning "plugin.sync-stateless" "This connector has no sync position; --restart-sync has no effect." Nothing |
+        mode == RestartSync, Nothing <- [position]]
+  pure (snapshot,ValidationReport (warnings ++ notes))
 
 sourceAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> ExceptT [Diagnostic] (Eff es) FileTree
