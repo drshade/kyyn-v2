@@ -205,8 +205,7 @@ Plugin-specific methods remain available for richer views.
 Clearing removes only the instance's local capture, latest summary and position,
 not accepted facts or recipe state. Distinguish unfetched, incompatible producer,
 publication conflict, malformed delta/storage and unavailable payload. Missing
-evidence does not claim upstream deletion. No fetch-history or pending-work
-selector is required. ADR 0014 owns these semantics.
+evidence does not claim upstream deletion. ADR 0014 owns these semantics.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK
 and, when a KB is selected, its generated public tool modules. Public modules come from kyyn-sdk's exposed

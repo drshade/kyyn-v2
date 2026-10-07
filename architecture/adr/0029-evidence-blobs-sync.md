@@ -9,8 +9,8 @@ title: 'Evidence blobs and connector-owned sync positions'
 Mail attachments, meeting transcripts and drive files need captured bytes without
 embedding binaries or large text in `state.dhall` or sending downloads through
 the MicroHs process. Incremental providers also need a continuation position that
-advances with the evidence it describes, not before it. Neither requirement calls
-for historical evidence, a provider-aware kernel or another curation workflow.
+advances atomically with the evidence it describes. Plugins own provider-specific
+acquisition; the host supplies blob storage and position persistence.
 
 ## Decision
 

@@ -167,7 +167,7 @@ Do not silently substitute an LLM for Jev.
 [ADR 0014](0014-evidence.md) owns recipe definitions and always-present state.
 Open recipes guide an external agent; closed recipes name a regular callable
 flow. Both prepare a recipe-based evolution under [ADR 0010](0010-evolutions.md).
-A closed run selects one recipe, not a collection of recipes or a pending batch.
+A closed run selects exactly one recipe.
 
 The host selects Before and supplies its root, the selected recipe's state and
 the caller's typed request. The flow signature defines the request and state
