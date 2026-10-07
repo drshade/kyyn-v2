@@ -122,11 +122,17 @@ lowerPluginSignature table kind signature = do
       apply name a = EApp (named name) a
       sumType a b = EApp (EApp (named "Kyyn.Types.Program.:+:") a) b
   unless (null vars) (Left "registered entry must have concrete types and no residual constraints")
-  (input,options,snapshot) <- case (kind,args) of
-    (_, [a,s]) -> Right (a,Nothing,s)
-    (AcquisitionEntry,[a,o,s]) -> do
+  (input,options,position,snapshot) <- case (kind,args) of
+    (_, [a,s]) -> Right (a,Nothing,Nothing,s)
+    (AcquisitionEntry,[a,o,s]) -> case unary "Kyyn.Types.Plugin.FetchContext" o of
+      Right p -> Right (a,Nothing,Just p,s)
+      Left _ -> do
+        option <- unary "Data.Maybe_Type.Maybe" o
+        Right (a,Just option,Nothing,s)
+    (AcquisitionEntry,[a,o,c,s]) -> do
       option <- unary "Data.Maybe_Type.Maybe" o
-      Right (a,Just option,s)
+      p <- unary "Kyyn.Types.Plugin.FetchContext" c
+      Right (a,Just option,Just p,s)
     _ -> Left "unsupported entry arity"
   payload <- unary "Kyyn.Types.Plugin.EvidenceSnapshot" snapshot
   (row,answer) <- pair "Kyyn.Types.Program.Program" result
@@ -138,10 +144,16 @@ lowerPluginSignature table kind signature = do
   (problem,value) <- pair "Data.Either.Either" answer
   unless (eqEType problem (named "Kyyn.Types.Plugin.FetchError")) (Left "expected FetchError failure type")
   case kind of
-    AcquisitionEntry -> do
-      change <- unary "Data.List_Type.[]" value >>= unary "Kyyn.Types.Evidence.EvidenceChange"
-      unless (eqEType change payload) (Left "EvidenceChange payload differs from snapshot payload")
-      FetchSignature <$> lower input <*> traverse lower options <*> lower payload
+    AcquisitionEntry -> case position of
+      Nothing -> do
+        change <- unary "Data.List_Type.[]" value >>= unary "Kyyn.Types.Evidence.EvidenceChange"
+        unless (eqEType change payload) (Left "EvidenceChange payload differs from snapshot payload")
+        FetchSignature <$> lower input <*> traverse lower options <*> lower payload
+      Just p -> do
+        (returnedPayload,returnedPosition) <- pair "Kyyn.Types.Plugin.FetchResult" value
+        unless (eqEType returnedPayload payload && eqEType returnedPosition p)
+          (Left "FetchResult payload/position differs from snapshot/context")
+        StatefulFetchSignature <$> lower input <*> traverse lower options <*> lower payload <*> lower p
     CapturedReadEntry -> ReadSignature <$> lower input <*> lower payload <*> lower value
 
 -- Traverses CHECKED constructor signatures. Aliases in them are already expanded

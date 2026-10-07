@@ -1,11 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, NoFieldSelectors #-}
 module Kyyn.Types.Plugin
-  ( SourceConnector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..) ) where
+  ( SourceConnector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
 
 import Data.Text (Text)
 
 import Kyyn.Types.Evidence (EvidenceId, Evidence, EvidenceFingerprint)
+import Kyyn.Types.Evidence (EvidenceChange)
+
+-- | Invocation time and the position saved with the prior successful capture.
+data FetchContext position = FetchContext
+  { startedAt :: Text, priorPosition :: Maybe position }
+  deriving (Eq, Show)
+
+-- | Changes and their final provider position, published together on success.
+data FetchResult payload position = FetchResult
+  { changes :: [EvidenceChange payload], position :: position }
+  deriving (Eq, Show)
 
 -- | A configured instance of one connector type.
 newtype ConnectorInstance connector = ConnectorInstance Text

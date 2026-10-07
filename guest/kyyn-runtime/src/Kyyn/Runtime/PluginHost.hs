@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
-module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeLogin) where
+module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeAcquisitionResult, executeLogin) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Plugin (exchange, exchangeBody, execute, input, eitherCodec, changeCodec, fileRequest, evidenceRequest)
@@ -16,9 +16,14 @@ import Kyyn.Types.Evidence (EvidenceChange)
 executeAcquisition :: forall config payload. Codec config -> Codec payload
   -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
         (Either FetchError [EvidenceChange payload])) -> IO ()
-executeAcquisition configCodec payloadCodec selected = withTransport $ \transport -> do
+executeAcquisition configCodec payloadCodec = executeAcquisitionResult configCodec payloadCodec (listCodec (changeCodec payloadCodec))
+
+executeAcquisitionResult :: forall config payload result. Codec config -> Codec payload -> Codec result
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
+        (Either FetchError result)) -> IO ()
+executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
   (config,snapshot) <- input transport configCodec
-  execute transport (eitherCodec (listCodec (changeCodec payloadCodec))) (handler transport) (selected config snapshot)
+  execute transport (eitherCodec resultCodec) (handler transport) (selected config snapshot)
   where
     handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))) a -> IO a
     handler transport identity (InLeft call) = httpRequest transport identity call
