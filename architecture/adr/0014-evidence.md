@@ -23,8 +23,7 @@ as Dhall in an ignored checkout-local store. A successful fetch replaces changed
 items, adds new items and removes deleted items. Persistent payload storage contains
 only the resulting current values. Binary and large-text payloads use typed
 BlobRefs under [ADR 0029](0029-evidence-blobs-sync.md), not embedded file contents.
-That ADR owns atomic connector sync positions and blob lifetime. Neither is
-historical evidence or a curation watermark.
+That ADR owns atomic connector sync positions and blob lifetime.
 
 All new evidence-read invocations use the latest successful fetch. Latest means latest successfully
 captured input, not a claim of continuous synchronization with the provider.
@@ -163,8 +162,8 @@ persisted instance configuration. Use named secrets for credentials.
 
 A fetch returns changes applied to the prior capture, not an implicit replacement
 listing. Absence from a partial result never means deletion. Removals require
-the source to establish absence. The host has no timestamp semantics or generic
-watermark, and fetching remains independent of accepted recipe progress.
+the source to establish absence. Connectors own timestamp semantics and sync
+positions; fetching updates the current evidence capture.
 
 ### Microsoft Graph calendar acquisition
 
@@ -420,7 +419,7 @@ to `.kyyn/.gitignore`. Blob lifetime remains owned by ADR 0029.
 
 Distinguish unfetched, fetched-empty, incompatible producer, truncated payload,
 malformed storage and publication conflict. A missing ID or cleared cache is not
-proof of upstream deletion. There is no generic pending/reconciliation result.
+proof of upstream deletion.
 After refetch, recipe code decides what a changed producer means for its own task.
 
 ### Investigation reads the current evidence
@@ -675,8 +674,8 @@ not establish whether the external source has changed since a citation was made.
 
 Current evidence is bound to producing plugin source and payload contract. Do not
 reinterpret incompatible values under a new producer. Successful refetch replaces
-the capture and position; failed refetch publishes nothing. Recipe state is not
-reset or forced through reconciliation. Authors decide how to adapt their methods.
+the capture and position; failed refetch publishes nothing. Recipe state remains
+unchanged. Authors decide how to adapt their methods.
 
 ## Verification
 
@@ -686,8 +685,8 @@ current payloads and the latest fetch summary remain, with no acquisition histor
 Test consistent reads within an invocation and fresh reads in the next, instance
 isolation, empty versus unfetched captures, and producer replacement.
 
-Prove generic guest enumeration/read and agent payload inspection without pending
-selection; compose reads across plugins. Cache clearing must leave accepted facts,
+Prove generic guest enumeration/read and agent payload inspection of current
+evidence; compose reads across plugins. Cache clearing must leave accepted facts,
 recipe state and citations unchanged. Missing cache data never implies deletion.
 
 Create open and closed recipes with distinct state types and initial values.
