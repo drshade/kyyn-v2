@@ -34,10 +34,11 @@ main = do
     case runPureEff (runDhallHandling (encodeValue probability (String value))) of
       Left _ -> pure ()
       Right _ -> fail "Invalid probability wire encoded"
-  forM_ [ProbabilityType, OptionalType ProbabilityType, ListType ProbabilityType] $ \datatype -> do
+  forM_ [UnitType, OptionalType UnitType, ListType UnitType,
+      ProbabilityType, OptionalType ProbabilityType, ListType ProbabilityType] $ \datatype -> do
     persisted <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue dataTypeShape (dataTypeValue datatype))))
     restored <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue dataTypeShape persisted)))
-    unless (parseEither parseDataType restored == Right datatype) (fail "Probability descriptor changed")
+    unless (parseEither parseDataType restored == Right datatype) (fail "Type descriptor changed")
   probabilityContract <- either (fail . show) pure (checkContract ProbabilityType (SchemaMetadata [] [] []))
   integerContract <- either (fail . show) pure (checkContract IntegerType (SchemaMetadata [] [] []))
   unless (contractId probabilityContract /= contractId integerContract) (fail "Probability and Integer identities collided")
@@ -45,7 +46,9 @@ main = do
         [Constructor "Query.All" [], Constructor "Query.Named" [(Just "name", StringType)]]
       fact = Algebraic "Kyyn.Types.Fact.Fact" [StringType]
         [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,StringType)]]
-  forM_ [(StringType, String "München 🦋"), (IntegerType, String "9007199254740993123456789"),
+  forM_ [(UnitType, object []), (ListType UnitType, toJSON [object [], object []]),
+      (OptionalType UnitType, object ["tag" .= ("Some" :: Text), "value" .= object []]),
+      (StringType, String "München 🦋"), (IntegerType, String "9007199254740993123456789"),
       (BoolType, Bool True), (ListType IntegerType, toJSON (["1", "-2"] :: [Text])),
       (ListType StringType, toJSON ([] :: [Text])),
       (OptionalType StringType, object ["tag" .= ("None" :: Text)]),

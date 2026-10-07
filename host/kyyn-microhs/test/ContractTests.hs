@@ -25,7 +25,7 @@ contractTests = do
   case checkRootLayout unregistered of
     Left [Diagnostic _ "schema.incoherent" message _] | "missing collection declaration" `isInfixOf` Text.unpack message -> pure ()
     result -> fail ("Unregistered persistent collection accepted: " ++ show result)
-  forM_ [StringType, IntegerType, BoolType, ListType payload, OptionalType payload,
+  forM_ [UnitType, StringType, IntegerType, BoolType, ListType payload, OptionalType payload,
       Algebraic "Model.Choice" [] [Constructor "Model.Yes" [], Constructor "Model.No" []]] $ \valueType -> do
     valueContract <- either (fail . show) pure (checkContract valueType (SchemaMetadata [] [] []))
     unless (Right (contractShape valueContract) == shapeOf valueType) (fail "Value shape changed")

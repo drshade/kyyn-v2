@@ -29,6 +29,8 @@ generateWith probability moduleName root = do
     definition name TextType = pure [name ++ " = textCodec"]
     definition name IntegerType = pure [name ++ " = integerCodec"]
     definition name BoolType = pure [name ++ " = boolCodec"]
+    definition name UnitType = pure
+      [name ++ " = Codec (\\() -> record []) (\\value -> fields [] value >> Right ())"]
     definition name ProbabilityType = pure [name ++ " = " ++ probability]
     definition name (ListType t) = pure [name ++ " = listCodec " ++ ref t]
     definition name (OptionalType t) = pure [name ++ " = optionalCodec " ++ ref t]

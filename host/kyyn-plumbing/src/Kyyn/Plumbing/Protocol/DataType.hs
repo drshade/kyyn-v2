@@ -23,6 +23,7 @@ dataTypeValue root = toJSON (map node types)
     node TextType = tagged "PackedText" Nothing
     node IntegerType = tagged "Integer" Nothing
     node BoolType = tagged "Bool" Nothing
+    node UnitType = node (Algebraic "()" [] [])
     node ProbabilityType = node (Algebraic "Agentic.Questions.Probability" [] [])
     node (ListType item) = tagged "List" (Just (reference item))
     node (OptionalType item) = tagged "Optional" (Just (reference item))
@@ -59,6 +60,7 @@ parseDataType input = do
             <*> (decl .: "constructors" >>= traverse (constructor previous)))
         _ -> fail "Unknown type declaration"
     declared "Agentic.Questions.Probability" [] [] = ProbabilityType
+    declared "()" [] [] = UnitType
     declared name args constructors = Algebraic name args constructors
     constructor previous = withObject "Constructor" $ \record -> Constructor
       <$> record .: "name" <*> (record .: "fields" >>= traverse (withObject "Field" (\field ->
