@@ -203,7 +203,7 @@ nativeTests temporary toolchain configType payloadType program = do
       noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
         (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
-  putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
+  putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."
 
 noNetwork :: Eff (HttpTransport : SecretStore : Waiting : es) a -> Eff es a
 noNetwork = interpret (\_ _ -> error "Unexpected waiting") . interpret (\_ _ -> error "Unexpected secret access") . interpret (\_ _ -> error "Unexpected HTTP")
