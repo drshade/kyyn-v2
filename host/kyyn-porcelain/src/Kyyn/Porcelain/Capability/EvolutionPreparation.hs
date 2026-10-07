@@ -16,7 +16,7 @@ import Kyyn.Porcelain.Capability.RootStore (rootLocation)
 prepareEvolution :: (EvolutionStore :> es, RootOpening :> es)
   => EvolutionWorkspace -> Eff es (Either [Diagnostic] PreparedEvolution)
 prepareEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) = runExceptT $ do
-  snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _) beforeCopy target _ _) <- ExceptT (readWorkspace location)
+  snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _ _) beforeCopy target _ _) <- ExceptT (readWorkspace location)
   rootPath <- either (throwE . pure . errorDiagnostic "evolution.capture") pure (rootLocation kb)
   before@(SourceRoot contract _ (RootDefinition _ _ _ _ _ sources) _) <-
     ExceptT (loadSourceAt repository revision (Subtree rootPath))

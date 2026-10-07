@@ -163,9 +163,12 @@ main = do
         (Invocation (Selection "nested/kb" Nothing (Just "/runtime")) Json (Guest (Just identity) request))
       refuses (["guest"] ++ args ++ ["--evolution","../invalid"])
   succeeds ["evolution","new","September"]
-    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing)))
+    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing Nothing)))
   succeeds ["evolution","new","September","--before",replicate 40 'a']
-    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") (Just revision))))
+    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") (Just revision) Nothing)))
+  succeeds ["evolution","new","September","--recipe","mail"]
+    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing (Just (RecipeId "mail")))))
+  refuses ["evolution","new","September","--recipe","../mail"]
   forM_ [("show",ShowEvolution),("check",CheckEvolution),
     ("ready",ReadyEvolution),("draft",DraftEvolution),("accept",AcceptEvolution),("recover",RecoverEvolution)] $
     \(verb,constructor) -> do

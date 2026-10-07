@@ -298,8 +298,8 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
       either refusal (const (stateResult identity Workspace.Ready)) <$> Store.markReady (workspace identity)
     Cli.DraftEvolution identity -> finish $ runMetadata host $
       either refusal (const (stateResult identity Workspace.Draft)) <$> Store.markDraft (workspace identity)
-    Cli.NewEvolution name before -> withRuntime host $ \toolchain sdk -> finish $ runAuthoring host toolchain sdk $ do
-      created <- Authoring.createEvolution kb name (maybe revision id before)
+    Cli.NewEvolution name before recipe -> withRuntime host $ \toolchain sdk -> finish $ runAuthoring host toolchain sdk $ do
+      created <- Authoring.createEvolution kb name (maybe revision id before) (maybe Workspace.AdHoc Workspace.RecipeBased recipe)
       pure $ case created of
         Left diagnostics -> refusal diagnostics
         Right value -> case Store.workspaceLocation value of

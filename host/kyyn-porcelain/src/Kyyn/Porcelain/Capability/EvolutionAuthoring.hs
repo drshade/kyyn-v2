@@ -9,9 +9,10 @@ import Kyyn.Domain.FactProposal (FactProposal)
 import Kyyn.Domain.Evolution (EvolutionName, EvolutionWorkspace, CapturedEvolution)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
+import Kyyn.Domain.Workspace (EvolutionKind)
 
 data EvolutionAuthoring :: Effect where
-  CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision
+  CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionKind
     -> EvolutionAuthoring m (Either [Diagnostic] EvolutionWorkspace)
   CreateFactProposal :: KnowledgeBase -> EvolutionName -> GitRevision -> FactProposal
     -> EvolutionAuthoring m (Either [Diagnostic] EvolutionWorkspace)
@@ -20,9 +21,9 @@ data EvolutionAuthoring :: Effect where
 
 type instance DispatchOf EvolutionAuthoring = Dynamic
 
-createEvolution :: EvolutionAuthoring :> es => KnowledgeBase -> EvolutionName -> GitRevision
+createEvolution :: EvolutionAuthoring :> es => KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionKind
   -> Eff es (Either [Diagnostic] EvolutionWorkspace)
-createEvolution kb name = send . CreateEvolution kb name
+createEvolution kb name revision = send . CreateEvolution kb name revision
 
 createFactProposal :: EvolutionAuthoring :> es => KnowledgeBase -> EvolutionName -> GitRevision
   -> FactProposal -> Eff es (Either [Diagnostic] EvolutionWorkspace)

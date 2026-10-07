@@ -1,5 +1,6 @@
 // Staged/installed CLI: typed recipe creation, migration, identity and removal.
-// Checks candidate/archive reload, acceptance and per-recipe isolation. No flows/providers.
+// Checks candidate/archive reload, acceptance and per-recipe isolation, including
+// authored recipe-based state edits. No closed flows/providers.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -30,6 +31,7 @@ evolution = ${body}
 `);
 }
 function accept(draft) {
+  console.log(`Checking and accepting ${draft.id}`);
   cli(['evolution', 'check', draft.id]);
   const report = cli(['evolution', 'show', draft.id]);
   cli(['evolution', 'ready', draft.id]);
@@ -55,6 +57,20 @@ import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV1.State as State`,
   assert.match(fs.readFileSync(statePath('mail'), 'utf8'), /mail-1/);
   assert.match(fs.readFileSync(statePath('stateless'), 'utf8'), /\{=\}/);
   assert.equal(cli(['root', 'recipe', 'list']).result.recipes.length, 3);
+
+  const review = cli(['evolution', 'new', 'review-mail', '--recipe', 'mail']).result;
+  assert.match(JSON.stringify(cli(['guest', 'module', 'show', 'Kyyn.Workspace.Evolution', '--evolution', review.id])), /recipeEdit/);
+  fs.writeFileSync(path.join(review.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
+import Kyyn.Workspace.Evolution
+import qualified ReviewV1
+evolution :: RecipeEvolution Root RecipeState
+evolution = recipeEdit (Rationale "Reviewed another message" []) $
+  modifyRecipeState (\\(ReviewV1.State seen) -> ReviewV1.State (seen ++ ["mail-2"]))
+`);
+  assert.match(JSON.stringify(accept(review)), /mail-2/);
+  assert.match(fs.readFileSync(statePath('mail'), 'utf8'), /mail-2/);
+  assert.equal(fs.readFileSync(statePath('calendar'), 'utf8'), calendar);
 
   const migration = cli(['evolution', 'new', 'migrate-mail']).result;
   fs.writeFileSync(path.join(migration.path, 'target/src/ReviewV2.hs'),

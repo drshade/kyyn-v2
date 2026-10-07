@@ -1,11 +1,13 @@
 -- Typed recipe state persistence: hermetic Dhall, per-ID isolation, unit state,
--- rejected missing/extra/malformed files and contract mismatch. No publication.
+-- rejected missing/extra/malformed files, contract mismatch and selected-pair
+-- decoding that preserves unrelated recipes. No publication.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
 import Control.Monad (unless)
-import Data.Aeson (object, (.=), Value(..))
+import Data.Aeson (object, (.=), Value(..), encode)
 import qualified Data.ByteString.Char8 as Bytes
+import qualified Data.ByteString.Lazy as Lazy
 import Effectful (runPureEff)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
@@ -13,12 +15,14 @@ import Kyyn.Domain.Curation (RecipeId(..))
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Value (CheckedValue(..))
-import Kyyn.Domain.Recipe (StoredRecipe(..), recipeDefinition)
+import Kyyn.Domain.Recipe (StoredRecipe(..), recipeDefinition, proposedRecipe, KnowledgeBase(..), ProposedRecipe(..))
+import Kyyn.Domain.EvolutionReport (EvolutionObservation(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Porcelain.Protocol.RecipePersistence
+import Kyyn.Plumbing.Protocol.RecipeEvolution (decodeRecipeEvolutionReply)
 
 main :: IO ()
 main = do
@@ -75,6 +79,23 @@ main = do
   restoredSnapshots <- right (run (decodeRecipeContracts snapshots))
   assert "Candidate contract snapshots lost their recipe identity"
     (restoredSnapshots == [(ident,name,contract) | (Fact ident _,name,contract) <- resolved])
+  let pair = object ["facts" .= object [], "state" .= object ["seen" .= (["three"] :: [String])]]
+      reply after = Lazy.toStrict (encode (object ["tag" .= ("Succeeded" :: String), "value" .= object
+        ["after" .= after, "steps" .= ([] :: [Value]), "curation" .= object ["tag" .= ("None" :: String)]]]))
+      expected = [Fact ident (case proposedRecipe recipe of
+        ProposedRecipe method name identity stateValue -> ProposedRecipe method name identity
+          (if ident == FactId "mail" then object ["seen" .= (["three"] :: [String])] else stateValue)) |
+        Fact ident recipe <- stored]
+  decoded <- right (decodeRecipeEvolutionReply first stored (reply pair)) >>= right
+  assert "Recipe pair decoding changed another recipe or its definition"
+    (decoded == EvolutionObservation (KnowledgeBase (object []) expected) [] Nothing)
+  assert "Missing selected recipe was accepted"
+    (isFailure (decodeRecipeEvolutionReply (RecipeId "missing") stored (reply pair)))
+  assert "Duplicate selected recipe was accepted"
+    (isFailure (decodeRecipeEvolutionReply first (stored ++ stored) (reply pair)))
+  assert "Recipe pair accepted unrelated fields"
+    (isFailure (decodeRecipeEvolutionReply first stored (reply (object
+      ["facts" .= object [], "state" .= object [], "recipes" .= ([] :: [Value])]))))
   putStrLn "Typed per-recipe Dhall persistence passed."
 
 path :: String -> RelativePath

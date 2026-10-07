@@ -75,7 +75,7 @@ data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe Ev
   | ExecuteTool MethodName String deriving (Eq, Show)
 
 data EvolutionCommand
-  = NewEvolution EvolutionName (Maybe GitRevision)
+  = NewEvolution EvolutionName (Maybe GitRevision) (Maybe RecipeId)
   | ListEvolutions EvolutionFilter
   | ShowEvolution EvolutionId
   | CheckEvolution EvolutionId
@@ -103,7 +103,7 @@ progressMessage request = case request of
     ("Checking the root and fetching " ++ pluginNameText plugin ++ "/" ++ coerce connector ++ "...")
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
-  Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
+  Evolution (NewEvolution _ _ _) -> Just "Preparing an evolution workspace..."
   Evolution (CheckEvolution selectedId) -> Just ("Evaluating and checking evolution " ++ evolutionIdName selectedId ++ "...")
   Evolution (AcceptEvolution selectedId) -> Just ("Checking and accepting evolution " ++ evolutionIdName selectedId ++ "...")
   _ -> Nothing
@@ -271,7 +271,9 @@ evolutionParser = hsubparser
   (group "new" "Create a draft workspace from the selected head or explicit base"
       (NewEvolution <$> (EvolutionName <$> argument nonempty (metavar "NAME"))
         <*> optional (option (eitherReader gitRevision)
-          (long "before" <> metavar "REVISION" <> help "Full Before commit ID (default: selected head)")))
+          (long "before" <> metavar "REVISION" <> help "Full Before commit ID (default: selected head)"))
+        <*> optional (option (eitherReader recipeId)
+          (long "recipe" <> metavar "RECIPE" <> help "Evolve facts and the selected recipe's state")))
   <> group "list" "List evolution workspaces"
       (ListEvolutions <$> flag AllEvolutions ExcludeDrafts
         (long "exclude-drafts" <> help "Omit work-in-progress drafts"))

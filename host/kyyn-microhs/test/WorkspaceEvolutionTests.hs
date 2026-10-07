@@ -1,5 +1,6 @@
 -- Actual EvolutionExecution with MicroHs/RootOpening/Dhall and recorded Git input:
--- schema-changing chain, source closure, materialization/reopen and context.
+-- schema-changing chain, recipe fact/state pair edits, source closure,
+-- materialization/reopen and context.
 -- Does not save candidates or publish proposals.
 
 {-# LANGUAGE GADTs, OverloadedStrings #-}
@@ -7,7 +8,7 @@ module Main (main) where
 
 import qualified Kyyn.Domain.Recipe as KB
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
+import Kyyn.Domain.Curation (emptyCurationRegister, RecipeId(..))
 import Control.Monad (unless)
 import Data.Aeson (object, (.=))
 import qualified Data.ByteString as Bytes
@@ -61,7 +62,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       tree = either error id . fileTree
   sdk <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
-     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Recipe/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
+     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Evolution/Proposal.hs","Kyyn/Recipe.hs","Kyyn/Recipe/Edit.hs","Kyyn/Recipe/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Evolution","Validation","SchemaMetadata"]] ++
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]]) >>= right . fileTree
@@ -106,7 +107,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
   identifier <- right (evolutionId "abc")
   let repository = Repository scope
       kb = KnowledgeBase repository (Subtree (path "nested"))
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft)
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft AdHoc)
         before target (tree [recipeEntry]) (tree [])
       context = EvolutionContext kb identifier (Before revision beforeContract) snapshot
       acceptedTree = tree (files beforeCode ++ files factFiles)
@@ -129,7 +130,32 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
           "window" .= object ["tag" .= ("Some" :: String),"value" .= ("October" :: String)]]
         && other == Fact (FactId "other") recipe) (fail ("Recipe migration changed the wrong state: " ++ show recipes))
     _ -> fail "Recipe migration changed membership"
-  putStrLn "Captured workspace evaluated through real schema inspection, MicroHs and checked reports; exact After materialized and reopened."
+  let recipeSource = utf8 (unlines
+        ["{-# LANGUAGE OverloadedStrings #-}", "module Evolution where", "import Kyyn.Workspace.Evolution",
+         "import Kyyn.Schema (FactId(..))", "import qualified Kyyn.Workspace.Before as Before",
+         "import qualified SchemaV1", "import qualified ReviewV1",
+         "evolution :: RecipeEvolution Root RecipeState",
+         "evolution = recipeEdit (Rationale \"Review the task\" []) $ do",
+         "  editFacts (within Before.todos (update (FactId \"todo-001\") (put (SchemaV1.Todo \"Reviewed\"))))",
+         "  modifyRecipeState (\\(ReviewV1.State ids) -> ReviewV1.State (ids ++ [\"mail-2\"]))"])
+      recipeSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review" "" Draft (RecipeBased (RecipeId "mail")))
+        before beforeCode (tree [(path "Evolution.hs",recipeSource)]) (tree [])
+      recipeContext = EvolutionContext kb identifier (Before revision beforeContract) recipeSnapshot
+  recipeResult <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
+    . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
+      source@(SourceRoot selected codeFiles _ closure) <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
+      evaluateEvolution (CapturedEvolution recipeContext (Root selected factFiles codeFiles emptyCurationRegister initialRecipes) closure source)
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ editedFacts) editedRecipes) (EvolutionReport _ recipeReports _) <- right recipeResult >>= right
+  unless (editedFacts == object ["todos" .= [object ["id" .= ("todo-001" :: String),
+      "value" .= object ["title" .= ("Reviewed" :: String)]]]] &&
+      case editedRecipes of
+        [Fact (FactId "mail") (KB.StoredRecipe _ _ _ (CheckedValue _ next)),other] ->
+          next == object ["reviewed" .= (["mail-1","mail-2"] :: [String])] && other == last initialRecipes &&
+          case recipeReports of [StepReport _ changes] -> length changes == 2; _ -> False
+        _ -> False)
+    (fail ("Recipe fact/state pair did not preserve its boundary: " ++ show recipeResult))
+  putStrLn "Captured schema migration and recipe fact/state edits passed through MicroHs and checked reports."
 
 gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
