@@ -65,12 +65,13 @@ main = do
     ["root","recipe","describe","syncTodos","--evolution","abc123"]] refuses
   succeeds ["root","recipe","show","syncTodos"]
     (Invocation selected Human (Root (RootRecipe (ShowRecipe (RecipeId "syncTodos")))))
-  succeeds ["root","recipe","run","syncTodos","local-file","sales","local-file","sales"]
-    (Invocation selected Human (Root (RootRecipe (RunRecipe (RecipeId "syncTodos") [(localFile,sales),(localFile,sales)]))))
-  forM_ [["root","recipe","run","syncTodos"], ["root","recipe","run","syncTodos","local-file"],
+  succeeds ["root","recipe","run","syncTodos"]
+    (Invocation selected Human (Root (RootRecipe (RunRecipe (RecipeId "syncTodos") Nothing))))
+  succeeds ["root","recipe","run","syncTodos","--input","\"October\""]
+    (Invocation selected Human (Root (RootRecipe (RunRecipe (RecipeId "syncTodos") (Just "\"October\"")))))
+  forM_ [["root","recipe","run","syncTodos","--input"], ["root","recipe","run","syncTodos","local-file"],
     ["root","recipe","run","syncTodos","local-file","sales","local-file"]] refuses
-  succeeds ["root","recipe","pending","list","syncTodos","local-file","sales"]
-    (Invocation selected Human (Root (RootRecipe (ListPendingEvidence (RecipeId "syncTodos") localFile sales))))
+  refuses ["root","recipe","pending","list","syncTodos","local-file","sales"]
   forM_ [["root","recipe","show","bad-name"], ["root","recipe","pending","list","syncTodos"],
     ["root","recipe","list","--evolution","abc123"]] refuses
   succeeds ["root","tool","list"] (Invocation selected Human (Root (RootTool (ListTools Nothing))))

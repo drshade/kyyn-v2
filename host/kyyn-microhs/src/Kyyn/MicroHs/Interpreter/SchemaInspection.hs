@@ -19,6 +19,7 @@ import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Plugin (QualifiedTypeName(..), PluginEntryKind, PluginSignature)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectRecipeSignature, inspectionSettings)
+import qualified Kyyn.MicroHs.Inspection as Inspection
 import Kyyn.MicroHs.Interpreter.InspectionCache (InspectionCache, cachedInspection)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature)
@@ -67,6 +68,15 @@ runSchemaInspectionIO toolchain cache = interpret $ \_ -> \case
       Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.compiler-rejected" message])
       Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "recipe.signature-invalid" message])
       Right (signature,_) -> pure (Right signature)
+  InspectRecipeExports source selected -> withTemporaryScope $ \scope -> do
+    forM_ (files source) $ \(path,bytes) -> writeBytes scope path bytes
+    let GuestToolchain compiler = toolchain
+    result <- liftIO (Inspection.inspectRecipeExports (scopePath compiler) [scopePath scope] selected)
+    case result of
+      Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
+      Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.compiler-rejected" message])
+      Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "recipe.signature-invalid" message])
+      Right (signatures,_) -> pure (Right signatures)
 
 inspectFunction :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :> es)
   => GuestToolchain -> Maybe InspectionCache -> [(RelativePath,Bytes.ByteString)] -> PluginEntryKind -> String

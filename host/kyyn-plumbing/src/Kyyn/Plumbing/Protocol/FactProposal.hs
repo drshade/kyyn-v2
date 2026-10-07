@@ -15,90 +15,86 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.FactProposal
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path (relativePath)
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
-import Kyyn.Plumbing.Protocol.Curation (curationDeclarationShape, curationDeclarationValue, parseCuration)
 import Kyyn.Plumbing.Protocol.FactEdits (factEditType)
 
-proposalShape :: RootContract -> Either String Shape
-proposalShape contract = do
-  unless (not (null (collectionContracts (rootSchema contract)))) (Left "Fact proposals require a domain fact collection")
-  edits <- shapeOf (ListType (factEditType contract))
-  pure (Record [("steps",List (Record [("rationale",rationale),("edits",edits)])),("curation",curationDeclarationShape)])
+proposalShape :: RootContract -> CheckedContract -> Either String Shape
+proposalShape contract state = do
+  edits <- if null (collectionContracts (rootSchema contract)) then pure (List (Union []))
+    else shapeOf (ListType (factEditType contract))
+  pure (Record [("steps",List (Record [("rationale",rationale),("edits",edits)])),("state",contractShape state)])
   where
     text = Scalar TextScalar
     rationale = Record [("explanation",text),("evidence",List (Record
       [("producer",text),("connector",text),("source",text),("references",List text)]))]
 
 proposalValue :: FactProposal -> Value
-proposalValue (FactProposal steps curation) = object
-  ["steps" .= map step steps,"curation" .= curationDeclarationValue curation]
+proposalValue (FactProposal steps (CheckedValue _ state)) = object
+  ["steps" .= map step steps,"state" .= state]
   where
     step (FactProposalStep (Rationale explanation evidence) edits) = object
       ["rationale" .= object ["explanation" .= explanation,"evidence" .= map citation evidence],"edits" .= edits]
     citation (EvidenceRef producer connector source references) = object
       ["producer" .= producer,"connector" .= connector,"source" .= source,"references" .= references]
 
-parseProposal :: Value -> Parser FactProposal
-parseProposal = withObject "Fact proposal" $ \fields -> do
+parseProposal :: CheckedContract -> Value -> Parser FactProposal
+parseProposal state = withObject "Fact proposal" $ \fields -> do
   steps <- fields .: "steps" >>= traverse (withObject "Proposed step" $ \step -> do
     why <- step .: "rationale" >>= withObject "Rationale" (\rationale ->
       Rationale <$> rationale .: "explanation" <*> (rationale .: "evidence" >>= traverse
         (withObject "Evidence reference" $ \evidence -> EvidenceRef
           <$> evidence .: "producer" <*> evidence .: "connector" <*> evidence .: "source" <*> evidence .: "references")))
     FactProposalStep why <$> step .: "edits")
-  value <- fields .: "curation" :: Parser Value
-  declaration <- parseCuration (object ["tag" .= ("Some" :: String),"value" .= value])
-  maybe (fail "Proposal must declare curation") (pure . FactProposal steps) declaration
+  FactProposal steps . CheckedValue (contractId state) <$> fields .: "state"
 
-proposalChange :: DhallHandling :> es => RootContract -> FactProposal -> Eff es (Either [Diagnostic] FileTree)
-proposalChange contract proposal = runExceptT $ do
-  shape <- checked (proposalShape contract)
+proposalChange :: DhallHandling :> es => RootContract -> CheckedContract -> FactProposal -> Eff es (Either [Diagnostic] FileTree)
+proposalChange contract state proposal@(FactProposal _ (CheckedValue identity _)) = runExceptT $ do
+  unless (identity == contractId state) (throwE [errorDiagnostic "proposal.state-contract" "Proposal state differs from the selected recipe's contract"])
+  shape <- checked (proposalShape contract state)
   encoded <- ExceptT (encodeValue shape (proposalValue proposal))
   path <- checked (relativePath "proposal.dhall")
   entry <- checked (relativePath "Evolution.hs")
   checked (fileTree [(path,Text.encodeUtf8 encoded),(entry,Text.encodeUtf8 (Text.pack (unlines
     ["module Evolution where", "import Kyyn.Workspace.Evolution",
-     "import qualified " ++ definingModule (case rootType (rootSchema contract) of Algebraic name _ _ -> name; _ -> error "Checked root is not algebraic"),
      "import KyynFrozenProposal (frozen)",
-     "evolution :: Evolution (KnowledgeBase " ++ root ++ ") (KnowledgeBase " ++ root ++ ")",
+     "evolution :: RecipeEvolution Root RecipeState",
      "evolution = frozen"])))])
-  where root = haskellType (rootType (rootSchema contract))
 
 -- | Decode captured Dhall inputs before compiling their ordinary pure entry.
-lowerProposal :: DhallHandling :> es => RootContract -> RootContract -> FileTree -> Eff es (Either [Diagnostic] FileTree)
-lowerProposal before after change = runExceptT $ do
+lowerProposal :: DhallHandling :> es => RootContract -> RootContract -> Maybe CheckedContract -> FileTree -> Eff es (Either [Diagnostic] FileTree)
+lowerProposal before after selectedState change = runExceptT $ do
   path <- checked (relativePath "proposal.dhall")
   case lookup path (files change) of
     Nothing -> pure change
     Just bytes -> do
+      state <- checked (maybe (Left "Frozen proposals require a recipe-based workspace") Right selectedState)
       unless (contractId (rootSchema before) == contractId (rootSchema after))
         (throwE [errorDiagnostic "proposal.schema-changed" "Fact proposals require the same Before and After schema and metadata"])
-      shape <- checked (proposalShape before)
+      shape <- checked (proposalShape before state)
       source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
       value <- ExceptT (decodeValue shape source)
       generated <- checked (relativePath "KyynFrozenProposal.hs")
       let json = Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))
           moduleSource = unlines
-            ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where", "import Kyyn.Evolution.Proposal (ProposedCuration)",
-             "import Kyyn.Workspace.FactEdits (RootEdit, proposalEvolution)", "import KyynFactEditCodec (rootCodec)",
+            ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where",
+             "import Kyyn.Workspace.Evolution", "import Kyyn.Workspace.FactEdits (RootEdit, applyRootEdit)",
+             "import qualified KyynFactEditCodec", "import qualified KyynRecipeStateCodec",
              "import Kyyn.Evolution.Internal (Evolution(..))",
-             "import Kyyn.Types.KnowledgeBase (KnowledgeBase)",
              "import Kyyn.Types.Evolution (EvolutionFailure(..))",
              "import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))",
-             "import qualified " ++ definingModule (case rootType (rootSchema before) of
-               Algebraic name _ _ -> name; _ -> error "Checked root is not algebraic"),
-             "import Kyyn.Runtime.Json", "import qualified Data.Text as Text", "import Kyyn.Runtime.Proposal (proposalCodec)",
+             "import Kyyn.Runtime.Json", "import qualified Data.Text as Text", "import Kyyn.Runtime.Proposal (recipeProposalCodec)",
              "-- | Apply the captured proposal without invoking its recipe again.",
-             "frozen :: Evolution (KnowledgeBase " ++ root ++ ") (KnowledgeBase " ++ root ++ ")",
+             "frozen :: RecipeEvolution Root RecipeState",
              "frozen = case proposal of",
-             "  Right value -> proposalEvolution value",
+             "  Right (RecipeProposal steps state) -> foldr ((>=>) . step) (recipeEdit (Rationale \"Update recipe state\" []) (putRecipeState state)) steps",
              "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing]))",
-             "proposal :: Either String (ProposedCuration RootEdit)",
-             "proposal = parseValue " ++ show json ++ " >>= decodeWith (proposalCodec rootCodec)"]
+             "step (ProposedStep why operations) = recipeEdit why (editFacts (mapM_ applyRootEdit operations))",
+             "proposal :: Either String (RecipeProposal RootEdit RecipeState)",
+             "proposal = parseValue " ++ show json ++ " >>= decodeWith (recipeProposalCodec KyynFactEditCodec.rootCodec KyynRecipeStateCodec.rootCodec)"]
       checked (fileTree ((generated,Text.encodeUtf8 (Text.pack moduleSource)) : filter ((/= path) . fst) (files change)))
-  where root = haskellType (rootType (rootSchema before))
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "proposal.invalid") pure

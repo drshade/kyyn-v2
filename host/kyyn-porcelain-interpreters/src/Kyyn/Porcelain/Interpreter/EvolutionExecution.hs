@@ -62,9 +62,10 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
         [recipe] -> pure (Just (ident,recipe))
         _ -> reject "recipe.unknown" "The selected recipe must exist in Before"
   CheckedValue _ input <- proposed (loadRootValueForChecking source)
-  (stateBindings,stateClosure,importedContracts) <- proposed (prepareRecipeTypes sdk before targetSources change)
+  (stateBindings,stateClosure,importedContracts,_) <- proposed (prepareRecipeTypes sdk before targetSource change)
   old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` (closure ++ stateClosure)])
-  lowered <- proposed (lowerProposal expected after change)
+  lowered <- proposed (lowerProposal expected after
+    (fmap (\(_,Value.StoredRecipe _ _ state _) -> state) selectedRecipe) change)
   combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,lowered,stateBindings,sdk])
   prepared <- checked "evolution.prepare" (case selectedRecipe of
     Nothing -> evolutionSources expected after combined

@@ -39,6 +39,7 @@ cabal test guest-catalogue --test-show-details=direct
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"
 node --check tools/test-initialization.mjs
 node --check tools/test-recipe-state.mjs
+node --check tools/test-recipe-state-run.mjs
 node --check tools/test-plugin-install.mjs
 cabal test processes --test-show-details=direct
 cabal test frames --test-show-details=direct

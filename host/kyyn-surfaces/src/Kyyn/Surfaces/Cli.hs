@@ -68,9 +68,9 @@ data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe Reci
 data SchemaCommand = ListSchemas (Maybe EvolutionId) | ShowSchema String (Maybe EvolutionId) deriving (Eq, Show)
 data CollectionCommand = ListCollections (Maybe EvolutionId) | ShowCollection String (Maybe EvolutionId) deriving (Eq, Show)
 data FactCommand = ListFacts String | ShowFact String String deriving (Eq, Show)
-data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName
+data RecipeCommand = ListRecipes | ShowRecipe RecipeId
   | DescribeRecipe RecipeId DescriptionFormat
-  | RunRecipe RecipeId [(PluginName,ConnectorName)] deriving (Eq, Show)
+  | RunRecipe RecipeId (Maybe String) deriving (Eq, Show)
 data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
   | ExecuteTool MethodName String deriving (Eq, Show)
 
@@ -246,10 +246,7 @@ recipeParser = hsubparser
     <*> (flag' Dot (long "dot" <> help "Render Graphviz DOT")
       <|> flag' Mermaid (long "mermaid" <> help "Render Mermaid") <|> pure Tree))
   <> group "run" "Run a closed recipe and save a draft evolution" (RunRecipe <$> recipe
-    <*> some ((,) <$> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))
-  <> group "pending" "Inspect net unacknowledged evidence changes" (hsubparser
-    (group "list" "List pending evidence for a recipe and connector instance"
-      (ListPendingEvidence <$> recipe <*> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))))
+    <*> optional (strOption (long "input" <> metavar "DHALL" <> help "Typed invocation arguments (may be omitted for unit input)"))))
   where
     recipe = argument (eitherReader recipeId) (metavar "RECIPE")
 

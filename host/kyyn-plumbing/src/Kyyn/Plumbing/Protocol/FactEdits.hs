@@ -22,35 +22,37 @@ factEditType contract = Algebraic "Kyyn.Workspace.FactEdits.RootEdit" []
     fact payload = Algebraic "Kyyn.Types.Fact.Fact" [payload]
       [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,payload)]]
 
--- | Bind the proposal interpreter to one already checked root contract.
--- The ordinary workspace Evolution module supplies the recorded-step constructor.
+-- | Bind fact operations to one already checked domain root.
 factEditBindings :: RootContract -> Either String FileTree
 factEditBindings contract = do
   let declarations = collectionContracts (rootSchema contract)
       names = [constructor field | CollectionContract _ field _ _ <- declarations]
-  if null declarations then Left "Fact-edit proposals need a domain fact collection"
-    else if length names /= length (nub names) then Left "Fact-edit constructor names collide"
+  if length names /= length (nub names) then Left "Fact-edit constructor names collide"
     else pure ()
   bindingPath <- relativePath "Kyyn/Workspace/FactEdits.hs"
   codecPath <- relativePath "KyynFactEditCodec.hs"
-  codecs <- generateCodecs "KyynFactEditCodec" (factEditType contract)
+  codecs <- if null declarations then pure (unlines
+    ["module KyynFactEditCodec where", "import Kyyn.Runtime.Json", "import Kyyn.Workspace.FactEdits (RootEdit)",
+     "rootCodec :: Codec RootEdit", "rootCodec = Codec (\\value -> value `seq` error \"Uninhabited RootEdit\") (\\_ -> Left \"This root has no fact collections\")"])
+    else generateCodecs "KyynFactEditCodec" (factEditType contract)
   let root = haskellType (rootType (rootSchema contract))
       source = unlines $
-        ["module Kyyn.Workspace.FactEdits (RootEdit(..), proposalEvolution) where",
+        ["{-# LANGUAGE EmptyDataDecls #-}",
+         "module Kyyn.Workspace.FactEdits (RootEdit(..), applyRootEdit) where",
          "import qualified Kyyn.Evolution.Proposal as Proposal",
-         "import Kyyn.Workspace.Evolution (Evolution, KnowledgeBase, Edit, identityEvolution, (>=>), withCuration, edit, within)",
-         "import qualified Kyyn.Workspace.After as Collections"] ++
+         "import Kyyn.Edit (Edit, within)",
+         "import qualified Kyyn.Edit.Internal as Internal", "import qualified Kyyn.Optics as Optics"] ++
         ["import qualified " ++ name | name <- nub
           (typeModules (rootType (rootSchema contract)))] ++
-        ["data RootEdit = " ++ intercalate " | "
+        ["data RootEdit" ++ (if null declarations then "" else " = " ++ intercalate " | "
            [constructor field ++ " (Proposal.FactEdit " ++ haskellType payload ++ ")" |
-             CollectionContract _ field payload _ <- declarations],
-         "applyRootEdit :: RootEdit -> Edit (KnowledgeBase " ++ root ++ ") ()"] ++
-        ["applyRootEdit (" ++ constructor field ++ " operation) = within Collections." ++ field ++ " (Proposal.applyFactEdit operation)" |
-           CollectionContract _ field _ _ <- declarations] ++
-        ["proposalEvolution :: Proposal.ProposedCuration RootEdit -> Evolution (KnowledgeBase " ++ root ++ ") (KnowledgeBase " ++ root ++ ")",
-         "proposalEvolution (Proposal.ProposedCuration steps curation) = withCuration curation (foldr ((>=>) . step) identityEvolution steps)",
-         "  where step (Proposal.ProposedStep why operations) = edit why (mapM_ applyRootEdit operations)"]
+             CollectionContract _ field payload _ <- declarations]),
+         "applyRootEdit :: RootEdit -> Edit " ++ root ++ " ()"] ++
+        ["applyRootEdit value = value `seq` error \"Uninhabited RootEdit\"" | null declarations] ++
+        ["applyRootEdit (" ++ constructor field ++ " operation) = within (Internal.Collection " ++ show name ++
+          " (Optics.lens " ++ definingModule root ++ "." ++ field ++ " (\\root value -> root { " ++ definingModule root ++ "." ++ field ++
+          " = value }))) (Proposal.applyFactEdit operation)" |
+           CollectionContract name field _ _ <- declarations]
   fileTree [(bindingPath,utf8 source),(codecPath,utf8 codecs)]
   where utf8 = Text.encodeUtf8 . Text.pack
 

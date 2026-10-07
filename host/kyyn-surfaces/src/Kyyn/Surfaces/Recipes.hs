@@ -1,14 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Surfaces.Recipes (recipesResult, recipeResult, recipeDescriptionResult, pendingResult, recipeRunResult) where
+module Kyyn.Surfaces.Recipes (recipesResult, recipeResult, recipeDescriptionResult, recipeRunResult) where
 
 import Data.Aeson (Value, object, (.=))
 import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (DescriptionFormat(..), RecipeDefinition(..))
-import Kyyn.Domain.Curation (RecipeId(..), PendingEvidence(..))
+import Kyyn.Domain.Curation (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
-import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..), ConnectorInstanceRef(..), FetchId(..), EvidenceId(..))
-import Kyyn.Domain.Plugin (pluginNameText)
 import Kyyn.Surfaces.Result (Response(..), success, workspaceResult)
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
 import Kyyn.Domain.Git (GitRevision, revisionName)
@@ -43,21 +41,3 @@ recipePayloadJson (ClosedRecipe (FlowEntryRef entry)) = object ["kind" .= ("Clos
 recipeText :: RecipeDefinition -> String
 recipeText (OpenRecipe instructions stateType) = "Open agent: " ++ Text.unpack instructions ++ "\nState type: " ++ stateType
 recipeText (ClosedRecipe (FlowEntryRef entry)) = "Closed agent: " ++ Text.unpack entry
-
-pendingResult :: RecipeId -> PendingEvidence -> Response
-pendingResult (RecipeId recipe) (PendingEvidence (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) changes) =
-  success (object ["recipe" .= recipe, "kind" .= ("Changes" :: String),
-    "scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
-    "changes" .= [object ["id" .= item,"kind" .= show kind] | (EvidenceId item,kind) <- changes]])
-    (["Recipe: " ++ Text.unpack recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch,
-      "Scope: EvidenceScope " ++ unwords (map show [pluginNameText plugin,instanceName,fetch])] ++
-      if null changes then ["No unacknowledged changes."] else [show kind ++ "  " ++ Text.unpack item | (EvidenceId item,kind) <- changes])
-pendingResult (RecipeId recipe) (Reconciliation (EvidenceSnapshotRef (ConnectorInstanceRef plugin instanceName) _ (FetchId fetch)) ids) =
-  success (object ["recipe" .= recipe, "kind" .= ("Reconciliation" :: String),
-    "scope" .= object ["plugin" .= pluginNameText plugin,"instance" .= instanceName,"fetch" .= fetch],
-    "currentIds" .= [item | EvidenceId item <- ids]])
-    (["Recipe: " ++ Text.unpack recipe, "Evidence: " ++ pluginNameText plugin ++ "/" ++ instanceName, "Fetch: " ++ fetch,
-      "Producer changed: reconcile the current evidence with the root.",
-      "Scope: EvidenceScope " ++ unwords (map show [pluginNameText plugin,instanceName,fetch]),
-      "Acknowledge the entire batch or leave it pending."] ++
-      if null ids then ["The current evidence set is empty."] else [Text.unpack item | EvidenceId item <- ids])

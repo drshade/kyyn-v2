@@ -8,6 +8,7 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.FactProposal (FactProposal)
+import Kyyn.Domain.Recipe (StoredRecipe(..))
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
@@ -34,7 +35,7 @@ runEvolutionAuthoring
   => Eff (EvolutionAuthoring : es) a -> Eff es a
 runEvolutionAuthoring = interpret $ \_ -> \case
   CreateEvolution kb name revision kind -> create kb name revision kind Nothing
-  CreateFactProposal kb name revision proposal -> create kb name revision AdHoc (Just proposal)
+  CreateFactProposal kb name revision recipe proposal -> create kb name revision (RecipeBased recipe) (Just proposal)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) -> runExceptT $ do
     PreparedEvolution context@(EvolutionContext _ _ (Before revision _) _) before@(SourceRoot _ _ _ closure) after <-
       ExceptT (prepareEvolution location)
@@ -50,19 +51,22 @@ create kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) r
     rootPath <- checked (rootLocation kb)
     source@(SourceRoot contract code (RootDefinition selected _ _ _ _ sources) _) <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
-    case kind of
-      AdHoc -> pure ()
+    stateContract <- case kind of
+      AdHoc -> pure Nothing
       RecipeBased (RecipeId ident) -> do
         Root _ _ _ _ recipes <- ExceptT (RootOpening.loadRootMaterialAt repository revision (Subtree rootPath) source)
-        unless (length [() | Fact (FactId actual) _ <- recipes, actual == ident] == 1)
-          (throwE [errorDiagnostic "recipe.unknown" "The selected recipe must exist in Before"])
+        case [state | Fact (FactId actual) (StoredRecipe _ _ state _) <- recipes, actual == ident] of
+          [state] -> pure (Just state)
+          _ -> throwE [errorDiagnostic "recipe.unknown" "The selected recipe must exist in Before"]
     empty <- checked (fileTree [])
     entryPath <- checked (relativePath "Evolution.hs")
     change <- case proposal of
       Nothing -> checked (fileTree [(entryPath,case kind of
         AdHoc -> identityEvolutionSource selected
         RecipeBased _ -> identityRecipeEvolutionSource selected)])
-      Just value -> ExceptT (proposalChange contract value)
+      Just value -> case stateContract of
+        Just state -> ExceptT (proposalChange contract state value)
+        Nothing -> checked (Left "Frozen proposals require a recipe-based workspace")
     tree <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
       (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft kind) sources code change empty))
     parentPath <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)

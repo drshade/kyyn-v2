@@ -15,7 +15,7 @@ import Kyyn.Domain.Recipe (RecipeSignature(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..), CollectionDecl(..))
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings)
 import Kyyn.Plumbing.Protocol.Tool (toolBindings)
-import Kyyn.MicroHs.Inspection (inspectRecipeSignature)
+import Kyyn.MicroHs.Inspection (inspectRecipeSignature, inspectRecipeExports)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (getEnv)
 import System.FilePath ((</>), takeDirectory)
@@ -59,6 +59,9 @@ main = withSystemTempDirectory "kyyn-recipe-signatures-" $ \temporary -> do
   unless (signature == RecipeSignature root StringType state) (fail ("Wrong reflected flow: " ++ show signature))
   (unit,_) <- inspect "unit" >>= right
   unless (unit == RecipeSignature root UnitType UnitType) (fail "Unit input/state did not reflect")
+  (exports,_) <- inspectRecipeExports compiler sources "Flows" >>= right
+  unless (length exports == 2 && lookup "review" exports == Just signature && lookup "unit" exports == Just unit)
+    (fail ("Recipe definition discovery included incompatible signatures: " ++ show exports))
   forM_ ["wrongState","wrongEdits","notAFlow"] $ \name -> do
     result <- inspect name
     case result of

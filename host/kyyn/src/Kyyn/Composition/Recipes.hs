@@ -8,7 +8,8 @@ import Kyyn.Domain.Git (Repository(..))
 import Kyyn.Domain.Path (scopedPath)
 import Kyyn.Porcelain.Capability.EvolutionStore (workspaceLocation)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
-import Kyyn.Porcelain.Capability.Recipe (findRecipeAt, pendingRecipeEvidence, proposeFromRecipe)
+import Kyyn.Porcelain.Capability.Recipe (findRecipeAt, proposeFromRecipe)
+import qualified Data.Text as Text
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
 import Kyyn.Plumbing.Interpreter.Judgement (runJudgementIO)
 import Kyyn.Plumbing.Interpreter.ModelTurn (runModelTurnIO)
@@ -39,22 +40,16 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
       . runRootOpening sdk . runRecipeStore . runRecipeInspection $
         either refusal (recipeDescriptionResult revision recipe format) <$> describeRecipeAt kb revision recipe format
-  Cli.RunRecipe recipe instances -> case knowledgeBaseScope kb of
+  Cli.RunRecipe recipe request -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
       runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
       . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
       . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
-        result <- proposeFromRecipe kb revision recipe instances
+        result <- proposeFromRecipe kb revision recipe (Text.pack <$> request)
         pure $ case result of
           Left diagnostics -> refusal diagnostics
           Right workspace -> case workspaceLocation workspace of
             Left message -> refusal [errorDiagnostic "kb.path" message]
             Right path -> let KnowledgeBase (Repository repositoryScope) _ = kb
               in recipeRunResult workspace revision (scopedPath repositoryScope path)
-  Cli.ListPendingEvidence recipe plugin instanceName -> case knowledgeBaseScope kb of
-    Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right scope -> withRuntime host $ \toolchain sdk -> finish $
-      runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
-      . runRecipeStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore $
-        either refusal (pendingResult recipe) <$> pendingRecipeEvidence kb revision recipe plugin instanceName

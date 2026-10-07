@@ -7,7 +7,7 @@ development executable is `kyyn-v2`; it does not replace kyyn-v1's `kyyn`.
 - [Install](#install) and [create a KB](#select-or-create-a-kb)
 - [Evolve, check and accept](#create-check-and-accept-an-evolution)
 - [Secrets](#secrets), [plugins and taps](#plugins-and-taps), [evidence](#fetch-and-inspect-evidence)
-- [Tools and models](#tools-and-models), [recipes and curation](#recipes-and-curation)
+- [Tools and models](#tools-and-models), [recipes and recipe state](#recipes-and-recipe-state)
 - [Browse facts/schema](#explore-schemas-collections-and-facts), [discover APIs](#discover-apis-while-authoring)
 
 ## Install
@@ -270,7 +270,7 @@ fresh provider sync; stateless connectors report that the flag has no effect.
 `evidence clear PLUGIN INSTANCE` deletes the local evidence and position, so the next
 fetch starts empty and reports everything as new.
 Refetch to rebuild it. Clearing evidence does not remove accepted facts or recipe
-acknowledgements.
+state.
 
 ## Tools and models
 
@@ -466,199 +466,129 @@ type's defining contract; for a standalone list or applied generic contract, use
 a named data/newtype wrapper. Existing primitive library contracts still work.
 Agentic's SystemOne uses Jev; SystemTwo uses the configured OpenAI or Anthropic provider.
 
-## Recipes and curation
+## Recipes and recipe state
 
-Recipes are first-class data in `KnowledgeBase a`, alongside the authored domain
-Root. Add, edit and remove them through ordinary evolution steps:
+Recipes are root-owned definitions with independently typed state. Create, update
+or remove them through an ad hoc evolution. State is mandatory; use `()` when
+the recipe has nothing to remember.
+
+For an open recipe, declare its state type in a target source module:
+
+```haskell
+module Review where
+data State = State { seen :: [String] }
+```
+
+Import its generated type handle in the evolution:
 
 ```haskell
 import Kyyn.Workspace.Evolution
-import Kyyn.Schema (Fact(..), FactId(..))
+import qualified Kyyn.Workspace.After.RecipeTypes.Review.State as ReviewType
+import qualified Review
 
-evolution = edit (Rationale "Teach the KB how to curate todos" []) $
-  within recipes $ append (Fact (FactId "syncTodos")
-    (OpenAgent "Inspect item/status evidence and update todos."))
+-- Inside an edit:
+createRecipe (RecipeId "reviewMail")
+  (openRecipe ReviewType.recipeType "Review relevant mail and update the tasks")
+  (Review.State [])
 ```
 
-Use `update` and `remove` with the same FactId to refine or remove the recipe.
-The ID is its name and follows the connector-binding identifier rule; IDs must
-be unique. Recipe changes appear distinctly in the evolution review.
+`updateRecipe` takes the old type handle, the new definition and a fallible
+state transformation. `removeRecipe` takes the recipe ID. Instruction-only
+updates can preserve state with `Right`. Recipe state appears in evolution
+reviews and is stored as typed Dhall in `root/recipes/<id>/state.dhall`;
+definitions are in `root/recipes.dhall`. Neither file belongs in an evolution's
+target: they are evaluated data.
 
-`ClosedAgent (FlowEntryRef "Tasks.reconcile")` stores a named authored flow
-instead of instructions. Root checking resolves the function and checks
-`Flow (RecipeInput Root) (ProposedCuration RootEdit)` without running it. Both
-constructors can be inspected and edited.
-
-Import `Kyyn.Evolution.Proposal` and generated `Kyyn.Workspace.FactEdits` to
-construct a `ProposedCuration RootEdit`. Each collection has a constructor such
-as `Edit_todos`, containing `Append`, `Replace` or `Remove`; group edits in
-`ProposedStep`s with rationale. These proposals edit facts, not schema. The
-bindings require a root with fact collections; for an evolution context its
-Before/After schema and metadata must match. Use `evolve` for schema changes.
-
-`Kyyn.Recipe` provides pure helpers for the captured input:
-
-```haskell
-pendingItems :: [PendingEvidence] -> [(EvidenceScope, EvidenceId)]
-removedItems :: [PendingEvidence] -> [(EvidenceScope, EvidenceId)]
-scopes :: [PendingEvidence] -> [EvidenceScope]
-acknowledgeAll :: RecipeInput root -> Curation
-acknowledgeItems :: [(EvidenceScope, EvidenceId)] -> [Acknowledgement]
-cite :: EvidenceScope -> EvidenceId -> EvidenceRef
-```
-
-`pendingItems` includes New/Updated items and reconciliation's current IDs;
-`removedItems` includes only explicit removals. Both preserve scope and order.
-Use `cite scope ident` in a rationale; it identifies the connector/item without
-inventing an external link. `acknowledgeAll input` explicitly declares all supplied
-batches handled, including reconciliation: use it only for flows that process
-the whole supplied source, after completing that work. For partial processing,
-pass only the items actually handled to `acknowledgeItems`:
-
-```haskell
-curation = Curation recipe (acknowledgeItems handledItems)
-```
-
-It groups `(EvidenceScope, EvidenceId)` pairs into one `IndividualRecords` per
-scope, preserving first-seen scope order and item order. It does not deduplicate
-IDs or decide what succeeded. Include handled deletions explicitly too.
-The host refuses individual acknowledgements for producer reconciliation scopes;
-authors explicitly add `EntireBatch scope` after completing that reconciliation.
-
-For effectful actions inside a flow, import `Step` from `Kyyn.Agentic`:
-
-```haskell
-type Step = ExceptT FetchError Tool
-type Flow input output = Agentic Step input output
-```
-
-String literals can be typed directly as `Text`, avoiding `Text.pack` around each
-literal. For example, with `Agentic` imported as `A` and `Data.Text` as `Text`:
-
-```haskell
-instruction :: Text.Text
-instruction = Text.unlines ["Read the note.", "Extract concrete tasks only."]
-
-summarise :: Flow Text.Text Text.Text
-summarise = A.draft (A.Instruction instruction)
-```
-
-MicroHs supports these literals directly; add `{-# LANGUAGE OverloadedStrings #-}`
-for GHC too. Existing `String` values (including `show` results) still need
-`Text.pack` when passed to a Text API.
-
-Inspect the flow:
+### Author a recipe-based evolution
 
 ```sh
-kyyn-v2 --kb ./my-kb root recipe describe syncTodos
-kyyn-v2 --kb ./my-kb root recipe describe syncTodos --dot > flow.dot
-kyyn-v2 --kb ./my-kb root recipe describe syncTodos --mermaid > flow.mmd
+kyyn-v2 --kb PATH evolution new review-mail --recipe reviewMail
 ```
 
-The default is Agentic's readable tree. The format flags are mutually exclusive;
-stdout contains only renderer output, or a contextual result envelope with
-`--json`. Description compiles the accepted flow but does not run its actions,
-validate facts, read evidence or call a model. Named steps and declared branches
-are visible; arbitrary pure/effectful functions remain opaque. Open recipes have
-instructions instead of a flow: use `root recipe show NAME`.
-
-Use `takeFirst` and `takeSecond` instead of `arr fst` and `arr snd` when selecting
-from a pair: diagrams can then follow the selected branch. For nested pairs,
-Agentic's `:/\` type and pattern let `(a, (b, c))` read as `a :/\ b :/\ c`.
-Import the type and pattern with `import Agentic ((:/\), pattern (:/\))` and
-enable `TypeOperators` and `PatternSynonyms` for portable GHC authoring.
-
-`guest module show Tasks` can inspect a recipe's authored module, and
-`guest module show Kyyn.Workspace.FactEdits` shows its generated edit type.
-With `--evolution ID`, recipe bindings describe the target root; the evolution's
-Before/After APIs remain a separate compilation context.
-
-Run a closed recipe against one or more fetched connector instances:
-
-```sh
-kyyn-v2 --kb ./my-kb root recipe run syncTodos local-file documents local-file prices
-kyyn-v2 --kb ./my-kb evolution check 000003-curate-synctodos
-```
-
-Use the evolution ID returned by `run`. It creates a Draft with
-`change/proposal.dhall`; checking and acceptance use that saved proposal, not
-another model invocation. Review it before marking it ready and accepting it.
-Its generated `Evolution.hs` imports `frozen` from `KyynFrozenProposal`:
+The generated facade binds the domain root and the selected recipe's state:
 
 ```haskell
-evolution :: Evolution (KnowledgeBase RootV3.Root) (KnowledgeBase RootV3.Root)
-evolution = frozen
+import Kyyn.Workspace.Evolution
+import qualified Kyyn.Workspace.Before as BeforeCollections
+import qualified Review
+
+evolution :: RecipeEvolution Root RecipeState
+evolution = recipeEdit (Rationale "Reviewed the message" []) $ do
+  -- Domain collection edits go inside editFacts:
+  -- editFacts (within BeforeCollections.todos ...)
+  modifyRecipeState $ \(Review.State seen) ->
+    Review.State (seen ++ ["message-123"])
 ```
 
-The root type is your KB's current type. `frozen` applies the saved proposal's
-edits, rationales and curation declaration. Kyyn prepares that value from
-`change/proposal.dhall` when checking; the evolution itself does not read files.
-Inspect its generated signature with
-`kyyn-v2 guest module show KyynFrozenProposal --evolution ID`.
+A recipe-based evolution changes facts and only its selected recipe's state.
+Use an ad hoc evolution to change schema, code, configuration or recipe definitions.
+Checking and acceptance use the ordinary evolution commands.
 
-Each selected instance supplies its pending changes and fetch scope. Its evidence
-contents are captured once for the invocation, including subsequent plugin reads.
-Reads of other instances capture lazily as ordinary tools do, but the proposal
-can acknowledge only supplied scopes and their pending IDs. Duplicate instance
-pairs are refused. Open recipes remain instructions for an external agent.
+### Closed recipes
 
-The host persists these values in `root/recipes.dhall`; an absent file means no
-recipes. Do not place this file in an evolution target: the evolution must return
-the recipe data. Queries and validators still receive the domain Root.
-
-The host stores acknowledged evidence in `root/curation.dhall`; a missing file
-means no acknowledgements. It is not part of the guest Root schema or copied into
-evolution targets. Ordinary evolutions preserve it through acceptance.
-
-An evolution can explicitly declare evidence handled for one recipe:
+A closed recipe is an authored flow with explicit request and state types:
 
 ```haskell
-evolution = withCuration
-  (Curation (RecipeId "syncTodos")
-    [ EntireBatch (EvidenceScope "local-file" "documents" "FETCH_ID")
-    , IndividualRecords (EvidenceScope "local-file" "other" "OTHER_FETCH_ID")
-        [EvidenceId "todo.txt"]
-    ]) identityEvolution
+import Kyyn.Agentic (Flow)
+import Kyyn.Recipe
+import Kyyn.Workspace.FactEdits (RootEdit)
+
+review :: Flow (RecipeInput Root Request ReviewState)
+               (RecipeProposal RootEdit ReviewState)
 ```
 
-These names are exported by `Kyyn.Workspace.Evolution`. Replace `identityEvolution`
-with your fact/schema transformation, or keep it when no fact change is needed.
-Pending human output includes a ready-to-paste `Scope: EvidenceScope ...` line;
-copy the expression after `Scope:` into the acknowledgement.
-Use the exact fetch ID you considered (`evidence history list PLUGIN INSTANCE`
-shows retained fetches). An individual ID absent at that fetch acknowledges its
-deletion. The recipe must exist in the returned KB; adding it and acknowledging
-evidence for it in the same evolution is supported.
+The input carries the accepted domain root, invocation arguments and current
+recipe state. The result carries ordered `ProposedStep` values and the complete
+next state. Flows read current evidence through generated connector bindings
+and plugin methods, just like KB tools; Kyyn does not supply a pending-work queue
+or require declarations that evidence was handled. If a recipe needs cursors,
+dismissals or other progress tracking, model that in its state.
 
-`evolution check` resolves these declarations and saves the resulting progress;
-`evolution show` displays them. Acceptance publishes that saved progress even if
-evidence has since refreshed or been cleared. An unavailable fetch scope must be
-updated and checked again.
+Each `RootEdit` constructor identifies a collection, for example
+`Edit_todos (Append (Fact ...))`, `Edit_todos (Replace factId payload)` or
+`Edit_todos (Remove factId)`. Group edits under `ProposedStep rationale edits`.
+An empty steps list with updated state is valid, including for roots with no
+fact collections.
 
-Discover the accepted recipes and their net pending evidence:
+To create a closed recipe in an evolution, import its generated definition handle.
+For a flow named `Flows.review`:
+
+```haskell
+import qualified Kyyn.Workspace.After.RecipeFlows.Flows as Flows
+
+-- Inside an edit:
+createRecipe (RecipeId "reviewMail") Flows.review (Review.State [])
+```
+
+The compiler derives the state type from the actual flow signature. These handles
+are definitions, not flow executions. Explore imported generated handles with
+`guest module show MODULE --evolution ID`.
 
 ```sh
 kyyn-v2 --kb PATH root recipe list
-kyyn-v2 --kb PATH root recipe show syncTodos
-kyyn-v2 --kb PATH --json root recipe pending list syncTodos local-file documents
+kyyn-v2 --kb PATH root recipe show reviewMail
+kyyn-v2 --kb PATH root recipe describe reviewMail
+kyyn-v2 --kb PATH root recipe describe reviewMail --dot
+kyyn-v2 --kb PATH root recipe describe reviewMail --mermaid
+kyyn-v2 --kb PATH root recipe run reviewMail --input '"October"'
 ```
 
-List/show needs no runtime bundle. Pending discovery returns a fixed `scope`
-(`plugin`, `instance`, `fetch`), `kind: "Changes"` and `changes` (`id`, `kind`), comparing latest
-evidence against this recipe's accepted acknowledgements. It neither fetches nor
-marks anything handled. For example, New then Updated before curation is still
-one pending New; New then Removed disappears from pending work. Two recipes can
-consider the same evidence independently. An incompatible cached producer requires refetching.
-After refetch, a producer change relative to accepted progress returns
-`kind: "Reconciliation"` and `currentIds` instead of `changes`. These are all
-currently present IDs, not a diff against the previous producer. The same input
-arrives in closed flows as `Reconciliation scope currentIds`. Compare current
-evidence with the root, then return `EntireBatch scope` or omit acknowledgement
-to leave reconciliation pending. `IndividualRecords` is refused for that scope.
-An empty reconciliation set still needs consideration; it is not an empty delta.
-An empty ordinary changes list means no unacknowledged
-changes, not that the recipe's task is complete. Use plugin methods or KB tools to
-read the actual evidence.
+`--input` is Dhall checked against the flow's request type; it may be omitted
+only for `()`. Description renders the authored flow's structure without running
+its actions.
+
+A successful run creates a recipe-based draft with `change/proposal.dhall` and:
+
+```haskell
+evolution :: RecipeEvolution Root RecipeState
+evolution = frozen
+```
+
+`frozen` is supplied by `KyynFrozenProposal`. It applies the saved fact steps
+and next state through the normal evolution machinery. Check, inspect, mark ready
+and accept the draft as usual; those operations do not invoke the flow again.
+Malformed proposal data is rejected before guest compilation. Subsequent reads
+of external evidence do not alter a saved proposal.
 
 ## Explore schemas, collections and facts
 

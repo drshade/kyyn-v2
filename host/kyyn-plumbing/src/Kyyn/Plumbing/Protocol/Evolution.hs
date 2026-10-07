@@ -74,7 +74,6 @@ evolutionBindings :: RootContract -> RootContract -> Either String FileTree
 evolutionBindings before after = do
   collections <- sequence [collectionBindings "Before" before, collectionBindings "After" after]
   proposals <- if contractId (rootSchema before) == contractId (rootSchema after)
-      && not (null (collectionContracts (rootSchema after)))
     then factEditBindings after
     else fileTree []
   codecs <- sequence [do

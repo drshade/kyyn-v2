@@ -10,11 +10,12 @@ import Kyyn.Domain.Evolution (EvolutionName, EvolutionWorkspace, CapturedEvoluti
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (EvolutionKind)
+import Kyyn.Types.Curation (RecipeId)
 
 data EvolutionAuthoring :: Effect where
   CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionKind
     -> EvolutionAuthoring m (Either [Diagnostic] EvolutionWorkspace)
-  CreateFactProposal :: KnowledgeBase -> EvolutionName -> GitRevision -> FactProposal
+  CreateFactProposal :: KnowledgeBase -> EvolutionName -> GitRevision -> RecipeId -> FactProposal
     -> EvolutionAuthoring m (Either [Diagnostic] EvolutionWorkspace)
   CaptureEvolution :: EvolutionWorkspace
     -> EvolutionAuthoring m (Either [Diagnostic] CapturedEvolution)
@@ -26,8 +27,8 @@ createEvolution :: EvolutionAuthoring :> es => KnowledgeBase -> EvolutionName ->
 createEvolution kb name revision = send . CreateEvolution kb name revision
 
 createFactProposal :: EvolutionAuthoring :> es => KnowledgeBase -> EvolutionName -> GitRevision
-  -> FactProposal -> Eff es (Either [Diagnostic] EvolutionWorkspace)
-createFactProposal kb name revision = send . CreateFactProposal kb name revision
+  -> RecipeId -> FactProposal -> Eff es (Either [Diagnostic] EvolutionWorkspace)
+createFactProposal kb name revision recipe = send . CreateFactProposal kb name revision recipe
 
 captureEvolution :: EvolutionAuthoring :> es => EvolutionWorkspace
   -> Eff es (Either [Diagnostic] CapturedEvolution)

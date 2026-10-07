@@ -5,8 +5,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister, RecipeId(..), PendingEvidence(..))
-import Kyyn.Surfaces.Recipes (pendingResult)
+import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), toJSON)
 import Data.List (isInfixOf, elemIndex)
@@ -65,18 +64,6 @@ main = do
         && messages == ["notes.txt  abc"]) (fail "Current listing output must contain only selection and IDs/fingerprints")
   case evidenceListResult (EvidenceCapture snapshot []) of
     Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
-  case pendingResult (RecipeId "review") (PendingEvidence snapshot []) of
-    Response _ result messages _ -> do
-      unless ("Scope: EvidenceScope \"local-file\" \"sales\" \"latest\"" `elem` messages)
-        (fail "Pending output must supply a pasteable scope even when empty")
-      unless (case result of Object fields -> KeyMap.lookup "kind" fields == Just (String "Changes"); _ -> False)
-        (fail "Ordinary pending output must identify its kind")
-  case pendingResult (RecipeId "review") (Reconciliation snapshot []) of
-    Response _ result messages _ -> do
-      unless ("The current evidence set is empty." `elem` messages)
-        (fail "Empty reconciliation must not look like no pending work")
-      unless (case result of Object fields -> KeyMap.lookup "kind" fields == Just (String "Reconciliation") && KeyMap.member "currentIds" fields && not (KeyMap.member "changes" fields); _ -> False)
-        (fail "Reconciliation must expose current IDs rather than a fabricated delta")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []
       checkInstanceKeys (Object fields) =
         not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)
@@ -116,7 +103,7 @@ main = do
       identity = right (evolutionId "abc")
       workspace = EvolutionWorkspace kb identity
       captured = EvolutionContext kb identity (Before revision schema)
-        (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft) empty empty empty empty)
+        (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft AdHoc) empty empty empty empty)
       candidate = Candidate captured (EvolutionReport [] [] Nothing) root
       citedCandidate = Candidate captured (EvolutionReport [] [StepReport (Rationale "Because" [citation]) []] Nothing) root
       assert label condition = unless condition (fail label)

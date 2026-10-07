@@ -1,5 +1,5 @@
 -- Generated same-schema edits under GHC/MicroHs, real Dhall proposals and RootStore
--- materialization. Checks rationale/curation, reports, repeated frozen evaluation and
+-- materialization. Checks rationale/state, reports, repeated frozen evaluation and
 -- failure without partial state; no CLI acceptance or live model.
 
 {-# LANGUAGE OverloadedStrings #-}
@@ -18,14 +18,15 @@ import Kyyn.Domain.EvolutionReport
 import Kyyn.Domain.FactProposal
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Path (relativeName, relativePath)
-import Kyyn.Domain.Root (Root(..))
+import Kyyn.Domain.Root (Root(..), CheckedValue(..))
+import Kyyn.Domain.Recipe (KnowledgeBase(..), StoredRecipe(..), proposedRecipe)
 import Kyyn.Types.SchemaMetadata
-import Kyyn.Types.Fact (FactId(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Evolution (Rationale(..))
-import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..))
-import Kyyn.Types.Curation
-import Kyyn.Types.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, decodeEvolutionReply)
+import Kyyn.Types.Evidence (EvidenceRef(..))
+import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
+import Kyyn.Plumbing.Protocol.RecipeEvolution (recipeEvolutionBindings, decodeRecipeEvolutionReply)
 import Kyyn.Plumbing.Protocol.FactEdits
 import Kyyn.Plumbing.Protocol.FactProposal
 import Kyyn.Plumbing.Capability.DhallHandling (encodeValue, decodeValue)
@@ -53,7 +54,8 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
   contract <- right (checkContract root (SchemaMetadata [] []
     [CollectionDecl "tasks" "todos" [], CollectionDecl "flags" "flags" []]) >>= checkRootLayout)
   generated <- right (factEditBindings contract)
-  workspace <- right (evolutionBindings contract contract)
+  state <- right (checkContract StringType (SchemaMetadata [] [] []))
+  workspace <- right (recipeEvolutionBindings contract state)
   unless (all (`elem` files workspace) (files generated)) (fail "Workspace omitted the proposal bindings")
   forM_ (files workspace) $ \(relative,content) -> do
     let destination = temporary </> relativeName relative
@@ -65,15 +67,14 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
      "data Root = Root { todos :: [Fact Todo], flags :: [Fact Bool] }"]
   Bytes.writeFile (temporary </> "Main.hs") $ Text.encodeUtf8 $ Text.unlines
     ["module Main where", "import Schema", "import Kyyn.Types.Fact",
-     "import Kyyn.Evolution", "import Kyyn.Evolution.Proposal",
+     "import Kyyn.Workspace.Evolution",
      "import Kyyn.Evolution.Internal (evaluateEvolution)",
-     "import Kyyn.Workspace.FactEdits", "import KyynFactEditCodec (rootCodec)",
-     "import qualified KyynEvolutionCodec1 as RootCodec", "import Kyyn.Runtime.Json",
-     "import Kyyn.Runtime.Evolution", "import Kyyn.Runtime.Proposal (proposalCodec)", "import qualified Evolution",
+     "import qualified KyynRecipeRootCodec as RootCodec", "import Kyyn.Runtime.Json",
+     "import Kyyn.Runtime.Evolution", "import qualified Evolution", "import qualified InvalidProposal",
      "main :: IO ()", "main = do", "  input <- getContents",
-     "  selected <- if input == \"\\\"frozen\\\"\" then pure Evolution.evolution else either fail (pure . proposalEvolution) (parseValue input >>= decodeWith (proposalCodec rootCodec))",
-     "  let before = KnowledgeBase (Root [Fact (FactId \"old\") (Todo \"old\")] []) []",
-     "  either fail putStrLn (encodeEvolutionReply (knowledgeBaseCodec RootCodec.rootCodec) (evaluateEvolution selected before))"]
+     "  let selected = if input == \"\\\"invalid\\\"\" then InvalidProposal.frozen else Evolution.evolution",
+     "  let before = (Schema.Root [Fact (FactId \"old\") (Todo \"old\")] [], \"initial\")",
+     "  either fail putStrLn (encodeEvolutionReply RootCodec.rootCodec (evaluateEvolution selected before))"]
   let include = map ("-i" ++) [temporary, repo </> "guest/kyyn-sdk/src", repo </> "guest/kyyn-runtime/src",
         repo </> "shared/kyyn-types/src", repo </> "vendor/json",repo </> "vendor/transformers"]
       command binary arguments = (proc binary arguments) { cwd = Just temporary }
@@ -84,7 +85,7 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
       compile process = do
         (status,_,errors) <- readCreateProcessWithExitCode process ""
         unless (status == ExitSuccess) (fail errors)
-  shape <- right (proposalShape contract)
+  shape <- right (proposalShape contract state)
   let tagged name value = object ["tag" .= (name :: String), "value" .= value]
       todoValue value = object ["title" .= (value :: String)]
       replace ident value = tagged "Edit_todos" (tagged "Replace" (object ["factId" .= (ident :: String),"replacement" .= todoValue value]))
@@ -92,16 +93,15 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
       remove = tagged "Edit_todos" (tagged "Remove" ("old" :: String))
       operations = [replace "old" "updated",appendFlag,remove]
       why = Rationale "Apply captured edits λ" [EvidenceRef "files" "inbox" "file:///todo" ["old"]]
-      curation = Curation (RecipeId "sync") [EntireBatch (EvidenceScope "files" "inbox" "first"),
-        IndividualRecords (EvidenceScope "files" "other" "second") [EvidenceId "deleted"]]
-      proposal edits = FactProposal [FactProposalStep why edits] curation
+      proposal edits = FactProposal [FactProposalStep why edits] (CheckedValue (contractId state) "reviewed")
+      recipes = [Fact (FactId "sync") (StoredRecipe (ClosedAgent (FlowEntryRef "Flows.review")) "String" state (CheckedValue (contractId state) "initial"))]
   persisted <- right (runPureEff (runDhallHandling (encodeValue shape (proposalValue (proposal operations)))))
   let proposalPath = temporary </> "proposal.dhall"
   Bytes.writeFile proposalPath (Text.encodeUtf8 persisted)
   loaded <- Text.decodeUtf8 <$> Bytes.readFile proposalPath
   restored <- right (runPureEff (runDhallHandling (decodeValue shape loaded)))
   unless (restored == proposalValue (proposal operations)) (fail "Dhall proposal round trip changed the operations")
-  change <- right (runPureEff (runDhallHandling (proposalChange contract (proposal operations))))
+  change <- right (runPureEff (runDhallHandling (proposalChange contract state (proposal operations))))
   entryPath <- right (relativePath "Evolution.hs")
   entry <- maybe (fail "Missing frozen entry") (pure . Text.decodeUtf8) (lookup entryPath (files change))
   unless ("evolution = frozen\n" `Text.isInfixOf` entry
@@ -110,31 +110,38 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
     (fail "Frozen entry leaked proposal decoding into authored code")
   renamed <- right (checkContract root (SchemaMetadata [] []
     [CollectionDecl "renamed" "todos" [], CollectionDecl "flags" "flags" []]) >>= checkRootLayout)
-  case runPureEff (runDhallHandling (lowerProposal contract renamed change)) of
+  case runPureEff (runDhallHandling (lowerProposal contract renamed (Just state) change)) of
     Left _ -> pure ()
     Right _ -> fail "Proposal accepted changed endpoint metadata"
   invalidPath <- right (relativePath "proposal.dhall")
   invalidChange <- right (fileTree [(invalidPath,"True")])
-  case runPureEff (runDhallHandling (lowerProposal contract contract invalidChange)) of
+  case runPureEff (runDhallHandling (lowerProposal contract contract (Just state) invalidChange)) of
     Left _ -> pure ()
     Right _ -> fail "Malformed Dhall reached the guest compiler"
-  lowered <- right (runPureEff (runDhallHandling (lowerProposal contract contract change)))
+  lowered <- right (runPureEff (runDhallHandling (lowerProposal contract contract (Just state) change)))
   forM_ (files lowered) $ \(relative,bytes) -> Bytes.writeFile (temporary </> relativeName relative) bytes
+  badChange <- right (runPureEff (runDhallHandling (proposalChange contract state (proposal [appendFlag,replace "missing" "x"]))))
+  badLowered <- right (runPureEff (runDhallHandling (lowerProposal contract contract (Just state) badChange)))
+  frozenPath <- right (relativePath "KyynFrozenProposal.hs")
+  badSource <- maybe (fail "Missing invalid frozen module") pure (lookup frozenPath (files badLowered))
+  Bytes.writeFile (temporary </> "InvalidProposal.hs") (Text.encodeUtf8
+    (Text.replace "module KyynFrozenProposal" "module InvalidProposal" (Text.decodeUtf8 badSource)))
   compile (command "ghc-9.10.3" (["-v0","-XOverloadedStrings","-i"] ++ include ++ ["-outputdir",temporary </> "objects","Main.hs","-o",native]))
   compile ((command (toolchain </> "bin/mhs")
     (["-DMIN_VERSION_base(x,y,z)=1","-a","-i"] ++ include ++ ["-i" ++ toolchain </> "lib","Main.hs","-o" ++ artifact])) { env = Just mhsEnv })
-  let input = KnowledgeBase (object ["todos" .= [object ["id" .= ("old" :: String),"value" .= todoValue "old"]],"flags" .= ([] :: [Value])]) []
+  let input = KnowledgeBase (object ["todos" .= [object ["id" .= ("old" :: String),"value" .= todoValue "old"]],"flags" .= ([] :: [Value])])
+        [Fact ident (proposedRecipe recipe) | Fact ident recipe <- recipes]
       programs = [command native [], command (toolchain </> "bin/mhseval") ["+RTS","-r" ++ artifact,"-RTS"]]
       execute process value = do
         (status,output,errors) <- readCreateProcessWithExitCode process (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value))))
         unless (status == ExitSuccess) (fail errors)
-        right (decodeEvolutionReply (Text.encodeUtf8 (Text.pack output)))
+        right (decodeRecipeEvolutionReply (RecipeId "sync") recipes (Text.encodeUtf8 (Text.pack output)))
   forM_ programs $ \program -> do
-    observation <- execute program restored >>= right
+    observation <- execute program ("frozen" :: Value) >>= right
     (checked@(KnowledgeBase checkedFacts _), EvolutionReport _ reports handled) <- right (runPureEff (runDhallHandling (runRootStore
-      (checkEvolutionReport contract input contract observation))))
-    unless (handled == Just curation && all (\(StepReport rationale _) -> rationale == why) reports)
-      (fail "Proposal rationale, citations or acknowledgements changed")
+      (checkEvolutionReport [("String",state)] contract input contract observation))))
+    unless (handled == Nothing && case reports of StepReport rationale _ : _ -> rationale == why; _ -> False)
+      (fail "Proposal rationale or citations changed")
     codePath <- right (relativePath "sources/Schema.hs")
     codeBytes <- Bytes.readFile (temporary </> "Schema.hs")
     code <- right (fileTree [(codePath,codeBytes)])
@@ -146,13 +153,14 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
     reloaded <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking stored))))
     unless (reloaded == checkedFacts) (fail "Materialized root did not reload unchanged")
     case reports of
-      [StepReport _ [FactChange "flags" (FactId "reviewed") Nothing (Just _), FactChange "tasks" (FactId "old") (Just _) Nothing]] -> pure ()
+      [StepReport _ [FactChange "flags" (FactId "reviewed") Nothing (Just _), FactChange "tasks" (FactId "old") (Just _) Nothing],
+       StepReport _ [RecipeChange (FactId "sync") _ (Just (StoredRecipe _ _ _ (CheckedValue _ "reviewed")))]] -> pure ()
       _ -> fail ("Unexpected computed changes: " ++ show reports)
-    replay <- execute program restored >>= right
+    replay <- execute program ("frozen" :: Value) >>= right
     unless (replay == observation) (fail "Pure replay differs")
     frozen <- execute program ("frozen" :: Value) >>= right
     unless (frozen == observation) (fail "Generated frozen evolution differs from returned proposal")
-    rejected <- execute program (proposalValue (proposal [appendFlag,replace "missing" "x"]))
+    rejected <- execute program ("invalid" :: Value)
     case rejected of Left _ -> pure (); Right _ -> fail "A failed edit returned a partial root"
   putStrLn "Generated typed fact edits passed GHC/MicroHs, Dhall replay and ordinary host observation/diff checks."
 

@@ -23,6 +23,7 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.Evolution (domainCollectionBindings, decodeEvolutionReplyWith)
+import Kyyn.Plumbing.Protocol.FactEdits (factEditBindings)
 
 identityRecipeEvolutionSource :: String -> ByteString
 identityRecipeEvolutionSource selected = utf8 $ unlines
@@ -35,6 +36,7 @@ identityRecipeEvolutionSource selected = utf8 $ unlines
 
 recipeEvolutionBindings :: RootContract -> CheckedContract -> Either String FileTree
 recipeEvolutionBindings domain state = do
+  edits <- factEditBindings domain
   collections <- traverse (`domainCollectionBindings` domain) ["Before","After"]
   rootCodec <- generateCodecs "KyynRecipeFactsCodec" (rootType (rootSchema domain))
   stateCodec <- generateCodecs "KyynRecipeStateCodec" (rootType state)
@@ -63,7 +65,7 @@ recipeEvolutionBindings domain state = do
   generated <- traverse (\(name,contents) -> (,utf8 contents) <$> relativePath name)
     [("KyynRecipeFactsCodec.hs",rootCodec),("KyynRecipeStateCodec.hs",stateCodec),
      ("KyynRecipeRootCodec.hs",codec),("Kyyn/Workspace/Evolution.hs",facade)]
-  fileTree (generated ++ concatMap files collections)
+  fileTree (generated ++ concatMap files collections ++ files edits)
 
 recipeEvolutionSources :: RootContract -> CheckedContract -> FileTree -> Either String GuestSources
 recipeEvolutionSources root state authored = do
