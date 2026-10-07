@@ -12,6 +12,8 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Domain.Evidence (Evidence(..))
+import Kyyn.Porcelain.Capability.EvidenceInspection (readCurrentEvidence)
 import qualified Data.Text as Text
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
 import Kyyn.MicroHs.Toolchain (GuestToolchain)
@@ -103,6 +105,14 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
         pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
+  Cli.ShowCurrentEvidence plugin name key -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $ runExceptT $ do
+    (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
+    (snapshot,found) <- ExceptT (readCurrentEvidence instanceRef producer payload key)
+    case found of
+      Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
+      Just item@(Evidence _ _ (CheckedValue _ value)) -> do
+        rendered <- ExceptT (encodeValue (contractShape payload) value)
+        pure (evidenceItemResult snapshot key item rendered)
   Cli.ListFetchHistory plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
     fmap (fmap (uncurry historyResult)) (connectorFetchHistory kb revision plugin name)
   Cli.ListEvidenceChanges plugin name since -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $

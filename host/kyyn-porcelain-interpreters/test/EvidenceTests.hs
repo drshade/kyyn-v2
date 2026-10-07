@@ -137,6 +137,7 @@ main = do
         run = execute scope
         load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
         listing instanceRef owner = run (runEvidenceInspection (Inspection.currentEvidence instanceRef owner contract))
+        inspect instanceRef owner item = run (runEvidenceInspection (Inspection.readCurrentEvidence instanceRef owner contract item))
         storePath = directory </> ".kyyn/evidence/folder-73616c6573"
         statePath = storePath </> "state.dhall"
     empty <- load instanceA producer
@@ -145,6 +146,8 @@ main = do
     assert "missing fetch looks like an empty successful fetch" (missing == Left NotFetched)
     absentListing <- listing instanceA producer
     assert "listing unfetched evidence succeeded" (absentListing == Left [evidenceProblemDiagnostic NotFetched])
+    absentItem <- inspect instanceA producer itemA
+    assert "unfetched inspection became a missing item" (absentItem == Left [evidenceProblemDiagnostic NotFetched])
     let ignorePath = directory </> ".kyyn/.gitignore"
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
@@ -168,6 +171,12 @@ main = do
     latest <- load instanceA producer
     listedLatest <- listing instanceA producer >>= right
     assert "listing retained removed item or old fingerprint" (listedLatest == EvidenceCapture f2 [(itemA,EvidenceFingerprint "new")])
+    inspected <- inspect instanceA producer itemA >>= right
+    assert "inspection lost latest payload, fingerprint or references" (inspected == (f2,Just (value "new")))
+    removed <- inspect instanceA producer itemB >>= right
+    assert "inspection returned removed payload" (removed == (f2,Nothing))
+    otherItem <- inspect instanceB producer itemA >>= right
+    assert "inspection mixed instances" (otherItem == (independent,Just (value "independent")))
     listedOther <- listing instanceB producer >>= right
     assert "listing mixed instances" (listedOther == EvidenceCapture independent [(itemA,EvidenceFingerprint "independent")])
     oldCapture <- run (resolveEvidenceCapture instanceA (key f1)) >>= right

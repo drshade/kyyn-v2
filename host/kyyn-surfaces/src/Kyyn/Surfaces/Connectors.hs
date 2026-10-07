@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult,
-  evidenceListResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
+  evidenceListResult, evidenceItemResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -8,6 +8,7 @@ import qualified Data.Text as Text
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin
 import Kyyn.Types.Evidence (EvidenceRef(..))
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Surfaces.Result (Response, success)
 
 connectorListResult :: PluginName -> [(ConnectorName,BindingName,ConnectorTypeName)] -> Response
@@ -52,6 +53,13 @@ evidenceListResult (EvidenceCapture snapshot items) = success
     [object ["id" .= key,"fingerprint" .= fingerprint] | (EvidenceId key,EvidenceFingerprint fingerprint) <- items]])
   (if null items then ["No current evidence."] else
     [Text.unpack key ++ "  " ++ Text.unpack fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
+
+evidenceItemResult :: EvidenceSnapshotRef -> EvidenceId -> Evidence CheckedValue -> Text.Text -> Response
+evidenceItemResult snapshot (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue _ payload)) rendered = success
+  (object ["selection" .= context snapshot, "id" .= key, "fingerprint" .= fingerprint,
+    "references" .= refs, "payload" .= payload])
+  (["Evidence: " ++ Text.unpack key, "Fingerprint: " ++ Text.unpack fingerprint] ++
+    ["Source: " ++ Text.unpack ref | ref <- refs] ++ [Text.unpack (Text.stripEnd rendered)])
 
 historyResult :: EvidenceSnapshotRef -> [FetchSummary] -> Response
 historyResult snapshot fetches = success (object ["selection" .= context snapshot,"fetches" .=

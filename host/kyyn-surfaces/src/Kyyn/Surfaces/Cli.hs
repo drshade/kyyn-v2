@@ -11,7 +11,8 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
-import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
+import Kyyn.Domain.Evidence (FetchId(..), EvidenceId(..), SyncMode(..))
+import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (RecipeId, recipeId)
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Data.Coerce (coerce)
@@ -57,6 +58,7 @@ data ConnectorCommand
 data EvidenceCommand
   = FetchConnector PluginName ConnectorName (Maybe String) SyncMode
   | ListCurrentEvidence PluginName ConnectorName
+  | ShowCurrentEvidence PluginName ConnectorName EvidenceId
   | ListFetchHistory PluginName ConnectorName
   | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
   | ClearEvidence PluginName ConnectorName
@@ -194,6 +196,8 @@ evidenceParser = hsubparser
     <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Connector-specific fetch options as hermetic Dhall"))
     <*> flag ContinueSync RestartSync (long "restart-sync" <> help "Start a fresh sync while keeping existing evidence for comparison"))
   <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
+  <> group "show" "Show a current evidence payload and source references" (ShowCurrentEvidence <$> plugin <*> instanceName
+      <*> argument (eitherReader (\key -> if null key then Left "Evidence ID must not be empty" else Right (EvidenceId (Text.pack key)))) (metavar "ID"))
   <> group "history" "Inspect retained fetch history" (hsubparser
       (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))
   <> group "change" "Inspect evidence changes" (hsubparser

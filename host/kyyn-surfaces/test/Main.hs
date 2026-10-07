@@ -10,7 +10,7 @@ import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionI
 import Kyyn.Domain.Git (gitRevision, gitUrl)
 import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
-import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
+import Kyyn.Domain.Evidence (FetchId(..), EvidenceId(..), SyncMode(..))
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Domain.Secret (secretName)
@@ -135,6 +135,10 @@ main = do
     (Invocation selected Human (Evidence (ListFetchHistory localFile sales)))
   succeeds ["evidence","list","local-file","sales"]
     (Invocation selected Human (Evidence (ListCurrentEvidence localFile sales)))
+  succeeds ["evidence","show","local-file","sales","notes.txt"]
+    (Invocation selected Human (Evidence (ShowCurrentEvidence localFile sales (EvidenceId "notes.txt"))))
+  forM_ [["evidence","show","local-file","sales"], ["evidence","show","local-file","sales",""],
+    ["evidence","show","local-file","sales","notes.txt","--evolution","abc123"]] refuses
   forM_ [["evidence","list"], ["evidence","list","local-file"],
     ["evidence","list","local-file","sales","--since","first"],
     ["evidence","list","local-file","sales","--evolution","abc123"]] refuses

@@ -22,7 +22,7 @@ import qualified Kyyn.Domain.GuestApi as Api
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (pluginName, connectorName)
-import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult, changesResult, historyResult)
+import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult, evidenceItemResult, changesResult, historyResult)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -63,6 +63,13 @@ main = do
         && messages == ["notes.txt  abc"]) (fail "Current listing output must contain only selection and IDs/fingerprints")
   case evidenceListResult (EvidenceCapture snapshot []) of
     Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
+  case evidenceItemResult snapshot (EvidenceId "notes.txt")
+    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (CheckedValue (contractId evidenceContract) (String "hello"))) "\"hello\"\n" of
+    Response _ payload messages _ -> unless
+      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)],
+        "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"references" .= ["file:///notes.txt" :: String],"payload" .= ("hello" :: String)]
+        && messages == ["Evidence: notes.txt","Fingerprint: abc","Source: file:///notes.txt","\"hello\""])
+      (fail "Current evidence inspection lost payload or source metadata")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []
       checkInstanceKeys (Object fields) =
         not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)

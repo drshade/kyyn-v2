@@ -174,8 +174,8 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runRootOpening sdk
-      (runPluginPreparation sdk (runToolPreparation sdk . runRootExecution sdk $ do
+    (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runPluginPreparation sdk
+      (runToolPreparation sdk (runRootOpening sdk . runRootExecution sdk $ do
         opened <- openCapturedRoot invalidCode
         either (pure . Rejected . ValidationReport) checkRoot opened))))))))))) >>= right
   case rootResult of

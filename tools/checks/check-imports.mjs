@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const allowed = {
   'kyyn-surfaces': ['Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Recipe', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
-    'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Secret',
+    'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Secret',
     'Kyyn.Domain.Plugin', 'Kyyn.Domain.Tap',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
     'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.DataType', 'Kyyn.Types.SchemaMetadata', 'Data.Aeson.Key', 'Kyyn.Domain.Recipe',
@@ -176,7 +176,7 @@ const plumbingModules = {
   'Kyyn.Plumbing.Protocol.Judgement': ['Agentic.Questions', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString.Lazy', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Model', 'Kyyn.Plumbing.Protocol.ModelTurn', 'Kyyn.Runtime.Json', 'Kyyn.Runtime.JudgementWire'],
   'Kyyn.Plumbing.Capability.SecretStore': ['Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Secret'],
   'Kyyn.Plumbing.Protocol.Recipes': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Recipe', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Kyyn.Domain.DataType', 'Kyyn.Types.Fact', 'Kyyn.Types.KnowledgeBase'],
-  'Kyyn.Plumbing.Protocol.Tool': ['Agentic.Questions', 'Agentic.Runtime', 'Kyyn.Plumbing.Protocol.ModelTurn', 'Kyyn.Plumbing.Protocol.Judgement', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.KeyMap', 'Data.ByteString',
+  'Kyyn.Plumbing.Protocol.Tool': ['Kyyn.Types.Evidence', 'Agentic.Questions', 'Agentic.Runtime', 'Kyyn.Plumbing.Protocol.ModelTurn', 'Kyyn.Plumbing.Protocol.Judgement', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.KeyMap', 'Data.ByteString',
     'Data.Coerce', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.GuestCompilation.Types',
     'Kyyn.Plumbing.Capability.SchemaInspection.Codecs', 'Kyyn.Plumbing.Protocol.PluginMessages'],

@@ -1,6 +1,5 @@
-// Installed closed-recipe run: two captured sources, frozen draft, repeated checks,
-// acceptance, deletion acknowledgement and newer evidence remaining pending.
-// Checks producer reconciliation, bad scopes/IDs and missing secrets; no live model.
+// Installed closed recipe: generic current reads across two instances, typed
+// fact/state proposals, frozen replay and acceptance. Model failures use no network.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -24,7 +23,7 @@ function invoke(command, args, status = 0) {
 }
 const cli = (args, status = 0) => JSON.parse(invoke(executable, ['--kb', kb, '--json', ...args], status));
 const accept = id => { cli(['evolution', 'ready', id]); cli(['evolution', 'accept', id]); };
-const run = (name, extra = [], status = 0) => cli(['root', 'recipe', 'run', name, 'local-file', 'documents', ...extra], status);
+const run = (name, extra = [], status = 0) => cli(['root', 'recipe', 'run', name, ...extra], status);
 const countDrafts = () => fs.readdirSync(path.join(kb, 'evolutions')).length;
 try {
   fs.mkdirSync(folder);
@@ -55,7 +54,8 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     const file = path.join(target, name);
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
-  fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `module Tasks where
+  fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Tasks where
 import qualified Agentic as A
 import qualified Agentic.Questions as Q
 import qualified Data.Text as Text
@@ -63,152 +63,113 @@ import Control.Monad.Trans.Except (throwE)
 import Kyyn.Agentic (Step, Flow, liftTool, interpret)
 import Kyyn.Recipe
 import Kyyn.Schema (Fact(..), FactId(..))
-import Kyyn.Evolution (Rationale(..))
-import Kyyn.Plugin (FetchError(..))
+import Kyyn.Evolution (Rationale(..), EvidenceRef(..))
+import Kyyn.Plugin (FetchError(..), Evidence(..), EvidenceId(..))
 import Kyyn.Workspace.FactEdits
 import qualified Kyyn.Connectors as Connectors
-import qualified Kyyn.Plugins.P_local_file.Folder as Folder
+import qualified Kyyn.Plugins.P_local_file.Folder.Evidence as Evidence
+import qualified LocalFile.Types as Local
 import qualified RootV2
-reconcile :: Flow (RecipeInput RootV2.Root) (ProposedCuration RootEdit)
+reconcile :: Flow (RecipeInput RootV2.Root String Integer) (RecipeProposal RootEdit Integer)
 reconcile = A.act reconcileStep
-reconcileStep :: RecipeInput RootV2.Root -> Step (ProposedCuration RootEdit)
-reconcileStep input@(RecipeInput recipe@(RecipeId name) (RootV2.Root facts) batches) = do
-  let removed = not (null (removedItems batches))
-        || or [null ids | Reconciliation _ ids <- batches]
-      repairing = or [True | Reconciliation _ _ <- batches]
-  text <- if removed || name == "empty" then pure "" else liftTool (Folder.content Connectors.documents "todo.txt") >>= either throwE pure
-  if name == "needsModel" then do
-    _ <- liftTool (interpret (A.draft (A.Instruction (Text.pack "Summarise")) :: Flow Text.Text Text.Text) text) >>= either throwE pure
+reconcileStep :: RecipeInput RootV2.Root String Integer -> Step (RecipeProposal RootEdit Integer)
+reconcileStep (RecipeInput (RootV2.Root facts) mode runs) = do
+  if mode == "failFlow" then throwE (FetchError "Authored refusal") else pure ()
+  if mode == "needsModel" then do
+    _ <- liftTool (interpret (A.draft (A.Instruction "Summarise") :: Flow Text.Text Text.Text) "task") >>= either throwE pure
     pure ()
     else pure ()
-  if name == "failFlow" then throwE (FetchError "Authored refusal") else pure ()
-  if name == "needsJev" then do
-    _ <- liftTool (interpret (A.judge (Q.yesNo (Text.pack "Does this need action?")) :: Flow Text.Text Q.YesNo) text) >>= either throwE pure
+  if mode == "needsJev" then do
+    _ <- liftTool (interpret (A.judge (Q.yesNo "Does this need action?") :: Flow Text.Text Q.YesNo) "task") >>= either throwE pure
     pure ()
     else pure ()
-  let capturedScopes = scopes batches
-      handled = if name == "empty" || text == "omit" then []
-        else if repairing && text == "individual" then acknowledgeItems [(scope, EvidenceId "todo.txt") | scope <- capturedScopes]
-        else if name == "wrongScope" then [EntireBatch (EvidenceScope "local-file" "documents" "invented")]
-        else if name == "wrongId" then acknowledgeItems [(scope, EvidenceId "not-pending") | scope <- capturedScopes]
-        else if not repairing then acknowledgeItems (pendingItems batches ++ removedItems batches)
-        else case acknowledgeAll input of Curation _ declarations -> declarations
-      selected = if name == "wrongRecipe" then RecipeId "someoneElse" else recipe
-      change = if removed then Remove (FactId "todo.txt")
-        else if null facts then Append (Fact (FactId "todo.txt") (RootV2.Todo (Text.unpack text)))
-        else Replace (FactId "todo.txt") (RootV2.Todo (Text.unpack text))
-      steps = if name == "empty" || text == "omit" then [] else [ProposedStep (Rationale "Use captured evidence" [cite scope ident | (scope, ident) <- pendingItems batches]) [Edit_todos change]]
-  pure (ProposedCuration steps (Curation selected handled))
+  ids <- liftTool (Evidence.listEvidenceIds Connectors.documents) >>= either throwE pure
+  prices <- liftTool (Evidence.listEvidenceIds Connectors.prices) >>= either throwE pure
+  captured <- mapM (\\key -> liftTool (Evidence.readEvidence Connectors.documents key) >>= either throwE pure) ids
+  missing <- liftTool (Evidence.readEvidence Connectors.documents (EvidenceId "absent.txt")) >>= either throwE pure
+  case missing of Just _ -> throwE (FetchError "Missing ID resolved"); Nothing -> pure ()
+  let texts = [Text.unpack text | Just (Evidence _ _ (Local.Document text)) <- captured]
+      citations = [EvidenceRef "local-file" "documents" key refs |
+        (EvidenceId key, Just (Evidence _ refs _)) <- zip ids captured]
+      edits = case texts of
+        [] -> [Edit_todos (Remove key) | Fact key _ <- facts]
+        text:_ -> [Edit_todos (if null facts then Append (Fact (FactId "todo.txt") (RootV2.Todo text))
+          else Replace (FactId "todo.txt") (RootV2.Todo text))]
+      rationale = Rationale (Text.pack ("Read current evidence; price items=" ++ show (length prices))) citations
+  pure (RecipeProposal [ProposedStep rationale edits] (runs + 1))
 `);
-  fs.writeFileSync(path.join(setup.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(setup.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
-import Kyyn.Schema
+import qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks
 import qualified RootV1 as Before
 import qualified RootV2 as After
 evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Teach recipes" []) (within recipes $ do
-    append (Fact (FactId "open") (OpenAgent "Use an external agent"))
-    mapM_ (\\name -> append (Fact (FactId name) (ClosedAgent (FlowEntryRef "Tasks.reconcile"))))
-      ["sync", "wrongRecipe", "wrongScope", "wrongId", "failFlow", "needsModel", "needsJev", "empty"])
+  >=> edit (Rationale "Teach recipes" []) (do
+    createRecipe (RecipeId "open") (openRecipe unitRecipeType "Use an external agent") ()
+    createRecipe (RecipeId "sync") Tasks.reconcile 0
+    createRecipe (RecipeId "untouched") Tasks.reconcile 100)
 `);
+  console.log('Creating evidence-reading recipe and typed state');
   cli(['evolution', 'check', setup.id]);
   accept(setup.id);
+  const state = name => fs.readFileSync(path.join(kb, 'root/recipes', name, 'state.dhall'), 'utf8');
+  const initialState = state('sync'), untouched = state('untouched');
+  const apiName = 'Kyyn.Plugins.P_local_file.Folder.Evidence';
+  assert(cli(['guest', 'module', 'list']).result.modules.includes(apiName));
+  const api = cli(['guest', 'module', 'show', apiName]).result;
+  assert.match(JSON.stringify(api), /listEvidenceIds/);
+  assert.match(JSON.stringify(api), /LocalFile.Types.Document/);
+  assert.match(JSON.stringify(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt'], 1)), /evidence.not-fetched/);
   for (const instance of ['documents', 'prices']) cli(['evidence', 'fetch', 'local-file', instance]);
+  const item = cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result;
+  assert.deepEqual(item.payload, { text: 'Captured task' });
+  assert(item.fingerprint.length > 0);
+  assert.deepEqual(item.references, [path.join(folder, 'todo.txt')]);
+  assert.match(JSON.stringify(cli(['evidence', 'show', 'local-file', 'documents', 'absent.txt'], 1)), /evidence.not-found/);
   const before = countDrafts();
-  for (const [name, code] of [['open', 'recipe.open-agent'], ['wrongRecipe', 'recipe.curation-mismatch'],
-    ['wrongScope', 'recipe.curation-scope'], ['wrongId', 'recipe.curation-record'], ['failFlow', 'tool.failed']]) {
-    assert.match(JSON.stringify(run(name, [], 1)), new RegExp(code));
+  assert.match(JSON.stringify(run('open', [], 1)), /recipe.open-agent/);
+  for (const [mode, diagnostic] of [['failFlow', /tool.failed/], ['needsModel', /Missing model secret RECIPE_TEST_KEY/],
+    ['needsJev', /Missing model secret JEV_TOKEN/]]) {
+    assert.match(JSON.stringify(run('sync', ['--input', JSON.stringify(mode)], 1)), diagnostic);
     assert.equal(countDrafts(), before, 'Refused run created an evolution');
   }
-  assert.match(JSON.stringify(run('sync', ['local-file', 'documents'], 1)), /recipe.duplicate-input/);
-  assert.match(JSON.stringify(run('needsModel', [], 1)), /Missing model secret RECIPE_TEST_KEY/);
-  assert.match(JSON.stringify(run('needsJev', [], 1)), /Missing model secret JEV_TOKEN/);
-  assert.equal(countDrafts(), before);
-  invoke(executable, ['--kb', kb, 'root', 'recipe', 'run', 'sync', 'local-file'], 2);
-  const proposal = run('sync', ['local-file', 'prices']).result;
+  assert.equal(state('sync'), initialState);
+  console.log('Running generic current evidence reads and freezing fact/state output');
+  const proposal = run('sync', ['--input', '"sync"']).result;
   const frozen = fs.readFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'utf8');
-  const entry = fs.readFileSync(path.join(proposal.path, 'change/Evolution.hs'), 'utf8');
-  assert.match(entry, /^evolution = frozen$/m);
-  assert.doesNotMatch(entry, /proposal\.decode|case /);
-  const selection = ['--evolution', proposal.id];
-  const modules = cli(['guest', 'module', 'list', ...selection]).result;
-  assert(modules.modules.includes('KyynFrozenProposal'));
-  assert.equal(modules.origins.KyynFrozenProposal, 'generated');
-  const api = cli(['guest', 'module', 'show', 'KyynFrozenProposal', ...selection]).result;
-  const binding = api.symbols.find(symbol => symbol.name === 'frozen');
-  assert.match(binding.declaration, /Evolution.*KnowledgeBase.*RootV2.Root/);
-  assert.equal(api.origin, 'generated');
-  assert.match(JSON.stringify(cli(['guest', 'symbol', 'show', 'KyynFrozenProposal.frozen', ...selection])), /RootV2.Root/);
-  fs.writeFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'True');
-  assert(cli(['guest', 'module', 'show', 'KyynFrozenProposal', ...selection], 1).diagnostics.length > 0);
-  fs.writeFileSync(path.join(proposal.path, 'change/proposal.dhall'), frozen);
+  assert.match(fs.readFileSync(path.join(proposal.path, 'change/Evolution.hs'), 'utf8'), /^evolution = frozen$/m);
   assert.match(frozen, /Captured task/);
-  assert.match(frozen, /prices/);
-  assert.match(JSON.stringify(cli(['evolution', 'show', proposal.id])), /Draft/);
-  assert.match(JSON.stringify(cli(['root', 'recipe', 'pending', 'list', 'sync', 'local-file', 'documents'])), /todo.txt/);
+  assert.match(frozen, /price items=1/);
+  assert.doesNotMatch(frozen, /curation/);
+  assert.match(JSON.stringify(cli(['guest', 'module', 'show', 'KyynFrozenProposal', '--evolution', proposal.id])), /RecipeEvolution/);
   fs.writeFileSync(path.join(folder, 'todo.txt'), 'Newer source text');
   cli(['evidence', 'fetch', 'local-file', 'documents']);
+  assert.equal(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result.payload.text, 'Newer source text');
   cli(['evolution', 'check', proposal.id]);
   cli(['evolution', 'check', proposal.id]);
   assert.equal(fs.readFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'utf8'), frozen);
+  assert.equal(state('sync'), initialState, 'Checking advanced recipe state');
   accept(proposal.id);
   const shown = JSON.stringify(cli(['root', 'show']));
   assert.match(shown, /Captured task/);
-  assert(!shown.includes('Newer source text'));
-  assert.match(JSON.stringify(cli(['root', 'recipe', 'pending', 'list', 'sync', 'local-file', 'documents'])), /Updated/);
-  assert.deepEqual(cli(['root', 'recipe', 'pending', 'list', 'sync', 'local-file', 'prices']).result.changes, []);
+  assert.doesNotMatch(shown, /Newer source text/);
+  assert.equal(state('sync').trim(), '+1');
+  assert.equal(state('untouched'), untouched);
   fs.unlinkSync(path.join(folder, 'todo.txt'));
   cli(['evidence', 'fetch', 'local-file', 'documents']);
-  const deletion = run('sync').result;
+  assert.match(JSON.stringify(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt'], 1)), /evidence.not-found/);
+  const deletion = run('sync', ['--input', '"sync"']).result;
   assert.match(fs.readFileSync(path.join(deletion.path, 'change/proposal.dhall'), 'utf8'), /Remove/);
   cli(['evolution', 'check', deletion.id]);
   accept(deletion.id);
-  assert.deepEqual(cli(['root', 'recipe', 'pending', 'list', 'sync', 'local-file', 'documents']).result.changes, []);
-  const empty = run('empty').result;
-  assert.equal(empty.state, 'Draft', 'Empty pending input should remain an authored decision');
-  cli(['evolution', 'check', empty.id]);
-  const upgrade = label => {
-    fs.appendFileSync(path.join(plugin, 'src/LocalFile/Folder.hs'), `\n-- ${label}\n`);
-    invoke('git', ['-C', plugin, 'add', '.']);
-    invoke('git', ['-C', plugin, '-c', 'commit.gpgsign=false', 'commit', '-qm', label]);
-    const draft = cli(['evolution', 'new', label]).result;
-    cli(['plugin', 'install', '--evolution', draft.id, '--from', plugin]);
-    cli(['evolution', 'check', draft.id]);
-    accept(draft.id);
-    cli(['evidence', 'fetch', 'local-file', 'documents']);
-  };
-  const pending = () => cli(['root', 'recipe', 'pending', 'list', 'sync', 'local-file', 'documents']).result;
-  fs.writeFileSync(path.join(folder, 'todo.txt'), 'individual');
-  upgrade('replace-producer');
-  assert.equal(pending().kind, 'Reconciliation');
-  assert.deepEqual(pending().currentIds, ['todo.txt']);
-  const priorDrafts = countDrafts();
-  assert.match(JSON.stringify(run('sync', [], 1)), /curation.producer-changed/);
-  assert.equal(countDrafts(), priorDrafts, 'Individual reconciliation saved a proposal');
-  fs.writeFileSync(path.join(folder, 'todo.txt'), 'omit');
-  cli(['evidence', 'fetch', 'local-file', 'documents']);
-  const omitted = run('sync').result;
-  cli(['evolution', 'check', omitted.id]);
-  accept(omitted.id);
-  assert.equal(pending().kind, 'Reconciliation', 'Omission cleared reconciliation');
-  fs.writeFileSync(path.join(folder, 'todo.txt'), 'Reconciled task');
-  cli(['evidence', 'fetch', 'local-file', 'documents']);
-  const repaired = run('sync').result;
-  cli(['evolution', 'check', repaired.id]);
-  assert.equal(pending().kind, 'Reconciliation', 'Checking advanced progress');
-  accept(repaired.id);
-  assert.deepEqual(pending().changes, []);
-  assert.match(JSON.stringify(cli(['root', 'show'])), /Reconciled task/);
-  fs.unlinkSync(path.join(folder, 'todo.txt'));
-  upgrade('replace-with-empty-producer');
-  assert.equal(pending().kind, 'Reconciliation');
-  assert.deepEqual(pending().currentIds, []);
-  const emptyRepair = run('sync').result;
-  cli(['evolution', 'check', emptyRepair.id]);
-  accept(emptyRepair.id);
-  assert.deepEqual(pending().changes, []);
-  console.log('Recipe run: captured reads, multiple scopes, refused proposals, Draft persistence, repeatable checking and ordinary acceptance passed.');
+  assert.equal(state('sync').trim(), '+2');
+  cli(['evidence', 'clear', 'local-file', 'documents']);
+  assert.equal(state('sync').trim(), '+2', 'Cache clearing changed accepted state');
+  assert.equal(state('untouched'), untouched);
+  cli(['root', 'check']);
+  console.log('Generic current reads, inspection, typed proposals, frozen replay and recipe isolation passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

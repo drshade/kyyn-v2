@@ -246,6 +246,7 @@ For Microsoft Graph authentication/configuration use
 ```sh
 kyyn-v2 --kb PATH evidence fetch local-file documents
 kyyn-v2 --kb PATH evidence list local-file documents
+kyyn-v2 --kb PATH evidence show local-file documents notes.txt
 kyyn-v2 --kb PATH evidence history list local-file documents
 kyyn-v2 --kb PATH evidence change list local-file documents --since FETCH_ID
 kyyn-v2 --kb PATH plugin connector method list local-file documents
@@ -259,6 +260,10 @@ markers; they cannot retrieve old contents. Plugin methods expose useful typed
 reads of captured evidence: local-file's `content` reads the latest captured
 text, not the current file on disk. Human method results are Dhall; `--json`
 returns structured JSON.
+
+`evidence show` displays the current typed payload as Dhall, its fingerprint and
+source references. A missing item is different from an unfetched connector;
+neither retrieves historical contents.
 
 Some connectors accept `evidence fetch PLUGIN INSTANCE --options 'DHALL'`.
 Inspect the optional type with `plugin connector show PLUGIN INSTANCE`;
@@ -288,6 +293,26 @@ kyyn-v2 --kb PATH root tool execute bulkContent --input '["notes.txt", "summary.
 Execution uses the accepted helper and latest fetched evidence. Discover IDs
 with `evidence list` first. Showing a tool exposes its contracts without
 executing it; helpers can compose reads across configured connector instances.
+
+Each generated connector proxy has an `Evidence` module for generic current reads,
+even when the plugin provides no enumeration method. For a local-file instance
+whose binding is `documents`:
+
+```haskell
+import qualified Kyyn.Connectors as Connectors
+import qualified Kyyn.Plugins.P_local_file.Folder.Evidence as Evidence
+
+-- Within a Tool action:
+-- Evidence.listEvidenceIds Connectors.documents
+-- Evidence.readEvidence Connectors.documents evidenceId
+```
+
+The first returns `Either FetchError [EvidenceId]`; the second returns
+`Either FetchError (Maybe (Evidence Payload))`, with the connector's actual payload
+type in place of `Payload`. Use `guest module show` on that generated module to
+see the exact signatures. Closed flows can use these actions through
+`Kyyn.Agentic.liftTool`, just like plugin methods. All reads of an instance within
+one invocation share its captured snapshot.
 
 ### Judgements
 
