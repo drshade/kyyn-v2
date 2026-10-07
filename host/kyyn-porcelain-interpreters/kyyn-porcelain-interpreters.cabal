@@ -18,6 +18,7 @@ library
     Kyyn.Porcelain.Protocol.EvidencePersistence
     Kyyn.Porcelain.Protocol.CurationPersistence
     Kyyn.Porcelain.Protocol.RecipePersistence
+    Kyyn.Porcelain.Protocol.RecipeBindings
     Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Protocol.ToolBroker
     Kyyn.Porcelain.Protocol.ToolBindings
@@ -65,6 +66,17 @@ test-suite guest-catalogue
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-porcelain,
     kyyn-porcelain-interpreters, kyyn-plumbing, kyyn-plumbing-interpreters,
     effectful-core ==2.6.1.0, bytestring
+
+test-suite recipe-state
+  type: exitcode-stdio-1.0
+  main-is: RecipeStateTests.hs
+  hs-source-dirs: test src
+  other-modules: Kyyn.Porcelain.Protocol.RecipePersistence
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    aeson, bytestring, text, transformers
 
 test-suite evolution-reports
   type: exitcode-stdio-1.0

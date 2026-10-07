@@ -21,6 +21,7 @@ import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
+import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import qualified Kyyn.Plumbing.Protocol.Plugin as Plugin
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
@@ -30,9 +31,10 @@ import Kyyn.Plumbing.Protocol.Recipes (knowledgeBaseValue)
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
+import Kyyn.Porcelain.Protocol.RecipeBindings (prepareRecipeTypes)
 
 runEvolutionExecution
-  :: (RootStore :> es,
+  :: (RootStore :> es, SchemaInspection :> es,
       GuestCompilation :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => FileTree -> Eff (EvolutionExecution : es) a -> Eff es a
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
@@ -44,9 +46,10 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
   unless (before == acceptedSources) (reject "evolution.before-source" "Captured input does not match Before's source")
   unless (target == preparedCode) (reject "evolution.after-source" "Prepared After does not match the captured target")
   CheckedValue _ input <- proposed (loadRootValueForChecking source)
-  old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` closure])
+  (stateBindings,stateClosure) <- proposed (prepareRecipeTypes sdk before targetSources change)
+  old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` (closure ++ stateClosure)])
   lowered <- proposed (lowerProposal expected after change)
-  combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,lowered,sdk])
+  combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,lowered,stateBindings,sdk])
   prepared <- checked "evolution.prepare" (evolutionSources expected after combined)
   compiled <- proposed (first (map (compilerContext "evolution")) <$> compileGuest prepared)
   let knowledge = Value.KnowledgeBase input recipes

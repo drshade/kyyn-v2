@@ -3,7 +3,8 @@ module Kyyn.Evolution
   ( Evolution, Rationale(..), EvolutionFailure(..)
   , EvidenceRef(..), EvidenceId(..), (>=>), identityEvolution, withCuration
   , RecipeId(..), EvidenceScope(..), Acknowledgement(..), Curation(..)
-  , KnowledgeBase(..), Recipe(..), FlowEntryRef(..), facts, recipes, onFacts
+  , KnowledgeBase, RecipeType, RecipeDefinition, facts, onFacts
+  , openRecipe, unitRecipeType, createRecipe, updateRecipe, removeRecipe
   , module Kyyn.Edit
   ) where
 

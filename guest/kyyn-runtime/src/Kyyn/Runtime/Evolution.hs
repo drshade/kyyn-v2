@@ -7,7 +7,8 @@ import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Evidence (EvidenceId(..))
 import Kyyn.Types.Curation
-import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
+import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Program (Program(..))
@@ -28,13 +29,21 @@ knowledgeBaseCodec valueCodec = Codec encode decode
     recipeCodec = Codec encodeRecipe decodeRecipe
     encodeRecipe (Fact (FactId name) payload) = record
       [("id",encodeWith textCodec name),
-       ("value",encodePayload payload)]
+       ("value",encodeStored payload)]
     decodeRecipe value = do
       values <- fields ["id","value"] value
       name <- field "id" textCodec values
       payload <- field "value" payloadCodec values
       pure (Fact (FactId name) payload)
-    payloadCodec = Codec encodePayload decodePayload
+    payloadCodec = Codec encodeStored decodeStored
+    encodeStored (StoredRecipe method stateType contract state) = record
+      [("method",encodePayload method),("stateType",encodeWith textCodec stateType),
+       ("stateContract",encodeWith textCodec contract),("state",state)]
+    decodeStored value = do
+      values <- fields ["method","stateType","stateContract","state"] value
+      StoredRecipe <$> field "method" (Codec encodePayload decodePayload) values
+        <*> field "stateType" textCodec values <*> field "stateContract" textCodec values
+        <*> field "state" (Codec id Right) values
     encodePayload (OpenAgent instructions) = tagged "OpenAgent" (Just
       (record [("instructions",encodeWith textCodec instructions)]))
     encodePayload (ClosedAgent (FlowEntryRef entry)) = tagged "ClosedAgent" (Just

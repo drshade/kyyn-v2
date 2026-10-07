@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import Control.Monad (unless, forM_)
+import Control.Monad (unless, forM_, forM)
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -22,6 +22,7 @@ import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, identityEvolutionSource, decodeEvolutionReply)
+import Kyyn.Plumbing.Protocol.RecipeTypes (recipeTypeBinding)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem
@@ -90,19 +91,23 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   toolchain <- GuestToolchain <$> right (directoryScope compiler)
   let path = either error id . relativePath
       load base name = (,) (path name) <$> Bytes.readFile (repo </> base </> name)
-  authored <- mapM (load "host/kyyn-microhs/test/evolution") ["SchemaV1.hs","SchemaV2.hs","Evolution.hs","Proof.hs"]
+  authored <- mapM (load "host/kyyn-microhs/test/evolution") ["SchemaV1.hs","SchemaV2.hs","Evolution.hs","Proof.hs","ReviewV1.hs","ReviewV2.hs","RecipeProof.hs"]
+  recipeBindings <- fmap concat $ forM [("Before","ReviewV1",[]),("After","ReviewV2",[(Just "window",OptionalType StringType)])] $ \(endpoint,name,extra) -> do
+    contract <- right (checkContract (Algebraic (name ++ ".State") []
+      [Constructor (name ++ ".State") ((Just "reviewed",ListType StringType):extra)]) (SchemaMetadata [] [] []))
+    files <$> right (recipeTypeBinding ("Kyyn.Workspace." ++ endpoint ++ ".RecipeTypes." ++ name ++ ".State") (name ++ ".State") contract)
   metadataBindings <- renamedBindings "Metadata" before renamed
   sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
     ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Evolution/Proposal.hs","Kyyn/Recipe.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
-     [load "guest/kyyn-sdk/src" "Kyyn/Recipe/Edit.hs"] ++
+     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Recipe/Edit.hs","Kyyn/Recipe/Internal.hs"]] ++
      [load "guest/kyyn-sdk/test" name | name <- ["EvolutionCore.hs","EditTests.hs","KnowledgeBaseTests.hs","RecipeTests.hs","RecipeEditTests.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Evolution","Validation"]] ++
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource "SchemaV1.Root")))
-      captured = (path "Identity.hs",identitySource) : authored ++ support ++ files bindings ++ files metadataBindings ++ files sameBindings
+      captured = (path "Identity.hs",identitySource) : authored ++ support ++ recipeBindings ++ files bindings ++ files metadataBindings ++ files sameBindings
       compileGuestFiles entries = do
         sources <- right (guestSources (path "Proof.hs") entries)
         runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain Nothing $ compileGuest sources

@@ -2,11 +2,13 @@
 module Proof where
 
 import qualified EvolutionCore
+import qualified RecipeProof
 import qualified Evolution
 import qualified Identity
 import qualified Kyyn.Workspace.Metadata as Metadata
 import qualified Kyyn.Workspace.Unchanged as Unchanged
 import Kyyn.Evolution
+import Kyyn.Recipe.Internal (KnowledgeBase(..))
 import Kyyn.Evolution.Internal (RecordedRoot(..), StepObservation(..), EvolutionOutput(..), evaluateEvolution)
 import Kyyn.Types.Fact
 import Kyyn.Runtime.Json (parseValue, record)
@@ -19,6 +21,7 @@ import qualified SchemaV2 as After
 main :: IO ()
 main = do
   EvolutionCore.main
+  RecipeProof.main
   let input = KnowledgeBase (Before.Root [Fact (FactId "todo-001") (Before.Todo "Review")]) []
   case evaluateEvolution Identity.evolution input of
     Right (EvolutionOutput value observations Nothing) -> assert (value == input && null observations)
