@@ -10,7 +10,7 @@ library
   exposed-modules: Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Evolution.Proposal Kyyn.Recipe
     Kyyn.Plugin Kyyn.Plugin.Host
-  other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal
+  other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1, text
@@ -21,7 +21,7 @@ test-suite evolution-core
   hs-source-dirs: test src
   other-modules: Kyyn.Evolution Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase
     Kyyn.Edit Kyyn.Edit.Internal Kyyn.Optics Kyyn.Recipe Kyyn.Evolution.Proposal
-    EditTests KnowledgeBaseTests RecipeTests
+    Kyyn.Recipe.Edit EditTests KnowledgeBaseTests RecipeTests RecipeEditTests
   default-language: Haskell2010
   ghc-options: -Wall -Werror -main-is EvolutionCore.main
   default-extensions: OverloadedStrings

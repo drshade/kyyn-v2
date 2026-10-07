@@ -5,11 +5,13 @@ module Kyyn.Recipe
   , Curation(..), Acknowledgement(..)
   , ProposedCuration(..), ProposedStep(..), FactEdit(..)
   , pendingItems, removedItems, scopes, acknowledgeAll, acknowledgeItems, cite
+  , module Kyyn.Recipe.Edit
   ) where
 
 import Kyyn.Types.Curation
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceRef(EvidenceRef))
 import Kyyn.Evolution.Proposal
+import Kyyn.Recipe.Edit
 import Data.List (partition)
 
 -- | The selected root and captured pending evidence supplied to a recipe flow.

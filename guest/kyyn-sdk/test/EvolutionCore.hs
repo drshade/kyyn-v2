@@ -11,12 +11,14 @@ import Text.JSON.Types (JSValue(..), toJSString)
 import qualified EditTests
 import qualified KnowledgeBaseTests
 import qualified RecipeTests
+import qualified RecipeEditTests
 
 main :: IO ()
 main = do
   EditTests.main
   KnowledgeBaseTests.main
   RecipeTests.main
+  RecipeEditTests.main
   let old = RootBinding "old" (JSString . toJSString . show) :: RootBinding Integer
       new = RootBinding "new" (JSString . toJSString . show) :: RootBinding Integer
       citation = EvidenceRef "sales" "account-one" "org/opportunity/123" ["https://example.test/123"]
