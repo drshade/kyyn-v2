@@ -98,8 +98,9 @@ eventValue value = do
   either (Left . (("Graph event " <> key <> ": ") <>)) Right (decodeEvent key)
   where
     decodeEvent key = do
-      version <- fieldText "changeKey"
-      if Text.null key || Text.null version then Left "Graph event has no ID or changeKey" else pure ()
+      changeKey <- Json.optionalText "changeKey" value
+      version <- maybe (fieldText "@odata.etag") Right changeKey
+      if Text.null key || Text.null version then Left "Graph event has no ID or version" else pure ()
       event <- Event <$> descriptive ["subject"] value <*> descriptive ["bodyPreview"] value
         <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
         <*> (Json.member "organizer" value >>= person)

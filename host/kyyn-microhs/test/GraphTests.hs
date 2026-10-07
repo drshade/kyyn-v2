@@ -212,6 +212,11 @@ deltaTests program = do
   assert "duplicate did not choose last copy" (fingerprint == ("latest" :: String))
   (deletedLast,_) <- trial [http 200 [] (deltaPage [event "changed" "key" "2026-09-01T00:00:00Z",removed "changed"])] (input False prior)
   assert "last tombstone lost" (tags deletedLast == Right ["Removed"])
+  let etagEvent = case event "changed" "unused" "2026-09-01T00:00:00Z" of
+        Object fields -> Object (KeyMap.insert "@odata.etag" (String "W/\"provider-version\"") (KeyMap.delete "changeKey" fields))
+        value -> value
+  (etagOnly,_) <- trial [http 200 [] (deltaPage [etagEvent])] (input False prior)
+  assert "delta event without changeKey was rejected" (tags etagOnly == Right ["Updated"])
   forM_ [410,404] $ \status -> do
     (reset,visited) <- trial [http status [] (object ["error" .= object ["code" .= ("syncStateNotFound" :: String)]]),
       http 200 [] (deltaPage [])] (input False prior)

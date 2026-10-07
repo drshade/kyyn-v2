@@ -2,7 +2,7 @@
 
 The `Calendar` source synchronizes one user's default calendar within a configured
 date window, including recurring occurrences. Event IDs
-identify evidence; Graph's `changeKey` identifies updates. The `event` method reads
+identify evidence; Graph's `changeKey` or returned ETag identifies updates. The `event` method reads
 the latest captured event without contacting Microsoft.
 
 ## Install and configure
