@@ -183,13 +183,10 @@ helpers remain ordinary typed functions or state actions; `onFacts` and `zoom fa
 reuse them without manual recipe copying. Generated collection handles compose
 the facts lens internally: `AfterCollections.todos` has type
 `Collection (KnowledgeBase After.Root) After.Todo`. Ordinary `within` edits need
-no extra zoom, and recipe edits use the same syntax. An existing unaccepted
-draft using the former bare-Root entry must update its signature, wrap whole-root
-schema functions with `onFacts`, and focus manual root state actions with `zoom facts`;
-the ordinary compiler error reports the mismatch, and the
-[CLI guide](../../docs/guide.md#recipes-and-curation)
-describes the repair. Do not add a second
-legacy entry adapter. Accepted archives remain readable without recompiling entries.
+no extra zoom. Recipe definitions and heterogeneous state use ADR 0014's typed
+recipe operations. In a recipe-based facade the collection handles instead focus
+on the domain root inside editFacts. Accepted archives remain readable without
+recompiling entries.
 
 Same-schema edits use standard strict StateT over Either. A refusal returns no
 partially modified root. One `edit` has one rationale and one observed boundary,
@@ -378,7 +375,7 @@ evolutions/<id>/
 Creation copies the base root's code, configuration and examples into `target/`.
 Editing that copy proposes their replacement; removing a target file proposes its
 deletion. Domain facts and recipes are produced by `evolution`, not edited in a
-parallel `target/facts/` tree or `target/recipes.dhall` file. RootStore combines
+parallel `target/facts/`, `target/recipes/` tree or `target/recipes.dhall` file. RootStore combines
 the returned data with this target code snapshot. This
 costs a copy of source/dependencies per workspace; begin there rather than invent
 overlay rules, tombstones or dependency-sharing machinery.
@@ -427,7 +424,7 @@ it from the snapshot and captured-input comparison, without parsing it; its pres
 does not establish acceptance. Re-encoding a WorkspaceSnapshot does not emit it;
 archive export supplies the fixed record separately. `result.dhall` is a file,
 not another captured subtree. Projection rejects other files
-outside the layout, any `target/facts` tree and `target/recipes.dhall`. Incomplete draft source is
+outside the layout, any `target/facts` or `target/recipes` tree and `target/recipes.dhall`. Incomplete draft source is
 capturable; projection does not promise that it compiles or matches the selected
 commit. Evolution capture performs that source-selection check separately.
 Input equality compares the parsed Before revision, name and explanation, and
@@ -848,8 +845,7 @@ runEvolutionExecution
   -> Eff (EvolutionExecution : es) a -> Eff es a
 
 applyEvolution
-  :: (RootStore :> es, EvolutionStore :> es, EvolutionExecution :> es,
-      EvidenceStore :> es)
+  :: (RootStore :> es, EvolutionStore :> es, EvolutionExecution :> es)
   => CapturedEvolution
   -> Eff es (Either PreviewRejection (Candidate Root))
 
@@ -919,7 +915,7 @@ evaluateWorkspace
 
 checkEvolution
   :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
-      EvolutionStore :> es, RootExecution :> es, RootStore :> es, EvidenceStore :> es)
+      EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace
   -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
 
