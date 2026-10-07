@@ -58,7 +58,7 @@ const allowed = {
     'Kyyn.Porcelain.Interpreter.WorkspaceStore', 'Kyyn.Surfaces.Cli',
     'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
   'kyyn-types': ['Data.Text', 'Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
-  'kyyn-sdk': ['Data.Text', 'Data.List', 'Kyyn.Evolution.Proposal', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Evolution.KnowledgeBase', 'Kyyn.Types.Curation', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
+  'kyyn-sdk': ['Data.Text', 'Data.List', 'Kyyn.Recipe.Edit', 'Kyyn.Evolution.Proposal', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Evolution.KnowledgeBase', 'Kyyn.Types.Curation', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
     'Kyyn.Types.Plugin', 'Kyyn.Types.PluginHost', 'Kyyn.Types.Program',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
     'Kyyn.Edit', 'Kyyn.Edit.Internal', 'Kyyn.Optics', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Fact',
