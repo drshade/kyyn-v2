@@ -75,10 +75,10 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
       RecipeBased (RecipeId selected) -> do
         rootPath <- checked (rootLocation kb)
         Root _ _ _ _ recipes <- ExceptT (loadRootMaterialAt repository revision (Subtree rootPath) beforeSource)
-        state <- checked $ case [contract | Fact (FactId name) (StoredRecipe _ _ contract _) <- recipes, name == selected] of
-          [contract] -> Right contract
+        state <- checked $ case [(contract,value) | Fact (FactId name) (StoredRecipe _ _ contract value) <- recipes, name == selected] of
+          [pair] -> Right pair
           _ -> Left "The selected recipe must exist in Before"
-        generated <- checked (recipeEvolutionBindings before state)
+        generated <- checked (recipeEvolutionBindings before (fst state))
         pure (generated,beforeSources,Just state)
     lowered <- ExceptT (lowerProposal before after stateContract change)
     let hasProposal = any ((== "proposal.dhall") . relativeName . fst) (files change)

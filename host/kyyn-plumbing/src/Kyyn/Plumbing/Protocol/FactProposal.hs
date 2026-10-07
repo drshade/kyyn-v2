@@ -4,7 +4,7 @@ module Kyyn.Plumbing.Protocol.FactProposal
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, object, (.=), (.:), withObject, encode)
-import Data.Aeson.Types (Parser)
+import Data.Aeson.Types (Parser, parseEither)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -64,20 +64,23 @@ proposalChange contract state proposal@(FactProposal _ (CheckedValue identity _)
      "evolution = frozen"])))])
 
 -- | Decode captured Dhall inputs before compiling their ordinary pure entry.
-lowerProposal :: DhallHandling :> es => RootContract -> RootContract -> Maybe CheckedContract -> FileTree -> Eff es (Either [Diagnostic] FileTree)
+lowerProposal :: DhallHandling :> es => RootContract -> RootContract -> Maybe (CheckedContract, CheckedValue) -> FileTree -> Eff es (Either [Diagnostic] FileTree)
 lowerProposal before after selectedState change = runExceptT $ do
   path <- checked (relativePath "proposal.dhall")
   case lookup path (files change) of
     Nothing -> pure change
     Just bytes -> do
-      state <- checked (maybe (Left "Frozen proposals require a recipe-based workspace") Right selectedState)
+      (state,previous) <- checked (maybe (Left "Frozen proposals require a recipe-based workspace") Right selectedState)
       unless (contractId (rootSchema before) == contractId (rootSchema after))
         (throwE [errorDiagnostic "proposal.schema-changed" "Fact proposals require the same Before and After schema and metadata"])
       shape <- checked (proposalShape before state)
       source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
       value <- ExceptT (decodeValue shape source)
+      FactProposal _ next <- checked (parseEither (parseProposal state) value)
       generated <- checked (relativePath "KyynFrozenProposal.hs")
       let json = Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))
+          finalStep = if next == previous then "identityEvolution"
+            else "recipeEdit (Rationale \"Update recipe state\" []) (putRecipeState state)"
           moduleSource = unlines
             ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where",
              "import Kyyn.Workspace.Evolution", "import Kyyn.Workspace.FactEdits (RootEdit, applyRootEdit)",
@@ -89,7 +92,7 @@ lowerProposal before after selectedState change = runExceptT $ do
              "-- | Apply the captured proposal without invoking its recipe again.",
              "frozen :: RecipeEvolution Root RecipeState",
              "frozen = case proposal of",
-             "  Right (RecipeProposal steps state) -> foldr ((>=>) . step) (recipeEdit (Rationale \"Update recipe state\" []) (putRecipeState state)) steps",
+             "  Right (RecipeProposal steps state) -> foldr ((>=>) . step) (" ++ finalStep ++ ") steps",
              "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing]))",
              "step (ProposedStep why operations) = recipeEdit why (editFacts (mapM_ applyRootEdit operations))",
              "proposal :: Either String (RecipeProposal RootEdit RecipeState)",
