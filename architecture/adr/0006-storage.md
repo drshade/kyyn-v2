@@ -48,7 +48,7 @@ role-only contract change therefore rejects an old checked value. Materializatio
 does not confer semantic validation, execute guest code or write files. Its
 porcelain interpreter requires only DhallHandling, with no IOE. Code and supporting
 files are preserved verbatim in a separate tree; code paths cannot overlap `facts/`
-or the recipe and host-owned curation material in [ADR 0014](0014-evidence.md).
+or the recipe definitions and typed state in [ADR 0014](0014-evidence.md).
 
 Fact-tree paths are relative to `root/`. Reserved file `facts/root.dhall` retains
 non-collection root fields (an empty record when there are none). Each collection
@@ -88,10 +88,9 @@ The store makes snapshot selection explicit. These host operations use
 data RootStore :: Effect where
   ReadRootDefinition
     :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
-  ReadRootCuration
-    :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
   ReadRootRecipes
-    :: FileTree -> RootStore m (Either [Diagnostic] [Fact Recipe])
+    :: [(TypeRef, CheckedContract)] -> FileTree
+    -> RootStore m (Either [Diagnostic] [StoredRecipe])
   CheckRootValue
     :: RootContract -> Value -> RootStore m (Either [Diagnostic] CheckedValue)
   LoadRootValueForChecking
@@ -114,7 +113,7 @@ runRootStore
   => Eff (RootStore : es) a -> Eff es a
 ```
 
-ExportRootFiles combines the validated root's domain facts, recipes, curation and code,
+ExportRootFiles combines the validated root's domain facts, recipe definitions/state and code,
 including examples, configuration and supporting files, without reading disk or
 re-encoding content. FileTree rejects overlapping paths rather than choosing one
 silently. The exported paths remain root-relative; publication places this complete
@@ -149,9 +148,10 @@ runRootOpening
 ```
 
 `LoadRootMaterialAt` adds the selected revision's undecoded fact files and decoded
-curation register to an already prepared `SourceRoot`, without inspecting its
+recipe material to an already prepared `SourceRoot`, without inspecting its
 schema again. Its file reads are scoped to those host-material locations; an absent
-facts directory yields an empty fact tree and an absent register means no progress.
+facts directory yields an empty fact tree. A declared recipe with missing state
+is invalid; absence of all recipes is an empty recipe set.
 Evolution capture uses it after preparing both source endpoints. This operation
 does not claim structural or semantic validation of the facts. Ordinary
 `LoadRootAt` also checks structural fact decoding.
@@ -160,7 +160,7 @@ The manifest is `kb.dhall` inside the selected root subtree. Its fields are
 `schemaType`, `schemaMetadata`, `validator`, the `queries` and `tools` registration
 lists defined in [authoring](0008-authoring.md), and the named `outputs`
 registrations defined in [outputs](0017-outputs.md). Recipes are separate typed root
-material in `recipes.dhall`, as defined in [ADR 0014](0014-evidence.md), not manifest fields. The first three select qualified exports
+material in `recipes.dhall` and per-recipe state files, as defined in [ADR 0014](0014-evidence.md), not manifest fields. The first three select qualified exports
 such as `Schema.Root`, `Schema.schemaMetadata` and `Validate.validate`.
 It selects declarations, not a second schema. Authored modules are under `src/`;
 RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,

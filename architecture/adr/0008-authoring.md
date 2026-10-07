@@ -275,12 +275,11 @@ same tool entry point.
 
 ### Recipe-guided authoring
 
-[ADR 0014](0014-evidence.md) owns recipes, their agent instructions and declared
-curation progress. A recipe is not another executable registry entry alongside
-queries and tools. An agent uses those existing entries to investigate, then
-prepares an evolution following the selected recipe. Generated SDK helpers expose
-the acknowledgement vocabulary without requiring register or fingerprint plumbing
-in authored code. Recipe discovery does not launch an agent or prescribe its steps.
+[ADR 0014](0014-evidence.md) owns recipes and their typed state. An agent uses
+existing tools to investigate and then prepares a recipe-based evolution with
+fact edits and the next state. Generated bindings expose the selected recipe's
+state without Dhall or protocol plumbing. Recipe discovery does not launch an
+agent or prescribe its steps. ADR 0028 owns explicit closed-flow execution.
 
 ### Shared authoring vocabulary
 

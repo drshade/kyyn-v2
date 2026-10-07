@@ -93,11 +93,9 @@ kyyn
       list
       show <name>
       describe <name> [--dot | --mermaid]
-      run <name> <plugin> <instance> [<plugin> <instance> ...]
-      pending
-        list <name> <plugin> <instance>
+      run <name> [--input <dhall>]
   evolution
-    new <name>
+    new <name> [--recipe <name>]
     list
     show <id>
     check <id>
@@ -129,11 +127,8 @@ kyyn
   evidence
     fetch <plugin> <instance> [--options <dhall>]
     list <plugin> <instance>
+    show <plugin> <instance> <id>
     clear <plugin> <instance>
-    history
-      list <plugin> <instance>
-    change
-      list <plugin> <instance>
   output
     list
     show <name>
@@ -187,36 +182,31 @@ discovery must remain available when the configuration file needs repair.
 
 Evidence operations use their own noun path:
 
-Recipe instructions and pending evidence use `root recipe list/show` and
-`root recipe pending list NAME PLUGIN INSTANCE`. They inspect the accepted root;
-list/show requires no runtime bundle. Pending results contain the recipe name,
-fixed `scope` (plugin, instance, fetch) and net `changes` (ID and kind), in human or
-JSON form. [ADR 0014](0014-evidence.md) owns the comparison, progress and recovery
-semantics. Empty pending work is displayed as "No unacknowledged changes."
-
-Raw acquisition history remains separate:
+Recipe discovery uses `root recipe list/show` to expose method, state type and
+current state from the selected accepted revision. Closed flows take their
+author-defined request through `root recipe run NAME [--input DHALL]`.
+An agent creates an authored recipe-based workspace with
+`evolution new NAME --recipe RECIPE`; omission selects ad hoc work.
+[ADR 0014](0014-evidence.md) owns the state model.
 
 ```text
 evidence fetch PLUGIN INSTANCE
-evidence history list PLUGIN INSTANCE
-evidence change list PLUGIN INSTANCE [--since FETCH]
+evidence list PLUGIN INSTANCE
+evidence show PLUGIN INSTANCE ID
 evidence clear PLUGIN INSTANCE
 ```
 
-Fetching selects and checks the accepted root and its configured instance;
-there is no `--evolution` acquisition context. An unaccepted instance cannot
-start an evidence history. Unknown plugins and instances produce `plugin.unknown`
-and `plugin.instance-unknown`; a typed acquisition refusal is `plugin.fetch-failed`.
-History and change results contain fetch identifiers, ordering and citations,
-never payloads. `--since` is exclusive; the ending fetch is always the latest.
-Clearing discards only the selected instance's local evidence and change markers.
-It needs neither the runtime nor plugin preparation, and reports whether a cache existed.
-Unavailable cursors, unfetched instances, incompatible producers, publication conflicts and malformed
-deltas remain distinct: `evidence.cursor-unavailable`, `evidence.not-fetched`, `evidence.producer-changed`,
-`evidence.base-conflict`, `evidence.invalid-delta` and `evidence.invalid-data`
-(corrupt stored data). ADR 0014 owns their semantics.
-History and change inspection prepare plugin declarations and contracts,
-including compiled adapters.
+Fetching checks the accepted configured instance; no draft acquisition context.
+List shows current IDs, fingerprints and availability. Show exposes the current
+payload with references and usable blob exports, not only a historical event.
+Present the latest fetch identity/time/basic summary with the capture.
+Plugin-specific methods remain available for richer views.
+
+Clearing removes only the instance's local capture, latest summary and position,
+not accepted facts or recipe state. Distinguish unfetched, incompatible producer,
+publication conflict, malformed delta/storage and unavailable payload. Missing
+evidence does not claim upstream deletion. No fetch-history or pending-work
+selector is required. ADR 0014 owns these semantics.
 
 `guest module list/show` and `guest symbol show` describe the installed public SDK
 and, when a KB is selected, its generated public tool modules. Public modules come from kyyn-sdk's exposed
@@ -617,26 +607,16 @@ No separate generic KB-tool lifecycle
 or proposal-submission effect is needed. Plugin acquisition methods may be exposed
 directly without implying a change to accepted knowledge.
 
-For evidence investigation, expose configured instance discovery, fetch history
-and the raw payload-free change index alongside plugin-specific read methods.
-Registered KB helpers have the same typed discovery/invocation experience; agents
-need not read the Kyyn repository or write MCP adapters to compose them.
-Change entries identify fetch/predecessor, change kind, evidence ID and citation;
-payload interpretation goes through plugin methods, not generic history payloads.
+For evidence investigation expose configured instances, current evidence enumeration,
+payload inspection/export and plugin-specific methods. Registered KB helpers have
+the same typed discovery/invocation experience. Agents need not read the Kyyn
+repository or write MCP adapters to compose them.
 
-The recipe surface lists/shows root-owned recipes and their
-instructions, and queries net pending changes for a recipe and connector instance.
-Results identify the selected fetch so authors can explicitly acknowledge that
-scope, not an unspecified latest capture. Keep raw acquisition history distinct
-from pending work. [ADR 0014](0014-evidence.md) owns the comparison, latest-only
-reads, raw-history versus pending-work diagnostics and acknowledgement semantics.
-An empty result must not disable investigation/evolution actions or label a task
-complete. Evolution review presents the recipe and batch/individual declarations
-alongside fact changes, including acknowledgement-only proposals. Fetching and
-reading never implicitly acknowledge anything. No agent launcher or workflow
-manager is required to expose these tools.
-The [user guide](../../docs/guide.md#recipes-and-curation) shows current commands,
-following the noun-path convention above.
+Recipe inspection shows instructions or flow plus typed state. Evolution review
+shows the selected recipe and actual fact/state changes, including state-only
+proposals. Reading evidence changes nothing in the accepted root and an empty
+capture does not declare a task complete. [ADR 0014](0014-evidence.md) owns this
+boundary. The [user guide](../../docs/guide.md) describes implemented workflows.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
 Web is designed for human understanding, high-level design, exploration and

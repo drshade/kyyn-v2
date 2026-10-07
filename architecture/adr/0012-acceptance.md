@@ -106,12 +106,11 @@ history from the final diff. Later history reads can therefore explain intermedi
 changes without running archived code. No separate provenance commit, receipt or
 database is required.
 
-Under the [curation model](0014-evidence.md), root export also includes
-the candidate's resolved host-owned progress register. Facts, progress and the
-archive publish through this same conditional commit. Publication does not consult
-the evidence cache or resolve declarations against a newer fetch. Inspection shows
-the declared acknowledgements even when the fact diff is empty. Expected-head,
-readiness and recovery rules apply unchanged.
+Under the [recipe-state model](0014-evidence.md), root export includes each
+recipe's definition and checked state. Facts, state and archive publish through
+the same conditional commit. Publication does not consult the evidence cache.
+Inspection includes state-only changes. Expected-head, readiness and recovery
+rules apply unchanged.
 
 Archive export is defined in ADR 0010. Only its notes subtree is
 read from the live workspace; captured manifest fields, source and fixed report
