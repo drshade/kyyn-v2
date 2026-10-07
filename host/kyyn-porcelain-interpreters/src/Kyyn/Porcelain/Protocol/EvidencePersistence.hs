@@ -1,5 +1,5 @@
 module Kyyn.Porcelain.Protocol.EvidencePersistence
-  ( encodeState, decodeState, decodeHeader, decodeHistory, EvidenceHeader(..) ) where
+  ( encodeState, encodeStateWithPosition, decodePosition, decodeState, decodeHeader, decodeHistory, EvidenceHeader(..) ) where
 
 import Data.Aeson (Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
@@ -78,21 +78,34 @@ decodeHistory bytes = case Text.decodeUtf8' bytes of
 
 encodeState :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> EvidenceState CheckedValue
   -> Eff es (Either EvidenceProblem ByteString)
-encodeState (EvidenceProducer (PackageIdentity producer) identity) contract state@(EvidenceState current values history)
+encodeState producer contract state = encodeStateWithPosition producer contract state Nothing
+
+encodeStateWithPosition :: DhallHandling :> es => EvidenceProducer -> CheckedContract -> EvidenceState CheckedValue
+  -> Maybe (CheckedContract,CheckedValue) -> Eff es (Either EvidenceProblem ByteString)
+encodeStateWithPosition (EvidenceProducer (PackageIdentity producer) identity) contract state@(EvidenceState current values history) position
   | identity /= contractId contract = pure (Left ProducerContractChanged)
   | otherwise = case encodedValue of
       Left problem -> pure (Left problem)
       Right value -> do
-        result <- encodeValue (stateShape (contractShape contract)) value
+        result <- encodeValue shape value
         pure $ either (Left . InvalidEvidence . show) (Right . Text.encodeUtf8) result
   where
+    shape = case stateShape (contractShape contract) of
+      Record fields -> Record (fields ++ [("position",Optional (positionShape (maybe (Record []) (contractShape . fst) position)))])
+      other -> other
     encodedValue = do
       validateState state
+      positionValue <- case position of
+        Nothing -> pure (object ["tag" .= ("None" :: String)])
+        Just (expected,CheckedValue actual value)
+          | actual == contractId expected -> pure (object ["tag" .= ("Some" :: String),"value" .= object
+              ["contract" .= contractFingerprint actual,"value" .= value]])
+          | otherwise -> Left (InvalidEvidence "Sync position has the wrong contract")
       FetchId currentKey <- maybe (Left (InvalidEvidence "A stored evidence state must have a fetch")) Right current
       currentValues <- traverse member values
       pure (object ["header" .= object ["producer" .= producer,
         "contract" .= contractFingerprint identity,"current" .= currentKey],
-        "values" .= currentValues,"history" .= map fetch history])
+        "values" .= currentValues,"history" .= map fetch history,"position" .= positionValue])
     evidence (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue actual value))
       | actual == identity = Right (object ["fingerprint" .= fingerprint,"references" .= refs,"payload" .= value])
       | otherwise = Left ProducerContractChanged
@@ -116,7 +129,8 @@ decodeState (EvidenceProducer producer identity) contract bytes
           pure (Left ProducerContractChanged)
         Right _ -> case Text.decodeUtf8' bytes of
           Left problem -> pure (Left (InvalidEvidence (show problem)))
-          Right source -> decodeFetchDocument (\fetch -> stateShapeWith fetch (contractShape contract)) parseState source
+          Right source -> decodeFetchDocument (\fetch -> stateShapeWith fetch (contractShape contract)) parseState
+            ("(" <> source <> "\n).{header,values,history}")
   where
     evidence = withObject "evidence" $ \fields -> Evidence <$> (EvidenceFingerprint <$> fields .: "fingerprint")
       <*> fields .: "references" <*> (CheckedValue identity <$> fields .: "payload")
@@ -129,6 +143,25 @@ decodeState (EvidenceProducer producer identity) contract bytes
       let state = EvidenceState (Just current) values history
       either (fail . show) pure (validateState state)
       pure state
+
+positionShape :: Shape -> Shape
+positionShape payload = Record [("contract",text),("value",payload)]
+
+decodePosition :: DhallHandling :> es => CheckedContract -> ByteString
+  -> Eff es (Either EvidenceProblem CheckedValue)
+decodePosition contract bytes = case Text.decodeUtf8' bytes of
+  Left problem -> pure (Left (InvalidEvidence (show problem)))
+  Right source -> decode (Optional (positionShape (contractShape contract))) parser
+    ("(" <> source <> "\n).position")
+  where
+    parser = withObject "sync position" $ \fields -> do
+      tag <- fields .: "tag"
+      if (tag :: String) /= "Some" then fail "Stateful capture has no sync position" else do
+        value <- fields .: "value"
+        withObject "checked sync position" (\entry -> do
+          fingerprint <- entry .: "contract"
+          if fingerprint /= contractFingerprint (contractId contract) then fail "Sync position contract changed"
+          else CheckedValue (contractId contract) <$> entry .: "value") value
 
 parseFetch :: Value -> Parser Fetch
 parseFetch = withObject "fetch" $ \fields -> Fetch <$> (FetchId <$> fields .: "id")

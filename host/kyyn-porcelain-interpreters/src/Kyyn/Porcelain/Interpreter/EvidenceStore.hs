@@ -28,10 +28,22 @@ import System.FilePath ((</>))
 runEvidenceStore :: forall es a. (DocumentPersistence :> es, Failure :> es, DhallHandling :> es, FileSystem.FileSystem :> es)
   => DirectoryScope -> Eff (EvidenceStore : es) a -> Eff es a
 runEvidenceStore kb = interpret $ \_ -> \case
+  BeginFetch instanceRef producer contract positionContract -> locked instanceRef $ runExceptT $ do
+    DocumentStamp _ started <- ExceptT (Right <$> Document.freshStamp)
+    bytes <- readCurrent
+    header <- traverse (ExceptT . decodeHeader) bytes
+    let base = case header of Just (EvidenceHeader _ _ key) -> Just key; Nothing -> Nothing
+    case (maybe False (matches producer) header,bytes) of
+      (True,Just contents) -> do
+        state@(EvidenceState _ values _) <- ExceptT (decodeState producer contract contents)
+        snapshot <- snapshotRef instanceRef producer state
+        position <- traverse (\selected -> ExceptT (decodePosition selected contents)) positionContract
+        pure (FetchBaseline started base (Just (CurrentEvidence snapshot values)) position)
+      _ -> pure (FetchBaseline started base Nothing Nothing)
   EvidenceHead instanceRef -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
     traverse (fmap (\(EvidenceHeader _ _ current) -> current) . ExceptT . decodeHeader) bytes
-  PublishFetch instanceRef producer contract expected options changes -> locked instanceRef $ runExceptT $ do
+  PublishFetch instanceRef producer contract expected options changes position -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
     header <- traverse (ExceptT . decodeHeader) bytes
     let current = case header of Just (EvidenceHeader _ _ key) -> Just key; Nothing -> Nothing
@@ -44,7 +56,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
     DocumentStamp key at <- ExceptT (Right <$> freshFetchStamp history)
     let identity = FetchId key
         updated = EvidenceState (Just identity) next (history ++ [Fetch identity previous at markers options])
-    encoded <- ExceptT (encodeState producer contract updated)
+    encoded <- ExceptT (encodeStateWithPosition producer contract updated position)
     ExceptT $ Right <$> FileSystem.ensureIgnoredDirectory kb cacheLocation
     ExceptT $ Right <$> Document.replaceCurrent encoded
     pure (EvidenceSnapshotRef instanceRef producer identity)

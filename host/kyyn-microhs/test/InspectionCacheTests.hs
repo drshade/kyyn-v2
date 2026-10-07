@@ -53,6 +53,8 @@ main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
       run action = runEff . runFailure . runFileSystemIO (scope temporary) . runDhallHandling $ action
   calls <- newIORef (0 :: Int)
   forM_ [FetchSignature structure Nothing StringType, FetchSignature structure (Just BoolType) StringType,
+    StatefulFetchSignature structure Nothing StringType IntegerType,
+    StatefulFetchSignature structure (Just BoolType) StringType IntegerType,
          ReadSignature StringType structure BoolType] $ \signature -> do
     let expected = (signature,[path "A.hs"])
     roundtrip <- run $ do

@@ -134,9 +134,9 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name su
   report <- case validation of
     Rejected (ValidationReport diagnostics) -> throwE diagnostics
     Passed _ diagnostics -> pure diagnostics
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options}) config) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options, syncPositionContract = position}) config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
-  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options supplied)
+  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options position supplied)
   pure (snapshot,report)
 
 sourceAt :: (RootOpening :> es, Evolution.EvolutionStore :> es)

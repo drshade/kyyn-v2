@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, input, fileRequest, evidenceRequest, changeCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, changeCodec) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
@@ -19,6 +19,26 @@ withOptionsCodec configCodec optionsCodec = Codec encode decode
     decode value = do
       values <- fields ["config","options"] value
       (,) <$> field "config" configCodec values <*> field "options" (optionalCodec optionsCodec) values
+
+withContextCodec :: Codec arguments -> Codec position -> Codec (arguments, FetchContext position)
+withContextCodec argumentsCodec positionCodec = Codec encode decode
+  where
+    encode (arguments,FetchContext at prior) = record
+      [("input",encodeWith argumentsCodec arguments),("startedAt",encodeWith textCodec at),
+       ("priorPosition",encodeWith (optionalCodec positionCodec) prior)]
+    decode value = do
+      values <- fields ["input","startedAt","priorPosition"] value
+      (,) <$> field "input" argumentsCodec values
+          <*> (FetchContext <$> field "startedAt" textCodec values <*> field "priorPosition" (optionalCodec positionCodec) values)
+
+fetchResultCodec :: Codec payload -> Codec position -> Codec (FetchResult payload position)
+fetchResultCodec payloadCodec positionCodec = Codec encode decode
+  where
+    encode (FetchResult changes position) = record
+      [("changes",encodeWith (listCodec (changeCodec payloadCodec)) changes),("position",encodeWith positionCodec position)]
+    decode value = do
+      values <- fields ["changes","position"] value
+      FetchResult <$> field "changes" (listCodec (changeCodec payloadCodec)) values <*> field "position" positionCodec values
 
 executeCapturedRead :: Codec arguments -> Codec payload -> Codec result
   -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload) (Either FetchError result)) -> IO ()

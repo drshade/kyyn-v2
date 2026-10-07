@@ -30,7 +30,7 @@ import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, inspectPlugi
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure)
-import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources, loginSources)
+import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, statefulAcquisitionSources, capturedReadSources, loginSources)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Porcelain.Capability.PluginPreparation
 
@@ -80,13 +80,17 @@ prepare sdk code = do
     connectors <- forM declarations $ \(ConnectorDeclaration connector fetch validate declaredMethods login) -> do
       let connectorLabel = label ++ "/" ++ coerce connector
       signature <- located connectorLabel (inspectPluginFunction sourceTree AcquisitionEntry fetch)
-      (configType,optionsType,payloadType) <- case signature of
-        FetchSignature c o p -> pure (c,o,p)
+      (configType,optionsType,payloadType,positionType) <- case signature of
+        FetchSignature c o p -> pure (c,o,p,Nothing)
+        StatefulFetchSignature c o p s -> pure (c,o,p,Just s)
         _ -> bad connectorLabel "Expected acquisition signature"
       config <- contract configType
       payload <- contract payloadType
       options <- traverse contract optionsType
-      acquisition <- checked connectorLabel (acquisitionSources (rootType config) (rootType payload) (rootType <$> options) fetch sources)
+      position <- traverse contract positionType
+      acquisition <- checked connectorLabel (case position of
+        Nothing -> acquisitionSources (rootType config) (rootType payload) (rootType <$> options) fetch sources
+        Just p -> statefulAcquisitionSources (rootType config) (rootType payload) (rootType <$> options) (rootType p) fetch sources)
       fetchEntry <- located connectorLabel (compileGuest acquisition)
       validation <- checked connectorLabel (validationSources (rootType config) validate sources)
       validationEntry <- located (connectorLabel ++ " " ++ validate ++ " (expected Config -> ValidationReport)") (compileGuest validation)
@@ -105,7 +109,7 @@ prepare sdk code = do
       loginEntry <- traverse (\selected -> do
         adapter <- checked connectorLabel (loginSources (rootType config) selected sources)
         located (connectorLabel ++ " " ++ selected ++ " (expected Config -> PluginLogin (Either LoginError ()))") (compileGuest adapter)) login
-      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry)
+      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry position)
     pure (PreparedPackage (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]

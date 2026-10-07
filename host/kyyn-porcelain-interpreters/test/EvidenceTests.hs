@@ -73,6 +73,7 @@ key (EvidenceSnapshotRef _ _ identity) = identity
 main :: IO ()
 main = do
   recordingProof
+  positionProof
   let first = [NewEvidence itemA (value "old"),NewEvidence itemB (value "removed")]
       second = [UpdatedEvidence itemA (value "new"),RemovedEvidence itemB]
   initial <- right (applyChanges [] first)
@@ -275,6 +276,54 @@ main = do
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
   putStrLn "Evidence store: latest payloads, markers, Dhall, cursors, producer reset, clear and concurrent publication passed."
+
+positionProof :: IO ()
+positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
+  scope <- right (directoryScope directory)
+  let run :: Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+      run = execute scope
+      cursor label = CheckedValue (contractId contract) (String label)
+      begin owner = run (beginFetch instanceA owner contract (Just contract)) >>= right
+      publish owner base changes label = run (publishFetchWithPosition instanceA owner contract base Nothing changes
+        (Just (contract,cursor label)))
+      path = directory </> ".kyyn/evidence/folder-73616c6573/state.dhall"
+  FetchBaseline started base prior position <- begin producer
+  assert "new acquisition has prior state" (base == Nothing && prior == Nothing && position == Nothing)
+  assert "invocation time is not UTC" (case iso8601ParseM started :: Maybe UTCTime of
+    Just _ -> last started == 'Z'; Nothing -> False)
+  first <- publish producer Nothing [NewEvidence itemA (value "initial")] "cursor-one" >>= right
+  FetchBaseline _ firstBase firstCapture firstPosition <- begin producer
+  assert "position and capture did not reload together" (firstBase == Just (key first) &&
+    firstCapture == Just (CurrentEvidence first [(itemA,value "initial")]) && firstPosition == Just (cursor "cursor-one"))
+  second <- publish producer firstBase [] "cursor-two" >>= right
+  FetchBaseline _ secondBase _ secondPosition <- begin producer
+  assert "empty batch did not advance position" (secondBase == Just (key second) && secondPosition == Just (cursor "cursor-two"))
+  before <- Bytes.readFile path
+  conflict <- publish producer firstBase [] "stale-cursor"
+  assert "stale position published" (conflict == Left BaseSnapshotConflict)
+  invalid <- publish producer secondBase [RemovedEvidence itemB] "invalid-cursor"
+  assert "invalid delta advanced position" (isLeft invalid)
+  wrong <- run (publishFetchWithPosition instanceA producer contract secondBase Nothing []
+    (Just (contract,CheckedValue (contractId contract) (Bool True))))
+  assert "incorrect position shape accepted" (isLeft wrong)
+  after <- Bytes.readFile path
+  assert "failed publication changed stored bytes" (before == after)
+  let replacement = EvidenceProducer (PackageIdentity "replacement") (contractId contract)
+  FetchBaseline _ replacementBase replacementPrior replacementPosition <- begin replacement
+  assert "new producer inherited old state" (replacementBase == secondBase && replacementPrior == Nothing && replacementPosition == Nothing)
+  failed <- publish replacement replacementBase [RemovedEvidence itemA] "replacement-position"
+  assert "invalid replacement accepted" (isLeft failed)
+  retained <- Bytes.readFile path
+  assert "failed replacement altered old capture" (retained == before)
+  new <- publish replacement replacementBase [] "replacement-position" >>= right
+  FetchBaseline _ newBase newCapture newPosition <- begin replacement
+  assert "replacement did not reset capture and position" (newBase == Just (key new) &&
+    newCapture == Just (CurrentEvidence new []) && newPosition == Just (cursor "replacement-position"))
+  old <- run (loadCurrentEvidence instanceA producer contract)
+  assert "old producer read replacement capture" (old == Left ProducerContractChanged)
+  _ <- run (clearEvidence instanceA)
+  FetchBaseline _ clearedBase clearedCapture clearedPosition <- begin replacement
+  assert "clear retained position" (clearedBase == Nothing && clearedCapture == Nothing && clearedPosition == Nothing)
 
 type Recording = (Maybe Bytes.ByteString,[String])
 

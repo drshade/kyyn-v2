@@ -3,6 +3,7 @@ module SignatureCases where
 
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
+import qualified Data.Text as Text
 import qualified FolderSchema as Schema
 
 data Box a = Box { item :: a }
@@ -17,6 +18,18 @@ good _ snapshot = fmap (fmap (const [])) (ids snapshot)
 
 goodOptions :: Config -> Maybe Schema.FetchOptions -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 goodOptions config _ = good config
+
+goodStateful :: Config -> FetchContext String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
+goodStateful _ (FetchContext started prior) _ = pure (Right (FetchResult [] (maybe "first" id prior ++ ":" ++ Text.unpack started)))
+
+goodStatefulOptions :: Config -> Maybe Schema.FetchOptions -> FetchContext String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
+goodStatefulOptions config _ = goodStateful config
+
+badPosition :: Config -> FetchContext Bool -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
+badPosition _ _ _ = pure (Right (FetchResult [] "wrong"))
+
+badContext :: Config -> String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
+badContext _ _ _ = pure (Right (FetchResult [] "wrong"))
 
 goodRead :: String -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError String)
 goodRead _ snapshot = fmap (fmap (const "read")) (ids snapshot)

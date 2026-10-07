@@ -25,11 +25,12 @@ newtype QualifiedTypeName = QualifiedTypeName String deriving (Eq, Show)
 data PluginEntryKind = AcquisitionEntry | CapturedReadEntry deriving (Eq, Show)
 data PluginSignature
   = FetchSignature DataType (Maybe DataType) DataType
+  | StatefulFetchSignature DataType (Maybe DataType) DataType DataType
   | ReadSignature DataType DataType DataType
   deriving (Eq, Show)
 
 expectedPluginSignature :: PluginEntryKind -> String
-expectedPluginSignature AcquisitionEntry = "Config -> [Maybe Options ->] EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError [EvidenceChange Payload])"
+expectedPluginSignature AcquisitionEntry = "Config -> [Maybe Options ->] [FetchContext Position ->] EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError result), where result is [EvidenceChange Payload] without context or FetchResult Payload Position with context"
 expectedPluginSignature CapturedReadEntry = "Input -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError Result)"
 data ConnectorDeclaration = ConnectorDeclaration ConnectorTypeName String String [CapturedMethodDeclaration] (Maybe String) deriving (Eq, Show)
 data CapturedMethodDeclaration = CapturedMethodDeclaration MethodName String String deriving (Eq, Show)

@@ -35,7 +35,7 @@ toolBrokerTests = do
       methodNameValue = either error id (methodName "content")
       program = fixtureProgram "not executed"
       method = PreparedMethod methodNameValue "Read" contract contract program
-      connector = PreparedConnector kind contract contract program program [method] Nothing Nothing
+      connector = PreparedConnector kind contract contract program program [method] Nothing Nothing Nothing
       plugins = [PreparedPlugin (PreparedPackage plugin (PackageIdentity "package") [connector])
         [ConfiguredConnector instanceName binding connector (CheckedValue (contractId contract) (string "config"))]]
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")

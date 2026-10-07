@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
-module PluginNativeTests (nativeTests, noNetwork, runStore) where
+module PluginNativeTests (nativeTests, statefulTests, noNetwork, runStore) where
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value, object, (.=), encode, eitherDecodeStrict, toJSON)
@@ -43,11 +43,39 @@ import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import Kyyn.Domain.DataType (DataType)
+import Kyyn.Domain.DataType (DataType(..))
 import System.Directory (createDirectory, removeFile, createFileLink)
 import System.FilePath ((</>))
 
 type StoreEffects = '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
+
+statefulTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
+statefulTests temporary toolchain configType payloadType program = do
+  let directory = temporary </> "stateful-kb"
+  createDirectory directory
+  kb <- right (directoryScope directory)
+  compiler <- GuestToolchain <$> right (directoryScope toolchain)
+  configContract <- right (checkContract configType (SchemaMetadata [] [] []))
+  payload <- right (checkContract payloadType (SchemaMetadata [] [] []))
+  position <- right (checkContract StringType (SchemaMetadata [] [] []))
+  plugin <- right (pluginName "stateful")
+  let instanceRef = ConnectorInstanceRef plugin "test"
+      package = PackageIdentity "stateful-source"
+      producer = EvidenceProducer package (contractId payload)
+      config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
+      fetch = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
+        fetchEvidence instanceRef package payload program config Nothing (Just position) Nothing
+      load = runStore kb (beginFetch instanceRef producer payload (Just position)) >>= right
+  first <- fetch >>= right
+  FetchBaseline _ base _ stored <- load
+  assert "stateful acquisition did not persist its position" (base == Just (snapshotId first) && case stored of
+    Just (CheckedValue _ value) -> "first:" `Text.isInfixOf` Text.pack (show value)
+    _ -> False)
+  second <- fetch >>= right
+  FetchBaseline _ next _ updated <- load
+  assert "stateful acquisition did not resume its prior position" (next == Just (snapshotId second) && first /= second &&
+    case updated of Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 2; _ -> False)
+  where snapshotId (EvidenceSnapshotRef _ _ identity) = identity
 
 nativeTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
 nativeTests temporary toolchain configType payloadType program = do
@@ -67,7 +95,7 @@ nativeTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
-        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing
+        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
@@ -154,13 +182,13 @@ nativeTests temporary toolchain configType payloadType program = do
   let noFiles :: Eff (FileAcquisition : es) a -> Eff es a
       noFiles = interpret $ \_ _ -> error "Acquisition fixture unexpectedly read source files"
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
-        noNetwork $ noFiles $ recordAcquisition firstId currentThird $
+        noNetwork $ noFiles $ recordAcquisition currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing)
+            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
-    (result == third && trace == ["head","load","publish"])
+    (result == third && trace == ["begin","publish"])
   let noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
       noEvidence = interpret $ \_ _ -> error "Invalid options accessed evidence"
       noGuest :: Eff (GuestExecution : es) a -> Eff es a
@@ -168,19 +196,19 @@ nativeTests temporary toolchain configType payloadType program = do
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
       noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
-        (fetchEvidence instanceRef package payload program (config directory) optionsContract (Just "True"))
+        (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
 
 noNetwork :: Eff (HttpTransport : SecretStore : Waiting : es) a -> Eff es a
 noNetwork = interpret (\_ _ -> error "Unexpected waiting") . interpret (\_ _ -> error "Unexpected secret access") . interpret (\_ _ -> error "Unexpected HTTP")
 
-recordAcquisition :: State.State [String] :> es => FetchId -> CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
-recordAcquisition earlier current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _) =
+recordAcquisition :: State.State [String] :> es => CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
+recordAcquisition current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _) =
   interpret $ \_ -> \case
-    EvidenceHead _ -> State.modify @[String] (++ ["head"]) >> pure (Right (Just earlier))
-    LoadCurrentEvidence _ _ _ -> State.modify @[String] (++ ["load"]) >> pure (Right (Just current))
-    PublishFetch _ _ _ expected _ [] | expected == Just identity ->
+    BeginFetch _ _ _ Nothing -> State.modify @[String] (++ ["begin"]) >>
+      pure (Right (FetchBaseline "2026-10-07T12:00:00Z" (Just identity) (Just current) Nothing))
+    PublishFetch _ _ _ expected _ [] Nothing | expected == Just identity ->
       State.modify @[String] (++ ["publish"]) >> pure (Right snapshot)
     _ -> error "Acquisition reopened evidence or published against a head other than its loaded input"
 

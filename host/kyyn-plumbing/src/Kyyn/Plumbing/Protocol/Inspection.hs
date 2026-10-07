@@ -24,6 +24,7 @@ encodePluginSignature (signature,closure) = fmap (fmap Text.encodeUtf8) $ encode
   where
     (kind,types) = case signature of
       FetchSignature config options payload -> ("fetch" :: String,[config,payload] ++ maybe [] pure options)
+      StatefulFetchSignature config options payload position -> ("stateful-fetch",[config,payload,position] ++ maybe [] pure options)
       ReadSignature input payload result -> ("read",[input,payload,result])
 
 decodePluginSignature :: DhallHandling :> es => ByteString -> Eff es (Either [Diagnostic] (PluginSignature,[RelativePath]))
@@ -37,6 +38,8 @@ decodePluginSignature bytes = case Text.decodeUtf8' bytes of
       signature <- case (kind :: String,types) of
         ("fetch",[config,payload]) -> pure (FetchSignature config Nothing payload)
         ("fetch",[config,payload,options]) -> pure (FetchSignature config (Just options) payload)
+        ("stateful-fetch",[config,payload,position]) -> pure (StatefulFetchSignature config Nothing payload position)
+        ("stateful-fetch",[config,payload,position,options]) -> pure (StatefulFetchSignature config (Just options) payload position)
         ("read",[input,payload,result]) -> pure (ReadSignature input payload result)
         _ -> fail "Invalid plugin signature cache"
       closure <- record .: "closure" >>= traverse (either fail pure . relativePath)

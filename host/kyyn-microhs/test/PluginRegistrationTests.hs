@@ -155,7 +155,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
           (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ runEvidenceAcquisition
-            (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing))))))))) >>= right >>= right
+            (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of
