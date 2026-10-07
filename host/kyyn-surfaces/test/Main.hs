@@ -10,7 +10,7 @@ import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionI
 import Kyyn.Domain.Git (gitRevision, gitUrl)
 import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
-import Kyyn.Domain.Evidence (FetchId(..), EvidenceId(..), SyncMode(..))
+import Kyyn.Domain.Evidence (EvidenceId(..), SyncMode(..))
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Domain.Secret (secretName)
@@ -131,8 +131,7 @@ main = do
   refuses ["plugin","connector","method","execute","local-file","sales","content","--input","\"one.txt\"","--evolution","abc123"]
   refuses ["plugin","connector","method","execute","local-file","sales","content"]
   refuses ["plugin","connector","method","show","local-file","sales","case"]
-  succeeds ["evidence","history","list","local-file","sales"]
-    (Invocation selected Human (Evidence (ListFetchHistory localFile sales)))
+  refuses ["evidence","history","list","local-file","sales"]
   succeeds ["evidence","list","local-file","sales"]
     (Invocation selected Human (Evidence (ListCurrentEvidence localFile sales)))
   succeeds ["evidence","show","local-file","sales","notes.txt"]
@@ -142,8 +141,7 @@ main = do
   forM_ [["evidence","list"], ["evidence","list","local-file"],
     ["evidence","list","local-file","sales","--since","first"],
     ["evidence","list","local-file","sales","--evolution","abc123"]] refuses
-  succeeds ["evidence","change","list","local-file","sales","--since","first"]
-    (Invocation selected Human (Evidence (ListEvidenceChanges localFile sales (Just (FetchId "first")))))
+  refuses ["evidence","change","list","local-file","sales","--since","first"]
   succeeds ["evidence","clear","local-file","sales"]
     (Invocation selected Human (Evidence (ClearEvidence localFile sales)))
   forM_ [["evidence","fetch","local-file","sales","--evolution","abc123"],
@@ -193,7 +191,7 @@ main = do
           (status == if "--help" `elem` args then ExitSuccess else ExitFailure 2)
       _ -> fail ("Expected help: " ++ show args)
   forM_ [([], ["kb", "root", "evolution", "guest", "plugin", "evidence"]), (["plugin"], ["install", "list", "show", "guide", "connector"]),
-    (["evidence"], ["fetch", "history", "change"]), (["plugin", "connector"], ["list", "schema"]),
+    (["evidence"], ["fetch", "list", "show", "clear"]), (["plugin", "connector"], ["list", "schema"]),
     (["kb"], ["init"]), (["root"], ["show", "check"]),
     (["guest"], ["module", "symbol"]), (["guest", "module"], ["list", "show"]),
     (["evolution"], ["new", "list", "accept"]),

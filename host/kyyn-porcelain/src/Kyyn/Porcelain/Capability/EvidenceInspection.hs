@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceInspection
-  ( EvidenceInspection(..), currentEvidence, readCurrentEvidence, fetchHistory, evidenceChanges ) where
+  ( EvidenceInspection(..), currentEvidence, readCurrentEvidence ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
@@ -13,11 +13,7 @@ data EvidenceInspection :: Effect where
   ListCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
     -> EvidenceInspection m (Either [Diagnostic] EvidenceCapture)
   ReadCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> EvidenceId
-    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, Maybe (Evidence CheckedValue)))
-  FetchHistory :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, [FetchSummary]))
-  EvidenceChanges :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
-    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, [EvidenceChangeSummary]))
+    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, Maybe (Evidence CheckedValue)))
 type instance DispatchOf EvidenceInspection = Dynamic
 
 currentEvidence :: EvidenceInspection :> es
@@ -27,15 +23,5 @@ currentEvidence instanceRef producer = send . ListCurrentEvidence instanceRef pr
 
 readCurrentEvidence :: EvidenceInspection :> es
   => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> EvidenceId
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, Maybe (Evidence CheckedValue)))
+  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, Maybe (Evidence CheckedValue)))
 readCurrentEvidence instanceRef producer payload = send . ReadCurrentEvidence instanceRef producer payload
-
-fetchHistory :: EvidenceInspection :> es
-  => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, [FetchSummary]))
-fetchHistory instanceRef producer payload = send (FetchHistory instanceRef producer payload)
-
-evidenceChanges :: EvidenceInspection :> es
-  => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, [EvidenceChangeSummary]))
-evidenceChanges instanceRef producer payload = send . EvidenceChanges instanceRef producer payload

@@ -16,9 +16,7 @@ runEvidenceInspection = interpret $ \_ request -> case request of
   ReadCurrentEvidence instanceRef producer payload key -> do
     loaded <- Store.loadCurrentEvidence instanceRef producer payload
     pure (diagnostic (loaded >>= maybe (Left NotFetched)
-      (\(CurrentEvidence snapshot items) -> Right (snapshot, lookup key items))))
-  FetchHistory instanceRef producer payload -> diagnostic <$> Store.readFetchHistory instanceRef producer payload
-  EvidenceChanges instanceRef producer payload since -> diagnostic <$> Store.listEvidenceChanges instanceRef producer payload since
+      (\(CurrentEvidence snapshot items latest) -> Right (snapshot, latest, lookup key items))))
   where
     diagnostic :: Either EvidenceProblem b -> Either [Diagnostic] b
     diagnostic = either (Left . pure . evidenceProblemDiagnostic) Right

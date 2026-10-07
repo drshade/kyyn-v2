@@ -107,16 +107,12 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
   Cli.ShowCurrentEvidence plugin name key -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $ runExceptT $ do
     (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
-    (snapshot,found) <- ExceptT (readCurrentEvidence instanceRef producer payload key)
+    (snapshot,latest,found) <- ExceptT (readCurrentEvidence instanceRef producer payload key)
     case found of
       Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
       Just item@(Evidence _ _ (CheckedValue _ value)) -> do
         rendered <- ExceptT (encodeValue (contractShape payload) value)
-        pure (evidenceItemResult snapshot key item rendered)
-  Cli.ListFetchHistory plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
-    fmap (fmap (uncurry historyResult)) (connectorFetchHistory kb revision plugin name)
-  Cli.ListEvidenceChanges plugin name since -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
-    fmap (fmap (uncurry changesResult)) (connectorEvidenceChanges kb revision plugin name since)
+        pure (evidenceItemResult snapshot latest key item rendered)
   where
     inspectEvidence toolchain sdk action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])

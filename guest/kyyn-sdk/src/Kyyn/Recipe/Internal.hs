@@ -16,7 +16,7 @@ import Kyyn.Types.Fact (Fact)
 -- | Domain facts together with separately identified, typed recipes.
 data KnowledgeBase root = KnowledgeBase root [Fact StoredRecipe] deriving (Eq, Show)
 
--- The generated binding carries the inspected type's whole contract identity.
+-- | A generated binding identifying and encoding a recipe's state type.
 data RecipeType state = RecipeType Text Text
   (state -> JSValue) (JSValue -> Either String state)
 

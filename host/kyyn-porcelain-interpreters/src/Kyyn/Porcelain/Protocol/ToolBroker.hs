@@ -33,7 +33,7 @@ executeToolProgram :: (PluginRead :> es, GuestExecution :> es, Failure :> es, Ju
   => CompiledProgram -> [PreparedPlugin] -> Maybe ModelConfiguration -> [CurrentEvidence]
   -> Value -> Eff es (Either [Diagnostic] Value)
 executeToolProgram program plugins model captured arguments = runExceptT $ do
-  result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState [(instanceRef,current) | current@(CurrentEvidence (EvidenceSnapshotRef instanceRef _ _) _) <- captured] $
+  result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState [(instanceRef,current) | current@(CurrentEvidence (EvidenceSnapshotRef instanceRef _ _) _ _) <- captured] $
     conversation decodeToolFrame program (Lazy.toStrict (encode arguments)) $ \case
       ToolJudgement request -> Judgement.judge request >>= either protocolFailure pure . Judgement.encodeReply
       ToolModel request -> case model of

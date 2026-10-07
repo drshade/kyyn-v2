@@ -11,7 +11,7 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
-import Kyyn.Domain.Evidence (FetchId(..), EvidenceId(..), SyncMode(..))
+import Kyyn.Domain.Evidence (EvidenceId(..), SyncMode(..))
 import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (RecipeId, recipeId)
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
@@ -59,8 +59,6 @@ data EvidenceCommand
   = FetchConnector PluginName ConnectorName (Maybe String) SyncMode
   | ListCurrentEvidence PluginName ConnectorName
   | ShowCurrentEvidence PluginName ConnectorName EvidenceId
-  | ListFetchHistory PluginName ConnectorName
-  | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
   | ClearEvidence PluginName ConnectorName
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
@@ -130,7 +128,7 @@ invocation = Invocation <$> selectionParser
        <> group "guide" "Read the plugin's packaged guide without compiling it"
           (ReadPluginGuide <$> argument (eitherReader guideSelection) (metavar "PLUGIN|TAP/PLUGIN") <*> pluginEvolution)
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
-    <> group "evidence" "Fetch and inspect current evidence and history" (Evidence <$> evidenceParser)
+    <> group "evidence" "Fetch and inspect current evidence" (Evidence <$> evidenceParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
 
@@ -198,16 +196,10 @@ evidenceParser = hsubparser
   <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
   <> group "show" "Show a current evidence payload and source references" (ShowCurrentEvidence <$> plugin <*> instanceName
       <*> argument (eitherReader (\key -> if null key then Left "Evidence ID must not be empty" else Right (EvidenceId (Text.pack key)))) (metavar "ID"))
-  <> group "history" "Inspect retained fetch history" (hsubparser
-      (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))
-  <> group "change" "Inspect evidence changes" (hsubparser
-      (group "list" "List changes through the latest fetch" (ListEvidenceChanges <$> plugin <*> instanceName
-        <*> optional (option fetchId (long "since" <> metavar "FETCH" <> help "Exclusive previous fetch")))))
   <> group "clear" "Clear one connector instance's evidence cache" (ClearEvidence <$> plugin <*> instanceName))
   where
     plugin = pluginArgument
     instanceName = argument (eitherReader connectorName) (metavar "INSTANCE")
-    fetchId = eitherReader (\identifier -> if null identifier then Left "Fetch ID must not be empty" else Right (FetchId identifier))
 
 selectionParser :: Parser Selection
 selectionParser = Selection

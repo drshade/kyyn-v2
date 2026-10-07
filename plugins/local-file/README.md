@@ -46,12 +46,12 @@ the evolution is checked, ready and accepted, fetch its configured instance:
 
 ```sh
 kyyn-v2 --kb /path/to/kb evidence fetch local-file documents
-kyyn-v2 --kb /path/to/kb evidence history list local-file documents
-kyyn-v2 --kb /path/to/kb evidence change list local-file documents --since FETCH
+kyyn-v2 --kb /path/to/kb evidence list local-file documents
+kyyn-v2 --kb /path/to/kb evidence show local-file documents notes.txt
 ```
 
-Omit `--since` to list all retained change markers. History and changes return
-identifiers and summaries; plugin reads use the latest captured document contents.
+Listing returns current identifiers and fingerprints with the latest-fetch summary;
+show and plugin reads use the latest captured document contents.
 Fetches are checkout-local Dhall data, not Git commits;
 they do not change accepted facts. A draft configuration cannot acquire evidence.
 

@@ -247,16 +247,15 @@ For Microsoft Graph authentication/configuration use
 kyyn-v2 --kb PATH evidence fetch local-file documents
 kyyn-v2 --kb PATH evidence list local-file documents
 kyyn-v2 --kb PATH evidence show local-file documents notes.txt
-kyyn-v2 --kb PATH evidence history list local-file documents
-kyyn-v2 --kb PATH evidence change list local-file documents --since FETCH_ID
 kyyn-v2 --kb PATH plugin connector method list local-file documents
 kyyn-v2 --kb PATH plugin connector method show local-file documents content
 kyyn-v2 --kb PATH plugin connector method execute local-file documents content --input '"notes.txt"'
 ```
 
 Fetching uses accepted configuration and updates local evidence, not KB facts.
-Only latest payloads are retained. History/change commands report payload-free
-markers; they cannot retrieve old contents. Plugin methods expose useful typed
+Only current evidence and one latest-fetch summary are retained. Evidence list
+and show include its ID, time, added/updated/removed counts and supplied options.
+Plugin methods expose useful typed
 reads of captured evidence: local-file's `content` reads the latest captured
 text, not the current file on disk. Human method results are Dhall; `--json`
 returns structured JSON.
@@ -268,7 +267,7 @@ neither retrieves historical contents.
 Some connectors accept `evidence fetch PLUGIN INSTANCE --options 'DHALL'`.
 Inspect the optional type with `plugin connector show PLUGIN INSTANCE`;
 omitting options uses connector defaults. Local-file has no fetch options.
-Options appear in history, so use secrets for credentials.
+Options appear in the latest-fetch summary, so use secrets for credentials.
 
 `evidence fetch PLUGIN INSTANCE --restart-sync` keeps existing evidence but starts a
 fresh provider sync; stateless connectors report that the flag has no effect.
