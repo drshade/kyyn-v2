@@ -12,13 +12,13 @@ import Kyyn.Domain.Value (CheckedValue)
 
 data EvidenceAcquisition :: Effect where
   FetchEvidence :: ConnectorInstanceRef -> PackageIdentity -> CheckedContract -> CompiledProgram -> CheckedValue
-    -> Maybe CheckedContract -> Maybe String
+    -> Maybe CheckedContract -> Maybe CheckedContract -> Maybe String
     -> EvidenceAcquisition m (Either [Diagnostic] EvidenceSnapshotRef)
 
 type instance DispatchOf EvidenceAcquisition = Dynamic
 
 fetchEvidence :: EvidenceAcquisition :> es
   => ConnectorInstanceRef -> PackageIdentity -> CheckedContract -> CompiledProgram -> CheckedValue
-  -> Maybe CheckedContract -> Maybe String
+  -> Maybe CheckedContract -> Maybe CheckedContract -> Maybe String
   -> Eff es (Either [Diagnostic] EvidenceSnapshotRef)
-fetchEvidence instanceRef package payload program config options = send . FetchEvidence instanceRef package payload program config options
+fetchEvidence instanceRef package payload program config options position = send . FetchEvidence instanceRef package payload program config options position

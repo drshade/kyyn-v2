@@ -82,7 +82,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     start <- getMonotonicTimeNSec
     outcome <- runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $
       recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ runEvidenceAcquisition $
-        fetchEvidence instanceRef package payload program (CheckedValue (contractId config) configuration) (Just options) Nothing
+        fetchEvidence instanceRef package payload program (CheckedValue (contractId config) configuration) (Just options) Nothing Nothing
     _ <- right outcome
     published <- getMonotonicTimeNSec
     current <- runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "No published capture") pure

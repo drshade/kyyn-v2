@@ -211,12 +211,14 @@ cursor can use a nullary position type. No kernel Graph deltaLink type exists.
 
 The host stores checked position data in the ignored Dhall state document, separate
 from evidence payloads. First acquisition or changed producer supplies `Nothing`.
-Changed code/config/contract must never reuse an incompatible position. Replacing
+Changed code/contract must never reuse an incompatible position. Replacing
 the producer clears the old position together with old evidence on successful
 publication; a failed replacement leaves the old stored capture untouched and
 incompatible for new reads. A failed/cancelled/conflicting fetch does not advance
 the position. Even a no-change fetch may publish a new position.
 
+The stored position continues the previous sync; after changing an instance's source
+configuration, an agent may clear that instance's evidence and position to start fresh.
 Provider pagination, cursor expiry/reset and endpoint-specific reconciliation are
 plugin logic. Publish only the final successful continuation, not intermediate
 page links. Treat stored position as private acquisition data: no normal history

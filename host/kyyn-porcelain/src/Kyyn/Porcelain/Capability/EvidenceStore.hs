@@ -2,6 +2,7 @@
 module Kyyn.Porcelain.Capability.EvidenceStore
   ( EvidenceStore(..), evidenceHead, publishFetch, loadCurrentEvidence
   , readFetchHistory, listEvidenceChanges, clearEvidence, resolveEvidenceCapture
+  , FetchBaseline(..), beginFetch, publishFetchWithPosition
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -11,10 +12,13 @@ import Kyyn.Domain.Evidence
 import Kyyn.Domain.Value (CheckedValue)
 
 data EvidenceStore :: Effect where
+  BeginFetch :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
+    -> EvidenceStore m (Either EvidenceProblem FetchBaseline)
   EvidenceHead :: ConnectorInstanceRef -> EvidenceStore m (Either EvidenceProblem (Maybe FetchId))
   PublishFetch :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
     -> Maybe String
-    -> [EvidenceChange CheckedValue] -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
+    -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue)
+    -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   LoadCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
     -> EvidenceStore m (Either EvidenceProblem (Maybe CurrentEvidence))
   ReadFetchHistory :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
@@ -27,11 +31,25 @@ data EvidenceStore :: Effect where
 
 type instance DispatchOf EvidenceStore = Dynamic
 
+data FetchBaseline = FetchBaseline
+  { startedAt :: String, expectedHead :: Maybe FetchId
+  , priorCapture :: Maybe CurrentEvidence, priorPosition :: Maybe CheckedValue
+  } deriving (Eq, Show)
+
+beginFetch :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
+  -> Eff es (Either EvidenceProblem FetchBaseline)
+beginFetch instanceRef producer payload = send . BeginFetch instanceRef producer payload
+
 evidenceHead :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es (Either EvidenceProblem (Maybe FetchId))
 evidenceHead = send . EvidenceHead
 publishFetch :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Maybe FetchId -> Maybe String -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
-publishFetch instanceRef producer contract base options = send . PublishFetch instanceRef producer contract base options
+publishFetch instanceRef producer contract base options changes = publishFetchWithPosition instanceRef producer contract base options changes Nothing
+
+publishFetchWithPosition :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  -> Maybe FetchId -> Maybe String -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue)
+  -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishFetchWithPosition instanceRef producer contract base options changes = send . PublishFetch instanceRef producer contract base options changes
 loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
 loadCurrentEvidence instanceRef producer = send . LoadCurrentEvidence instanceRef producer

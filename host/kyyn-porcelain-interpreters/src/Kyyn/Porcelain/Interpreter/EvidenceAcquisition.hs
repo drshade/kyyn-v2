@@ -2,11 +2,13 @@
 module Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (object, (.=))
+import Data.Aeson (object, (.=), (.:))
+import Data.Aeson.Types (parseEither, withObject)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (contractId, contractShape)
+import Kyyn.Domain.DataType (Shape(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
@@ -24,7 +26,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
 runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
-runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract supplied) -> runExceptT $ do
+runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract positionContract supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
   (arguments,optionsText) <- case (optionsContract,supplied) of
     (Nothing,Nothing) -> pure (configValue,Nothing)
@@ -36,17 +38,27 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package paylo
             (\v -> object ["tag" .= ("Some" :: String),"value" .= v]) decoded
       pure (object ["config" .= configValue,"options" .= optional],Text.unpack <$> rendered)
   let producer = EvidenceProducer package (contractId payload)
-  observedHead <- ExceptT (fmap (either (Left . problem) Right) (Store.evidenceHead instanceRef))
-  loaded <- ExceptT (Right <$> Store.loadCurrentEvidence instanceRef producer payload)
-  (base,prior) <- case loaded of
-    Right Nothing -> pure (Nothing,Nothing)
-    Right current@(Just (CurrentEvidence (EvidenceSnapshotRef _ _ identity) _)) -> pure (Just identity,current)
-    Left ProducerContractChanged -> pure (observedHead,Nothing)
-    Left failure -> throwE (problem failure)
-  result <- ExceptT (executeAcquisition program arguments prior)
-  _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
-  changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload result)
-  ExceptT (fmap (either (Left . problem) Right) (Store.publishFetch instanceRef producer payload base optionsText changes))
+  Store.FetchBaseline startedAt base prior position <- ExceptT
+    (fmap (either (Left . problem) Right) (Store.beginFetch instanceRef producer payload positionContract))
+  let input = case positionContract of
+        Nothing -> arguments
+        Just _ -> object ["input" .= arguments,"startedAt" .= startedAt,"priorPosition" .=
+          maybe (object ["tag" .= ("None" :: String)])
+            (\(CheckedValue _ value) -> object ["tag" .= ("Some" :: String),"value" .= value]) position]
+  result <- ExceptT (executeAcquisition program input prior)
+  (delta,savedPosition) <- case positionContract of
+    Nothing -> do
+      _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
+      pure (result,Nothing)
+    Just contract -> do
+      _ <- ExceptT (encodeValue (Record [("changes",changesShape (contractShape payload)),
+        ("position",contractShape contract)]) result)
+      (changes,next) <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure
+        (parseEither (withObject "fetch result" $ \fields -> (,) <$> fields .: "changes" <*> fields .: "position") result)
+      pure (changes,Just (contract,CheckedValue (contractId contract) next))
+  changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload delta)
+  ExceptT (fmap (either (Left . problem) Right)
+    (Store.publishFetchWithPosition instanceRef producer payload base optionsText changes savedPosition))
 
 problem :: EvidenceProblem -> [Diagnostic]
 problem failure = [evidenceProblemDiagnostic failure]
