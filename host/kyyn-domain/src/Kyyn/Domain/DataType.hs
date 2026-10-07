@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 
 -- Resolved data declarations only; a complete KB contract also needs metadata.
 data DataType
-  = StringType | TextType | IntegerType | BoolType | ProbabilityType
+  = StringType | TextType | IntegerType | BoolType | ProbabilityType | UnitType
   | ListType DataType | OptionalType DataType
   | Algebraic String [DataType] [Constructor]
   deriving (Eq, Show, Generic, NFData)
@@ -31,6 +31,7 @@ shapeOf TextType = Right (Scalar TextScalar)
 shapeOf IntegerType = Right (Scalar IntegerScalar)
 shapeOf BoolType = Right (Scalar BoolScalar)
 shapeOf ProbabilityType = Right (Scalar ProbabilityScalar)
+shapeOf UnitType = Right (Record [])
 shapeOf (ListType t) = List <$> shapeOf t
 shapeOf (OptionalType t) = Optional <$> shapeOf t
 shapeOf t@(Algebraic "Kyyn.Types.Fact.FactId" _ _)
@@ -75,6 +76,7 @@ haskellType TextType = "Data.Text.Text"
 haskellType IntegerType = "Integer"
 haskellType BoolType = "Bool"
 haskellType ProbabilityType = "Agentic.Questions.Probability"
+haskellType UnitType = "()"
 haskellType (ListType t) = "[" ++ haskellType t ++ "]"
 haskellType (OptionalType t) = "(Maybe " ++ haskellType t ++ ")"
 haskellType (Algebraic name [] _) = name

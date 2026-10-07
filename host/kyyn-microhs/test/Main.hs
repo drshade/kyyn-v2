@@ -11,6 +11,7 @@ import qualified Data.ByteString as Bytes
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType)
+import Kyyn.Domain.DataType (DataType(UnitType))
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Capability.ProcessExecution
 import Kyyn.Plumbing.Capability.GuestCompilation
@@ -103,12 +104,13 @@ main = withSystemTempDirectory "kyyn-codecs" $ \temporary -> do
   putStrLn "Compiler-inspected ADT codecs: real MicroHs round trips and rejection cases passed."
 
 testEmptyRoot :: DirectoryScope -> GuestToolchain -> FilePath -> FilePath -> FilePath -> FilePath -> IO ()
-testEmptyRoot temporary toolchain compiler fixtures guest json = do
-  (inspected,_) <- inspectDataType compiler [fixtures] "Empty.Root" >>= either (fail . show) pure
+testEmptyRoot temporary toolchain compiler fixtures guest json = forM_ ["Empty", "Unit"] $ \name -> do
+  (inspected,_) <- inspectDataType compiler [fixtures] (name ++ ".Root") >>= either (fail . show) pure
+  unless (name /= "Unit" || inspected == UnitType) (fail "Unit alias lost its builtin identity")
   generated <- either fail pure (generateCodecs "KyynGeneratedCodec" inspected)
   second <- either fail pure (generateCodecs "KyynSecondCodec" inspected)
   captured <- mapM (\(base, path) -> (,) (checkedPath path) <$> Bytes.readFile (base </> path))
-    [(fixtures,"Empty.hs"), (fixtures,"RoundTrip.hs"), (guest,"Kyyn/Runtime/Json.hs"), (guest,"Kyyn/Runtime/Transport.hs"),
+    [(fixtures,name ++ ".hs"), (fixtures,"RoundTrip.hs"), (guest,"Kyyn/Runtime/Json.hs"), (guest,"Kyyn/Runtime/Transport.hs"),
      (json,"Text/JSON/Types.hs"), (json,"Text/JSON/String.hs")]
   sources <- either fail pure (guestSources (checkedPath "RoundTrip.hs")
     (captured ++ [(checkedPath "KyynGeneratedCodec.hs", B.toStrict (utf8 generated)),
@@ -122,8 +124,8 @@ testEmptyRoot temporary toolchain compiler fixtures guest json = do
       (output,ProcessExit status diagnostics) <- either (fail . show) pure result
       actual <- either fail pure (A.eitherDecodeStrict output)
       unless (status == 0 && actual == expected && Bytes.null diagnostics == valid)
-        (fail ("Empty root codec mismatch: " ++ show result))
-  putStrLn "Empty root: compiler-inspected MicroHs codecs round-trip {} and reject extra/tagged fields."
+        (fail (name ++ " codec mismatch: " ++ show result))
+  putStrLn (name ++ ": compiler-inspected MicroHs codecs round-trip {} and reject extra/tagged fields.")
 
 tag :: String -> Maybe A.Value -> A.Value
 tag name value = A.object (["tag" A..= name] ++ maybe [] (\v -> ["value" A..= v]) value)

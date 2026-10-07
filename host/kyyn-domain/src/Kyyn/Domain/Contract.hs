@@ -182,6 +182,7 @@ typeValue TextType = toJSON ["packed-text" :: String]
 typeValue IntegerType = toJSON ["integer" :: String]
 typeValue ProbabilityType = toJSON ["probability-basis-points" :: String]
 typeValue BoolType = toJSON ["bool" :: String]
+typeValue UnitType = toJSON ["unit" :: String]
 typeValue (ListType t) = toJSON ("list" :: String, typeValue t)
 typeValue (OptionalType t) = toJSON ("optional" :: String, typeValue t)
 typeValue (Algebraic name args cs) = toJSON ("data" :: String, name, map typeValue args,

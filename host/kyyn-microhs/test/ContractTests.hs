@@ -14,6 +14,9 @@ contractTests = do
   empty <- either (fail . show) pure (checkContract
     (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
   unless (contractShape (rootSchema empty) == Record []) (fail "Empty root is not an empty record")
+  unit <- either (fail . show) pure (checkContract UnitType (SchemaMetadata [] [] []))
+  unless (contractShape unit == Record [] && contractId unit /= contractId (rootSchema empty))
+    (fail "Unit must share the empty-record shape, not its nominal identity")
   unless (shapeOf sdkFactIdType == Right (Scalar TextScalar)) (fail "SDK FactId must project to text")
   unless (shapeOf (Algebraic "Model.FactId" [] [Constructor "Model.FactId" [(Nothing,StringType)]])
     == Right (Union [("FactId", Just (Scalar TextScalar))])) (fail "author type must not gain SDK scalar semantics by short name")
@@ -25,7 +28,7 @@ contractTests = do
   case checkRootLayout unregistered of
     Left [Diagnostic _ "schema.incoherent" message _] | "missing collection declaration" `isInfixOf` Text.unpack message -> pure ()
     result -> fail ("Unregistered persistent collection accepted: " ++ show result)
-  forM_ [StringType, IntegerType, BoolType, ListType payload, OptionalType payload,
+  forM_ [UnitType, StringType, IntegerType, BoolType, ListType payload, OptionalType payload,
       Algebraic "Model.Choice" [] [Constructor "Model.Yes" [], Constructor "Model.No" []]] $ \valueType -> do
     valueContract <- either (fail . show) pure (checkContract valueType (SchemaMetadata [] [] []))
     unless (Right (contractShape valueContract) == shapeOf valueType) (fail "Value shape changed")

@@ -37,6 +37,8 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
   generated <- right (generateAgenticCodec "Generated" payload)
   probabilityModel <- right (generateAgenticCodec "ProbabilityModel" ProbabilityType)
   probabilityWire <- right (generateCodecs "ProbabilityWire" ProbabilityType)
+  unitWire <- right (generateCodecs "UnitWire" UnitType)
+  Bytes.writeFile (temporary </> "UnitWire.hs") (Text.encodeUtf8 (Text.pack unitWire))
   Bytes.writeFile (temporary </> "ProbabilityWire.hs") (Text.encodeUtf8 (Text.pack probabilityWire))
   instanceFiles <- right (generateAgenticInstance 0 "Schema.Payload" payload)
   enumFiles <- right (generateAgenticInstance 1 "Schema.Status" status)
@@ -71,6 +73,7 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
      "import qualified Agentic.Questions as Q",
      "import qualified Data.Text as Text",
      "import qualified ProbabilityModel as PM", "import qualified ProbabilityWire as PW",
+     "import qualified UnitWire as UW",
      "import qualified Kyyn.Runtime.Json as Wire",
      "import Agentic.Contract (options)",
      "import Kyyn.Types.Fact", "import qualified Agentic as A", "import qualified Agentic.Runtime as R",
@@ -93,6 +96,8 @@ main = withSystemTempDirectory "kyyn-agentic-contracts-" $ \temporary -> do
      "classify :: A.Agentic (Either String) Text.Text Commitment",
      "classify = A.judge (Q.choice \"Is this a concrete commitment?\") A.>>> A.arr route",
      "main :: IO ()", "main = do",
+     "  unless (Wire.decodeWith UW.rootCodec (Wire.encodeWith UW.rootCodec ()) == Right ()) (fail \"Unit codec round trip\")",
+     "  mapM_ (\\s -> case Wire.parseValue s >>= Wire.decodeWith UW.rootCodec of Left _ -> pure (); Right _ -> fail \"Invalid unit accepted\") [\"[]\",\"true\",\"{\\\"extra\\\":true}\"]",
      "  mapM_ (\\n -> let p = Q.fromBasisPoints n in do",
      "    unless (Wire.decodeWith PW.rootCodec (Wire.encodeWith PW.rootCodec p) == Right p) (fail \"Probability wire round trip\")",
      "    unless (PM.rootCodec.decode (PM.rootCodec.encode p) == Right p) (fail \"Probability model round trip\")) [0..10000]",

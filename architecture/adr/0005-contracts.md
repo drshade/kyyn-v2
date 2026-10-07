@@ -78,6 +78,11 @@ The zero-field case is included: its fields are vacuously both all named and all
 positional, and the convention chooses the record projection. `data Root = Root`
 and `data Root = Root {}` therefore have the same empty-record shape
 (`{}` in JSON, `{=}` in Dhall).
+The unit value `()` uses this same empty-record projection for stateless recipe
+state and no-argument requests. It retains its own nominal type identity; sharing
+the representation with an authored empty record does not equate their contracts.
+Unit is a value contract, not an authored persistent root. This does not extend
+support to multi-element tuples.
 This gives initialization an empty root without dummy fields or collections.
 The rule applies to all values, not only initialization; multi-constructor
 nullary enums remain tagged unions. Generated guest codecs use the same projection.
