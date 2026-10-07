@@ -600,7 +600,7 @@ evolution :: Evolution (KnowledgeBase Root.Root) (KnowledgeBase Root.Root)
 evolution = edit (Rationale "Remember the last reviewed window" []) $
   updateRecipe BeforeState.recipeType (RecipeId "reviewMail")
     (openRecipe AfterState.recipeType "Review relevant emails in the requested window.")
-    (\\old -> Right (New.ReviewState old.reviewedIds Nothing))
+    (\(Old.ReviewState reviewed) -> Right (New.ReviewState reviewed Nothing))
 ```
 
 Before/After source closure naming follows ADR 0005, including its collision rules.
