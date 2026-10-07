@@ -5,7 +5,7 @@ module Kyyn.Recipe
   , RecipeId(..), module Kyyn.Recipe.Edit
   ) where
 
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Evolution.Proposal
 import Kyyn.Recipe.Edit
 

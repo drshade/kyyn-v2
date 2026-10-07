@@ -52,7 +52,7 @@ workspaceApiTests = do
       target = tree [("kb.dhall",manifest "After"),("src/After.hs","after schema")]
       sdk = tree [("Sdk.hs","installed sdk")]
       snapshot beforeCopy targetCode change = WorkspaceSnapshot
-        (WorkspaceManifest revision "Test" "" Draft) beforeCopy targetCode change (tree [])
+        (WorkspaceManifest revision "Test" "" Draft AdHoc) beforeCopy targetCode change (tree [])
       expected = map (\name -> ApiModule name [] [])
         ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After"]
       perform :: WorkspaceSnapshot -> IO (Either [Diagnostic] WorkspaceCatalogue, [String])
@@ -64,15 +64,19 @@ workspaceApiTests = do
           . interpret (\_ (Api.InspectApiModules source names) -> do
               record "api"
               let entries = [(relativeName p,b) | (p,b) <- files source]
+                  WorkspaceSnapshot _ _ targetFiles _ _ = material
+                  targetUnused = lookup (path "src/Unused.hs") (files targetFiles)
               unless (names == map (\(ApiModule name _ _) -> name) expected
                 && lookup "Before.hs" entries == Just "before schema"
-                && lookup "Evolution.hs" entries == Nothing && lookup "Unused.hs" entries == Nothing
+                && lookup "Evolution.hs" entries == Nothing && lookup "Unused.hs" entries == targetUnused
                 && lookup "Sdk.hs" entries == Just "installed sdk")
-                (error "Discovery included evolution/unused code or lost its captured closure")
+                (error "Discovery included evolution code or lost its captured schema/target sources")
               pure (Right expected))
           . interpret (\_ -> \case
-              Schema.InspectImports {} -> error "Unexpected import inspection"
+              Schema.InspectImports {} -> pure (Right [])
               Schema.InspectType {} -> error "Unexpected plain type inspection"
+              Schema.InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
+              Schema.InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
               Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
               Schema.InspectSchema source -> do
                 record ("schema:" ++ Schema.selectedType source)
@@ -84,7 +88,7 @@ workspaceApiTests = do
                   _ -> Left [errorDiagnostic "test.bad-schema" "Invalid target schema"])
           . interpret (\_ -> \case
               Git.ReadTreeAt selected base location exclusions
-                | (selected,base,location,exclusions) == (repo,revision,Subtree (path "nested/root"),[factsLocation, curationLocation, recipesLocation]) -> do
+                | (selected,base,location,exclusions) == (repo,revision,Subtree (path "nested/root"),[factsLocation, recipesLocation, recipeStatesLocation]) -> do
                     record "before"
                     pure (Right beforeCode)
               _ -> error "Discovery read facts, HEAD, history or wrote Git state")

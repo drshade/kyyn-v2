@@ -49,7 +49,6 @@ cabal test git-snapshots --test-show-details=direct
 cabal test file-trees --test-show-details=direct
 cabal test plugin-packages --test-show-details=direct
 cabal test evidence-store --test-show-details=direct
-cabal test curation-core --test-show-details=direct
 cabal test document-persistence --test-show-details=direct
 cabal test file-acquisition --test-show-details=direct
 cabal test secret-store --test-show-details=direct

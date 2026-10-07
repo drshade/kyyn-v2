@@ -7,7 +7,7 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (checkRootLayout)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath, isRootMaterial, curationLocation, recipesLocation, recipeStatesLocation)
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath, isRootMaterial, recipesLocation, recipeStatesLocation)
 import Kyyn.Domain.Recipe (StoredRecipe)
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
@@ -16,7 +16,7 @@ import Kyyn.Domain.Git (TreePath(..))
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
-import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, readRootCuration, readRootRecipes, readRecipeStates)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, readRootRecipes, readRecipeStates)
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
 import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
@@ -27,7 +27,7 @@ runRootOpening
 runRootOpening sdk = interpret $ \_ -> \case
   OpenCapturedSource tree -> openSource sdk tree
   LoadSourceAt repository revision prefix -> do
-    captured <- Git.readTreeExcluding repository revision prefix [factsLocation, curationLocation, recipesLocation, recipeStatesLocation]
+    captured <- Git.readTreeExcluding repository revision prefix [factsLocation, recipesLocation, recipeStatesLocation]
     either (pure . Left) (openSource sdk) captured
   OpenCapturedRoot tree -> openTree sdk tree
   LoadRootAt repository revision prefix -> do
@@ -46,12 +46,6 @@ runRootOpening sdk = interpret $ \_ -> \case
           path <- checked (relativePath (relativeName factsLocation ++ "/" ++ relativeName p))
           pure (path,b)) (files tree)
     facts <- checked (fileTree entries)
-    progressPath <- checked (relativePath (case prefix of
-      WholeTree -> relativeName curationLocation
-      Subtree path -> relativeName path ++ "/" ++ relativeName curationLocation))
-    progressBytes <- ExceptT (Git.readFileAt repository revision progressPath)
-    progressTree <- checked (fileTree (maybe [] (\bytes -> [(curationLocation,bytes)]) progressBytes))
-    progress <- ExceptT (readRootCuration progressTree)
     recipePath <- checked (relativePath (case prefix of
       WholeTree -> relativeName recipesLocation
       Subtree path -> relativeName path ++ "/" ++ relativeName recipesLocation))
@@ -69,7 +63,7 @@ runRootOpening sdk = interpret $ \_ -> \case
           pure (path,b)) (files tree)
     recipeTree <- checked (fileTree (maybe [] (\bytes -> [(recipesLocation,bytes)]) recipeBytes ++ stateEntries))
     recipes <- ExceptT (loadRecipes sdk source recipeTree)
-    pure (Root contract facts code progress recipes)
+    pure (Root contract facts code recipes)
 
 openTree
   :: (Schema.SchemaInspection :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
@@ -85,9 +79,8 @@ openInput
 openInput sdk tree = runExceptT $ do
   source@(SourceRoot contract code _ closure) <- ExceptT (openSource sdk tree)
   facts <- checked (fileTree [(p,b) | (p,b) <- files tree, isFactPath p])
-  progress <- ExceptT (readRootCuration tree)
   recipes <- ExceptT (loadRecipes sdk source tree)
-  pure (Root contract facts code progress recipes, closure)
+  pure (Root contract facts code recipes, closure)
 
 loadRecipes :: (Schema.SchemaInspection :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
   => FileTree -> SourceRoot -> FileTree -> Eff es (Either [Diagnostic] [Fact StoredRecipe])

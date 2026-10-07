@@ -6,8 +6,8 @@
 module CandidateTests (candidateTests) where
 
 import qualified Kyyn.Types.KnowledgeBase as KB
+import qualified Kyyn.Domain.Recipe as Value
 
-import CurationPersistenceTests (sampleCuration)
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), object, (.=))
 import Data.Aeson.Types (parseEither)
@@ -34,7 +34,6 @@ import Kyyn.Domain.Plugin (pluginName, PluginOrigin(..), PluginRepository(..))
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (Rationale(..))
-import qualified Kyyn.Types.Curation as Curation
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.SchemaMetadata
@@ -46,7 +45,6 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, openRecipeRecordShape, previousRecordShape, legacyRecordShape)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution, checkEvolution)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
@@ -82,19 +80,19 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   capturedNotes <- right (fileTree [(either error id (relativePath "old.md"),"old review note")])
   let kb = KnowledgeBase (Repository scope) prefix
       location = EvolutionWorkspace kb identity
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft) beforeFiles code changeFiles capturedNotes
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
-      captured = CapturedEvolution context (Root schema facts code sampleCuration []) []
+      captured = CapturedEvolution context (Root schema facts code []) []
         (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] beforeFiles) [])
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
-      recipeValues = [Fact (FactId "syncTodos") (KB.OpenAgent "Read and explain λ")]
+      recipeValues = [Fact (FactId "syncTodos") (unitRecipe (KB.OpenAgent "Read and explain λ"))]
       report = EvolutionReport [PluginChange (either error id (pluginName "local-file")) Nothing
         (Just (PluginOrigin (LocalRepository scope) WholeTree revision)) [either error id (relativePath "source/README.md")]]
         [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
           [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
-         StepReport (Rationale "Teach curation" []) [RecipeChange (FactId "syncTodos") Nothing (Just (KB.OpenAgent "Read and explain λ"))]] Nothing
-      root = Root schema facts code sampleCuration recipeValues
+         StepReport (Rationale "Teach recipe" []) [RecipeChange (FactId "syncTodos") Nothing (Just (unitRecipe (KB.OpenAgent "Read and explain λ")))]]
+      root = Root schema facts code recipeValues
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
       execute = runEff . runFailure . runFileSystemIO scope . runDhallHandling . runRootStore
@@ -179,20 +177,20 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let migratedValue = case checked of
         CheckedValue _ (Object values) -> Object (KeyMap.insert "confirmed" (Bool True) values)
         _ -> error "Expected record root value"
-      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft) empty migratedCode empty empty
+      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft AdHoc) empty migratedCode empty empty
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
-      migratedCapture = CapturedEvolution migratedContext (Root schema facts code sampleCuration []) []
+      migratedCapture = CapturedEvolution migratedContext (Root schema facts code []) []
         (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] empty) [])
       migratedReport = EvolutionReport [] [StepReport (Rationale "New schema" [])
-        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]] Nothing
+        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
   migratedInput <- right migratedChecked
   migrated <- execute (evaluationMock migratedCapture
-    (Right (EvaluatedEvolution migratedCapture (After migratedSchema) (KB.KnowledgeBase migratedInput []) migratedReport))
+    (Right (EvaluatedEvolution migratedCapture (After migratedSchema) (Value.KnowledgeBase migratedInput []) migratedReport))
     (applyEvolution migratedCapture)) >>= right >>= right
   migratedLoaded <- execute (loadCandidate (EvolutionWorkspace kb migratedId)) >>= right >>= right
   unless (migratedLoaded == Just migrated) (fail "Schema-changing candidate lost Before/After or recorded contracts")
-  let evaluated = EvaluatedEvolution captured (After schema) (KB.KnowledgeBase checked recipeValues) report
+  let evaluated = EvaluatedEvolution captured (After schema) (Value.KnowledgeBase checked recipeValues) report
   applied <- execute (evaluationMock captured (Right evaluated) (applyEvolution captured)) >>= right >>= right
   unless (applied == candidate) (fail "Application changed the evaluated context/value/report")
   selected <- execute (loadCandidate location) >>= right >>= right
@@ -208,7 +206,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   unless (refused == Right (Left rejection)) (fail "Application lost evaluation rejection")
   afterRejection <- Char8.readFile pointer
   unless (afterRejection == second) (fail "Rejected evaluation replaced the last successful result")
-  let malformed = EvaluatedEvolution captured (After schema) (KB.KnowledgeBase (CheckedValue (contractId (rootSchema schema)) Null) []) report
+  let malformed = EvaluatedEvolution captured (After schema) (Value.KnowledgeBase (CheckedValue (contractId (rootSchema schema)) Null) []) report
   execute (evaluationMock captured (Right malformed) (applyEvolution captured)) >>= \case
     Right (Left (ProposedCodeRejected _)) -> pure ()
     other -> fail ("Invalid materialization returned a candidate: " ++ show other)
@@ -246,7 +244,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       archived <- runEff . runDhallHandling . runWorkspaceStore $ readWorkspaceSnapshot workspaceFiles
       currentNotes <- right (fileTree [(either error id (relativePath "new.md"),noteBytes)])
       unless (archived == Right (WorkspaceSnapshot
-          (WorkspaceManifest revision "Review λ" "Explain this" Accepted) beforeFiles code changeFiles currentNotes))
+          (WorkspaceManifest revision "Review λ" "Explain this" Accepted AdHoc) beforeFiles code changeFiles currentNotes))
         (fail "Archive substituted live source/manifest or failed to preserve current notes/deletions")
       liveManifest <- Bytes.readFile (liveWorkspace </> "manifest.dhall")
       unless (liveManifest == "invalid live manifest") (fail "Export modified the live lifecycle state")
@@ -256,7 +254,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
         (fail "Export resurrected captured notes after deletion")
       let Candidate _ _ checkedRoot = checkedCandidate
           wrongContext = EvolutionContext kb identity (Before revision schema)
-            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft) beforeFiles empty changeFiles capturedNotes)
+            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) beforeFiles empty changeFiles capturedNotes)
       execute (exportAcceptedWorkspace (Candidate wrongContext report checkedRoot)) >>= right >>= \case
         Left [Diagnostic Error "evolution.archive-context" _ _] -> pure ()
         _ -> fail "Archive accepted code differing from the checked root"
@@ -328,61 +326,18 @@ contractDescriptions baseline = do
       report = EvolutionReport [] [step "Edit" (Just old) (Just changed),
         step "Migrate" (Just changed) (Just new), step "Delete" (Just new) Nothing,
         step "Add" Nothing (Just new), StepReport (Rationale "No change" []) []]
-        (Just (Curation.Curation (Curation.RecipeId "syncTodos")
-          [Curation.EntireBatch (Curation.EvidenceScope "files" "documents" "first"),
-           Curation.IndividualRecords (Curation.EvidenceScope "files" "other" "second") []]))
   encoded <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema report)))
   decodedReport <- right (runPureEff (runDhallHandling (decodeEvolutionRecord encoded))) >>= right
   unless (decodedReport == (identity,baseline,schema,report))
     (fail "Dhall record changed migration steps, typed payloads or optional fact sides")
-  (_,currentDocument) <- right (recordDocument identity baseline schema report)
-  let versionThree = case currentDocument of
-        Object fields -> Object (KeyMap.insert "version" (String "3") (KeyMap.delete "plugins" fields))
-        _ -> error "Expected record document"
-  v3 <- right (runPureEff (runDhallHandling (encodeValue (previousRecordShape baseline schema) versionThree)))
-  v3Decoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 v3)))) >>= right
-  unless (v3Decoded == (identity,baseline,schema,report)) (fail "Version-three archive changed")
-  let open = KB.OpenAgent "Inspect todos"
-      closed = KB.ClosedAgent (KB.FlowEntryRef "Tasks.reconcile")
+  let open = unitRecipe (KB.OpenAgent "Inspect todos")
+      closed = unitRecipe (KB.ClosedAgent (KB.FlowEntryRef "Tasks.reconcile"))
       recipeReport oldRecipe newRecipe = EvolutionReport []
-        [StepReport (Rationale "Change recipe" []) [RecipeChange (FactId "syncTodos") oldRecipe newRecipe]] Nothing
+        [StepReport (Rationale "Change recipe" []) [RecipeChange (FactId "syncTodos") oldRecipe newRecipe]]
       closedReport = recipeReport (Just open) (Just closed)
   closedBytes <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema closedReport)))
   closedRead <- right (runPureEff (runDhallHandling (decodeEvolutionRecord closedBytes))) >>= right
   unless (closedRead == (identity,baseline,schema,closedReport)) (fail "Archive lost recipe constructor change")
-  let openReport = recipeReport Nothing (Just open)
-      oldPayload (Object fields)
-        | KeyMap.lookup "tag" fields == Just (String "OpenAgent")
-        , Just recipePayload <- KeyMap.lookup "value" fields = recipePayload
-        | otherwise = Object (fmap oldPayload fields)
-      oldPayload (Array values) = Array (fmap oldPayload values)
-      oldPayload value = value
-  (_,openDocument) <- right (recordDocument identity baseline schema openReport)
-  forM_ [("3",previousRecordShape),("4",openRecipeRecordShape)] $ \(version,shape) -> do
-    let document = case oldPayload openDocument of
-          Object fields -> Object (KeyMap.insert "version" (String version)
-            (if version == "3" then KeyMap.delete "plugins" fields else fields))
-          _ -> error "Expected record document"
-    source <- right (runPureEff (runDhallHandling (encodeValue (shape baseline schema) document)))
-    restored <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 source)))) >>= right
-    unless (restored == (identity,baseline,schema,openReport)) (fail "Legacy archive recipe was not OpenAgent")
-  let removeRecipeChanges (Object fields) = Object (KeyMap.delete "recipeChanges" fields)
-      removeRecipeChanges value = value
-      legacySteps (Array steps) = Array (fmap removeRecipeChanges steps)
-      legacySteps value = value
-      legacyDocument = case currentDocument of
-        Object fields -> Object (KeyMap.delete "plugins" (KeyMap.insert "version" (String "2")
-          (KeyMap.mapWithKey (\key value -> if key == "steps" then legacySteps value else value) fields)))
-        _ -> error "Expected record document"
-  legacy <- right (runPureEff (runDhallHandling (encodeValue (legacyRecordShape baseline schema) legacyDocument)))
-  legacyDecoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord (Text.encodeUtf8 legacy)))) >>= right
-  unless (legacyDecoded == (identity,baseline,schema,report)) (fail "Version-two archive changed")
-  let oldRecord = "(" <> Text.encodeUtf8 legacy <> ").{identity,before,after,steps} // { version = +1 }"
-  (_,_,_,EvolutionReport _ oldSteps oldCuration) <- right
-    (runPureEff (runDhallHandling (decodeEvolutionRecord oldRecord))) >>= right
-  let EvolutionReport _ expectedSteps _ = report
-  unless (oldSteps == expectedSteps && oldCuration == Nothing)
-    (fail "Version-one archive did not remain readable without curation")
   forM_ [baseline,schema] $ \selected -> do
     source <- right (runPureEff (runDhallHandling (encodeValue snapshotShape (snapshotValue selected))))
     document <- right (runPureEff (runDhallHandling (decodeValue snapshotShape source)))
@@ -397,6 +352,10 @@ contractDescriptions baseline = do
   case parseEither restoreSnapshot Null of
     Left _ -> pure ()
     other -> fail ("Malformed contract description accepted: " ++ show other)
+
+unitRecipe :: KB.Recipe -> Value.StoredRecipe
+unitRecipe method = Value.StoredRecipe method "()" contract (CheckedValue (contractId contract) (object []))
+  where contract = either (error . show) id (checkContract UnitType (SchemaMetadata [] [] []))
 
 noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Candidate operation read Git"

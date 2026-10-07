@@ -9,12 +9,14 @@ import qualified Data.ByteString.Char8 as Bytes
 import Data.Text (Text)
 import Effectful (runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (RootContract)
+import Kyyn.Domain.Contract (RootContract, rootType, rootSchema)
+import Kyyn.Domain.DataType (DataType(UnitType))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Domain.Path (relativeName)
-import Kyyn.Domain.Recipe (DescriptionFormat(..))
+import Kyyn.Domain.Recipe (DescriptionFormat(..), RecipeSignature(..))
+import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection(..))
 import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..), sourceFiles)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
@@ -40,7 +42,6 @@ recipeInspectionTests contract = do
                 renderer = case format of Tree -> "renderTree"; Dot -> "dot"; Mermaid -> "mermaid"
             unless (case wrapper of
               [bytes] -> Bytes.pack ("Describe." ++ renderer ++ " (Describe.describe selected)") `Bytes.isInfixOf` bytes
-                && "Flow (RecipeInput" `Bytes.isInfixOf` bytes
                 && not ("interpret" `Bytes.isInfixOf` bytes)
               _ -> False) (error "Wrong recipe description wrapper")
             pure (Right (error "Recording interpreter does not read the compiled artifact")))
@@ -50,6 +51,9 @@ recipeInspectionTests contract = do
         . interpret (\_ -> \case
             PreparePlugins _ -> pure (Right [])
             _ -> error "Description invoked plugin validation")
+        . interpret (\_ -> \case
+            InspectRecipeFunction _ "Tasks.flow" -> pure (Right (RecipeSignature (rootType (rootSchema contract)) UnitType UnitType))
+            _ -> error "Description inspected an unexpected signature")
         . runRecipeInspection $ describeRecipe source (FlowEntryRef "Tasks.flow") format
   forM_ [Tree,Dot,Mermaid] $ \format ->
     unless (perform format "\"rendered\"" (ProcessExit 0 "") == Right (Right "rendered"))

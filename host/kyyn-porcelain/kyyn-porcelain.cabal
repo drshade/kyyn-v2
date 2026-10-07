@@ -32,7 +32,6 @@ library
     Kyyn.Porcelain.Capability.EvolutionReport
     Kyyn.Porcelain.Capability.EvolutionExecution
     Kyyn.Porcelain.Capability.Evolution
-    Kyyn.Porcelain.Capability.Curation
     Kyyn.Porcelain.Capability.RecipeStore
     Kyyn.Porcelain.Capability.Recipe
     Kyyn.Porcelain.Capability.RecipeExecution

@@ -7,7 +7,7 @@ module Kyyn.Recipe.Internal
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Text.JSON.Types (JSValue)
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.KnowledgeBase (Recipe)
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure(..))

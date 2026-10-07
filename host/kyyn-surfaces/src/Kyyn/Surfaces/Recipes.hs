@@ -4,7 +4,7 @@ module Kyyn.Surfaces.Recipes (recipesResult, recipeResult, recipeDescriptionResu
 import Data.Aeson (Value, object, (.=))
 import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (DescriptionFormat(..), RecipeDefinition(..))
-import Kyyn.Domain.Curation (RecipeId(..))
+import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import Kyyn.Surfaces.Result (Response(..), success, workspaceResult)

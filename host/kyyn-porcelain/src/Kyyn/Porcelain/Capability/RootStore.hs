@@ -1,14 +1,13 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RootStore
   ( RootStore(..), readRootDefinition, checkRootValue, materializeRoot, loadRootValueForChecking
-  , readExamples, encodeExample, exportRootFiles, readRootCuration, readRootRecipes
+  , readExamples, encodeExample, exportRootFiles, readRootRecipes
   , readRecipeStates, encodeRootRecipes, checkRecipeValue, readCollection, rootLocation ) where
 
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Contract (RootContract, CheckedContract)
-import Kyyn.Domain.Curation (CurationRegister)
 import Kyyn.Types.Fact (Fact)
 import qualified Kyyn.Domain.Recipe as Value
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -25,7 +24,6 @@ rootLocation kb = relativePath "root" >>= knowledgeBasePath kb
 
 data RootStore :: Effect where
   ReadRootDefinition :: FileTree -> RootStore m (Either [Diagnostic] RootDefinition)
-  ReadRootCuration :: FileTree -> RootStore m (Either [Diagnostic] CurationRegister)
   ReadRootRecipes :: FileTree -> RootStore m (Either [Diagnostic] [Fact Value.RecipeDefinition])
   ReadRecipeStates :: [(Fact Value.RecipeDefinition, String, CheckedContract)] -> FileTree
     -> RootStore m (Either [Diagnostic] [Fact Value.StoredRecipe])
@@ -43,9 +41,6 @@ type instance DispatchOf RootStore = Dynamic
 
 readRootDefinition :: RootStore :> es => FileTree -> Eff es (Either [Diagnostic] RootDefinition)
 readRootDefinition = send . ReadRootDefinition
-
-readRootCuration :: RootStore :> es => FileTree -> Eff es (Either [Diagnostic] CurationRegister)
-readRootCuration = send . ReadRootCuration
 
 readRootRecipes :: RootStore :> es => FileTree -> Eff es (Either [Diagnostic] [Fact Value.RecipeDefinition])
 readRootRecipes = send . ReadRootRecipes

@@ -77,7 +77,7 @@ main = do
       step = Internal.edit binding (Rationale "Prepare review" []) action
       stop = Internal.edit binding (Rationale "Refuse" []) (refuse refusal)
   case Internal.evaluateEvolution step input of
-    Right (Internal.EvolutionOutput value observations _) ->
+    Right (Internal.EvolutionOutput value observations) ->
       assert "one observation for multiple within blocks" (value == expected && length observations == 1)
     Left err -> fail (show err)
   assert "evolution refusal drops earlier observations" (Internal.evaluateEvolution (step >=> stop) input == Left (EvolutionFailure refusal))

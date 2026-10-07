@@ -10,14 +10,13 @@ import Kyyn.Domain.Plugin (PluginName, PluginOrigin)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Types.Evolution (Rationale)
 import Kyyn.Types.Fact (FactId)
-import Kyyn.Types.Curation (Curation)
 import Kyyn.Domain.Recipe (KnowledgeBase, ProposedRecipe, StoredRecipe)
 
 data ObservedRoot = ObservedRoot String (KnowledgeBase Value ProposedRecipe) deriving (Eq, Show)
 data StepObservation = StepObservation Rationale ObservedRoot ObservedRoot deriving (Eq, Show)
-data EvolutionObservation = EvolutionObservation (KnowledgeBase Value ProposedRecipe) [StepObservation] (Maybe Curation) deriving (Eq, Show)
+data EvolutionObservation = EvolutionObservation (KnowledgeBase Value ProposedRecipe) [StepObservation] deriving (Eq, Show)
 
-data EvolutionReport = EvolutionReport [PluginChange] [StepReport] (Maybe Curation) deriving (Eq, Show)
+data EvolutionReport = EvolutionReport [PluginChange] [StepReport] deriving (Eq, Show)
 data PluginChange = PluginChange PluginName (Maybe PluginOrigin) (Maybe PluginOrigin) [RelativePath]
   deriving (Eq, Show)
 data StepReport = StepReport

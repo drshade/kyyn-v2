@@ -14,8 +14,6 @@ import Kyyn.Domain.Contract (describeRootContract)
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
-import Kyyn.Types.Curation
-import Kyyn.Types.Evidence (EvidenceId(..))
 import Kyyn.Domain.Failure
 import Kyyn.Domain.Git (GitRevision, revisionName, LocalBranch(..), Repository(..), TreePath(..), gitUrlText)
 import Kyyn.Domain.Plugin (InstalledPlugin(..), PluginOrigin(..), PluginRepository(..), pluginNameText)
@@ -121,7 +119,7 @@ evolutionCheckResult identity result = case result of
   where name = evolutionIdName identity
 
 rootResult :: GitRevision -> Root -> CheckedValue -> Response
-rootResult revision (Root schema _ _ _ _) (CheckedValue _ value) = success
+rootResult revision (Root schema _ _ _) (CheckedValue _ value) = success
   (object ["revision" .= revisionName revision, "schema" .= describeRootContract schema, "value" .= value])
   ["Root at " ++ revisionName revision, jsonText value]
 
@@ -140,7 +138,7 @@ inspectionResult revision (summary, report) = success
   ([summaryText summary, "Inspected at " ++ revisionName revision] ++ maybe ["No saved report."] reportText report)
 
 candidateResult :: Candidate Root -> Response
-candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _ _)) = success
+candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _)) = success
   (object ["id" .= evolutionIdName identity, "beforeRevision" .= revisionName revision,
     "schema" .= describeRootContract schema, "report" .= reportJson report])
   (["Saved candidate for " ++ evolutionIdName identity] ++ reportText report)
@@ -209,19 +207,11 @@ summaryText (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName nam
   evolutionIdName identity ++ "  " ++ show state ++ "  " ++ name
 
 reportJson :: EvolutionReport -> Value
-reportJson (EvolutionReport plugins steps curation) = object
-  ["steps" .= map step steps,"curation" .= fmap declaration curation,
+reportJson (EvolutionReport plugins steps) = object
+  ["steps" .= map step steps,
    "plugins" .= [object ["name" .= pluginNameText name, "before" .= fmap originJson old,
       "after" .= fmap originJson new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]]
   where
-    declaration (Curation (RecipeId recipe) handled) = object
-      ["recipe" .= recipe,"handled" .= map acknowledgement handled]
-    scope (EvidenceScope plugin instanceName fetch) = object
-      ["plugin" .= plugin,"instance" .= instanceName,"fetch" .= fetch]
-    acknowledgement (EntireBatch selected) = object
-      ["kind" .= ("EntireBatch" :: String),"scope" .= scope selected]
-    acknowledgement (IndividualRecords selected ids) = object
-      ["kind" .= ("IndividualRecords" :: String),"scope" .= scope selected,"ids" .= [item | EvidenceId item <- ids]]
     step (StepReport (Rationale explanation evidence) changes) = object
       ["explanation" .= explanation, "evidence" .= map evidenceJson evidence, "changes" .= map change changes]
     change (FactChange collection (FactId identity) before after) = object
@@ -237,18 +227,13 @@ reportJson (EvolutionReport plugins steps curation) = object
       ["producer" .= producer, "instance" .= connector, "source" .= source, "references" .= references]
 
 reportText :: EvolutionReport -> [String]
-reportText (EvolutionReport plugins steps curation) = concatMap pluginLines plugins ++ concatMap step steps ++ maybe [] declaration curation
+reportText (EvolutionReport plugins steps) = concatMap pluginLines plugins ++ concatMap step steps
   where
     pluginLines (PluginChange name old new paths) =
       ["Plugin " ++ pluginNameText name ++ ": " ++ revision old ++ " → " ++ revision new]
       ++ ["  before source: " ++ maybe "(absent)" originText old, "  after source:  " ++ maybe "(absent)" originText new]
       ++ ["  changed: " ++ relativeName path | path <- paths]
     revision = maybe "(absent)" (\(PluginOrigin _ _ selected) -> take 8 (revisionName selected))
-    declaration (Curation (RecipeId recipe) handled) = ("Recipe: " ++ Text.unpack recipe) : map acknowledgement handled
-    scope (EvidenceScope plugin instanceName fetch) = Text.unpack (plugin <> "/" <> instanceName <> " at fetch " <> fetch)
-    acknowledgement (EntireBatch selected) = "  Handled entire batch: " ++ scope selected
-    acknowledgement (IndividualRecords selected ids) = "  Handled records: " ++ scope selected
-      ++ " [" ++ unwords [Text.unpack item | EvidenceId item <- ids] ++ "]"
     step (StepReport (Rationale explanation evidence) changes) = [Text.unpack explanation]
       ++ ["  Declared citations:" | not (null evidence)]
       ++ ["    " ++ Text.unpack source ++ " " ++ unwords (map Text.unpack references) | EvidenceRef _ _ source references <- evidence]

@@ -26,7 +26,7 @@ decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
     version <- decodeValue (Scalar IntegerScalar) ("(" <> contents <> "\n).version")
     case version of
       Left diagnostics -> pure (Left (show diagnostics))
-      Right (String "6") -> decodeContents contents
+      Right (String "7") -> decodeContents contents
       Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
         "Stored evolution record format is not supported by this kernel"]))
   where

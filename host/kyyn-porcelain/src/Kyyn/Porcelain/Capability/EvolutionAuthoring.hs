@@ -10,7 +10,7 @@ import Kyyn.Domain.Evolution (EvolutionName, EvolutionWorkspace, CapturedEvoluti
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (EvolutionKind)
-import Kyyn.Types.Curation (RecipeId)
+import Kyyn.Types.KnowledgeBase (RecipeId)
 
 data EvolutionAuthoring :: Effect where
   CreateEvolution :: KnowledgeBase -> EvolutionName -> GitRevision -> EvolutionKind

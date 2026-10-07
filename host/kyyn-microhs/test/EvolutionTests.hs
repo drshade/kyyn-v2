@@ -101,7 +101,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   metadataBindings <- renamedBindings "Metadata" before renamed
   sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
+    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Evolution/Proposal.hs","Kyyn/Recipe.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Recipe/Edit.hs","Kyyn/Recipe/Internal.hs"]] ++
      [load "guest/kyyn-sdk/test" name | name <- ["EvolutionCore.hs","EditTests.hs","KnowledgeBaseTests.hs","RecipeTests.hs","RecipeEditTests.hs"]] ++
@@ -134,8 +134,8 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   replies <- traverse (right . decodeEvolutionReply . Text.encodeUtf8 . Text.pack)
     [line | line <- lines expected, take 1 line == "{"]
   case replies of
-    [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _) _), Left refusal] -> do
-      (_,EvolutionReport _ reports _) <- right (runPureEff . runDhallHandling . runRootStore $
+    [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _)), Left refusal] -> do
+      (_,EvolutionReport _ reports) <- right (runPureEff . runDhallHandling . runRootStore $
         checkEvolutionReport [] before input after observation)
       unless (length reports == 3 && all (\(StepReport _ changes) -> length changes == 1) reports)
         (fail "Guest observations did not derive the three real fact changes")
@@ -145,7 +145,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   let badType = [(p,if relativeName p == "Evolution.hs"
         then Text.encodeUtf8 (Text.replace "editBefore" "edit" (Text.decodeUtf8 b)) else b) | (p,b) <- captured]
       badConstructor = [(p,if relativeName p == "Proof.hs" then
-        "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [] Nothing)\n" else b) | (p,b) <- captured]
+        "module Proof where\nimport Kyyn.Evolution\nmain :: IO ()\nmain = print (EvolutionOutput () [])\n" else b) | (p,b) <- captured]
       badBinding = [(p,if relativeName p == "Proof.hs" then
         "module Proof where\nimport Kyyn.Workspace.Evolution (beforeRoot)\nmain :: IO ()\nmain = pure ()\n" else b) | (p,b) <- captured]
       hiddenCollection = [(p,if relativeName p == "Proof.hs" then

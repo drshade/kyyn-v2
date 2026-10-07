@@ -12,7 +12,7 @@ import Data.List (nub, sort, isPrefixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
-import Kyyn.Domain.Curation (recipeId, RecipeId(..))
+import Kyyn.Domain.Recipe (recipeId, RecipeId(..))
 import Kyyn.Domain.Recipe (RecipeDefinition, StoredRecipe(..), recipeDefinition, recipeMethod, checkRecipeDefinitions)
 import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
 import Kyyn.Domain.Value (CheckedValue(..))

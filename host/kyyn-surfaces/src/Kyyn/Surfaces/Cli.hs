@@ -12,7 +12,7 @@ import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
 import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
-import Kyyn.Domain.Curation (RecipeId, recipeId)
+import Kyyn.Domain.Recipe (RecipeId, recipeId)
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Data.Coerce (coerce)
 import Kyyn.Domain.Secret (SecretName, secretName)
@@ -227,7 +227,7 @@ rootParser = hsubparser
   <> group "fact" "Read facts from the validated accepted root" (RootFact <$> hsubparser
     (group "list" "List fact IDs and titles" (ListFacts <$> collection)
     <> group "show" "Show a fact's payload" (ShowFact <$> collection <*> strArgument (metavar "ID"))))
-  <> group "recipe" "Discover curation instructions and pending evidence" (RootRecipe <$> recipeParser)
+  <> group "recipe" "Discover recipes and run authored flows" (RootRecipe <$> recipeParser)
   <> group "tool" "Discover and invoke KB-authored investigation helpers" (RootTool <$> hsubparser
     (group "list" "List registered KB tools" (ListTools <$> workspace)
     <> group "show" "Show a tool's description and Dhall types" (ShowTool <$> name <*> workspace)

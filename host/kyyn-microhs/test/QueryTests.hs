@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
-import qualified Kyyn.Types.KnowledgeBase as KB
+import qualified Kyyn.Domain.Recipe as KB
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), object, (.=))

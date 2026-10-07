@@ -10,7 +10,7 @@ import Data.Text (Text)
 import Text.JSON.Types (JSValue(..), toJSObject, fromJSObject)
 import Kyyn.Recipe.Internal
 import Kyyn.Types.KnowledgeBase (Recipe(OpenAgent))
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))

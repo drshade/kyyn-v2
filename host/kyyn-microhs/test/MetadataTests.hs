@@ -12,7 +12,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runEff, runPureEff)
 import Kyyn.Domain.Root (CheckedValue(..))
-import qualified Kyyn.Types.KnowledgeBase as KB
+import qualified Kyyn.Domain.Recipe as KB
 import Kyyn.Domain.Diagnostic (Diagnostic(Diagnostic), Severity(..), DiagnosticLocation(..), ValidationReport(..), CheckResult(..), checkReport)
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Porcelain.Capability.RootStore

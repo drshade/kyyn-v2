@@ -1,7 +1,7 @@
 module Kyyn.Domain.Recipe
   ( DescriptionFormat(..), KnowledgeBase(..), RecipeDefinition(..)
   , ProposedRecipe(..), StoredRecipe(..), proposedRecipe, recipeMethod, recipeDefinition, proposedDefinition
-  , checkRecipeDefinitions
+  , checkRecipeDefinitions, RecipeId(..), recipeId
   , RecipeSignature(..)
   ) where
 
@@ -10,14 +10,16 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Control.Monad (unless)
 import Data.List (nub)
-import Kyyn.Domain.Curation (recipeId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Plugin (qualifiedTypeName, bindingModule)
+import Kyyn.Domain.Plugin (qualifiedTypeName, bindingModule, bindingName)
 import Kyyn.Domain.Contract (CheckedContract, ContractId, contractId)
 import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
+
+recipeId :: String -> Either String RecipeId
+recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId (Text.pack value)))) (bindingName value)
 
 data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
 

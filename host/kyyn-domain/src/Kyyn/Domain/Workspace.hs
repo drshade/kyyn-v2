@@ -7,8 +7,8 @@ import Data.List (isPrefixOf, stripPrefix)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.Path (relativeName, relativePath)
-import Kyyn.Domain.Root (factsLocation, curationLocation, recipesLocation)
-import Kyyn.Types.Curation (RecipeId)
+import Kyyn.Domain.Root (factsLocation, recipesLocation)
+import Kyyn.Types.KnowledgeBase (RecipeId)
 
 data EvolutionState = Draft | Ready | Accepted deriving (Eq, Show)
 data EvolutionKind = AdHoc | RecipeBased RecipeId deriving (Eq, Show)
@@ -34,8 +34,6 @@ projectWorkspace manifest tree
   | any (not . allowed . relativeName . fst) (files tree) = Left "Unexpected file outside workspace layout"
   | any (\(p,_) -> relativeName p == targetFacts || (targetFacts ++ "/") `isPrefixOf` relativeName p) (files tree) =
       Left "Target facts must be produced by the evolution"
-  | any (\(p,_) -> relativeName p == "target/" ++ relativeName curationLocation) (files tree) =
-      Left "Target curation progress is host material, not authored code"
   | any (\(p,_) -> relativeName p == "target/" ++ relativeName recipesLocation) (files tree) =
       Left "Target recipes must be produced by the evolution"
   | any (\(p,_) -> "target/recipes/" `isPrefixOf` relativeName p) (files tree) =

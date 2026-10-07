@@ -60,7 +60,7 @@ dispatchFacts host command (SelectedKb kb revision _) = withRuntime host $ \tool
       Rejected (ValidationReport diagnostics) -> pure (refusal diagnostics)
       Passed root (ValidationReport warnings) -> do
         result <- runExceptT $ do
-          let Root contract _ _ _ _ = validatedValue root
+          let Root contract _ _ _ = validatedValue root
           selected@(CollectionContract _ _ _ shape) <- ExceptT (pure (Root.selectCollection contract collection))
           facts <- ExceptT (readCollection root collection)
           case command of

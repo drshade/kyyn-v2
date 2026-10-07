@@ -20,7 +20,7 @@ import Kyyn.Porcelain.Capability.RootStore (RootStore, checkRootValue, checkReci
 checkEvolutionReport :: RootStore :> es
   => [(String, CheckedContract)] -> RootContract -> KnowledgeBase Value ProposedRecipe -> RootContract -> EvolutionObservation
   -> Eff es (Either [Diagnostic] (KnowledgeBase CheckedValue StoredRecipe, EvolutionReport))
-checkEvolutionReport stateContracts source input target (EvolutionObservation output steps curation) =
+checkEvolutionReport stateContracts source input target (EvolutionObservation output steps) =
   case resolveBoundaries of
     Left diagnostics -> pure (Left diagnostics)
     Right boundaries -> do
@@ -47,7 +47,7 @@ checkEvolutionReport stateContracts source input target (EvolutionObservation ou
           (reject "An evolution cannot return to Before after entering After")
         reports <- stepReports steps (drop 1 factSets)
         case reverse values of
-          final : _ -> Right (final, EvolutionReport [] reports curation)
+          final : _ -> Right (final, EvolutionReport [] reports)
           [] -> reject "Missing evolution boundaries"
   where
     checkRecipes recipes = do

@@ -1,11 +1,10 @@
 {-# LANGUAGE NoFieldSelectors #-}
 module Kyyn.Evolution.Proposal
-  ( FactEdit(..), ProposedStep(..), ProposedCuration(..), RecipeProposal(..), applyFactEdit ) where
+  ( FactEdit(..), ProposedStep(..), RecipeProposal(..), applyFactEdit ) where
 
 import Kyyn.Edit (CollectionEdit, append, update, put, remove)
 import Kyyn.Types.Fact (Fact, FactId)
 import Kyyn.Types.Evolution (Rationale)
-import Kyyn.Types.Curation (Curation)
 
 -- | A description of a fact change, not an executable update function.
 data FactEdit a
@@ -16,9 +15,6 @@ data FactEdit a
 
 -- | Ordered changes sharing one explanation and its evidence citations.
 data ProposedStep edits = ProposedStep Rationale [edits] deriving (Eq, Show)
-
--- | Fact-edit steps and an explicit declaration of handled evidence.
-data ProposedCuration edits = ProposedCuration [ProposedStep edits] Curation deriving (Eq, Show)
 
 -- | Proposed fact edits and the complete next state of the selected recipe.
 data RecipeProposal edits state = RecipeProposal

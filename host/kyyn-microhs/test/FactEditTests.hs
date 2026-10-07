@@ -24,7 +24,7 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Plumbing.Protocol.RecipeEvolution (recipeEvolutionBindings, decodeRecipeEvolutionReply)
 import Kyyn.Plumbing.Protocol.FactEdits
@@ -154,14 +154,14 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
         right (decodeRecipeEvolutionReply (RecipeId "sync") recipes (Text.encodeUtf8 (Text.pack output)))
   forM_ programs $ \program -> do
     observation <- execute program ("frozen" :: Value) >>= right
-    (checked@(KnowledgeBase checkedFacts _), EvolutionReport _ reports handled) <- right (runPureEff (runDhallHandling (runRootStore
+    (checked@(KnowledgeBase checkedFacts _), EvolutionReport _ reports) <- right (runPureEff (runDhallHandling (runRootStore
       (checkEvolutionReport [("String",state)] contract input contract observation))))
-    unless (handled == Nothing && case reports of StepReport rationale _ : _ -> rationale == why; _ -> False)
+    unless (case reports of StepReport rationale _ : _ -> rationale == why; _ -> False)
       (fail "Proposal rationale or citations changed")
     codePath <- right (relativePath "sources/Schema.hs")
     codeBytes <- Bytes.readFile (temporary </> "Schema.hs")
     code <- right (fileTree [(codePath,codeBytes)])
-    stored@(Root storedContract factFiles storedCode _ _) <- right (runPureEff
+    stored@(Root storedContract factFiles storedCode _) <- right (runPureEff
       (runDhallHandling (runRootStore (materializeRoot contract code checked))))
     unless (storedContract == contract && storedCode == code) (fail "Non-fact artifacts changed")
     unless (all ((== ".dhall") . reverse . take 6 . reverse . relativeName . fst) (files factFiles))
@@ -180,7 +180,7 @@ main = withSystemTempDirectory "kyyn-fact-edits-" $ \temporary -> do
     case rejected of Left _ -> pure (); Right _ -> fail "A failed edit returned a partial root"
     forM_ [("unchanged",1),("state-only",1),("no-changes",0)] $ \(variant,count) -> do
       observed <- execute program (variant :: Value) >>= right
-      (_,EvolutionReport _ steps _) <- right (runPureEff (runDhallHandling (runRootStore
+      (_,EvolutionReport _ steps) <- right (runPureEff (runDhallHandling (runRootStore
         (checkEvolutionReport [("String",state)] contract input contract observed))))
       unless (length steps == count && all (\(StepReport _ changes) -> not (null changes)) steps)
         (fail ("Unexpected empty or missing steps for " ++ show variant ++ ": " ++ show steps))

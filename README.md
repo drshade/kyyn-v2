@@ -5,7 +5,7 @@ Facts, Haskell schemas, validation, tools and recipes evolve together through
 reviewable proposals in Git.
 
 The development CLI supports KB initialization, typed evolutions and acceptance,
-source plugins/taps, latest evidence, recipe-scoped curation, model-assisted tools,
+source plugins/taps, latest evidence, typed per-recipe state, model-assisted tools,
 closed recipes and API/fact browsing. Web and MCP surfaces are architectural goals,
 not shipped interfaces in this checkout.
 

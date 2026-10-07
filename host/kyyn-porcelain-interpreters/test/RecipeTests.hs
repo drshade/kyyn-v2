@@ -5,7 +5,7 @@ import Control.Monad (unless)
 import Data.ByteString (ByteString)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Curation
+import Kyyn.Domain.Recipe (RecipeDefinition(..), RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
@@ -22,35 +22,30 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 
 recipeTests :: IO ()
 recipeTests = do
-  let recipe = Fact (FactId "syncTodos") (OpenAgent "Read current documents, then explain the proposed changes.")
+  let recipe = Fact (FactId "syncTodos") (OpenRecipe "Read current documents, then explain the proposed changes." "()")
       check label condition = unless condition (fail label)
       kb = KnowledgeBase repository (Subtree (either error id (relativePath "nested/kb")))
       at = either error id (gitRevision (replicate 40 'a'))
       current = either error id (gitRevision (replicate 40 'b'))
-      run :: Maybe ByteString -> Eff '[RecipeStore,RootStore,DhallHandling,Git] a -> a
-      run progress = runPureEff . recording at progress . runDhallHandling . runRootStore . runRecipeStore
-  check "Selected revision's recipes not returned" (run Nothing (loadRecipesAt kb at) == Right [recipe])
-  check "Recipe instructions lost" (run Nothing (findRecipeAt kb at (RecipeId "syncTodos")) == Right recipe)
-  check "Empty recipe list became an error" (run Nothing (loadRecipesAt kb current) == Right [])
-  check "Missing register not empty" (run Nothing (loadCurationAt kb at) == Right emptyCurationRegister)
-  check "Listing instructions tried to read corrupt progress"
-    (run (Just "malformed") (loadRecipesAt kb at) == Right [recipe])
-  check "Unknown recipe accepted" (case run Nothing (findRecipeAt kb at (RecipeId "missing")) of
-    Left [Diagnostic _ "curation.recipe-unknown" _ _] -> True
+      run :: Eff '[RecipeStore,RootStore,DhallHandling,Git] a -> a
+      run = runPureEff . recording at . runDhallHandling . runRootStore . runRecipeStore
+  check "Selected revision's recipes not returned" (run (loadRecipesAt kb at) == Right [recipe])
+  check "Recipe instructions lost" (run (findRecipeAt kb at (RecipeId "syncTodos")) == Right recipe)
+  check "Empty recipe list became an error" (run (loadRecipesAt kb current) == Right [])
+  check "Unknown recipe accepted" (case run (findRecipeAt kb at (RecipeId "missing")) of
+    Left [Diagnostic _ "recipe.unknown" _ _] -> True
     _ -> False)
-  check "Malformed register accepted" (case run (Just "malformed") (loadCurationAt kb at) of Left _ -> True; _ -> False)
-  putStrLn "Recipe discovery reads only selected Git recipe/register documents without a compiler."
+  putStrLn "Recipe discovery reads only selected Git recipe definitions without a compiler."
 
 repository :: Repository
 repository = Repository (either error id (directoryScope "/fixture"))
 
-recording :: GitRevision -> Maybe ByteString -> Eff (Git : es) a -> Eff es a
-recording selected progress = interpret $ \_ request -> case request of
+recording :: GitRevision -> Eff (Git : es) a -> Eff es a
+recording selected = interpret $ \_ request -> case request of
   ReadFileAt actual revision path | actual == repository -> case relativeName path of
     "nested/kb/root/recipes.dhall" -> pure (Right (if revision == selected then Just recipeData else Nothing))
-    "nested/kb/root/curation.dhall" | revision == selected -> pure (Right progress)
     _ -> error "Recipe store read outside selected KB/revision"
   _ -> error "Recipe discovery performed a non-document Git operation"
 
 recipeData :: ByteString
-recipeData = "[{ id = \"syncTodos\", value = { instructions = \"Read current documents, then explain the proposed changes.\" } }]"
+recipeData = "let Recipe = < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > in [{ id = \"syncTodos\", value = Recipe.OpenAgent { instructions = \"Read current documents, then explain the proposed changes.\", stateType = \"()\" } }]"

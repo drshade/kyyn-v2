@@ -5,7 +5,6 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), toJSON)
 import Data.List (isInfixOf, elemIndex)
@@ -95,7 +94,7 @@ main = do
       schema = right (checkContract
         (Algebraic "Example.Root" [] [Constructor "Example.Root" [(Just "title",StringType)]])
         (SchemaMetadata [] [] []) >>= checkRootLayout)
-      root = Root schema empty empty emptyCurationRegister []
+      root = Root schema empty empty []
       value = CheckedValue (contractId (rootSchema schema)) (object ["title" .= ("Unicode λ" :: String)])
       scope = right (directoryScope "/test/repository")
       kb = KnowledgeBase (Repository scope) (Subtree (right (relativePath "nested/kb")))
@@ -104,8 +103,8 @@ main = do
       workspace = EvolutionWorkspace kb identity
       captured = EvolutionContext kb identity (Before revision schema)
         (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft AdHoc) empty empty empty empty)
-      candidate = Candidate captured (EvolutionReport [] [] Nothing) root
-      citedCandidate = Candidate captured (EvolutionReport [] [StepReport (Rationale "Because" [citation]) []] Nothing) root
+      candidate = Candidate captured (EvolutionReport [] []) root
+      citedCandidate = Candidate captured (EvolutionReport [] [StepReport (Rationale "Because" [citation]) []]) root
       assert label condition = unless condition (fail label)
       runRoot :: RootCommand -> (Response, [String])
       runRoot request = runPureEff . runState ([] :: [String]) . storeRoot value . execution

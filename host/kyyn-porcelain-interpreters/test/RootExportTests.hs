@@ -1,9 +1,8 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module RootExportTests (rootExportTests) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
-import CurationPersistenceTests (sampleCuration)
-import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
+import GuestFixture (noRecipePreparation)
+
 import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes)
 import Control.Monad (unless)
 import qualified Data.ByteString as Bytes
@@ -48,7 +47,7 @@ import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 rootExportTests :: Root -> IO ()
-rootExportTests original@(Root contract facts code _ _) = withSystemTempDirectory "kyyn-root-export" $ \directory -> do
+rootExportTests original@(Root contract facts code _) = withSystemTempDirectory "kyyn-root-export" $ \directory -> do
   executable <- findExecutable "git" >>= maybe (fail "Git required for root export integration") pure
   scope <- either fail pure (directoryScope directory)
   let path = either error id . relativePath
@@ -57,16 +56,15 @@ rootExportTests original@(Root contract facts code _ _) = withSystemTempDirector
       manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       completeCode = tree ([(p,if relativeName p == "kb.dhall" then manifest else b) | (p,b) <- files code] ++ [(path "plugins/config/example.dhall","{ enabled = True }"),
         (path "assets/template.bin",Bytes.pack [0..255])])
-      root = Root contract facts completeCode sampleCuration []
+      root = Root contract facts completeCode []
       storage action = runPureEff (runDhallHandling (runRootStore action))
       outcome = runPureEff . checkingMock root . runDhallHandling . runRootStore $ checkRoot root
   checked <- case outcome of
     Passed value _ -> pure value
     _ -> fail (show outcome)
   exported <- either (fail . show) pure (storage (exportRootFiles checked))
-  progress <- either (fail . show) pure (runPureEff (runDhallHandling (encodeRegister sampleCuration)))
   recipeBytes <- either (fail . show) pure (runPureEff (runDhallHandling (encodeRecipes [])))
-  unless (exported == tree ((recipesLocation,recipeBytes) : (curationLocation,progress) : files facts ++ files completeCode) && validatedValue checked == root)
+  unless (exported == tree ((recipesLocation,recipeBytes) : files facts ++ files completeCode) && validatedValue checked == root)
     (fail "Export substituted or rerendered the validated root")
   let process args = do
         result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
@@ -94,8 +92,8 @@ rootExportTests original@(Root contract facts code _ _) = withSystemTempDirector
   let kb = KnowledgeBase repo (Subtree (path "kb"))
       beforeSource = tree [(path "Schema.hs","captured before source")]
       changeSource = tree [(path "Evolution.hs","captured change source")]
-      captured = WorkspaceSnapshot (WorkspaceManifest parent "Export" "Fixed proposal" Ready) beforeSource completeCode changeSource (tree [])
-      report = EvolutionReport [] [StepReport (Rationale "Retain this explanation" []) []] Nothing
+      captured = WorkspaceSnapshot (WorkspaceManifest parent "Export" "Fixed proposal" Ready AdHoc) beforeSource completeCode changeSource (tree [])
+      report = EvolutionReport [] [StepReport (Rationale "Retain this explanation" []) []]
       candidate = Candidate (EvolutionContext kb workspaceId (Before parent contract) captured) report checked
   createDirectoryIfMissing True (directory </> "kb/evolutions/e001/notes")
   Bytes.writeFile (directory </> "kb/evolutions/e001/notes/review.md") "later review note"
@@ -129,7 +127,7 @@ rootExportTests original@(Root contract facts code _ _) = withSystemTempDirector
       findAcceptance kb workspaceId revision
   unless (accepted == Right (Right (Just revision))) (fail "Combined commit did not introduce its Accepted archive")
   opened <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . schemaMock (rootSchema contract)
-    . runDhallHandling . runRootStore . runRootOpening (tree []) $ openCapturedRoot reopened
+    . runDhallHandling . runRootStore . noRecipePreparation . runRootOpening (tree []) $ openCapturedRoot reopened
   unless (opened == Right (Right (validatedValue checked))) (fail "Reopened Root differs from the validated input")
   contents <- process ["show",revisionName revision ++ ":outside"]
   unless (contents == "committed outside") (fail "Commit included unrelated staged or working changes")
@@ -140,7 +138,7 @@ rootExportTests original@(Root contract facts code _ _) = withSystemTempDirector
   unless (currentIndex == indexBefore && liveOutside == "unstaged outside")
     (fail "Export/commit/ref primitives modified the checkout")
   let (factEntries,codeEntries) = partition (\(p,_) -> "facts/" `isPrefixOf` relativeName p) (files reopened)
-  reopenedValue <- either (fail . show) pure (storage (loadRootValueForChecking (Root contract (tree factEntries) (tree codeEntries) emptyCurationRegister [])))
+  reopenedValue <- either (fail . show) pure (storage (loadRootValueForChecking (Root contract (tree factEntries) (tree codeEntries) [])))
   originalValue <- either (fail . show) pure (storage (loadRootValueForChecking original))
   unless (reopenedValue == originalValue) (fail "Reopened committed facts changed")
   putStrLn "Validated root export composes with real Git commit/CAS: exact files, deletion, parent and unrelated checkout preservation passed."
@@ -161,6 +159,8 @@ schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es 
 schemaMock contract = interpret $ \_ -> \case
   Schema.InspectImports {} -> error "Unexpected import inspection"
   Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
+  Schema.InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
   Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   Schema.InspectSchema source -> do
     unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")

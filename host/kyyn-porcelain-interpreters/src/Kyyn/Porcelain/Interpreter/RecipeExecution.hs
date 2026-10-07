@@ -36,7 +36,7 @@ import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 runRecipeExecution :: (RootStore :> es, ToolPreparation :> es, SchemaInspection :> es, GuestCompilation :> es,
   GuestExecution :> es, PluginRead :> es, Failure :> es, Judgement :> es, ModelTurn :> es, DhallHandling :> es)
   => Eff (RecipeExecution : es) a -> Eff es a
-runRecipeExecution = interpret $ \_ (ExecuteRecipeFlow root@(Root contract _ code _ _) plugins entry@(FlowEntryRef name) (CheckedValue stateIdentity stateValue) request) -> runExceptT $ do
+runRecipeExecution = interpret $ \_ (ExecuteRecipeFlow root@(Root contract _ code _) plugins entry@(FlowEntryRef name) (CheckedValue stateIdentity stateValue) request) -> runExceptT $ do
   (sources,_) <- ExceptT (prepareToolBindings code plugins)
   let (interfaces,instances) = pluginBindings plugins
       checked = either (throwE . pure . errorDiagnostic "recipe.execution") pure

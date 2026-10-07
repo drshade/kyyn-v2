@@ -14,7 +14,7 @@ import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Git (gitRevision, revisionName)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.Workspace
-import Kyyn.Domain.Curation (recipeId, RecipeId(..))
+import Kyyn.Domain.Recipe (recipeId, RecipeId(..))
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore(..))
 

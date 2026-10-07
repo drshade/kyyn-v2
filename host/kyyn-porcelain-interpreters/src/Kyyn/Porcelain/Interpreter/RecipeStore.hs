@@ -11,16 +11,13 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.Git (Git, readFileAt)
 import Kyyn.Porcelain.Capability.RecipeStore
-import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootRecipes, readRootCuration)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootRecipes)
 
 runRecipeStore :: (Git :> es, RootStore :> es) => Eff (RecipeStore : es) a -> Eff es a
 runRecipeStore = interpret $ \_ request -> case request of
   LoadRecipesAt kb revision -> runExceptT $ do
     material <- readDocument kb revision "recipes.dhall"
     ExceptT (readRootRecipes material)
-  LoadCurationAt kb revision -> runExceptT $ do
-    material <- readDocument kb revision "curation.dhall"
-    ExceptT (readRootCuration material)
 
 readDocument :: Git :> es => KnowledgeBase -> GitRevision -> String
   -> ExceptT [Diagnostic] (Eff es) FileTree

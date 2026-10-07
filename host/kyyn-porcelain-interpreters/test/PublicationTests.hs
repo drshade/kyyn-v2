@@ -5,9 +5,12 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, TypeApplications #-}
 module PublicationTests (publicationTests) where
 
+import GuestFixture (noRecipePreparation)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
+import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
+
 import Control.Exception (AsyncException(..), throwIO, try)
-import Kyyn.Domain.Curation (emptyCurationRegister)
-import qualified Kyyn.Types.KnowledgeBase as KB
+import qualified Kyyn.Domain.Recipe as KB
 import Control.Monad (unless, when, forM_)
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (coerce)
@@ -65,11 +68,11 @@ import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
 type Effects = '[EvidenceStore, RootPublication, RootExecution, EvolutionExecution, EvolutionAuthoring, EvolutionStore,
-  RootOpening, Schema.SchemaInspection, WorkspaceStore, RootStore, DhallHandling,
+  RootOpening, ToolPreparation, PluginPreparation, Schema.SchemaInspection, WorkspaceStore, RootStore, DhallHandling,
   Git.Git, Git.Git, Process.ProcessExecution, FileSystem, Failure, IOE]
 
 publicationTests :: Root -> IO ()
-publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt ->
+publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
   withSystemTempDirectory "kyyn-publication" $ \directory -> do
     executable <- findExecutable "git" >>= maybe (fail "Git required") pure
     scope <- either fail pure (directoryScope directory)
@@ -85,7 +88,7 @@ publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt 
         pluginBytes = "module Plugin where\n"
         code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
           (path pluginFile,pluginBytes)]
-        initialRoot = Root contract facts code emptyCurationRegister []
+        initialRoot = Root contract facts code []
         output = object ["description" .= ("accepted" :: String), "todos" .= ([] :: [Value])]
         write name bytes = do
           createDirectoryIfMissing True (takeDirectory (directory </> name))
@@ -109,7 +112,7 @@ publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt 
           result <- runEff . runFailure . runFileSystemIO scope . runProcessExecutionIO
             . runGit executable [] . gitHook hook . runDhallHandling . runRootStore
             . runWorkspaceStore . schemaMock contract
-            . (if opening then runRootOpening (tree []) else noOpening)
+            . noRecipePreparation . (if opening then runRootOpening (tree []) else noOpening)
             . runEvolutionStore . runEvolutionAuthoring . evaluationMock output . validationMock validation
             . runRootPublication . noEvidence $ action
           either (fail . show) pure result
@@ -126,8 +129,8 @@ publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt 
     command ["-c","user.name=Fixture","-c","user.email=fixture@example.invalid",
       "-c","commit.gpgsign=false","commit","-qm","initial root"]
     base <- headRevision
-    workspace@(EvolutionWorkspace _ identity) <- normal (createEvolution kb (EvolutionName "First") base) >>= right
-    other <- normal (createEvolution kb (EvolutionName "Other") base) >>= right
+    workspace@(EvolutionWorkspace _ identity) <- normal (createEvolution kb (EvolutionName "First") base AdHoc) >>= right
+    other <- normal (createEvolution kb (EvolutionName "Other") base AdHoc) >>= right
     workspacePath <- either fail (pure . relativeName) (workspaceLocation workspace)
     otherPath <- either fail (pure . relativeName) (workspaceLocation other)
     inheritedPlugin <- Bytes.readFile (directory </> workspacePath </> "target" </> pluginFile)
@@ -264,10 +267,10 @@ publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt 
       else pure accepted
     stale <- publication (acceptEvolution branch metadata otherChecked)
     assert "Parallel draft was not stale" (stale == NotAccepted (BaseMismatch base (Just rebaseHead)))
-    let EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ name explanation state) before target change notes) =
+    let EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ name explanation state _) before target change notes) =
           case otherCandidate of Candidate otherContext _ _ -> otherContext
     rebasedFiles <- publication (encodeWorkspaceSnapshot (WorkspaceSnapshot
-      (WorkspaceManifest rebaseHead name explanation state) before target change notes)) >>= right
+      (WorkspaceManifest rebaseHead name explanation state AdHoc) before target change notes)) >>= right
     writeTreeAt otherPath rebasedFiles
     rebasedCapture <- normal (captureEvolution other) >>= right
     _ <- normal (applyEvolution rebasedCapture) >>= right
@@ -289,10 +292,10 @@ publicationTests (Root contract facts _ _ _) = forM_ [False, True] $ \interrupt 
     assert "Removed archive was still treated as accepted" (removedRecovery == Right Nothing)
     removedAcceptance <- publication accept
     case removedAcceptance of NotAccepted (InvalidMaterial _) -> pure (); _ -> fail "Removed acceptance bypassed absent candidate"
-    let WorkspaceSnapshot (WorkspaceManifest _ originalName originalExplanation _)
+    let WorkspaceSnapshot (WorkspaceManifest _ originalName originalExplanation _ _)
           originalBefore originalTarget originalChange originalNotes = case context of EvolutionContext _ _ _ snapshot -> snapshot
     reacceptFiles <- publication (encodeWorkspaceSnapshot (WorkspaceSnapshot
-      (WorkspaceManifest reverted originalName originalExplanation Ready)
+      (WorkspaceManifest reverted originalName originalExplanation Ready AdHoc)
       originalBefore originalTarget originalChange originalNotes)) >>= right
     writeTreeAt workspacePath reacceptFiles
     reacceptCapture <- normal (captureEvolution workspace) >>= right
@@ -329,6 +332,8 @@ schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
   Schema.InspectImports {} -> error "Unexpected import inspection"
   Schema.InspectType {} -> error "Unexpected plain type inspection"
+  Schema.InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
+  Schema.InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
   Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   Schema.InspectSchema _ -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
 
@@ -340,8 +345,8 @@ evaluationMock output = interpret $ \_ (EvaluateEvolution captured@(CapturedEvol
       before = KB.KnowledgeBase input []
       after = KB.KnowledgeBase output []
       observation = EvolutionObservation after [StepObservation (Rationale "Clear completed work" [])
-        (ObservedRoot fingerprint before) (ObservedRoot fingerprint after)] Nothing
-  checked <- checkEvolutionReport contract before contract observation
+        (ObservedRoot fingerprint before) (ObservedRoot fingerprint after)]
+  checked <- checkEvolutionReport [] contract before contract observation
   pure $ case checked of
     Left diagnostics -> Left (ProposedCodeRejected diagnostics)
     Right (value,report) -> Right (EvaluatedEvolution captured (After contract) value report)

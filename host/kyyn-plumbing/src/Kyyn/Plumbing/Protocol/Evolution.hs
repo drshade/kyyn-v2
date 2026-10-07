@@ -22,7 +22,6 @@ import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Plumbing.Protocol.Validation (parseReport)
-import Kyyn.Plumbing.Protocol.Curation (parseCuration)
 import Kyyn.Plumbing.Protocol.Recipes (parseKnowledgeBase)
 import Kyyn.Plumbing.Protocol.FactEdits (factEditBindings)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
@@ -152,9 +151,8 @@ decodeEvolutionReplyWith parseRoot bytes = eitherDecodeStrict bytes >>= parseEit
       "Rejected" -> do
         ValidationReport diagnostics <- parseReport value
         pure (Left (EvolutionFailure diagnostics))
-      "Succeeded" -> Right <$> exact "EvolutionOutput" ["after","steps","curation"] (\output ->
-        EvolutionObservation <$> (output .: "after" >>= parseRoot) <*> (output .: "steps" >>= array step)
-          <*> (output .: "curation" >>= parseCuration)) value
+      "Succeeded" -> Right <$> exact "EvolutionOutput" ["after","steps"] (\output ->
+        EvolutionObservation <$> (output .: "after" >>= parseRoot) <*> (output .: "steps" >>= array step)) value
       _ -> fail "Unknown evolution outcome")
   where
     step = exact "StepObservation" ["rationale","before","after"] $ \o ->

@@ -15,7 +15,7 @@ import Kyyn.Domain.EvolutionReport (EvolutionReport(..), PluginChange(..))
 import qualified Kyyn.Domain.EvolutionReport as Report
 import Kyyn.Domain.Contract (contractId)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Domain.Plugin (pluginName)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
@@ -47,7 +47,7 @@ runEvolutionExecution
   => FileTree -> Eff (EvolutionExecution : es) a -> Eff es a
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)
-      (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) before target change _)) source@(Root actual _ acceptedCode _ recipes) closure
+      (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) before target change _)) source@(Root actual _ acceptedCode recipes) closure
       targetSource@(SourceRoot after preparedCode (RootDefinition _ _ _ _ _ targetSources) _))) -> runExceptT $ do
   unless (actual == expected) (reject "evolution.before-contract" "Captured input does not match Before's contract")
   RootDefinition _ _ _ _ _ acceptedSources <- proposed (readRootDefinition acceptedCode)
@@ -83,7 +83,7 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
       ("Evolution.evolution: " ++ message))))
     Right (Left failure) -> throwE (EvolutionRejected failure)
     Right (Right result) -> pure result
-  let Report.EvolutionObservation (Value.KnowledgeBase _ returnedRecipes) _ _ = reply
+  let Report.EvolutionObservation (Value.KnowledgeBase _ returnedRecipes) _ = reply
   targetContracts <- proposed (inspectRecipeContracts sdk targetSource
     [Fact ident (Value.proposedDefinition recipe) | Fact ident recipe <- returnedRecipes])
   unless (and [ident == expectedIdent && stateType == expectedType && identity == contractId contract |
@@ -93,8 +93,8 @@ runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(Captured
         ++ [(name,contract) | (_,name,contract) <- targetContracts]
   result <- proposed (checkEvolutionReport knownStates expected knowledge after reply)
   plugins <- proposed (pluginChanges acceptedCode preparedCode)
-  let (value,EvolutionReport _ steps curation) = result
-  pure (EvaluatedEvolution captured (After after) value (EvolutionReport plugins steps curation))
+  let (value,EvolutionReport _ steps) = result
+  pure (EvaluatedEvolution captured (After after) value (EvolutionReport plugins steps))
 
 pluginChanges :: DhallHandling :> es => FileTree -> FileTree -> Eff es (Either [Diagnostic] [PluginChange])
 pluginChanges before after = runExceptT $ traverse change changed

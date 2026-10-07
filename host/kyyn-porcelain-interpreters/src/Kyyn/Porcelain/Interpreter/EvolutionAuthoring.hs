@@ -15,7 +15,7 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath)
 import Kyyn.Domain.Path (relativePath, relativeName, scopedPath, directoryScope)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft), EvolutionKind(..))
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
@@ -54,7 +54,7 @@ create kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) r
     stateContract <- case kind of
       AdHoc -> pure Nothing
       RecipeBased (RecipeId ident) -> do
-        Root _ _ _ _ recipes <- ExceptT (RootOpening.loadRootMaterialAt repository revision (Subtree rootPath) source)
+        Root _ _ _ recipes <- ExceptT (RootOpening.loadRootMaterialAt repository revision (Subtree rootPath) source)
         case [state | Fact (FactId actual) (StoredRecipe _ _ state _) <- recipes, actual == ident] of
           [state] -> pure (Just state)
           _ -> throwE [errorDiagnostic "recipe.unknown" "The selected recipe must exist in Before"]

@@ -19,20 +19,19 @@ import Kyyn.Domain.Plugin (pluginName, pluginNameText)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Plumbing.Protocol.Plugin (originShape, originValue, parseOrigin)
 import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot, checkedSnapshotValue, restoreCheckedSnapshot)
-import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration)
 import Kyyn.Plumbing.Protocol.Recipes (methodShape, methodValue, parseMethod)
-import Kyyn.Domain.Curation (recipeId)
+import Kyyn.Domain.Recipe (recipeId)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
 
 recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Either [Diagnostic] (Shape, Value)
-recordDocument identity before after (EvolutionReport plugins steps curation) = do
+recordDocument identity before after (EvolutionReport plugins steps) = do
   encoded <- traverse step steps
   pure (recordShape stateContracts before after,
-    object ["version" .= ("6" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
-      "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation,
+    object ["version" .= ("7" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+      "after" .= snapshotValue after, "steps" .= encoded,
       "recipeContracts" .= map checkedSnapshotValue stateContracts,
       "plugins" .= [object ["name" .= pluginNameText name, "before" .= optional originValue old,
         "after" .= optional originValue new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]])
@@ -84,7 +83,7 @@ withPlugins shape = case shape of
   _ -> error "Expected record shape"
 
 recordShapeWithRecipes :: Shape -> RootContract -> RootContract -> Shape
-recordShapeWithRecipes recipe before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
+recordShapeWithRecipes recipe before after = Record (headerFields ++ [("steps",List step)])
   where
     fact collection = Union [(tag, Just (Record [("id",text),("value",shape)])) |
       (tag,contract) <- [("Before",before),("After",after)],
@@ -105,7 +104,7 @@ header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootCon
 header = withObject "Evolution record" $ \record -> do
   version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version /= "6" then pure (Left [errorDiagnostic "evolution.record-format"
+  if version /= "7" then pure (Left [errorDiagnostic "evolution.record-format"
     "Stored evolution record format is not supported by this kernel"])
   else do
     before <- record .: "before" >>= restoreSnapshot
@@ -116,7 +115,6 @@ header = withObject "Evolution record" $ \record -> do
 decodeRecord :: [CheckedContract] -> RootContract -> RootContract -> Value -> Either String EvolutionReport
 decodeRecord states before after = parseEither $ withObject "Evolution record" $ \record -> do
   steps <- record .: "steps" >>= traverse (step [("Before",before),("After",after)])
-  curation <- record .: "curation" >>= parseCuration
   plugins <- record .:? "plugins" .!= [] >>= traverse (withObject "Plugin change" $ \fields -> do
     name <- fields .: "name" >>= either fail pure . pluginName
     old <- fields .: "before" >>= parseOptional parseOrigin
@@ -124,7 +122,7 @@ decodeRecord states before after = parseEither $ withObject "Evolution record" $
     unless (old /= Nothing || new /= Nothing) (fail "Plugin change has no package")
     paths <- fields .: "files" >>= traverse (either fail pure . relativePath)
     pure (PluginChange name old new paths))
-  pure (EvolutionReport plugins steps curation)
+  pure (EvolutionReport plugins steps)
   where
     step :: [(String,RootContract)] -> Value -> Parser StepReport
     step endpoints = withObject "Step" $ \record -> do

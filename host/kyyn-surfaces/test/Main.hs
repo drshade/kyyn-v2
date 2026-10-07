@@ -11,7 +11,7 @@ import Kyyn.Domain.Git (gitRevision, gitUrl)
 import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
 import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
-import Kyyn.Domain.Curation (RecipeId(..))
+import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Domain.Secret (secretName)
 import Kyyn.Surfaces.Cli

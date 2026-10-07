@@ -1,7 +1,6 @@
 {-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module ExecutionTests (executionTests) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless, forM_)
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, runEff)
@@ -38,7 +37,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree [(path "src/Checks.hs", "captured validator"), (path "kb.dhall", manifest)]
       sdk = tree [(path "Sdk.hs", "explicit SDK")]
-      root = Root contract facts code emptyCurationRegister []
+      root = Root contract facts code []
       entry = fixtureProgram
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
         . runFixtureExecution shell . compileMock compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runToolPreparation sdkFiles . runRootExecution sdkFiles $ do
@@ -62,9 +61,9 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\" }")],
       tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")],
       tree [(path "kb.dhall", "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate;bad\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")]] $ \badCode -> do
-    failure <- execute sdk unexpected (Root contract facts badCode emptyCurationRegister [])
+    failure <- execute sdk unexpected (Root contract facts badCode [])
     case failure of Right (Left _) -> pure (); _ -> fail "Invalid manifest reached execution"
-  noFacts <- execute sdk (Right (entry "exit 99")) (Root contract (tree []) code emptyCurationRegister [])
+  noFacts <- execute sdk (Right (entry "exit 99")) (Root contract (tree []) code [])
   case noFacts of Right (Left _) -> pure (); _ -> fail "Unreadable facts reached execution"
   collision <- execute (tree [(path "Checks.hs", "collision")]) unexpected root
   case collision of Right (Left _) -> pure (); _ -> fail "Source collision reached compilation"

@@ -20,10 +20,9 @@ import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), Stora
 import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath, cacheLocation)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, scopedPath, directoryScope)
-import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath, isRootMaterial, curationLocation)
-import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister)
+import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath, isRootMaterial)
 import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipeContracts, decodeRecipeContracts)
-import Kyyn.Domain.Curation (curationEntries, recipeId)
+import Kyyn.Domain.Recipe (recipeId)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
@@ -80,7 +79,7 @@ runEvolutionStore = interpret $ \_ -> \case
   MarkDraft workspace -> runExceptT (setState workspace Draft)
   ExportAcceptedWorkspace (Candidate (EvolutionContext kb@(KnowledgeBase (Repository scope) _) identity (Before revision before)
       (WorkspaceSnapshot (WorkspaceManifest selected name explanation _ kind) source target change _)) report validated) -> runExceptT $ do
-    let Root after _ code _ _ = validatedValue validated
+    let Root after _ code _ = validatedValue validated
     unless (revision == selected && target == code) (throwE [errorDiagnostic "evolution.archive-context"
       "Checked root or Before revision disagrees with captured workspace inputs"])
     notesPath <- checked (workspaceLocation (EvolutionWorkspace kb identity) >>= \p -> relativePath (relativeName p ++ "/notes"))
@@ -101,18 +100,15 @@ runEvolutionStore = interpret $ \_ -> \case
     current <- readWorkspace (EvolutionWorkspace kb identity)
     pure (Workspace.matchesCapturedInputs captured current)
   SaveCandidate (Candidate (EvolutionContext kb identity (Before revision before)
-      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) _ target _ _)) report root@(Root after facts code progress recipes)) -> do
+      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) _ target _ _)) report root@(Root after facts code recipes)) -> do
     parent <- candidateScope kb
     unless (revision == selected && code == target)
       (storageFailure WriteFile "candidate.dhall" "Candidate disagrees with its captured Before or target")
     _ <- RootStore.loadRootValueForChecking root >>= stored WriteFile "root"
     checkSavedReport WriteFile report
     capture <- WorkspaceStore.encodeWorkspaceSnapshot snapshot >>= stored WriteFile "capture"
-    progressFiles <- if null (curationEntries progress) then pure [] else do
-      progressBytes <- encodeRegister progress >>= stored WriteFile "curation.dhall"
-      pure [(curationLocation,progressBytes)]
     recipeFiles <- RootStore.encodeRootRecipes recipes >>= stored WriteFile "recipes.dhall"
-    tree <- stored WriteFile "root" (fileTree (files recipeFiles ++ progressFiles ++ files facts ++ files code))
+    tree <- stored WriteFile "root" (fileTree (files recipeFiles ++ files facts ++ files code))
     let KnowledgeBase (Repository repositoryScope) _ = kb
     cache <- stored WriteFile (relativeName cacheLocation) (knowledgeBasePath kb cacheLocation)
     FileSystem.ensureIgnoredDirectory repositoryScope cache
@@ -153,7 +149,6 @@ runEvolutionStore = interpret $ \_ -> \case
                 rootFiles <- stored ReadFile "root" (subtree "root/" tree)
                 facts <- stored ReadFile ("root/" ++ relativeName factsLocation) (fileTree [(p,b) | (p,b) <- files rootFiles, isFactPath p])
                 code <- stored ReadFile "root" (fileTree [(p,b) | (p,b) <- files rootFiles, not (isRootMaterial p)])
-                progress <- RootStore.readRootCuration rootFiles >>= stored ReadFile "root/curation.dhall"
                 definitions <- RootStore.readRootRecipes rootFiles >>= stored ReadFile "root/recipes.dhall"
                 contractBytes <- maybe (storageFailure ReadFile "recipe-contracts.dhall" "Missing candidate recipe contracts") pure
                   (lookup "recipe-contracts.dhall" [(relativeName p,b) | (p,b) <- files tree])
@@ -166,7 +161,7 @@ runEvolutionStore = interpret $ \_ -> \case
                 recipes <- RootStore.readRecipeStates resolved rootFiles >>= stored ReadFile "root/recipes"
                 unless (code == target) (storageFailure ReadFile "root" "Saved root code differs from the captured target")
                 unless (owner == identity) (storageFailure ReadFile "candidate.dhall" "Saved result belongs to another evolution")
-                let root = Root after facts code progress recipes
+                let root = Root after facts code recipes
                 _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
                 checkSavedReport ReadFile report
                 pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
@@ -277,7 +272,7 @@ introducingCommits kb@(KnowledgeBase repository _) identity before visited (revi
       pure (if introduced then revision:rest else rest)
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
-checkSavedReport operation (EvolutionReport _ steps _) = forM_ steps $ \(StepReport _ changes) ->
+checkSavedReport operation (EvolutionReport _ steps) = forM_ steps $ \(StepReport _ changes) ->
   forM_ changes check
   where
     check (RecipeChange (FactId identity) before after) = do

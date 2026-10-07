@@ -3,7 +3,7 @@ module Kyyn.Porcelain.Capability.Recipe (findRecipeAt, proposeFromRecipe) where
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
-import Kyyn.Domain.Curation (RecipeId(..))
+import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -33,7 +33,7 @@ proposeFromRecipe :: (RootOpening :> es, PluginPreparation :> es,
   -> Eff es (Either [Diagnostic] EvolutionWorkspace)
 proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name) request = runExceptT $ do
   location <- either (failure "kb.path") pure (rootLocation kb)
-  root@(Root _ _ code _ recipes) <- ExceptT (loadRootAt repository revision (Subtree location))
+  root@(Root _ _ code recipes) <- ExceptT (loadRootAt repository revision (Subtree location))
   (entry,state) <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
     [StoredRecipe (ClosedAgent value) _ _ state] -> pure (value,state)
     [StoredRecipe (OpenAgent _) _ _ _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"

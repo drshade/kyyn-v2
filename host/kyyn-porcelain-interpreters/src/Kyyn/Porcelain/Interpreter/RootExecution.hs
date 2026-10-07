@@ -37,7 +37,7 @@ runRootExecution
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
-  PrepareRoot root@(Root contract _ code _ recipes) -> runExceptT $ do
+  PrepareRoot root@(Root contract _ code recipes) -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
     _ <- ExceptT (prepareTools code plugins)
     definition@(RootDefinition _ _ validator declarations _ authored) <- ExceptT (readRootDefinition code)

@@ -15,7 +15,7 @@ import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
 import qualified Kyyn.Domain.KnowledgeBase as KB
 import Kyyn.Domain.Recipe (StoredRecipe(..))
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionKind(..))
-import Kyyn.Types.Curation (RecipeId(..))
+import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection, inspectApiModules)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
@@ -74,7 +74,7 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
         pure (generated,empty,Nothing)
       RecipeBased (RecipeId selected) -> do
         rootPath <- checked (rootLocation kb)
-        Root _ _ _ _ recipes <- ExceptT (loadRootMaterialAt repository revision (Subtree rootPath) beforeSource)
+        Root _ _ _ recipes <- ExceptT (loadRootMaterialAt repository revision (Subtree rootPath) beforeSource)
         state <- checked $ case [(contract,value) | Fact (FactId name) (StoredRecipe _ _ contract value) <- recipes, name == selected] of
           [pair] -> Right pair
           _ -> Left "The selected recipe must exist in Before"

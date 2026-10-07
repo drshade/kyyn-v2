@@ -8,7 +8,7 @@ module Main (main) where
 
 import qualified Kyyn.Domain.Recipe as KB
 
-import Kyyn.Domain.Curation (emptyCurationRegister, RecipeId(..))
+import Kyyn.Domain.Recipe (RecipeId(..))
 import Control.Monad (unless)
 import Data.Aeson (object, (.=))
 import qualified Data.ByteString as Bytes
@@ -62,7 +62,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       utf8 = Text.encodeUtf8 . Text.pack
       tree = either error id . fileTree
   sdk <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
+    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
      [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Evolution/Proposal.hs","Kyyn/Recipe.hs","Kyyn/Recipe/Edit.hs","Kyyn/Recipe/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Evolution","Validation","SchemaMetadata"]] ++
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
@@ -103,7 +103,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       rootAction = do
         value <- checkRootValue beforeContract input
         either (pure . Left) (\v -> materializeRoot beforeContract beforeCode (KB.KnowledgeBase v initialRecipes)) value
-  Root _ factFiles _ _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
+  Root _ factFiles _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
   revision <- right (gitRevision (replicate 40 'a'))
   identifier <- right (evolutionId "abc")
   let repository = Repository scope
@@ -117,8 +117,8 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
     . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       prepared <- openCapturedSource target >>= either (error . show) pure
-      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles emptyCurationRegister initialRecipes) closure prepared)
-  EvaluatedEvolution preserved (After afterContract) checked@(KB.KnowledgeBase (CheckedValue _ value) recipes) (EvolutionReport _ reports _) <- right result >>= right
+      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles initialRecipes) closure prepared)
+  EvaluatedEvolution preserved (After afterContract) checked@(KB.KnowledgeBase (CheckedValue _ value) recipes) (EvolutionReport _ reports) <- right result >>= right
   unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 4 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
     (fail ("Unexpected evaluated workspace: " ++ show result))
@@ -153,13 +153,13 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
     . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
     . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
       source@(SourceRoot selected codeFiles _ closure) <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
-      let captured context' = CapturedEvolution context' (Root selected factFiles codeFiles emptyCurationRegister initialRecipes) closure source
+      let captured context' = CapturedEvolution context' (Root selected factFiles codeFiles initialRecipes) closure source
       (,) <$> evaluateEvolution (captured recipeContext) <*> evaluateEvolution (captured identityContext)
   (recipeResult,identityResult) <- right recipeResults
-  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ identityFacts) identityRecipes) (EvolutionReport _ identityReports _) <- right identityResult
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ identityFacts) identityRecipes) (EvolutionReport _ identityReports) <- right identityResult
   unless (identityFacts == input && identityRecipes == initialRecipes && null identityReports)
     (fail "Generated recipe identity scaffold changed facts, state or reports")
-  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ editedFacts) editedRecipes) (EvolutionReport _ recipeReports _) <- right recipeResult
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ editedFacts) editedRecipes) (EvolutionReport _ recipeReports) <- right recipeResult
   unless (editedFacts == object ["todos" .= [object ["id" .= ("todo-001" :: String),
       "value" .= object ["title" .= ("Reviewed" :: String)]]]] &&
       case editedRecipes of
@@ -174,7 +174,7 @@ gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
   ReadTreeAt selected selectedRevision (Subtree path) excluded
     | selected == repository && selectedRevision == revision && relativeName path == "nested/root"
-      && excluded == [factsLocation, curationLocation, recipesLocation, recipeStatesLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
+      && excluded == [factsLocation, recipesLocation, recipeStatesLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
   _ -> error "Evolution attempted Git operations other than its exact Before read"
 
 beforeType :: DataType

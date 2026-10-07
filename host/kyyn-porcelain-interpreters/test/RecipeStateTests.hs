@@ -11,7 +11,7 @@ import qualified Data.ByteString.Lazy as Lazy
 import Effectful (runPureEff)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
-import Kyyn.Domain.Curation (RecipeId(..))
+import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Value (CheckedValue(..))
@@ -81,14 +81,14 @@ main = do
     (restoredSnapshots == [(ident,name,contract) | (Fact ident _,name,contract) <- resolved])
   let pair = object ["facts" .= object [], "state" .= object ["seen" .= (["three"] :: [String])]]
       reply after = Lazy.toStrict (encode (object ["tag" .= ("Succeeded" :: String), "value" .= object
-        ["after" .= after, "steps" .= ([] :: [Value]), "curation" .= object ["tag" .= ("None" :: String)]]]))
+        ["after" .= after, "steps" .= ([] :: [Value])]]))
       expected = [Fact ident (case proposedRecipe recipe of
         ProposedRecipe method name identity stateValue -> ProposedRecipe method name identity
           (if ident == FactId "mail" then object ["seen" .= (["three"] :: [String])] else stateValue)) |
         Fact ident recipe <- stored]
   decoded <- right (decodeRecipeEvolutionReply first stored (reply pair)) >>= right
   assert "Recipe pair decoding changed another recipe or its definition"
-    (decoded == EvolutionObservation (KnowledgeBase (object []) expected) [] Nothing)
+    (decoded == EvolutionObservation (KnowledgeBase (object []) expected) [])
   assert "Missing selected recipe was accepted"
     (isFailure (decodeRecipeEvolutionReply (RecipeId "missing") stored (reply pair)))
   assert "Duplicate selected recipe was accepted"

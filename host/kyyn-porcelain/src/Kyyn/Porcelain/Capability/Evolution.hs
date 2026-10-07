@@ -6,10 +6,6 @@ import Kyyn.Domain.Git (LocalBranch, CommitMetadata)
 import Kyyn.Domain.Diagnostic (CheckResult(..), ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Publication (AcceptanceResult(..), AcceptanceProblem(..))
 import Kyyn.Domain.Root (Root(..))
-import qualified Kyyn.Domain.Recipe as Value
-import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
-import Kyyn.Porcelain.Capability.Curation (resolveCuration)
-import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution, evaluateEvolution)
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, loadCandidate)
@@ -20,14 +16,14 @@ import Kyyn.Porcelain.Capability.Validation (checkCandidate)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, materializeRoot)
 import Kyyn.Porcelain.Validated (Validated)
 
-evaluateWorkspace :: (EvolutionAuthoring :> es, EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es, EvidenceStore :> es)
+evaluateWorkspace :: (EvolutionAuthoring :> es, EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
 evaluateWorkspace workspace = do
   captured <- captureEvolution workspace
   either (pure . Left . ProposedCodeRejected) applyEvolution captured
 
 checkEvolution :: (EvolutionAuthoring :> es, EvolutionExecution :> es, EvolutionStore :> es,
-    RootExecution :> es, RootStore :> es, EvidenceStore :> es)
+    RootExecution :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (CheckResult (Candidate (Validated Root))))
 checkEvolution workspace = do
   evaluated <- evaluateWorkspace workspace
@@ -43,26 +39,22 @@ checkSavedCandidate workspace = do
       "Check this evolution first; no saved candidate is available"]))
     Right (Just candidate) -> checkCandidate candidate
 
-applyEvolution :: (EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es, EvidenceStore :> es)
+applyEvolution :: (EvolutionExecution :> es, EvolutionStore :> es, RootStore :> es)
   => CapturedEvolution -> Eff es (Either PreviewRejection (Candidate Root))
 applyEvolution captured = do
   evaluated <- evaluateEvolution captured
   case evaluated of
     Left rejection -> pure (Left rejection)
     Right (EvaluatedEvolution (CapturedEvolution context@(EvolutionContext _ _ _
-        (WorkspaceSnapshot _ _ target _ _)) (Root _ _ _ progress _) _ _)
-        (After schema) value@(Value.KnowledgeBase _ recipes) report@(EvolutionReport _ _ curation)) -> do
+        (WorkspaceSnapshot _ _ target _ _)) _ _ _)
+        (After schema) value report) -> do
       materialized <- materializeRoot schema target value
       case materialized of
         Left diagnostics -> pure (Left (ProposedCodeRejected diagnostics))
         Right root -> do
-          resolved <- resolveCuration recipes curation progress
-          case resolved of
-            Left diagnostics -> pure (Left (ProposedCodeRejected diagnostics))
-            Right next -> do
-              let candidate = Candidate context report root { curation = next }
-              saveCandidate candidate
-              pure (Right candidate)
+          let candidate = Candidate context report root
+          saveCandidate candidate
+          pure (Right candidate)
 
 acceptStoredEvolution :: (RootPublication :> es, EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => LocalBranch -> CommitMetadata -> EvolutionWorkspace -> Eff es AcceptanceResult

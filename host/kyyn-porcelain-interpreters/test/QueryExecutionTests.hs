@@ -1,7 +1,6 @@
 {-# LANGUAGE GADTs, OverloadedStrings, LambdaCase #-}
 module QueryExecutionTests (queryExecutionTests) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..))
 import Effectful (Eff, runEff, (:>))
@@ -43,7 +42,7 @@ queryExecutionTests rootContract facts = withSystemTempDirectory "kyyn-query-exe
       query = "{ name = \"summary\", description = \"Summary\", implementation = \"Queries.summary\", inputType = \"Queries.Input\", inputMetadata = \"Queries.inputMetadata\", resultType = \"Queries.Result\", resultMetadata = \"Queries.resultMetadata\" }"
       manifest declarations = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Checks.validate\", queries = " <> declarations <> ", tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
       code = tree [(path "src/Queries.hs", "captured query"), (path "kb.dhall", manifest ("[" <> query <> "]"))]
-      root = Root rootContract facts code emptyCurationRegister []
+      root = Root rootContract facts code []
       sdk = tree [(path "Sdk.hs", "explicit SDK")]
       input = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
       output = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
@@ -116,6 +115,8 @@ schemaMock :: CheckedContract -> CheckedContract -> Eff (SchemaInspection : es) 
 schemaMock input output = interpret $ \_ -> \case
   InspectImports {} -> error "Unexpected import inspection"
   InspectType {} -> error "Unexpected plain type inspection"
+  InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
+  InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
   InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   InspectSchema source -> do
     let entries = [(relativeName path,bytes) | (path,bytes) <- sourceFiles (schemaSources source)]
@@ -155,6 +156,8 @@ recordExecution = interpret $ \_ -> \case
 recordInspection :: (State [String] :> es, SchemaInspection :> es)
   => Eff (SchemaInspection : es) a -> Eff es a
 recordInspection = interpret $ \_ -> \case
+  InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
+  InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
   InspectImports {} -> error "Unexpected import inspection"
   InspectType {} -> error "Unexpected plain type inspection"
   InspectPluginFunction {} -> error "Unexpected plugin signature inspection"

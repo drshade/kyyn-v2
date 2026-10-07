@@ -14,9 +14,9 @@ data Root = Root [Fact T.Text] [Fact Bool] deriving (Eq, Show)
 data FactEdit a = Append (Fact a) | Replace FactId a | Remove FactId deriving (Eq, Show)
 data RootEdit = Todos (FactEdit T.Text) | Flags (FactEdit Bool) deriving (Eq, Show)
 data ProposedStep = ProposedStep Rationale [RootEdit] deriving (Eq, Show)
-data Proposal = Proposal [ProposedStep] Curation deriving (Eq, Show)
+data Proposal = Proposal [ProposedStep] deriving (Eq, Show)
 
--- Explicit fixture codecs stand in for the future compiler-generated bindings.
+-- Explicit fixture codecs exercise the agentic transport independently of code generation.
 instance A.Contract EvidenceRef where
   contract = A.record "Evidence citation" $ EvidenceRef
     <$> stringField "producer" producer <*> stringField "connector" instanceName
@@ -25,38 +25,9 @@ instance A.Contract EvidenceRef where
 
 stringField name getter = A.required name "" getter
 
-instance A.Contract EvidenceScope where
-  contract = A.record "Evidence scope" $ EvidenceScope
-    <$> stringField "plugin" (\(EvidenceScope p _ _) -> p)
-    <*> stringField "instance" (\(EvidenceScope _ i _) -> i)
-    <*> stringField "fetch" (\(EvidenceScope _ _ f) -> f)
-
-instance A.Contract Acknowledgement where
-  contract = A.sumOf "Handled evidence"
-    [A.constructor "EntireBatch" "All evidence" entire
-       (EntireBatch <$> A.required "scope" "Capture" scope),
-     A.constructor "IndividualRecords" "Selected items" individual
-       (IndividualRecords <$> A.required "scope" "Capture" scope
-         <*> (map EvidenceId <$> A.required "ids" "Items" ids))]
-    where
-      entire (EntireBatch _) = True
-      entire _ = False
-      individual (IndividualRecords _ _) = True
-      individual _ = False
-      scope (EntireBatch s) = s
-      scope (IndividualRecords s _) = s
-      ids (IndividualRecords _ keys) = [key | EvidenceId key <- keys]
-      ids _ = []
-
-instance A.Contract Curation where
-  contract = A.record "Curation" $ Curation
-    <$> (RecipeId <$> stringField "recipe" (\(Curation (RecipeId name) _) -> name))
-    <*> A.required "handled" "Acknowledgements" (\(Curation _ handled) -> handled)
-
 instance A.Contract Proposal where
   contract = A.record "Proposal" $ Proposal
-    <$> A.required "steps" "Ordered steps" (\(Proposal steps _) -> steps)
-    <*> A.required "curation" "Declared curation" (\(Proposal _ curation) -> curation)
+    <$> A.required "steps" "Ordered steps" (\(Proposal steps) -> steps)
 
 instance A.Contract a => A.Contract (FactEdit a) where
   contract = A.sumOf "Fact edit"
