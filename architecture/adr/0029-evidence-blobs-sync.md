@@ -162,7 +162,7 @@ The new scope also protects downloads until publication/failure has resolved.
 The porcelain composes this boundary with EvidenceStore; its IO interpreter
 owns the filesystem/resource mechanics.
 
-No fetch history, citation or curation register retains a blob. Retaining bytes
+Neither citations nor recipe state retain evidence-store blobs. Retaining bytes
 briefly for an active invocation is not offering historical fetch selection.
 Clearing an instance clears its blobs along with its evidence and sync position.
 Payload truncation/restoration follows ADR 0014 and is not a source-removal event.
@@ -223,8 +223,8 @@ deletes evidence and position. For stateless connectors restart is a reported no
 Provider pagination, cursor expiry/reset and endpoint-specific reconciliation are
 plugin logic. Publish only the final successful continuation, not intermediate
 page links. Treat stored position as private acquisition data: no normal history
-display, logs, citation fields or recipe progress. Curation acknowledgements and
-sync positions have different owners and must not advance each other.
+display, logs, citation fields or recipe state. Recipe state and connector sync
+positions have different owners and must not advance each other.
 
 ## Consequences and verification
 
@@ -246,7 +246,7 @@ published. Fake Graph responses prove adapter behavior; live permissions and
 provider identities require their own opt-in field proof.
 
 Verify new/updated evidence with Truncated payloads, same-fingerprint restoration,
-and truncation of pending as well as acknowledged items. Truncation releases blobs
-without changing evidence fingerprints or curation progress; explicit source removal
+and truncation independently of recipe processing. Truncation releases blobs
+without changing evidence fingerprints or recipe state; explicit source removal
 still removes the entry. Check that shared blobs survive until their final Available
 reference and active invocation are released.

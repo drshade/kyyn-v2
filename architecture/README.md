@@ -27,7 +27,7 @@ and reconciliation follow [the SDLC](../docs/SDLC.md#5-significant-decisions-are
 | [0011](adr/0011-validation.md) | Full-root validity, explicit diagnostics and examples |
 | [0012](adr/0012-acceptance.md) | One conditional acceptance step from local head |
 | [0013](adr/0013-collaboration.md) | User/agent resolution of upstream Git conflicts |
-| [0014](adr/0014-evidence.md) | Latest evidence and recipe-scoped declared curation |
+| [0014](adr/0014-evidence.md) | Current evidence and recipe-owned state |
 | [0015](adr/0015-plugins.md) | Vendored source plugins group connectors and methods |
 | [0016](adr/0016-connections.md) | Checkout-local KB secrets; plugin-owned authentication |
 | [0017](adr/0017-outputs.md) | Multi-query renderers bound to typed plugin sinks |

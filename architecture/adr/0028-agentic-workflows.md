@@ -20,7 +20,7 @@ instruction-led work and explicit flow execution. Kyyn is not an autonomous
 agent; evolutions remain pure and nothing is automatically accepted. The host
 performs individual model turns with per-KB credentials hidden from guest code.
 SystemOne and SystemTwo use Agentic's types directly. Closed agents propose only
-fact edits, with existing curation declarations, not schema or code changes.
+fact edits and their own next recipe state, not schema or code changes.
 Flows remain inspectable and testable with deterministic fixtures.
 
 ## Decision
@@ -162,57 +162,41 @@ encoding and host interpretation, not a competing public judgement API.
 Filtering thresholds remain authored policy, not proof that the model is correct.
 Do not silently substitute an LLM for Jev.
 
-### Open and closed recipes share ordinary curation
+### Open and closed recipes share typed recipe state
 
-Recipe identity, its constructor type and curation progress remain owned by
-[ADR 0014](0014-evidence.md). Open recipes continue to guide an external agent
-investigating evidence and authoring an evolution. Closed recipes let a caller
-explicitly execute a typed flow to prepare that work. Both use the same recipe
-ID and curation register. A closed
-recipe is not a scheduled job or a promise that every input will be resolved.
+[ADR 0014](0014-evidence.md) owns recipe definitions and always-present state.
+Open recipes guide an external agent; closed recipes name a regular callable
+flow. Both prepare a recipe-based evolution under [ADR 0010](0010-evolutions.md).
+A closed run selects one recipe, not a collection of recipes or a pending batch.
 
-The `ClosedAgent` reference names a regular callable KB function, resolved and type-checked
-like a tool entry, not a serialized Haskell closure. Invalid names or incompatible
-signatures produce diagnostics. The recipe constructor owns the reference; there
-is no separate recipe-flow registration list. Recipe definitions and their code
-are changed through ordinary authored evolutions, not closed-agent fact edits.
-
-At invocation, the host selects a Before root and captures the pending evidence
-inputs for the selected connector instances. The flow gets typed pending data
-and captured-read bindings, not live provider access. The same capture is used
-for subsequent reads of those instances during this invocation. Reads of other
-instances capture lazily as ordinary tools do, but they do not expand the supplied
-curation scopes. This does not archive old evidence
-payloads: after a run, [latest-only storage](0014-evidence.md) still applies.
+The host selects Before and supplies its root, the selected recipe's state and
+the caller's typed request. The flow signature defines the request and state
+types; its state must agree with the recipe's selected state declaration.
+No state initialization occurs here: recipe creation already supplied it.
 
 ```haskell
-closedRecipe
-  :: Flow (RecipeInput Root) (ProposedCuration RootEdit)
+data RecipeInput root input state = RecipeInput
+  { root :: root, input :: input, state :: state }
 
-data ProposedCuration edits = ProposedCuration [ProposedStep edits] Curation
+data RecipeProposal edits state = RecipeProposal
+  { steps :: [ProposedStep edits], state :: state }
+
+closedRecipe
+  :: Flow (RecipeInput Root Request ReviewState)
+          (RecipeProposal RootEdit ReviewState)
 ```
 
-`Kyyn.Recipe.RecipeInput root` contains the recipe ID, selected domain root and
-pending changes grouped by captured instance. Each `PendingEvidence` carries an
-existing `EvidenceScope` and `[PendingChange]`, with `New`, `Updated` and `Removed`
-carrying evidence IDs. Producer replacement supplies ADR 0014's explicit
-`Reconciliation` with current IDs instead of net changes. Recipes are not restricted to
-one connector. `root recipe run NAME PLUGIN INSTANCE [PLUGIN INSTANCE ...]`
-selects one or more input instances for one invocation, refusing incomplete or
-duplicate pairs. It does not define what other invocations of that recipe may
-use. Empty pending data is valid input; the authored flow decides what to do.
+`root recipe run NAME --input DHALL` checks the caller's request against the
+inspected input contract. Unit requests may omit input. Generated codecs hide
+transport from the author. The selected flow name is stored in the recipe;
+there is no second flow registration list.
 
-Reuse ADR 0014's existing `Curation`, `EntireBatch EvidenceScope` and
-`IndividualRecords EvidenceScope [EvidenceId]` unchanged. The input supplies the
-captured scopes; the flow declares what it handled, including deletions, and the
-normal host curation checks resolve those declarations. The declaration names
-the invoked recipe. A returned scope must be one supplied to the invocation;
-individual IDs must be in that scope's ordinary pending batch, including removed
-IDs; reconciliation scopes permit only whole-batch acknowledgement or omission.
-Reading, citing or changing a fact does not acknowledge
-evidence. Empty acknowledgements are valid; low-confidence work can stay pending
-for an external agent. There is no additional selection vocabulary, watermark or
-inference that model confidence means successful curation.
+Flows read current evidence through generated instance bindings and plugin
+methods. Each instance is captured lazily on first access and reused for that
+invocation. Reads do not update recipe state, acknowledge evidence or expand a
+host processing scope. Source selection and processing policy belong to authored
+code; empty evidence does not prohibit a run. The returned state may preserve
+the input state or record whatever the recipe chooses, without host interpretation.
 
 ### Describe fact edits as data
 
@@ -245,7 +229,9 @@ The current executable `CollectionEdit` is not a wire value. These data
 constructors describe its operations, and generated bindings supply the pure
 interpreter. No per-recipe applicator is required. The generated edit type
 contains domain fact collections only, not recipe definitions, schema, code,
-plugin configuration or other root artifacts. The accepted schema and associated
+plugin configuration or other root artifacts. The separately typed next state
+updates only the selected recipe. A root with no domain collections still permits
+a state-only proposal with an empty step list; do not require a dummy fact collection. The accepted schema and associated
 metadata stay fixed; equal endpoint Haskell types alone would not establish that.
 
 ### Freeze the result, then use the existing evolution path
@@ -253,8 +239,7 @@ metadata stay fixed; equal endpoint Haskell types alone would not establish that
 All model calls happen during tool/recipe execution. A successful closed recipe
 returns typed proposal **data**; it does not return a remotely executable closure
 or publish a root. The host writes an ordinary evolution workspace against the
-captured Before, with frozen inputs, declared acknowledgements and producer
-information. The workspace's pure `evolution` applies those inputs through checked
+captured Before, with the returned fact-edit steps and typed next recipe state. The workspace's pure `evolution` applies those inputs through checked
 KB code. The current check, diff, readiness and acceptance operations then apply
 unchanged. Running a recipe does not mark its workspace Ready or accept it.
 
@@ -263,7 +248,7 @@ unchanged. Running a recipe does not mark its workspace Ready or accept it.
 proposeFromRecipe
   :: (RootOpening :> es, PluginPreparation :> es, PluginRead :> es,
       RecipeExecution :> es, EvolutionAuthoring :> es)
-  => KnowledgeBase -> GitRevision -> RecipeId -> [(PluginName, ConnectorName)]
+  => KnowledgeBase -> GitRevision -> RecipeId -> DhallText
   -> Eff es (Either [Diagnostic] EvolutionWorkspace)
 ```
 
@@ -272,19 +257,17 @@ supply checked connectors and invocation-local evidence captures. RecipeExecutio
 executes the authored flow, and EvolutionAuthoring writes its frozen proposal as
 a draft. No publication capability appears in this row.
 
-Persist the returned steps and curation declaration through the ordinary Dhall
-path. A generated conventional evolution entry applies them to the actual
-captured Before with the existing SDK and attaches the existing curation
-declaration. It changes facts only; the workspace initially retains Before's
-schema, code, configuration and recipe definitions unchanged. Derive the review
-diff through normal observation checks, never from a model's claimed before/after
-report. The persisted operations make pure re-evaluation possible without model
-calls or serialized closures.
+Persist returned steps and next state through the ordinary Dhall path. The
+generated recipe-based evolution applies the operations to Before and returns
+the proposed state. Schema, code, configuration and recipe definitions remain
+unchanged. Derive the review diff through normal observation checks, never from
+a model's claimed before/after report. Re-evaluation uses the frozen data without
+model calls or serialized closures. State-only proposals are equally reviewable.
 
 The generated entry exposes the captured proposal as a typed value:
 
 ```haskell
-evolution :: Evolution (KnowledgeBase Root) (KnowledgeBase Root)
+evolution :: RecipeEvolution Root ReviewState
 evolution = frozen
 ```
 
@@ -295,7 +278,7 @@ transformation step or rationale.
 
 Checks and acceptance never rerun the flow. Editing the frozen operations or source
 requires fresh checking, just like other source/input edits. A failed or cancelled
-run produces no successful proposal and advances no curation progress. If head
+run produces no successful proposal and changes no accepted recipe state. If head
 changes during the run, its output remains based on the captured Before;
 the ordinary stale-base rule applies. Do not relabel it as based on a newer head.
 
@@ -345,10 +328,11 @@ output followed by correction, applicative judgements and flow descriptions unde
 both GHC and MicroHs with scripted handlers. Test a generated-contract flow through
 Kyyn's real guest/host protocol, including cancellation and provider failures.
 
-A closed recipe must produce a reviewable frozen ordinary evolution. Verify partial
-and deletion acknowledgements, failed-run preservation, repeated checking without
-model calls, edit ordering, missing/duplicate IDs, rationale and unchanged non-fact
-artifacts. Live-provider verification uses opt-in credentials and does not replace
+A closed recipe must produce a reviewable frozen ordinary evolution. Verify typed request/state decoding, mandatory initial state, state-only proposals,
+failed-run preservation, repeated checking without model calls, edit ordering,
+missing/duplicate IDs, rationale and unchanged definitions/schema/configuration.
+Two recipes with the same state type must retain separate values; a proposed state
+cannot be attributed to a different recipe during acceptance. Live-provider verification uses opt-in credentials and does not replace
 deterministic error-path tests.
 
 ## Consequences and alternatives

@@ -12,7 +12,8 @@ must not be disconnected workflows. Evaluation must be useful without acceptance
 ## Decision
 
 An evolution is one of the three KB entry-point kinds in ADR 0008. The authored
-entry is an `Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)` value.
+entry is an ad hoc `Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)`
+or a recipe-based `RecipeEvolution Root State` value, as specified below.
 The guest wrapper and recipe data are defined in [ADR 0014](0014-evidence.md).
 The generated adapter applies
 it to Before and returns After with annotated step observations; Kyyn materializes
@@ -59,7 +60,6 @@ identityEvolution :: Evolution a a
 data EvolutionOutput a = EvolutionOutput
   { value        :: a
   , observations :: [StepObservation]
-  , curation     :: Maybe Curation
   }
 
 data StepObservation  -- rationale paired with encoded before/after root values
@@ -77,13 +77,80 @@ entry in `pure . evaluateEvolution`. Generated step constructors use
 Public exports guide construction; they do not enforce observation completeness.
 The host's contract/value and chain checks below are the actual boundary checks.
 
-The `curation` field and its SDK attachment helper follow
-[ADR 0014](0014-evidence.md): one optional recipe context with explicit handled
-evidence, independent of step citations. Candidate
-preparation resolves its declarations into host-owned progress and saves both
-with the result for review/publication. An acknowledgement-only identity evolution
-is valid; an ordinary evolution can omit curation. Neither case adds a required
-entry-point function or exposes the progress register to the guest.
+### Ad hoc and recipe-based authoring
+
+A workspace has an explicit kind, captured with its evaluation inputs:
+
+```haskell
+data EvolutionKind = AdHoc | RecipeBased RecipeId
+```
+
+Ad hoc evolutions perform general changes, including domain schema migration and
+creating, updating or removing recipe definitions and their state. Recipe-based
+evolutions select exactly one existing recipe from Before and change domain facts
+plus that recipe's state. They preserve domain schema, recipe definitions/state
+types, source and configuration. Same endpoint Haskell types alone do not establish
+these artifact constraints; compare captured source/configuration as well.
+
+Open-agent and closed-flow recipes both produce recipe-based evolutions. A closed
+run produces one workspace. No multi-recipe run or cross-recipe state composition
+is introduced. An ad hoc schema migration may update several recipe definitions
+as part of its general root transformation; that is not a multi-recipe run.
+
+The guest facade exposes typed editing of the selected pair:
+
+```haskell
+data RecipeEvolution root state
+data RecipeEdit root state a
+
+recipeEdit
+  :: Rationale -> RecipeEdit root state ()
+  -> RecipeEvolution root state
+
+editFacts :: Edit root a -> RecipeEdit root state a
+getRecipeState :: RecipeEdit root state state
+putRecipeState :: state -> RecipeEdit root state ()
+modifyRecipeState :: (state -> state) -> RecipeEdit root state ()
+
+(>=>)
+  :: RecipeEvolution root state -> RecipeEvolution root state
+  -> RecipeEvolution root state
+```
+
+RecipeEdit has the ordinary fallible State-style sequencing used by Edit.
+The generated facade supplies domain collection handles focused on the root for
+editFacts. It does not expose another recipe's state through this context.
+Composition sequences the same typed pair and appends observations, using the
+same evolution machinery, not a second evaluator or publication implementation.
+The recipe facade uses the same composition operator convention as ad hoc work.
+
+For example, an author can edit facts and remember an investigated email together:
+
+```haskell
+evolution :: RecipeEvolution Before.Root ReviewState
+evolution =
+  recipeEdit (Rationale "Create a task from George's email" [emailReference]) $ do
+    editFacts $
+      within BeforeCollections.todos $
+        append (Fact (FactId "prepare-report")
+                     (Before.Todo "Prepare September report"))
+    modifyRecipeState $ \s ->
+      s { reviewedIds = "email-123" : s.reviewedIds }
+```
+
+Before supplies both values from the same recorded Git revision. There is no
+Maybe state: recipe creation supplies its initial state; stateless recipes use ().
+Generated adapters lower this typed pair to the common observation/check/report
+path and preserve all other root material. Missing state is an error, not a reset.
+A state-only edit is valid and appears in review even with no changed facts.
+
+The workspace kind determines the expected entry signature and selected recipe.
+Changing it or rebasing invalidates the saved candidate. Rebase reloads both
+domain facts and recipe state; acceptance never substitutes newer state into a
+previously evaluated result. [ADR 0014](0014-evidence.md) owns state persistence,
+and [ADR 0028](0028-agentic-workflows.md) owns closed-flow proposals.
+
+### Endpoint contracts
 
 One workspace has exactly two endpoint contracts: Before and After. Optional
 Before edits precede a transition to After; After edits follow it. Same-contract
@@ -331,6 +398,7 @@ The manifest is a hermetic Dhall value with this shape:
 , name : Text
 , explanation : Text
 , state : < Draft | Ready | Accepted >
+, kind : < AdHoc | RecipeBased : Text >
 }
 ```
 
@@ -703,17 +771,17 @@ diagnostics do not suggest replay; only LoadCandidate converts incompatibility i
 `candidate.stale` with reapplication guidance. There is no version migration
 framework in this implementation.
 
-EvolutionRecord version 2 also carries the optional curation declaration defined
-by [ADR 0014](0014-evidence.md). Readers still accept version 1 with no declaration;
-writers emit version 2. Existing accepted step reports remain inspectable without
-rerunning archived code.
+Recipe-based archive records retain the selected recipe identity and state changes,
+with before/after contracts and values. Historical curation declarations may be
+read as legacy report data, but do not authorize any current progress update.
+Use the archive version policy above when extending the representation.
 
 The replacement is confined to the owning KB's `evolutions/<id>/`. It includes no
 materialized root facts, absolute candidate-store paths, validation marker or
 `.kyyn/` contents. RootStore independently exports the same Validated Root's files;
 publication combines those two replacements into one GitTree.
 
-Creation has one scaffold form. It loads source at the selected revision, copies
+Creation selects an ad hoc or recipe-based scaffold from EvolutionKind. It loads source at the selected revision, copies
 its entire authored `src/` tree to `before/`, copies all non-fact root files to
 `target/`, and writes a Draft manifest with the supplied human name, Before revision
 and an initially empty explanation. Examples and configuration are copied too;
@@ -833,9 +901,8 @@ runs; candidate checking answers whether its result is acceptable. Both outcomes
 remain visible on the same proposal. Do not construct an empty-facts Root merely
 to invoke code checking earlier.
 
-After materialization, `applyEvolution` resolves declared curation through
-EvidenceStore against the captured Before progress, as owned by ADR 0014, then
-calls `SaveCandidate` before returning
+After materialization, `applyEvolution` saves the proposed root including recipe
+state through `SaveCandidate` before returning
 `Right candidate`. Subsequent semantic/example rejection leaves that unchecked
 result available for inspection; compilation or transformation rejection creates
 no replacement candidate. An earlier saved candidate is not a successful outcome
@@ -847,7 +914,7 @@ Porcelain also owns the workspace-level application operations:
 ```haskell
 evaluateWorkspace
   :: (EvolutionAuthoring :> es, EvolutionExecution :> es,
-      EvolutionStore :> es, RootStore :> es, EvidenceStore :> es)
+      EvolutionStore :> es, RootStore :> es)
   => EvolutionWorkspace -> Eff es (Either PreviewRejection (Candidate Root))
 
 checkEvolution
@@ -937,7 +1004,7 @@ Transformation code may change structure in ways no optic can infer automaticall
 On the host, derive a reviewable ordered report from the annotated boundaries:
 
 ```haskell
-data EvolutionReport = EvolutionReport [StepReport] (Maybe Curation)
+data EvolutionReport = EvolutionReport EvolutionKind [StepReport]
 
 data StepReport = StepReport
   { rationale :: Rationale
@@ -950,7 +1017,7 @@ data Change = FactChange
   , before     :: Maybe RecordedFact
   , after      :: Maybe RecordedFact
   }
-  | RecipeChange FactId (Maybe Recipe) (Maybe Recipe)
+  | RecipeChange RecipeId (Maybe StoredRecipe) (Maybe StoredRecipe)
 
 data RecordedFact = RecordedFact
   { contract :: RootContract
