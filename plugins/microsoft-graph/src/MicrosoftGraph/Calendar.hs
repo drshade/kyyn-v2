@@ -98,20 +98,25 @@ eventValue value = do
   either (Left . (("Graph event " <> key <> ": ") <>)) Right (decodeEvent key)
   where
     decodeEvent key = do
-      changeKey <- Json.optionalText "changeKey" value
-      version <- maybe (fieldText "@odata.etag") Right changeKey
+      etag <- Json.optionalText "@odata.etag" value
+      version <- maybe (fieldText "changeKey") Right etag
       if Text.null key || Text.null version then Left "Graph event has no ID or version" else pure ()
       event <- Event <$> descriptive ["subject"] value <*> descriptive ["bodyPreview"] value
         <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
-        <*> (Json.member "organizer" value >>= person)
-        <*> (Json.member "attendees" value >>= Json.array >>= mapM person)
+        <*> person (optionalField "organizer" value)
+        <*> (case optionalField "attendees" value of JSNull -> Right []; entries -> Json.array entries >>= mapM person)
         <*> descriptive ["location","displayName"] value
-        <*> (Json.member "isAllDay" value >>= Json.boolean) <*> (Json.member "isCancelled" value >>= Json.boolean)
-        <*> fieldText "type" <*> descriptive ["iCalUId"] value <*> fieldText "lastModifiedDateTime" <*> descriptive ["webLink"] value
+        <*> flag "isAllDay" <*> flag "isCancelled"
+        <*> descriptive ["type"] value <*> descriptive ["iCalUId"] value <*> descriptive ["lastModifiedDateTime"] value <*> descriptive ["webLink"] value
       pure (key,version,event)
     fieldText key = Json.member key value >>= Json.text
+    flag key = case optionalField key value of JSNull -> Right False; item -> Json.boolean item
     eventTime item = EventTime <$> (Json.member "dateTime" item >>= Json.text) <*> (Json.member "timeZone" item >>= Json.text)
     person item = Person <$> descriptive ["emailAddress","name"] item <*> descriptive ["emailAddress","address"] item
+
+optionalField :: Text -> JSValue -> JSValue
+optionalField key (JSObject fields) = maybe JSNull id (lookup (Text.unpack key) (fromJSObject fields))
+optionalField _ _ = JSNull
 
 descriptive :: [Text] -> JSValue -> Either Text Text
 descriptive _ JSNull = Right ""

@@ -213,7 +213,8 @@ deltaTests program = do
   (deletedLast,_) <- trial [http 200 [] (deltaPage [event "changed" "key" "2026-09-01T00:00:00Z",removed "changed"])] (input False prior)
   assert "last tombstone lost" (tags deletedLast == Right ["Removed"])
   let etagEvent = case event "changed" "unused" "2026-09-01T00:00:00Z" of
-        Object fields -> Object (KeyMap.insert "@odata.etag" (String "W/\"provider-version\"") (KeyMap.delete "changeKey" fields))
+        Object fields -> Object (KeyMap.insert "@odata.etag" (String "W/\"provider-version\"")
+          (foldr KeyMap.delete fields ["changeKey","organizer","attendees","isCancelled","isAllDay","type","lastModifiedDateTime"]))
         value -> value
   (etagOnly,_) <- trial [http 200 [] (deltaPage [etagEvent])] (input False prior)
   assert "delta event without changeKey was rejected" (tags etagOnly == Right ["Updated"])

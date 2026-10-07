@@ -192,7 +192,7 @@ fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Eve
 The first fetch establishes a baseline. Subsequent fetches follow the saved delta
 link verbatim, including its encoded window. Follow all next links before publishing
 evidence and the final delta link together, as specified in [ADR 0029](0029-evidence-blobs-sync.md).
-Use event IDs and `changeKey` (or `@odata.etag` when omitted) for additions/updates, retaining source links and
+Use event IDs and `@odata.etag` (or `changeKey` when omitted) for additions/updates, retaining source links and
 `lastModifiedDateTime` in the payload. For repeated IDs in a round, the last copy wins.
 An `@removed` entry removes a captured ID from this source's scope; unknown IDs do nothing.
 HTTP 410 or `syncStateNotFound` restarts a full baseline, reconciling prior IDs against
