@@ -769,9 +769,9 @@ diagnostics do not suggest replay; only LoadCandidate converts incompatibility i
 framework in this implementation.
 
 Recipe-based archive records retain the selected recipe identity and state changes,
-with before/after contracts and values. Historical curation declarations may be
-read as legacy report data, but do not authorize any current progress update.
-Use the archive version policy above when extending the representation.
+with before/after contracts and values. Use the archive version policy above
+when extending the representation; reading an older report does not manufacture
+state changes absent from that report.
 
 The replacement is confined to the owning KB's `evolutions/<id>/`. It includes no
 materialized root facts, absolute candidate-store paths, validation marker or

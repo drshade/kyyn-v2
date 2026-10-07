@@ -110,8 +110,7 @@ Under the [recipe-state model](0014-evidence.md), root export includes each
 recipe's definition and checked state. Facts, state and archive publish through
 the same conditional commit. Publication does not consult the evidence cache.
 Inspection includes state-only changes. Expected-head, readiness and recovery
-rules apply unchanged; no acknowledgement resolution or independent state commit
-is introduced.
+rules apply unchanged.
 
 Archive export is defined in ADR 0010. Only its notes subtree is
 read from the live workspace; captured manifest fields, source and fixed report

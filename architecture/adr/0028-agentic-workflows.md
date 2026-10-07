@@ -171,7 +171,7 @@ A closed run selects one recipe, not a collection of recipes or a pending batch.
 
 The host selects Before and supplies its root, the selected recipe's state and
 the caller's typed request. The flow signature defines the request and state
-types; its state must agree with the recipe's selected state declaration.
+types; the closed recipe's state contract is derived from that signature.
 No state initialization occurs here: recipe creation already supplied it.
 
 ```haskell
@@ -193,8 +193,7 @@ there is no second flow registration list.
 
 Flows read current evidence through generated instance bindings and plugin
 methods. Each instance is captured lazily on first access and reused for that
-invocation. Reads do not update recipe state, acknowledge evidence or expand a
-host processing scope. Source selection and processing policy belong to authored
+invocation. Reads do not update recipe state. Source selection and processing policy belong to authored
 code; empty evidence does not prohibit a run. The returned state may preserve
 the input state or record whatever the recipe chooses, without host interpretation.
 
