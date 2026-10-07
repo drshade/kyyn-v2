@@ -30,6 +30,7 @@ import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..))
 import Kyyn.Plumbing.Capability.Git (Git(..))
+import Kyyn.Plumbing.Protocol.RecipeEvolution (identityRecipeEvolutionSource)
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem
@@ -141,12 +142,24 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       recipeSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review" "" Draft (RecipeBased (RecipeId "mail")))
         before beforeCode (tree [(path "Evolution.hs",recipeSource)]) (tree [])
       recipeContext = EvolutionContext kb identifier (Before revision beforeContract) recipeSnapshot
-  recipeResult <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
+      scaffold = identityRecipeEvolutionSource "SchemaV1.Root"
+      identitySnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Identity" "" Draft (RecipeBased (RecipeId "mail")))
+        before beforeCode (tree [(path "Evolution.hs",scaffold)]) (tree [])
+      identityContext = EvolutionContext kb identifier (Before revision beforeContract) identitySnapshot
+  unless (all (`Text.isInfixOf` Text.decodeUtf8 scaffold)
+    ["import qualified SchemaV1 as Before", "import qualified Kyyn.Workspace.Before as BeforeCollections"])
+    (fail "Recipe scaffold does not advertise the schema and collection imports")
+  recipeResults <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
     . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
       source@(SourceRoot selected codeFiles _ closure) <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
-      evaluateEvolution (CapturedEvolution recipeContext (Root selected factFiles codeFiles emptyCurationRegister initialRecipes) closure source)
-  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ editedFacts) editedRecipes) (EvolutionReport _ recipeReports _) <- right recipeResult >>= right
+      let captured context' = CapturedEvolution context' (Root selected factFiles codeFiles emptyCurationRegister initialRecipes) closure source
+      (,) <$> evaluateEvolution (captured recipeContext) <*> evaluateEvolution (captured identityContext)
+  (recipeResult,identityResult) <- right recipeResults
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ identityFacts) identityRecipes) (EvolutionReport _ identityReports _) <- right identityResult
+  unless (identityFacts == input && identityRecipes == initialRecipes && null identityReports)
+    (fail "Generated recipe identity scaffold changed facts, state or reports")
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ editedFacts) editedRecipes) (EvolutionReport _ recipeReports _) <- right recipeResult
   unless (editedFacts == object ["todos" .= [object ["id" .= ("todo-001" :: String),
       "value" .= object ["title" .= ("Reviewed" :: String)]]]] &&
       case editedRecipes of

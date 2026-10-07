@@ -61,7 +61,7 @@ create kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) r
     change <- case proposal of
       Nothing -> checked (fileTree [(entryPath,case kind of
         AdHoc -> identityEvolutionSource selected
-        RecipeBased _ -> identityRecipeEvolutionSource)])
+        RecipeBased _ -> identityRecipeEvolutionSource selected)])
       Just value -> ExceptT (proposalChange contract value)
     tree <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
       (WorkspaceSnapshot (WorkspaceManifest revision name "" Draft kind) sources code change empty))

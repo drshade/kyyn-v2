@@ -11,7 +11,7 @@ import Data.List (nub, sort)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType (haskellType, typeModules)
+import Kyyn.Domain.DataType (haskellType, typeModules, definingModule)
 import Kyyn.Domain.EvolutionReport (EvolutionObservation)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
@@ -24,9 +24,13 @@ import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSourc
 import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
 import Kyyn.Plumbing.Protocol.Evolution (domainCollectionBindings, decodeEvolutionReplyWith)
 
-identityRecipeEvolutionSource :: ByteString
-identityRecipeEvolutionSource = utf8 $ unlines
-  ["module Evolution where", "import Kyyn.Workspace.Evolution",
+identityRecipeEvolutionSource :: String -> ByteString
+identityRecipeEvolutionSource selected = utf8 $ unlines
+  ["{-# LANGUAGE OverloadedStrings #-}",
+   "module Evolution where", "import Kyyn.Workspace.Evolution",
+   "import qualified " ++ definingModule selected ++ " as Before",
+   "import qualified Kyyn.Workspace.Before as BeforeCollections",
+   "",
    "evolution :: RecipeEvolution Root RecipeState", "evolution = identityEvolution"]
 
 recipeEvolutionBindings :: RootContract -> CheckedContract -> Either String FileTree
