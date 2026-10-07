@@ -86,7 +86,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     _ <- right outcome
     published <- getMonotonicTimeNSec
     current <- runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "No published capture") pure
-    let CurrentEvidence _ items = current
+    let CurrentEvidence _ items _ = current
     unless (length items == pages * 100) (fail "Published evidence count differs")
     unless (sort [key | (EvidenceId key,_) <- items] == sort [itemId n | n <- [1 .. pages*100]]) (fail "Published IDs differ")
     forM_ items $ \(_,Evidence fingerprint _ (CheckedValue _ value)) ->

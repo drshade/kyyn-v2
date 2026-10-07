@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector, loginConfiguredConnector
-  , connectorCurrentEvidence, connectorFetchHistory, connectorEvidenceChanges, clearConnectorEvidence
+  , connectorCurrentEvidence, clearConnectorEvidence
   , connectorFetchOptions, listConnectorMethods, selectConnectorMethod, selectConnectorEvidence ) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
@@ -10,14 +10,14 @@ import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..), ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
 import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
 import Kyyn.Domain.DataType (Shape)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, FetchId, FetchSummary, EvidenceChangeSummary, SyncMode(..))
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, SyncMode(..))
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Plugin
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetchEvidence)
-import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, currentEvidence, fetchHistory, evidenceChanges)
+import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, currentEvidence)
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginLogin (PluginLogin, loginPlugin)
@@ -98,20 +98,6 @@ connectorCurrentEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, 
 connectorCurrentEvidence kb revision plugin name = runExceptT $ do
   (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
   ExceptT (currentEvidence instanceRef producer payload)
-
-connectorFetchHistory :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
-  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[FetchSummary]))
-connectorFetchHistory kb revision plugin name = runExceptT $ do
-  (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
-  ExceptT (fetchHistory instanceRef producer payload)
-
-connectorEvidenceChanges :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
-  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName -> Maybe FetchId
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef,[EvidenceChangeSummary]))
-connectorEvidenceChanges kb revision plugin name since = runExceptT $ do
-  (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
-  ExceptT (evidenceChanges instanceRef producer payload since)
 
 selectConnectorEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName

@@ -1,23 +1,19 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.RecipeStore
-  ( RecipeStore(..), loadRecipesAt, loadCurationAt ) where
+  ( RecipeStore(..), loadRecipesAt ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Curation (Recipe, CurationRegister)
+import Kyyn.Domain.Recipe (RecipeDefinition)
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 
 data RecipeStore :: Effect where
-  LoadRecipesAt :: KnowledgeBase -> GitRevision -> RecipeStore m (Either [Diagnostic] [Fact Recipe])
-  LoadCurationAt :: KnowledgeBase -> GitRevision -> RecipeStore m (Either [Diagnostic] CurationRegister)
+  LoadRecipesAt :: KnowledgeBase -> GitRevision -> RecipeStore m (Either [Diagnostic] [Fact RecipeDefinition])
 
 type instance DispatchOf RecipeStore = Dynamic
 
-loadRecipesAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] [Fact Recipe])
+loadRecipesAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] [Fact RecipeDefinition])
 loadRecipesAt kb = send . LoadRecipesAt kb
-
-loadCurationAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] CurationRegister)
-loadCurationAt kb = send . LoadCurationAt kb

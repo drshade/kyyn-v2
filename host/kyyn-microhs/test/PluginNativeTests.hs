@@ -85,7 +85,7 @@ statefulTests temporary toolchain configType payloadType program = do
   assert "restart did not withhold position" (case restarted of
     Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 1; _ -> False)
   assert "restart discarded existing evidence" (case capture of
-    Just (CurrentEvidence _ items) -> items == [(EvidenceId "preserved",preserved)]; _ -> False)
+    Just (CurrentEvidence _ items _) -> items == [(EvidenceId "preserved",preserved)]; _ -> False)
   where snapshotId (EvidenceSnapshotRef _ _ identity) = identity
 
 nativeTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
@@ -110,7 +110,7 @@ nativeTests temporary toolchain configType payloadType program = do
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
-  firstCurrent@(CurrentEvidence _ firstItems) <- load
+  firstCurrent@(CurrentEvidence _ firstItems _) <- load
   let firstIds = map fst firstItems
       firstOld = lookup (EvidenceId "changed.txt") firstItems
   assert "first capture lost content or fingerprint" (case firstOld of
@@ -123,21 +123,15 @@ nativeTests temporary toolchain configType payloadType program = do
   Bytes.writeFile (directory </> "new.txt") "new"
   removeFile (directory </> "gone.txt")
   second <- fetch directory >>= right
-  let EvidenceSnapshotRef _ _ firstId = first
-      EvidenceSnapshotRef _ _ secondId = second
-  (_,summaries) <- runStore kb (listEvidenceChanges instanceRef producer payload (Just firstId)) >>= right
-  assert "second real acquisition lost new/updated/removed distinctions"
-    ([(kind,key) | EvidenceChangeSummary _ _ kind key _ _ <- summaries] ==
-      [(Updated,EvidenceId "changed.txt"),(New,EvidenceId "new.txt"),(Removed,EvidenceId "gone.txt")])
-  CurrentEvidence secondRef secondItems <- load
+  CurrentEvidence secondRef secondItems (FetchSummary _ _ added updated removed _) <- load
+  assert "new/updated/removed count wrong" ((added,updated,removed) == (1,1,1) && map fst secondItems == map EvidenceId ["changed.txt","same.txt","new.txt"])
   assert "new invocation did not load latest contents" (secondRef == second &&
     lookup (EvidenceId "changed.txt") secondItems /= firstOld)
   assert "previously loaded invocation input changed" (case firstCurrent of
-    CurrentEvidence firstRef _ -> firstRef == first)
+    CurrentEvidence firstRef _ _ -> firstRef == first)
   third <- fetch directory >>= right
-  (_,unchanged) <- runStore kb (listEvidenceChanges instanceRef producer payload (Just secondId)) >>= right
-  currentThird@(CurrentEvidence _ thirdItems) <- load
-  assert "unchanged files emitted spurious updates" (null unchanged)
+  currentThird@(CurrentEvidence _ thirdItems (FetchSummary _ _ addedAgain updatedAgain removedAgain _)) <- load
+  assert "unchanged files emitted spurious updates" ((addedAgain,updatedAgain,removedAgain) == (0,0,0))
   let EvidenceSnapshotRef _ _ thirdId = third
       unchangedHead = runStore kb (evidenceHead instanceRef) >>= right
   failed <- fetch (directory </> "missing")
@@ -187,7 +181,7 @@ nativeTests temporary toolchain configType payloadType program = do
         case result of Right _ -> pure (); Left problem -> error (show problem)
   stable <- runStore kb (inspectBetween advance) >>= right >>= right
   assert "captured read changed after concurrent publication" (stable == completed)
-  CurrentEvidence newestRef newestItems <- load
+  CurrentEvidence newestRef newestItems _ <- load
   assert "snapshot fixture did not actually advance stored evidence"
     (newestRef /= third && lookup key newestItems == Just changed)
   let noFiles :: Eff (FileAcquisition : es) a -> Eff es a
@@ -209,13 +203,13 @@ nativeTests temporary toolchain configType payloadType program = do
       noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
         (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
-  putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
+  putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."
 
 noNetwork :: Eff (HttpTransport : SecretStore : Waiting : es) a -> Eff es a
 noNetwork = interpret (\_ _ -> error "Unexpected waiting") . interpret (\_ _ -> error "Unexpected secret access") . interpret (\_ _ -> error "Unexpected HTTP")
 
 recordAcquisition :: State.State [String] :> es => CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
-recordAcquisition current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _) =
+recordAcquisition current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _ _) =
   interpret $ \_ -> \case
     BeginFetch _ _ _ Nothing -> State.modify @[String] (++ ["begin"]) >>
       pure (Right (FetchBaseline "2026-10-07T12:00:00Z" (Just identity) (Just current) Nothing))

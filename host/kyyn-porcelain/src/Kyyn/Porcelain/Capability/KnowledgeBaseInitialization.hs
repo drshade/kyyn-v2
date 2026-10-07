@@ -51,5 +51,5 @@ initialRootFiles = traverse (\(name,bytes) -> (,) <$> relativePath name <*> pure
   , ("src/RootV1.hs", "module RootV1 where\n\nimport Kyyn.Schema\n\ndata Root = Root deriving (Eq, Show)\n\nmetadata :: SchemaMetadata\nmetadata = SchemaMetadata [] [] []\n")
   , ("src/Validate.hs", "module Validate where\n\nimport qualified RootV1 as Schema\nimport Kyyn.Validation\n\nvalidate :: Schema.Root -> ValidationReport\nvalidate _ = ValidationReport []\n")
   , (relativeName factsLocation ++ "/root.dhall", "{=}\n")
-  , ("recipes.dhall", "[] : List { id : Text, value : { instructions : Text } }\n")
+  , ("recipes.dhall", "[] : List { id : Text, value : < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > }\n")
   ] >>= fileTree

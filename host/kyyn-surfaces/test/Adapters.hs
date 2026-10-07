@@ -5,8 +5,6 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module Main (main) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister, RecipeId(..), PendingEvidence(..))
-import Kyyn.Surfaces.Recipes (pendingResult)
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), toJSON)
 import Data.List (isInfixOf, elemIndex)
@@ -24,7 +22,7 @@ import qualified Kyyn.Domain.GuestApi as Api
 import Kyyn.Domain.KnowledgeBase
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (pluginName, connectorName)
-import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult, changesResult, historyResult)
+import Kyyn.Surfaces.Connectors (clearResult, evidenceListResult, evidenceItemResult)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -58,25 +56,24 @@ main = do
   let evidenceContract = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "sales")
         (EvidenceProducer (PackageIdentity "fixture") (contractId evidenceContract)) (FetchId "latest")
-  case evidenceListResult (EvidenceCapture snapshot [(EvidenceId "notes.txt",EvidenceFingerprint "abc")]) of
+      latest = FetchSummary (FetchId "latest") "2026-10-07T00:00:00Z" 1 0 0 Nothing
+      latestValue = object ["id" .= ("latest" :: String), "fetchedAt" .= ("2026-10-07T00:00:00Z" :: String),
+        "added" .= (1 :: Integer), "updated" .= (0 :: Integer), "removed" .= (0 :: Integer), "options" .= (Nothing :: Maybe String)]
+      latestLine = "Latest fetch: latest  2026-10-07T00:00:00Z  1 added, 0 updated, 0 removed"
+  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc")]) of
     Response _ payload messages _ -> unless
-      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)],
+      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
         "items" .= [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String)]]]
-        && messages == ["notes.txt  abc"]) (fail "Current listing output must contain only selection and IDs/fingerprints")
-  case evidenceListResult (EvidenceCapture snapshot []) of
-    Response _ _ messages _ -> unless (messages == ["No current evidence."]) (fail "Empty listing output")
-  case pendingResult (RecipeId "review") (PendingEvidence snapshot []) of
-    Response _ result messages _ -> do
-      unless ("Scope: EvidenceScope \"local-file\" \"sales\" \"latest\"" `elem` messages)
-        (fail "Pending output must supply a pasteable scope even when empty")
-      unless (case result of Object fields -> KeyMap.lookup "kind" fields == Just (String "Changes"); _ -> False)
-        (fail "Ordinary pending output must identify its kind")
-  case pendingResult (RecipeId "review") (Reconciliation snapshot []) of
-    Response _ result messages _ -> do
-      unless ("The current evidence set is empty." `elem` messages)
-        (fail "Empty reconciliation must not look like no pending work")
-      unless (case result of Object fields -> KeyMap.lookup "kind" fields == Just (String "Reconciliation") && KeyMap.member "currentIds" fields && not (KeyMap.member "changes" fields); _ -> False)
-        (fail "Reconciliation must expose current IDs rather than a fabricated delta")
+        && messages == [latestLine,"notes.txt  abc"]) (fail "Current listing output lost summary or IDs/fingerprints")
+  case evidenceListResult (EvidenceCapture snapshot latest []) of
+    Response _ _ messages _ -> unless (messages == [latestLine,"No current evidence."]) (fail "Empty listing output")
+  case evidenceItemResult snapshot latest (EvidenceId "notes.txt")
+    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (CheckedValue (contractId evidenceContract) (String "hello"))) "\"hello\"\n" of
+    Response _ payload messages _ -> unless
+      (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
+        "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"references" .= ["file:///notes.txt" :: String],"payload" .= ("hello" :: String)]
+        && messages == [latestLine,"Evidence: notes.txt","Fingerprint: abc","Source: file:///notes.txt","\"hello\""])
+      (fail "Current evidence inspection lost payload or source metadata")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []
       checkInstanceKeys (Object fields) =
         not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)
@@ -85,8 +82,7 @@ main = do
       hasInstance (Object fields) = KeyMap.lookup "instance" fields == Just (String "sales") || any hasInstance (KeyMap.elems fields)
       hasInstance (Array values) = any hasInstance values
       hasInstance _ = False
-      results = [historyResult snapshot [], changesResult snapshot
-        [EvidenceChangeSummary (FetchId "latest") Nothing New (EvidenceId "notes.txt") (EvidenceFingerprint "abc") citation]]
+      results = [evidenceListResult (EvidenceCapture snapshot latest [])]
   mapM_ (\(Response _ payload _ _) -> unless (checkInstanceKeys payload) (fail "Evidence output mislabeled instance")) results
   let render name namespace origin signature = case GuestApi.symbolResult
         (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of
@@ -108,7 +104,7 @@ main = do
       schema = right (checkContract
         (Algebraic "Example.Root" [] [Constructor "Example.Root" [(Just "title",StringType)]])
         (SchemaMetadata [] [] []) >>= checkRootLayout)
-      root = Root schema empty empty emptyCurationRegister []
+      root = Root schema empty empty []
       value = CheckedValue (contractId (rootSchema schema)) (object ["title" .= ("Unicode λ" :: String)])
       scope = right (directoryScope "/test/repository")
       kb = KnowledgeBase (Repository scope) (Subtree (right (relativePath "nested/kb")))
@@ -116,9 +112,9 @@ main = do
       identity = right (evolutionId "abc")
       workspace = EvolutionWorkspace kb identity
       captured = EvolutionContext kb identity (Before revision schema)
-        (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft) empty empty empty empty)
-      candidate = Candidate captured (EvolutionReport [] [] Nothing) root
-      citedCandidate = Candidate captured (EvolutionReport [] [StepReport (Rationale "Because" [citation]) []] Nothing) root
+        (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft AdHoc) empty empty empty empty)
+      candidate = Candidate captured (EvolutionReport [] []) root
+      citedCandidate = Candidate captured (EvolutionReport [] [StepReport (Rationale "Because" [citation]) []]) root
       assert label condition = unless condition (fail label)
       runRoot :: RootCommand -> (Response, [String])
       runRoot request = runPureEff . runState ([] :: [String]) . storeRoot value . execution

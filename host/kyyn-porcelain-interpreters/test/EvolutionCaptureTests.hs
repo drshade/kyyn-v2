@@ -5,9 +5,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module EvolutionCaptureTests (evolutionCaptureTests) where
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
 import Control.Monad (forM_, unless)
-import Data.Aeson (Value(Null))
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
@@ -16,22 +14,18 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(Error), errorDiagnostic)
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.FactProposal
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(WriteFile))
-import Kyyn.Domain.FileTree (FileTree, fileTree, files)
+import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (directoryScope, relativePath)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft), EvolutionKind(AdHoc))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
-import Kyyn.Plumbing.Protocol.FactProposal (proposalChange)
-import Kyyn.Types.Curation (Curation(..), RecipeId(..))
-import Kyyn.Types.Evolution (Rationale(..))
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -101,47 +95,26 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
         noOpening :: Eff TestEffects a -> IO (Either OperationalFailure a)
         noOpening = execute revision (error "Input matching/malformed capture unexpectedly opened a source root")
         displayName = "Sales / ../ \"September\" λ"
-    created@(EvolutionWorkspace createdKb createdId) <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
+    created@(EvolutionWorkspace createdKb createdId) <- success (createEvolution kb (EvolutionName displayName) revision AdHoc) >>= right >>= right
     unless (createdKb == kb && evolutionIdName createdId == "000001-sales-september")
       (fail "Creation returned an invalid KB or directory ID")
     CapturedEvolution (EvolutionContext _ _ (Before createdBase _) (WorkspaceSnapshot
-      (WorkspaceManifest _ actualName explanation state) createdBefore createdTarget createdChange createdNotes)) _ _ _ <-
+      (WorkspaceManifest _ actualName explanation state _) createdBefore createdTarget createdChange createdNotes)) _ _ _ <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
     identityEntry <- tree [("Evolution.hs",identityEvolutionSource "Schema.Root")]
     unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
       createdBefore == sourceTree && createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
       (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
-    another@(EvolutionWorkspace _ anotherId) <- success (createEvolution kb (EvolutionName displayName) revision) >>= right >>= right
+    another@(EvolutionWorkspace _ anotherId) <- success (createEvolution kb (EvolutionName displayName) revision AdHoc) >>= right >>= right
     unless (another /= created && evolutionIdName anotherId == "000002-sales-september") (fail "Repeated creation did not advance the local sequence")
     let evolutionDirectory = directory </> maybe "" id prefixName </> "evolutions"
         sourceError = [errorDiagnostic "test.source-rejected" "Source schema rejected"]
     beforeRejection <- listDirectory evolutionDirectory
-    denied <- execute revision (Right (Left sourceError)) (createEvolution kb (EvolutionName "Bad") revision)
+    denied <- execute revision (Right (Left sourceError)) (createEvolution kb (EvolutionName "Bad") revision AdHoc)
     afterRejection <- listDirectory evolutionDirectory
     unless (denied == Right (Left sourceError) && beforeRejection == afterRejection)
       (fail "Source rejection created a draft or lost diagnostics")
-    let proposal = FactProposal [] (Curation (RecipeId "sync") [])
-    frozen@(EvolutionWorkspace _ frozenId) <- success (createFactProposal kb (EvolutionName "Frozen") revision proposal) >>= right >>= right
-    frozenChange <- runEff (runDhallHandling (proposalChange contract proposal)) >>= right
-    frozenSnapshot <- noOpening (readWorkspace frozen) >>= right >>= right
-    case frozenSnapshot of
-      WorkspaceSnapshot (WorkspaceManifest selected _ _ selectedState) b t c _ ->
-        unless (selected == revision && selectedState == Draft && b == sourceTree && t == sourceCode && c == frozenChange)
-          (fail "Proposal creation changed its base, target artifacts, state or saved data")
-    frozenContext <- success (captureEvolution frozen) >>= right >>= right
-    let CapturedEvolution selectedContext _ _ _ = frozenContext
-    noOpening (matchesCapturedInputs selectedContext) >>= right >>= right >>= assertTrue
-    proposalPath <- right (relativePath "proposal.dhall")
-    proposalBytes <- maybe (fail "Proposal data was not saved") pure (lookup proposalPath (files frozenChange))
-    Bytes.writeFile (evolutionDirectory </> evolutionIdName frozenId </> "change/proposal.dhall") (proposalBytes <> Char8.pack "\n")
-    noOpening (matchesCapturedInputs selectedContext) >>= right >>= right >>= assertFalse
-    beforeInvalid <- listDirectory evolutionDirectory
-    invalid <- success (createFactProposal kb (EvolutionName "Invalid") revision
-      (FactProposal [FactProposalStep (Rationale "Bad edit" []) [Null]] (Curation (RecipeId "sync") []))) >>= right
-    rejected invalid
-    afterInvalid <- listDirectory evolutionDirectory
-    unless (beforeInvalid == afterInvalid) (fail "Invalid proposal allocated a workspace")
     write "manifest.dhall" (manifest 'a' "Draft")
     write "before/Schema.hs" "selected source"
     write "before/Helpers.hs" "selected helper"
@@ -150,13 +123,13 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "change/Evolution.hs" "unfinished entry"
     write "notes/review.md" "original note"
     captured@(CapturedEvolution context@(EvolutionContext actualKb actualId (Before base actualContract)
-      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _) before target _ _)) input closure _) <-
+      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _ _) before target _ _)) input closure _) <-
       success (captureEvolution location) >>= right >>= right
     unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision && actualContract == contract && before == sourceTree)
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
     expectedTarget <- tree [("kb.dhall", "unfinished target manifest"), ("src/Schema.hs", "unfinished target source")]
     emptyFacts <- tree []
-    unless (input == Root contract emptyFacts sourceCode emptyCurationRegister [] && closure == expectedClosure) (fail "Capture lost its input root or closure")
+    unless (input == Root contract emptyFacts sourceCode [] && closure == expectedClosure) (fail "Capture lost its input root or closure")
     unless (target == expectedTarget) (fail "Capture changed proposed target bytes")
     snapshot <- noOpening (readWorkspace location) >>= right >>= right
     unless (case context of EvolutionContext _ _ _ material -> snapshot == material)
@@ -210,11 +183,11 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   count <- newIORef 0
   failedWrite <- runEff . runFailure . creationFiles True failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
     . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
-      createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision
+      createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision AdHoc
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   collided <- runEff . runFailure . creationFiles False failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
     . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
-      createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Collision") revision
+      createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Collision") revision AdHoc
   case collided of
     Right (Left [Diagnostic Error "evolution.exists" _ _]) -> pure ()
     _ -> fail "Lost directory reservation wrote files or became a storage failure"
@@ -245,13 +218,13 @@ openingMock count expectedRepo expectedRevision expectedPath answer = interpret 
       SourceRoot schema target definition closure)) answer
     LoadRootMaterialAt repo revision path (SourceRoot schema code _ _)
       | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
-        pure (Right (Root schema (either error id (fileTree [])) code emptyCurationRegister []))
+        pure (Right (Root schema (either error id (fileTree [])) code []))
     _ -> error "Capture opened the wrong source revision/path or tried to decode facts"
 
 manifest :: Char -> String -> Bytes.ByteString
 manifest digit state = Char8.pack ("{ before = { revision = " ++ show (replicate 40 digit) ++
   " }, name = \"Import\", explanation = \"Bring in sales\", state = < Draft | Ready | Accepted >." ++ state ++
-  "}")
+  ", kind = < AdHoc | RecipeBased : Text >.AdHoc }")
 
 tree :: [(FilePath, Bytes.ByteString)] -> IO FileTree
 tree entries = traverse (\(p,b) -> do path <- right (relativePath p); pure (path,b)) entries >>= right . fileTree

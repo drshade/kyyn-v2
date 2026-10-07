@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, historyResult, changesResult, clearResult,
-  evidenceListResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
+module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, clearResult,
+  evidenceListResult, evidenceItemResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Text as Text
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Plugin
-import Kyyn.Types.Evidence (EvidenceRef(..))
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Surfaces.Result (Response, success)
 
 connectorListResult :: PluginName -> [(ConnectorName,BindingName,ConnectorTypeName)] -> Response
@@ -47,28 +47,27 @@ fetchResult snapshot@(EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ i
   ["Fetched " ++ pluginNameText plugin ++ "/" ++ name, "Fetch: " ++ fetchName identity]
 
 evidenceListResult :: EvidenceCapture -> Response
-evidenceListResult (EvidenceCapture snapshot items) = success
-  (object ["selection" .= context snapshot, "items" .=
+evidenceListResult (EvidenceCapture snapshot latest items) = success
+  (object ["selection" .= context snapshot, "latest" .= summaryValue latest, "items" .=
     [object ["id" .= key,"fingerprint" .= fingerprint] | (EvidenceId key,EvidenceFingerprint fingerprint) <- items]])
-  (if null items then ["No current evidence."] else
+  (summaryLines latest ++ if null items then ["No current evidence."] else
     [Text.unpack key ++ "  " ++ Text.unpack fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
 
-historyResult :: EvidenceSnapshotRef -> [FetchSummary] -> Response
-historyResult snapshot fetches = success (object ["selection" .= context snapshot,"fetches" .=
-  [object ["id" .= fetchName identity,"previous" .= fmap fetchName previous,"fetchedAt" .= at,"changeCount" .= count,"options" .= options]
-    | FetchSummary identity previous at count options <- fetches]])
-  [fetchName identity ++ "  " ++ at ++ "  " ++ show count ++ " changes" ++ maybe "" ("  options=" ++) options
-    | FetchSummary identity _ at count options <- fetches]
+evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> Text.Text -> Response
+evidenceItemResult snapshot latest (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue _ payload)) rendered = success
+  (object ["selection" .= context snapshot, "latest" .= summaryValue latest, "id" .= key, "fingerprint" .= fingerprint,
+    "references" .= refs, "payload" .= payload])
+  (summaryLines latest ++ ["Evidence: " ++ Text.unpack key, "Fingerprint: " ++ Text.unpack fingerprint] ++
+    ["Source: " ++ Text.unpack ref | ref <- refs] ++ [Text.unpack (Text.stripEnd rendered)])
 
-changesResult :: EvidenceSnapshotRef -> [EvidenceChangeSummary] -> Response
-changesResult snapshot changes = success (object ["selection" .= context snapshot,"changes" .= map value changes])
-  (if null changes then ["No evidence changes in the selected interval."] else
-    [fetchName identity ++ "  " ++ show kind ++ "  " ++ Text.unpack key | EvidenceChangeSummary identity _ kind (EvidenceId key) _ _ <- changes])
-  where
-    value (EvidenceChangeSummary identity previous kind (EvidenceId key) (EvidenceFingerprint fingerprint) (EvidenceRef producer connector source refs)) = object
-      ["fetch" .= fetchName identity,"previous" .= fmap fetchName previous,"kind" .= show kind,"id" .= key,
-       "fingerprint" .= fingerprint,
-       "citation" .= object ["producer" .= producer,"instance" .= connector,"source" .= source,"references" .= refs]]
+summaryValue :: FetchSummary -> Value
+summaryValue (FetchSummary identity at added updated removed options) = object
+  ["id" .= fetchName identity,"fetchedAt" .= at,"added" .= added,"updated" .= updated,"removed" .= removed,"options" .= options]
+
+summaryLines :: FetchSummary -> [String]
+summaryLines (FetchSummary identity at added updated removed options) =
+  ["Latest fetch: " ++ fetchName identity ++ "  " ++ at ++ "  " ++ show added ++ " added, " ++ show updated ++ " updated, " ++ show removed ++ " removed"
+    ++ maybe "" ("  options=" ++) options]
 
 clearResult :: PluginName -> ConnectorName -> Bool -> Response
 clearResult plugin name existed = success

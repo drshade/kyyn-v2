@@ -11,8 +11,9 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
-import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
-import Kyyn.Domain.Curation (RecipeId, recipeId)
+import Kyyn.Domain.Evidence (EvidenceId(..), SyncMode(..))
+import qualified Data.Text as Text
+import Kyyn.Domain.Recipe (RecipeId, recipeId)
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Data.Coerce (coerce)
 import Kyyn.Domain.Secret (SecretName, secretName)
@@ -57,8 +58,7 @@ data ConnectorCommand
 data EvidenceCommand
   = FetchConnector PluginName ConnectorName (Maybe String) SyncMode
   | ListCurrentEvidence PluginName ConnectorName
-  | ListFetchHistory PluginName ConnectorName
-  | ListEvidenceChanges PluginName ConnectorName (Maybe FetchId)
+  | ShowCurrentEvidence PluginName ConnectorName EvidenceId
   | ClearEvidence PluginName ConnectorName
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
@@ -68,14 +68,14 @@ data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe Reci
 data SchemaCommand = ListSchemas (Maybe EvolutionId) | ShowSchema String (Maybe EvolutionId) deriving (Eq, Show)
 data CollectionCommand = ListCollections (Maybe EvolutionId) | ShowCollection String (Maybe EvolutionId) deriving (Eq, Show)
 data FactCommand = ListFacts String | ShowFact String String deriving (Eq, Show)
-data RecipeCommand = ListRecipes | ShowRecipe RecipeId | ListPendingEvidence RecipeId PluginName ConnectorName
+data RecipeCommand = ListRecipes | ShowRecipe RecipeId
   | DescribeRecipe RecipeId DescriptionFormat
-  | RunRecipe RecipeId [(PluginName,ConnectorName)] deriving (Eq, Show)
+  | RunRecipe RecipeId (Maybe String) deriving (Eq, Show)
 data ToolCommand = ListTools (Maybe EvolutionId) | ShowTool MethodName (Maybe EvolutionId)
   | ExecuteTool MethodName String deriving (Eq, Show)
 
 data EvolutionCommand
-  = NewEvolution EvolutionName (Maybe GitRevision)
+  = NewEvolution EvolutionName (Maybe GitRevision) (Maybe RecipeId)
   | ListEvolutions EvolutionFilter
   | ShowEvolution EvolutionId
   | CheckEvolution EvolutionId
@@ -103,7 +103,7 @@ progressMessage request = case request of
     ("Checking the root and fetching " ++ pluginNameText plugin ++ "/" ++ coerce connector ++ "...")
   Root ShowRoot -> Just "Checking and reading the root..."
   Root CheckRoot -> Just "Checking the root..."
-  Evolution (NewEvolution _ _) -> Just "Preparing an evolution workspace..."
+  Evolution (NewEvolution _ _ _) -> Just "Preparing an evolution workspace..."
   Evolution (CheckEvolution selectedId) -> Just ("Evaluating and checking evolution " ++ evolutionIdName selectedId ++ "...")
   Evolution (AcceptEvolution selectedId) -> Just ("Checking and accepting evolution " ++ evolutionIdName selectedId ++ "...")
   _ -> Nothing
@@ -128,7 +128,7 @@ invocation = Invocation <$> selectionParser
        <> group "guide" "Read the plugin's packaged guide without compiling it"
           (ReadPluginGuide <$> argument (eitherReader guideSelection) (metavar "PLUGIN|TAP/PLUGIN") <*> pluginEvolution)
        <> group "connector" "Inspect configured connectors" (Connector <$> connectorParser)))
-    <> group "evidence" "Fetch and inspect current evidence and history" (Evidence <$> evidenceParser)
+    <> group "evidence" "Fetch and inspect current evidence" (Evidence <$> evidenceParser)
     <> group "secret" "Manage checkout-local secrets" (Secret <$> secretParser)
     <> group "evolution" "Prepare and accept changes" (Evolution <$> evolutionParser))
 
@@ -194,16 +194,12 @@ evidenceParser = hsubparser
     <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Connector-specific fetch options as hermetic Dhall"))
     <*> flag ContinueSync RestartSync (long "restart-sync" <> help "Start a fresh sync while keeping existing evidence for comparison"))
   <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
-  <> group "history" "Inspect retained fetch history" (hsubparser
-      (group "list" "List fetches without evidence payloads" (ListFetchHistory <$> plugin <*> instanceName)))
-  <> group "change" "Inspect evidence changes" (hsubparser
-      (group "list" "List changes through the latest fetch" (ListEvidenceChanges <$> plugin <*> instanceName
-        <*> optional (option fetchId (long "since" <> metavar "FETCH" <> help "Exclusive previous fetch")))))
+  <> group "show" "Show a current evidence payload and source references" (ShowCurrentEvidence <$> plugin <*> instanceName
+      <*> argument (eitherReader (\key -> if null key then Left "Evidence ID must not be empty" else Right (EvidenceId (Text.pack key)))) (metavar "ID"))
   <> group "clear" "Clear one connector instance's evidence cache" (ClearEvidence <$> plugin <*> instanceName))
   where
     plugin = pluginArgument
     instanceName = argument (eitherReader connectorName) (metavar "INSTANCE")
-    fetchId = eitherReader (\identifier -> if null identifier then Left "Fetch ID must not be empty" else Right (FetchId identifier))
 
 selectionParser :: Parser Selection
 selectionParser = Selection
@@ -227,7 +223,7 @@ rootParser = hsubparser
   <> group "fact" "Read facts from the validated accepted root" (RootFact <$> hsubparser
     (group "list" "List fact IDs and titles" (ListFacts <$> collection)
     <> group "show" "Show a fact's payload" (ShowFact <$> collection <*> strArgument (metavar "ID"))))
-  <> group "recipe" "Discover curation instructions and pending evidence" (RootRecipe <$> recipeParser)
+  <> group "recipe" "Discover recipes and run authored flows" (RootRecipe <$> recipeParser)
   <> group "tool" "Discover and invoke KB-authored investigation helpers" (RootTool <$> hsubparser
     (group "list" "List registered KB tools" (ListTools <$> workspace)
     <> group "show" "Show a tool's description and Dhall types" (ShowTool <$> name <*> workspace)
@@ -246,10 +242,7 @@ recipeParser = hsubparser
     <*> (flag' Dot (long "dot" <> help "Render Graphviz DOT")
       <|> flag' Mermaid (long "mermaid" <> help "Render Mermaid") <|> pure Tree))
   <> group "run" "Run a closed recipe and save a draft evolution" (RunRecipe <$> recipe
-    <*> some ((,) <$> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))
-  <> group "pending" "Inspect net unacknowledged evidence changes" (hsubparser
-    (group "list" "List pending evidence for a recipe and connector instance"
-      (ListPendingEvidence <$> recipe <*> pluginArgument <*> argument (eitherReader connectorName) (metavar "INSTANCE")))))
+    <*> optional (strOption (long "input" <> metavar "DHALL" <> help "Typed invocation arguments (may be omitted for unit input)"))))
   where
     recipe = argument (eitherReader recipeId) (metavar "RECIPE")
 
@@ -271,7 +264,9 @@ evolutionParser = hsubparser
   (group "new" "Create a draft workspace from the selected head or explicit base"
       (NewEvolution <$> (EvolutionName <$> argument nonempty (metavar "NAME"))
         <*> optional (option (eitherReader gitRevision)
-          (long "before" <> metavar "REVISION" <> help "Full Before commit ID (default: selected head)")))
+          (long "before" <> metavar "REVISION" <> help "Full Before commit ID (default: selected head)"))
+        <*> optional (option (eitherReader recipeId)
+          (long "recipe" <> metavar "RECIPE" <> help "Evolve facts and the selected recipe's state")))
   <> group "list" "List evolution workspaces"
       (ListEvolutions <$> flag AllEvolutions ExcludeDrafts
         (long "exclude-drafts" <> help "Omit work-in-progress drafts"))

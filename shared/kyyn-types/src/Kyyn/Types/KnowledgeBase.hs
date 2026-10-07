@@ -1,12 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe(..), FlowEntryRef(..)) where
+module Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..)) where
 
 import Data.Text (Text)
 
-import Kyyn.Types.Fact (Fact)
-
--- | Domain facts and the identified recipes explaining how to work with them.
-data KnowledgeBase a = KnowledgeBase a [Fact Recipe] deriving (Eq, Show)
+-- | The name of an identified recipe in the selected root.
+newtype RecipeId = RecipeId Text deriving (Eq, Show)
 
 -- | A task guided by instructions or implemented by an authored flow.
 -- The containing fact's ID is the recipe's name.

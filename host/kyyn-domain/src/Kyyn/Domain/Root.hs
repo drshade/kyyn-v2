@@ -1,9 +1,9 @@
 {-# LANGUAGE DuplicateRecordFields #-}
-module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), factsLocation, isFactPath, curationLocation, recipesLocation, isRootMaterial
+module Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), factsLocation, isFactPath, recipesLocation, recipeStatesLocation, isRootMaterial
   , pluginPackagesLocation, pluginSourceLocation, pluginOriginLocation, pluginManifestLocation, pluginPackageExclusions) where
 
 import Kyyn.Domain.Contract (RootContract)
-import Kyyn.Domain.Curation (Recipe, CurationRegister)
+import Kyyn.Domain.Recipe (StoredRecipe)
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Query (QueryDefinition)
@@ -16,14 +16,15 @@ import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 factsLocation :: RelativePath
 factsLocation = either error id (relativePath "facts")
 
-curationLocation :: RelativePath
-curationLocation = either error id (relativePath "curation.dhall")
-
 recipesLocation :: RelativePath
 recipesLocation = either error id (relativePath "recipes.dhall")
 
+recipeStatesLocation :: RelativePath
+recipeStatesLocation = either error id (relativePath "recipes")
+
 isRootMaterial :: RelativePath -> Bool
-isRootMaterial path = isFactPath path || path == curationLocation || path == recipesLocation
+isRootMaterial path = isFactPath path || path == recipesLocation
+  || path == recipeStatesLocation || "recipes/" `isPrefixOf` relativeName path
 
 pluginPackagesLocation, pluginSourceLocation, pluginOriginLocation, pluginManifestLocation :: RelativePath
 pluginPackagesLocation = either error id (relativePath "plugins/packages")
@@ -38,7 +39,7 @@ isFactPath :: RelativePath -> Bool
 isFactPath path = relativeName path == relativeName factsLocation
   || (relativeName factsLocation ++ "/") `isPrefixOf` relativeName path
 
-data Root = Root { schema :: RootContract, facts :: FileTree, code :: FileTree, curation :: CurationRegister, recipes :: [Fact Recipe] } deriving (Eq, Show)
+data Root = Root { schema :: RootContract, facts :: FileTree, code :: FileTree, recipes :: [Fact StoredRecipe] } deriving (Eq, Show)
 data SourceRoot = SourceRoot
   { schema :: RootContract, code :: FileTree, definition :: RootDefinition
   , loadedSources :: [RelativePath] } deriving (Eq, Show)

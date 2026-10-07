@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Werror #-}
-module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectionSettings) where
+module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectRecipeSignature, inspectRecipeExports, inspectionSettings) where
 
 import Control.DeepSeq (force)
 import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
@@ -8,6 +8,7 @@ import Control.Monad (unless)
 import Data.List (nubBy, nub)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..), expectedPluginSignature)
+import Kyyn.Domain.Recipe (RecipeSignature(..))
 import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
 import Kyyn.MicroHs.Timing (withTimingIO)
 import Kyyn.MicroHs.Source (readParsedSource)
@@ -78,14 +79,40 @@ type Constructors = String -> [ValueExport]
 
 inspectPluginSignature :: FilePath -> [FilePath] -> PluginEntryKind -> String
   -> IO (Either InspectionError (PluginSignature,[FilePath]))
-inspectPluginSignature compiler sources kind selected = withTimingIO "inspection" selected (inspect `catch` failure)
+inspectPluginSignature compiler sources kind selected = inspectFunction compiler sources selected
+  (\table -> lowerPluginSignature table kind) (expectedPluginSignature kind)
+
+inspectRecipeSignature :: FilePath -> [FilePath] -> String
+  -> IO (Either InspectionError (RecipeSignature,[FilePath]))
+inspectRecipeSignature compiler sources selected = inspectFunction compiler sources selected
+  lowerRecipeSignature "Flow (RecipeInput root input state) (RecipeProposal edits state)"
+
+inspectRecipeExports :: FilePath -> [FilePath] -> String
+  -> IO (Either InspectionError ([(String,RecipeSignature)],[FilePath]))
+inspectRecipeExports compiler sources name = inspectExports compiler sources name $ \table exports ->
+  Right [(entry,signature) | (entry,expression) <- exports, Right signature <- [lowerRecipeSignature table expression]]
+
+inspectFunction :: Show a => FilePath -> [FilePath] -> String
+  -> (Constructors -> Expr -> Either String a) -> String
+  -> IO (Either InspectionError (a,[FilePath]))
+inspectFunction compiler sources selected lower expected = inspectExports compiler sources (definingModule selected) $ \table exports ->
+  let localName = reverse (takeWhile (/= '.') (reverse selected))
+      result = case lookup localName exports of
+        Just signature -> lower table signature
+        Nothing -> Left "selected function is not exported"
+  in either (Left . (\message -> selected ++ ": " ++ message ++ "\nExpected: " ++ expected)) Right result
+
+inspectExports :: Show a => FilePath -> [FilePath] -> String
+  -> (Constructors -> [(String,Expr)] -> Either String a)
+  -> IO (Either InspectionError (a,[FilePath]))
+inspectExports compiler sources selected lower = withTimingIO "inspection" selected (inspect `catch` failure)
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
       | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (compilerMessage (displayException err))))
       | otherwise = pure (Left (NativeError (displayException err)))
     inspect = do
-      let imported = mkIdent (definingModule selected)
+      let imported = mkIdent selected
           witness = addPreludeImport (EModule (mkIdent "KyynFunctionWitness") [ExpModule imported]
             [Import (ImportSpec ImpNormal False imported Nothing Nothing)])
       (((checked,_,_,_,_),_),cache0) <- runStateIO (compileModuleP (inspectionFlags compiler sources) ImpNormal witness) emptyCache
@@ -93,15 +120,37 @@ inspectPluginSignature compiler sources kind selected = withTimingIO "inspection
       let exports = [(unIdent qi,vs) | m <- cachedModules cache,
             TypeExport _ (Entry (EVar qi) _) vs <- tTypeExps m]
           constructors name = maybe [] id (lookup name exports)
-          localName = reverse (takeWhile (/= '.') (reverse selected))
-          result = case [signature | ValueExport name (Entry _ signature) <- tValueExps checked,
-                                    unIdent name == localName] of
-            [signature] -> lowerPluginSignature constructors kind signature
-            _ -> Left "selected function is not exported"
+          result = lower constructors [(unIdent name,signature) | ValueExport name (Entry _ signature) <- tValueExps checked]
       _ <- evaluate (force (show result))
       pure $ case result of
-        Left message -> Left (TypeNotSupported (selected ++ ": " ++ message ++ "\nExpected: " ++ expectedPluginSignature kind))
+        Left message -> Left (TypeNotSupported message)
         Right signature -> Right (signature,nub [slocFile (slocIdent (tModuleName m)) | m <- cachedModules cache])
+
+lowerRecipeSignature :: Constructors -> Expr -> Either String RecipeSignature
+lowerRecipeSignature table signature = do
+  let (vars,body) = stripForall signature
+      application name arity value = case unApps value of
+        (EVar n,args) | unIdent n == name && length args == arity -> Right args
+        _ -> Left ("expected " ++ name)
+  unless (null vars) (Left "recipe flow must have concrete types and no residual constraints")
+  flow <- application "Agentic.Core.Agentic" 3 body
+  case flow of
+    [effect,input,resultType] -> do
+      let named = EVar . mkIdent
+          program = EApp (named "Kyyn.Types.Program.Program") (named "KyynToolCalls.Calls")
+          expectedEffect = EApp (EApp (named "Control.Monad.Trans.Except.ExceptT")
+            (named "Kyyn.Types.Plugin.FetchError")) program
+      unless (eqEType effect expectedEffect) (Left "recipe flow must use Kyyn.Agentic.Step")
+      arguments <- application "Kyyn.Recipe.RecipeInput" 3 input
+      result <- application "Kyyn.Evolution.Proposal.RecipeProposal" 2 resultType
+      case (arguments,result) of
+        ([root,request,state],[edits,returnedState]) -> do
+          unless (eqEType edits (named "Kyyn.Workspace.FactEdits.RootEdit"))
+            (Left "recipe proposal must use the generated RootEdit type")
+          unless (eqEType state returnedState) (Left "recipe flow must return its input state type")
+          RecipeSignature <$> lowerType table [] [] root <*> lowerType table [] [] request <*> lowerType table [] [] state
+        _ -> Left "invalid recipe flow arguments"
+    _ -> Left "invalid flow arguments"
 
 lowerPluginSignature :: Constructors -> PluginEntryKind -> Expr -> Either String PluginSignature
 lowerPluginSignature table kind signature = do

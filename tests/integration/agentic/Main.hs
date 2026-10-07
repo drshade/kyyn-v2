@@ -10,7 +10,6 @@ import Kyyn.Runtime.Transport (withTransport)
 import qualified Kyyn.Runtime.Json as J
 import Kyyn.Runtime.Evolution (encodeEvolutionReply)
 import qualified Kyyn.Evolution.Internal as E
-import Kyyn.Evolution (withCuration)
 import System.Environment (getArgs)
 import Bridge
 import Proposal
@@ -42,8 +41,8 @@ main = do
       -- Frozen data, not another run of the model-backed flow.
       line <- getLine
       value <- either fail pure (J.parseValue line >>= J.decodeWith valueCodec)
-      Proposal steps curation <- either (fail . T.unpack) pure (((A.contract :: A.Codec Proposal).decode) value)
-      let selected = withCuration curation (proposalEvolution steps)
+      Proposal steps <- either (fail . T.unpack) pure (((A.contract :: A.Codec Proposal).decode) value)
+      let selected = proposalEvolution steps
       either fail putStrLn (encodeEvolutionReply rootCodec (E.evaluateEvolution selected before))
     ["describe"] -> putStrLn (T.unpack (A.renderTree (A.describe flow)))
     [] -> withTransport $ \transport -> execute transport resultCodec (modelRequest transport) (runExceptT (A.interpret runtime flow "captured evidence 雪"))

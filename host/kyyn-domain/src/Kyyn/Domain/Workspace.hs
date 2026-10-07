@@ -1,5 +1,5 @@
 module Kyyn.Domain.Workspace
-  ( EvolutionState(..), WorkspaceManifest(..), WorkspaceSnapshot(..)
+  ( EvolutionState(..), EvolutionKind(..), WorkspaceManifest(..), WorkspaceSnapshot(..)
   , projectWorkspace, matchesCapturedInputs
   ) where
 
@@ -7,15 +7,18 @@ import Data.List (isPrefixOf, stripPrefix)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.Path (relativeName, relativePath)
-import Kyyn.Domain.Root (factsLocation, curationLocation, recipesLocation)
+import Kyyn.Domain.Root (factsLocation, recipesLocation)
+import Kyyn.Types.KnowledgeBase (RecipeId)
 
 data EvolutionState = Draft | Ready | Accepted deriving (Eq, Show)
+data EvolutionKind = AdHoc | RecipeBased RecipeId deriving (Eq, Show)
 
 data WorkspaceManifest = WorkspaceManifest
   { beforeRevision :: GitRevision
   , name :: String
   , explanation :: String
   , state :: EvolutionState
+  , kind :: EvolutionKind
   } deriving (Eq, Show)
 
 data WorkspaceSnapshot = WorkspaceSnapshot
@@ -31,10 +34,10 @@ projectWorkspace manifest tree
   | any (not . allowed . relativeName . fst) (files tree) = Left "Unexpected file outside workspace layout"
   | any (\(p,_) -> relativeName p == targetFacts || (targetFacts ++ "/") `isPrefixOf` relativeName p) (files tree) =
       Left "Target facts must be produced by the evolution"
-  | any (\(p,_) -> relativeName p == "target/" ++ relativeName curationLocation) (files tree) =
-      Left "Target curation progress is host material, not authored code"
   | any (\(p,_) -> relativeName p == "target/" ++ relativeName recipesLocation) (files tree) =
       Left "Target recipes must be produced by the evolution"
+  | any (\(p,_) -> "target/recipes/" `isPrefixOf` relativeName p) (files tree) =
+      Left "Target recipe state must be produced by the evolution"
   | otherwise = WorkspaceSnapshot manifest <$> subtree "before/" <*> subtree "target/" <*>
       subtree "change/" <*> subtree "notes/"
   where
@@ -46,5 +49,5 @@ projectWorkspace manifest tree
 matchesCapturedInputs :: WorkspaceSnapshot -> WorkspaceSnapshot -> Bool
 matchesCapturedInputs left right = inputs left == inputs right
   where
-    inputs (WorkspaceSnapshot (WorkspaceManifest revision name explanation _) before target change _) =
-      (revision, name, explanation, before, target, change)
+    inputs (WorkspaceSnapshot (WorkspaceManifest revision name explanation _ kind) before target change _) =
+      (revision, name, explanation, kind, before, target, change)

@@ -15,7 +15,6 @@ library
     Kyyn.Domain.Tap
     Kyyn.Domain.Tool
     Kyyn.Domain.Evidence
-    Kyyn.Domain.Curation
     Kyyn.Domain.Secret
     Kyyn.Domain.Model
     Kyyn.Domain.FactProposal
@@ -34,11 +33,3 @@ test-suite contract-roles
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types
-
-test-suite curation-core
-  type: exitcode-stdio-1.0
-  hs-source-dirs: test
-  main-is: CurationTests.hs
-  default-language: GHC2021
-  ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, aeson, text

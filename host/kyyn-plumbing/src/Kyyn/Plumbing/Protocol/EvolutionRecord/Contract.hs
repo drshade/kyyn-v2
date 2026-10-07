@@ -1,4 +1,5 @@
-module Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot) where
+module Kyyn.Plumbing.Protocol.EvolutionRecord.Contract
+  ( snapshotShape, snapshotValue, restoreSnapshot, checkedSnapshotValue, restoreCheckedSnapshot ) where
 
 import Data.Aeson (Value, object, (.=), withObject, (.:))
 import Data.Aeson.Types (Parser)
@@ -19,10 +20,12 @@ snapshotShape = Record [("fingerprint",text), ("types",dataTypeShape), ("metadat
          ("references",List (Record [("field",text),("collection",text)]))]))]
 
 snapshotValue :: RootContract -> Value
-snapshotValue contract = object ["fingerprint" .= contractFingerprint (contractId schema),
+snapshotValue = checkedSnapshotValue . rootSchema
+
+checkedSnapshotValue :: CheckedContract -> Value
+checkedSnapshotValue schema = object ["fingerprint" .= contractFingerprint (contractId schema),
   "types" .= dataTypeValue (rootType schema), "metadata" .= metadata]
   where
-    schema = rootSchema contract
     SchemaMetadata roles assignments collections = metadataOf schema
     metadata = object
       ["roles" .= [object ["name" .= name, "description" .= description,
@@ -33,12 +36,15 @@ snapshotValue contract = object ["fingerprint" .= contractFingerprint (contractI
          | CollectionDecl name field references <- collections]]
 
 restoreSnapshot :: Value -> Parser (Either [Diagnostic] RootContract)
-restoreSnapshot = withObject "Contract snapshot" $ \record -> do
+restoreSnapshot value = fmap (>>= checkRootLayout) (restoreCheckedSnapshot value)
+
+restoreCheckedSnapshot :: Value -> Parser (Either [Diagnostic] CheckedContract)
+restoreCheckedSnapshot = withObject "Contract snapshot" $ \record -> do
   fingerprint <- record .: "fingerprint"
   root <- record .: "types" >>= parseDataType
   metadata <- record .: "metadata" >>= parseMetadata
-  pure $ case checkContract root metadata >>= checkRootLayout of
-    Right contract | contractFingerprint (contractId (rootSchema contract)) == fingerprint -> Right contract
+  pure $ case checkContract root metadata of
+    Right contract | contractFingerprint (contractId contract) == fingerprint -> Right contract
     _ -> Left [errorDiagnostic "schema.stored-contract" "Stored contract cannot be reconstructed with its fingerprint by this kernel"]
 
 parseMetadata :: Value -> Parser SchemaMetadata

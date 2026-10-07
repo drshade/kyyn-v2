@@ -61,7 +61,7 @@ main = do
   assert "one shared observation includes root and state" $
     Internal.evaluateEvolution step pair == Right
       (Internal.EvolutionOutput (after, next)
-        [Internal.StepObservation reason (encode pair) (encode (after, next))] Nothing)
+        [Internal.StepObservation reason (encode pair) (encode (after, next))])
   assert "recipe evolution uses ordinary composition and identity" $
     Internal.evaluateEvolution (step >=> stateStep >=> identityEvolution) pair ==
       Internal.evaluateEvolution (identityEvolution >=> step >=> stateStep) pair

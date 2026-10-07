@@ -354,7 +354,7 @@ for cursor reset, repeated entries and hierarchy omissions.
 ### Atomic refresh and invocation-local reads
 
 Publish one complete successful batch atomically. Failure leaves the current
-capture and its change markers unchanged. Publication checks the expected previous
+capture, sync position and latest-fetch summary unchanged. Publication checks the expected previous
 fetch ID (or no fetch for a new instance) so a concurrent acquisition cannot apply its delta against a different
 base. This is local update consistency, not a curation approval workflow.
 
@@ -370,6 +370,7 @@ under ADR 0029; refresh must not reclaim bytes an active reader still needs.
 data CurrentEvidence = CurrentEvidence
   { snapshot :: EvidenceSnapshotRef
   , items :: [(EvidenceId, Evidence CheckedValue)]
+  , latest :: FetchSummary
   }
 
 loadCurrentEvidence

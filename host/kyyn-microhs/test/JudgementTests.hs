@@ -57,7 +57,7 @@ main = withSystemTempDirectory "kyyn-judgement-" $ \temporary -> do
       method = either error id (methodName "content")
       binding = either error id (bindingName "documents")
       instanceName = either error id (connectorName "documents")
-  sources <- right (toolSources [ConnectorInterface plugin kind [(method,StringType,StringType)]]
+  sources <- right (toolSources [ConnectorInterface plugin kind StringType [(method,StringType,StringType)]]
     [InstanceBinding binding plugin kind instanceName] StringType StringType "Helpers.run" common)
   forM_ (sourceFiles sources) $ \(file,bytes) -> do
     let target = temporary </> relativeName file
@@ -148,6 +148,8 @@ broker scenario program = do
                     assert "request order" (identity == toInteger (length trace + 1))
                     (label,reply) <- case call of
                       ToolModel _ -> fail "Judgement fixture unexpectedly requested a model"
+                      ToolEvidenceList {} -> fail "Judgement fixture unexpectedly enumerated evidence"
+                      ToolEvidenceRead {} -> fail "Judgement fixture unexpectedly read evidence"
                       ToolCall _ _ _ _ value -> do
                         assert "captured-read argument" (value == String "item")
                         pure ("read",success (String "captured 雪"))

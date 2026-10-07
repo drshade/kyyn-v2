@@ -159,7 +159,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of
-          Just (CurrentEvidence selected items) -> selected == snapshot && length items == 1
+          Just (CurrentEvidence selected items _) -> selected == snapshot && length items == 1
           Nothing -> False)
         result <- invoke identity method (arguments "one.txt") >>= right
         assert "Content read returned the wrong payload" (result == CheckedValue (contractId output) (toJSON ("one" :: String)))
@@ -174,8 +174,8 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runRootOpening sdk
-      (runPluginPreparation sdk (runToolPreparation sdk . runRootExecution sdk $ do
+    (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runPluginPreparation sdk
+      (runToolPreparation sdk (runRootOpening sdk . runRootExecution sdk $ do
         opened <- openCapturedRoot invalidCode
         either (pure . Rejected . ValidationReport) checkRoot opened))))))))))) >>= right
   case rootResult of

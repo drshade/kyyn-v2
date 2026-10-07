@@ -1,5 +1,6 @@
 module Kyyn.Plumbing.Protocol.Evolution
-  ( evolutionBindings, identityEvolutionSource, decodeEvolutionReply, evolutionSources, mergeEvolutionSources ) where
+  ( evolutionBindings, identityEvolutionSource, decodeEvolutionReply, decodeEvolutionReplyWith
+  , evolutionSources, mergeEvolutionSources, domainCollectionBindings ) where
 
 import Control.Monad (unless)
 import Data.List (nub, sort)
@@ -16,11 +17,11 @@ import Kyyn.Domain.DataType (DataType(..), haskellType, definingModule, typeModu
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionObservation(..), StepObservation(..), ObservedRoot(..))
+import Kyyn.Domain.Recipe (KnowledgeBase, ProposedRecipe)
 import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Plumbing.Protocol.Validation (parseReport)
-import Kyyn.Plumbing.Protocol.Curation (parseCuration)
 import Kyyn.Plumbing.Protocol.Recipes (parseKnowledgeBase)
 import Kyyn.Plumbing.Protocol.FactEdits (factEditBindings)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources)
@@ -72,7 +73,6 @@ evolutionBindings :: RootContract -> RootContract -> Either String FileTree
 evolutionBindings before after = do
   collections <- sequence [collectionBindings "Before" before, collectionBindings "After" after]
   proposals <- if contractId (rootSchema before) == contractId (rootSchema after)
-      && not (null (collectionContracts (rootSchema after)))
     then factEditBindings after
     else fileTree []
   codecs <- sequence [do
@@ -110,7 +110,13 @@ evolutionBindings before after = do
     utf8 = Text.encodeUtf8 . Text.pack
 
 collectionBindings :: String -> RootContract -> Either String FileTree
-collectionBindings endpoint contract = do
+collectionBindings = collectionBindingsWith True
+
+domainCollectionBindings :: String -> RootContract -> Either String FileTree
+domainCollectionBindings = collectionBindingsWith False
+
+collectionBindingsWith :: Bool -> String -> RootContract -> Either String FileTree
+collectionBindingsWith wrapped endpoint contract = do
   path <- relativePath ("Kyyn/Workspace/" ++ endpoint ++ ".hs")
   let root = rootType (rootSchema contract)
       declarations = collectionContracts (rootSchema contract)
@@ -122,8 +128,8 @@ collectionBindings endpoint contract = do
         ["import qualified " ++ name | name <- typeModules root] ++
         concat [["-- | Collection " ++ show name ++ " in " ++ haskellType root ++ ".",
                  "-- Root field: " ++ field ++ "; fact type: " ++ haskellType payload ++ ".",
-                 field ++ " :: Collection (KnowledgeBase " ++ haskellType root ++ ") " ++ haskellType payload,
-                 field ++ " = Internal.Collection " ++ show name ++ " (facts . Optics.lens " ++ rootModule ++ "." ++ field ++
+                 field ++ " :: Collection " ++ (if wrapped then "(KnowledgeBase " ++ haskellType root ++ ")" else haskellType root) ++ " " ++ haskellType payload,
+                 field ++ " = Internal.Collection " ++ show name ++ " (" ++ (if wrapped then "facts . " else "") ++ "Optics.lens " ++ rootModule ++ "." ++ field ++
                    " (\\root value -> root { " ++ rootModule ++ "." ++ field ++ " = value }))"] |
           CollectionContract name field payload _ <- declarations]
   fileTree [(path,Text.encodeUtf8 (Text.pack source))]
@@ -133,7 +139,11 @@ collectionBindings endpoint contract = do
     comma (x:xs) = x ++ ", " ++ comma xs
 
 decodeEvolutionReply :: ByteString -> Either String (Either EvolutionFailure EvolutionObservation)
-decodeEvolutionReply bytes = eitherDecodeStrict bytes >>= parseEither
+decodeEvolutionReply = decodeEvolutionReplyWith parseKnowledgeBase
+
+decodeEvolutionReplyWith :: (Value -> Parser (KnowledgeBase Value ProposedRecipe))
+  -> ByteString -> Either String (Either EvolutionFailure EvolutionObservation)
+decodeEvolutionReplyWith parseRoot bytes = eitherDecodeStrict bytes >>= parseEither
   (exact "EvolutionReply" ["tag","value"] $ \o -> do
     tag <- o .: "tag"
     value <- o .: "value"
@@ -141,14 +151,13 @@ decodeEvolutionReply bytes = eitherDecodeStrict bytes >>= parseEither
       "Rejected" -> do
         ValidationReport diagnostics <- parseReport value
         pure (Left (EvolutionFailure diagnostics))
-      "Succeeded" -> Right <$> exact "EvolutionOutput" ["after","steps","curation"] (\output ->
-        EvolutionObservation <$> (output .: "after" >>= parseKnowledgeBase) <*> (output .: "steps" >>= array step)
-          <*> (output .: "curation" >>= parseCuration)) value
+      "Succeeded" -> Right <$> exact "EvolutionOutput" ["after","steps"] (\output ->
+        EvolutionObservation <$> (output .: "after" >>= parseRoot) <*> (output .: "steps" >>= array step)) value
       _ -> fail "Unknown evolution outcome")
   where
     step = exact "StepObservation" ["rationale","before","after"] $ \o ->
       StepObservation <$> (o .: "rationale" >>= rationale) <*> (o .: "before" >>= root) <*> (o .: "after" >>= root)
-    root = exact "ObservedRoot" ["contract","value"] $ \o -> ObservedRoot <$> o .: "contract" <*> (o .: "value" >>= parseKnowledgeBase)
+    root = exact "ObservedRoot" ["contract","value"] $ \o -> ObservedRoot <$> o .: "contract" <*> (o .: "value" >>= parseRoot)
     rationale = exact "Rationale" ["explanation","evidence"] $ \o ->
       Rationale <$> o .: "explanation" <*> (o .: "evidence" >>= array evidence)
     evidence = exact "EvidenceRef" ["producer","connector","source","references"] $ \o ->

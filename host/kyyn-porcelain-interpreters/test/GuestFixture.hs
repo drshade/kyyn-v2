@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
-module GuestFixture (fixtureProgram, runFixtureExecution) where
+module GuestFixture (fixtureProgram, runFixtureExecution, noRecipePreparation) where
 
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
@@ -10,6 +10,16 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Domain.Path (relativePath)
 import Kyyn.Plumbing.Capability.ProcessExecution
+import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
+
+noRecipePreparation :: Eff (ToolPreparation : PluginPreparation : es) a -> Eff es a
+noRecipePreparation = noPlugins . noTools
+  where
+    noTools :: Eff (ToolPreparation : es) a -> Eff es a
+    noTools = interpret $ \_ _ -> error "Fixture without closed recipes prepared tools"
+    noPlugins :: Eff (PluginPreparation : es) a -> Eff es a
+    noPlugins = interpret $ \_ _ -> error "Fixture without closed recipes prepared plugins"
 
 fixtureProgram :: String -> CompiledProgram
 fixtureProgram script = CompiledProgram (BuildIdentity "fixture" "fixture")

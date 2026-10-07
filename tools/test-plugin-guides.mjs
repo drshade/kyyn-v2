@@ -40,7 +40,7 @@ try {
   write(path.join(kb, 'root/kb.dhall'), 'Invalid schema: documentation must not interpret this');
   git(repo, 'init', '-q', '-b', 'main');
   const initial = commit(repo);
-  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${initial}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft }`);
+  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${initial}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft, kind = < AdHoc | RecipeBased : Text >.AdHoc }`);
   write(path.join(workspace, 'target/kb.dhall'), 'Invalid target');
   assert.deepEqual(cli(['list', ...draft]).result.plugins, []);
   for (const args of [['list'], ['show', 'example'], ['guide', 'example']]) {

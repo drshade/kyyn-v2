@@ -73,7 +73,7 @@ try {
   assert.ok(!modify.includes('-- [compiler signature]'));
   assert.ok(!modify.includes('value modify'));
   const source = call('guest', 'symbol', 'show', 'Kyyn.Evolution.source').stdout;
-  assert.ok(source.includes('\nsource :: EvidenceRef -> String'));
+  assert.ok(source.includes('\nsource :: EvidenceRef -> Text'));
   assert.ok(!source.includes('-- [compiler signature]'));
   assert.ok(source.includes('-- [Defined as Kyyn.Types.Evidence.source]'));
   assert.ok(source.includes('-- [Defined as Kyyn.Types.Evidence.source]\nsource ::'));
@@ -81,10 +81,10 @@ try {
   const sourceJson = json('guest', 'symbol', 'show', 'Kyyn.Evolution.source').symbols[0];
   assert.equal(sourceJson.namespace, 'value');
   assert.equal(sourceJson.definedAs, 'Kyyn.Types.Evidence.get$.EvidenceRef.source');
-  assert.equal(sourceJson.checkedSignature, 'EvidenceRef -> [Char]');
+  assert.equal(sourceJson.checkedSignature, 'EvidenceRef -> Text');
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.Fact').stdout.includes('\nFact :: '));
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.Fact').stdout.includes('data Fact a = Fact FactId a'));
-  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.FactId').stdout.includes('newtype FactId = FactId String'));
+  assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Schema.FactId').stdout.includes('newtype FactId = FactId Text'));
   assert.ok(call('guest', 'symbol', 'show', 'Kyyn.Edit.Collection').stdout.includes('data Collection root a'));
   const metadata = json('guest', 'module', 'show', 'Kyyn.Schema');
   assert.ok(metadata.symbols.every(s => !s.name.includes('inst$') && !s.name.includes('@')));

@@ -5,17 +5,17 @@ import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Root (Root)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Curation (RecipeId, PendingEvidence)
-import Kyyn.Domain.Evidence (CurrentEvidence)
+import Data.Text (Text)
+import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.FactProposal (FactProposal)
 import Kyyn.Types.KnowledgeBase (FlowEntryRef)
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedPlugin)
 
 data RecipeExecution :: Effect where
-  ExecuteRecipeFlow :: Root -> [PreparedPlugin] -> FlowEntryRef -> RecipeId
-    -> [(PendingEvidence,CurrentEvidence)] -> RecipeExecution m (Either [Diagnostic] FactProposal)
+  ExecuteRecipeFlow :: Root -> [PreparedPlugin] -> FlowEntryRef -> CheckedValue
+    -> Maybe Text -> RecipeExecution m (Either [Diagnostic] FactProposal)
 type instance DispatchOf RecipeExecution = Dynamic
 
-executeRecipeFlow :: RecipeExecution :> es => Root -> [PreparedPlugin] -> FlowEntryRef -> RecipeId
-  -> [(PendingEvidence,CurrentEvidence)] -> Eff es (Either [Diagnostic] FactProposal)
-executeRecipeFlow root plugins entry recipe = send . ExecuteRecipeFlow root plugins entry recipe
+executeRecipeFlow :: RecipeExecution :> es => Root -> [PreparedPlugin] -> FlowEntryRef -> CheckedValue
+  -> Maybe Text -> Eff es (Either [Diagnostic] FactProposal)
+executeRecipeFlow root plugins entry state = send . ExecuteRecipeFlow root plugins entry state

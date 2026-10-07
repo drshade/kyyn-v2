@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceStore
   ( EvidenceStore(..), evidenceHead, publishFetch, loadCurrentEvidence
-  , readFetchHistory, listEvidenceChanges, clearEvidence, resolveEvidenceCapture
+  , clearEvidence
   , FetchBaseline(..), beginFetch, publishFetchWithPosition
   ) where
 
@@ -21,13 +21,7 @@ data EvidenceStore :: Effect where
     -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   LoadCurrentEvidence :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
     -> EvidenceStore m (Either EvidenceProblem (Maybe CurrentEvidence))
-  ReadFetchHistory :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-    -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [FetchSummary]))
-  ListEvidenceChanges :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
-    -> EvidenceStore m (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
   ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m Bool
-  ResolveEvidenceCapture :: ConnectorInstanceRef -> FetchId
-    -> EvidenceStore m (Either EvidenceProblem EvidenceCapture)
 
 type instance DispatchOf EvidenceStore = Dynamic
 
@@ -53,15 +47,5 @@ publishFetchWithPosition instanceRef producer contract base options changes = se
 loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
   -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
 loadCurrentEvidence instanceRef producer = send . LoadCurrentEvidence instanceRef producer
-readFetchHistory :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-  -> Eff es (Either EvidenceProblem (EvidenceSnapshotRef, [FetchSummary]))
-readFetchHistory instanceRef producer = send . ReadFetchHistory instanceRef producer
-listEvidenceChanges :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId
-  -> Eff es (Either EvidenceProblem (EvidenceSnapshotRef, [EvidenceChangeSummary]))
-listEvidenceChanges instanceRef producer contract = send . ListEvidenceChanges instanceRef producer contract
 clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es Bool
 clearEvidence = send . ClearEvidence
-
-resolveEvidenceCapture :: EvidenceStore :> es => ConnectorInstanceRef -> FetchId
-  -> Eff es (Either EvidenceProblem EvidenceCapture)
-resolveEvidenceCapture instanceRef = send . ResolveEvidenceCapture instanceRef

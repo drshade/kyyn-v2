@@ -68,7 +68,7 @@ try {
   write(path.join(repo, 'unrelated'), 'preserve');
   git(repo, ['init', '-q', '-b', 'main']);
   const beforeHead = commit(repo);
-  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${beforeHead}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft }`);
+  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${beforeHead}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft, kind = < AdHoc | RecipeBased : Text >.AdHoc }`);
   write(path.join(workspace, 'target/kb.dhall'), 'An unfinished target must not require compilation to install plugins');
   const acceptedRoot = snapshot(path.join(kb, 'root'));
   invoke(['--from', source], 2, { json: false, selected: null });

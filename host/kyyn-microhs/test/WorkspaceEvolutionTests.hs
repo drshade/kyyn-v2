@@ -1,13 +1,14 @@
 -- Actual EvolutionExecution with MicroHs/RootOpening/Dhall and recorded Git input:
--- schema-changing chain, source closure, materialization/reopen and context.
+-- schema-changing chain, recipe fact/state pair edits, source closure,
+-- materialization/reopen and context.
 -- Does not save candidates or publish proposals.
 
 {-# LANGUAGE GADTs, OverloadedStrings #-}
 module Main (main) where
 
-import qualified Kyyn.Types.KnowledgeBase as KB
+import qualified Kyyn.Domain.Recipe as KB
 
-import Kyyn.Domain.Curation (emptyCurationRegister)
+import Kyyn.Domain.Recipe (RecipeId(..))
 import Control.Monad (unless)
 import Data.Aeson (object, (.=))
 import qualified Data.ByteString as Bytes
@@ -26,7 +27,10 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.Root
 import Kyyn.Domain.Workspace
 import Kyyn.Types.SchemaMetadata
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..))
 import Kyyn.Plumbing.Capability.Git (Git(..))
+import Kyyn.Plumbing.Protocol.RecipeEvolution (identityRecipeEvolutionSource)
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem
@@ -41,6 +45,8 @@ import Kyyn.Porcelain.Capability.RootOpening (loadSourceAt, openCapturedSource)
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Porcelain.Interpreter.RootOpening
 import Kyyn.Porcelain.Interpreter.EvolutionExecution
+import Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation)
+import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import System.Environment (getEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -56,22 +62,26 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       utf8 = Text.encodeUtf8 . Text.pack
       tree = either error id . fileTree
   sdk <- sequence
-    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","Curation","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
-     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
+    ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") | name <- ["Fact","Diagnostic","Evidence","KnowledgeBase","Evolution","Program","SchemaMetadata"]] ++
+     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Schema.hs","Kyyn/Validation.hs","Kyyn/Evolution.hs","Kyyn/Evolution/Internal.hs","Kyyn/Evolution/KnowledgeBase.hs","Kyyn/Evolution/Proposal.hs","Kyyn/Recipe.hs","Kyyn/Recipe/Edit.hs","Kyyn/Recipe/Internal.hs","Kyyn/Edit.hs","Kyyn/Edit/Internal.hs","Kyyn/Optics.hs"]] ++
      [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Evolution","Validation","SchemaMetadata"]] ++
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]]) >>= right . fileTree
   oldSchema <- load "host/kyyn-microhs/test/evolution" "SchemaV1.hs"
   newSchema <- load "host/kyyn-microhs/test/evolution" "SchemaV2.hs"
   entry <- load "host/kyyn-microhs/test/evolution" "Evolution.hs"
+  reviewV1 <- load "host/kyyn-microhs/test/evolution" "ReviewV1.hs"
+  reviewV2 <- load "host/kyyn-microhs/test/evolution" "ReviewV2.hs"
+  initialState <- right (checkContract (Algebraic "ReviewV1.State" []
+    [Constructor "ReviewV1.State" [(Just "reviewed",ListType StringType)]]) (SchemaMetadata [] [] []))
   beforeContract <- right (checkContract beforeType metadata >>= checkRootLayout)
   let oldMetadata = unlines ["module Metadata where", "import Kyyn.Schema",
         "metadata :: SchemaMetadata", "metadata = SchemaMetadata [RoleDecl \"title\" \"Title\" Title] [] [CollectionDecl \"todos\" \"todos\" []]"]
       checks namespace body = utf8 (unlines ["module Checks where", "import " ++ namespace, "import Kyyn.Validation",
         "validate :: Root -> ValidationReport", "validate _ = " ++ body])
-      before = tree [oldSchema,(path "Metadata.hs",utf8 oldMetadata),
+      before = tree [oldSchema,reviewV1,(path "Metadata.hs",utf8 oldMetadata),
         (path "Checks.hs",checks "SchemaV1" "ValidationReport [Diagnostic Error \"old-rule\" \"Needs repair\" Nothing]")]
-      targetSources = tree [newSchema,(path "Metadata.hs",utf8 oldMetadata),
+      targetSources = tree [newSchema,reviewV1,reviewV2,(path "Metadata.hs",utf8 oldMetadata),
         (path "Checks.hs",checks "SchemaV2" "ValidationReport []")]
       code namespace sources = tree ((path "kb.dhall",utf8 (manifest namespace)) :
         [(path ("src/" ++ relativeName p),bytes) | (p,bytes) <- files sources])
@@ -79,38 +89,92 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       target = code "SchemaV2" targetSources
       input = object ["todos" .= [object ["id" .= ("todo-001" :: String),"value" .= object ["title" .= ("Review" :: String)]]]]
       expected = object ["todos" .= [object ["id" .= ("todo-001" :: String),"value" .= object ["title" .= ("Review λ" :: String),"done" .= True]]]]
+      recipe = KB.StoredRecipe (OpenAgent "Review mail") "ReviewV1.State" initialState
+        (CheckedValue (contractId initialState) (object ["reviewed" .= (["mail-1"] :: [String])]))
+      initialRecipes = [Fact (FactId "mail") recipe,Fact (FactId "other") recipe]
+      recipeEntry = (fst entry, utf8 (Text.unpack (Text.replace "import Kyyn.Schema"
+        (Text.unlines ["import Kyyn.Schema", "import qualified ReviewV1", "import qualified ReviewV2",
+          "import qualified Kyyn.Workspace.Before.RecipeTypes.ReviewV1.State as OldState",
+          "import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV2.State as NewState"])
+        (Text.decodeUtf8 (snd entry))) ++ unlines
+          ["  >=> edit (Rationale \"Migrate mail state\" [])",
+           "    (updateRecipe OldState.recipeType (RecipeId \"mail\") (openRecipe NewState.recipeType \"Review mail\")",
+           "      (\\(ReviewV1.State ids) -> Right (ReviewV2.State ids (Just \"October\"))))"]))
       rootAction = do
         value <- checkRootValue beforeContract input
-        either (pure . Left) (\v -> materializeRoot beforeContract beforeCode (KB.KnowledgeBase v [])) value
-  Root _ factFiles _ _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
+        either (pure . Left) (\v -> materializeRoot beforeContract beforeCode (KB.KnowledgeBase v initialRecipes)) value
+  Root _ factFiles _ _ <- right (runPureEff (runDhallHandling (runRootStore rootAction)))
   revision <- right (gitRevision (replicate 40 'a'))
   identifier <- right (evolutionId "abc")
   let repository = Repository scope
       kb = KnowledgeBase repository (Subtree (path "nested"))
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft)
-        before target (tree [entry]) (tree [])
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migrate" "Review" Draft AdHoc)
+        before target (tree [recipeEntry]) (tree [])
       context = EvolutionContext kb identifier (Before revision beforeContract) snapshot
       acceptedTree = tree (files beforeCode ++ files factFiles)
   result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
-    . runRootStore . runRootOpening sdk . runEvolutionExecution sdk $ do
+    . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       prepared <- openCapturedSource target >>= either (error . show) pure
-      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles emptyCurationRegister []) closure prepared)
-  EvaluatedEvolution preserved (After afterContract) checked@(KB.KnowledgeBase (CheckedValue _ value) recipes) (EvolutionReport _ reports _) <- right result >>= right
-  unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 3 &&
+      evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles initialRecipes) closure prepared)
+  EvaluatedEvolution preserved (After afterContract) checked@(KB.KnowledgeBase (CheckedValue _ value) recipes) (EvolutionReport _ reports) <- right result >>= right
+  unless ((case preserved of CapturedEvolution actual _ _ _ -> actual == context) && value == expected && length reports == 4 &&
       all (\(StepReport _ changes) -> length changes == 1) reports)
     (fail ("Unexpected evaluated workspace: " ++ show result))
   materialized <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot afterContract target checked))))
   reopened <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking materialized))))
   unless (checked == KB.KnowledgeBase reopened recipes) (fail "Evaluated After did not materialize and reopen exactly")
-  putStrLn "Captured workspace evaluated through real schema inspection, MicroHs and checked reports; exact After materialized and reopened."
+  case recipes of
+    [Fact (FactId "mail") (KB.StoredRecipe _ name _ (CheckedValue _ state)),other] ->
+      unless (name == "ReviewV2.State" && state == object ["reviewed" .= (["mail-1"] :: [String]),
+          "window" .= object ["tag" .= ("Some" :: String),"value" .= ("October" :: String)]]
+        && other == Fact (FactId "other") recipe) (fail ("Recipe migration changed the wrong state: " ++ show recipes))
+    _ -> fail "Recipe migration changed membership"
+  let recipeSource = utf8 (unlines
+        ["{-# LANGUAGE OverloadedStrings #-}", "module Evolution where", "import Kyyn.Workspace.Evolution",
+         "import Kyyn.Schema (FactId(..))", "import qualified Kyyn.Workspace.Before as Before",
+         "import qualified SchemaV1", "import qualified ReviewV1",
+         "evolution :: RecipeEvolution Root RecipeState",
+         "evolution = recipeEdit (Rationale \"Review the task\" []) $ do",
+         "  editFacts (within Before.todos (update (FactId \"todo-001\") (put (SchemaV1.Todo \"Reviewed\"))))",
+         "  modifyRecipeState (\\(ReviewV1.State ids) -> ReviewV1.State (ids ++ [\"mail-2\"]))"])
+      recipeSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review" "" Draft (RecipeBased (RecipeId "mail")))
+        before beforeCode (tree [(path "Evolution.hs",recipeSource)]) (tree [])
+      recipeContext = EvolutionContext kb identifier (Before revision beforeContract) recipeSnapshot
+      scaffold = identityRecipeEvolutionSource "SchemaV1.Root"
+      identitySnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Identity" "" Draft (RecipeBased (RecipeId "mail")))
+        before beforeCode (tree [(path "Evolution.hs",scaffold)]) (tree [])
+      identityContext = EvolutionContext kb identifier (Before revision beforeContract) identitySnapshot
+  unless (all (`Text.isInfixOf` Text.decodeUtf8 scaffold)
+    ["import qualified SchemaV1 as Before", "import qualified Kyyn.Workspace.Before as BeforeCollections"])
+    (fail "Recipe scaffold does not advertise the schema and collection imports")
+  recipeResults <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
+    . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
+      source@(SourceRoot selected codeFiles _ closure) <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
+      let captured context' = CapturedEvolution context' (Root selected factFiles codeFiles initialRecipes) closure source
+      (,) <$> evaluateEvolution (captured recipeContext) <*> evaluateEvolution (captured identityContext)
+  (recipeResult,identityResult) <- right recipeResults
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ identityFacts) identityRecipes) (EvolutionReport _ identityReports) <- right identityResult
+  unless (identityFacts == input && identityRecipes == initialRecipes && null identityReports)
+    (fail "Generated recipe identity scaffold changed facts, state or reports")
+  EvaluatedEvolution _ _ (KB.KnowledgeBase (CheckedValue _ editedFacts) editedRecipes) (EvolutionReport _ recipeReports) <- right recipeResult
+  unless (editedFacts == object ["todos" .= [object ["id" .= ("todo-001" :: String),
+      "value" .= object ["title" .= ("Reviewed" :: String)]]]] &&
+      case editedRecipes of
+        [Fact (FactId "mail") (KB.StoredRecipe _ _ _ (CheckedValue _ next)),other] ->
+          next == object ["reviewed" .= (["mail-1","mail-2"] :: [String])] && other == last initialRecipes &&
+          case recipeReports of [StepReport _ changes] -> length changes == 2; _ -> False
+        _ -> False)
+    (fail ("Recipe fact/state pair did not preserve its boundary: " ++ show recipeResult))
+  putStrLn "Captured schema migration and recipe fact/state edits passed through MicroHs and checked reports."
 
 gitMock :: Repository -> GitRevision -> FileTree -> Eff (Git : es) a -> Eff es a
 gitMock repository revision tree = interpret $ \_ operation -> case operation of
   ReadTreeAt selected selectedRevision (Subtree path) excluded
     | selected == repository && selectedRevision == revision && relativeName path == "nested/root"
-      && excluded == [factsLocation, curationLocation, recipesLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
+      && excluded == [factsLocation, recipesLocation, recipeStatesLocation] -> pure (Right (either error id (fileTree [(p,b) | (p,b) <- files tree, not (isRootMaterial p)])))
   _ -> error "Evolution attempted Git operations other than its exact Before read"
 
 beforeType :: DataType

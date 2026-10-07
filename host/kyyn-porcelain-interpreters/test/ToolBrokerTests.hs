@@ -41,7 +41,7 @@ toolBrokerTests = do
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")
         (EvidenceProducer (PackageIdentity "package") (contractId contract)) (FetchId "captured")
       captured = CurrentEvidence snapshot [(EvidenceId "one",Evidence (EvidenceFingerprint "old") []
-        (CheckedValue (contractId contract) (string "old contents")))]
+        (CheckedValue (contractId contract) (string "old contents")))] (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing)
       recordReads :: Eff (PluginRead : es) a -> Eff es (a,Int)
       recordReads = reinterpret (runState (0 :: Int)) $ \_ operation -> case operation of
         LoadCapturedInput {} -> error "Recipe input was reread from latest instead of its pinned capture"

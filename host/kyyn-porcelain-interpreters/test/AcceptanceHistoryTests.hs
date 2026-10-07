@@ -71,7 +71,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
         (CommitIdentity "Fixture" "fixture@example.invalid" "1700000000 +0000") message
       archive before state = do
         encoded <- right $ runPureEff . runDhallHandling . runWorkspaceStore $
-          encodeWorkspaceSnapshot (WorkspaceSnapshot (WorkspaceManifest before "Example" "Reason" state) empty empty empty empty)
+          encodeWorkspaceSnapshot (WorkspaceSnapshot (WorkspaceManifest before "Example" "Reason" state AdHoc) empty empty empty empty)
         pure (tree [(p, if relativeName p == "manifest.dhall" then
           Bytes.concat ["(", bytes, ") // { extra = [] : List Text }"] else bytes) | (p,bytes) <- files encoded])
       commit parent contents message = git (createCommit repo (GitTree [(archivePath,contents)]) (Just parent) (metadata message))
@@ -168,7 +168,7 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
       changeFiles = tree [(path "Evolution.hs","not compilable")]
       notes = tree [(path "review.md","unchanged notes")]
       initialSnapshot = WorkspaceSnapshot
-        (WorkspaceManifest base "Same label λ" "Keep this explanation" Draft)
+        (WorkspaceManifest base "Same label λ" "Keep this explanation" Draft AdHoc)
         sourceFiles targetFiles changeFiles notes
       encodeSnapshot snapshot = right $ runPureEff . runDhallHandling . runWorkspaceStore $ encodeWorkspaceSnapshot snapshot
       writeWorkspace key snapshot = do
@@ -224,8 +224,8 @@ acceptanceHistoryTests = withSystemTempDirectory "kyyn-acceptance-history" $ \di
   afterFailedWrite <- Bytes.readFile livePath
   unless (failedTransition == Left writeFailure && beforeFailedWrite == afterFailedWrite)
     (fail "Failed transition lost its operational failure or changed the manifest")
-  let WorkspaceSnapshot (WorkspaceManifest r n e _) b t c ns = initialSnapshot
-  writeWorkspace "e001" (WorkspaceSnapshot (WorkspaceManifest r n e Accepted) b t c ns)
+  let WorkspaceSnapshot (WorkspaceManifest r n e _ _) b t c ns = initialSnapshot
+  writeWorkspace "e001" (WorkspaceSnapshot (WorkspaceManifest r n e Accepted AdHoc) b t c ns)
   expectDiagnostic (readEvolutionState workspace)
   runLifecycle (markReady workspace) >>= right
   validLocal <- Bytes.readFile livePath

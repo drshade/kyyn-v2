@@ -113,6 +113,15 @@ test-suite workspace-evolutions
     bytestring, text, filepath, temporary ==1.3, aeson,
     kyyn-porcelain, kyyn-porcelain-interpreters
 
+test-suite recipe-signatures
+  type: exitcode-stdio-1.0
+  main-is: RecipeSignatureTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-microhs, kyyn-domain,
+    kyyn-plumbing, bytestring, text, filepath, directory, temporary ==1.3
+
 test-suite evolutions
   type: exitcode-stdio-1.0
   main-is: EvolutionTests.hs

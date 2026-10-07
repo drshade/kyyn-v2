@@ -91,20 +91,20 @@ import System.Directory (getCurrentDirectory, doesFileExist)
 import System.FilePath ((</>))
 
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
-type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
-type Evaluation = EvolutionExecution ': Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': EvidenceStore ': DocumentPersistence ': Runtime
+type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
+type Evaluation = EvolutionExecution ': Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': EvidenceStore ': DocumentPersistence ': Runtime
 type Checking = RootExecution ': ToolPreparation ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
 runMetadata host = runBase host . runWorkspaceStore . runEvolutionStore
 
 runAuthoring :: Host -> GuestToolchain -> FileTree -> Eff Authoring a -> IO (Either OperationalFailure a)
-runAuthoring host toolchain sdk = runRuntime host toolchain . runRootOpening sdk
+runAuthoring host toolchain sdk = runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk
   . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring
 
 runEvaluation :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Evaluation a -> IO (Either OperationalFailure a)
 runEvaluation host toolchain sdk scope = runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
-  . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
+  . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
 
 runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)
 runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk
@@ -218,13 +218,14 @@ catalogueResult :: Cli.GuestCommand -> [ApiEntry] -> Eff es Response
 catalogueResult request entries = ApiResult.withOrigins entries <$>
   runGuestApiFromCatalogue (Right [m | ApiEntry _ m <- entries]) (guestResult request)
 
-type Discovery = '[WorkspaceApi.WorkspaceApi, ToolPreparation, PluginPreparation, Store.EvolutionStore, WorkspaceStore, RootOpening, ApiInspection, SchemaInspection, GuestCompilation, GuestExecution, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
+type Discovery = '[WorkspaceApi.WorkspaceApi, Store.EvolutionStore, WorkspaceStore, RootOpening, ToolPreparation, PluginPreparation, ApiInspection, SchemaInspection, GuestCompilation, GuestExecution, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Discovery a -> IO (Either OperationalFailure a)
 runDiscovery host@(Host _ _ _ _ cache inspection timings) toolchain sdk catalogue = runBase host . runGuestApi catalogue
   . runGuestExecution toolchain . observeExecutions timings . runGuestCompilation toolchain cache . observeCompilations timings
-  . runSchemaInspectionIO toolchain inspection . runApiInspectionIO toolchain inspection . runRootOpening sdk
-  . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runWorkspaceApi sdk
+  . runSchemaInspectionIO toolchain inspection . runApiInspectionIO toolchain inspection
+  . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk
+  . runWorkspaceStore . runEvolutionStore . runWorkspaceApi sdk
 
 dispatchRootApi :: Host -> Cli.GuestCommand -> SelectedKb -> IO Response
 dispatchRootApi host@(Host _ _ _ runtime _ _ _) request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk ->
@@ -272,7 +273,7 @@ executeInitialization host scope = do
       case metadata of
         Left response -> pure response
         Right commit -> withRuntime host $ \toolchain sdk -> finish $
-          runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
+          runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
             initializationResult <$> Initialization.initializeKnowledgeBase target commit
 
 dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
@@ -286,7 +287,7 @@ dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
   Cli.CheckRoot -> withRoot (checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision)
   where
     withRoot action = withRuntime host $ \toolchain sdk -> finish $
-      runRuntime host toolchain . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ action
+      runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ action
 dispatchEvolution :: Host -> Cli.EvolutionCommand -> SelectedKb -> IO Response
 dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case request of
     Cli.ListEvolutions selection -> finish $ runMetadata host $
@@ -297,8 +298,8 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
       either refusal (const (stateResult identity Workspace.Ready)) <$> Store.markReady (workspace identity)
     Cli.DraftEvolution identity -> finish $ runMetadata host $
       either refusal (const (stateResult identity Workspace.Draft)) <$> Store.markDraft (workspace identity)
-    Cli.NewEvolution name before -> withRuntime host $ \toolchain sdk -> finish $ runAuthoring host toolchain sdk $ do
-      created <- Authoring.createEvolution kb name (maybe revision id before)
+    Cli.NewEvolution name before recipe -> withRuntime host $ \toolchain sdk -> finish $ runAuthoring host toolchain sdk $ do
+      created <- Authoring.createEvolution kb name (maybe revision id before) (maybe Workspace.AdHoc Workspace.RecipeBased recipe)
       pure $ case created of
         Left diagnostics -> refusal diagnostics
         Right value -> case Store.workspaceLocation value of
@@ -307,7 +308,7 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
     Cli.CheckEvolution identity -> case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
       Right kbScope -> withRuntime host $ \toolchain sdk -> finish $
-        runEvaluation host toolchain sdk kbScope . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $
+        runEvaluation host toolchain sdk kbScope . runRootExecution sdk $
           evolutionCheckResult identity <$> checkEvolution (workspace identity)
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached

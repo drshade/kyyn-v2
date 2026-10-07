@@ -29,7 +29,7 @@ workspaceTests = do
   target <- tree [("kb.dhall", "unfinished target manifest"), ("src/SchemaV2.hs", "unfinished target source")]
   change <- tree [("Evolution.hs", "unfinished transformation"), ("inputs.csv", "a,b")]
   notes <- tree [("review.md", "please review")]
-  unless (snapshot == WorkspaceSnapshot (WorkspaceManifest revision "September" "Import sales" Draft) before target change notes)
+  unless (snapshot == WorkspaceSnapshot (WorkspaceManifest revision "September" "Import sales" Draft AdHoc) before target change notes)
     (fail "Workspace projection changed manifest, bytes or relative paths")
   let compareWith entries' expected = do
         changed <- tree entries' >>= right . readSnapshot
@@ -40,6 +40,15 @@ workspaceTests = do
   forM_ ["Ready", "Accepted"] $ \state ->
     compareWith (replace "manifest.dhall" (manifest "a" state "September" "Import sales")) True
   compareWith (replace "notes/review.md" "different review") True
+  compareWith (replace "manifest.dhall" ("(" <> manifest "a" "Draft" "September" "Import sales" <>
+    ") // { kind = < AdHoc | RecipeBased : Text >.RecipeBased \"mail\" }")) False
+  recipeSnapshot <- tree (replace "manifest.dhall" ("(" <> manifest "a" "Draft" "September" "Import sales" <>
+    ") // { kind = < AdHoc | RecipeBased : Text >.RecipeBased \"mail\" }")) >>= right . readSnapshot
+  recipeEncoded <- right (runPureEff (runDhallHandling (runWorkspaceStore (encodeWorkspaceSnapshot recipeSnapshot))))
+  recipeReopened <- right (readSnapshot recipeEncoded)
+  unless (recipeSnapshot == recipeReopened) (fail "Recipe selection was lost on workspace roundtrip")
+  tree (replace "manifest.dhall" ("(" <> manifest "a" "Draft" "September" "Import sales" <>
+    ") // { kind = < AdHoc | RecipeBased : Text >.RecipeBased \"../mail\" }")) >>= rejected . readSnapshot
   compareWith (filter ((/= "notes/review.md") . fst) entries) True
   compareWith (("notes/new.md", "another note") : entries) True
   forM_ ["archived record", "malformed or unsupported archived record"] $ \record ->
@@ -53,7 +62,7 @@ workspaceTests = do
     compareWith (filter ((/= path) . fst) entries) False
   forM_ ["before/Helper.hs", "target/config/plugin.dhall", "change/new.csv"] $ \path ->
     compareWith ((path, "new input") : entries) False
-  forM_ ["target/facts/root.dhall", "target/facts", "target/curation.dhall", "target/recipes.dhall", "random/file", "notes", "result.dhall/child"] $ \path ->
+  forM_ ["target/facts/root.dhall", "target/facts", "target/recipes.dhall", "target/recipes/mail/state.dhall", "random/file", "notes", "result.dhall/child"] $ \path ->
     tree ((path, "unexpected") : filter ((/= "notes/review.md") . fst) entries) >>= rejected . readSnapshot
   forM_ ["True", "./other.dhall", Bytes.pack [255], manifest "0" "Draft" "September" "Import sales",
     manifest "a" "Unknown" "September" "Import sales"] $ \bad ->
@@ -86,7 +95,7 @@ manifest :: String -> String -> String -> String -> Bytes.ByteString
 manifest digit state name explanation = Char8.pack
   ("{ before = { revision = " ++ show (concat (replicate 40 digit)) ++ " }, name = " ++ show name ++
    ", explanation = " ++ show explanation ++ ", state = < Draft | Ready | Accepted >." ++ state ++
-   "}")
+   ", kind = < AdHoc | RecipeBased : Text >.AdHoc }")
 
 tree :: [(FilePath, Bytes.ByteString)] -> IO FileTree
 tree entries' = traverse (\(p,b) -> do path <- right (relativePath p); pure (path,b)) entries' >>= right . fileTree

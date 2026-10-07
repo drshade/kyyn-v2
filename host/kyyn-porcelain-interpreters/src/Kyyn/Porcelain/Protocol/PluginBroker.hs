@@ -56,7 +56,7 @@ answerEvidence prior call = case call of
       (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value]) (lookup key selected)))
   _ -> protocolFailure "Filesystem acquisition is unavailable in this invocation"
   where
-    selected = maybe [] (\(CurrentEvidence _ values) -> values) prior
+    selected = maybe [] (\(CurrentEvidence _ values _) -> values) prior
     checkToken token | token == "selected" = pure ()
                      | otherwise = protocolFailure "Unknown evidence snapshot handle"
 

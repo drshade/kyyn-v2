@@ -70,19 +70,25 @@ testTools scope toolchain sdk pluginCode plugins = do
         [ "module Helpers where"
         , "import Data.Text (Text)"
         , "import Kyyn.Plugin (FetchError)"
+        , "import Kyyn.Plugin (Evidence(..), EvidenceId(..))"
         , "import Kyyn.Connectors (Tool)"
         , "import qualified Kyyn.Connectors as Connectors"
         , "import qualified Kyyn.Plugins.P_local_file.Folder as Files"
+        , "import qualified Kyyn.Plugins.P_local_file.Folder.Evidence as Evidence"
         , "type Input = [Text]"
         , "type Output = [Text]"
         , "bulk :: Input -> Tool (Either FetchError Output)"
         , "bulk ids = do"
+        , "  keys <- Evidence.listEvidenceIds Connectors.salesFiles"
+        , "  found <- Evidence.readEvidence Connectors.salesFiles (EvidenceId \"one.txt\")"
+        , "  absent <- Evidence.readEvidence Connectors.salesFiles (EvidenceId \"absent.txt\")"
         , "  a <- mapM (Files.content Connectors.salesFiles) ids"
         , "  b <- mapM (Files.content Connectors.supportFiles) ids"
         , "  missing <- Files.content Connectors.salesFiles \"absent.txt\""
-        , "  pure $ case missing of"
-        , "    Left _ -> sequence (a ++ b)"
-        , "    Right value -> Right [value]"
+        , "  pure $ case (keys,found,absent,missing) of"
+        , "    (Right current,Right (Just (Evidence _ refs _)),Right Nothing,Left _)"
+        , "      | EvidenceId \"one.txt\" `elem` current && not (null refs) -> sequence (a ++ b)"
+        , "    _ -> Right []"
         ])
       declaration = "[{ name = \"bulk\", description = \"Read both folders\", implementation = \"Helpers.bulk\", inputType = \"Helpers.Input\", resultType = \"Helpers.Output\" }]"
       empty = "[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }"
@@ -167,7 +173,7 @@ testBindingShapes scope toolchain sdk = do
   method <- right (methodName "request")
   name <- right (connectorName "other")
   binding <- right (bindingName "other")
-  let proxy selectedKind = toolSources [ConnectorInterface plugin folder [(method,StringType,StringType)], ConnectorInterface plugin other []]
+  let proxy selectedKind = toolSources [ConnectorInterface plugin folder StringType [(method,StringType,StringType)], ConnectorInterface plugin other StringType []]
         [InstanceBinding binding plugin selectedKind name] StringType StringType "Probe.helper" (files sdk ++ [source
           "module Probe where\nimport qualified Kyyn.Connectors as C\nimport qualified Kyyn.Plugins.P_sample.Folder as F\nhelper x = F.request C.other x\n"])
   matching <- right (proxy folder)

@@ -136,7 +136,7 @@ integrationTests = withSystemTempDirectory "kyyn-plugin-install-" $ \directory -
       targetRoot = kbDirectory </> "work/kb/evolutions/000001-install/target"
   createDirectoryIfMissing True targetRoot
   Bytes.writeFile (kbDirectory </> "work/kb/evolutions/000001-install/manifest.dhall")
-    (Char8.pack ("{ before.revision = \"" ++ revisionName kbCommit ++ "\", name = \"install\", explanation = \"\", state = < Draft | Ready | Accepted >.Draft }"))
+    (Char8.pack ("{ before.revision = \"" ++ revisionName kbCommit ++ "\", name = \"install\", explanation = \"\", state = < Draft | Ready | Accepted >.Draft, kind = < AdHoc | RecipeBased : Text >.AdHoc }"))
   url <- right (gitUrl ("file://" ++ sourceDirectory))
   Bytes.writeFile (directory </> "not-a-directory") "file"
   createFileLink (directory </> "absent") (directory </> "dangling")

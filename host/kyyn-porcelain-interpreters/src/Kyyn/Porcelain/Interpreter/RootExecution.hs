@@ -1,11 +1,10 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution) where
 
-import Control.Monad (unless, forM, forM_)
+import Control.Monad (unless, forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (encode, object, (.=))
 import Data.Bifunctor (first)
-import qualified Data.Text as Text
 import qualified Data.ByteString as Strict
 import qualified Data.ByteString.Lazy as Bytes
 import Effectful (Eff, (:>))
@@ -13,7 +12,8 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (rootType, rootSchema, contractShape, contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic, compilerContext)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
-import Kyyn.Domain.Root (Root(..), RootDefinition(..), CheckedValue(..))
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..))
+import Kyyn.Domain.Recipe (StoredRecipe(..), recipeDefinition)
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..), QueryResult(..))
 import Kyyn.Domain.FileTree (FileTree, files)
 import Kyyn.Domain.Path (RelativePath)
@@ -22,15 +22,14 @@ import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Plumbing.Protocol.Query (queryBindings, querySources, decodeQueryReply)
-import Kyyn.Plumbing.Protocol.Recipe (recipeCheckSources)
-import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
-import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Types.Fact (Fact(..))
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
-import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, checkRecipeValue)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins, validatePlugins)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareTools, prepareToolBindings)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareTools)
+import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
@@ -38,19 +37,17 @@ runRootExecution
       Schema.SchemaInspection :> es, Dhall.DhallHandling :> es)
   => FileTree -> Eff (RootExecution : es) a -> Eff es a
 runRootExecution sdk = interpret $ \_ -> \case
-  PrepareRoot root@(Root contract _ code _ recipes) -> runExceptT $ do
+  PrepareRoot root@(Root contract _ code recipes) -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
     _ <- ExceptT (prepareTools code plugins)
-    let closed = [(name,entry) | Fact (FactId name) (ClosedAgent entry) <- recipes]
-    unless (null closed) $ do
-      (sources,_) <- ExceptT (prepareToolBindings code plugins)
-      forM_ closed $ \(name,entry@(FlowEntryRef selected)) -> do
-        source <- checked "recipe.signature" (recipeCheckSources contract entry sources)
-        let context = errorDiagnostic "recipe.signature"
-              ("Recipe " ++ Text.unpack name ++ ": expected " ++ Text.unpack selected ++ " :: Flow (RecipeInput Root) (ProposedCuration RootEdit)")
-        _ <- ExceptT (first (context :) <$> compileGuest source)
-        pure ()
-    RootDefinition _ _ validator declarations _ authored <- ExceptT (readRootDefinition code)
+    definition@(RootDefinition _ _ validator declarations _ authored) <- ExceptT (readRootDefinition code)
+    states <- ExceptT (inspectRecipeContracts sdk (SourceRoot contract code definition [])
+      [Fact identity (recipeDefinition recipe) | Fact identity recipe <- recipes])
+    _ <- forM (zip recipes states) $ \(Fact identity (StoredRecipe _ name expected (CheckedValue fingerprint value)),
+      (Fact actual _,actualName,inspected)) -> do
+        unless (identity == actual && name == actualName && expected == inspected && fingerprint == contractId inspected)
+          (throwE [errorDiagnostic "recipe.state-contract" "Recipe state no longer matches its authored contract"])
+        ExceptT (checkRecipeValue inspected value)
     bindings <- checked "query.bindings" (queryBindings contract)
     validation <- checked "root.validation-source"
       (validationSources (rootType (rootSchema contract)) validator (bindings : files authored ++ files sdk))

@@ -49,11 +49,7 @@ const plans = [
     { tag: 'Todos', edit: { tag: 'Append', id: 'new', value: 'new item' } },
     { tag: 'Flags', edit: { tag: 'Append', id: 'reviewed', value: true } }] }
 ];
-const curation = { recipe: 'sync', handled: [
-  { tag: 'IndividualRecords', scope: { plugin: 'fixture', instance: 'files', fetch: 'fetch-1' }, ids: ['e-1'] },
-  { tag: 'EntireBatch', scope: { plugin: 'fixture', instance: 'other', fetch: 'fetch-2' } }
-] };
-const proposal = { steps: plans, curation };
+const proposal = { steps: plans };
 
 async function broker(bin, args, scenario) {
   const child = spawn('bash', ['-c', 'set -o pipefail; cat | "$@" | cat', 'kyyn-agentic', bin, ...args],
@@ -155,22 +151,19 @@ try {
     assert.deepEqual(output.value.steps[0].rationale.evidence, [citation]);
     assert.deepEqual(output.value.steps[0].after, output.value.steps[1].before);
     assert.equal(output.value.steps[1].after.contract, 'fixture-root-v1');
-    assert.equal(output.value.curation.value.handled[0].tag, 'IndividualRecords');
-    assert.equal(output.value.curation.value.handled[1].tag, 'EntireBatch');
     const one = edit => [{ reason: 'failure case', citations: [], edits: [{ tag: 'Todos', edit }] }];
     const sequential = apply({ steps: [{ reason: 'Ordered edits', citations: [], edits: [
       { tag: 'Todos', edit: { tag: 'Append', id: 'fresh', value: 'first' } },
       { tag: 'Todos', edit: { tag: 'Replace', id: 'fresh', value: 'second' } }
-    ] }], curation: { recipe: 'sync', handled: [] } });
+    ] }] });
     assert.equal(sequential.tag, 'Succeeded');
     assert.deepEqual(sequential.value.after.todos.at(-1), { id: 'fresh', value: 'second' });
-    const unchanged = apply({ steps: [], curation });
+    const unchanged = apply({ steps: [] });
     assert.equal(unchanged.tag, 'Succeeded');
     assert.deepEqual(unchanged.value.steps, []);
-    assert.deepEqual(unchanged.value.curation, output.value.curation);
     for (const edit of [{ tag: 'Remove', id: 'missing' }, { tag: 'Replace', id: 'missing', value: 'x' }, { tag: 'Append', id: 'old', value: 'x' }]) {
-      assert.equal(apply({ steps: one(edit), curation }).tag, 'Rejected');
-      assert.equal(apply({ steps: [...plans, ...one(edit)], curation }).tag, 'Rejected', 'Partial proposal succeeded');
+      assert.equal(apply({ steps: one(edit) }).tag, 'Rejected');
+      assert.equal(apply({ steps: [...plans, ...one(edit)] }).tag, 'Rejected', 'Partial proposal succeeded');
     }
     outputs.push(output);
   }

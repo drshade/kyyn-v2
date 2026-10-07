@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.EvolutionRecord.Document
-  ( recordDocument, recordShape, openRecipeRecordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord ) where
+  ( recordDocument, recordShape, headerShape, decodeHeader, decodeRecord ) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, object, (.=), withObject, (.:), (.:?), (.!=))
@@ -13,27 +13,31 @@ import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionId, evolutionId, evolutionIdName)
 import Kyyn.Domain.EvolutionReport
+import Kyyn.Domain.Recipe (StoredRecipe(..))
+import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Plugin (pluginName, pluginNameText)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Plumbing.Protocol.Plugin (originShape, originValue, parseOrigin)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
-import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue, parseCuration)
-import Kyyn.Plumbing.Protocol.Recipes (recipeShape, legacyRecipeShape, recipeValue, parseRecipe)
-import Kyyn.Domain.Curation (recipeId)
+import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot, checkedSnapshotValue, restoreCheckedSnapshot)
+import Kyyn.Plumbing.Protocol.Recipes (methodShape, methodValue, parseMethod)
+import Kyyn.Domain.Recipe (recipeId)
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
 
 recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Either [Diagnostic] (Shape, Value)
-recordDocument identity before after (EvolutionReport plugins steps curation) = do
+recordDocument identity before after (EvolutionReport plugins steps) = do
   encoded <- traverse step steps
-  pure (recordShape before after,
-    object ["version" .= ("5" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
-      "after" .= snapshotValue after, "steps" .= encoded, "curation" .= curationValue curation,
+  pure (recordShape stateContracts before after,
+    object ["version" .= ("7" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+      "after" .= snapshotValue after, "steps" .= encoded,
+      "recipeContracts" .= map checkedSnapshotValue stateContracts,
       "plugins" .= [object ["name" .= pluginNameText name, "before" .= optional originValue old,
         "after" .= optional originValue new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]])
   where
+    stateContracts = nub [contract | StepReport _ changes <- steps, RecipeChange _ old new <- changes,
+      Just (StoredRecipe _ _ contract _) <- [old,new]]
     endpoints = [("Before",before),("After",after)]
     collections = collectionNames before after
     step (StepReport (Rationale explanation evidence) changes) = do
@@ -46,7 +50,9 @@ recordDocument identity before after (EvolutionReport plugins steps curation) = 
       recipes <- traverse (\(ident,old,new) -> do
         _ <- either invalid pure (recipeId (Text.unpack ident))
         unless (old /= Nothing || new /= Nothing) (invalid "Recipe change has no value")
-        pure (object ["id" .= ident,"before" .= optional recipeValue old,"after" .= optional recipeValue new]))
+        b <- traverse storedRecipeValue old
+        a <- traverse storedRecipeValue new
+        pure (object ["id" .= ident,"before" .= optional id b,"after" .= optional id a]))
         [(ident,old,new) | RecipeChange (FactId ident) old new <- changes]
       pure (object ["explanation" .= explanation, "evidence" .= map evidenceValue evidence,
         "changes" .= object grouped, "recipeChanges" .= recipes])
@@ -61,16 +67,14 @@ recordDocument identity before after (EvolutionReport plugins steps curation) = 
       [] -> invalid "Report contains a fact from outside its endpoint schemas"
 
 headerFields :: [(String,Shape)]
-headerFields = [("version",Scalar IntegerScalar),("identity",text),("before",snapshotShape),("after",snapshotShape)]
+headerFields = [("version",Scalar IntegerScalar),("identity",text),("before",snapshotShape),("after",snapshotShape),
+  ("recipeContracts",List snapshotShape)]
 
 headerShape :: Shape
 headerShape = Record headerFields
 
-recordShape :: RootContract -> RootContract -> Shape
-recordShape before after = withPlugins (recordShapeWithRecipes (Just recipeShape) before after)
-
-openRecipeRecordShape :: RootContract -> RootContract -> Shape
-openRecipeRecordShape before after = withPlugins (previousRecordShape before after)
+recordShape :: [CheckedContract] -> RootContract -> RootContract -> Shape
+recordShape states before after = withPlugins (recordShapeWithRecipes (storedRecipeShape states) before after)
 
 withPlugins :: Shape -> Shape
 withPlugins shape = case shape of
@@ -78,14 +82,8 @@ withPlugins shape = case shape of
     ("after",Optional originShape),("files",List text)]))])
   _ -> error "Expected record shape"
 
-previousRecordShape :: RootContract -> RootContract -> Shape
-previousRecordShape = recordShapeWithRecipes (Just legacyRecipeShape)
-
-legacyRecordShape :: RootContract -> RootContract -> Shape
-legacyRecordShape = recordShapeWithRecipes Nothing
-
-recordShapeWithRecipes :: Maybe Shape -> RootContract -> RootContract -> Shape
-recordShapeWithRecipes recipe before after = Record (headerFields ++ [("steps",List step),("curation",curationShape)])
+recordShapeWithRecipes :: Shape -> RootContract -> RootContract -> Shape
+recordShapeWithRecipes recipe before after = Record (headerFields ++ [("steps",List step)])
   where
     fact collection = Union [(tag, Just (Record [("id",text),("value",shape)])) |
       (tag,contract) <- [("Before",before),("After",after)],
@@ -93,30 +91,30 @@ recordShapeWithRecipes recipe before after = Record (headerFields ++ [("steps",L
     change collection = Record [("id",text),("before",Optional (fact collection)),("after",Optional (fact collection))]
     step = Record ([("explanation",text),("evidence",List evidenceShape),
       ("changes",Record [(name,List (change name)) | name <- collectionNames before after])] ++
-      [("recipeChanges",List (Record [("id",text),("before",Optional payload),("after",Optional payload)])) | Just payload <- [recipe]])
+      [("recipeChanges",List (Record [("id",text),("before",Optional recipe),("after",Optional recipe)]))])
 
 collectionNames :: RootContract -> RootContract -> [String]
 collectionNames before after = sort (nub [name | contract <- [before,after],
   CollectionContract name _ _ _ <- collectionContracts (rootSchema contract)])
 
-decodeHeader :: Value -> Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract))
+decodeHeader :: Value -> Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract, [CheckedContract]))
 decodeHeader = parseEither header
 
-header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootContract))
+header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootContract,[CheckedContract]))
 header = withObject "Evolution record" $ \record -> do
   version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version `notElem` ["2","3","4","5"] then pure (Left [errorDiagnostic "evolution.record-format"
+  if version /= "7" then pure (Left [errorDiagnostic "evolution.record-format"
     "Stored evolution record format is not supported by this kernel"])
   else do
     before <- record .: "before" >>= restoreSnapshot
     after <- record .: "after" >>= restoreSnapshot
-    pure ((identity,,) <$> before <*> after)
+    states <- record .: "recipeContracts" >>= traverse restoreCheckedSnapshot
+    pure ((identity,,,) <$> before <*> after <*> sequence states)
 
-decodeRecord :: RootContract -> RootContract -> Value -> Either String EvolutionReport
-decodeRecord before after = parseEither $ withObject "Evolution record" $ \record -> do
+decodeRecord :: [CheckedContract] -> RootContract -> RootContract -> Value -> Either String EvolutionReport
+decodeRecord states before after = parseEither $ withObject "Evolution record" $ \record -> do
   steps <- record .: "steps" >>= traverse (step [("Before",before),("After",after)])
-  curation <- record .: "curation" >>= parseCuration
   plugins <- record .:? "plugins" .!= [] >>= traverse (withObject "Plugin change" $ \fields -> do
     name <- fields .: "name" >>= either fail pure . pluginName
     old <- fields .: "before" >>= parseOptional parseOrigin
@@ -124,7 +122,7 @@ decodeRecord before after = parseEither $ withObject "Evolution record" $ \recor
     unless (old /= Nothing || new /= Nothing) (fail "Plugin change has no package")
     paths <- fields .: "files" >>= traverse (either fail pure . relativePath)
     pure (PluginChange name old new paths))
-  pure (EvolutionReport plugins steps curation)
+  pure (EvolutionReport plugins steps)
   where
     step :: [(String,RootContract)] -> Value -> Parser StepReport
     step endpoints = withObject "Step" $ \record -> do
@@ -137,8 +135,8 @@ decodeRecord before after = parseEither $ withObject "Evolution record" $ \recor
         (withObject "RecipeChange" $ \fields -> do
           name <- fields .: "id"
           _ <- either fail pure (recipeId name)
-          old <- fields .: "before" >>= parseOptional parseRecipe
-          new <- fields .: "after" >>= parseOptional parseRecipe
+          old <- fields .: "before" >>= parseOptional (parseStoredRecipe states)
+          new <- fields .: "after" >>= parseOptional (parseStoredRecipe states)
           unless (old /= Nothing || new /= Nothing) (fail "Recipe change has no value")
           pure (RecipeChange (FactId (Text.pack name)) old new))
       pure (StepReport (Rationale explanation evidence) (changes ++ recipes))
@@ -165,6 +163,31 @@ decodeRecord before after = parseEither $ withObject "Evolution record" $ \recor
 
 text :: Shape
 text = Scalar TextScalar
+
+stateTag :: CheckedContract -> String
+stateTag contract = "State_" ++ contractFingerprint (contractId contract)
+
+storedRecipeShape :: [CheckedContract] -> Shape
+storedRecipeShape contracts = Record [("method",methodShape),("stateType",text),
+  ("state",Union [(stateTag contract,Just (contractShape contract)) | contract <- contracts])]
+
+storedRecipeValue :: StoredRecipe -> Either [Diagnostic] Value
+storedRecipeValue (StoredRecipe method name contract (CheckedValue identity value)) = do
+  unless (identity == contractId contract) (invalid "Recipe state belongs to a different contract")
+  pure (object ["method" .= methodValue method,"stateType" .= name,
+    "state" .= tagged (stateTag contract) (Just value)])
+
+parseStoredRecipe :: [CheckedContract] -> Value -> Parser StoredRecipe
+parseStoredRecipe contracts = withObject "Stored recipe" $ \fields -> do
+  method <- fields .: "method" >>= parseMethod
+  name <- fields .: "stateType"
+  fields .: "state" >>= withObject "Recipe state" (\state -> do
+    tag <- state .: "tag"
+    contract <- case [c | c <- contracts, stateTag c == tag] of
+      [c] -> pure c
+      _ -> fail "Unknown or ambiguous recipe-state contract"
+    value <- state .: "value"
+    pure (StoredRecipe method name contract (CheckedValue (contractId contract) value)))
 
 evidenceShape :: Shape
 evidenceShape = Record [("producer",text), ("connector",text), ("source",text), ("references",List text)]

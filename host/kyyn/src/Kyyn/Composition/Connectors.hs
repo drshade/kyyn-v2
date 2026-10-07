@@ -12,6 +12,8 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Domain.Evidence (Evidence(..))
+import Kyyn.Porcelain.Capability.EvidenceInspection (readCurrentEvidence)
 import qualified Data.Text as Text
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
 import Kyyn.MicroHs.Toolchain (GuestToolchain)
@@ -36,23 +38,24 @@ import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootExecution (runRootExecution)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Connectors
 import Kyyn.Surfaces.Result (Response(..), refusal)
 
-type Discovery = PluginPreparation ': Evolution.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
+type Discovery = Evolution.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host toolchain sdk = runRuntime host toolchain . runRootOpening sdk . runWorkspaceStore
-  . runEvolutionStore . runPluginPreparation sdk
+runDiscovery host toolchain sdk = runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+  . runRootOpening sdk . runWorkspaceStore . runEvolutionStore
 
 dispatchConnectors :: Host -> Cli.ConnectorCommand -> SelectedKb -> IO Response
 dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
   Cli.LoginConnector plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runHttpTransportIO . runSecretStoreIO scope
-      . runWaitingIO . runLoginInteractionIO . runRootOpening sdk . runWorkspaceStore
-      . runEvolutionStore . runPluginPreparation sdk . runPluginLogin $ runExceptT $ do
+      . runWaitingIO . runLoginInteractionIO . runPluginPreparation sdk . runToolPreparation sdk
+      . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginLogin $ runExceptT $ do
         ValidationReport warnings <- ExceptT (loginConfiguredConnector kb revision plugin name)
         let Response outcome result humanLines diagnostics = loginResult plugin name
         pure (Response outcome result humanLines (warnings ++ diagnostics))
@@ -77,7 +80,7 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
   Cli.ExecuteConnectorMethod plugin name method inputText -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
-      . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runPluginRead $ runExceptT $ do
+      . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginRead $ runExceptT $ do
         (instanceRef,producer,payload,selected@(PreparedMethod _ _ input output _)) <-
           ExceptT (selectConnectorMethod kb revision Nothing plugin name method)
         value <- ExceptT (decodeValue (contractShape input) (Text.pack inputText))
@@ -96,21 +99,25 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
       . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
-      . runRootOpening sdk . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
+      . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
-  Cli.ListFetchHistory plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
-    fmap (fmap (uncurry historyResult)) (connectorFetchHistory kb revision plugin name)
-  Cli.ListEvidenceChanges plugin name since -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
-    fmap (fmap (uncurry changesResult)) (connectorEvidenceChanges kb revision plugin name since)
+  Cli.ShowCurrentEvidence plugin name key -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $ runExceptT $ do
+    (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
+    (snapshot,latest,found) <- ExceptT (readCurrentEvidence instanceRef producer payload key)
+    case found of
+      Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
+      Just item@(Evidence _ _ (CheckedValue _ value)) -> do
+        rendered <- ExceptT (encodeValue (contractShape payload) value)
+        pure (evidenceItemResult snapshot latest key item rendered)
   where
     inspectEvidence toolchain sdk action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
       Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
-        . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runEvidenceInspection $ action
+        . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvidenceInspection $ action
 
 respond :: IO (Either OperationalFailure (Either [Diagnostic] Response)) -> IO Response
 respond = finish . fmap (fmap (either refusal id))

@@ -37,41 +37,48 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     const file = path.join(target, name);
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
+  fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `module Tasks where
+import Kyyn.Agentic (Flow)
+import Kyyn.Recipe
+import Kyyn.Workspace.FactEdits (RootEdit)
+import qualified Agentic as A
+import qualified RootV2
+sync :: Flow (RecipeInput RootV2.Root () ()) (RecipeProposal RootEdit ())
+sync = A.act (\\_ -> error "Manual frozen proposal must not execute the flow")
+`);
   fs.writeFileSync(path.join(initial.path, 'change/Evolution.hs'), `module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
+import qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks
 import qualified RootV1 as Before
 import qualified RootV2 as After
 evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = evolve (Rationale "Start tracking tasks" [])
   (onFacts (\\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Teach curation" []) (within recipes (append (Fact (FactId "sync") (OpenAgent "Review tasks"))))
+  >=> edit (Rationale "Teach recipe" []) (createRecipe (RecipeId "sync") Tasks.sync ())
 `);
   cli(['evolution', 'check', initial.id]);
   accept(initial.id);
   const beforeSchema = fs.readFileSync(path.join(kb, 'root/src/RootV2.hs'), 'utf8');
   const beforeRecipes = fs.readFileSync(path.join(kb, 'root/recipes.dhall'), 'utf8');
-  const draft = cli(['evolution', 'new', 'frozen-proposal']).result;
+  const draft = cli(['evolution', 'new', 'frozen-proposal', '--recipe', 'sync']).result;
   const dataPath = path.join(draft.path, 'change/proposal.dhall');
   const proposal = `let Edit = < Append : { id : Text, value : { title : Text } }
                  | Replace : { factId : Text, replacement : { title : Text } }
                  | Remove : Text >
 let RootEdit = < Edit_todos : Edit >
-let Ack = < EntireBatch : { plugin : Text, instance : Text, fetch : Text }
-          | IndividualRecords : { scope : { plugin : Text, instance : Text, fetch : Text }, ids : List Text } >
 in { steps = [ { rationale = { explanation = "Record useful work", evidence =
        [ { producer = "notes", connector = "inbox", source = "file:///tasks", references = [ "todo-1" ] } ] }
      , edits = [ RootEdit.Edit_todos (Edit.Append { id = "todo-1", value = { title = "Do this" } }) ] } ]
-   , curation = { recipe = "sync", handled = [] : List Ack } }
+   , state = {=} }
 `;
   fs.writeFileSync(dataPath, proposal);
   fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `module Evolution where
 import Kyyn.Workspace.Evolution
-import Kyyn.Workspace.FactEdits
-import qualified KyynFrozenProposal
+import KyynFrozenProposal (frozen)
 import qualified RootV2
-evolution :: Evolution (KnowledgeBase RootV2.Root) (KnowledgeBase RootV2.Root)
-evolution = either error proposalEvolution KyynFrozenProposal.proposal
+evolution :: RecipeEvolution RootV2.Root ()
+evolution = frozen
 `);
   cli(['evolution', 'check', draft.id]);
   const reviewed = cli(['evolution', 'show', draft.id]);

@@ -52,7 +52,7 @@ try {
   git(repo, 'init', '-q', '-b', 'main');
   const initial = commit(repo);
   const workspace = path.join(kb, 'evolutions', id);
-  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${initial}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft }`);
+  write(path.join(workspace, 'manifest.dhall'), `{ before.revision = "${initial}", name = "install", explanation = "", state = < Draft | Ready | Accepted >.Draft, kind = < AdHoc | RecipeBased : Text >.AdHoc }`);
   write(path.join(workspace, 'target/kb.dhall'), 'Unfinished target');
   packageAt(path.join(upstream, 'plugins/local'), 'local', '# Local λ\n');
   packageAt(path.join(upstream, 'plugins/unguided'), 'unguided', null);
