@@ -10,7 +10,7 @@ import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionI
 import Kyyn.Domain.Git (gitRevision, gitUrl)
 import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
-import Kyyn.Domain.Evidence (FetchId(..))
+import Kyyn.Domain.Evidence (FetchId(..), SyncMode(..))
 import Kyyn.Domain.Curation (RecipeId(..))
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Domain.Secret (secretName)
@@ -110,9 +110,11 @@ main = do
   succeeds ["plugin","connector","schema","show","local-file","--evolution","abc123"]
     (Invocation selected Human (Plugin (Connector (ShowConnectorSchema localFile (Just identity)))))
   succeeds ["evidence","fetch","local-file","sales"]
-    (Invocation selected Human (Evidence (FetchConnector localFile sales Nothing)))
+    (Invocation selected Human (Evidence (FetchConnector localFile sales Nothing ContinueSync)))
   succeeds ["evidence","fetch","local-file","sales","--options","{ limit = 3 }"]
-    (Invocation selected Human (Evidence (FetchConnector localFile sales (Just "{ limit = 3 }"))))
+    (Invocation selected Human (Evidence (FetchConnector localFile sales (Just "{ limit = 3 }") ContinueSync)))
+  succeeds ["evidence","fetch","local-file","sales","--restart-sync"]
+    (Invocation selected Human (Evidence (FetchConnector localFile sales Nothing RestartSync)))
   succeeds ["plugin","connector","show","local-file","sales"]
     (Invocation selected Human (Plugin (Connector (ShowConnector localFile sales Nothing))))
   succeeds ["plugin","connector","login","local-file","sales"]

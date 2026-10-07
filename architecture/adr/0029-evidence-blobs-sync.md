@@ -217,8 +217,9 @@ publication; a failed replacement leaves the old stored capture untouched and
 incompatible for new reads. A failed/cancelled/conflicting fetch does not advance
 the position. Even a no-change fetch may publish a new position.
 
-The stored position continues the previous sync; after changing an instance's source
-configuration, an agent may clear that instance's evidence and position to start fresh.
+The stored position continues the previous sync; `evidence fetch --restart-sync`
+passes `Nothing` once while retaining evidence for comparison, whereas `evidence clear`
+deletes evidence and position. For stateless connectors restart is a reported no-op.
 Provider pagination, cursor expiry/reset and endpoint-specific reconciliation are
 plugin logic. Publish only the final successful continuation, not intermediate
 page links. Treat stored position as private acquisition data: no normal history

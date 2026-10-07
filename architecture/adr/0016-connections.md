@@ -268,10 +268,12 @@ data GraphAuth
 
 data CalendarConfig = CalendarConfig
   { auth :: GraphAuth, mailbox :: Text, calendarId :: Maybe Text
-  , sharedCalendar :: Bool }
+  , sharedCalendar :: Bool, windowStart :: Text, windowEnd :: Text }
 ```
 
-`Nothing` selects the mailbox's default calendar. An explicit mailbox works
+`Nothing` selects the mailbox's default calendar; supported scope and window
+semantics belong to [ADR 0014](0014-evidence.md#microsoft-graph-calendar-acquisition).
+An explicit mailbox works
 with both delegated and application tokens; do not rely on `/me` for app-only
 access. Configuration names secret keys, never credential values. Pure config
 validation checks required fields and names, not consent or remote connectivity.

@@ -5,7 +5,7 @@ module Kyyn.Domain.Evidence
   , EvidenceSnapshotRef(..), EvidenceProblem(..), ChangeKind(..), EvidenceChangeMarker(..), EvidenceChangeSummary(..)
   , applyChanges, recordChanges, fetchesSince, summarizeChanges, validateState
   , evidenceProblemDiagnostic, FetchSummary(..), summarizeFetch
-  , EvidenceCapture(..), captureEvidence, resolveCapture
+  , EvidenceCapture(..), captureEvidence, resolveCapture, SyncMode(..)
   ) where
 
 import Control.Monad (foldM, unless)
@@ -18,6 +18,7 @@ import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
 
 newtype FetchId = FetchId String deriving (Eq, Show)
+data SyncMode = ContinueSync | RestartSync deriving (Eq, Show)
 data ConnectorInstanceRef = ConnectorInstanceRef PluginName String deriving (Eq, Show)
 data EvidenceProducer = EvidenceProducer PackageIdentity ContractId deriving (Eq, Show)
 data Fetch = Fetch

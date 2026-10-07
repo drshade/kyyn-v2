@@ -1,9 +1,10 @@
 # Microsoft Graph calendar
 
-The `Calendar` source reads one user's default or named calendar. It fetches single
-events and recurring-series masters, not expanded recurrence instances. Event IDs
-identify evidence; Graph's `changeKey` identifies updates. The `event` method reads
-the latest captured event without contacting Microsoft.
+The `Calendar` source synchronizes one user's default calendar within a configured
+date window, including recurring occurrences. Event IDs
+identify evidence; Graph's returned ETag (or `changeKey`) identifies updates. The `event` method reads
+the latest captured event without contacting Microsoft. Descriptive fields omitted
+by Graph are empty; absent participant lists are empty and absent flags are false.
 
 ## Install and configure
 
@@ -25,7 +26,8 @@ let Auth =
       >
 let Connector =
       < Calendar :
-          { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool }
+          { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool
+          , windowStart : Text, windowEnd : Text }
       >
 in [ { name = "work"
      , binding = "workCalendar"
@@ -38,13 +40,17 @@ in [ { name = "work"
          , mailbox = "you@example.com"
          , calendarId = None Text
          , sharedCalendar = False
+         , windowStart = "2026-01-01T00:00:00Z"
+         , windowEnd = "2027-01-01T00:00:00Z"
          }
      } ]
 ```
 
 `mailbox` is explicit for both authentication modes. `calendarId = None Text`
-selects its default calendar; use `Some "ID"` for a named calendar. Different
-instances may use different mailboxes/calendars and secret keys.
+selects its default calendar; named calendars are not supported by this delta API.
+Choose explicit `windowStart` and `windowEnd` instants for the meeting times you
+want to capture. The window does not slide automatically. Different instances may
+use different mailboxes, windows and secret keys.
 
 Check, review and accept the evolution:
 
@@ -100,35 +106,32 @@ kyyn-v2 --kb /path/to/kb evidence list microsoft-graph work
 kyyn-v2 --kb /path/to/kb plugin connector method execute microsoft-graph work event --input '"EVENT-ID"'
 ```
 
-An unfiltered fetch reads every page and emits additions, updates and removals.
-A failed page publishes nothing. Recurring series are not expanded; a listing
-is not a transactionally frozen view of a changing calendar.
+The first fetch reads the configured window. Later fetches use Graph's saved delta
+link to request changes. All pages must succeed before evidence and the new position
+are saved together. Removed entries disappear from the captured scope. An expired
+provider position triggers a fresh baseline.
 
-Optional inclusive last-modified bounds restrict upserts:
+The saved link continues the previous sync even if you change the instance config.
+To start fresh after changing its mailbox or window, restart the sync while keeping
+captured evidence for comparison:
 
 ```sh
-kyyn-v2 --kb /path/to/kb evidence fetch microsoft-graph work --options \
-  '{ modifiedFrom = Some "2026-09-01T00:00:00Z", modifiedTo = None Text }'
+kyyn-v2 --kb /path/to/kb evidence fetch microsoft-graph work --restart-sync
 ```
 
-Bounds accept calendar dates with seconds, optional fractional seconds, and `Z`
-or a numeric `+HH:MM`/`-HH:MM` offset. They refer to when an item changed, not when
-the meeting occurs. Both empty bounds select all upserts. Every fetch still downloads
-the full listing and detects removals against that whole list, never against only
-the selected upserts. Existing items outside the bounds remain captured. There is
-no automatic timestamp watermark; run without bounds to capture all current changes.
-
 HTTP 429/503 with numeric `Retry-After` pauses before retrying (at least one second).
+`evidence clear microsoft-graph work` instead deletes evidence and its position;
+the next fetch reports everything as new.
 Without a usable delay, fetch reports a retry-later error. Ctrl-C interrupts waits.
 
 ## Verification and provider documentation
 
 The `graph-calendar` test compiles the actual adapters under GHC and MicroHs and
 uses a recording provider for authentication, token rotation, pagination, throttling,
-date bounds and failed pages. Live Entra consent/tenant policy remains an opt-in
+delta continuation, duplicate IDs, removals, resets and failed pages. Live Entra consent/tenant policy remains an opt-in
 test with the user's own app and account.
 
-- [Calendar events and recurrence semantics](https://learn.microsoft.com/en-us/graph/api/calendar-list-events?view=graph-rest-1.0)
+- [Calendar delta synchronization](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0)
 - [Event IDs, changeKey and lastModifiedDateTime](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)
 - [Device-code authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)
 - [Application authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow)

@@ -1,7 +1,7 @@
 -- Actual Graph adapters under GHC/MicroHs with recording providers: auth modes,
--- polling, rotation, throttling, pagination and scoped/full acquisition failures.
+-- polling, rotation, throttling, pagination, delta continuation and reset failures.
 -- Includes 1,000 long-ID events with populated prior evidence, ordered deltas and
--- duplicate refusal under the broker's 20-second per-invocation timeout.
+-- last-copy duplicate handling under the broker's per-invocation timeout.
 -- No live credentials, consent or mailbox coverage.
 
 {-# LANGUAGE OverloadedStrings #-}
@@ -68,10 +68,10 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
   let inspect name = fmap fst <$> inspectDataType toolchain (map (repo </>) directories) name >>= right
   config <- inspect "MicrosoftGraph.Types.CalendarConfig"
   payload <- inspect "MicrosoftGraph.Types.Event"
-  options <- inspect "MicrosoftGraph.Types.CalendarFetch"
+  position <- inspect "MicrosoftGraph.Types.CalendarPosition"
   (derived,_) <- inspectPluginSignature toolchain (map (repo </>) directories) AcquisitionEntry "MicrosoftGraph.Calendar.fetch" >>= right
-  assert "Graph signature-derived contracts differ" (derived == FetchSignature config (Just options) payload)
-  fetchSources <- right (acquisitionSources config payload (Just options) "MicrosoftGraph.Calendar.fetch" sources)
+  assert "Graph signature-derived contracts differ" (derived == StatefulFetchSignature config Nothing payload position)
+  fetchSources <- right (statefulAcquisitionSources config payload Nothing position "MicrosoftGraph.Calendar.fetch" sources)
   loginAdapter <- right (loginSources config "MicrosoftGraph.Login.login" sources)
   (fetchPrograms,_) <- compileBoth temporary toolchain compiler "graph-fetch" fetchSources
   (loginPrograms,_) <- compileBoth temporary toolchain compiler "graph-login" loginAdapter
@@ -105,14 +105,11 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
       assert "retry delay" ("wait:2" `elem` trace)
       if device then assert "refresh not persisted before Graph read"
         (take 3 trace == ["get:refresh","token:refresh_token","put:refresh"]) else pure ()
-    (respond,_) <- provider False
-    let optionsValue = some (object ["modifiedFrom" .= some (String "2026-09-01T02:00:00+02:00"),"modifiedTo" .= none])
-    (filtered,_,_) <- brokerWith Normal respond program (input False optionsValue)
-    assert "filtered fetch lost full-list removals or missed inclusive offset" (tags filtered == Right ["Updated","Removed"])
+    deltaTests program
     (nullableResponder,_) <- provider False
     let nullable capability method args = if capability == "http" then do
           url <- get "url" args
-          if "graph.microsoft.com" `isInfixOf` url then pure (http 200 [] (object ["value" .= [nullableEvent]]))
+          if "graph.microsoft.com" `isInfixOf` url then pure (http 200 [] (deltaPage [nullableEvent]))
             else nullableResponder capability method args
           else nullableResponder capability method args
     (nullableResult,_,_) <- brokerWith Normal nullable program (input False none)
@@ -129,10 +126,10 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
     (failed,_,_) <- brokerWith Normal failedResponder program (input False none)
     assert "partial page produced delta" (case failed >>= either (const Nothing) Just . parseEither (withObject "result" (.: "tag")) of Just ("Left" :: String) -> True; _ -> False)
     (invalidResponder,invalidEvents) <- provider False
-    (invalid,_,_) <- brokerWith Normal invalidResponder program (input False
-      (some (object ["modifiedFrom" .= some (String "2026-02-30T00:00:00Z"),"modifiedTo" .= none])))
+    (invalid,_,_) <- brokerWith Normal invalidResponder program
+      (inputConfig (setField "windowStart" (String "2026-02-30T00:00:00Z") (configuration False)) none)
     assert "invalid timestamp accepted" (tags invalid /= Right [])
-    assert "invalid options caused authentication" . null =<< invalidEvents
+    assert "invalid window caused authentication" . null =<< invalidEvents
     (throttledResponder,throttledEvents) <- provider False
     let noDelay capability method args = if capability == "http" then do
           url <- get "url" args
@@ -149,25 +146,88 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
     assert "revoked refresh changed state" . (== ["get:refresh"]) =<< refreshEvents
     forM_ [False,True] $ \duplicate -> do
       large <- scaleProvider duplicate
-      (scaled,trace,status) <- brokerWith Normal large program (input False none)
+      (scaled,_,status) <- brokerWith Normal large program (input False none)
       assert "large calendar guest exit" (status == ExitSuccess)
-      if duplicate then do
-        assert "large calendar duplicate refused" (case resultError scaled of
-          Right message -> "duplicate IDs" `isInfixOf` message
-          _ -> False)
-        assert "duplicate calendar read prior evidence" (not (any ((== "evidence") . fst) trace))
-      else do
-        changes <- maybe (fail "missing scale result") (get "value") scaled
+      do
+        changes <- maybe (fail "missing scale result") (\result -> get "value" result >>= get "changes") scaled
         actual <- mapM (\change -> do
           tag <- get "tag" change
           value <- get "value" change
           key <- if tag == ("Removed" :: String) then right (parseEither parseJSON value) else get "id" value
           pure (tag,key)) (changes :: [Value])
-        let expected = [("New",scaleKey n) | n <- [1001..1100]] ++
+        let expected = [("New",scaleKey n) | n <- [if duplicate then 1002 else 1001 ..1100]] ++
               [("Updated",scaleKey n) | n <- reverse [1..100]] ++
+              [("New",scaleKey 1001) | duplicate] ++
               [("Removed",scaleKey n) | n <- reverse [901..1000]]
         assert "large calendar exact delta and source/prior order" (actual == expected)
   putStrLn "Graph calendar/authentication passed under GHC and MicroHs (recording provider, no live credentials)."
+
+deltaUrl :: String
+deltaUrl = "https://graph.microsoft.com/v1.0/calendarView/delta?$deltatoken=saved"
+
+deltaPage :: [Value] -> Value
+deltaPage entries = object ["value" .= entries,"@odata.deltaLink" .= deltaUrl]
+
+deltaTests :: CreateProcess -> IO ()
+deltaTests program = do
+  let prior = some (object ["deltaLink" .= deltaUrl])
+      removed key = object ["id" .= (key :: String),"@removed" .= object ["reason" .= ("deleted" :: String)]]
+      nextPage entries = object ["value" .= entries,"@odata.nextLink" .= ("https://graph.microsoft.com/page=2" :: String)]
+      trial replies arguments = do
+        (fallback,_) <- provider False
+        remaining <- newIORef replies
+        urls <- newIORef []
+        let respond capability method args = if capability == "http" then do
+              url <- get "url" args
+              if "graph.microsoft.com" `isInfixOf` url then do
+                modifyIORef' urls (++ [url])
+                pending <- readIORef remaining
+                case pending of
+                  [] -> fail "unexpected additional delta request"
+                  response:rest -> modifyIORef' remaining (const rest) >> pure response
+                else fallback capability method args
+              else if capability == "evidence" && method == "read" then do
+                key <- get "id" args
+                if key == ("unknown" :: String) then pure (success none) else fallback capability method args
+              else fallback capability method args
+        (result,_,status) <- brokerWith Normal respond program arguments
+        assert "delta guest failed" (status == ExitSuccess)
+        assert "delta skipped response pages" . null =<< readIORef remaining
+        visited <- readIORef urls
+        pure (result,visited)
+  (empty,urls) <- trial [http 200 [] (deltaPage [])] (input False prior)
+  assert "empty incremental fetch removed absent items" (tags empty == Right [] && urls == [deltaUrl])
+  returned <- maybe (fail "missing fetch result") (\value -> get "value" value >>= get "position" >>= get "deltaLink") empty
+  assert "final position lost" (returned == deltaUrl)
+  (removals,_) <- trial [http 200 [] (deltaPage [removed "gone",removed "unknown"])] (input False prior)
+  assert "explicit removal or unknown-ID handling wrong" (tags removals == Right ["Removed"])
+  (duplicate,_) <- trial
+    [http 200 [] (nextPage [event "changed" "stale" "2026-09-01T00:00:00Z"]),
+     http 200 [] (deltaPage [event "changed" "latest" "2026-09-01T00:00:00Z"])] (input False prior)
+  assert "duplicate delta emitted multiple changes" (tags duplicate == Right ["Updated"])
+  changes <- maybe (fail "missing changes") (\value -> get "value" value >>= get "changes") duplicate
+  fingerprint <- case changes :: [Value] of
+    [change] -> get "value" change >>= get "evidence" >>= get "fingerprint"
+    _ -> fail "expected one final duplicate"
+  assert "duplicate did not choose last copy" (fingerprint == ("latest" :: String))
+  (deletedLast,_) <- trial [http 200 [] (deltaPage [event "changed" "key" "2026-09-01T00:00:00Z",removed "changed"])] (input False prior)
+  assert "last tombstone lost" (tags deletedLast == Right ["Removed"])
+  let etagEvent = case event "changed" "unused" "2026-09-01T00:00:00Z" of
+        Object fields -> Object (KeyMap.insert "@odata.etag" (String "W/\"provider-version\"")
+          (foldr KeyMap.delete fields ["changeKey","organizer","attendees","isCancelled","isAllDay","type","lastModifiedDateTime"]))
+        value -> value
+  (etagOnly,_) <- trial [http 200 [] (deltaPage [etagEvent])] (input False prior)
+  assert "delta event without changeKey was rejected" (tags etagOnly == Right ["Updated"])
+  forM_ [410,404] $ \status -> do
+    (reset,visited) <- trial [http status [] (object ["error" .= object ["code" .= ("syncStateNotFound" :: String)]]),
+      http 200 [] (deltaPage [])] (input False prior)
+    assert "expired position did not rebaseline" (tags reset == Right ["Removed","Removed","Removed"] &&
+      case visited of [first,second] -> first == deltaUrl && "startDateTime=" `isInfixOf` second; _ -> False)
+  (failed,_) <- trial [http 410 [] (object []),http 500 [] (object [])] (input False prior)
+  assert "failed reset returned a publishable result" (case resultError failed of Right _ -> True; _ -> False)
+  (continued,continuedUrls) <- trial [http 200 [] (deltaPage [])]
+    (inputConfig (setField "mailbox" (String "changed@example.test") (configuration False)) prior)
+  assert "configuration change discarded explicit continuation" (tags continued == Right [] && continuedUrls == [deltaUrl])
 
 scaleKey :: Int -> String
 scaleKey n = replicate 140 'A' ++ replicate (10 - length suffix) '0' ++ suffix
@@ -187,7 +247,8 @@ scaleProvider duplicate = do
         modifyIORef' pages (+1)
         let entries = take 100 (drop (page*100) upstream)
             next = ["@odata.nextLink" .= ("https://graph.microsoft.com/page/" ++ show (page+1))
-              | (page+1)*100 < length upstream]
+              | (page+1)*100 < length upstream] ++
+              ["@odata.deltaLink" .= deltaUrl | (page+1)*100 >= length upstream]
         pure (http 200 [] (object (["value" .=
           [event (scaleKey n) "current" "2026-09-01T00:00:00Z" | n <- entries]] ++ next)))
     ("evidence","list") -> pure (success (toJSON (map scaleKey (reverse [1..1000]))))
@@ -203,10 +264,15 @@ configuration :: Bool -> Value
 configuration device = object ["auth" .= object ["tag" .= (if device then "DeviceCode" else "ClientSecret" :: String),
   "value" .= object (["tenant" .= ("tenant" :: String),"clientId" .= ("client" :: String)] ++
     [if device then "tokenKey" .= ("refresh" :: String) else "secretKey" .= ("client-secret" :: String)])],
-  "mailbox" .= ("user@example.test" :: String),"calendarId" .= none,"sharedCalendar" .= False]
+  "mailbox" .= ("user@example.test" :: String),"calendarId" .= none,"sharedCalendar" .= False,
+  "windowStart" .= ("2026-01-01T00:00:00Z" :: String),"windowEnd" .= ("2027-01-01T00:00:00Z" :: String)]
 
 input :: Bool -> Value -> Value
-input device options = object ["arguments" .= object ["config" .= configuration device,"options" .= options],"snapshot" .= ("prior" :: String)]
+input device = inputConfig (configuration device)
+
+inputConfig :: Value -> Value -> Value
+inputConfig config prior = object ["arguments" .= object ["input" .= config,"startedAt" .= ("2026-10-07T12:00:00Z" :: String),
+  "priorPosition" .= prior],"snapshot" .= ("prior" :: String)]
 
 provider :: Bool -> IO (String -> String -> Value -> IO Value, IO [String])
 provider failPage = do
@@ -249,7 +315,7 @@ provider failPage = do
             modifyIORef' requests (+1)
             count <- readIORef requests
             pure $ if count == 1 then http 429 [("Retry-After","2")] (object [])
-              else if "page=2" `isInfixOf` url then if failPage then http 500 [] (object []) else http 200 [] (object ["value" .= [event "changed" "new-key" "2026-09-01T00:00:00Z"]])
+              else if "page=2" `isInfixOf` url then if failPage then http 500 [] (object []) else http 200 [] (deltaPage [event "changed" "new-key" "2026-09-01T00:00:00Z"])
               else http 200 [] (object ["value" .= [event "new" "new-key" "2026-08-01T00:00:00Z",event "same" "same-key" "2026-08-01T00:00:00Z"],
                 "@odata.nextLink" .= ("https://graph.microsoft.com/v1.0/events?page=2" :: String)])
         ("evidence","list") -> pure (success (toJSON (["same","changed","gone"] :: [String])))
@@ -298,7 +364,8 @@ tags :: Maybe Value -> Either String [String]
 tags Nothing = Left "No result"
 tags (Just value) = parseEither (withObject "result" $ \o -> do
   tag <- o .: "tag"
-  if tag /= ("Right" :: String) then fail "Fetch failed" else o .: "value" >>= mapM (withObject "change" (.: "tag"))) value
+  if tag /= ("Right" :: String) then fail "Fetch failed" else o .: "value" >>= withObject "fetch result"
+    (\result -> result .: "changes" >>= mapM (withObject "change" (.: "tag")))) value
 resultError :: Maybe Value -> Either String String
 resultError Nothing = Left "No result"
 resultError (Just value) = parseEither (withObject "result" $ \o -> do

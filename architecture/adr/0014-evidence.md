@@ -175,54 +175,28 @@ watermark, and fetching remains independent of accepted recipe progress.
 
 ### Microsoft Graph calendar acquisition
 
-The first calendar connector captures event resources from one configured user
-calendar, not a calendarView of expanded recurring occurrences. Graph's
-[events collection](https://learn.microsoft.com/en-us/graph/api/calendar-list-events?view=graph-rest-1.0)
-contains single events and recurring-series masters. A
-[calendarView](https://learn.microsoft.com/en-us/graph/api/calendar-list-calendarview?view=graph-rest-1.0)
-instead expands occurrences in an event-time window. Its required start/end dates
-cannot implement a modified-time window. The connector must not claim that series
-master acquisition covers every occurrence exception or cancellation.
-
-Default acquisition paginates the full events collection and compares all returned
-items, with no timestamp cutoff derived from previous captures. The connector
-advertises optional per-fetch scope:
+The Calendar connector synchronizes the mailbox's default calendar through
+[calendarView delta](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0).
+Its configured `windowStart` and `windowEnd` are explicit, fixed, timezone-qualified
+ISO 8601 instants selecting meeting times, including expanded recurring occurrences.
+Reject invalid or inverted windows and non-default calendar IDs; there is no
+rolling window or second full-events acquisition path.
 
 ```haskell
-data CalendarFetch = CalendarFetch
-  { modifiedFrom :: Maybe Text, modifiedTo :: Maybe Text }
+newtype CalendarPosition = CalendarPosition { deltaLink :: Text }
+
+fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Event
+      -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition))
 ```
 
-Supplied bounds are timezone-qualified ISO 8601 instants compared inclusively
-against `lastModifiedDateTime`, independently of meeting start/end dates. Reject
-malformed or inverted bounds. Missing bounds are unbounded; `Nothing` options
-and an options record with both bounds absent select all upserts. Compare parsed
-instants, not arbitrary timestamp strings. These options limit additions/updates
-only; they do not restrict removal detection or discard already captured items
-merely because those items fall outside the bounds.
-
-Paginate the calendar's events collection and filter by modified time in plugin
-code. This initial choice requires no undocumented server-side timestamp-filter
-support and makes no remote-query efficiency claim. Every fetch reads the whole
-calendar: supplied options narrow captured upserts, not what is downloaded. Follow every
-returned next page before publishing a batch; a page failure publishes nothing. The payload
-retains the provider modification time. There is no separate persisted fetch clock.
-
-Use the provider event ID within the configured instance and its `changeKey` as
-the opaque change token. Keep returned source links for citations. Graph describes
-these fields in its [event resource contract](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
-Capture a stable projection of the event, without fetch-time fields. Emit New for
-an absent ID, Updated for a different token, and nothing for an unchanged token.
-A scoped re-fetch reads current provider values, not historical versions.
-
-After the full listing succeeds, emit Removed for previously captured IDs absent
-from that complete, unfiltered listing, even when upsert options were supplied.
-Never compare captured IDs against only the option-selected subset. A returned
-cancellation field is an update. This mirrors the selected event-resource
-collection, not expanded recurring occurrences or a transactionally frozen view
-of the remote calendar. Provider ID behavior and changes during pagination need
-live verification; fake-server tests do not establish those properties.
-Authentication is owned by ADR 0016, not this fetch contract.
+The first fetch establishes a baseline. Subsequent fetches follow the saved delta
+link verbatim, including its encoded window. Follow all next links before publishing
+evidence and the final delta link together, as specified in [ADR 0029](0029-evidence-blobs-sync.md).
+Use event IDs and `@odata.etag` (or `changeKey` when omitted) for additions/updates, retaining source links and
+`lastModifiedDateTime` in the payload. For repeated IDs in a round, the last copy wins.
+An `@removed` entry removes a captured ID from this source's scope; unknown IDs do nothing.
+HTTP 410 or `syncStateNotFound` restarts a full baseline, reconciling prior IDs against
+that complete result; failed rounds publish nothing. Authentication belongs to ADR 0016.
 
 ### Microsoft Graph mail, meeting artifacts and files
 
@@ -920,16 +894,13 @@ Accepted KB facts and curation progress remain owned by evolutions.
 
 ## Verification
 
-For Graph acquisition, cover initial/empty captures, default full comparison,
-inclusive equal-time bounds, edits to old meetings, invalid options, pagination
-failure, unchanged tokens and real removals. Check that an item outside supplied
-bounds is not falsely removed, while an ID absent from the unfiltered listing is
-removed. Verify option discovery, pre-execution type refusal, unchanged no-options
-connector signatures and supplied-option history round trips. Failed batches leave
-evidence and history unchanged. Exercise throttling waits and cancellation. Run
+For Graph acquisition, cover initial/empty captures, incremental updates, removals,
+duplicate IDs, explicit restart, provider reset and failed pages. Failed batches leave
+evidence and position unchanged. Verify option discovery and pre-execution type
+refusal on connectors that advertise options. Exercise throttling waits and cancellation. Run
 the same guest under GHC and MicroHs with recording HTTP/secret handlers, then the
-installed CLI against a fake server. Live calendar checks must distinguish series
-masters from occurrences and verify the advertised modified-time behavior.
+installed CLI against a fake server. Live calendar checks must verify baseline and
+incremental acquisition within the configured occurrence window.
 
 Exercise new/updated/removed/unchanged files, stable content fingerprints, failed
 acquisition and stale-base publication. After several updates, inspect stored Dhall:

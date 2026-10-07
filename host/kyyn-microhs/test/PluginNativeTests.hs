@@ -63,18 +63,29 @@ statefulTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "stateful-source"
       producer = EvidenceProducer package (contractId payload)
       config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
-      fetch = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
-        fetchEvidence instanceRef package payload program config Nothing (Just position) Nothing
+      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
+        fetchEvidence instanceRef package payload program config Nothing (Just position) mode Nothing
       load = runStore kb (beginFetch instanceRef producer payload (Just position)) >>= right
-  first <- fetch >>= right
+  first <- fetch ContinueSync >>= right
   FetchBaseline _ base _ stored <- load
   assert "stateful acquisition did not persist its position" (base == Just (snapshotId first) && case stored of
     Just (CheckedValue _ value) -> "first:" `Text.isInfixOf` Text.pack (show value)
     _ -> False)
-  second <- fetch >>= right
+  second <- fetch ContinueSync >>= right
   FetchBaseline _ next _ updated <- load
   assert "stateful acquisition did not resume its prior position" (next == Just (snapshotId second) && first /= second &&
     case updated of Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 2; _ -> False)
+  savedPosition <- maybe (fail "Missing prior position") pure updated
+  let preserved = Evidence (EvidenceFingerprint "preserved") []
+        (CheckedValue (contractId payload) (object ["item" .= ("keep me" :: String)]))
+  _ <- runStore kb (publishFetchWithPosition instanceRef producer payload next Nothing
+    [NewEvidence (EvidenceId "preserved") preserved] (Just (position,savedPosition))) >>= right
+  _ <- fetch RestartSync >>= right
+  FetchBaseline _ _ capture restarted <- load
+  assert "restart did not withhold position" (case restarted of
+    Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 1; _ -> False)
+  assert "restart discarded existing evidence" (case capture of
+    Just (CurrentEvidence _ items) -> items == [(EvidenceId "preserved",preserved)]; _ -> False)
   where snapshotId (EvidenceSnapshotRef _ _ identity) = identity
 
 nativeTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
@@ -95,7 +106,7 @@ nativeTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
-        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing Nothing
+        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing ContinueSync Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
@@ -184,7 +195,7 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noNetwork $ noFiles $ recordAcquisition currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing Nothing)
+            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -196,7 +207,7 @@ nativeTests temporary toolchain configType payloadType program = do
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
       noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
-        (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing (Just "True"))
+        (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input, persisted markers, unchanged files and failure atomicity passed."
 

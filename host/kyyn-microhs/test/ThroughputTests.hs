@@ -33,7 +33,7 @@ import Kyyn.Plumbing.Capability.FileSystem (readTree)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
-import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources)
+import Kyyn.Plumbing.Protocol.PluginInvocation (statefulAcquisitionSources)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
@@ -62,12 +62,12 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
   sources <- filter (isSuffixOf ".hs" . relativeName . fst) . concatMap files <$> mapM load directories
   configType <- inspect "MicrosoftGraph.Types.CalendarConfig"
   payloadType <- inspect "MicrosoftGraph.Types.Event"
-  optionsType <- inspect "MicrosoftGraph.Types.CalendarFetch"
-  adapter <- right (acquisitionSources configType payloadType (Just optionsType) "MicrosoftGraph.Calendar.fetch" sources)
+  positionType <- inspect "MicrosoftGraph.Types.CalendarPosition"
+  adapter <- right (statefulAcquisitionSources configType payloadType Nothing positionType "MicrosoftGraph.Calendar.fetch" sources)
   (_,program) <- compileBoth temporary toolchain ghc "graph" adapter
   config <- right (checkContract configType (SchemaMetadata [] [] []))
   payload <- right (checkContract payloadType (SchemaMetadata [] [] []))
-  options <- right (checkContract optionsType (SchemaMetadata [] [] []))
+  position <- right (checkContract positionType (SchemaMetadata [] [] []))
   compiler <- GuestToolchain <$> right (directoryScope toolchain)
   plugin <- right (pluginName "microsoft-graph")
   forM_ [35,100] $ \pages -> do
@@ -82,7 +82,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     start <- getMonotonicTimeNSec
     outcome <- runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $
       recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ runEvidenceAcquisition $
-        fetchEvidence instanceRef package payload program (CheckedValue (contractId config) configuration) (Just options) Nothing Nothing
+        fetchEvidence instanceRef package payload program (CheckedValue (contractId config) configuration) Nothing (Just position) ContinueSync Nothing
     _ <- right outcome
     published <- getMonotonicTimeNSec
     current <- runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "No published capture") pure
@@ -115,7 +115,8 @@ recordHttp total cursor bytes = interpret $ \_ (Http.SendHttp (Http.HttpRequest 
       unless (page < total) (error "Unexpected extra provider request")
       liftIO (modifyIORef' cursor (+1))
       pure (object (["value" .= [event n | n <- [page*100+1 .. (page+1)*100]]] ++
-        ["@odata.nextLink" .= ("https://graph.microsoft.com/page/" <> Text.pack (show (page+1))) | page+1 < total]))
+        ["@odata.nextLink" .= ("https://graph.microsoft.com/page/" <> Text.pack (show (page+1))) | page+1 < total] ++
+        ["@odata.deltaLink" .= ("https://graph.microsoft.com/delta" :: String) | page+1 == total]))
   let body = Lazy.toStrict (encode value)
   liftIO (modifyIORef' bytes (+ Bytes.length body))
   pure (Right (Http.HttpResponse 200 [] (Text.decodeUtf8 body)))
@@ -123,7 +124,8 @@ recordHttp total cursor bytes = interpret $ \_ (Http.SendHttp (Http.HttpRequest 
 configuration :: Value
 configuration = object ["auth" .= object ["tag" .= ("ClientSecret" :: Text.Text),"value" .= object
   ["tenant" .= ("fixture" :: Text.Text),"clientId" .= ("fixture" :: Text.Text),"secretKey" .= ("fixture" :: Text.Text)]],
-  "mailbox" .= ("fixture@example.invalid" :: Text.Text),"calendarId" .= object ["tag" .= ("None" :: Text.Text)],"sharedCalendar" .= False]
+  "mailbox" .= ("fixture@example.invalid" :: Text.Text),"calendarId" .= object ["tag" .= ("None" :: Text.Text)],"sharedCalendar" .= False,
+  "windowStart" .= ("2026-01-01T00:00:00Z" :: String),"windowEnd" .= ("2027-01-01T00:00:00Z" :: String)]
 
 itemId :: Int -> Text.Text
 itemId n = "event-" <> Text.pack (show n)

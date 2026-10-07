@@ -211,6 +211,10 @@ bulk ids = do
   assert(!JSON.stringify(listedFirst).includes('sales evidence'));
   if (configurationSmoke) {
     assert.equal(history('sales').selection.fetch, first);
+    const restarted = cli(['evidence', 'fetch', 'local-file', 'sales', '--restart-sync']);
+    assert(restarted.diagnostics.some(d => d.code === 'plugin.sync-stateless'));
+    assert.deepEqual(current('sales').items, listedFirst.items);
+    assert.equal(history('sales').fetches.at(-1).changeCount, 0);
     assert(fs.existsSync(path.join(kb, '.kyyn/evidence')));
     assert(!fs.existsSync(path.join(checkout, '.kyyn/evidence')));
     assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);

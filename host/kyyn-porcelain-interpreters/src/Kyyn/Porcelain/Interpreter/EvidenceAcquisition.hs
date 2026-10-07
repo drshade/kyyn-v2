@@ -26,7 +26,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
 runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
-runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract positionContract supplied) -> runExceptT $ do
+runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
   (arguments,optionsText) <- case (optionsContract,supplied) of
     (Nothing,Nothing) -> pure (configValue,Nothing)
@@ -44,7 +44,8 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package paylo
         Nothing -> arguments
         Just _ -> object ["input" .= arguments,"startedAt" .= startedAt,"priorPosition" .=
           maybe (object ["tag" .= ("None" :: String)])
-            (\(CheckedValue _ value) -> object ["tag" .= ("Some" :: String),"value" .= value]) position]
+            (\(CheckedValue _ value) -> object ["tag" .= ("Some" :: String),"value" .= value])
+            (case mode of ContinueSync -> position; RestartSync -> Nothing)]
   result <- ExceptT (executeAcquisition program input prior)
   (delta,savedPosition) <- case positionContract of
     Nothing -> do
