@@ -10,14 +10,14 @@ import Kyyn.Domain.Curation (RecipeId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
-import Kyyn.Domain.Recipe (DescriptionFormat)
+import Kyyn.Domain.Recipe (DescriptionFormat, RecipeDefinition(..))
 import Kyyn.Domain.Root (SourceRoot)
 import Kyyn.Porcelain.Capability.Recipe (findRecipeAt)
 import Kyyn.Porcelain.Capability.RecipeStore (RecipeStore)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadSourceAt)
 import Kyyn.Porcelain.Capability.RootStore (rootLocation)
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef)
+import Kyyn.Types.KnowledgeBase (FlowEntryRef)
 
 data RecipeInspection :: Effect where
   DescribeRecipe :: SourceRoot -> FlowEntryRef -> DescriptionFormat
@@ -34,8 +34,8 @@ describeRecipeAt :: (RecipeInspection :> es, RecipeStore :> es, RootOpening :> e
 describeRecipeAt kb@(KnowledgeBase repository _) revision recipe format = runExceptT $ do
   Fact _ definition <- ExceptT (findRecipeAt kb revision recipe)
   entry <- case definition of
-    ClosedAgent value -> pure value
-    OpenAgent _ -> throwE [errorDiagnostic "recipe.open-agent"
+    ClosedRecipe value -> pure value
+    OpenRecipe _ _ -> throwE [errorDiagnostic "recipe.open-agent"
       "Open-agent recipes have instructions, not a flow. Use root recipe show NAME to read them."]
   location <- either (throwE . pure . errorDiagnostic "kb.path") pure (rootLocation kb)
   source <- ExceptT (loadSourceAt repository revision (Subtree location))

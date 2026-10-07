@@ -96,6 +96,8 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
     contract <- right (checkContract (Algebraic (name ++ ".State") []
       [Constructor (name ++ ".State") ((Just "reviewed",ListType StringType):extra)]) (SchemaMetadata [] [] []))
     files <$> right (recipeTypeBinding ("Kyyn.Workspace." ++ endpoint ++ ".RecipeTypes." ++ name ++ ".State") (name ++ ".State") contract)
+  unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  unitBinding <- right (recipeTypeBinding "CheckedUnit" "()" unit)
   metadataBindings <- renamedBindings "Metadata" before renamed
   sameBindings <- renamedBindings "Unchanged" before before
   support <- sequence
@@ -107,7 +109,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
      [load "vendor/transformers" name | name <- ["Control/Monad/Signatures.hs","Control/Monad/Trans/Class.hs","Control/Monad/Trans/Reader.hs","Control/Monad/Trans/State/Strict.hs"]] ++
      [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let identitySource = Text.encodeUtf8 (Text.replace "module Evolution where" "module Identity where" (Text.decodeUtf8 (identityEvolutionSource "SchemaV1.Root")))
-      captured = (path "Identity.hs",identitySource) : authored ++ support ++ recipeBindings ++ files bindings ++ files metadataBindings ++ files sameBindings
+      captured = (path "Identity.hs",identitySource) : authored ++ support ++ recipeBindings ++ files unitBinding ++ files bindings ++ files metadataBindings ++ files sameBindings
       compileGuestFiles entries = do
         sources <- right (guestSources (path "Proof.hs") entries)
         runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestCompilation toolchain Nothing $ compileGuest sources
@@ -134,7 +136,7 @@ integration before renamed after bindings = withSystemTempDirectory "kyyn-evolut
   case replies of
     [Right observation@(EvolutionObservation _ (StepObservation _ (ObservedRoot _ input) _ : _) _), Left refusal] -> do
       (_,EvolutionReport _ reports _) <- right (runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport before input after observation)
+        checkEvolutionReport [] before input after observation)
       unless (length reports == 3 && all (\(StepReport _ changes) -> length changes == 1) reports)
         (fail "Guest observations did not derive the three real fact changes")
       unless (refusal == EvolutionFailure [Diagnostic Error "evolution.refused" "Cannot reconcile λ"

@@ -12,10 +12,12 @@ import Effectful (runPureEff)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.EvolutionReport
+import Kyyn.Domain.Evolution (evolutionId)
 import qualified Kyyn.Types.Curation as Curation
 import Kyyn.Plumbing.Protocol.Curation (curationValue)
 import Kyyn.Plumbing.Protocol.Recipes (knowledgeBaseValue)
-import qualified Kyyn.Types.KnowledgeBase as KB
+import qualified Kyyn.Domain.Recipe as KB
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Domain.Root (CheckedValue(..))
 import Kyyn.Types.Diagnostic
 import Kyyn.Types.Evolution
@@ -26,6 +28,7 @@ import Kyyn.Porcelain.Capability.EvolutionReport
 import Kyyn.Porcelain.Interpreter.RootStore
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Protocol.Evolution (decodeEvolutionReply)
+import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
 
 main :: IO ()
 main = do
@@ -39,7 +42,7 @@ main = do
       step c a d b = StepObservation rationale (observed c a) (observed d b)
       check source value target steps output = fmap (\(KB.KnowledgeBase result _,report) -> (result,report)) $
         runPureEff . runDhallHandling . runRootStore $
-          checkEvolutionReport source (KB.KnowledgeBase value []) target (EvolutionObservation (KB.KnowledgeBase output []) steps Nothing)
+          checkEvolutionReport [] source (KB.KnowledgeBase value []) target (EvolutionObservation (KB.KnowledgeBase output []) steps Nothing)
       changed before after identifier = FactChange "todos" (FactId identifier) before after
       recorded c value = Just (RecordedFact c value)
   (checked, report) <- right (check old input old [step old input old edited] edited)
@@ -92,13 +95,55 @@ main = do
     "Fact identity was not scoped to its collection"
   protocolTests
   recipeTests old new input migrated
+  stateTests old input
   putStrLn "Evolution chain, structural values, identity-based reports and protocol rejection checks passed."
+
+stateTests :: RootContract -> Value -> IO ()
+stateTests domain input = do
+  state <- right (checkContract (Algebraic "Review.State" []
+    [Constructor "Review.State" [(Just "seen",ListType StringType)]]) (SchemaMetadata [] [] []))
+  unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  ident <- right (evolutionId "000001-review")
+  let stored ids = KB.StoredRecipe (OpenAgent "Review") "Review.State" state
+        (CheckedValue (contractId state) (object ["seen" .= (ids :: [String])]))
+      first = stored []
+      next = stored ["one"]
+      kb values = KB.KnowledgeBase input [Fact (FactId name) (KB.proposedRecipe value) | (name,value) <- values]
+      before = kb [("mail",first),("calendar",next)]
+      after = kb [("mail",next),("calendar",next)]
+      rationale = Rationale "Remember reviewed mail" []
+      observed = ObservedRoot (contractFingerprint (contractId (rootSchema domain)))
+      run = runPureEff . runDhallHandling
+      check contracts a b = run . runRootStore $ checkEvolutionReport contracts domain a domain
+        (EvolutionObservation b [StepObservation rationale (observed a) (observed b)] Nothing)
+      catalog = [("Review.State",state),("()",unit)]
+  (_,report) <- right (check catalog before after)
+  assert (report == EvolutionReport [] [StepReport rationale
+    [RecipeChange (FactId "mail") (Just first) (Just next)]] Nothing)
+    "State-only changes mixed recipes sharing the same type"
+  bytes <- right (run (encodeEvolutionRecord ident domain domain report))
+  restored <- right (run (decodeEvolutionRecord bytes)) >>= right
+  assert (restored == (ident,domain,domain,report)) "Typed recipe state lost in report archive"
+  let unitState = KB.StoredRecipe (OpenAgent "Review") "()" unit (CheckedValue (contractId unit) (object []))
+  (_,migrated) <- right (check catalog before (kb [("mail",unitState),("calendar",next)]))
+  migrationBytes <- right (run (encodeEvolutionRecord ident domain domain migrated))
+  migrationAgain <- right (run (decodeEvolutionRecord migrationBytes)) >>= right
+  assert (migrationAgain == (ident,domain,domain,migrated)) "Heterogeneous state migration did not round trip"
+  rejected (check [] before after)
+  let invalid = KB.StoredRecipe (OpenAgent "Review") "Review.State" state
+        (CheckedValue (contractId state) (String "not a record"))
+  rejected (check catalog before (kb [("mail",invalid)]))
+  (_,reordered) <- right (check catalog before (kb [("calendar",next),("mail",first)]))
+  assert (reordered == EvolutionReport [] [StepReport rationale []] Nothing)
+    "Recipe ordering produced a phantom state change"
 
 recipeTests :: RootContract -> RootContract -> Value -> Value -> IO ()
 recipeTests beforeContract afterContract input migrated = do
-  let first = KB.OpenAgent "Read todos"
-      updated = KB.OpenAgent "Read todos and explain changes"
-      entry value = Fact (FactId "syncTodos") value
+  unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  let stored method = KB.StoredRecipe method "()" unit (CheckedValue (contractId unit) (object []))
+      first = stored (OpenAgent "Read todos")
+      updated = stored (OpenAgent "Read todos and explain changes")
+      entry value = Fact (FactId "syncTodos") (KB.proposedRecipe value)
       before = KB.KnowledgeBase input [entry first]
       after = KB.KnowledgeBase input [entry updated]
       empty = KB.KnowledgeBase input []
@@ -106,14 +151,14 @@ recipeTests beforeContract afterContract input migrated = do
       observed c value = ObservedRoot (contractFingerprint (contractId (rootSchema c))) value
       step c a d b = StepObservation why (observed c a) (observed d b)
       check initial finalContract steps final = runPureEff . runDhallHandling . runRootStore $
-        checkEvolutionReport beforeContract initial finalContract (EvolutionObservation final steps Nothing)
+        checkEvolutionReport [("()",unit)] beforeContract initial finalContract (EvolutionObservation final steps Nothing)
       same initial final = check initial beforeContract [step beforeContract initial beforeContract final] final
       expected a b = EvolutionReport [] [StepReport why [RecipeChange (FactId "syncTodos") a b]] Nothing
   (_,added) <- right (same empty before)
   assert (added == expected Nothing (Just first)) "Recipe addition lost identity or instructions"
   (_,edited) <- right (same before after)
   assert (edited == expected (Just first) (Just updated)) "Recipe edit absent from report"
-  let closed = KB.ClosedAgent (KB.FlowEntryRef "Tasks.reconcile")
+  let closed = stored (ClosedAgent (FlowEntryRef "Tasks.reconcile"))
   (_,converted) <- right (same before (KB.KnowledgeBase input [entry closed]))
   assert (converted == expected (Just first) (Just closed)) "Recipe constructor change absent from report"
   (_,removed) <- right (same before empty)
@@ -122,7 +167,7 @@ recipeTests beforeContract afterContract input migrated = do
   assert (identity == EvolutionReport [] [] Nothing) "Unchanged recipes created changes"
   rejected (check before beforeContract [] after)
   rejected (check before beforeContract [step beforeContract empty beforeContract after] after)
-  forM_ [[entry first,entry updated], [Fact (FactId "bad-name") first]] $ \entries -> do
+  forM_ [[entry first,entry updated], [Fact (FactId "bad-name") (KB.proposedRecipe first)]] $ \entries -> do
     let invalid = KB.KnowledgeBase input entries
     rejected (same before invalid)
     rejected (check before beforeContract

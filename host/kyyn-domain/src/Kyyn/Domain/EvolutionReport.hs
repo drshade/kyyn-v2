@@ -11,11 +11,11 @@ import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Types.Evolution (Rationale)
 import Kyyn.Types.Fact (FactId)
 import Kyyn.Types.Curation (Curation)
-import Kyyn.Types.KnowledgeBase (KnowledgeBase, Recipe)
+import Kyyn.Domain.Recipe (KnowledgeBase, ProposedRecipe, StoredRecipe)
 
-data ObservedRoot = ObservedRoot String (KnowledgeBase Value) deriving (Eq, Show)
+data ObservedRoot = ObservedRoot String (KnowledgeBase Value ProposedRecipe) deriving (Eq, Show)
 data StepObservation = StepObservation Rationale ObservedRoot ObservedRoot deriving (Eq, Show)
-data EvolutionObservation = EvolutionObservation (KnowledgeBase Value) [StepObservation] (Maybe Curation) deriving (Eq, Show)
+data EvolutionObservation = EvolutionObservation (KnowledgeBase Value ProposedRecipe) [StepObservation] (Maybe Curation) deriving (Eq, Show)
 
 data EvolutionReport = EvolutionReport [PluginChange] [StepReport] (Maybe Curation) deriving (Eq, Show)
 data PluginChange = PluginChange PluginName (Maybe PluginOrigin) (Maybe PluginOrigin) [RelativePath]
@@ -25,6 +25,6 @@ data StepReport = StepReport
 data Change = FactChange
   { collection :: String, fact :: FactId
   , before :: Maybe RecordedFact, after :: Maybe RecordedFact
-  } | RecipeChange FactId (Maybe Recipe) (Maybe Recipe) deriving (Eq, Show)
+  } | RecipeChange FactId (Maybe StoredRecipe) (Maybe StoredRecipe) deriving (Eq, Show)
 data RecordedFact = RecordedFact
   { contract :: RootContract, value :: Value } deriving (Eq, Show)

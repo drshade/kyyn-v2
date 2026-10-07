@@ -26,3 +26,4 @@ cabal test agentic-contracts --test-show-details=direct
 cabal test model-tools --test-show-details=direct
 cabal test evolutions --test-show-details=direct
 cabal test workspace-evolutions --test-show-details=direct
+cabal test recipe-signatures --test-show-details=direct

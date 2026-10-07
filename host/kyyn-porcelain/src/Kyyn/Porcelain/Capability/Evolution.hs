@@ -6,7 +6,7 @@ import Kyyn.Domain.Git (LocalBranch, CommitMetadata)
 import Kyyn.Domain.Diagnostic (CheckResult(..), ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Publication (AcceptanceResult(..), AcceptanceProblem(..))
 import Kyyn.Domain.Root (Root(..))
-import qualified Kyyn.Types.KnowledgeBase as Value
+import qualified Kyyn.Domain.Recipe as Value
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Porcelain.Capability.Curation (resolveCuration)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)

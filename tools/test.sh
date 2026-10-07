@@ -38,6 +38,7 @@ cabal test cli-adapters --test-show-details=direct
 cabal test guest-catalogue --test-show-details=direct
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"
 node --check tools/test-initialization.mjs
+node --check tools/test-recipe-state.mjs
 node --check tools/test-plugin-install.mjs
 cabal test processes --test-show-details=direct
 cabal test frames --test-show-details=direct
@@ -60,6 +61,7 @@ cabal test metadata --test-options=--codec-only --test-show-details=direct
 cabal test queries --test-options=--pure --test-show-details=direct
 cabal test evolution-core --test-show-details=direct
 cabal test evolution-reports --test-show-details=direct
+cabal test recipe-state --test-show-details=direct
 cabal test evolutions --test-options=--pure --test-show-details=direct
 if [[ "${1:-}" == --full ]]; then
   bash tools/test-guest.sh

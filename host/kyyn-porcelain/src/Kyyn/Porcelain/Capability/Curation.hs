@@ -12,7 +12,7 @@ import Kyyn.Domain.Plugin (pluginName)
 import qualified Kyyn.Types.Curation as Declaration
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore, resolveEvidenceCapture)
 
-resolveCuration :: EvidenceStore :> es => [Fact Recipe] -> Maybe Declaration.Curation
+resolveCuration :: EvidenceStore :> es => [Fact recipe] -> Maybe Declaration.Curation
   -> CurationRegister -> Eff es (Either [Diagnostic] CurationRegister)
 resolveCuration _ Nothing register = pure (Right register)
 resolveCuration recipes (Just (Declaration.Curation recipe@(RecipeId name) handled)) register = runExceptT $ do

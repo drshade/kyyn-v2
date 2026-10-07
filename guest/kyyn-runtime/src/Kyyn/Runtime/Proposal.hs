@@ -1,6 +1,6 @@
-module Kyyn.Runtime.Proposal (proposalCodec) where
+module Kyyn.Runtime.Proposal (proposalCodec, recipeProposalCodec) where
 
-import Kyyn.Evolution.Proposal (ProposedCuration(..), ProposedStep(..))
+import Kyyn.Evolution.Proposal (ProposedCuration(..), ProposedStep(..), RecipeProposal(..))
 import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..))
 import Kyyn.Types.Curation
@@ -14,10 +14,23 @@ proposalCodec edits = Codec encode decode
     decode value = do
       values <- fields ["steps","curation"] value
       ProposedCuration <$> field "steps" (listCodec stepCodec) values <*> field "curation" curationCodec values
-    stepCodec = Codec encodeStep decodeStep
-    encodeStep (ProposedStep why operations) = record
+    stepCodec = proposedStepCodec edits
+
+recipeProposalCodec :: Codec edits -> Codec state -> Codec (RecipeProposal edits state)
+recipeProposalCodec edits state = Codec encode decode
+  where
+    encode (RecipeProposal steps next) = record
+      [("steps",encodeWith (listCodec (proposedStepCodec edits)) steps),("state",encodeWith state next)]
+    decode value = do
+      values <- fields ["steps","state"] value
+      RecipeProposal <$> field "steps" (listCodec (proposedStepCodec edits)) values <*> field "state" state values
+
+proposedStepCodec :: Codec edits -> Codec (ProposedStep edits)
+proposedStepCodec edits = Codec encode decode
+  where
+    encode (ProposedStep why operations) = record
       [("rationale",encodeWith rationaleCodec why),("edits",encodeWith (listCodec edits) operations)]
-    decodeStep value = do
+    decode value = do
       values <- fields ["rationale","edits"] value
       ProposedStep <$> field "rationale" rationaleCodec values <*> field "edits" (listCodec edits) values
 

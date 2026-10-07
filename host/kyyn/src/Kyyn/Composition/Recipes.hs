@@ -36,16 +36,15 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
   Cli.ShowRecipe recipe -> finish $ runBase host . runRecipeStore $
     either refusal recipeResult <$> findRecipeAt kb revision recipe
   Cli.DescribeRecipe recipe format -> withRuntime host $ \toolchain sdk -> finish $
-    runRuntime host toolchain . runRootOpening sdk . runRecipeStore . runPluginPreparation sdk
-      . runToolPreparation sdk . runRecipeInspection $
+    runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+      . runRootOpening sdk . runRecipeStore . runRecipeInspection $
         either refusal (recipeDescriptionResult revision recipe format) <$> describeRecipeAt kb revision recipe format
   Cli.RunRecipe recipe instances -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
       runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
       . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
-      . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk
-      . runToolPreparation sdk . runRecipeExecution . runEvolutionAuthoring $ do
+      . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
         result <- proposeFromRecipe kb revision recipe instances
         pure $ case result of
           Left diagnostics -> refusal diagnostics
@@ -57,5 +56,5 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
       runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
-      . runRecipeStore . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk $
+      . runRecipeStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore $
         either refusal (pendingResult recipe) <$> pendingRecipeEvidence kb revision recipe plugin instanceName

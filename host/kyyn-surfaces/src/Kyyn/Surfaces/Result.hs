@@ -23,6 +23,7 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (relativeName, scopePath, scopedPath)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root (Root(..), CheckedValue(..))
+import Kyyn.Domain.Recipe (StoredRecipe(..))
 import Kyyn.Domain.Workspace (EvolutionState)
 import Kyyn.Porcelain.Validated (Validated, validatedValue)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
@@ -227,8 +228,10 @@ reportJson (EvolutionReport plugins steps curation) = object
       ["kind" .= ("Fact" :: String), "collection" .= collection, "id" .= identity, "before" .= fmap recorded before, "after" .= fmap recorded after]
     change (RecipeChange (FactId identity) before after) = object
       ["kind" .= ("Recipe" :: String), "id" .= identity, "before" .= fmap recipeJson before, "after" .= fmap recipeJson after]
-    recipeJson (OpenAgent instructions) = object ["kind" .= ("OpenAgent" :: String),"instructions" .= instructions]
-    recipeJson (ClosedAgent (FlowEntryRef entry)) = object ["kind" .= ("ClosedAgent" :: String),"flow" .= entry]
+    recipeJson (StoredRecipe method stateType _ (CheckedValue _ state)) = object
+      ["method" .= methodJson method,"stateType" .= stateType,"state" .= state]
+    methodJson (OpenAgent instructions) = object ["kind" .= ("OpenAgent" :: String),"instructions" .= instructions]
+    methodJson (ClosedAgent (FlowEntryRef entry)) = object ["kind" .= ("ClosedAgent" :: String),"flow" .= entry]
     recorded (RecordedFact contract value) = object ["schema" .= describeRootContract contract, "value" .= value]
     evidenceJson (EvidenceRef producer connector source references) = object
       ["producer" .= producer, "instance" .= connector, "source" .= source, "references" .= references]
@@ -257,8 +260,10 @@ reportText (EvolutionReport plugins steps curation) = concatMap pluginLines plug
       ["  Recipe: " ++ Text.unpack identity,
        "    before: " ++ maybe "(absent)" recipeText before,
        "    after:  " ++ maybe "(absent)" recipeText after]
-    recipeText (OpenAgent instructions) = "Open agent: " ++ Text.unpack instructions
-    recipeText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ Text.unpack entry
+    recipeText (StoredRecipe method stateType _ (CheckedValue _ state)) =
+      methodText method ++ "; state (" ++ stateType ++ "): " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode state)))
+    methodText (OpenAgent instructions) = "Open agent: " ++ Text.unpack instructions
+    methodText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ Text.unpack entry
     value (RecordedFact _ contents) = jsonText contents
 
 originJson :: PluginOrigin -> Value

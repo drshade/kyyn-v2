@@ -12,11 +12,14 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic, compilerContext)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..), PluginChange(..))
+import qualified Kyyn.Domain.EvolutionReport as Report
+import Kyyn.Domain.Contract (contractId)
+import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Domain.Plugin (pluginName)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), CheckedValue(..), pluginPackagesLocation, pluginOriginLocation)
-import qualified Kyyn.Types.KnowledgeBase as Value
+import qualified Kyyn.Domain.Recipe as Value
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -32,34 +35,45 @@ import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution(..))
 import Kyyn.Porcelain.Capability.EvolutionReport (checkEvolutionReport)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking)
 import Kyyn.Porcelain.Protocol.RecipeBindings (prepareRecipeTypes)
+import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
+import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
+import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
 
 runEvolutionExecution
-  :: (RootStore :> es, SchemaInspection :> es,
+  :: (RootStore :> es, SchemaInspection :> es, ToolPreparation :> es, PluginPreparation :> es,
       GuestCompilation :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => FileTree -> Eff (EvolutionExecution : es) a -> Eff es a
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)
       (WorkspaceSnapshot _ before target change _)) source@(Root actual _ acceptedCode _ recipes) closure
-      (SourceRoot after preparedCode (RootDefinition _ _ _ _ _ targetSources) _))) -> runExceptT $ do
+      targetSource@(SourceRoot after preparedCode (RootDefinition _ _ _ _ _ targetSources) _))) -> runExceptT $ do
   unless (actual == expected) (reject "evolution.before-contract" "Captured input does not match Before's contract")
   RootDefinition _ _ _ _ _ acceptedSources <- proposed (readRootDefinition acceptedCode)
   unless (before == acceptedSources) (reject "evolution.before-source" "Captured input does not match Before's source")
   unless (target == preparedCode) (reject "evolution.after-source" "Prepared After does not match the captured target")
   CheckedValue _ input <- proposed (loadRootValueForChecking source)
-  (stateBindings,stateClosure) <- proposed (prepareRecipeTypes sdk before targetSources change)
+  (stateBindings,stateClosure,importedContracts) <- proposed (prepareRecipeTypes sdk before targetSources change)
   old <- checked "evolution.before-closure" (fileTree [(p,b) | (p,b) <- files before, p `elem` (closure ++ stateClosure)])
   lowered <- proposed (lowerProposal expected after change)
   combined <- checked "evolution.source-collision" (mergeEvolutionSources [old,targetSources,lowered,stateBindings,sdk])
   prepared <- checked "evolution.prepare" (evolutionSources expected after combined)
   compiled <- proposed (first (map (compilerContext "evolution")) <$> compileGuest prepared)
-  let knowledge = Value.KnowledgeBase input recipes
+  let knowledge = Value.KnowledgeBase input [Fact ident (Value.proposedRecipe recipe) | Fact ident recipe <- recipes]
   output <- ExceptT (Right <$> executeCompiledEntry "Evolution.evolution" compiled (Bytes.toStrict (encode (knowledgeBaseValue knowledge))))
   reply <- case decodeEvolutionReply output of
     Left message -> ExceptT (raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput
       ("Evolution.evolution: " ++ message))))
     Right (Left failure) -> throwE (EvolutionRejected failure)
     Right (Right result) -> pure result
-  result <- proposed (checkEvolutionReport expected knowledge after reply)
+  let Report.EvolutionObservation (Value.KnowledgeBase _ returnedRecipes) _ _ = reply
+  targetContracts <- proposed (inspectRecipeContracts sdk targetSource
+    [Fact ident (Value.proposedDefinition recipe) | Fact ident recipe <- returnedRecipes])
+  unless (and [ident == expectedIdent && stateType == expectedType && identity == contractId contract |
+    (Fact ident (Value.ProposedRecipe _ stateType identity _), (Fact expectedIdent _,expectedType,contract)) <- zip returnedRecipes targetContracts])
+    (reject "recipe.state-contract" "Returned recipe state does not match its target definition")
+  let knownStates = importedContracts ++ [(name,contract) | Fact _ (Value.StoredRecipe _ name contract _) <- recipes]
+        ++ [(name,contract) | (_,name,contract) <- targetContracts]
+  result <- proposed (checkEvolutionReport knownStates expected knowledge after reply)
   plugins <- proposed (pluginChanges acceptedCode preparedCode)
   let (value,EvolutionReport _ steps curation) = result
   pure (EvaluatedEvolution captured (After after) value (EvolutionReport plugins steps curation))

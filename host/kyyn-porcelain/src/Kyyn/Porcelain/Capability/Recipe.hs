@@ -13,6 +13,7 @@ import Kyyn.Domain.Evidence
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Root (Root(..))
+import Kyyn.Domain.Recipe (RecipeDefinition, StoredRecipe(..))
 import Kyyn.Domain.Contract (contractId)
 import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionWorkspace)
 import Kyyn.Domain.FactProposal (FactProposal(..))
@@ -30,7 +31,7 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt)
 import Kyyn.Porcelain.Capability.PluginPreparation
 
 findRecipeAt :: RecipeStore :> es => KnowledgeBase -> GitRevision -> RecipeId
-  -> Eff es (Either [Diagnostic] (Fact Recipe))
+  -> Eff es (Either [Diagnostic] (Fact RecipeDefinition))
 findRecipeAt kb revision (RecipeId name) = runExceptT $ do
   recipes <- ExceptT (loadRecipesAt kb revision)
   case [recipe | recipe@(Fact (FactId identity) _) <- recipes, identity == name] of
@@ -47,8 +48,8 @@ proposeFromRecipe kb@(KnowledgeBase repository _) revision recipe@(RecipeId name
   location <- either (failure "kb.path") pure (rootLocation kb)
   root@(Root _ _ code progress recipes) <- ExceptT (loadRootAt repository revision (Subtree location))
   entry <- case [value | Fact (FactId actual) value <- recipes, actual == name] of
-    [ClosedAgent value] -> pure value
-    [OpenAgent _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
+    [StoredRecipe (ClosedAgent value) _ _ _] -> pure value
+    [StoredRecipe (OpenAgent _) _ _ _] -> failure "recipe.open-agent" "This recipe has instructions for an external agent, not an executable flow"
     _ -> failure "curation.recipe-unknown" ("No recipe named " ++ Text.unpack name)
   plugins <- ExceptT (preparePlugins code)
   captured <- forM selected $ \(plugin,instanceName) -> do

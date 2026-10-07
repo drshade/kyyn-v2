@@ -10,28 +10,28 @@ import Data.Foldable (toList)
 import Data.List (nub, sort)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract
-import Kyyn.Domain.Curation (checkRecipes)
+import Kyyn.Domain.Recipe
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Domain.Root (CheckedValue)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Types.KnowledgeBase (KnowledgeBase(..), Recipe)
-import Kyyn.Porcelain.Capability.RootStore (RootStore, checkRootValue)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, checkRootValue, checkRecipeValue)
 
 checkEvolutionReport :: RootStore :> es
-  => RootContract -> KnowledgeBase Value -> RootContract -> EvolutionObservation
-  -> Eff es (Either [Diagnostic] (KnowledgeBase CheckedValue, EvolutionReport))
-checkEvolutionReport source input target (EvolutionObservation output steps curation) =
+  => [(String, CheckedContract)] -> RootContract -> KnowledgeBase Value ProposedRecipe -> RootContract -> EvolutionObservation
+  -> Eff es (Either [Diagnostic] (KnowledgeBase CheckedValue StoredRecipe, EvolutionReport))
+checkEvolutionReport stateContracts source input target (EvolutionObservation output steps curation) =
   case resolveBoundaries of
     Left diagnostics -> pure (Left diagnostics)
     Right boundaries -> do
       checked <- traverse (\(contract,KnowledgeBase value recipes) -> do
         result <- checkRootValue contract value
-        pure (KnowledgeBase <$> result <*> checkRecipes recipes)) boundaries
+        checkedRecipes <- checkRecipes recipes
+        pure (KnowledgeBase <$> result <*> checkedRecipes)) boundaries
       pure $ do
         values <- sequence checked
-        factSets <- traverse (\(contract,KnowledgeBase value recipes) ->
-          (,recipes) <$> identifiedFacts contract value) boundaries
+        factSets <- traverse (\((contract,KnowledgeBase value _),KnowledgeBase _ recipes) ->
+          (,recipes) <$> identifiedFacts contract value) (zip boundaries values)
         let first = ObservedRoot (identity source) input
             lastRoot = ObservedRoot (identity target) output
             starts = [before | StepObservation _ before _ <- steps] ++ [lastRoot]
@@ -50,6 +50,17 @@ checkEvolutionReport source input target (EvolutionObservation output steps cura
           final : _ -> Right (final, EvolutionReport [] reports curation)
           [] -> reject "Missing evolution boundaries"
   where
+    checkRecipes recipes = do
+      checked <- traverse checkRecipe recipes
+      pure $ do
+        values <- sequence checked
+        _ <- checkRecipeDefinitions [Fact ident (recipeDefinition recipe) | Fact ident recipe <- values]
+        pure values
+    checkRecipe (Fact ident (ProposedRecipe method name fingerprint value)) =
+      case nub [contract | (selected,contract) <- stateContracts,
+                 selected == name, contractId contract == fingerprint] of
+        [contract] -> fmap (fmap (Fact ident . StoredRecipe method name contract)) (checkRecipeValue contract value)
+        _ -> pure (reject ("Recipe state names an unknown contract: " ++ name))
     contracts = nub [source, target]
     observedIdentity (ObservedRoot name _) = name
     resolve (ObservedRoot selected value) = case filter ((== selected) . identity) contracts of
@@ -88,7 +99,7 @@ diff before after =
     key@(collection,identifier) <- sort (nub (map fst before ++ map fst after)),
     let old = lookup key before, let new = lookup key after, old /= new]
 
-recipeDiff :: [Fact Recipe] -> [Fact Recipe] -> [Change]
+recipeDiff :: [Fact StoredRecipe] -> [Fact StoredRecipe] -> [Change]
 recipeDiff before after =
   [RecipeChange (FactId name) old new |
     name <- sort (nub (map fst earlier ++ map fst later)),

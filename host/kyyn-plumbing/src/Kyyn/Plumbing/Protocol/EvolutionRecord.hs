@@ -10,8 +10,7 @@ import Kyyn.Domain.DataType (Shape(Scalar), ScalarKind(IntegerScalar))
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, recordShape, openRecipeRecordShape, previousRecordShape, legacyRecordShape, headerShape, decodeHeader, decodeRecord)
-import Kyyn.Plumbing.Protocol.Curation (curationShape, curationValue)
+import Kyyn.Plumbing.Protocol.EvolutionRecord.Document (recordDocument, recordShape, headerShape, decodeHeader, decodeRecord)
 
 encodeEvolutionRecord :: DhallHandling :> es => EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Eff es (Either [Diagnostic] ByteString)
@@ -27,27 +26,19 @@ decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
     version <- decodeValue (Scalar IntegerScalar) ("(" <> contents <> "\n).version")
     case version of
       Left diagnostics -> pure (Left (show diagnostics))
-      Right (String "1") -> do
-        empty <- encodeValue curationShape (curationValue Nothing)
-        case empty of
-          Left diagnostics -> pure (Left (show diagnostics))
-          Right declaration -> decodeContents legacyRecordShape ("(" <> contents <> "\n) // { version = +2, curation = " <> declaration <> " }")
-      Right (String "2") -> decodeContents legacyRecordShape contents
-      Right (String "3") -> decodeContents previousRecordShape contents
-      Right (String "4") -> decodeContents openRecipeRecordShape contents
-      Right (String "5") -> decodeContents recordShape contents
+      Right (String "6") -> decodeContents contents
       Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
         "Stored evolution record format is not supported by this kernel"]))
   where
-    decodeContents shape contents = do
-      decoded <- decodeValue headerShape ("(" <> contents <> "\n).{version, identity, before, after}")
+    decodeContents contents = do
+      decoded <- decodeValue headerShape ("(" <> contents <> "\n).{version, identity, before, after, recipeContracts}")
       case decoded of
         Left diagnostics -> pure (Left (show diagnostics))
         Right value -> case decodeHeader value of
-          Right (Right (identity,before,after)) -> do
-            checked <- decodeValue (shape before after) contents
+          Right (Right (identity,before,after,states)) -> do
+            checked <- decodeValue (recordShape states before after) contents
             pure $ case checked of
               Left diagnostics -> Left (show diagnostics)
-              Right document -> (\report -> Right (identity,before,after,report)) <$> decodeRecord before after document
+              Right document -> (\report -> Right (identity,before,after,report)) <$> decodeRecord states before after document
           Right (Left diagnostics) -> pure (Right (Left diagnostics))
           Left message -> pure (Left message)

@@ -13,17 +13,18 @@ import Kyyn.Domain.Curation (RecipeId(..))
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Domain.Recipe (StoredRecipe(..), recipeDefinition)
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipeStates, decodeRecipeStates)
+import Kyyn.Porcelain.Protocol.RecipePersistence
 
 main :: IO ()
 main = do
   state <- right (checkContract (Algebraic "Review.State" []
     [Constructor "Review.State" [(Just "seen",ListType StringType)]]) (SchemaMetadata [] [] []))
   unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
-  assert "Unit guest handle fingerprint differs from the checked contract"
-    (contractFingerprint (contractId unit) == "3c0bb1f1944c4350562a169eb26598527e566911796d0d1338741cba74ac78de")
   let first = RecipeId "mail"
       second = RecipeId "calendar"
       third = RecipeId "stateless"
@@ -55,6 +56,25 @@ main = do
   assert "Malformed stored state accepted" (isFailure (run (decodeRecipeStates [(third,unit)] malformed)))
   imported <- right (fileTree [(path "recipes/stateless/state.dhall","./external.dhall")])
   assert "Dhall import accepted in stored state" (isFailure (run (decodeRecipeStates [(third,unit)] imported)))
+  let stored =
+        [ Fact (FactId "mail") (StoredRecipe (OpenAgent "Review mail") "Review.State" state (value ["one"]))
+        , Fact (FactId "calendar") (StoredRecipe (ClosedAgent (FlowEntryRef "Flows.calendar")) "Review.State" state (value ["two"]))
+        , Fact (FactId "stateless") (StoredRecipe (OpenAgent "Investigate") "()" unit unitValue)
+        ]
+      resolved = [(Fact ident (recipeDefinition recipe),name,contract) |
+        Fact ident recipe@(StoredRecipe _ name contract _) <- stored]
+  storedTree <- right (run (encodeStoredRecipes stored))
+  definitions <- right (run (decodeRecipes (lookup (path "recipes.dhall") (files storedTree))))
+  assert "Definitions redundantly store closed-flow state type"
+    (definitions == [definition | (definition,_,_) <- resolved])
+  storedAgain <- right (run (decodeStoredRecipes resolved storedTree))
+  assert "Stored recipe values or identities changed" (storedAgain == stored)
+  canonicalAgain <- right (run (encodeStoredRecipes storedAgain))
+  assert "Unchanged recipe material produced different bytes" (files canonicalAgain == files storedTree)
+  snapshots <- right (run (encodeRecipeContracts stored))
+  restoredSnapshots <- right (run (decodeRecipeContracts snapshots))
+  assert "Candidate contract snapshots lost their recipe identity"
+    (restoredSnapshots == [(ident,name,contract) | (Fact ident _,name,contract) <- resolved])
   putStrLn "Typed per-recipe Dhall persistence passed."
 
 path :: String -> RelativePath

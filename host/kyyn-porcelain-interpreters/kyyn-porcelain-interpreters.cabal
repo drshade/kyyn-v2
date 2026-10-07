@@ -19,6 +19,7 @@ library
     Kyyn.Porcelain.Protocol.CurationPersistence
     Kyyn.Porcelain.Protocol.RecipePersistence
     Kyyn.Porcelain.Protocol.RecipeBindings
+    Kyyn.Porcelain.Protocol.RecipeContracts
     Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Protocol.ToolBroker
     Kyyn.Porcelain.Protocol.ToolBindings

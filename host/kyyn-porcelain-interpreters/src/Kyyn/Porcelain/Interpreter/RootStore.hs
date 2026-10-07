@@ -16,11 +16,11 @@ import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.Curation (checkRecipes, emptyCurationRegister, curationEntries)
-import qualified Kyyn.Types.KnowledgeBase as Value
+import Kyyn.Domain.Curation (emptyCurationRegister, curationEntries)
+import qualified Kyyn.Domain.Recipe as Value
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Porcelain.Protocol.CurationPersistence (encodeRegister, decodeRegister)
-import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes, decodeRecipes)
+import Kyyn.Porcelain.Protocol.RecipePersistence (encodeStoredRecipes, decodeRecipes, decodeStoredRecipes)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiagnostic)
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
@@ -39,6 +39,11 @@ runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
 runRootStore = interpret $ \_ -> \case
   ReadRootCuration tree -> decodeRegister (lookup curationLocation (files tree))
   ReadRootRecipes tree -> decodeRecipes (lookup recipesLocation (files tree))
+  ReadRecipeStates definitions tree -> decodeStoredRecipes definitions tree
+  EncodeRootRecipes recipes -> encodeStoredRecipes recipes
+  CheckRecipeValue contract value -> runExceptT $ do
+    _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)
+    pure (CheckedValue (contractId contract) value)
   ReadRootDefinition code -> runExceptT $ do
     _ <- ExceptT (readModelConfiguration code)
     manifest <- withExceptT (map manifestDiagnostic) $ decodeFile code "kb.dhall"
@@ -94,11 +99,11 @@ runRootStore = interpret $ \_ -> \case
   EncodeExample example -> runExceptT (saveExample example)
   ExportRootFiles checked -> runExceptT $ do
     let Root _ facts code curation recipes = validatedValue checked
-    recipeBytes <- ExceptT (encodeRecipes recipes)
+    recipeFiles <- ExceptT (encodeStoredRecipes recipes)
     progress <- if null (curationEntries curation) then pure [] else do
       bytes <- ExceptT (encodeRegister curation)
       pure [(curationLocation,bytes)]
-    liftChecked (fileTree ((recipesLocation,recipeBytes) : progress ++ files facts ++ files code))
+    liftChecked (fileTree (files recipeFiles ++ progress ++ files facts ++ files code))
 
 type Result es = ExceptT [Diagnostic] (Eff es)
 
@@ -163,9 +168,9 @@ encodeFile name shape value = do
   contents <- ExceptT (Dhall.encodeValue shape value)
   pure (path, Text.encodeUtf8 contents)
 
-materialize :: Dhall.DhallHandling :> es => RootContract -> FileTree -> Value.KnowledgeBase CheckedValue -> Result es Root
+materialize :: Dhall.DhallHandling :> es => RootContract -> FileTree -> Value.KnowledgeBase CheckedValue Value.StoredRecipe -> Result es Root
 materialize selected code (Value.KnowledgeBase (CheckedValue identity value) recipes) = do
-  _ <- ExceptT (pure (checkRecipes recipes))
+  _ <- ExceptT (encodeStoredRecipes recipes)
   let contract = rootSchema selected
   ensure (identity == contractId contract) "Checked value belongs to a different contract"
   ensure (all (not . isRootMaterial . fst) (files code))

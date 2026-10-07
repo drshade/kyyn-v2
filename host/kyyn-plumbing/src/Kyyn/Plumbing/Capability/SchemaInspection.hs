@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.SchemaInspection
-  ( SchemaInspection(..), InspectedSchema(..), inspectSchema, inspectType, inspectImports, inspectPluginFunction, SchemaSource, schemaSource, schemaSources, selectedType ) where
+  ( SchemaInspection(..), InspectedSchema(..), inspectSchema, inspectType, inspectImports, inspectPluginFunction, inspectRecipeFunction, SchemaSource, schemaSource, schemaSources, selectedType ) where
 
 import Data.ByteString (ByteString)
 import qualified Data.Text as Text
@@ -8,6 +8,7 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Contract (CheckedContract)
+import Kyyn.Domain.Recipe (RecipeSignature)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.FileTree (FileTree)
@@ -38,6 +39,7 @@ data SchemaInspection :: Effect where
   InspectSchema :: SchemaSource -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
   InspectType :: FileTree -> QualifiedTypeName -> SchemaInspection m (Either [Diagnostic] InspectedSchema)
   InspectPluginFunction :: FileTree -> PluginEntryKind -> String -> SchemaInspection m (Either [Diagnostic] PluginSignature)
+  InspectRecipeFunction :: FileTree -> String -> SchemaInspection m (Either [Diagnostic] RecipeSignature)
 
 type instance DispatchOf SchemaInspection = Dynamic
 
@@ -53,3 +55,6 @@ inspectImports = send . InspectImports
 
 inspectPluginFunction :: SchemaInspection :> es => FileTree -> PluginEntryKind -> String -> Eff es (Either [Diagnostic] PluginSignature)
 inspectPluginFunction sources kind = send . InspectPluginFunction sources kind
+
+inspectRecipeFunction :: SchemaInspection :> es => FileTree -> String -> Eff es (Either [Diagnostic] RecipeSignature)
+inspectRecipeFunction sources = send . InspectRecipeFunction sources

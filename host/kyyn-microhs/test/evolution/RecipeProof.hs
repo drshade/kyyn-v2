@@ -3,7 +3,8 @@ module RecipeProof (main) where
 
 import Kyyn.Evolution
 import Kyyn.Edit.Internal (execStateT)
-import Kyyn.Recipe.Internal (KnowledgeBase(..), readRecipeState)
+import Kyyn.Recipe.Internal (KnowledgeBase(..), RecipeType(..), readRecipeState)
+import qualified CheckedUnit
 import Kyyn.Runtime.Json (Codec(..), integerCodec, encodeWith, decodeWith)
 import Kyyn.Runtime.Evolution (knowledgeBaseCodec)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
@@ -14,6 +15,10 @@ import qualified ReviewV2 as New
 
 main :: IO ()
 main = do
+  case (unitRecipeType, CheckedUnit.recipeType) of
+    (RecipeType name actual encode decode, RecipeType expectedName expected _ _) -> do
+      unless (name == expectedName && actual == expected) "SDK unit binding differs from the host contract"
+      unless (decode (encode ()) == Right ()) "SDK unit binding did not round trip"
   let identity = RecipeId "reviewMail"
       before = openRecipe Before.recipeType "Review relevant emails"
       after = openRecipe After.recipeType "Review relevant emails in this window"
