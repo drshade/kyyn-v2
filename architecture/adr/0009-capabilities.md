@@ -136,6 +136,32 @@ data CapturedText = CapturedText Text EvidenceFingerprint
 type CapturedRead payload a = Program (EvidenceRead payload :+: BlobRead) a
 ```
 
+Sink execution has its own request row; acquiring or reading evidence does not
+grant writes. The initial row supports the text-file sink:
+
+```haskell
+data SinkError = SinkRejected Text | SinkUncertain Text
+
+data FileWrite a where
+  WriteTextFile :: FilePath -> Text -> FileWrite (Either SinkError FilePath)
+
+type SinkCalls = FileWrite
+```
+
+WriteTextFile uses the `files/write` request with `{ path : Text, content : Text }`.
+The host encodes content as UTF-8, resolves a relative path against the invocation's
+KB directory, creates parents, and atomically replaces the target as specified in
+ADR 0017. Its checked response is Either SinkError FilePath; Right contains the
+resolved absolute destination. The wire adapter supplies codecs; guest authors
+do not construct wire envelopes. No bytes/base64 contract is implied by this
+text-only request. Source FileRead retains its existing absolute-path contract.
+
+A host failure known to precede replacement returns SinkRejected (parent directory
+creation may already have occurred). If replacement may have happened but success
+cannot be established, it returns SinkUncertain. The file sink propagates these
+results and delivery maps them under ADR 0017. Cancellation or transport loss may
+prevent a guest response; the host must not infer a rejected write from that loss.
+
 `BlobRead` and acquisition-only `BlobAcquisition` are defined by
 [ADR 0029](0029-evidence-blobs-sync.md). Both read contexts remain tied to the same
 invocation-local evidence capture; blob reads do not grant filesystem browsing.

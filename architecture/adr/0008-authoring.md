@@ -70,9 +70,9 @@ A report is a query result. Agent-facing operations expose queries, KB tools,
 plugin methods and evolution workspaces. A KB tool is an authored function, not a
 second proposal-authoring workflow. Plugin methods remain integration operations;
 acquisition need not propose knowledge. ADR 0010 defines evolution composition.
-An output declaration binds an ordinary renderer function to a typed plugin sink,
-as defined in [outputs](0017-outputs.md). Renderer execution is selected-snapshot
-computation, like a query, not an effectful KB tool. It can compose
+An output declaration binds a registered query name to a typed plugin sink,
+as defined in [outputs](0017-outputs.md). Renderer is the role of that query,
+not a second export registry or an effectful KB tool. It can compose
 multiple queries. Generated output adapters prepare values; a separate host
 operation invokes the sink. Queries remain independently discoverable/callable.
 Each evolution workspace has a single `evolution` binding; reusable helper

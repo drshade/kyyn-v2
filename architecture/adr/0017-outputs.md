@@ -29,8 +29,9 @@ is a KB code/configuration change and follows the ordinary evolution route.
 
 The guest's Root is the concrete state type. Query and renderer implementations
 belong to authored code, not function-valued fields serialized into facts.
-Register outputs in `kb.dhall` by naming a renderer and a configured plugin sink,
-using the same named-entry convention as [authoring](0008-authoring.md).
+Register outputs in `kb.dhall` by naming a registered query and a configured plugin
+sink. The query registration owns the authored export under
+[authoring](0008-authoring.md); an output does not register a second export.
 The registration contains names and descriptions, not duplicated data schemas:
 
 ```haskell
@@ -38,7 +39,7 @@ The registration contains names and descriptions, not duplicated data schemas:
 data OutputDefinition = OutputDefinition
   { name :: String
   , description :: String
-  , renderer :: String        -- qualified authored Haskell export
+  , query :: String           -- name in the same root's queries list
   , sink :: SinkReference
   }
 
@@ -186,7 +187,7 @@ The guest boundary has the following shape (private registration representation
 is omitted):
 
 ```haskell
-publish :: Config -> Options -> Input -> Program SinkCalls Result
+publish :: Config -> Options -> Input -> Program SinkCalls (Either SinkError Result)
 defaultOptions :: Options
 ```
 
@@ -194,6 +195,11 @@ Config, Options, Input and Result are selected-plugin types. The generated adapt
 checks the renderer result against Input; the host checks query arguments and
 sink options independently before execution. Neither options nor config become
 an extra argument to the renderer. Invalid options must cause no sink invocation.
+ADR 0009 owns the concrete SinkCalls and FileWrite request contracts. A guest
+Left (SinkRejected message) maps to RejectedByDestination; Left (SinkUncertain
+message) maps to Uncertain. A Right result becomes Acknowledged only after its
+result contract has been checked. Protocol loss, guest failure or invalid results
+after dispatch cannot establish that no write occurred and produce Uncertain.
 
 ### Invoking the sink
 
@@ -232,6 +238,7 @@ Its query result is text content; the destination is separate configuration:
 data FileConfig = FileConfig { path :: FilePath }
 data FilePublishOptions = FilePublishOptions { pathOverride :: Maybe FilePath }
 type Input = Text
+type Result = FilePath -- resolved absolute destination after successful replacement
 defaultOptions = FilePublishOptions Nothing
 ```
 
@@ -241,6 +248,11 @@ a temporary file and atomic rename in the destination directory. No expected-old
 content hash, compare-and-swap, approval token or publication proposal is required.
 Repeated publications replace the file; competing writers are not coordinated.
 Binary files and multi-file output are not part of this contract.
+Rename replaces a destination symlink itself rather than writing through it.
+The replacement takes the temporary file's permissions (normal creation mode
+subject to the process umask), not the previous file's permissions.
+The file plugin propagates a failed host write as SinkError; it does not turn
+a failed or ambiguous write into a successful path result.
 
 For the file sink, path text is plugin input/configuration, not native IO or a
 host-imported plugin configuration type. The plugin issues a filesystem write
@@ -266,6 +278,11 @@ value and never invokes a sink or creates directories. It is optional, not an
 approval step. Publication need not compare the selected root with a newer head
 before dispatch. Returned results identify the selected root and sink; they do not
 require a persistent receipt or claim exactly-once execution.
+Preview identifies the configured sink and shows its checked configuration
+alongside the computed input. It does not claim a resolved delivery destination:
+publish-time options can override it. Publish returns the file sink's resolved
+absolute path on success. No plugin-specific path computation belongs in the
+generic preview handler.
 
 Use an accepted snapshot for normal output updates. Explicit candidate export
 for discussion may use a validated candidate, clearly identified as such rather
