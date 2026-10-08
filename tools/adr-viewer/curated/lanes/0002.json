@@ -1,7 +1,7 @@
 {
   "adr": "0002",
   "title": "Native Haskell kernel and bundled MicroHs execution",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0002.01",

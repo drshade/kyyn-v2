@@ -1,7 +1,7 @@
 {
   "adr": "0004",
   "title": "Distinguish the KB, its root and its evolutions",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0004.01",

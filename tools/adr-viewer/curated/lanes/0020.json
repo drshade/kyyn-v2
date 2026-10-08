@@ -1,7 +1,7 @@
 {
   "adr": "0020",
   "title": "One installation supplies the execution toolchain",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0020.01",

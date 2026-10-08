@@ -1,7 +1,7 @@
 {
   "adr": "0006",
   "title": "Materialized facts and runtime data loading",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0006.01",

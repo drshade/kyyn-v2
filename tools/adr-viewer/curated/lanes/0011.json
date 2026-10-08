@@ -1,7 +1,7 @@
 {
   "adr": "0011",
   "title": "Validation checks a complete candidate, not reality",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0011.01",

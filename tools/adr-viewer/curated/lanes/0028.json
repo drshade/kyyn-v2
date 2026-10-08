@@ -1,7 +1,7 @@
 {
   "adr": "0028",
   "title": "Typed agentic tools and explicitly executable recipes",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0028.01",

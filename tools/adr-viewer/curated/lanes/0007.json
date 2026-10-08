@@ -1,7 +1,7 @@
 {
   "adr": "0007",
   "title": "Library-backed JSON hidden behind typed adapters",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0007.01",

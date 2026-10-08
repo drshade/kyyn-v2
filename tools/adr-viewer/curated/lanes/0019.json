@@ -1,7 +1,7 @@
 {
   "adr": "0019",
   "title": "Typed failures, explicit cancellation and modest operational state",
-  "cursor": 163,
+  "cursor": 166,
   "nodes": [
     {
       "id": "0019.01",
