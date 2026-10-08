@@ -53,7 +53,7 @@ echo = pure
   assert.equal(cli(['root', 'query', 'execute', 'echo', '--input', '"Snow 雪"']).result, 'Snow 雪');
   assert.match(cli(['root', 'query', 'execute', 'hello'], 0, false), /"Hello from the KB"/);
   assert.equal(cli(['root', 'query', 'execute', 'echo'], 1).diagnostics[0].code, 'query.arguments');
-  cli(['root', 'query', 'execute', 'echo', '--input', 'True'], 1);
+  assert.equal(cli(['root', 'query', 'execute', 'echo', '--input', 'True'], 1).diagnostics[0].code, 'dhall.type');
   assert.equal(cli(['root', 'query', 'show', 'missing'], 1).diagnostics[0].code, 'query.unknown');
   console.log('Installed query discovery, accepted revision, unit/typed arguments and Dhall/JSON execution passed.');
 } finally {
