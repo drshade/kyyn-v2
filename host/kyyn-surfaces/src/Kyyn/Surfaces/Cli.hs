@@ -93,7 +93,7 @@ parseArguments :: [String] -> ParserResult Invocation
 parseArguments = execParserPure cliPrefs cliInfo
 
 cliPrefs :: ParserPrefs
-cliPrefs = prefs (showHelpOnEmpty <> showHelpOnError)
+cliPrefs = prefs (showHelpOnEmpty <> showHelpOnError <> subparserInline)
 
 progressMessage :: Command -> Maybe String
 progressMessage request = case request of
