@@ -1,0 +1,264 @@
+{
+  "adr": "0026",
+  "title": "One repository, explicit package boundaries",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0026.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "One monorepo with separate packages as dependency boundaries",
+      "detail": "Kernel, guest SDK, compiler integration and first-party plugins live in one repository, with separate Cabal packages enforcing dependency boundaries. The tree is a destination layout: create each directory/package only when real work needs it, and never add empty packages or placeholder services.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Plumbing",
+        "Private",
+        "Public"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #6 creates the first real packages (kyyn-domain, kyyn-plumbing, kyyn-microhs, guest runtime) under cabal.project; web/ is still absent, consistent with on-demand creation"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0026.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "shared/kyyn-types: pure vocabulary compiled by both GHC and MicroHs",
+      "detail": "Genuinely shared pure vocabulary (fact envelopes, diagnostics, reports, schema metadata) is one source compiled by both compilers and exercised under both; host KnowledgeBase/Root descriptors and KB schemas are not shared, and sharing types does not choose a wire codec.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Shared source ownership"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 11,
+        "evidence": "PR #12: 'First real shared/kyyn-types package: one pure metadata vocabulary compiled by GHC and MicroHs'"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0026.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Host package roles: microhs isolated, surfaces translate, kyyn composes",
+      "detail": "Porcelain-interpreters may use both capability APIs but no native IO; kyyn-microhs owns compiler-specific interpreters and may be imported only by composition and native interpreters; kyyn-surfaces only translates requests and receives execution functions from the thin kyyn composition package. Constructor visibility follows package ownership (Validated in porcelain, no reverse domain dependency).",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Host ownership"
+      ],
+      "anchors": [
+        "SchemaInspection",
+        "GuestCompilation",
+        "Validated",
+        "Compose",
+        "Application"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "kyyn-microhs from PR #6; kyyn-surfaces and host/kyyn composition first appear in PR #44 with import-boundary checks. Composition module is Kyyn.Composition, not the sketched Kyyn/Application/Compose.hs"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0026.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Pinned upstream MicroHs source under vendor/ for native and guest",
+      "detail": "vendor/MicroHs is an explicit build input at one pinned revision used by both native integration and the bundled guest toolchain, available in a source build; it is upstream dependency management, not a compiler fork. Copy-versus-submodule left open.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Host ownership"
+      ],
+      "anchors": [
+        "MicroHs",
+        "Pinned"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #6 vendors pinned complete upstream source; native adapter and guest compiler use the same source"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0026.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Public kyyn-sdk and private kyyn-runtime, neither depending on kernel",
+      "detail": "Guest packages split a public pure authoring surface from private transport/execution support; neither imports the native kernel, and no speculative shared-protocol package is created.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Guest and plugin ownership"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 32,
+        "evidence": "guest/kyyn-runtime from PR #6; guest/kyyn-sdk first appears in PR #33"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0026.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "First-party plugins use the public SDK and ordinary installation",
+      "detail": "Each plugins/ directory is independently consumable via the normal plugin installation path, using only the public SDK and declared host capabilities, with no privileged host imports; taps may select them like third-party plugins.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Guest and plugin ownership"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 74,
+        "evidence": "PR #90 installs plugin source through the CLI; first plugins/ directories appear then (later local-file, microsoft-graph)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0026.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Package-local tests, real-boundary integration tests, disposable example KBs",
+      "detail": "Unit tests stay with packages; top-level integration tests exercise real boundaries; example and field-scenario KBs are templates copied into disposable repositories, never operated as live KBs inside the product checkout. Named entry points (test.sh, test-guest.sh, build-web.sh, package.sh) must fail on guest/plugin failures.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Tests and development material"
+      ],
+      "anchors": [
+        "README"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "tools/test-guest.sh and tests/integration from PR #6; examples/todos template with installed journey in PR #44. build-web.sh/package.sh never created (no web yet)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0026.08",
+      "seq": 6,
+      "pr": 6,
+      "summary": "MicroHs is a vendored source copy recorded in vendor/README",
+      "detail": "Chooses a vendored copy over a submodule: a complete Git source archive includes it, and revision, archive digest and notices are recorded in vendor/README.md. Native packages build within the monorepo rather than as separately packaged tarballs.",
+      "kind": "refine",
+      "supersedes": [
+        "0026.04"
+      ],
+      "sections": [
+        "Decision / Host ownership"
+      ],
+      "anchors": [
+        "MicroHs"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 6,
+        "evidence": "PR #6 adds pinned complete upstream source copies with notices/provenance"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0026.09",
+      "seq": 11,
+      "pr": 12,
+      "summary": "Shared modules declare their own pragmas with matching semantics",
+      "detail": "Shared source carries required language pragmas in-file rather than relying on Cabal defaults, and uses only features with identical semantics under GHC and MicroHs.",
+      "kind": "refine",
+      "supersedes": [
+        "0026.02"
+      ],
+      "sections": [
+        "Decision / Shared source ownership"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 11,
+        "evidence": "PR #12 introduces shared/kyyn-types compiled by both compilers"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0026.10",
+      "seq": 11,
+      "pr": 12,
+      "summary": "Pure format decoding may live in plumbing capability helpers",
+      "detail": "Pure decoders such as the Aeson metadata decoder may sit in plumbing capability helpers without granting that package native IO or compiler access.",
+      "kind": "refine",
+      "supersedes": [
+        "0026.03"
+      ],
+      "sections": [
+        "Decision / Host ownership"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 11,
+        "evidence": "PR #12: fixed Aeson host decoder in plumbing helpers"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0026.11",
+      "seq": 56,
+      "pr": 66,
+      "summary": "Build-only API catalogue executable lives in kyyn-microhs/app",
+      "detail": "The kyyn-api-catalogue executable that generates the installed guest discovery catalogue belongs to host/kyyn-microhs/app and inspects staged runtime inputs via relative paths.",
+      "kind": "refine",
+      "supersedes": [
+        "0026.10"
+      ],
+      "sections": [
+        "Decision / Host ownership"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 56,
+        "evidence": "PR #66 adds host/kyyn-microhs/app/ApiCatalogue.hs"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 6,
+      "pr": 6,
+      "note": "Also converts status line to front-matter metadata and basis statement"
+    },
+    {
+      "seq": 88,
+      "pr": 108,
+      "note": "Drops the space-splitting CPP workaround rationale once the upstream quoting fix was adopted; the catalogue location/relative-path rule is unchanged"
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Layout comment: architecture/ holds field templates instead of walkthroughs (docs consolidation)"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: removes status/date/basis and drops 'paging values' from shared vocabulary, following the whole-collection-read decision owned elsewhere"
+    }
+  ],
+  "notes": "This lane is quiet: one large founding layout, then small location rules added as the code needed them, each built in the same step. The spec and code have drifted in two places the ADR never caught up with. The composition module is Kyyn.Composition rather than the sketched Kyyn/Application/Compose.hs (matching the 0003.04 gap), and since seq 152 vendor/MicroHs is temporarily the owner's fork with a GC fix, against the ADR's 'not an assumed compiler fork'. The ADR also still names plugins/files, web/, tools/build-web.sh and tools/package.sh, none of which exist; that fits its 'destination layout, create on demand' wording, so I did not count it as a gap. I split Host ownership into package roles and MicroHs vendoring, and Guest and plugin ownership into guest packages and plugin parity, because each makes independent commitments. I folded the composition-package sketch and Validated visibility into 0026.03."
+}

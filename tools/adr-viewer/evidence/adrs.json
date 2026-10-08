@@ -1,0 +1,147 @@
+[
+  {
+    "id": "0001",
+    "title": "Kyyn is a runtime and design workbench",
+    "born": 1
+  },
+  {
+    "id": "0002",
+    "title": "Native Haskell kernel and bundled MicroHs execution",
+    "born": 1
+  },
+  {
+    "id": "0003",
+    "title": "Effects express architectural dependencies",
+    "born": 1
+  },
+  {
+    "id": "0004",
+    "title": "Distinguish the KB, its root and its evolutions",
+    "born": 1
+  },
+  {
+    "id": "0005",
+    "title": "One authoritative contract and mechanical projections",
+    "born": 1
+  },
+  {
+    "id": "0006",
+    "title": "Materialized facts and runtime data loading",
+    "born": 1
+  },
+  {
+    "id": "0007",
+    "title": "Library-backed JSON hidden behind typed adapters",
+    "born": 1
+  },
+  {
+    "id": "0008",
+    "title": "Domain authors write typed functions, not adapters",
+    "born": 1
+  },
+  {
+    "id": "0009",
+    "title": "Typed capability rows describe program effects",
+    "born": 1
+  },
+  {
+    "id": "0010",
+    "title": "One evolution mechanism for facts, schema and meaning",
+    "born": 1
+  },
+  {
+    "id": "0011",
+    "title": "Validation checks a complete candidate, not reality",
+    "born": 1
+  },
+  {
+    "id": "0012",
+    "title": "Acceptance is one conditional step from local head",
+    "born": 1
+  },
+  {
+    "id": "0013",
+    "title": "Users and agents resolve upstream Git conflicts",
+    "born": 1
+  },
+  {
+    "id": "0014",
+    "title": "Current evidence and recipe-owned state",
+    "born": 1
+  },
+  {
+    "id": "0015",
+    "title": "Locally built plugins group source and sink connectors",
+    "born": 1
+  },
+  {
+    "id": "0016",
+    "title": "Local secrets, typed configuration and named connector bindings",
+    "born": 1
+  },
+  {
+    "id": "0017",
+    "title": "Outputs bind snapshot renderers to typed plugin sinks",
+    "born": 1
+  },
+  {
+    "id": "0018",
+    "title": "CLI, MCP and web share application operations",
+    "born": 1
+  },
+  {
+    "id": "0019",
+    "title": "Typed failures, explicit cancellation and modest operational state",
+    "born": 1
+  },
+  {
+    "id": "0020",
+    "title": "One installation supplies the execution toolchain",
+    "born": 1
+  },
+  {
+    "id": "0021",
+    "title": "Architecture is a tested deliverable before feature volume",
+    "born": 1
+  },
+  {
+    "id": "0022",
+    "title": "Proprietary now; deliberate dependency and future licensing choices",
+    "born": 1
+  },
+  {
+    "id": "0023",
+    "title": "Two first-class interfaces with a shared design and review loop",
+    "born": 1
+  },
+  {
+    "id": "0024",
+    "title": "Fresh-agent scenarios and two-part field reports",
+    "born": 1
+  },
+  {
+    "id": "0025",
+    "title": "Agent-driven setup and per-KB execution",
+    "born": 1
+  },
+  {
+    "id": "0026",
+    "title": "One repository, explicit package boundaries",
+    "born": 1
+  },
+  {
+    "id": "0027",
+    "title": "Agentic judgements backed by Jev",
+    "born": 99
+  },
+  {
+    "id": "0028",
+    "title": "Typed agentic tools and explicitly executable recipes",
+    "born": 122
+  },
+  {
+    "id": "0029",
+    "title": "Evidence blobs and connector-owned sync positions",
+    "born": 151
+  }
+]

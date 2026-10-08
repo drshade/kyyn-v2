@@ -1,0 +1,270 @@
+{
+  "adr": "0029",
+  "title": "Evidence blobs and connector-owned sync positions",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0029.01",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Captured bytes use a nominal SDK BlobRef stored per instance",
+      "detail": "BlobRef (sha256, size, mediaType, name) is a recognised nominal SDK type found by schema inspection through nested contracts, never inferred from similar records. Bytes live under the instance's evidence directory as blobs/<sha256>, and payloads hold references, not bytes or paths, with instance-local dedup only.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Captured bytes have typed references"
+      ],
+      "anchors": [
+        "BlobRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "BlobRef never appears in code by end of history; seq 156/157 PRs explicitly say 'no blobs'"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.02",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Blob downloads stream through the host, never into guest",
+      "detail": "Acquisition gains StoreBlob, which the native interpreter streams to a temp file while hashing, returning a BlobResponse with HTTP status/headers so plugins can handle 429/503 and Retry-After; only complete downloads yield a reference, with no hidden retries and no guest-memory bytes.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Acquisition streams through the host"
+      ],
+      "anchors": [
+        "BlobDownload",
+        "BlobResponse",
+        "BlobAcquisition",
+        "StoreBlob",
+        "storeBlob",
+        "HttpRequest",
+        "FetchError"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No StoreBlob/BlobDownload in code"
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0029.09"
+      }
+    },
+    {
+      "id": "0029.03",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Blob reads confined to references in one captured snapshot",
+      "detail": "readBlob/readBlobText are CapturedRead effects resolvable only for references reachable in the invocation's EvidenceSnapshot; missing or corrupt bytes are errors, never a provider refetch, and a known hash is not a historical-read API.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Reads belong to one captured invocation"
+      ],
+      "anchors": [
+        "BlobRead",
+        "ReadBlob",
+        "readBlob",
+        "readBlobText",
+        "CapturedRead",
+        "EvidenceSnapshot"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No blob read operations in code"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.04",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Blobs complete before atomic publish; unreferenced bytes reclaimed safely",
+      "detail": "Publication verifies every reference resolves to a complete blob before the atomic state replacement, and commits evidence, markers and position together. Afterwards bytes not referenced by Available payloads are reclaimed, and a host-only BlobScope protects in-flight readers and downloads across processes.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Publication and reclamation"
+      ],
+      "anchors": [
+        "BlobScope",
+        "BlobStorage",
+        "withBlobScope",
+        "storeBlobAt",
+        "readBlobAt",
+        "ConnectorInstanceRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No BlobScope/BlobStorage in code"
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0029.10"
+      }
+    },
+    {
+      "id": "0029.05",
+      "seq": 151,
+      "pr": 197,
+      "summary": "CLI/MCP results attach read-only local file paths to BlobRefs",
+      "detail": "At presentation the host finds BlobRefs via the checked result contract and supplies a read-only path to the captured local blob from the originating instance. Kyyn adds no PDF, OCR or conversion engine and keeps no second archive.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Surface results expose files, not binary transcripts"
+      ],
+      "anchors": [
+        "BlobRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Depends on BlobRef, which was never implemented"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.06",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Typed connector sync positions persist atomically with evidence",
+      "detail": "Stateful fetch takes a FetchContext (host startedAt instant and prior position) and returns a FetchResult with a plugin-defined Position type checked by the compiler. The host stores it in the state document beside evidence and advances it only on successful publication. Pagination/reset logic is plugin-owned and positions never feed history, citations or recipe progress.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Sync positions are typed connector data"
+      ],
+      "anchors": [
+        "FetchContext",
+        "FetchResult",
+        "Position",
+        "fetch",
+        "EvidenceChange"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 156,
+        "evidence": "PR #203 infers typed FetchContext/FetchResult from connector signatures and publishes evidence plus Dhall position atomically"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.07",
+      "seq": 156,
+      "pr": 203,
+      "summary": "Positions survive source config changes; clear the instance to restart",
+      "detail": "Only changed code or contract invalidates a stored position. A source configuration change continues the prior sync, and an agent explicitly clears the instance's evidence and position to start fresh, with no config-identity mechanism.",
+      "kind": "refine",
+      "supersedes": [
+        "0029.06"
+      ],
+      "sections": [
+        "Decision / Sync positions are typed connector data"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 156,
+        "evidence": "PR #203: 'Configuration has no new identity mechanism: agents explicitly clear an instance to restart'"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.08",
+      "seq": 157,
+      "pr": 204,
+      "summary": "--restart-sync withholds the position once, retaining evidence",
+      "detail": "evidence fetch --restart-sync passes Nothing once while keeping evidence for comparison; evidence clear deletes evidence and position; for stateless connectors restart is a reported no-op.",
+      "kind": "refine",
+      "supersedes": [
+        "0029.07"
+      ],
+      "sections": [
+        "Decision / Sync positions are typed connector data"
+      ],
+      "anchors": [
+        "CalendarPosition"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 157,
+        "evidence": "PR #204 implements generic --restart-sync and Calendar delta on typed positions"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.09",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Host-streamed blob downloads with no size or media-type policy",
+      "detail": "Downloads still stream through the host to a hashed temporary file, and only complete downloads yield a reference (the surviving core of 0029.02). BlobDownload drops maxBytes, so there is no connector size limit or media-type skip policy: a download either completes or fails the acquisition.",
+      "kind": "replace",
+      "supersedes": [
+        "0029.02"
+      ],
+      "sections": [
+        "Decision / Acquisition streams through the host"
+      ],
+      "anchors": [
+        "BlobDownload",
+        "StoreBlob"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No StoreBlob/BlobDownload in code; PR #214 says blob storage is a later slice"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.10",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Blobs complete before publish; reclaim under store lock, no reader pins",
+      "detail": "Publication still verifies every reference resolves to a complete blob before the atomic state replacement, and unreferenced bytes are still reclaimed (the surviving core of 0029.04), now under the instance store lock. The host-only BlobScope and cross-process reader protection are withdrawn: blob lifetime assumes non-overlapping tool use, and concurrent read versus reclaim or clear is undefined.",
+      "kind": "replace",
+      "supersedes": [
+        "0029.04"
+      ],
+      "sections": [
+        "Decision / Publication and reclamation"
+      ],
+      "anchors": [
+        "BlobStorage",
+        "storeBlobAt",
+        "readBlobAt",
+        "ConnectorInstanceRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No BlobStorage or blob reclamation in code; PR #214 says blob storage is a later slice"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "String -> Text in BlobRef/BlobDownload/BlobResponse/readBlobText/FetchContext field types, following the SDK-wide packed Text transport owned by ADR 0007; no change to this lane's requirements"
+    },
+    {
+      "seq": 158,
+      "pr": 206,
+      "note": "Swaps curation-register/acknowledgement vocabulary for recipe state following ADR 0014's redesign; the existing commitments (no retention of blobs, positions independent of recipe progress) are unchanged"
+    },
+    {
+      "seq": 159,
+      "pr": 207,
+      "note": "Context-section rewording removing curation-model archaeology"
+    }
+  ],
+  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented. Both changes withdraw something an earlier node stated, so they are replacements that restate the surviving core: 0029.09 replaces 0029.02 (no maxBytes or media-type policy), and 0029.10 replaces 0029.04 (BlobScope reader protection withdrawn in favour of a store lock and an explicit non-overlapping-use assumption). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there."
+}

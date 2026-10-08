@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADR history</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #74746f; --faint: #d9d9d4;
+    --lane: #c9c9c3; --planned-fill: #ffffff; --planned-stroke: #55554f;
+    --done: #2f9e5b; --done-stroke: #1f7a43; --ended: #b9b9b3; --accent: #3b6fd8;
+    --cursor: #d8613b; --tick: #8f8f88;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151514; --panel: #1e1e1c; --ink: #ececea; --muted: #9a9a94; --faint: #34342f;
+      --lane: #45453f; --planned-fill: #f4f4f0; --planned-stroke: #f4f4f0;
+      --done: #3fbf74; --done-stroke: #2f9e5b; --ended: #55554f; --accent: #7aa2f7;
+      --cursor: #f08a5d; --tick: #6c6c66;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+           padding: 14px 16px; border-bottom: 1px solid var(--faint); }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  .controls { display: flex; gap: 10px; align-items: center; flex: 1; min-width: 280px; }
+  #topbar { position: sticky; top: 0; z-index: 1; background: var(--bg);
+            border-bottom: 1px solid var(--faint); cursor: ew-resize; touch-action: none; user-select: none; }
+  #top { display: block; }
+  .handle { fill: var(--cursor); }
+  .handle-label { fill: #fff; font-size: 11px; font-weight: 600; }
+  button { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--faint);
+           border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  #now { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 220px; }
+  .legend { display: flex; gap: 14px; color: var(--muted); align-items: center; }
+  .legend svg { vertical-align: -2px; }
+  body { display: flex; flex-direction: column; height: 100vh; }
+  main { display: grid; grid-template-columns: 1fr 320px; flex: 1; min-height: 0; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } aside { max-height: 40vh; } }
+  #canvas { overflow: auto; position: relative; }
+  aside { border-left: 1px solid var(--faint); padding: 14px 16px; background: var(--panel); overflow: auto; }
+  aside h2 { font-size: 13px; margin: 0 0 6px; }
+  aside .meta { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+  aside p { margin: 6px 0; }
+  aside a { color: var(--accent); }
+  aside .notes { white-space: pre-wrap; color: var(--muted); font-size: 12px; }
+  svg text { fill: var(--ink); }
+  .lane-label { font-size: 12px; cursor: pointer; }
+  .lane-label.dim { fill: var(--muted); }
+  .lane-line { stroke: var(--lane); stroke-width: 1.5; }
+  .tick { stroke: var(--tick); stroke-width: 1; }
+  .node { cursor: pointer; }
+  .node.planned { fill: var(--planned-fill); stroke: var(--planned-stroke); stroke-width: 1.5; }
+  .node.done { fill: var(--done); stroke: var(--done-stroke); stroke-width: 1.5; }
+  .node.ended { opacity: .35; }
+  .thread { stroke: var(--lane); stroke-width: 1; }
+  .node.sel { stroke: var(--accent); stroke-width: 3; }
+  .edge { fill: none; stroke: var(--muted); stroke-width: 1; opacity: .55; }
+  .edge.replace { stroke-dasharray: 3 3; }
+  .cursor { stroke: var(--cursor); stroke-width: 1.5; }
+  .interchange { stroke: var(--accent); stroke-width: 1; opacity: .5; }
+  .axis { fill: var(--muted); font-size: 11px; }
+  .gridline { stroke: var(--faint); stroke-width: 1; }
+  .head { font-size: 11px; fill: var(--muted); }
+  .bar.done { fill: var(--done); opacity: .85; }
+  .bar.planned { fill: var(--planned-fill); stroke: var(--planned-stroke); stroke-width: .5; }
+  .lane-label { user-select: none; }
+  .conv { fill: none; stroke: var(--done); stroke-width: 1.5; }
+  .conv-area { fill: var(--done); opacity: .12; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">ADR history</h1>
+  <div class="controls">
+    <button id="play">▶</button>
+    <button id="expand-all">Expand all</button>
+    <span id="now"></span>
+  </div>
+  <div class="legend">
+    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned"/></svg> specified</span>
+    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done"/></svg> realised</span>
+    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done ended"/></svg> delivered, then superseded</span>
+    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned ended"/></svg> superseded unbuilt</span>
+  </div>
+</header>
+<main>
+  <div id="canvas"><div id="topbar"><svg id="top"></svg></div><svg id="svg"></svg></div>
+  <aside id="side"><p class="meta">Drag along the timeline at the top, or press play. Click a decision or a lane.</p></aside>
+</main>
+<script>
+// Inlined by `adr-viewer render`. Every rule (liveness, realisation, tracks,
+// counts, convergence) is computed in Haskell; this script only compares the
+// precomputed steps with the step being shown, and draws.
+const D = /*ADR_VIEWER_DATA*/null;
+const NS = "http://www.w3.org/2000/svg";
+const LABEL_W = 230, NODE_R = 4.5, ROW = 11, LANE_PAD = 9, THIN = 18, TOP = 6;
+const CONV_TOP = 12, CONV_H = 56, AXIS_Y = CONV_TOP + CONV_H + 22, TOP_H = AXIS_Y + 12;
+const svg = document.getElementById("svg"), topSvg = document.getElementById("top");
+const topbar = document.getElementById("topbar"), side = document.getElementById("side");
+const nowEl = document.getElementById("now");
+const maxSeq = D.maxSeq;
+let T = maxSeq;  // the step currently shown
+const setT = v => { T = Math.max(0, Math.min(maxSeq, Math.round(v))); render(); };
+document.getElementById("title").textContent = "ADR history · " + D.name;
+
+let STEP_W = 8;
+const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - 140) / maxSeq); };
+fitWidth();
+const x = seq => LABEL_W + seq * STEP_W;
+const el = (tag, attrs = {}, parent = svg) => {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  parent.appendChild(e); return e;
+};
+const prLink = pr => pr && D.repoUrl ? `<a href="${D.repoUrl}/pull/${pr}" target="_blank">#${pr}</a>` : (pr ? "#" + pr : "direct commit");
+const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+// State at step t from the model's precomputed steps (null means never).
+const never = v => v == null ? Infinity : v;
+function state(n, t) {
+  if (n.seq > t) return null;
+  const until = never(n.until);
+  const built = never(n.realisedAt) <= Math.min(t, until) ? "done" : "planned";
+  return until <= t ? built + " ended" : built;
+}
+
+// Lanes are collapsed to a one-row summary until their label is clicked.
+const COLLAPSED = 26, BAR_H = 16;
+const inferred = Object.keys(D.lanes).sort();
+const order = [...inferred, ...D.adrs.map(a => a.id).filter(id => !D.lanes[id])];
+let expanded = new Set();
+try { expanded = new Set(JSON.parse(localStorage.getItem("adr-viewer.expanded") || "[]")); } catch {}
+const saveExpanded = () => { try { localStorage.setItem("adr-viewer.expanded", JSON.stringify([...expanded])); } catch {} };
+
+for (const id of inferred) {
+  const lane = D.lanes[id];
+  lane._byId = Object.fromEntries(lane.nodes.map(n => [n.id, n]));
+  lane._counts = lane.counts.map(([done, planned]) => ({ done, planned }));
+  lane._max = Math.max(1, ...lane.counts.map(([d, p]) => d + p));
+  lane._depth = lane.depth;
+  for (const n of lane.nodes) { n._until = never(n.until); n._track = n.track; }
+}
+
+let layout = {}, height = 0;
+function relayout() {
+  layout = {}; let y = TOP;
+  for (const id of order) {
+    const lane = D.lanes[id];
+    if (lane && expanded.has(id)) {
+      const h = lane._depth * ROW + LANE_PAD * 2;
+      layout[id] = { y, h, mid: y + LANE_PAD + ROW / 2 };
+    } else {
+      const h = lane ? COLLAPSED : THIN;
+      layout[id] = { y, h, mid: y + h / 2 };
+    }
+    y += layout[id].h;
+  }
+  height = y + 12;
+  svg.setAttribute("height", height);
+}
+relayout();
+
+// One toggle: expands every lane unless all are already open, then collapses all.
+const expandBtn = document.getElementById("expand-all");
+const allOpen = () => inferred.every(id => expanded.has(id));
+const syncExpandBtn = () => { expandBtn.textContent = allOpen() ? "Collapse all" : "Expand all"; };
+expandBtn.onclick = () => {
+  expanded = allOpen() ? new Set() : new Set(inferred);
+  saveExpanded(); relayout(); render();
+};
+const nodeY = (id, n) => layout[id].y + LANE_PAD + n._track * ROW + ROW / 2;
+
+function adrTitle(id) { return (D.adrs.find(a => a.id === id) || {}).title || ""; }
+
+function render() {
+  const t = T;
+  syncExpandBtn();
+  svg.replaceChildren(); topSvg.replaceChildren();
+  svg.setAttribute("width", x(maxSeq) + 100);
+  topSvg.setAttribute("width", x(maxSeq) + 100); topSvg.setAttribute("height", TOP_H);
+  const step = D.steps.find(s => s.seq === t) || D.steps[D.steps.length - 1];
+  nowEl.textContent = `step ${t} · ${step.date.slice(0, 10)} · ${step.pr ? "PR #" + step.pr : "direct"}`;
+
+  // Day gridlines and labels.
+  let lastDay = "";
+  for (const s of D.steps) {
+    const day = s.date.slice(5, 10);
+    if (day !== lastDay) {
+      el("line", { x1: x(s.seq), x2: x(s.seq), y1: 0, y2: height, class: "gridline" });
+      el("line", { x1: x(s.seq), x2: x(s.seq), y1: CONV_TOP, y2: TOP_H, class: "gridline" }, topSvg);
+      if (s.seq === 0 || x(s.seq) - x(D.steps.find(q => q.date.slice(5, 10) === lastDay)?.seq ?? 0) > 34)
+        el("text", { x: x(s.seq) + 3, y: AXIS_Y + 4, class: "axis" }, topSvg).textContent = day;
+      lastDay = day;
+    }
+  }
+
+  for (const id of order) {
+    const L = layout[id], lane = D.lanes[id];
+    const meta = D.adrs.find(a => a.id === id);
+    if (meta.born > t) continue;
+    const open = lane && expanded.has(id);
+    const label = el("text", { x: 8, y: L.mid + 4, class: "lane-label" + (lane ? "" : " dim") });
+    label.textContent = (lane ? (open ? "▾ " : "▸ ") : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
+    label.onclick = () => {
+      if (lane) { expanded.has(id) ? expanded.delete(id) : expanded.add(id); saveExpanded(); relayout(); render(); }
+      showLane(id);
+    };
+    const end = meta.deleted != null && meta.deleted <= t ? meta.deleted : t;
+    el("line", { x1: x(meta.born), x2: x(end), y1: open ? L.mid : L.y + L.h - 4, y2: open ? L.mid : L.y + L.h - 4, class: "lane-line" });
+
+    if (lane && !open) {
+      // Summary: per step, live decisions realised (green) and still ahead of code (white).
+      const base = L.y + L.h - 4, unit = BAR_H / lane._max, w = Math.max(1, STEP_W - 1);
+      for (let s = meta.born; s <= t; s++) {
+        const c = lane._counts[s]; if (!c.done && !c.planned) continue;
+        el("rect", { x: x(s) - w / 2, y: base - c.done * unit, width: w, height: c.done * unit, class: "bar done" });
+        if (c.planned) el("rect", { x: x(s) - w / 2, y: base - (c.done + c.planned) * unit, width: w, height: c.planned * unit, class: "bar planned" });
+      }
+      const c = lane._counts[t];
+      el("text", { x: x(t) + 10, y: L.mid + 4, class: "head" }).textContent =
+        c.planned ? `${c.planned} ahead · ${c.done + c.planned} live` : `${c.done} live, in sync`;
+      continue;
+    }
+
+    if (!lane) {
+      // Mechanical lane: a tick for every step that changed this ADR.
+      for (const s of D.steps) if (s.seq <= t && s.adrs.includes(id))
+        el("line", { x1: x(s.seq), x2: x(s.seq), y1: L.mid - 5, y2: L.mid + 5, class: "tick" });
+      continue;
+    }
+
+    const byId = lane._byId;
+    // Thread lines: each node's track runs until it is superseded (or now).
+    for (const n of lane.nodes) {
+      if (n.seq > t) continue;
+      const until = Math.min(t, n._until);
+      if (until > n.seq) el("line", { x1: x(n.seq), x2: x(until), y1: nodeY(id, n), y2: nodeY(id, n), class: "thread" });
+    }
+    for (const n of lane.nodes) {
+      if (n.seq > t) continue;
+      for (const p of n.supersedes || []) {
+        const o = byId[p]; if (!o) continue;
+        const x1 = x(o.seq), y1 = nodeY(id, o), x2 = x(n.seq), y2 = nodeY(id, n), mx = (x1 + x2) / 2;
+        el("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, class: "edge " + (n.kind || "") });
+      }
+    }
+    let live = 0, planned = 0;
+    for (const n of lane.nodes) {
+      const st = state(n, t); if (!st) continue;
+      if (!st.includes("ended")) { live++; if (st === "planned") planned++; }
+      const c = el("circle", { cx: x(n.seq), cy: nodeY(id, n), r: NODE_R,
+        class: `node ${st}${selected === n ? " sel" : ""}` });
+      el("title", {}, c).textContent = n.summary;
+      c.onclick = () => { selected = n; showNode(id, n); render(); };
+    }
+    el("text", { x: x(t) + 10, y: L.mid + 4, class: "head" }).textContent =
+      planned ? `${planned} ahead · ${live} live` : `${live} live, in sync`;
+  }
+
+  // Interchange: the lanes the current step touched.
+  const touched = step.adrs.filter(a => layout[a]).map(a => layout[a].mid);
+  if (touched.length > 1)
+    el("line", { x1: x(t), x2: x(t), y1: Math.min(...touched), y2: Math.max(...touched), class: "interchange", "stroke-width": 4 });
+  el("line", { x1: x(t), x2: x(t), y1: 0, y2: height, class: "cursor" });
+  drawConvergence(t);
+  // Cursor and handle on the timeline band, which is the scrub control.
+  el("line", { x1: x(t), x2: x(t), y1: CONV_TOP - 6, y2: TOP_H, class: "cursor" }, topSvg);
+  const label = step.date.slice(5, 10), hw = 46;
+  el("rect", { x: x(t) - hw / 2, y: AXIS_Y - 9, width: hw, height: 18, rx: 9, class: "handle" }, topSvg);
+  el("text", { x: x(t), y: AXIS_Y + 4, "text-anchor": "middle", class: "handle-label" }, topSvg).textContent = label;
+}
+
+// Share of live inferred decisions that the code realises, step by step.
+function drawConvergence(t) {
+  const all = inferred.flatMap(id => D.lanes[id].nodes);
+  if (!all.length) return;
+  const base = CONV_TOP + CONV_H;
+  el("text", { x: 8, y: CONV_TOP + 14, class: "lane-label" }, topSvg).textContent = "convergence";
+  el("text", { x: 8, y: CONV_TOP + 30, class: "head" }, topSvg).textContent = "live decisions realised";
+  el("line", { x1: LABEL_W, x2: x(maxSeq), y1: base, y2: base, class: "gridline" }, topSvg);
+  const pts = [];
+  for (let s = 0; s <= maxSeq; s++) {
+    const share = D.convergence[s];
+    pts.push(share == null ? null : [x(s), base - CONV_H * share, share]);
+  }
+  const path = upto => {
+    const ps = pts.slice(0, upto + 1).filter(Boolean);
+    return ps.map((p, i) => (i ? "L" : "M") + p[0] + "," + p[1]).join(" ");
+  };
+  // Faint future, solid past: the whole curve is visible as a map to scrub along.
+  el("path", { d: path(maxSeq), class: "conv", opacity: .25 }, topSvg);
+  const past = pts.slice(0, t + 1).filter(Boolean);
+  if (past.length > 1) {
+    el("path", { d: `${path(t)} L${past.at(-1)[0]},${base} L${past[0][0]},${base} Z`, class: "conv-area" }, topSvg);
+    el("path", { d: path(t), class: "conv" }, topSvg);
+    const last = past.at(-1);
+    el("text", { x: last[0] + 6, y: last[1] + 4, class: "head" }, topSvg).textContent = Math.round(100 * last[2]) + "%";
+  }
+}
+
+let selected = null;
+function showNode(id, n) {
+  const r = n.realised || {};
+  const when = r.seq != null ? `step ${r.seq}` : "";
+  side.innerHTML = `
+    <h2>${esc(n.summary)}</h2>
+    <div class="meta">${n.id} · ${esc(n.kind)} · step ${n.seq} · ${prLink(n.pr)} · confidence ${esc(n.confidence)}</div>
+    <p>${esc(n.detail)}</p>
+    <p><b>Realised:</b> ${esc(r.how)} ${when}<br><span class="meta">${esc(r.evidence)}</span></p>
+    ${n.supersedes?.length ? `<p><b>Supersedes:</b> ${n.supersedes.join(", ")}</p>` : ""}
+    ${n.ended ? `<p><b>Ended:</b> ${esc(n.ended.how)} at step ${n.ended.seq}${n.ended.by ? " by " + n.ended.by : ""}</p>` : ""}
+    ${n.anchors?.length ? `<p class="meta">Anchors: ${n.anchors.map(esc).join(", ")}</p>` : ""}
+    ${n.sections?.length ? `<p class="meta">Sections: ${n.sections.map(esc).join("; ")}</p>` : ""}`;
+}
+function showLane(id) {
+  const lane = D.lanes[id];
+  const steps = D.steps.filter(s => s.adrs.includes(id));
+  side.innerHTML = `<h2>${id} ${esc(adrTitle(id))}</h2>
+    <div class="meta">${steps.length} steps touched this ADR${lane ? ` · ${lane.nodes.length} decisions · ${lane.editorial.length} editorial` : " · not yet inferred"}</div>
+    ${lane ? `<div class="notes">${esc(lane.notes)}</div>` : ""}`;
+}
+
+let dragging = false;
+const seqAt = e => (e.clientX - topSvg.getBoundingClientRect().left - LABEL_W) / STEP_W;
+topbar.addEventListener("pointerdown", e => { dragging = true; topbar.setPointerCapture(e.pointerId); setT(seqAt(e)); });
+topbar.addEventListener("pointermove", e => { if (dragging) setT(seqAt(e)); });
+topbar.addEventListener("pointerup", () => { dragging = false; });
+window.addEventListener("resize", () => { fitWidth(); render(); });
+let timer = null;
+document.getElementById("play").onclick = e => {
+  if (timer) { clearInterval(timer); timer = null; e.target.textContent = "▶"; return; }
+  if (T >= maxSeq) T = 0;
+  e.target.textContent = "❚❚";
+  timer = setInterval(() => {
+    setT(T + 1);
+    if (T >= maxSeq) { clearInterval(timer); timer = null; e.target.textContent = "▶"; }
+  }, 120);
+};
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowRight") setT(T + 1);
+  if (e.key === "ArrowLeft") setT(T - 1);
+});
+render();
+</script>
+</body>
+</html>

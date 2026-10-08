@@ -1,0 +1,377 @@
+{
+  "adr": "0004",
+  "title": "Distinguish the KB, its root and its evolutions",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0004.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "KnowledgeBase aggregates one accepted root and lazily loaded workspaces",
+      "detail": "A KnowledgeBase is a repository-scoped aggregate with one accepted root and a collection of evolution workspaces; opening the KB must not eagerly load every workspace. Rejects a universal mutable Kb of paths, callbacks and current values.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KnowledgeBase"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 30,
+        "evidence": "KnowledgeBase and EvolutionWorkspace first appear in code in PR #31 (KB/workspace/context values)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0004.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Host Root is an opaque snapshot handle, distinct from guest Root",
+      "detail": "The host Root is an opaque descriptor of schema, fact snapshot and code snapshot (including vendored deps, examples, config and query/output declarations) created by host stores as handles to fixed contents, never editable paths. The guest's Root is a different, KB-authored data type.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FactSnapshot",
+        "CodeSnapshot",
+        "CheckedContract"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Store-created opaque handles were never built; replaced by immutable file-tree values at seq 4 before any code existed"
+      },
+      "ended": {
+        "seq": 4,
+        "how": "replaced",
+        "by": "0004.07"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0004.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Workspace has Before revision, target After, evaluated Candidate Root",
+      "detail": "An EvolutionWorkspace's Before holds a Git revision and its schema; After specifies only the target schema; evaluation yields Candidate Root and checking yields Candidate (Validated Root). CheckedEvolution groups these for acceptance as an ordinary checked value, not an approval token; archives keep metadata without loading typed roots.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionWorkspace",
+        "Before",
+        "Candidate",
+        "CheckedEvolution",
+        "EvolutionContext",
+        "EvolutionReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 36,
+        "evidence": "Workspace capture against Before in #31, Candidate persistence/checking in #37; CheckedEvolution name itself never appears in code"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0004.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Candidate is a Functor over payload; Validated has no Functor",
+      "detail": "Candidate carries a captured evolution context and fixed report and fmap maps only its payload; Validated has no Functor, so no mapping carries a validation result onto changed content. Changing a proposed root requires fresh evaluation and checking.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Candidate",
+        "Validated",
+        "Functor",
+        "EvolutionReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 36,
+        "evidence": "PR #37: Candidate is ordinary Functor data preserving context and report; checkCandidate composes checkRoot"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Validated constructor private to porcelain validation-owned module",
+      "detail": "Validated lives in a non-public validation module in kyyn-porcelain beside the checker that constructs it; consumers get only the abstract type, enforced by package/import checks. Ordinary fact reads require an explicit Validated Root.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Validated"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 27,
+        "evidence": "PR #28 adds Validation/Types with private constructor and import-check rejection of constructor imports"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.06",
+      "seq": 4,
+      "pr": 4,
+      "summary": "KnowledgeBase is explicit repository plus KB-relative prefix",
+      "detail": "KnowledgeBase becomes a concrete record of Repository and a KB-relative directory prefix so publication can address the selected KB without guessing its location.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KnowledgeBase",
+        "Repository",
+        "RelativePath"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 30,
+        "evidence": "KnowledgeBase record introduced in PR #31 (Repository in code from seq 19)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.07",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Fact and code snapshots are immutable file-tree values",
+      "detail": "FactSnapshot and CodeSnapshot contain immutable file-tree values read into memory at load; later reads never resolve editable paths or depend on a store-specific handle service. The host/guest Root distinction is retained.",
+      "kind": "replace",
+      "supersedes": [
+        "0004.02"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FactSnapshot",
+        "CodeSnapshot",
+        "FileTree"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 16,
+        "evidence": "PR #17 introduces RootStore materialization/reopening over immutable FileTree values; Root holds facts/code as FileTree"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.08",
+      "seq": 25,
+      "pr": 26,
+      "summary": "Root schema is the persistent-root RootContract refinement",
+      "detail": "Root.schema takes RootContract, a private refinement of the general checked value contract that enforces persistent-root layout, so query values need not satisfy root collection rules.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootContract",
+        "checkRootLayout"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 25,
+        "evidence": "PR #26 adds RootContract/checkRootLayout and changes Root.schema"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.09",
+      "seq": 27,
+      "pr": 28,
+      "summary": "checkRoot is the sole Validated Root path; validatedValue accessor",
+      "detail": "checkRoot (ADR 0011) is the constructor-owning route to Validated Root; validatedValue exposes the payload without constructor or mapping, and saved reports never bypass checking.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.05"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkRoot",
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 27,
+        "evidence": "PR #28 implements checkRoot as only constructor of the private Validated wrapper"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.10",
+      "seq": 28,
+      "pr": 29,
+      "summary": "Dependency-free public Kyyn.Porcelain.Validated facade exports abstract type",
+      "detail": "A public module exports only the abstract Validated type and validatedValue, importing neither checker nor constructor, so store capabilities can use it without an import cycle.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Porcelain",
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 28,
+        "evidence": "PR #29 adds Kyyn/Porcelain/Validated.hs facade and import checks"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.11",
+      "seq": 30,
+      "pr": 31,
+      "summary": "KB prefix is TreePath; stores derive root/ and evolutions/",
+      "detail": "The prefix is WholeTree or a nonempty Subtree, and stores derive root/ and evolutions/<id>/ beneath it rather than accepting independently selected root or workspace paths.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "TreePath",
+        "WholeTree",
+        "Subtree",
+        "KnowledgeBase"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 30,
+        "evidence": "PR #31 KnowledgeBase uses TreePath (type existed from seq 21); EvolutionStore derives workspace paths"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.12",
+      "seq": 91,
+      "pr": 112,
+      "summary": "Root carries a separate host-owned curation register",
+      "detail": "The host Root gains a CurationRegister field holding curation progress, which is neither guest domain data nor authored code.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CurationRegister"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 91,
+        "evidence": "PR #112: Root carries a distinct typed register, preserved across capture/candidate/export"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0004.14"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.13",
+      "seq": 94,
+      "pr": 116,
+      "summary": "Root carries recipes as authored facts; guest gets KnowledgeBase wrapper",
+      "detail": "Recipes become authored knowledge held in the root as [Fact Recipe], distinct from progress bookkeeping; the guest evolution receives a typed KnowledgeBase wrapper, not the host snapshot descriptor.",
+      "kind": "refine",
+      "supersedes": [
+        "0004.12"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Recipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 96,
+        "evidence": "PR #118 'Evolve recipes as first-class knowledge-base data' implements #116 design"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0004.14"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0004.14",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Root holds stored recipes with typed state; no curation register",
+      "detail": "The host Root drops the curation register and holds [StoredRecipe]: recipe definitions with independently typed per-recipe state, both authored knowledge in the accepted root.",
+      "kind": "replace",
+      "supersedes": [
+        "0004.12",
+        "0004.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "StoredRecipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 adds StoredRecipe and removes CurationRegister; Root now has recipes :: [Fact StoredRecipe]"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 4,
+      "pr": 4,
+      "note": "Also converts status line to front-matter metadata and an established/proposed basis statement; no architectural change"
+    },
+    {
+      "seq": 27,
+      "pr": 28,
+      "note": "Also flips status proposed -> accepted (metadata)"
+    },
+    {
+      "seq": 36,
+      "pr": 37,
+      "note": "Implementation-status note: Candidate now implemented as Functor data with checkCandidate; restates 0004.04 rather than changing it"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: removes status/date/basis metadata and 'implemented'/'unimplemented' status prose, rewords query/output declarations as authored functions and registrations; all covered by existing nodes"
+    }
+  ],
+  "notes": "Lane is mostly stable at the KB/Root/Candidate/Validated level; nearly all change is to the shape of the host Root record. The biggest detour is the recipe/curation arc: a host-owned CurationRegister was added (seq 91), recipes moved into the root as facts (seq 94, built 96), and the whole register was then removed in favour of typed per-recipe state (seq 158, built 162) within two weeks. CheckedEvolution, FactSnapshot and CodeSnapshot never became code names (Root uses FileTree; acceptance composes AcceptEvolution), so 0004.03's realisation is judged by behaviour not identifiers. The Boundaries and consequences section (fact reads need Validated Root, accepted-root loading re-checks) was folded into 0004.05 rather than given nodes; seq 143 quietly dropped 'Accepted-load composition remains unimplemented' without evidence it had been built."
+}

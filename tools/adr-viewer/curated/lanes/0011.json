@@ -1,0 +1,604 @@
+{
+  "adr": "0011",
+  "title": "Validation checks a complete candidate, not reality",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0011.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Three distinct outcomes: structural errors, semantic diagnostics, example expectations",
+      "detail": "Validation keeps decoding/contract errors, KB-authored semantic diagnostics and example results distinct. A Diagnostic has severity, stable code, message and optional structured location; errors reject, warnings stay visible, and CheckResult retains the full report on both Rejected and Passed. These are pure values shared with the guest SDK.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Severity",
+        "Diagnostic",
+        "DiagnosticLocation",
+        "ValidationReport",
+        "CheckResult",
+        "Passed",
+        "Rejected"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 23,
+        "evidence": "PR 24 adds shared Diagnostic/ValidationReport/CheckResult in kyyn-types with guest encoder and host decoder"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Semantic validation is a pure whole-root guest function",
+      "detail": "The baseline is complete-root validation against the candidate's own schema and code: the authored validate :: Root -> ValidationReport consumes the guest's concrete root with no capability row. Per-fact checks are helpers only; before/after rules belong in the evolution.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "validate",
+        "ValidationReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 24,
+        "evidence": "PR 25 compiles the manifest-selected Root -> ValidationReport validator and runs it on the captured root"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "RootExecution effect evaluates selected snapshots, separate from EvolutionExecution",
+      "detail": "A host RootExecution effect validates roots and executes queries on an explicit selected snapshot, never latest workspace files, never accepting or fetching live evidence, and never re-invoking the evolution. Builds are delegated to GuestCompilation; RootStore owns decoding.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootExecution",
+        "ValidateRoot",
+        "ExecuteQuery",
+        "runRootExecution",
+        "QueryDescriptor"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "ValidateRoot in PR 25, ExecuteQuery in PR 27"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "One proposal-level compile gate before materialization: ProposedCodeRejected",
+      "detail": "The selected proposal is one build scope: before materializing a candidate, the evolution and every executable entry to be published (validators, queries, evolutions, outputs) are typechecked, including ones the evolution never calls; any compile error returns ProposedCodeRejected rather than a validation report.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ProposedCodeRejected"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 27,
+        "evidence": "PR 28's CheckRootCode compiles all registered entries, but as part of checking rather than pre-materialization"
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 36,
+        "how": "replaced",
+        "by": "0011.19"
+      }
+    },
+    {
+      "id": "0011.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Source root need only be structurally readable, allowing repair",
+      "detail": "Evaluation requires the source root to be structurally readable, not semantically valid, so a typed transformation can repair an invalid head; the preview retains the source's validation report alongside the outcome and source errors alone do not reject the repair.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadRootAt"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "PR 35 loads Before through RootOpening without semantic checking; showing source diagnostics in the repair preview is still open as issue #187"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0011.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "PrepareOutput renders an output's typed sink input from a root",
+      "detail": "RootExecution's PrepareOutput evaluates an output renderer against the supplied root into a recomputable typed sink input, not an approval or persistent preview, and never invokes the sink; ordinary use requires Validated Root and renderers join the compile gate.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PrepareOutput",
+        "OutputDescriptor",
+        "PreparedOutput"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No PrepareOutput/OutputDescriptor exists in the code; RootExecution has only PrepareRoot/ValidateRoot/ExecuteQuery"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Examples are current-root material checked on every candidate and load",
+      "detail": "Examples live in root/examples (edited via target/examples), travel with the candidate's code snapshot and publication, and are read via RootStore ReadExamples and executed alongside semantic validation both when checking candidates and loading accepted roots; deleting one is a visible root change.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadExamples",
+        "Example"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 27,
+        "evidence": "PR 28 persists examples under examples/ and checks them in checkRoot via ReadExamples"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Examples are typed query invocations with expected typed results",
+      "detail": "An executable example names a registered snapshot query, typed arguments and expected result plus Required/Illustrative requirement; values are checked against contract identities, compared by exact contract equality, run via ExecuteQuery, with no assertion language. Incompatible contracts need explicit author rebuild.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Example",
+        "ExampleRequirement",
+        "makeExample",
+        "checkExample",
+        "Required",
+        "Illustrative"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 27,
+        "evidence": "PR 28 implements Example/ExampleRequirement/checkExample with required errors and illustrative warnings"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "checkCandidate and loadAcceptedRoot are the only routes to Validated Root",
+      "detail": "checkCandidate runs semantic checks and examples on a materialized candidate, preserving context and the fixed report; loadAcceptedRoot pins an explicit accepted revision. A failing validator never manufactures Validated Root or erases its report; runtime failure stays Failure.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkCandidate",
+        "loadAcceptedRoot",
+        "Validated",
+        "Candidate",
+        "ResolveHead"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 36,
+        "evidence": "checkCandidate lands in PR 37; loadAcceptedRoot itself was never implemented (checkRootAt in PR 44 took its role)"
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0011.22"
+      }
+    },
+    {
+      "id": "0011.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Checks use only captured inputs; edits force re-evaluation",
+      "detail": "Candidate checks run only on the materialized result and captured checking inputs, never fresh acquisition or rerunning the entry; time-dependent checks take a declared as-of, and editing schema/validators/examples/inputs or rebasing Before requires rerunning evaluation and checks. Check/example edits are shown beside fact changes.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Before"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 36,
+        "evidence": "PR 37 checks the saved materialized candidate without re-executing the evolution"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0011.11",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugin configuration checked structurally plus pure validateConfig",
+      "detail": "Root plugin config files get structural checking and any advertised pure validateConfig, called through generated code, never an effectful health method or secret lookup, so missing credentials do not invalidate a fresh clone.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "validateConfig"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 81,
+        "evidence": "PR 100 generates pure config-validation adapters; ValidateRoot combines config reports with root validation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.12",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Example compatibility compares query contracts, not the whole Root contract",
+      "detail": "Saved example argument/result identities are compared with the selected query's argument/result contracts, so a Root schema change alone does not invalidate an example whose query contracts are unchanged; the comparison still uses each whole contract including roles.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ContractId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 27,
+        "evidence": "PR 28 tests unchanged query contracts across a root contract change and role-only query contract changes"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.13",
+      "seq": 23,
+      "pr": 24,
+      "summary": "Concrete diagnostic locations and a fixed SDK report codec",
+      "detail": "Locations are FactLocation collection factId optional-field, one-based SourceLocation file line column, or ExampleLocation name; errorDiagnostic builds location-less errors and checkReport classifies without minting Validated. A fixed guest encoder/host decoder own the report wire, and malformed data is a decoding failure.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FactLocation",
+        "SourceLocation",
+        "ExampleLocation",
+        "checkReport",
+        "errorDiagnostic"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 23,
+        "evidence": "PR 24 implements the shared locations and report protocol"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.14",
+      "seq": 24,
+      "pr": 25,
+      "summary": "ValidateRoot separates cannot-run diagnostics from an executed report",
+      "detail": "ValidateRoot returns Either [Diagnostic] ValidationReport: Left for unreadable definition/facts or source rejection, Right whenever the manifest-selected validator ran. Facts travel at runtime over stdin, SDK sources are explicit interpreter inputs, and RootExecution no longer inspects schemas.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.03"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ValidateRoot",
+        "ReadRootDefinition",
+        "LoadRootValueForChecking",
+        "FileTree"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 24,
+        "evidence": "PR 25 implements ValidateRoot this way"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.15",
+      "seq": 26,
+      "pr": 27,
+      "summary": "Query discovery and execution with typed results and read traces",
+      "detail": "RootExecution gains DiscoverQueries and an ExecuteQuery returning QueryResult with the logical read trace; contracts come from named declarations, arguments/results are checked via DhallHandling, unknown names/changed contracts return diagnostics. Examples compare results, not traces.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.14"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ExecuteQuery",
+        "DiscoverQueries",
+        "QueryResult",
+        "DhallHandling",
+        "SchemaInspection"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 26,
+        "evidence": "PR 27 adds DiscoverQueries/ExecuteQuery with read traces"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.16",
+      "seq": 27,
+      "pr": 28,
+      "summary": "Root checking first compiles validator and every registered query",
+      "detail": "Before semantic/example evaluation, CheckRootCode compiles the validator and every registered query with generated adapters, including queries no example uses, without executing them; only this root's declarations participate, and compile errors are returned in CheckResult.Rejected.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CheckRootCode"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 27,
+        "evidence": "PR 28 adds CheckRootCode with tests rejecting an unused query"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.17",
+      "seq": 27,
+      "pr": 28,
+      "summary": "Examples persisted as Dhall files with whole-contract fingerprints",
+      "detail": "Examples are stored as examples/<name>/ example, arguments and expected Dhall files recording query name, requirement, explanation and hex input/result ContractIds; fingerprints are compared before decoding and never silently rebound; equality is structural Value equality, and only well-formed illustrative mismatches downgrade to warnings.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "encodeExample",
+        "EncodeExample",
+        "saveExample"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 27,
+        "evidence": "PR 28 implements encodeExample and Dhall example persistence"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.18",
+      "seq": 27,
+      "pr": 28,
+      "summary": "checkRoot composes checking; only checking code mints Validated",
+      "detail": "checkRoot is a composition of RootStore and RootExecution (no new effect) that checks code, discovers queries, loads examples, runs the validator and checks examples on one root; Validated has a private constructor available only to checking code, with warnings attached.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkRoot",
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 27,
+        "evidence": "PR 28 adds checkRoot and the private Validated wrapper with import guards"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.19",
+      "seq": 36,
+      "pr": 37,
+      "summary": "Evolution compiles at evaluation; target checking code compiles during candidate checking",
+      "detail": "The single pre-materialization gate is dropped: EvolutionExecution compiles the evolution before materialization, while target validators/queries compile in candidate checking, rejecting via CheckResult without erasing the saved candidate. Loading a saved candidate never compiles; ProposedCodeRejected leaves this ADR.",
+      "kind": "replace",
+      "supersedes": [
+        "0011.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkCandidate",
+        "CheckRootCode"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 36,
+        "evidence": "PR 37 implements checkCandidate composing checkRoot over saved candidates"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.20",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Selected-revision checkRootAt and inspectRootAt live in porcelain",
+      "detail": "Opening and checking an explicit revision are porcelain operations: checkRootAt yields CheckResult (Validated Root) and inspectRootAt adds the browsing value only after checking succeeds; surfaces only render results.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.18"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkRootAt",
+        "inspectRootAt",
+        "RootOpening"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 adds checkRootAt/inspectRootAt behind the CLI"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.21",
+      "seq": 45,
+      "pr": 48,
+      "summary": "PrepareRoot compiles once into an opaque PreparedRoot reused by checks",
+      "detail": "PrepareRoot reads the definition once, inspects query contracts and compiles every registered entry into a PreparedRoot of pure CompiledProgram values; ValidateRoot/ExecuteQuery/checkExample consume it without recompiling. CheckRootCode and DiscoverQueries are folded in; each independent check prepares afresh with no persistent cache.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.15",
+        "0011.16"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PrepareRoot",
+        "PreparedRoot",
+        "preparedRoot",
+        "preparedQueries",
+        "CompiledProgram"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 45,
+        "evidence": "PR 48 implements PreparedRoot, halving guest compilations in measured journeys"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.22",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Accepted roots are checked via checkRootAt; loadAcceptedRoot dropped",
+      "detail": "The planned loadAcceptedRoot is removed: checkRootAt over RootOpening pins the explicit accepted revision, callers resolve revisions via Git ResolveRevision, and both checkCandidate and checkRootAt read examples through ReadExamples.",
+      "kind": "replace",
+      "supersedes": [
+        "0011.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkRootAt",
+        "ResolveRevision",
+        "loadAcceptedRoot"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 43,
+        "evidence": "checkRootAt has existed since PR 44; loadAcceptedRoot was never written"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0011.23",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Compile gate covers plugins, tools, closed recipes and output renderers",
+      "detail": "PrepareRoot's gate also compiles registered plugin methods, tools, closed recipes and output renderers without executing their effects, with RootExecution depending on GuestExecution, PluginPreparation and ToolPreparation; the evolution entry stays at the ADR 0010 evaluation boundary.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.21",
+        "0011.19"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PluginPreparation",
+        "ToolPreparation",
+        "GuestExecution"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 87,
+        "evidence": "Plugins joined PrepareRoot in PR 100 (seq 81) and tools in PR 107 (seq 87); recipe state contracts only at seq 162 and output renderers do not exist"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0011.24",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Prepared roots may reuse content-keyed caches; caches never replace checking",
+      "detail": "Reverses the 'no persistent artifact cache' clause: compilation may reuse ADR 0002's content-keyed artifact cache and schema inspection ADR 0005's cache, but prepared values never depend on retained interpreter state and neither cache substitutes for semantic checking.",
+      "kind": "refine",
+      "supersedes": [
+        "0011.21"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CompiledProgram"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 104,
+        "evidence": "PR 132 (seq 104) per-KB compiled artifact cache and PR 136 (seq 106) inspection cache already existed"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Removes a link to the deleted boundaries composition sketch; wording only"
+    }
+  ],
+  "notes": "The biggest reversal is the compile gate: the founding text required one proposal-level typecheck of every entry before materialization with a dedicated ProposedCodeRejected channel; once implementation started (seq 27/36) checking-code compilation moved after materialization into candidate checking, and ProposedCodeRejected left the ADR at seq 36. The RootExecution effect was reshaped three times (Either results at 24, DiscoverQueries at 26, CheckRootCode at 27, then all collapsed into PrepareRoot/PreparedRoot at 45) for performance; the 'no persistent cache' clause was then reversed by the seq 143 reconciliation to match compile/inspection caches built at seq 104/106. loadAcceptedRoot was spec'd from seq 1 but never written; checkRootAt (seq 43) quietly took its place and seq 143 caught the ADR up. Still ahead of code: PrepareOutput/output renderers (never built) and the repair preview showing source diagnostics (issue #187). The 'Alternatives and consequences' no-validation-cache baseline produced no node per the Consequences rule; the seq 143 'tools and closed recipes gather inputs, evolution entry is pure' wording was treated as an ADR 0010 echo rather than a new 0011 node."
+}

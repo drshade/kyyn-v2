@@ -1,0 +1,465 @@
+{
+  "adr": "0007",
+  "title": "Library-backed JSON hidden behind typed adapters",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0007.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "UTF-8 JSON over a private synchronous protocol, using existing libraries",
+      "detail": "Host and guest exchange UTF-8 JSON over a small private synchronous protocol: Aeson on the host and an existing guest JSON library chosen by a conformance proof. Kyyn does not write another parser; if no library passes, the decision reopens.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #6 ships the private guest runtime using unchanged json library parsing/printing with Aeson on the host"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Generated adapters own the wire; authored code never sees JSON",
+      "detail": "SDK-generated adapters own serialization, framing, request IDs, dispatch, contract matching and structured failures; ordinary KB/plugin code never sees Value, JSON text, pipes or envelopes. The host translates disk values and never sends executable Dhall.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "WireValue"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "Generated codecs at PR #6, and generated query adapters at PR #27 keep wire values out of authored queries"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Private request/response envelopes; undeclared errors abort, never reach continuations",
+      "detail": "Guest messages are HostRequest or Completed; host replies HostResponse with a declared HostCallError or value. Recoverable errors must be part of the request's declared result type; envelope-level errors abort the invocation rather than being cast into the continuation's x or an empty page.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "GuestMessage",
+        "HostMessage",
+        "HostRequest",
+        "HostResponse",
+        "Completed",
+        "HostCallError",
+        "RequestId",
+        "CapabilityId",
+        "MethodId",
+        "PluginError"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "PR #96 implements HostRequest/HostResponse envelopes with strict response decoding before continuation resumption"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Adapter checks method availability and contracts before dispatch and reply",
+      "detail": "The host adapter resolves each request's method among the invocation's available capabilities, checks input against the descriptor, dispatches, then checks output against the result contract; the guest decoder reconstructs the exact suspended x. A matching response ID is not a type check.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 80,
+        "evidence": "PR #99's protocol broker rejects unknown handles, methods and request IDs and out-of-row requests before effects"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Pure library-backed frame codec, separate from the contract checker",
+      "detail": "decodeFrame/encodeFrame validate envelope syntax via a library parser/encoder only; capability availability and KB semantics are elsewhere, and the contract checker (ADR 0005) separately produces CheckedValue.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "decodeFrame",
+        "encodeFrame",
+        "ProtocolDiagnostic",
+        "CheckedValue"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 80,
+        "evidence": "decodeFrame code_added at seq 80 (PR #99 native broker)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "One compact JSON object per LF-terminated frame; stdout protocol-only",
+      "detail": "Each message is a single compact JSON line (library encoding escapes newlines), avoiding the prototype's byte-counting transport; stdout carries only protocol and stderr diagnostics.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "PR #96's plugin adapter exercises LF framing over real pipes under GHC and MicroHs"
+      },
+      "ended": {
+        "seq": 154,
+        "how": "replaced",
+        "by": "0007.17"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Restricted value profile: decimal strings, tagged unions and optionals",
+      "detail": "Integers/decimals travel as canonical decimal strings (never Double), unions and optionals as explicit tags, identities/dates as documented strings for recognised library types only, large binaries as typed references; no functions, NaN, omitted-field defaults or union guessing.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Proposed value profile"
+      ],
+      "anchors": [
+        "Decimal"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #6 generated codecs round-trip arbitrary-precision integer strings, nested optionals and tagged unions between GHC/Aeson and MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Duplicate-key decoding behaviour pinned consistently across both peers",
+      "detail": "Generated frames have unique fields; the decoder's duplicate-key policy must be pinned and identical on host and guest (rejection preferred only if libraries allow it without another scanner). No semantic JSON hashing or extra approval identity.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Proposed value profile"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "Guest runtime Json.hs (PR #6) normalises keys before structural decoding"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Adapters generated in lockstep; no version negotiation, one outstanding request",
+      "detail": "Kyyn generates both adapters for its installed runtime with no protocol/SDK negotiation; protocol changes update both together. One outstanding request per guest; unknown methods, mismatched identities and out-of-order messages fail before any effect, and changed contracts yield a repair instruction.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Protocol boundary and tradeoffs"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "PR #96 conversational adapter handles one request at a time and aborts on wrong IDs/tags before resuming"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Outer invocation owns nested plugin calls, their cancellation and resources",
+      "detail": "A parent KB may synchronously call a plugin in a separate invocation (no recursive call graph); the outer invocation owns child processes, cancellation releases them, recoverable errors return typed, and per-call processes suffice without pooling.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Protocol boundary and tradeoffs"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 KB tools start one captured-method guest per call from the tool invocation, without a process pool; cancellation propagation not separately evidenced"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0007.11",
+      "seq": 5,
+      "pr": 5,
+      "summary": "Aeson 2.2.5.0 host; unchanged json-0.11 Types/String modules on MicroHs",
+      "detail": "The guest library is selected: unchanged Text.JSON.Types and Text.JSON.String from json-0.11 compile under pinned MicroHs, with no umbrella module, alternate backend or parser fork; upstream notices are preserved.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #5 only probed; PR #6 vendors pinned upstream sources and uses them in the guest runtime"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.12",
+      "seq": 5,
+      "pr": 5,
+      "summary": "Kyyn generates JSON mappings from compiler-inspected authored ADTs",
+      "detail": "Generated structural codecs map library JSON values to constructors/fields of supported, compiler-inspected ADTs, checking tags, fields and payload types; authors maintain neither codecs nor a second schema, and mappings need real MicroHs round-trip tests.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #6 implements compiler-inspected ADT codec generation with real MicroHs round trips"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.13",
+      "seq": 5,
+      "pr": 5,
+      "summary": "Decoded-value checks reject surrogates, JSON numbers and nulls",
+      "detail": "After parsing and before dispatch or encoding, retained strings and keys are checked recursively for surrogate Chars, and numeric/null nodes are rejected; these are decoded-value checks, not another syntax scanner or canonical-frame service.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.07"
+      ],
+      "sections": [
+        "Value profile"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "Guest Json.hs (PR #6) rejects JSNull, JSRational and surrogate characters"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.14",
+      "seq": 5,
+      "pr": 5,
+      "summary": "Duplicate keys resolved first-key-wins, matching Aeson 2.2.5.0",
+      "detail": "Both peers use first-key-wins per object; the guest normalises its association lists (recursively) before structural decoding, and dependency updates must rerun this conformance assertion.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.08"
+      ],
+      "sections": [
+        "Value profile"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "firstKeys normalisation in guest Json.hs from the PR #6 runtime"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.15",
+      "seq": 6,
+      "pr": 6,
+      "summary": "Newtypes use ordinary constructor mapping; no name-based transparency",
+      "detail": "Positional wrappers are tagged and named record wrappers are objects; transparency is never inferred from a type's name or newtype-ness, and string representations apply only to recognised SDK/library scalars, not a KB type called FactId or Date.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.12"
+      ],
+      "sections": [
+        "Value profile"
+      ],
+      "anchors": [
+        "FactId"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 6,
+        "evidence": "PR #6 tests ordinary newtype wrappers in real MicroHs round trips"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.16",
+      "seq": 78,
+      "pr": 96,
+      "summary": "Concrete plugin envelope: typed Either result, canonical integer request IDs",
+      "detail": "The plugin adapter starts with {arguments, snapshot}, emits tagged HostRequest/Completed objects and receives HostResponse whose result encodes the typed Either FetchError a directly, without a second error wrapper. Wrong IDs, tags, fields or payloads abort before resumption; config/payload codecs come from inspected types.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.03"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FetchError",
+        "HostRequest",
+        "HostResponse"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 78,
+        "evidence": "PR #96 implements and tests this envelope under GHC and MicroHs against a recording broker"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.17",
+      "seq": 154,
+      "pr": 201,
+      "summary": "Chunk-framed binary sections replace LF-terminated JSON lines",
+      "detail": "Each section is a series of chunks (canonical ASCII byte count, LF, exact bytes; max 64 KiB) ended by a zero-length chunk; receivers reject oversize, noncanonical or truncated input, and chunk boundaries carry no meaning. Motivated by issue #199 throughput measurements.",
+      "kind": "replace",
+      "supersedes": [
+        "0007.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ByteString"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 155,
+        "evidence": "PR #202 implements two length-prefixed chunk sections per message with 64 KiB maximum chunks and explicit terminators (Transport.hs)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.18",
+      "seq": 154,
+      "pr": 201,
+      "summary": "Frames carry JSON metadata plus a raw body used only for HTTP",
+      "detail": "Frame = metadata + body; decodeMessage also validates the permitted body. HTTP request/response bodies (any status) travel raw instead of as escaped JSON strings; transport failures have no body and other messages reject a nonempty one.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.05"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "decodeMessage",
+        "encodeMessage"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 155,
+        "evidence": "PR #202: HTTP request/response bodies bypass the nested JSON string, including non-2xx responses"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.19",
+      "seq": 154,
+      "pr": 201,
+      "summary": "Verified binary standard handles per platform; no text-mode fallback",
+      "detail": "The guest reads exact chunks with native block I/O and must obtain binary stdin/stdout under GHC and MicroHs on Linux, macOS and WSL; reopening /dev/stdin|stdout needs platform verification and silently falling back to text mode is forbidden.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 155,
+        "evidence": "PR #202 adds native block I/O and binary handles (Transport.hs uses /dev/stdout and hSetBinaryMode); macOS/WSL verification not evidenced"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0007.20",
+      "seq": 154,
+      "pr": 201,
+      "summary": "Guest retains packed Text/ByteString and encodes results in bounded pieces",
+      "detail": "SDK identities, messages and textual payloads use Text, with String conversion local to adapters; results are encoded and written incrementally while still forming one terminal Completed message, with no per-page result protocol.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 155,
+        "evidence": "PR #202: SDK identifiers/payloads use Text and terminal JSON is emitted in bounded pieces with one Completed result"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 80,
+      "pr": 99,
+      "note": "Progress prose: native broker now interprets filesystem and evidence requests; no requirement change."
+    },
+    {
+      "seq": 81,
+      "pr": 100,
+      "note": "Progress prose: registration and configured acquisition proved."
+    },
+    {
+      "seq": 84,
+      "pr": 103,
+      "note": "Drops the 'no multi-version protocol or historical evidence schema negotiation' clause after ADR 0014 went latest-only; 'no protocol/SDK version negotiation' remains in 0007.09."
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Navigation/link updates (vendored inputs, codec tests) and rewording of the MicroHs round-trip requirement already covered by 0007.12."
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: removes status/basis, rewords context and decimal-mapping gate as firm rules covered by 0007.07, and restates broker dispatch by selected row (covered by 0007.04 and ADR 0009)."
+    }
+  ],
+  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted."
+}

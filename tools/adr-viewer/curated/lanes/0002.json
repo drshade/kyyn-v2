@@ -1,0 +1,468 @@
+{
+  "adr": "0002",
+  "title": "Native Haskell kernel and bundled MicroHs execution",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0002.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "GHC kernel plus bundled pinned MicroHs for all guest programs",
+      "detail": "A GHC-built native kernel runs KB and tap plugin code through a pinned, shipped MicroHs compiler/evaluator with base/SDK libraries and cpphs. Plugins arrive as source and are compiled locally; per-plugin native binaries are rejected, and the native host never imports KB types nor guests host libraries.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "MicroHs",
+        "MHSDIR"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "Guest code runs on pinned MicroHs from seq 6-8; PR #44 stages the bundled runtime and proves the installed journey; plugin source install follows at seq 72-74"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0002.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Managed child process with private typed protocol and live continuation",
+      "detail": "Guests run as a managed child process; a generated adapter keeps the live continuation while requesting host effects, and only request/result data crosses. No serialized closures, durable continuations, in-process ABI or worker pool; the process is a failure boundary, not a sandbox.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "One-shot child execution from seq 7-8; PR #96 adds the private guest adapter owning request IDs and live continuation resumption for host calls"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0002.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "GuestCompilation plumbing capability, separate from fact loading",
+      "detail": "Compilation is a kyyn-plumbing capability taking fixed GuestSources (no KB layout or fact data) and returning diagnostics or a compiled entry; porcelain selects sources and generates adapters but never assembles MicroHs commands. One compiler capability, not a backend framework or build service.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "GuestCompilation",
+        "CompileGuest",
+        "compileGuest",
+        "GuestSources",
+        "CompiledEntry",
+        "BuildOptions",
+        "CodeSnapshot"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "PR #8 implements GuestCompilation/compileGuest/GuestSources in plumbing"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "kyyn-microhs interpreter over FileSystem/ProcessExecution with explicit toolchain",
+      "detail": "runGuestCompilation lives in kyyn-microhs, lowers into FileSystem and ProcessExecution rather than ambient IO, and receives a GuestToolchain from composition; schema inspection and compilation share the same selected toolchain.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "GuestToolchain",
+        "runGuestCompilation",
+        "FileSystem"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "PR #8: GuestCompilation lowers into FileSystem and ProcessExecution without IOE; GuestToolchain code_added"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Build identity from code inputs only; fact changes reuse builds",
+      "detail": "Compilation derives its build/cache identity from source, dependencies, SDK, compiler and options, never fact contents, so a fact-only change reuses an unchanged code build and changed inputs never reuse an incompatible one.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "PR #8 records BuildIdentity from toolchain revision and source digest, facts passed only at runtime"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Compiler rejection is diagnostics; compiler crash is Failure",
+      "detail": "Parse/type rejection returns diagnostics in the caller's normal result channel, while inability to start the compiler or a crash is an operational Failure: a broken proposed module is not a broken installation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Diagnostic"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "PR #8 returns Either [Diagnostic] CompiledEntry with operational failures separate"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Scoped ProcessExecution plumbing effect owns child cleanup",
+      "detail": "A plumbing ProcessExecution effect with WithProcess scopes child cleanup on return, failure and cancellation without exposing native IO to porcelain; reads are byte chunks with framing owned by the adapter, and exit status/stderr are required.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ProcessExecution",
+        "WithProcess",
+        "WriteStdin",
+        "ReadStdout",
+        "ProcessSpec",
+        "ProcessPipes",
+        "runProcessExecutionIO"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 7,
+        "evidence": "PR #7 implements ProcessExecution/WithProcess and runProcessExecutionIO"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.08",
+      "seq": 7,
+      "pr": 7,
+      "summary": "ProcessPipes is an inner effect scope; explicit spec, SeqUnlift",
+      "detail": "withProcess installs a child-local ProcessPipes effect (write, close stdin, read, await exit) instead of an opaque handle; ProcessSpec gives executable, args, directory and full environment with no shell. Stderr drains concurrently into ProcessExit, nonzero exit is data, and secondary cleanup errors never mask a primary failure.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "withProcess",
+        "AwaitExit",
+        "CloseStdin",
+        "ProcessExit",
+        "SeqUnlift"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 7,
+        "evidence": "PR #7 implements the scoped API with typed-process and cancels the stderr reader before teardown"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.09",
+      "seq": 8,
+      "pr": 8,
+      "summary": "Compile to .comb bytecode run by mhseval; no user C compiler",
+      "detail": "The interpreter emits MicroHs combinator bytes consumed by the installed evaluator instead of native executables, so C is only a distribution build input, never a KB-authoring dependency.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 8,
+        "evidence": "PR #8 compiles captured sources to .comb and executes with the bundled evaluator"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.10",
+      "seq": 8,
+      "pr": 8,
+      "summary": "Hermetic captured GuestSources including SDK bytes; no BuildOptions",
+      "detail": "GuestSources is a checked path tree combining KB/generated modules with installed SDK/dependency bytes; the compiler runs with cleared search paths, explicit MHSDIR/MHSCPPHS and empty PATH. The speculative BuildOptions type is dropped until a second mode exists.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.03",
+        "0002.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "MHSCPPHS",
+        "GuestSources"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 8,
+        "evidence": "PR #8 captures SDK/library sources with authored modules; BuildOptions removed"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.11",
+      "seq": 8,
+      "pr": 8,
+      "summary": "Immutable CompiledEntry executed via capability-owned withCompiledEntry",
+      "detail": "CompiledEntry holds immutable bytecode, build identity and launch description; withCompiledEntry materializes it in a fresh temporary scope and runs it through ProcessExecution so callers never reconstruct evaluator flags or keep build paths.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CompiledEntry",
+        "withCompiledEntry"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 8,
+        "evidence": "withCompiledEntry code_added at seq 8"
+      },
+      "ended": {
+        "seq": 45,
+        "how": "replaced",
+        "by": "0002.15"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.12",
+      "seq": 8,
+      "pr": 8,
+      "summary": "BuildIdentity: pinned toolchain revision plus SHA-256 sources digest",
+      "detail": "The artifact records a BuildIdentity of compiler revision and a length-delimited SHA-256 over sorted paths/bytes and selected entry; it is not an attestation of installed binaries, and no persistent cache exists yet.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.05"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "BuildIdentity",
+        "buildIdentity"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 8,
+        "evidence": "BuildIdentity/buildIdentity code_added at seq 8"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.13",
+      "seq": 8,
+      "pr": 8,
+      "summary": "Exit status 1 is compiler rejection; other exits are operational",
+      "detail": "For the pinned compiler, status 1 returns UTF-8 diagnostic text as guest.compiler-rejected without parsing prose; other statuses, signals, bad encoding and empty artifacts are operational failures.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 8,
+        "evidence": "PR #8 classifies compiler exits as described"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.14",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Ship upstream GHC-built gmhs as bin/mhs; self-hosted build is reference",
+      "detail": "The pinned compiler is staged from its GHC-built gmhs target (much faster) at the existing bin/mhs path, with bytecode parity against the self-hosted build checked in full integration; same source, not a language fork.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR #44 stages gmhs under bin/mhs with a bytecode parity fixture"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.15",
+      "seq": 45,
+      "pr": 48,
+      "summary": "CompiledProgram is pure domain data; ExecuteCompiled runs it",
+      "detail": "CompiledEntry/withCompiledEntry give way to a domain-package CompiledProgram (identity plus bytecode, no launch config) so porcelain can carry prepared code; an ExecuteCompiled operation supplies evaluator and launch configuration from the installed toolchain.",
+      "kind": "replace",
+      "supersedes": [
+        "0002.11"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CompiledProgram",
+        "ExecuteCompiled",
+        "executeCompiled",
+        "executeCompiledEntry"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 45,
+        "evidence": "PR #48 adds CompiledProgram and executeCompiled; CompiledEntry code_removed seq 45"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.16",
+      "seq": 83,
+      "pr": 102,
+      "summary": "Separate GuestExecution effect with one-shot and conversational modes",
+      "detail": "GuestCompilation only compiles; GuestExecution owns one-shot ExecuteCompiled and framed ExecuteGuest conversations whose host callback stays in the caller's effect row. Its kyyn-microhs interpreter needs only FileSystem, ProcessExecution and Failure.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.15"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "GuestExecution",
+        "ExecuteGuest"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102 (1cebb68): GuestExecution owns both execution modes; GuestCompilation only compiles"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.17",
+      "seq": 104,
+      "pr": 132,
+      "summary": "Per-KB .kyyn/compiled bytecode cache inside the compilation interpreter",
+      "detail": "runGuestCompilation reuses artifacts from a per-KB cache keyed by BuildIdentity, exact compiler args and environment; misses publish atomically, rejections are not cached, nonempty entries are trusted, and deleting the directory is always safe. Callers of compileGuest are unchanged.",
+      "kind": "refine",
+      "supersedes": [
+        "0002.12"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DirectoryScope"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 104,
+        "evidence": "PR #132 implements the cache with compilation-cache tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.18",
+      "seq": 142,
+      "pr": 184,
+      "summary": "Opt-in KYYN_TIMINGS phase timings on stderr",
+      "detail": "KYYN_TIMINGS=1 emits inclusive timing events for inspection, compilation/cache hits, guest execution and command wall time on stderr without changing normal or JSON results.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Development diagnostics"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 105,
+        "evidence": "PR #134 exposed opt-in command phase timings"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0002.19",
+      "seq": 142,
+      "pr": 184,
+      "summary": "Checkout-local inspection cache keyed by Kyyn build revision",
+      "detail": "Native schema/API inspection results are cached in checkout-local Dhall keyed by sources, selection, compiler settings and installed Kyyn revision; unidentified builds disable it, and no cache stores validation authority.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Development diagnostics"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 106,
+        "evidence": "PR #136 caches native inspection results across CLI invocations"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 7,
+      "pr": 7,
+      "note": "Also converts the header to YAML front matter and restates the basis line; metadata only"
+    },
+    {
+      "seq": 43,
+      "pr": 44,
+      "note": "Also bumps front-matter date; metadata only"
+    },
+    {
+      "seq": 88,
+      "pr": 108,
+      "note": "Advances the MicroHs pin to 3322c60 for the upstream path-quoting fix; a deliberate pin update under the existing release-gate rule, not a new requirement"
+    },
+    {
+      "seq": 117,
+      "pr": 152,
+      "note": "Advances the MicroHs pin to 8bf3d4d (0.16.7.0) for CPP filename fixes; pin bump only"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconcile: drops status/date/basis, removes measurement prose, delegates pin identity to vendor/README; no architectural change"
+    }
+  ],
+  "notes": "This lane tracked its code closely: almost every refinement (seq 7, 8, 45, 83, 104) was written by the PR that implemented it, so the spec rarely ran ahead. The compiled-artifact shape was rewritten twice: CompiledEntry with a launch description and withCompiledEntry (seq 8) became a pure domain CompiledProgram plus ExecuteCompiled (seq 45), and execution then moved out into its own GuestExecution effect (seq 83) once plugins needed conversational host calls. The founding speculative BuildOptions type was dropped at seq 8 ('no options type before a second mode'), and the founding 'no persistent cache' line was later reversed by the per-KB bytecode cache (seq 104), which I treated as a refine of build identity because the identity rule is unchanged. The seq 142 'Development diagnostics' section is not Context/Consequences, so I recorded two code_first nodes for it. Pin bumps (seq 88, 117) sit in Consequences and are editorial. The founding production release gates (cancellation, clean-install, heterogeneous-root tests) live in Consequences and produce no nodes."
+}

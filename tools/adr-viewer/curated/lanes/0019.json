@@ -1,0 +1,273 @@
+{
+  "adr": "0019",
+  "title": "Typed failures, explicit cancellation and modest operational state",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0019.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Expected failures are typed at owning boundary, never empty success",
+      "detail": "Not-found, invalid input, contract mismatch, validation diagnostics, base conflict, missing secret, protocol failure and uncertain outcomes are represented where they arise, with locations and repair actions. Native exceptions are translated once at the plumbing edge; validation reports and provider errors are data, and unknown failures never become empty successes.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Diagnostic",
+        "CheckResult",
+        "ValidationReport",
+        "Uncertain"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 7,
+        "evidence": "PR #7 translates native process IO failures at their operation and returns nonzero exits as data; CheckResult/ValidationReport follow at seq 23"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Separate Failure effect with fixed OperationalFailure vocabulary incl. cancellation",
+      "detail": "Host operational failures stop an operation through a dedicated Failure effect (Raise/runFailure) over a selected vocabulary: StorageUnavailable, CodeRejected, RuntimeUnavailable, ProtocolBroken, ContractMismatch, InvalidRequest and OperationCancelled. Expected domain outcomes stay in result types rather than one exception channel.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "OperationalFailure",
+        "runFailure",
+        "StorageUnavailable",
+        "CodeRejected",
+        "RuntimeUnavailable",
+        "ProtocolBroken",
+        "ContractMismatch",
+        "InvalidRequest",
+        "OperationCancelled"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 7,
+        "evidence": "PR #7 implements OperationalFailure/runFailure with only RuntimeUnavailable ('no placeholder variants'); CodeRejected, ProtocolBroken, ContractMismatch, InvalidRequest and OperationCancelled never appeared in code"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0019.10"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Proposed-code compile errors are review outcomes, not operational failures",
+      "detail": "CodeRejected is reserved for installed code unexpectedly rejected; preview returns ProposedCodeRejected before materialization for compilation errors anywhere in the proposal's build scope (incl. validation/query entries), and checking returns Rejected ValidationReport for semantic/example failures, not a second compilation channel. RuntimeUnavailable means a missing or crashed compiler.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CodeRejected",
+        "ProposedCodeRejected",
+        "Rejected",
+        "RuntimeUnavailable"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "PR #35 returns ProposedCodeRejected from evolution evaluation (code_added at 34); Rejected/CheckResult from seq 23"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0019.11"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Keep MicroHs compiler text verbatim; no parsed or invented locations",
+      "detail": "Compiler errors keep the original message with location = Nothing and a host-owned category code; Kyyn does not parse compiler prose for control flow or spans, or wait for an upstream structured API. Inspector-owned errors may keep structured positions; generated-source diagnostics are identified honestly.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "Guest compilation through plumbing (PR #8) returns compiler diagnostics as text; PR #35 explicitly adds no Haskell or debug-output parsing"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0019.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "After a commit or external write, report the real outcome",
+      "detail": "Once a commit or possible external write has happened, cancellation or native failure is caught at that boundary and the meaningful outcome reported; OperationCancelled must not replace a known accepting revision, and later inspection must distinguish a hard kill from a returned pre-effect failure.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 retains AcceptedCommit after ref update and tests injected asynchronous interruption after a completed ref update"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Cancellation is operation-scoped; composition root releases resources",
+      "detail": "Cancelling an operation releases its pipes, workers, temp files and locks via the composition root; cancelling pure work prevents publication, after a remote write it may leave Uncertain. Nested guest lifetimes belong to the outer invocation; killing a guest never promises rollback of requested host actions and there is no cross-process cancellation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Uncertain"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 7,
+        "evidence": "PR #7: scoped process execution terminates/reaps the child on early return, failure, exceptions and cancellation"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "No generic persisted operation registry or workflow engine",
+      "detail": "Progress and results go to the owning caller; durability belongs to the concrete operation that needs it (e.g. Delivery), pure calls rerun from captured inputs and external writes are never blindly replayed. No universal state machine, hidden retries or string-parsed errors.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Alternatives and consequences"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; no code existed at seq 1 and no generic operation registry was ever introduced"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.08",
+      "seq": 42,
+      "pr": 43,
+      "summary": "Interrupted acceptance yields no result; next run inspects Git",
+      "detail": "Following ADR 0012, asynchronous cancellation or process death after the ref update may produce no normal result and never implies non-acceptance; the next invocation establishes the outcome from Git. A CLI handling interruption says status may need inspection, names the recovery command and uses an exit status distinct from ordinary refusal.",
+      "kind": "refine",
+      "supersedes": [
+        "0019.05",
+        "0019.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44 exposes the evolution journey through the CLI including publication/interruption outcomes (recovery lookup itself from PR #42)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0019.09",
+      "seq": 103,
+      "pr": 130,
+      "summary": "Strip compiler CallStack noise; codes name the preparing operation",
+      "detail": "Preserve the compiler's full diagnostic (file/line/column, multi-line text) but drop internal CallStack/HasCallStack blocks. Rejection codes identify the preparing operation (schema., tool., validator., query., evolution.compiler-rejected; guest.compiler-rejected / guest.api-compiler-rejected otherwise), never a role guessed from a module name.",
+      "kind": "refine",
+      "supersedes": [
+        "0019.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CallStack",
+        "HasCallStack"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #130 adds shared compiler-message cleanup and contextual classification with an installed type-error journey"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0019.10",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Failure is effectful Error over four operational constructors",
+      "detail": "Failure = Error OperationalFailure with raiseFailure, and the vocabulary is StorageUnavailable, RuntimeUnavailable ProcessDiagnostic, CompilerUnavailable and GitUnavailable. Asynchronous cancellation propagates through scoped cleanup instead of being an OperationCancelled constructor or a successful return.",
+      "kind": "replace",
+      "supersedes": [
+        "0019.02"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "raiseFailure",
+        "OperationalFailure",
+        "StorageUnavailable",
+        "RuntimeUnavailable",
+        "CompilerUnavailable",
+        "GitUnavailable",
+        "ProcessDiagnostic"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 7,
+        "evidence": "raiseFailure/ProcessDiagnostic existed from PR #7, CompilerUnavailable from seq 18 and GitUnavailable from seq 19; the ADR caught up at 143"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0019.11",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Compile errors classified by stage: entry pre-materialization, checking-code after",
+      "detail": "Authored-code compilation errors are diagnostics of the preparing operation: evaluation returns ProposedCodeRejected for schema/entry rejection before materialization, while candidate checking returns Rejected ValidationReport for checking-code compilation errors after materialization, and failed checking keeps the saved candidate. CodeRejected is gone; missing/crashed compilers stay operational Failure.",
+      "kind": "replace",
+      "supersedes": [
+        "0019.03"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ProposedCodeRejected",
+        "Rejected",
+        "ValidationReport"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 36,
+        "evidence": "PR #186 reconciles to existing behaviour; candidates persisted and checked post-materialization since PR #37 (seq 36), when ADR 0011 also dropped ProposedCodeRejected from checking"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [],
+  "notes": "Founding ADR with no ### subsections; split into 7 commitments (typed boundary failures, Failure vocabulary, compile-error classification, compiler-text policy, post-effect outcome honesty, scoped cancellation, no operation registry). The lane changed only three times. The most notable thing is how far the founding Failure vocabulary was from what got built: PR #7 deliberately implemented only the constructors in use, and five of the seven founding constructors (CodeRejected, ProtocolBroken, ContractMismatch, InvalidRequest, OperationCancelled) never existed in code. The ADR only caught up at the seq 143 desired-state reconciliation, which I treated as replacing 0019.02 and 0019.03 (code_first) rather than as editorial because it reverses concrete commitments: cancellation stops being a Failure constructor and checking-code compile errors move from ProposedCodeRejected to post-materialization Rejected. Seq 42 reworded the post-commit cancellation promise ('cancelling after ref update reports acceptance') into the weaker, more honest 'may yield no result; inspect Git', aligning with ADR 0012's crash-recovery design. Realisation seqs for the broad founding principles (.01, .04, .06) are judgement calls with medium/low confidence."
+}

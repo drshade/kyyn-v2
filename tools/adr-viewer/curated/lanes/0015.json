@@ -1,0 +1,788 @@
+{
+  "adr": "0015",
+  "title": "Locally built plugins group source and sink connectors",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0015.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Taps are Git catalogues distributing plugin, library and template packages",
+      "detail": "A tap is a Git repository with a data catalogue distributing three package kinds (plugins, reusable MicroHs libraries, KB templates); any third-party tap or local checkout works without a central approval service, and first-party packages use the same interfaces.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PackageKind",
+        "PluginPackage",
+        "LibraryPackage",
+        "TemplatePackage"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No tap, library-package or template-package code existed before the tap model was redefined at seq 114"
+      },
+      "ended": {
+        "seq": 114,
+        "how": "replaced",
+        "by": "0015.24"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0015.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugins ship as source, vendored into the KB and compiled locally",
+      "detail": "Distributed plugins are inspectable source directories, vendored with their source dependencies into the KB's Git tree and compiled locally against the installed SDK/runtime; no supplied executables, and compiled artifacts are disposable build products.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PackageIdentity"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Vendoring lands with PR #89/#90 (seq 73-74); PR #100 compiles vendored local-file source and hashes captured source for package identity. Source-dependency vendoring itself is still not implemented (packages are self-contained)",
+        "seq": 81
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0015.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Evidence methods supply citable source identifiers, no version obligation",
+      "detail": "Evidence-producing methods should supply a stable URI, scoped provider item ID or local path so citations stay meaningful outside Kyyn's evidence cache; no source-version, fingerprint or historical-reconstruction obligation attaches to citations.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Local-file evidence is keyed by file path once configured fetches land (PR #101); Graph events later carry provider IDs",
+        "seq": 82
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0015.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "One plugin supplies connector types; KB configures named instances",
+      "detail": "A plugin supplies connector types (config type, implementation, methods), each a Source or Sink; the KB configures uniquely named instances beneath the plugin, repeated types allowed, referenced by plugin plus instance name. No kernel Connection entity or per-instance install lifecycle.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "ConnectorKind",
+        "ConnectorType",
+        "ConnectorInstance",
+        "ConnectorTypeName",
+        "ConnectorName"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #100 registers source connectors with root-owned Dhall instance configuration and proves two independent Folder instances; sink connector types are still not implemented",
+        "seq": 81
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0015.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Single typed method registration and checked host invocation boundary",
+      "detail": "Fixed health/description/config methods and typed named methods share one registration mechanism; the host listMethods/callPlugin boundary checks input and output contracts against structural descriptors, with no unchecked byte-call escape hatch.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "listConnectors",
+        "listMethods",
+        "callPlugin",
+        "MethodDescriptor",
+        "PluginError",
+        "PluginInvocation",
+        "RootStore"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "The generic listMethods/callPlugin host API never appeared in code; the prepared-plugin/PluginRead boundary that replaced it at seq 143 is what was built"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0015.29"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0015.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Invocations select plugin and instance; config is typed input",
+      "detail": "A connector call names plugin and connector instance rather than an ambient default account; the selected instance's concrete configuration is assembled into the method's typed input by generated bindings, and dispatch verifies the method belongs to that connector type.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #101 exposes configured per-instance fetching through the CLI; PR #107 adds per-instance handles for KB tools",
+        "seq": 82
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0015.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Explicit plugin update re-fetches source from recorded origin",
+      "detail": "A dedicated update operation (e.g. `kyyn plugin update`) fetches from the recorded remote origin, re-vendors and rebuilds the whole plugin package, preserving configuration/credentials and refusing to silently overwrite local source edits.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Explicit updates, ordinary repair"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No separate update command was built; re-installation became the update route at seq 120"
+      },
+      "ended": {
+        "seq": 120,
+        "how": "replaced",
+        "by": "0015.27"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0015.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "No plugin version pins, compatibility declarations or solver",
+      "detail": "First release deliberately has no version pins, SDK/runtime compatibility declarations, negotiation or backward-compatibility promise; incompatible updates are repaired via compiler diagnostics and Git, and old compiled artifacts are never selected for changed source.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Explicit updates, ordinary repair"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; no version machinery existed at founding and none was added",
+        "seq": 1
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Install/update stage local files adopted through ordinary evolution",
+      "detail": "Installation and update prepare local files only; they never create a special install commit or silently accept a new root, so changes are adopted through the ordinary code-only evolution route or Git with checking on load.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Explicit updates, ordinary repair"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #89 installs into the KB without commits, HEAD changes or acceptance",
+        "seq": 73
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Trust selected source and toolchain; no signing or attestation",
+      "detail": "Building the source it executes removes executable-provenance concerns; Kyyn introduces no plugin signing, provenance attestations, reproducible-build gates or central trust service. Review is ordinary judgement, not a runtime gate.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Trust the selected source and the installed toolchain"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; no signing or trust machinery exists",
+        "seq": 1
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.11",
+      "seq": 70,
+      "pr": 86,
+      "summary": "Install from local directory or Git URL subdirectory with origin",
+      "detail": "`plugin install --from DIR|URL [--path SUB]` captures a package copy (local working-tree contents or fetched Git HEAD) into root/plugins/packages/<name>/source with Kyyn-owned origin.dhall recording source and path, excluding .git/build directories and refusing symlinks, submodules and existing destinations.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.02"
+      ],
+      "sections": [
+        "Decision / Install a source package"
+      ],
+      "anchors": [
+        "PluginSource",
+        "LocalPackage",
+        "GitPackage",
+        "InstalledPlugin",
+        "TreePath",
+        "ReadTree"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "PR #87 implementing this was paused; the local working-tree route was replaced by Git-only acquisition before shipping"
+      },
+      "ended": {
+        "seq": 71,
+        "how": "replaced",
+        "by": "0015.14"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.12",
+      "seq": 70,
+      "pr": 86,
+      "summary": "Hermetic kyyn-plugin.dhall manifest names package and entry module",
+      "detail": "The package root is the directory containing a hermetic kyyn-plugin.dhall `{ name, entryModule }`; the entry module must exist under src/. The manifest locates source only; method and config schemas stay in Haskell declarations.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Install a source package"
+      ],
+      "anchors": [
+        "PluginManifest",
+        "ModuleName"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #87 adds PluginManifest and decoding; plugins/local-file manifest ships in PR #90",
+        "seq": 72
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.13",
+      "seq": 70,
+      "pr": 86,
+      "summary": "Installation validates structure only, with no runtime or commit effects",
+      "detail": "Installation validates package structure without guest compilation, configuration, health or evidence; it creates no commit, changes no accepted HEAD and accepts nothing, leaving an ordinary local root change for the owner to adopt. Stable plugin.* refusal codes.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.09"
+      ],
+      "sections": [
+        "Decision / Install a source package"
+      ],
+      "anchors": [
+        "PluginInstallation",
+        "InstallPlugin",
+        "Diagnostic"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #89 runtime-free PluginInstallation porcelain with structured refusals",
+        "seq": 73
+      },
+      "ended": {
+        "seq": 79,
+        "how": "replaced",
+        "by": "0015.17"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.14",
+      "seq": 71,
+      "pr": 88,
+      "summary": "Install only committed Git revisions; origin records revision",
+      "detail": "Every source is a Git repository: local packages are read from committed HEAD, dirty package paths are refused (plugin.source-uncommitted), and origin.dhall records repository, repository-relative path and exact captured revision. The filesystem tree-reader route is dropped.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.11"
+      ],
+      "sections": [
+        "Decision / Install a source package"
+      ],
+      "anchors": [
+        "PluginOrigin",
+        "PluginRepository",
+        "LocalRepository",
+        "RemoteRepository",
+        "GitRevision",
+        "DiscoverRepository"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #87 (seq 72) adds Git-backed acquisition and revision-bearing PluginOrigin; PR #89 (seq 73) installs; PR #90 (seq 74) CLI",
+        "seq": 73
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.15",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Each connector instance declares its generated guest binding name",
+      "detail": "Root-owned instances carry a BindingName for their generated guest binding under ADR 0016; the binding is an authoring name, not another identity, so renaming it does not rename the instance or its history.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.04"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "BindingName"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "BindingName and global binding checks land in PR #100; executable bindings in PR #107",
+        "seq": 81
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.16",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Plugin-specific captured-evidence read methods, no generic evidence view",
+      "detail": "Sources expose plugin-specific typed methods over captured evidence (e.g. viewEmail) that are separately discoverable and composable in KB tools; the host prescribes no generic evidence view, and acquisition and captured reads have distinct capability rows.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #106 adds local-file content method discovery and invocation over latest evidence",
+        "seq": 86
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.17",
+      "seq": 79,
+      "pr": 98,
+      "summary": "Plugin installation targets an unaccepted evolution only",
+      "detail": "`plugin install --evolution ID` writes into evolutions/<id>/target/plugins/packages; missing or accepted evolutions are refused before acquisition, changing a target stales prior checks, and the accepted root changes only on acceptance. No direct-to-root mode for install, update or removal.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.13"
+      ],
+      "sections": [
+        "Decision / Install a source package"
+      ],
+      "anchors": [
+        "EvolutionWorkspace",
+        "EvolutionStore"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #98 implements target-scoped installation with installed install/check/accept journeys",
+        "seq": 79
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.18",
+      "seq": 81,
+      "pr": 100,
+      "summary": "Connectors registered via entry module's SourceConnector list with named types",
+      "detail": "A plugin entry module exports `connectors :: [SourceConnector]` naming connector, config/payload types, fetch and pure validateConfig by qualified Haskell names; the compiler inspects named types and generated adapters typecheck the functions, deriving a Dhall config union without duplicated schemas.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.05"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "SourceConnector",
+        "connectors",
+        "QualifiedTypeName",
+        "SchemaInspection",
+        "FolderConfig",
+        "ValidationReport"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #100 implements registration, inspection, generated adapters and root-wide config validation",
+        "seq": 81
+      },
+      "ended": {
+        "seq": 115,
+        "how": "replaced",
+        "by": "0015.26"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.19",
+      "seq": 86,
+      "pr": 106,
+      "summary": "CapturedMethod declarations and PluginRead invoke typed captured reads",
+      "detail": "Connector declarations list CapturedMethod entries (name, description, implementation); generated adapters check them against CapturedRead, and the PluginRead capability validates input, loads current evidence once and calls the read with no file-acquisition capability or live fallback.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.16"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "CapturedMethod",
+        "PluginRead",
+        "MethodName",
+        "FetchError",
+        "CapturedRead"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #106 implements CapturedMethod registration, PluginRead and CLI method list/show/execute",
+        "seq": 86
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.20",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Optional typed fetch options checked before acquisition",
+      "detail": "A connector may advertise an options type; its contract is discoverable via `plugin connector show`, supplied options are checked before guest execution, and the fetch signature takes `Maybe Options` while no-options connectors keep their existing signature.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.18"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "fetch",
+        "EvidenceSnapshot",
+        "EvidenceChange"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #145 implements fetchOptionsType, checked --options and history retention",
+        "seq": 111
+      },
+      "ended": {
+        "seq": 115,
+        "how": "replaced",
+        "by": "0015.26"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.21",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Connectors declare FileSource or NetworkSource acquisition context",
+      "detail": "Each source connector selects an acquisition context that picks ADR 0009's file/evidence row or HTTP/secret/evidence row, determining generated signatures and native dispatch.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "AcquisitionContext",
+        "FileSource",
+        "NetworkSource"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Never implemented; dropped in favour of one unified acquisition row when Graph shipped (seq 113)"
+      },
+      "ended": {
+        "seq": 113,
+        "how": "replaced",
+        "by": "0015.23"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.22",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Optional connector login entry dispatched under ADR 0016",
+      "detail": "A source connector may name a login entry checked and dispatched under ADR 0016's plugin-owned authentication; discovery shows the declaration without executing authentication or fetching.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #147 adds CLI connector login and Graph device-code/client-secret auth",
+        "seq": 113
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.23",
+      "seq": 113,
+      "pr": 147,
+      "summary": "All source connectors share one acquisition capability row",
+      "detail": "Every source connector uses ADR 0009's single acquisition row (files, HTTP, secrets, waiting, evidence reads); login presence is independent of which capabilities a fetch uses.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.21"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #147 unifies the acquisition row and dispatcher and ships the Graph calendar source",
+        "seq": 113
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.24",
+      "seq": 114,
+      "pr": 148,
+      "summary": "KB-local taps.dhall declares taps; synced catalogues are disposable caches",
+      "detail": "A KB's tracked top-level taps.dhall (outside root/evolution ownership) names tap repositories; synced catalogues live in ignored .kyyn/taps; search is offline; `tap/plugin` names resolve through the existing installer and execution never resolves a tap. No global registry; tap updates never change installed plugins.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.01"
+      ],
+      "sections": [
+        "Decision / Discover packages through KB-local taps"
+      ],
+      "anchors": [
+        "TapName",
+        "PluginDiscovery"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #155 implements taps.dhall, tap list/add/remove/update, search and qualified install",
+        "seq": 119
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.25",
+      "seq": 114,
+      "pr": 148,
+      "summary": "Package README is the guide, read host-side without executing plugins",
+      "detail": "A plugin's guide is its package-root README.md; the host reads it for installed, evolution or not-yet-installed (tap) packages without compiling, authenticating or validating the root.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Read packaged guides without executing plugins"
+      ],
+      "anchors": [
+        "PluginDocumentation",
+        "readPluginGuide",
+        "PluginGuide"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #154 (seq 118) reads installed guides; PR #155 (seq 119) adds pre-installation guide access",
+        "seq": 119
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.26",
+      "seq": 115,
+      "pr": 150,
+      "summary": "Registration names functions; contracts derived from checked signatures",
+      "detail": "Connector and method registration names implementations only; the compiler derives Config, Payload, optional Options and captured-method Input/Result from checked function signatures, rejecting misfits, using payload-parameterised SDK types instead of a generated KyynPluginBindings module.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.18",
+        "0015.20"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "Acquisition",
+        "ReadsEvidence",
+        "KyynPluginBindings"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #151 implements signature-derived preparation and migrates first-party plugins",
+        "seq": 116
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.27",
+      "seq": 120,
+      "pr": 156,
+      "summary": "Repeat install replaces the package and is the update route",
+      "detail": "Re-running `plugin install` in an evolution replaces the named package completely (removing obsolete files, updating origin, preserving connector config); this replaces both the duplicate-install refusal and any separate update command or force flag.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.07"
+      ],
+      "sections": [
+        "Decision / Install a source package",
+        "Decision / Explicit updates, ordinary repair"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #156 implements staged complete re-vendoring with rollback",
+        "seq": 120
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.28",
+      "seq": 121,
+      "pr": 157,
+      "summary": "Evolution review shows host-derived plugin package comparisons",
+      "detail": "Evolution check/show reports added, removed and changed plugin packages with before/after origin and changed paths from package bytes (so local edits under an unchanged origin show), persisted with candidate and accepted reports.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Install a source package"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #157 persists plugin comparisons in EvolutionRecord v4 and renders them",
+        "seq": 121
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.29",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Host plugin boundary is preparation plus typed captured-read execution",
+      "detail": "Host contracts are PluginPreparation (prepare packages/plugins, validate configs without provider calls) yielding PreparedConnector/PreparedMethod, and PluginRead (LoadCapturedInput, ExecuteCapturedMethod) with checked contracts; sinks are owned by ADR 0017, replacing the generic callPlugin API.",
+      "kind": "replace",
+      "supersedes": [
+        "0015.05"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "PluginPreparation",
+        "PreparePackages",
+        "PreparePlugins",
+        "ValidatePlugins",
+        "PreparedConnector",
+        "PreparedMethod",
+        "PreparedPackage",
+        "ConfiguredConnector",
+        "LoadCapturedInput",
+        "ExecuteCapturedMethod",
+        "CurrentEvidence"
+      ],
+      "realised": {
+        "how": "code_first",
+        "evidence": "PreparePackages/PreparedPackage existed from seq 82 and LoadCapturedInput/ExecuteCapturedMethod from seq 87; the reconciliation adopted them as contract",
+        "seq": 87
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.30",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Typed connector sync positions derived from fetch signatures",
+      "detail": "Stateful fetch signatures take FetchContext Position and return FetchResult Payload Position; Position is derived from the checked signature like Config/Payload/Options and kept through PreparedConnector and generated dispatch.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.26"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "FetchContext",
+        "FetchResult",
+        "Position"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #203 infers FetchContext/FetchResult from signatures and persists positions",
+        "seq": 156
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.31",
+      "seq": 151,
+      "pr": 197,
+      "summary": "One microsoft-graph package holds Calendar, Mail, Meetings, Files sources",
+      "detail": "A single microsoft-graph plugin supplies Calendar, Mail, Meetings and Files source types with per-instance config, evidence and sync position, sharing plugin auth code; Mail/Meetings/Files expose typed captured reads and BlobRefs rather than eager binary content.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph source family"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "plugins/microsoft-graph in kyyn-v2 only contains the Calendar source (Calendar.hs); no Mail, Meetings or Files connectors yet"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 74,
+      "pr": 90,
+      "note": "Only adds retained Git refusal codes to the diagnostics list; the PR delivers the CLI that realises the install nodes"
+    },
+    {
+      "seq": 84,
+      "pr": 103,
+      "note": "Rewords citation guidance to point operational fingerprints at ADR 0014; citations still need no version or fingerprint"
+    },
+    {
+      "seq": 111,
+      "pr": 145,
+      "note": "Status wording only: marks fetch options as implemented (realises 0015.20)"
+    },
+    {
+      "seq": 116,
+      "pr": 151,
+      "note": "Removes the 'not yet implemented' status line for signature-derived registration (realises 0015.26)"
+    },
+    {
+      "seq": 118,
+      "pr": 154,
+      "note": "Status wording only: installed-package list/show/guide implemented"
+    },
+    {
+      "seq": 119,
+      "pr": 155,
+      "note": "Status wording and naming the repository-root kyyn-tap.dhall catalogue file; realises tap discovery and pre-install guides"
+    }
+  ],
+  "notes": "The founding text is ambitious (taps with library/template packages, sinks, a generic callPlugin host API, a dedicated update command), and most of it was either narrowed or replaced by what got built: tap kinds collapsed to plugin-only catalogues (seq 114), callPlugin became PluginPreparation/PluginRead (reconciled at seq 143, code-first), and `plugin update` became repeat install (seq 120). The install slice flip-flopped quickly: seq 70 specified installing local working-tree contents, then seq 71 (same day, before implementation shipped) made it Git-only with revision-bearing origins; seq 79 then moved the install target from root/ into an evolution. Registration went through two shapes: named type strings (seq 81) then signature-derived contracts (seq 115/116), absorbing the short-lived fetchOptionsType field; AcquisitionContext (seq 110) never shipped and was replaced by a unified row at seq 113. Spec ahead of code at end of history: sink connectors, source-dependency vendoring, and the Graph Mail/Meetings/Files family (seq 151) remain unrealised. Split judgement: the founding 'One plugin, several connectors' subsection was split into hierarchy (04), typed method boundary (05) and instance-selected dispatch (06); 'Explicit updates' was split into the update operation (07), the no-versioning constraint (08) and evolution adoption (09). Seq 143 also removed the ConnectorKind Source|Sink type from the code block while keeping kind as 'intended use' text; treated as editorial within 0015.29."
+}

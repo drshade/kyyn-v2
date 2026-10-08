@@ -1,0 +1,852 @@
+{
+  "adr": "0009",
+  "title": "Typed capability rows describe program effects",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0009.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Capability row is the contract; role names are only aliases",
+      "detail": "Each program's typed capability row defines what it may do; names such as PluginHost or KnowledgeBaseHost are aliases for selected capabilities, never an all-access record or separate permission taxonomy. Prevents host contexts from becoming service locators.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PluginHost",
+        "KnowledgeBaseHost"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "PR #96 gives acquisition and captured readers distinct typed rows (Acquisition vs CapturedRead) with compile-time rejection of out-of-row calls; KnowledgeBaseHost never became a code record"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Program contexts bound effects: pure validators, snapshot-only queries/renderers",
+      "detail": "Validators and pure helpers only calculate; snapshot queries and output renderers read one selected immutable snapshot, never live providers; accepted-root publication is never a guest capability. These context boundaries are tabulated per program kind.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SnapshotRead"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "PR #27 implements snapshot-only typed queries with no wire values or IO; validators pure; no guest publication capability. Output renderers themselves are still absent from code"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Evolution entry points may call snapshot, evidence and plugin capabilities",
+      "detail": "Evolution entries could use declared snapshot/evidence reads and plugin acquisition/read calls while producing a candidate (illustrated by EvolutionHost = SnapshotRead :+: MicrosoftCalls), but could not accept it or start a nested proposal.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionHost",
+        "MicrosoftCalls",
+        "ReadEmail",
+        "EvidenceRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Evolutions were implemented as pure composition (PR #33); no plugin calls from evolutions ever existed before the decision was withdrawn"
+      },
+      "ended": {
+        "seq": 97,
+        "how": "replaced",
+        "by": "0009.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Delivery explicitly invokes a plugin sink with renderer-prepared typed input",
+      "detail": "Application operations compose output preparation and an explicit sink invocation (ADR 0017); renderers compute typed input but never invoke sinks, and sink methods receive prepared input plus instance config. Headless automation may call the same operations.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No sink connector, renderer or delivery operation exists in the kyyn-v2 source at end of history"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Registration and dispatch use the selected method's declared capabilities",
+      "detail": "A plugin can export source and sink connectors, but the host registers and dispatches by each selected method's declared capabilities and contracts. Provider-read intent is author-declared; HTTP verbs cannot prove read-only behaviour.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Method"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 81,
+        "evidence": "PR #100 registers source connectors with inspected per-method contracts; PR #147 checks the selected context/login signature at registration"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Guest effects are a pure typed request tree, Program request a",
+      "detail": "Authored code builds a free-monad-like Program whose existential request type fixes the continuation's input; interpretProgram is a pure fold into an explicit handler. No IO in authored programs, and the continuation stays in the running guest, never on the wire.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "interpretProgram",
+        "request"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "PR #27 adds shared typed Program/continuation core compiling unchanged under GHC and pinned MicroHs; interpretProgram code_added at 26"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Compose capability algebras with typed sums and generated injection helpers",
+      "detail": "Rows are composed as typed sums (left :+: right) with InLeft/InRight; generated helpers hide injections from authors. A row-membership library would be an alternative implementation, not a different model; an interpreter for one algebra cannot accept another's requests by type.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "InLeft",
+        "InRight"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "PR #96 composes filesystem acquisition and evidence requests via an explicit typed sum; InLeft/InRight code_added at 78"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Private generated adapters interpret requests; no accepted-ref capability for guests",
+      "detail": "Generated adapters translate guest requests into native host semantic operations and own transport IO; guest packages cannot import them as ordinary API, and no native accepted-ref capability is exported to guests.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "PR #27 generates private query adapters in kyyn-runtime; PR #96 adds a private guest adapter owning JSON, request IDs and continuation resumption"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugin calls are caller-algebra requests routed to separate plugin invocations",
+      "detail": "A generated plugin-call capability is a typed request in the caller's row; the host routes it to a separately interpreted plugin invocation, so the plugin's HTTP/Secrets requirements are never granted to the caller. Proxy, registration and dispatch must be proved together.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "MicrosoftCalls"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 generates caller proxies and native typed dispatch (ExecuteCapturedMethod) running each method in the plugin's own captured-read context"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Paged snapshot reads keyed by explicit SnapshotRef and CollectionBinding",
+      "detail": "SnapshotRead offered ReadPage over an explicitly selected SnapshotRef, a generated CollectionBinding and a PageRequest, with the host verifying snapshot and collection context.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadPage",
+        "PageRequest",
+        "SnapshotRef",
+        "CollectionBinding"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Paged reads were never implemented; replaced by whole-root local reads in the same step that first implemented SnapshotRead"
+      },
+      "ended": {
+        "seq": 26,
+        "how": "replaced",
+        "by": "0009.11"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.11",
+      "seq": 26,
+      "pr": 27,
+      "summary": "Local pure snapshot interpreter with ordered logical read trace",
+      "detail": "SnapshotRead root offers ReadCollection/ReadFact via generated root-specific bindings; the adapter receives the whole root and arguments on stdin and returns the result plus an ordered ReadAccess trace. No request wire encoding or host loop; paging and plugin calls are not implicit capabilities.",
+      "kind": "replace",
+      "supersedes": [
+        "0009.10"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SnapshotRead",
+        "ReadCollection",
+        "ReadFact",
+        "runLocally",
+        "ReadAccess",
+        "CollectionRead",
+        "FactRead",
+        "CollectionBinding"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 26,
+        "evidence": "PR #27 implements generated bindings, runLocally and ordered traces, tested under GHC and MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.12",
+      "seq": 76,
+      "pr": 94,
+      "summary": "KB tools: a program context composing snapshot and captured-evidence reads",
+      "detail": "A new KB-tool context composes selected-root SnapshotRead and typed plugin reads against captured evidence; it never fetches from providers, invokes sinks, or proposes/accepts roots.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Proposed addition: KB-tool read composition"
+      ],
+      "anchors": [
+        "MailReads",
+        "CalendarReads"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 implements KB tools composing captured plugin reads (selected-root reads deferred)"
+      },
+      "ended": {
+        "seq": 97,
+        "how": "replaced",
+        "by": "0009.22"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.13",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Separate acquisition and captured-read algebras for plugin methods",
+      "detail": "Source connectors split into acquisition methods (filesystem/HTTP, secrets, prior evidence reads) and captured-evidence methods (typed reads of the selected snapshot only, no secrets or acquisition). Calling a read method can never hide a fresh fetch.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Proposed addition: KB-tool read composition"
+      ],
+      "anchors": [
+        "Acquisition",
+        "CapturedRead"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "PR #96: captured readers have evidence requests only; both compilers reject filesystem calls from a captured reader"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.14",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Plugin-call proxies select a configured instance, not an evidence ref",
+      "detail": "Generated proxies take a generated instance value (e.g. Mail.Instance); the invocation context resolves that instance's fixed evidence snapshot, and the plugin reads it through its own capabilities.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Instance",
+        "EvidenceSnapshotRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 generates phantom-typed instance handles and resolves the named instance's latest captured input"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.15",
+      "seq": 78,
+      "pr": 96,
+      "summary": "Concrete EvidenceRead and FileRead algebras with explicit snapshot arguments",
+      "detail": "Acquisition = FileRead :+: EvidenceRead Payload; CapturedRead has only ListEvidenceIds/ReadEvidence over an explicit EvidenceSnapshot. Folder acquisition requires an absolute directory and enumeration failure is a typed error, never an empty directory.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvidenceRead",
+        "FileRead",
+        "ListEvidenceIds",
+        "ReadEvidence",
+        "ListFiles",
+        "ReadTextFile",
+        "EvidenceSnapshot",
+        "FetchError"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 78,
+        "evidence": "PR #96 implements and proves these algebras under GHC and MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.16",
+      "seq": 83,
+      "pr": 102,
+      "summary": "Host broker requires GuestExecution plus exactly the capabilities it dispatches",
+      "detail": "executeAcquisition needs GuestExecution and the dispatched host effects, not GuestCompilation. GuestExecution supplies both one-shot and conversational execution, preserving the broker's effect row while the guest continuation waits.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "executeAcquisition",
+        "GuestExecution",
+        "FileAcquisition",
+        "CompiledProgram"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102: GuestExecution owns one-shot and conversational execution; GuestCompilation only compiles"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.17",
+      "seq": 85,
+      "pr": 104,
+      "summary": "Text acquisition returns content with a SHA-256 fingerprint",
+      "detail": "ReadTextFile returns CapturedText: UTF-8 decoded text plus a lowercase hex SHA-256 fingerprint computed from the same captured bytes, supporting latest-only evidence change detection.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.15"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CapturedText",
+        "EvidenceFingerprint"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 85,
+        "evidence": "PR #104 adds fingerprinted Evidence and native CapturedText with a known SHA-256 test vector"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.18",
+      "seq": 85,
+      "pr": 104,
+      "summary": "Broker reads preloaded current evidence; no EvidenceStore dependency",
+      "detail": "The acquisition workflow loads current evidence once before entering the broker; guest evidence reads use that immutable input and publication uses the loaded fetch as its expected base (or the prior head when the producer changed).",
+      "kind": "refine",
+      "supersedes": [
+        "0009.16"
+      ],
+      "sections": [
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "CurrentEvidence",
+        "executeAcquisition"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 85,
+        "evidence": "PR #104: current evidence loaded once before guest execution; broker has no EvidenceStore dependency"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.19",
+      "seq": 86,
+      "pr": 106,
+      "summary": "Captured methods: typed signature, latest evidence supplied, no IO or codec",
+      "detail": "A registered captured method is a function Input -> EvidenceSnapshot Payload -> CapturedRead (Either FetchError Result); the generated adapter fixes contracts, the host supplies latest captured evidence at invocation start, and method failure never fetches or changes it.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "content",
+        "CapturedMethod"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 86,
+        "evidence": "PR #106 implements CapturedMethod discovery and invocation over latest captured evidence"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.20",
+      "seq": 87,
+      "pr": 107,
+      "summary": "Generated Tool = Program Calls with per-instance lazily loaded evidence",
+      "detail": "Tool a is Program over a closed generated GADT with one constructor per captured-read method using the plugin's real types. The host resolves instances, lazily loads latest evidence once per instance per invocation, runs each method in its own guest; FetchError stays catchable while missing/invalid evidence stops the invocation.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.12"
+      ],
+      "sections": [
+        "Decision / KB-tool read composition"
+      ],
+      "anchors": [
+        "Content",
+        "ContentId",
+        "KyynToolCalls",
+        "ExecuteCapturedMethod"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 87,
+        "evidence": "PR #107 implements generated proxies, native dispatch and one captured-input load per instance"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.21",
+      "seq": 97,
+      "pr": 121,
+      "summary": "Evolution execution is pure, owned by ADR 0010; no plugin calls",
+      "detail": "Speculative effectful-evolution provisions (EvolutionHost, acquisition from evolutions) are withdrawn; evolution entry points follow ADR 0010's pure transformation contract. Seq 99 rewrites the bullet and table row to point at ADR 0010.",
+      "kind": "replace",
+      "supersedes": [
+        "0009.03"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 32,
+        "evidence": "Evolutions were pure fallible composition from PR #33 onward; no evolution ever gained plugin capabilities"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.22",
+      "seq": 97,
+      "pr": 121,
+      "summary": "KB tools compose captured plugin reads only, not selected-root reads",
+      "detail": "The KB-tool row drops SnapshotRead root; tools compose captured-evidence method calls (e.g. MailReads :+: CalendarReads) with neither acquisition nor sink handlers.",
+      "kind": "replace",
+      "supersedes": [
+        "0009.12"
+      ],
+      "sections": [
+        "Decision / KB-tool read composition"
+      ],
+      "anchors": [
+        "MailReads",
+        "CalendarReads"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 87,
+        "evidence": "The first tool slice (PR #107) already composed captured reads only"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.23",
+      "seq": 99,
+      "pr": 123,
+      "summary": "KB-tool row gains typed model judgements",
+      "detail": "The generated Tool Calls GADT also carries judgement operations specified by ADR 0027; queries, validators and evolutions do not gain them.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.20"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / KB-tool read composition"
+      ],
+      "anchors": [
+        "Judgement"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #126 (seq 100) exposes typed host judgements in KB tools backed by Jev"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.24",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Typed Http, Secrets and Waiting guest algebras interpreted by host plumbing",
+      "detail": "Provider acquisition uses ordinary typed algebras (SendHttp, GetSecret/PutSecret, WaitSeconds); the broker delegates to host plumbing interpreters. HTTP status responses stay values, transport failures are sanitized, waits are cancellable, and no host OAuth is introduced.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "Http",
+        "SendHttp",
+        "HttpRequest",
+        "HttpResponse",
+        "HttpError",
+        "Secrets",
+        "GetSecret",
+        "PutSecret",
+        "SecretError",
+        "Waiting",
+        "WaitSeconds",
+        "HttpTransport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 113,
+        "evidence": "Transport proved with native HTTP/wait interpreters in PR #146 (seq 112); installed network connectors receive them in PR #147"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.25",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Network acquisition row separate from the file connector's row",
+      "detail": "Network connectors got a NetworkAcquisition row (Http, Secrets, Waiting, EvidenceRead) while the file connector kept its file/evidence row; the registration's checked context selected the row.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "NetworkAcquisition"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 112,
+        "evidence": "PR #146 adds NetworkAcquisition in guest SDK (code_added 112), proved with recording handlers"
+      },
+      "ended": {
+        "seq": 113,
+        "how": "replaced",
+        "by": "0009.29"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.26",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Explicit connector login has its own row with user instructions",
+      "detail": "PluginLogin = Http, Secrets, Waiting and LoginInteraction; only login can DisplayInstructions (to stderr, keeping --json stdout clean) and it cannot publish evidence. Acquisition never prompts. Neither row reaches captured reads, tools, validators or evolutions.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "PluginLogin",
+        "LoginInteraction",
+        "DisplayInstructions"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 113,
+        "evidence": "PR #147 adds registration-checked login signatures and CLI login writing instructions to stderr"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.27",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Retry policy belongs to the plugin; Graph honours Retry-After",
+      "detail": "HTTP transport never hides retries; Graph acquisition waits on valid Retry-After for 429/503 via WaitSeconds, otherwise returns an actionable retry-later error, and cancellation abandons without publishing a partial batch.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "WaitSeconds"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 113,
+        "evidence": "PR #146 transport has no automatic retries; MicrosoftGraph/Http.hs (PR #147) handles 429/503 Retry-After"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.28",
+      "seq": 111,
+      "pr": 145,
+      "summary": "Acquisition input assembled from checked config plus typed fetch options",
+      "detail": "The broker's argument is a wire Value built from checked instance config and optional typed fetch options, not a value stamped with the config-only contract.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.18"
+      ],
+      "sections": [
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "executeAcquisition"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 111,
+        "evidence": "PR #145 implements fetchOptionsType and checks --options before acquisition"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.29",
+      "seq": 113,
+      "pr": 147,
+      "summary": "One unified acquisition row for every source connector",
+      "detail": "All source connectors share a single Acquisition row (Http, Secrets, Waiting, FileRead, EvidenceRead), one generated adapter and one host dispatcher, so a fetch can mix file, HTTP, secret, wait and evidence requests without per-connector registration.",
+      "kind": "replace",
+      "supersedes": [
+        "0009.25"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "Acquisition"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 113,
+        "evidence": "PR #147: one source-acquisition row and generated adapter/dispatcher for files, HTTP, secrets, waiting and evidence"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.30",
+      "seq": 115,
+      "pr": 150,
+      "summary": "Payload-generic SDK rows and ReadsEvidence class replace generated bindings",
+      "detail": "Acquisition/CapturedRead are payload-parameterised SDK types; evidence helpers work in both rows through a small ReadsEvidence class with two explicit instances, and the compiler derives Input/Payload/Result from authored signatures. No generated author-facing bindings or recursive membership search.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.07",
+        "0009.19"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "ReadsEvidence",
+        "injectEvidence",
+        "AcquisitionRequests",
+        "listEvidenceIds",
+        "readEvidence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 116,
+        "evidence": "PR #151 implements generic SDK helpers, two ReadsEvidence instances and signature-derived registration"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.31",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Model-turn requests allowed only in KB tools and recipe flows",
+      "detail": "ADR 0028's agentic model turns join the KB-tool row and explicit recipe flows, and are not added to evolution, validation, query or renderer contexts.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.23"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ModelTurn"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 128,
+        "evidence": "PR #165 lets ordinary KB tools execute Agentic flows with host-supplied model turns"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0009.32",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Streamed evidence blobs: BlobAcquisition for fetch, BlobRead for captured reads",
+      "detail": "Acquisition gains BlobAcquisition and the broker BlobStorage; captured reads become EvidenceRead :+: BlobRead, tied to the same invocation-local capture, with blob reads granting no filesystem browsing (ADR 0029).",
+      "kind": "refine",
+      "supersedes": [
+        "0009.29",
+        "0009.30"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Provider acquisition and explicit login",
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "BlobRead",
+        "BlobAcquisition",
+        "BlobStorage"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No Blob* identifiers in code; SDK still has ReadsEvidence (EvidenceRead payload) with injectEvidence = id"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.33",
+      "seq": 154,
+      "pr": 201,
+      "summary": "Packed Text throughout; HTTP bodies travel in raw byte section",
+      "detail": "Guest-facing HTTP, secret, login and binding types use packed Text instead of String, and the adapter carries HTTP bodies in ADR 0007's raw byte section rather than inside the JSON envelope.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.24"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Provider acquisition and explicit login"
+      ],
+      "anchors": [
+        "HttpRequest",
+        "HttpResponse",
+        "CapturedText",
+        "CollectionBinding"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 155,
+        "evidence": "PR #202 implements packed guest Text and raw HTTP bodies bypassing nested JSON strings"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 32,
+      "pr": 33,
+      "note": "Renames EvidenceRef to EvidenceSnapshotRef inside the illustrative MicrosoftCalls example; no change in requirement."
+    },
+    {
+      "seq": 80,
+      "pr": 99,
+      "note": "Status/basis line and verification prose updated to report native broker progress."
+    },
+    {
+      "seq": 81,
+      "pr": 100,
+      "note": "Status/basis line only: source registration and configured instances now proved."
+    },
+    {
+      "seq": 84,
+      "pr": 103,
+      "note": "'historical reads' reworded to 'invocation-local reads' to follow ADR 0014's latest-only evidence decision; nothing new required here."
+    },
+    {
+      "seq": 112,
+      "pr": 146,
+      "note": "Basis line updated to report the network transport proof; no decision change."
+    },
+    {
+      "seq": 116,
+      "pr": 151,
+      "note": "Implements 0009.30; ADR text reconciled ('SDK's readTextFile', proof wording) to the shipped implementation."
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: drops status/basis lines, turns 'illustrative' into contract wording, 'proposes' to 'defines', adds model turns to the tool table row (covered by 0009.31) and HttpTransport/SecretStore/Waiting to the executeAcquisition signature to match code already shipped in seq 113."
+    }
+  ],
+  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04 never implemented). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row."
+}

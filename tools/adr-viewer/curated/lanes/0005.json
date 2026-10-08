@@ -1,0 +1,666 @@
+{
+  "adr": "0005",
+  "title": "One authoritative contract and mechanical projections",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0005.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "One checked contract algebra feeds every projection, with one ContractId",
+      "detail": "A finite internal Shape/ScalarKind algebra inside CheckedContract is the single input to structural checking, codec generation, routing, JSON Schema, Dhall types and presentation. One ContractId covers the whole contract including roles and codec parameters, so a role-only edit invalidates dependent bindings with no separate presentation identity.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "Shape",
+        "ScalarKind",
+        "CheckedContract",
+        "ContractId",
+        "contractId",
+        "metadataOf",
+        "shapeOf"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 12,
+        "evidence": "PR 13 builds CheckedContract with contractId/metadataOf over the Shape projection introduced in PR 6"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Authored Haskell types are the sole authoritative KB schema",
+      "detail": "The KB schema is the author's own Haskell types; codecs, adapters, collection descriptors and discovery are generated from checked declarations and are disposable. No Dhall/JSON Schema/DSL authority, automatic frontend switching or parallel authority.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed",
+        "Alternatives and tradeoff"
+      ],
+      "anchors": [
+        "GeneratedSources"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR 6 implements compiler-inspected authored ADTs with generated codecs importing authored constructors"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Presentation roles declared as pure Haskell SchemaMetadata, coherence-checked",
+      "detail": "Title/Timeline/Badge affordances are attached via KB-authored roles in a named pure Haskell SchemaMetadata export alongside the schema, not a JSON/RON sidecar or field-name inference. Missing types/fields/roles, incompatible affordance shapes and ambiguous assignments are rejected; badge alternatives derive from the checked enum.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "Affordance",
+        "RoleDecl",
+        "FieldRole",
+        "SchemaMetadata",
+        "schemaMetadata",
+        "Timeline"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 12,
+        "evidence": "SDK metadata types land in PR 12; PR 13 checkContract enforces role coherence (Timeline still rejected for lack of a date codec)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Collections declared in metadata over [Fact payload] root fields",
+      "detail": "Collection membership and reference targets live in the same metadata export; a declared root collection field must be [Fact payload] with identity from the SDK envelope's FactId, never an idField. References are IDs, not embedded values; existence is a validation concern.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "CollectionDecl",
+        "CollectionId",
+        "Reference",
+        "FactId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 12,
+        "evidence": "PR 13 checks SDK Fact/FactId envelopes by resolved identity, collection declarations and reference targets"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "SchemaInspection plumbing capability extracts checked types via linked MicroHs",
+      "detail": "Schema extraction uses the pinned MicroHs frontend linked into the native host, from checked types (no pretty-printer or subset parser), behind a SchemaInspection plumbing effect over a captured SchemaSource. Ill-typed/unsupported source is a diagnostic; infrastructure failure is Failure; the interpreter lives in kyyn-microhs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "SchemaInspection",
+        "InspectSchema",
+        "inspectSchema",
+        "SchemaSource",
+        "InspectedSchema",
+        "TypeBindings"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 18,
+        "evidence": "PR 19 implements SchemaInspection/inspectSchema/runSchemaInspectionIO over captured module bytes"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Metadata read by deterministic pure guest evaluation through fixed SDK codec",
+      "detail": "SchemaInspection obtains the metadata value by compiling a fixed SDK adapter (GuestCompilation) and evaluating it as a process, with no root facts, evidence or host capabilities, and without depending on bindings generated from the contract under inspection or routing through RootExecution.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "runSchemaInspectionIO",
+        "GuestCompilation",
+        "ProcessExecution",
+        "GuestToolchain"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 11,
+        "evidence": "PR 12 evaluateMetadata compiles a fixed JSON adapter through GuestCompilation and runs it under real MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "checkValue yields CheckedValue proving structural conformance to a contract",
+      "detail": "An UncheckedValue from the selected parser is checked against a CheckedContract into a private CheckedValue carrying the contract identity; it proves conformity only, not semantic validity, and differing expected contracts must be compared or explicitly converted.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "checkValue",
+        "CheckedValue",
+        "UncheckedValue",
+        "valueContract"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 16,
+        "evidence": "CheckedValue arrives in PR 17 via shape-directed DhallHandling/RootStore rather than a standalone checkValue"
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0005.21"
+      }
+    },
+    {
+      "id": "0005.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Pure projections: bindings, JSON Schema and Dhall types from checked contract",
+      "detail": "generateBindings, projectJsonSchema and projectDhallType are pure functions over the one checked representation; JsonSchema is a discovery projection, never the universal value, and Dhall types serve fact/manifest and connector config files without assuming native Dhall dates/decimals.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "generateBindings",
+        "projectJsonSchema",
+        "projectDhallType",
+        "JsonSchema",
+        "DhallType",
+        "GeneratedSources"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 14,
+        "evidence": "Codec generation from PR 6/13 and Dhall projection from PR 15; no KB-contract JSON Schema discovery projection exists in the repo"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0005.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Finite supported algebra; unsupported shapes rejected when introduced",
+      "detail": "Only finite records, lists, optionals, tagged unions, booleans, text and exact numeric conventions are supported; arbitrary Haskell introspection, per-field bounds and type-level programming are out. Unsupported shapes fail before acceptance with one lowering per target and round-trip tests.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "Shape"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR 6 projects resolved ADTs into Shape and rejects unsupported shapes with diagnostics"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Reuse library numeric/date types, recognised by resolved identity",
+      "detail": "Decimal/date/instant/natural scalars must use existing Haskell/MicroHs libraries (Data.Fixed first, standard resolutions only), recognised by resolved type identity and parameters retained in contract and bindings; never Kyyn arithmetic or name-based inference.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "DecimalScalar",
+        "DateScalar",
+        "InstantScalar",
+        "NaturalScalar",
+        "HasResolution",
+        "Decimal"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "ScalarKind in code is Text/Integer/Bool/Probability only; decimal/date/instant integration tracked as issue #188"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.11",
+      "seq": 8,
+      "pr": 8,
+      "summary": "Schema inspection interpreter also depends on scoped FileSystem",
+      "detail": "runSchemaInspectionIO gains FileSystem so the scoped compiled-artifact helper can materialize the metadata entry for execution; no build-directory handle is retained in schema values.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.06"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "FileSystem",
+        "runSchemaInspectionIO"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 18,
+        "evidence": "PR 19's runSchemaInspectionIO materializes captures through FileSystem"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0005.12",
+      "seq": 11,
+      "pr": 12,
+      "summary": "Metadata vocabulary is a shared GHC/MicroHs package with positional constructors",
+      "detail": "The SchemaMetadata vocabulary lives in shared kyyn-types compiled by both GHC and MicroHs, using positional constructors to avoid divergent selector APIs, and is decoded host-side from a fixed JSON adapter.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.03"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "SchemaMetadata",
+        "RoleDecl",
+        "FieldRole",
+        "CollectionDecl"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 11,
+        "evidence": "PR 12 adds shared/kyyn-types SchemaMetadata and the Aeson host decoder"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.13",
+      "seq": 12,
+      "pr": 13,
+      "summary": "ContractId is SHA-256 of versioned encoding of types and all metadata",
+      "detail": "Contract identity hashes a version-tagged JSON-array encoding of resolved types and all metadata including descriptions and declaration order; no derived Show, no behavioural/package identity claim; reordering may conservatively invalidate.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.01"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "ContractId",
+        "contractId"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 12,
+        "evidence": "PR 13 implements the SHA-256 contract identity"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.14",
+      "seq": 12,
+      "pr": 13,
+      "summary": "Pure checkContract combines inspected DataType with metadata",
+      "detail": "A pure checkContract joins the inspected DataType and decoded metadata, keeps the resolved type for codegen, annotates reference fields and reports the first incoherence; Title needs text, Badge a nullary enum, Timeline waits for a date codec, ambiguous polymorphic instantiations are rejected.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.03"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "DataType",
+        "Contract",
+        "checkContract"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 12,
+        "evidence": "PR 13 adds SchemaInspection/Contract checkContract (later moved to kyyn-domain)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.15",
+      "seq": 18,
+      "pr": 19,
+      "summary": "inspectSchema returns checked contract retaining resolved DataType; no bindings registry",
+      "detail": "schemaSource captures module/dependency bytes plus a fixed metadata adapter; inspectSchema returns a checked contract whose retained DataType carries the names needed for codec generation, replacing a separate TypeBindings registry. Frontend failures surface as CompilerUnavailable.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.05"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "SchemaSource",
+        "inspectSchema",
+        "CompilerUnavailable"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 18,
+        "evidence": "PR 19 implements the interpreter with CompilerUnavailable and no separate bindings registry"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.16",
+      "seq": 25,
+      "pr": 26,
+      "summary": "Value contracts accept all shapes; persistent roots refined to RootContract",
+      "detail": "checkContract accepts any supported shape so query arguments/results can be contracts; persistent roots additionally pass checkRootLayout into a private RootContract newtype (single record, every direct [Fact a] field declared) without a second identity.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.01",
+        "0005.04"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "RootContract",
+        "checkRootLayout",
+        "rootSchema"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 25,
+        "evidence": "PR 26 adds RootContract/checkRootLayout/rootSchema and threads it through Root/RootStore"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.17",
+      "seq": 34,
+      "pr": 35,
+      "summary": "InspectedSchema reports compiler-loaded source closure; only .hs sources",
+      "detail": "InspectedSchema carries loadedSources (captured files the compiler loaded) instead of TypeBindings, used by build preparation to select old schema dependencies but not part of identity; .lhs/.hsc inputs are rejected before inspection.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.15"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "InspectedSchema",
+        "RelativePath",
+        "loadedSources"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 34,
+        "evidence": "PR 35 returns compiler-loaded paths from SchemaInspection and rejects .lhs/.hsc"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.18",
+      "seq": 49,
+      "pr": 53,
+      "summary": "Zero-field single constructors project to the empty record",
+      "detail": "Any single all-named constructor, including zero fields, uses the record projection ({} / {=}), giving init a genuinely empty root; adding a second constructor turns it into a tagged union and needs a migration.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.16"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "checkRootLayout"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 49,
+        "evidence": "PR 53 shares one projection predicate across shape, root checking and generated codecs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.19",
+      "seq": 102,
+      "pr": 128,
+      "summary": "Records may carry several distinct Badge roles; each role once",
+      "detail": "A record has at most one Title and one Timeline assignment but may have several Badge roles with distinct names (e.g. status and priority); assigning a role twice is ambiguous and rejected.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.14"
+      ],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "Badge"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 102,
+        "evidence": "PR 128 changes the Contract badge rule with ContractRoleTests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.20",
+      "seq": 106,
+      "pr": 136,
+      "summary": "Cache successful native inspection results checkout-locally",
+      "detail": "Schema/API interpreters reuse successful inspections from .kyyn/inspected/<hash>.dhall keyed by installed Kyyn commit, all captured bytes, selection, kind and compiler settings; metadata evaluation and checkContract still run live, failures are never cached, unidentified builds disable reuse.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "InspectionCache"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 106,
+        "evidence": "PR 136 adds InspectionCache with hit/invalidation/corruption tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.21",
+      "seq": 143,
+      "pr": 186,
+      "summary": "CheckedValue is minted only by DhallHandling/RootStore checking",
+      "detail": "The standalone checkValue/UncheckedValue API is dropped: CheckedValue has a private constructor, shape-directed checking belongs to DhallHandling and root identity/layout checks to RootStore CheckRootValue, and persisted values are rechecked on load rather than rewrapped from saved metadata.",
+      "kind": "replace",
+      "supersedes": [
+        "0005.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CheckedValue",
+        "DhallHandling",
+        "CheckRootValue"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 16,
+        "evidence": "PR 17 already made DhallHandling shape-directed with RootStore owning CheckedValue identity"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.22",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Schema inspection runs metadata via GuestExecution and stores cache via DhallHandling",
+      "detail": "runSchemaInspectionIO's effect row becomes GuestCompilation, GuestExecution, FileSystem, DhallHandling, IOE and Failure with an optional InspectionCache; ProcessExecution is no longer a direct dependency.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.11"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "GuestExecution",
+        "DhallHandling",
+        "InspectionCache",
+        "runSchemaInspectionIO"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 106,
+        "evidence": "GuestExecution took over schema-inspection execution in PR 102 (seq 83); cache/DhallHandling parameter landed in PR 136"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.23",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Scalar adapters bind library type, parameters, encoding and checks together",
+      "detail": "Data.Fixed specifics leave the ADR (to issue #188); instead any scalar adapter must select the maintained library type, its parameters, canonical encoding and semantic checks together, with cross-compiler round-trip, range and sign conformance tests. Business rounding stays KB code.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.10"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DecimalScalar"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 149,
+        "evidence": "Probability (PR 195) is the first adapter built this way; decimal/date/instant adapters remain #188"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0005.24",
+      "seq": 149,
+      "pr": 195,
+      "summary": "Upstream Probability is a known scalar stored as exact basis points",
+      "detail": "Agentic.Questions.Probability is recognised as ProbabilityScalar by resolved identity, stored as Dhall Natural 0..10000 with an integer-string guest wire, rejecting out-of-range input before upstream clamping; model contracts use upstream's numeric codec, and identity distinguishes it from Integer.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.23"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ProbabilityScalar",
+        "Probability"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 149,
+        "evidence": "PR 195 adds ProbabilityScalar recognition, storage/wire/model codecs and installed journey"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.25",
+      "seq": 151,
+      "pr": 197,
+      "summary": "BlobReference shape retains SDK BlobRef identity through lowering",
+      "detail": "The algebra gains a BlobReference shape so the SDK BlobRef keeps its resolved identity through structural lowering; storage and surface projection are owned by ADR 0029, never inferred from field names.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "BlobReference",
+        "BlobRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Docs-only PR 197; Shape in Kyyn.Domain.DataType has no BlobReference constructor"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0005.26",
+      "seq": 161,
+      "pr": 209,
+      "summary": "Unit () is an empty-record value contract with its own identity",
+      "detail": "() uses the empty-record projection for stateless recipe state and no-argument requests but keeps a distinct nominal identity; it is a value contract, not a persistent root, and larger tuples stay unsupported.",
+      "kind": "refine",
+      "supersedes": [
+        "0005.18"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "UnitType"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 161,
+        "evidence": "PR 209 adds UnitType through inspection, contracts, codecs and Dhall"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 2,
+      "pr": 1,
+      "note": "Converts sibling-checkout experiment links into plain path citations"
+    },
+    {
+      "seq": 16,
+      "pr": 17,
+      "note": "Renames checkContract's module path after relocation to kyyn-domain; no change in requirement"
+    },
+    {
+      "seq": 21,
+      "pr": 22,
+      "note": "Evidence-section status update noting RootOpening reads kb.dhall (owned by ADR 0006)"
+    },
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "Metadata declaration fields switch String to Text as part of packed transport; representation detail, same commitments"
+    }
+  ],
+  "notes": "The founding text was unusually code-ahead: interface sketches (checkValue/UncheckedValue, TypeBindings, InspectedSchema.bindings, projectJsonSchema) mostly did not survive contact with implementation. TypeBindings was quietly dissolved into the retained DataType at seq 18 and formally replaced by loadedSources at seq 34; checkValue was never built and the seq 143 reconciliation rewrote the ADR to the DhallHandling/RootStore checking the code had used since seq 16. The longest-running gap is scalar support: Decimal/Date/Instant/Natural kinds and the Timeline affordance have been in the ADR since seq 1 and are still absent from code (issue #188); seq 143 removed the Data.Fixed guidance rather than resolving it, and Probability (seq 149) is the only library-backed scalar delivered. A JSON Schema discovery projection of KB contracts is also still unbuilt. BlobReference (seq 151) is design-only. Judgement calls: seq 8's FileSystem effect-row addition and seq 143's GuestExecution/DhallHandling row are treated as refines (effect rows are contracts per PR 186), and seq 155's String->Text change as editorial."
+}

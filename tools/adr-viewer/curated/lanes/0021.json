@@ -1,0 +1,301 @@
+{
+  "adr": "0021",
+  "title": "Architecture is a tested deliverable before feature volume",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0021.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Clean rebuild; review each boundary's types and effects before implementing",
+      "detail": "Start a clean implementation porting ideas and tests, not prototype package structure. Before implementing a boundary review its public types, effect dependencies, handler composition, failure semantics and one authored example, and remove speculative fast paths, alternate implementations and unused interfaces.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "Implementation PRs from #6 onward are reviewed per boundary and repeatedly drop placeholders (no placeholder failure variants in #7, BuildOptions removed in #8)"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0021.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Layered tests with real process/Git faults; failure paths per slice",
+      "detail": "Checks span pure properties, contract round trips, compile-fail boundary examples, deterministic interpreters, real process/Git fault tests and clean installs; simulation never substitutes for native integration and routine tests never hit providers. Every slice proves its failure behaviour (failed examples, guest crash, cancellation, non-compiling proposed code as pre-candidate rejection, no acquisition rerun on check/accept).",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "Real Git/process tests from seq 7 and 22; PR #44 adds the installed CLI journey with compiler-rejection and repair cases"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0021.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Slice 1: package DAG and signatures with forbidden imports checked",
+      "detail": "First accept boundary decisions and compile a tiny package DAG and operation signatures with forbidden imports checked, without empty capability implementations pretending the product exists.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "tools/checks/check-imports.mjs first appears with the first implementation PR at seq 6"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0021.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Slice 2: production schema extraction and multi-request protocol proof",
+      "detail": "Carry the schema-extraction proof into production, evaluate schema metadata without facts, bind a heterogeneous root, load runtime facts and run one multi-request host program; carry unions, optionals, exact amounts and references through disk/host/guest/browser with canonical round trips, and measure whole-root costs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 78,
+        "evidence": "ADT codecs (#6), metadata (#12), structural checks (#13), query reads (#27); a live multi-request host continuation arrives only with PR #96. No browser leg exists"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0021.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Slice 3: reporting KB evolution loop through Web and MCP",
+      "detail": "Implement evaluate/check/inspect on a synthetic reporting model with Web and MCP surfaces, human/agent review of the same differences, policy-only and schema-changing evolutions, a multi-request evolution entry with no guest Propose call, a Before-Mid-After migration, and EvolutionRejected cases for malformed observation chains.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [
+        "EvolutionRejected",
+        "Propose"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Chain rejection and candidates landed for the CLI (seq 33-36), but no reporting KB, Web or MCP surface was ever built and evolutions became pure"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0021.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Slice 4: acceptance, reopen and Git race/crash cases",
+      "detail": "Implement acceptance and reopen with Git races, crash cases and deletion; reopen record history from archived step reports without guest execution, and verify acceptance stores the evaluated report rather than a later-edited file.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 composes evolution acceptance with explicit checkout recovery; archives from #40. Per-record history reopening was not built"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0021.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Slice 5: vendored tap plugins, named instances, secrets, paged evidence",
+      "detail": "Vendor and locally compile an independent tap plugin with two named instances of one connector type plus another plugin, prove instance selection with shared/different secrets and config isolation, acquire paged evidence and repeat curation without duplicate knowledge, and rebuild offline from vendored source.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 113,
+        "evidence": "Plugin source install (#87-#90), two-instance configuration (#100/#101), curation (#111), local secrets (#122) and paged Graph calendar acquisition (#147)"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0021.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Slice 6: renderer-to-file-sink output path with zero browsing sink calls",
+      "detail": "Prove ADR 0017's output path: a renderer composes several queries over one root into a first-party file sink's exact input, the sink is invoked explicitly and bytes verified, browsing makes no sink calls, and relative destinations resolve against the KB directory.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No renderer or sink code exists in kyyn-v2"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0021.09",
+      "seq": 4,
+      "pr": 4,
+      "summary": "First build is a CLI todo journey through the real kernel",
+      "detail": "The first implementation is a CLI journey through the real kernel and MicroHs (load-compile-validate, evolution, saved-candidate checking, local acceptance/reopen) using the todo walkthrough as fixture; it explicitly does not discharge the reporting, Web/MCP, performance or distribution proofs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44 exposes the first evolution journey through the CLI and closes #3"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0021.10",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Package DAG grows inside working PRs, not a scaffolding PR",
+      "detail": "Establish the package DAG and signatures inside the first working CLI PR, creating only packages needed for real operations with builds/tests at each merge, never a separate scaffold or a native-Haskell stand-in for guest execution.",
+      "kind": "refine",
+      "supersedes": [
+        "0021.03"
+      ],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR #6 introduces packages alongside real MicroHs codec tests rather than an empty scaffold"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0021.11",
+      "seq": 52,
+      "pr": 58,
+      "summary": "Composed migration test uses only Before/After endpoint contracts",
+      "detail": "The slice-3 composed migration becomes a Before edit, Before-to-After migration and After edit, each with its own step report but no declared intermediate schema.",
+      "kind": "refine",
+      "supersedes": [
+        "0021.05"
+      ],
+      "sections": [
+        "Ordered implementation slices"
+      ],
+      "anchors": [
+        "editBefore",
+        "editAfter"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 52,
+        "evidence": "PR #58 adds editBefore/evolve/editAfter and updates the Migrate journey fixture"
+      },
+      "ended": {
+        "seq": 142,
+        "how": "replaced",
+        "by": "0021.12"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0021.12",
+      "seq": 142,
+      "pr": 184,
+      "summary": "Next slice chosen from real journeys; ordering lives in issues",
+      "detail": "The permanent ordered roadmap is removed: build complete paths, pick each next slice from a real user journey, and keep sequencing in issues. Coverage obligations move to an end-to-end verification checklist by area.",
+      "kind": "replace",
+      "supersedes": [
+        "0021.04",
+        "0021.05",
+        "0021.06",
+        "0021.07",
+        "0021.08",
+        "0021.09",
+        "0021.11"
+      ],
+      "sections": [
+        "End-to-end verification",
+        "Ordered implementation slices"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 43,
+        "evidence": "From the CLI journey onward work was already issue-driven and ignored the reporting-first slice order"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 4,
+      "pr": 4,
+      "note": "Also converts header to front matter and rewrites the basis line; metadata only"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconcile: drops status/date/basis and rewords the paging caveat in Alternatives and consequences; no change in requirements"
+    }
+  ],
+  "notes": "This lane was mostly a roadmap: about two-thirds of the founding text was six ordered implementation slices. The real project departed from that order at seq 4 (a CLI todo journey replaced the reporting-first, Web/MCP-first slice 3), and seq 142 deleted the whole roadmap, saying ordering belongs in issues. I gave each slice a node because the section is neither Context, Consequences nor Verification, and the slices show clearly what was skipped. Slice 3 (reporting KB through Web and MCP) and slice 6 (renderer to file sink) were never built, and nothing in the new End-to-end verification list is tracked as a node, because Verification sections produce none. Slices 2, 4 and 5 were reached piecemeal and out of order (plugins and secrets well before outputs). I was unsure whether the slice nodes should count as decisions at all; if they should not, the lane comes down to 0021.01-03, 0021.10 and 0021.12."
+}

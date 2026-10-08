@@ -1,0 +1,5 @@
+dist-newstyle/
+evidence/worklists/
+# Rendered pages; the page template is source.
+*.html
+!template/viewer.html

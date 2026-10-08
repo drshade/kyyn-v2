@@ -1,0 +1,112 @@
+{
+  "adr": "0013",
+  "title": "Users and agents resolve upstream Git conflicts",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0013.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Ordinary Git resolves upstream conflicts; Kyyn owns no remote adoption protocol",
+      "detail": "Users and agents fetch, merge/rebase and push with ordinary Git and check the resulting KB themselves. Kyyn has no distributed coordinator, semantic merge or special conflict-resolution proposal; its acceptance guarantees only ADR 0012's conditional local step.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 1,
+        "evidence": "Negative constraint; no code existed at founding and the host still contains no fetch/merge/push or remote-coordination code"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0013.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Acceptance publishes locally as Git history; no automatic force push",
+      "detail": "Local acceptance is ordinary Git history advanced by a local conditional update; normal push may be rejected by an advanced remote and force push is never an automatic remedy. Local acceptance and remote publication are reported separately; a local CAS reserves nothing remotely.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #23 adds expected-head CompareAndSwapRef; PR #42 composes acceptance as commit + local CAS; guide states acceptance 'does not push to a remote'"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0013.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Unaccepted evolutions rebase in place; no permanent Stale lifecycle",
+      "detail": "When head advances, the author sets Before.revision to the new head, refreshes schema, repairs and reruns the transformation in the same workspace, rather than creating a new workspace or keeping old attempts. Accepted workspaces stay as history.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Before"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 tests 'acceptance/rebase/recovery journeys'; BaseMismatch reports expected vs actual head; guide says update Before and re-check; lifecycle is Draft/Ready/Accepted only"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0013.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Drafts stay local; no implicit session-sync service",
+      "detail": "Uncommitted drafts live on one machine; sharing them requires ordinary Git commit/push or explicit file transfer. Kyyn provides no session synchronisation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 1,
+        "evidence": "Negative constraint; no sync service exists at any point"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0013.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Explicit repository and KB path; whole-repository CAS for shared repos",
+      "detail": "Semantic operations take an explicit repository and KB path rather than ambient cwd. When several KBs share one repository, whole-repository CAS conservatively conflicts; no cross-KB transactions or branch-per-KB federation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "Porcelain operations carry an explicit KnowledgeBase(Repository) value and acceptance CASes the repo branch head; PR #44 CLI adds --kb PATH with Git repo discovery (though --kb defaults to '.')"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Front-matter/status cleanup and dropping 'proposed' from the ADR 0012 cross-reference; no change in what the architecture requires"
+    }
+  ],
+  "notes": "A tiny, stable lane: founded once and only touched by the seq-143 metadata reconciliation. Most of it is negative constraints (no remote protocol, no sync service, no Stale state) which the code honours trivially - the host has no push/fetch code at all. The positive commitments (local CAS publication, rebase-in-place) were realised by the ADR 0012 acceptance work (PRs #23/#42) without ever editing this ADR. One soft spot: 'require an explicit repository and KB path; do not rely on ambient cwd' is met at the porcelain layer, but the CLI's --kb defaults to '.', so the surface does use cwd as a default."
+}

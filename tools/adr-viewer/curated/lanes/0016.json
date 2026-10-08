@@ -1,0 +1,408 @@
+{
+  "adr": "0016",
+  "title": "Local secrets, typed configuration and named connector bindings",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0016.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Checkout-local per-KB named secret store, never in Git",
+      "detail": "Each KB in a checkout has its own key/value secrets, independent of plugins, outside the accepted root, evolutions and Git; no global fallback, cross-KB lookup or synchronisation. Configuration names keys as ordinary text (no SecretRef type), and secret values are never candidate capture inputs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Configuration remains ordinary typed root data"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #122 implements the per-KB ignored store and CLI",
+        "seq": 98
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Guest getSecret request returns plaintext; plugin builds its own auth",
+      "detail": "The guest SDK exposes a typed GetSecret request composed with HTTP; trusted plugins receive the plaintext value and construct provider-specific authentication themselves, with no host injection or provider classification. Effectful evolution entries could use it via acquisition plugins.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Secrets",
+        "GetSecret",
+        "getSecret",
+        "SecretError"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No guest secret request existed when seq 97 removed it pending a real consumer"
+      },
+      "ended": {
+        "seq": 97,
+        "how": "replaced",
+        "by": "0016.10"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Host SecretStore plumbing scoped to selected KB, actionable missing-key errors",
+      "detail": "Secret access is a host plumbing effect whose runner receives the selected KB's store scope; missing keys yield SecretNotFound naming the key (never the value), storage corruption is an operational failure, and there are no per-plugin grants, opaque handles or connection registry.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SecretStore",
+        "ReadSecret",
+        "runSecretStoreIO",
+        "SecretNotFound"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #122 adds SecretStore capability and native interpreter",
+        "seq": 98
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Per-plugin root config files hold instances as generated Dhall union",
+      "detail": "Connector instances live in a per-plugin root file (root/plugins/config/<plugin>.dhall) as a list keyed by a Kyyn-generated union of advertised connector config types derived from Haskell; Kyyn owns the envelope, plugins own payload schemas, and malformed config fails the whole root with no partial loading.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Configuration remains ordinary typed root data"
+      ],
+      "anchors": [
+        "ConnectorInstance"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #100 derives the union schema and loads root/plugins/config instances, rejecting invalid configs root-wide",
+        "seq": 81
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Pure per-instance config validator runs during root checking",
+      "detail": "Each connector type supplies `validateConfig :: Config -> ValidationReport`, run on every configured instance during root checking with plugin/instance diagnostics; failure blocks acceptance, and it never fetches, reads secrets or tests credentials.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Configuration remains ordinary typed root data"
+      ],
+      "anchors": [
+        "validateConfig",
+        "ValidationReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #100 generates pure validator adapters and combines reports with root validation",
+        "seq": 81
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugins own provider authentication; no kernel Connection model",
+      "detail": "Provider-specific authentication and response handling live in integration code using host capabilities; there is no kernel Connection entity, automatic credential injection or closed auth taxonomy, and required user actions are explicit, never hidden prompts in scheduled work.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Authentication belongs to the integration"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #147 ships plugin-owned Graph client-secret and device-code auth with no kernel auth model",
+        "seq": 113
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.07",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Instances declare a binding; Kyyn.Connectors exports typed handles",
+      "detail": "Each configured instance names an author-facing `binding`; Kyyn generates a Kyyn.Connectors module exporting a typed handle per instance (no payload or secret) so KB code calls e.g. Mail.viewEmail Connectors.salesMail. Bindings are unique valid identifiers; renaming one never changes instance identity or evidence.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Configuration remains ordinary typed root data"
+      ],
+      "anchors": [
+        "BindingName",
+        "salesMail",
+        "Connectors",
+        "Instance"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Binding validation lands in PR #100; PR #107 generates instance handles and proxies for KB tools",
+        "seq": 87
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.08",
+      "seq": 81,
+      "pr": 100,
+      "summary": "Raw RootOpening carries config bytes; PrepareRoot compiles and validates",
+      "detail": "RootOpening carries plugin config files as bytes without compiling plugins (for scaffolding and Before comparisons); PrepareRoot inspects declarations, decodes every instance and retains compiled validators, and ValidateRoot combines their reports. Neither probes a provider.",
+      "kind": "refine",
+      "supersedes": [
+        "0016.04"
+      ],
+      "sections": [
+        "Decision / Configuration remains ordinary typed root data"
+      ],
+      "anchors": [
+        "PrepareRoot",
+        "RootOpening",
+        "ValidateRoot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #100 implements prepared-root wiring with this split",
+        "seq": 81
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.09",
+      "seq": 87,
+      "pr": 107,
+      "summary": "Generated per-connector proxy modules with phantom-typed instance handles",
+      "detail": "Proxies are generated as Kyyn.Plugins.P_<plugin>.<ConnectorType>; the exported Instance is phantom-typed by plugin and connector type so handles cannot be passed to another connector's methods.",
+      "kind": "refine",
+      "supersedes": [
+        "0016.07"
+      ],
+      "sections": [
+        "Decision / Configuration remains ordinary typed root data"
+      ],
+      "anchors": [
+        "Plugins",
+        "ConnectorType",
+        "Folder"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #107 generates phantom-typed proxies and instance bindings",
+        "seq": 87
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.10",
+      "seq": 97,
+      "pr": 121,
+      "summary": "Guest secret requests deferred until a real consumer exists",
+      "detail": "The first implementation is the host store plus local setup commands; guest request algebras are added only with actual consumers rather than as unused SDK constructors, and evolution execution stays pure (no secret-using acquisition inside evolutions).",
+      "kind": "replace",
+      "supersedes": [
+        "0016.02"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Local storage and CLI"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Design-only step removing guest Secrets from the spec; code had none, so it conforms immediately",
+        "seq": 97
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0016.11",
+      "seq": 97,
+      "pr": 121,
+      "summary": "Secrets stored as plaintext Dhall files under .kyyn/secrets with CLI",
+      "detail": "Each value is a hermetic Dhall Text at <kb>/.kyyn/secrets/<name>.dhall, explicitly plaintext at rest with ordinary permissions and an ignore rule; SecretStore gains write/list/remove; `secret set/list/remove` work without a valid schema, compiler or evolution, refuse empty input and never print values.",
+      "kind": "refine",
+      "supersedes": [
+        "0016.01",
+        "0016.03"
+      ],
+      "sections": [
+        "Decision / Local storage and CLI"
+      ],
+      "anchors": [
+        "SecretName",
+        "WriteSecret",
+        "ListSecretNames",
+        "RemoveSecret"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #122 implements the store and CLI",
+        "seq": 98
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.12",
+      "seq": 98,
+      "pr": 122,
+      "summary": "Masked secret show and kb.dhall marker required for secret commands",
+      "detail": "`secret show` returns a masked value (first four characters for long values, true length preserved) in human and JSON forms; secret commands require root/kb.dhall in the selected directory so a wrong working directory cannot silently acquire secrets.",
+      "kind": "refine",
+      "supersedes": [
+        "0016.11"
+      ],
+      "sections": [
+        "Decision / Local storage and CLI"
+      ],
+      "anchors": [
+        "DhallHandling"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #122 implements masked show (owner follow-up) and the marker check",
+        "seq": 98
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.13",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Source connectors read and replace secrets via guest requests",
+      "detail": "Graph introduces the guest secret consumers: source and login programs can read secrets and replace them (e.g. refresh-token rotation) through ADR 0009's request rows, writing to the same per-KB store as local setup.",
+      "kind": "refine",
+      "supersedes": [
+        "0016.10"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Local storage and CLI"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #147 adds getSecret/putSecret to the guest SDK host row and per-KB persistence",
+        "seq": 113
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.14",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Explicit connector login entry; fetch never starts interaction",
+      "detail": "A connector may advertise `login :: Config -> PluginLogin (Either LoginError ())`, invoked only by `plugin connector login PLUGIN INSTANCE` with accepted config; it fetches nothing and creates no evolution, and its secret writes are local setup.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Authentication belongs to the integration"
+      ],
+      "anchors": [
+        "PluginLogin",
+        "LoginError",
+        "login"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #147 implements CLI connector login",
+        "seq": 113
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.15",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Graph plugin owns client-secret and device-code auth with refresh rotation",
+      "detail": "One microsoft-graph plugin owns GraphAuth (ClientSecret or DeviceCode) in its config; client-secret gets fresh .default tokens, device-code stores a refresh token and rotates it before proceeding, access tokens live per invocation, and the host knows nothing of tenants, scopes or endpoints.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph authentication"
+      ],
+      "anchors": [
+        "GraphAuth",
+        "ClientSecret",
+        "DeviceCode",
+        "CalendarConfig",
+        "Calendars"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #147 implements both modes against a recording provider under GHC and MicroHs",
+        "seq": 113
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0016.16",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Shared Graph auth config with combined delegated scopes across connectors",
+      "detail": "Calendar, Mail, Meetings and Files share one app registration; DeviceCode config carries the combined delegated `scopes` list so login consents for all and refresh never narrows it, with per-API permission requirements and explicit errors for unsupported auth/endpoint combinations.",
+      "kind": "refine",
+      "supersedes": [
+        "0016.15"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph authentication"
+      ],
+      "anchors": [
+        "scopes"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 165,
+        "evidence": "PR #213: DeviceCode config carries scopes; login and refresh request the full configured set plus offline_access, connectors no longer narrow it; Calendar validates shared-calendar scope"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 84,
+      "pr": 103,
+      "note": "Retargets the ADR 0014 cross-reference from historical selection to latest-only evidence; no change to bindings"
+    },
+    {
+      "seq": 113,
+      "pr": 147,
+      "note": "Status update marking Graph auth implemented plus a sharedCalendar flag selecting the shared-read scope already described; realises 0016.13-15"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Reconciliation: drops status/basis lines, restates host-side vs guest secret routes already covered by 0016.10/13, and points the decoded instance type at ADR 0015"
+    },
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "Config example types switched from String to Text to match packed guest Text; no architectural change"
+    },
+    {
+      "seq": 157,
+      "pr": 204,
+      "note": "Adds calendar windowStart/windowEnd config fields whose semantics are owned by ADR 0014; provider-config detail only"
+    }
+  ],
+  "notes": "The lane's most notable detour is guest secret access: the founding text gave plugins a GetSecret request, seq 97 removed it as speculative (host store + CLI only, evolutions pure), and seq 110/113 reintroduced read-and-replace guest requests once Graph needed token rotation. The ADR also grew in scope: retitled at seq 76 from 'Local secrets and plugin-owned authentication' to include typed configuration and named connector bindings, and later accreted a large Microsoft Graph authentication section that is really plugin-specific design living in a core ADR. Seq 151's shared combined-scope DeviceCode config (0016.16) ran ahead of the code until PR #213 at seq 165 added configured scopes shared by login and refresh; it is marked realised there with medium confidence because only the Calendar connector exists, so the Mail/Meetings/Files permission rules in the same node are not yet exercised. The founding 'Trust and consequences' section carries real requirements (traces omit secret values and HTTP headers/URLs/bodies) but per the rules produced no node; worth a human check whether it should. Several small config-field steps (sharedCalendar, scopes String->Text, window fields) were judged editorial/provider detail rather than architecture."
+}

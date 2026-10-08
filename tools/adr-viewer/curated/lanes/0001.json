@@ -1,0 +1,130 @@
+{
+  "adr": "0001",
+  "title": "Kyyn is a runtime and design workbench",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0001.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Local-first runtime and workbench for a human and their agent",
+      "detail": "Kyyn is a local-first runtime and design workbench used by a human together with their existing agent, rather than a hosted service or governance product.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44 exposes the first local evolution journey through the CLI; PR #49 (seq 46) installs the complete local CLI"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0001.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "KB owns domain meaning; Kyyn owns loading, execution and acceptance",
+      "detail": "The KB owns its domain types, facts, validation, calculations, instructions, tools and views; Kyyn owns loading, execution, discovery, candidates, acceptance and operational integration. KBs may depend on Kyyn to execute.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "KB-authored typed queries/validation run by Kyyn from PR #27-#28; Kyyn-composed evolution acceptance lands in PR #42 (seq 41)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0001.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Exploration is an outcome; preserve unknown and disputed values",
+      "detail": "Exploration and improved understanding count as outcomes before reporting or automation exists, and accepted facts may carry unknown or disputed domain values instead of implying 'verified true'.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unknown",
+        "evidence": "A product stance; KB-authored types can model unknown/disputed values but no specific kernel mechanism or PR claims it"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0001.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "External schedulers call ordinary operations; Kyyn never orchestrates agents",
+      "detail": "Schedulers and agent harnesses invoke ordinary Kyyn operations; the kernel does not orchestrate agents itself.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 1,
+        "evidence": "Negative constraint; no code existed, so nothing orchestrated agents"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0001.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "No universal ontology or governance engine; effects are not sandboxing",
+      "detail": "Rejects a standalone-code requirement, a universal knowledge ontology and a general governance/workflow engine, but also 'just a folder of scripts': the runtime must remove repeated loading, protocol, review and persistence work. Explicit effects aid trusted agents and are not hostile-code containment.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Boundaries and alternatives"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 1,
+        "evidence": "Mostly negative constraints that the (empty) codebase conformed to; the positive runtime half is delivered across later steps"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0001.06",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Explicitly invoked KB-authored agentic flows allowed; still no autonomous scheduling",
+      "detail": "Kyyn does not autonomously orchestrate agents, but KB-authored agentic flows invoked explicitly (ADR 0028) are permitted; they do not turn the kernel into an agent scheduler.",
+      "kind": "refine",
+      "supersedes": [
+        "0001.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 128,
+        "evidence": "PR #165 lets explicitly invoked KB tools run Agentic flows with host-supplied model turns; closed recipes run in PR #168 (seq 131)"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: frontmatter replaces Status line, 'proposed in' becomes 'defined in' ADR 0028; no requirement change."
+    }
+  ],
+  "notes": "A short, stable product-charter lane with no subsections, split by commitment. 'Boundaries and alternatives' was treated as part of the decision (it is not Context/Consequences/Verification) and yields one mostly-negative node. The only substantive change is seq 122 softening 'Kyyn does not orchestrate agents' to 'not autonomously', carving out explicitly invoked agentic flows; I modelled that as a refine rather than a replace because the no-scheduler commitment survives. Realisation for charter-level nodes is necessarily judgemental (0001.03 unknown)."
+}
