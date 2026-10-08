@@ -44,6 +44,7 @@ echo = pure
   fs.writeFileSync(manifest, original.replace(empty, `queries = [${declaration('hello', 'Unit')}, ${declaration('echo', 'Input')}]`));
   assert.deepEqual(cli(['root', 'query', 'list']).result.queries, []);
   cli(['evolution', 'check', draft.id]);
+  cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
   assert.deepEqual(cli(['root', 'query', 'list']).result.queries.map(q => q.name), ['hello', 'echo']);
   assert.equal(cli(['root', 'query', 'show', 'hello']).result.inputType.trim(), '{}');
