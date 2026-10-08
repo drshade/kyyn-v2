@@ -1,7 +1,7 @@
 {
   "adr": "0007",
   "title": "Library-backed JSON hidden behind typed adapters",
-  "cursor": 166,
+  "cursor": 169,
   "nodes": [
     {
       "id": "0007.01",
@@ -432,6 +432,31 @@
         "evidence": "PR #202: SDK identifiers/payloads use Text and terminal JSON is emitted in bounded pieces with one Completed result"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0007.21",
+      "seq": 167,
+      "pr": 215,
+      "summary": "Raw body also carries blob-download requests and successful blob reads",
+      "detail": "Frames remain JSON metadata plus a raw body validated by decodeMessage. Besides HTTP requests and responses, the body now carries blob-download requests and the exact bytes of successful blob reads, with no text encoding; blob downloads return metadata only, failed blob reads have no body, and other messages still reject a nonempty body.",
+      "kind": "refine",
+      "supersedes": [
+        "0007.18"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "decodeMessage",
+        "BlobRead",
+        "BlobDownload"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 167,
+        "evidence": "PR #215 carries captured blob-read bytes raw through the plugin protocol (PluginMessages/PluginBroker) and returns metadata-only blob-download responses"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -461,5 +486,5 @@
       "note": "Desired-state reconciliation: removes status/basis, rewords context and decimal-mapping gate as firm rules covered by 0007.07, and restates broker dispatch by selected row (covered by 0007.04 and ADR 0009)."
     }
   ],
-  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted."
+  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane."
 }

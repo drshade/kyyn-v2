@@ -1842,5 +1842,35 @@
     "pr": 214,
     "title": "feat(evidence): separate payload availability from source changes",
     "adrs": []
+  },
+  {
+    "seq": 167,
+    "sha": "56b568f73563c41eefca9660889ee4fe2a5aec61",
+    "date": "2026-10-08T16:26:40+02:00",
+    "pr": 215,
+    "title": "feat(evidence): stream captured blobs through host capabilities",
+    "adrs": [
+      "0007",
+      "0029"
+    ]
+  },
+  {
+    "seq": 168,
+    "sha": "aed66e69edc30450fe2d9f3cc28b52270c2f9736",
+    "date": "2026-10-08T16:55:52+02:00",
+    "pr": 217,
+    "title": "Add Graph Mail capture with attachments",
+    "adrs": [
+      "0014",
+      "0029"
+    ]
+  },
+  {
+    "seq": 169,
+    "sha": "59906effeb8e4af1c85650f5506efa7af3f4d7d6",
+    "date": "2026-10-08T17:06:29+02:00",
+    "pr": 216,
+    "title": "Add adr-viewer: replayable plan-versus-build history of the ADRs",
+    "adrs": []
   }
 ]

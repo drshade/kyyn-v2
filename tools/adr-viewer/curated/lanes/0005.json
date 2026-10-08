@@ -1,7 +1,7 @@
 {
   "adr": "0005",
   "title": "One authoritative contract and mechanical projections",
-  "cursor": 166,
+  "cursor": 169,
   "nodes": [
     {
       "id": "0005.01",
@@ -662,5 +662,5 @@
       "note": "Metadata declaration fields switch String to Text as part of packed transport; representation detail, same commitments"
     }
   ],
-  "notes": "The founding text was unusually code-ahead: interface sketches (checkValue/UncheckedValue, TypeBindings, InspectedSchema.bindings, projectJsonSchema) mostly did not survive contact with implementation. TypeBindings was quietly dissolved into the retained DataType at seq 18 and formally replaced by loadedSources at seq 34; checkValue was never built and the seq 143 reconciliation rewrote the ADR to the DhallHandling/RootStore checking the code had used since seq 16. The longest-running gap is scalar support: Decimal/Date/Instant/Natural kinds and the Timeline affordance have been in the ADR since seq 1 and are still absent from code (issue #188); seq 143 removed the Data.Fixed guidance rather than resolving it, and Probability (seq 149) is the only library-backed scalar delivered. A JSON Schema discovery projection of KB contracts is also still unbuilt. BlobReference (seq 151) is design-only. Judgement calls: seq 8's FileSystem effect-row addition and seq 143's GuestExecution/DhallHandling row are treated as refines (effect rows are contracts per PR 186), and seq 155's String->Text change as editorial."
+  "notes": "The founding text was unusually code-ahead: interface sketches (checkValue/UncheckedValue, TypeBindings, InspectedSchema.bindings, projectJsonSchema) mostly did not survive contact with implementation. TypeBindings was quietly dissolved into the retained DataType at seq 18 and formally replaced by loadedSources at seq 34; checkValue was never built and the seq 143 reconciliation rewrote the ADR to the DhallHandling/RootStore checking the code had used since seq 16. The longest-running gap is scalar support: Decimal/Date/Instant/Natural kinds and the Timeline affordance have been in the ADR since seq 1 and are still absent from code (issue #188); seq 143 removed the Data.Fixed guidance rather than resolving it, and Probability (seq 149) is the only library-backed scalar delivered. A JSON Schema discovery projection of KB contracts is also still unbuilt. BlobReference (seq 151) is design-only. Judgement calls: seq 8's FileSystem effect-row addition and seq 143's GuestExecution/DhallHandling row are treated as refines (effect rows are contracts per PR 186), and seq 155's String->Text change as editorial. PR #215 (seq 167) implemented BlobRef by walking the nominal DataType rather than adding a BlobReference shape to the algebra, so 0005.25 stays unrealised."
 }

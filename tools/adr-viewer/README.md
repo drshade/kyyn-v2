@@ -24,6 +24,7 @@ git + GitHub ──extract──▶ evidence/ ──curate (agent)──▶ cura
 | `extract` | the tool | first-parent git history, merged PRs via `gh` | `evidence/` only |
 | curate | an agent, following this README | `evidence/` (including worklists) | `curated/lanes/<ADR>.json` only |
 | `check` | the tool | `evidence/`, `curated/` | nothing; prints diagnostics |
+| `pending` | the tool | `evidence/`, `curated/` | nothing; prints the curator's work list |
 | `render` | the tool | `evidence/`, `curated/` | one HTML file |
 
 ```
@@ -51,6 +52,7 @@ the root build. `extract` needs an authenticated `gh` for PR titles and bodies.
 ```sh
 cabal run -v0 adr-viewer -- extract --repo ../.. --output evidence
 cabal run -v0 adr-viewer -- check                      # defaults: --evidence evidence --curated curated
+cabal run -v0 adr-viewer -- pending                    # add --json for machine-readable output
 cabal run -v0 adr-viewer -- render --output /tmp/adr-history.html
 cabal test                                             # model, checks and ADR readings
 ```
@@ -79,27 +81,36 @@ browser. It is self-contained and is not committed.
 
 When asked to bring the history up to date:
 
-1. Run `extract`. Note the last seq in `evidence/steps.json`.
-2. Run `check`. Lanes reported as "N steps behind" are your work list. These are
-   warnings, not failures. A lane file is missing for an ADR that has never been
-   curated; create it, starting at the ADR's founding step. To see which lanes
-   have spec changes rather than only realisation checks, read each new step's
-   `adrs` list in `evidence/steps.json`.
-3. For each behind lane, work through the steps after its cursor, in order:
-   - Steps that changed this ADR are in `evidence/worklists/<ADR>.jsonl` (each
-     entry has `diff`, `body`, `code_files`, `spec_added`, `spec_removed`,
-     `code_added`). Apply the rules below to each one.
-   - For every step after the cursor, including code-only steps, check whether it
-     realises a live node that is still `unrealised`. Use `code_added` in
-     `evidence/worklists/anchors.json` and the PR bodies in
+1. Run `extract`. It always rewalks the whole history, so there is no extraction
+   cursor. New merges simply appear as new steps at the end of `steps.json`.
+2. Run `pending`. This is your work list. For every lane that is behind (its
+   `cursor` is below the last step) or missing, it lists:
+   - **curate**: steps after the cursor that changed this ADR. Apply the rules
+     below to each one, reading its entry in `evidence/worklists/<ADR>.jsonl`
+     (`diff`, `body`, `code_files`, `spec_added`, `spec_removed`, `code_added`).
+   - **realisation checks**: steps after the cursor that did not change the ADR,
+     which matter only because they might realise an open decision.
+   - **open decisions**: live nodes still `unrealised` or `unknown`, which are
+     the only nodes a step can newly realise.
+   - **advance the cursor**: lanes with nothing to curate and no open decisions.
+     Just set `cursor` to the last step.
+   - **no lane file**: an ADR never curated. Create its lane from the founding
+     step, curating every listed step.
+3. For each lane with work, in order of seq:
+   - Curate the "curate" steps.
+   - For each open decision, check whether any listed step realises it. Use
+     `code_added` in `evidence/worklists/anchors.json` and the PR bodies in
      `evidence/worklists/steps.jsonl` (grep by seq or PR number; the file is
-     large). If it does, set that node's `realised` to `later_step` with the
+     large). If one does, set that node's `realised` to `later_step` with that
      step's seq. Never change a node's history otherwise: earlier nodes keep
      their meaning, and new understanding becomes new nodes.
-   - Set `cursor` to the last seq.
    - When a step changed several ADRs, read how already-current sibling lanes
-     treated that step (read-only) and stay consistent with them.
-4. Run `check` until it reports no errors, and read the warnings.
+     treated it (read-only) and stay consistent with them.
+   - Set `cursor` to the last step. This applies equally when the lane had open
+     decisions and none of the listed steps realised them.
+4. Run `check` until it reports no errors, and read the warnings. "Behind"
+   warnings are expected until every cursor is advanced. Run `pending` again;
+   it should report that all lanes are current.
 5. `render` and open the page if asked to show the result.
 
 Keep lane files formatted as two-space-indented JSON with a trailing newline,
@@ -152,6 +163,18 @@ For each step that changed the ADR:
    is a separable commitment of its own, it should have been its own node; do
    not split history retroactively, but note it in `notes`.
 
+Judging evidence:
+
+- **PR bodies are written before merge.** A body that says "draft" or lists
+  remaining work describes the PR at the time it was written, so confirm
+  against the merged code. The merged code is the evidence.
+- **Anchors from this tool are excluded.** `extract` does not count
+  `tools/adr-viewer/` as code. An anchor's `code_added` therefore never comes
+  from curated lanes that merely name it.
+- **The `evidence` string of a still-unrealised node may be kept current** (for
+  example when the reason it is unbuilt changes), since that is not history.
+  Do not alter a realised or ended node's fields except to correct an error.
+
 Consistency rules (other lanes are curated separately, so apply these exactly):
 
 - **Founding granularity:** the founding step is the ADR's first version.
@@ -167,6 +190,19 @@ Consistency rules (other lanes are curated separately, so apply these exactly):
   realised `code_first`. A reversal is a `replace`.
 - **Version or format bumps** are a `refine` only when they change what the
   architecture requires; otherwise they are editorial.
+- **Several live successors:** when an earlier decision continues in more than
+  one live node (for example a connector refined in one node and its download
+  policy replaced in another), a later change supersedes the successor whose
+  topic it changes. If it changes several, list each one.
+- **Changes owned by another ADR:** when a step rewords, in this ADR, a
+  requirement another ADR owns (a transport rule restated here, say), it is
+  editorial in this lane. The decision is recorded in the owning ADR's lane.
+- **Partly built multi-case decisions:** when a decision applies to each of
+  several cases (connectors, surfaces) and only some exist, mark it realised
+  once it holds for every case that exists, lower `confidence`, and name the
+  missing cases in `evidence`. When the decision is about the set itself ("one
+  package holds Calendar, Mail, Meetings and Files"), it stays unrealised until
+  the set is complete.
 - **Negative constraints** ("there is no X", "never Y") are `same_step` if the
   code at that time conforms, otherwise `unknown`.
 

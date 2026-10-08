@@ -3,6 +3,10 @@ module Main (main) where
 
 import AdrViewer.Check
 import AdrViewer.Extract
+import AdrViewer.Json (encodeCompact)
+import AdrViewer.Pending
+import AdrViewer.Types (stepSeq)
+import qualified Data.ByteString.Lazy.Char8 as BLC
 import AdrViewer.Render (renderPage)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.IO as TIO
@@ -13,6 +17,7 @@ import System.IO (hPutStrLn, stderr)
 data Command
   = Extract ExtractOptions
   | Check FilePath FilePath
+  | Pending FilePath FilePath Bool
   | Render FilePath FilePath FilePath
 
 main :: IO ()
@@ -22,6 +27,9 @@ commands :: Parser Command
 commands = hsubparser $ mconcat
   [ command "extract" (info extractOpts (progDesc "Write mechanical evidence from git and GitHub history"))
   , command "check" (info (Check <$> evidenceOpt <*> curatedOpt) (progDesc "Validate curated lanes against the evidence"))
+  , command "pending" (info (Pending <$> evidenceOpt <*> curatedOpt
+        <*> switch (long "json" <> help "Machine-readable output"))
+      (progDesc "List, per lane, the steps after its cursor and the open decisions they could realise"))
   , command "render" (info (Render <$> evidenceOpt <*> curatedOpt <*> outputOpt "HTML file to write")
       (progDesc "Check, then write the self-contained time-travel page")) ]
   where
@@ -39,6 +47,12 @@ run (Check evidence curated) = do
   inputs <- load evidence curated
   report inputs
   putStrLn (show (length (inLanes inputs)) <> " lanes checked")
+run (Pending evidence curated asJson) = do
+  inputs <- load evidence curated
+  let lastSeq = maximum (0 : map stepSeq (inSteps inputs))
+      work = pending inputs
+  if asJson then BLC.putStrLn (encodeCompact (pendingJson lastSeq work))
+            else TIO.putStr (renderPending lastSeq work)
 run (Render evidence curated output) = do
   inputs <- load evidence curated
   report inputs
