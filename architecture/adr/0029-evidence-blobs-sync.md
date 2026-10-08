@@ -222,9 +222,9 @@ same type in context/result. Stateless connectors may keep the existing signatur
 they have no stored position. A connector needing invocation time but no provider
 cursor can use a nullary position type. No kernel Graph deltaLink type exists.
 
-The host stores checked position data in a separate ignored Dhall file referenced
-by the current evidence index (ADR 0014). Generic evidence inspection does not
-decode it. First acquisition or changed producer supplies `Nothing`.
+The host stores checked position data inside the ignored current evidence index
+(ADR 0014), separate from payload files. Generic evidence inspection does not
+interpret it using plugin code or expose it. First acquisition or changed producer supplies `Nothing`.
 Changed code/contract must never reuse an incompatible position. Replacing
 the producer clears the old position together with old evidence on successful
 publication; a failed replacement leaves the old stored capture untouched and

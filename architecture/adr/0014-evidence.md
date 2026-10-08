@@ -479,14 +479,13 @@ The instance directory is `.kyyn/evidence/<plugin>-<hex instance>/`, where the
 instance component is lowercase hexadecimal UTF-8. Its layout is:
 
 ```text
-state.dhall             current index and publication metadata; no payload bodies
-payloads/<key>.dhall     one Available item's checked payload per referenced file
-positions/<key>.dhall    optional checked connector sync position
+index.dhallb            current index as standard binary Dhall; no payload bodies
+payloads/<sha256>.dhall  checked payloads, addressed by their serialized bytes
 blobs/<sha256>           captured attachment bytes (ADR 0029)
 ```
 
 The index holds producer/connector identity, the compiler-derived payload contract
-descriptor, latest-fetch summary, optional position-file reference and an entry per
+descriptor, latest-fetch summary, optional checked sync position and an entry per
 evidence ID. Each entry contains fingerprint, external references and either
 Truncated or a payload-file reference. The latter also records that payload's
 referenced BlobRefs, derived by the host using its nominal contract walker when
@@ -494,11 +493,43 @@ the payload is checked. This lets publication and reclamation determine file
 reachability without reopening every unchanged payload. It is storage metadata,
 not another plugin-authored declaration.
 
-Payload and position files are self-contained Dhall. Keys are host-generated safe,
-immutable storage identities, independent of arbitrary provider IDs and opaque
-evidence fingerprints. A changed file gets a new key; never overwrite a file still
-named by the current index. The physical identity algorithm is private to the
-interpreter, not a new guest capability or evidence versioning scheme.
+Encode the private index using Dhall's standard binary (CBOR) representation with
+the maintained Dhall library. Decode, type-check against the index contract and
+normalize using that same library; reject imports just as for text documents.
+This is the authoritative index, not a binary cache beside a second textual copy.
+It remains inspectable with `dhall decode`. Text parsing of a realistic metadata
+index alone exceeds the interactive budget; binary Dhall removes that parser cost
+without introducing a new value model, bespoke codec or database. Payloads remain
+text Dhall because individual files are small and useful to inspect directly.
+
+`DhallHandling` owns this encoding distinction at the plumbing boundary:
+
+```haskell
+decodeBinaryValue
+  :: DhallHandling :> es
+  => Shape -> ByteString -> Eff es (Either [Diagnostic] Value)
+
+encodeBinaryValue
+  :: DhallHandling :> es
+  => Shape -> Value -> Eff es (Either [Diagnostic] ByteString)
+```
+
+Binary decoding performs the same contract/checked-value conversion as text
+decoding; binary storage does not bypass type checking. DocumentPersistence accepts
+the index filename explicitly and remains unaware of either encoding.
+
+Payload files are self-contained Dhall. Their keys are lowercase SHA-256 of the
+exact serialized UTF-8 bytes, using the same native hashing implementation as
+blobs. References include byte length. These are storage identities, independent
+of arbitrary provider IDs and opaque evidence fingerprints, not Dhall semantic
+hashes. Identical bytes can reuse an existing file; different bytes get a different
+key. Never overwrite a file named by the current index. There is no new guest
+capability or evidence versioning scheme.
+
+Keep the optional sync position inside the index. It is publication metadata and
+advances in the same atomic replacement; a separate file/lifetime adds no useful
+boundary. Generic inspection parses the index but does not interpret the position
+with plugin code or render it to callers.
 
 Persist the payload descriptor as part of the capture so generic inspection needs
 no compiler. Its authority is the successful checked fetch that wrote it, bound to
@@ -506,11 +537,19 @@ the existing producer identity. This is a projection of the Haskell contract, no
 a second schema to maintain. Producer mismatch refuses the read as before; do not
 reinterpret old payloads or introduce a new compatibility policy.
 
+Self-contained Dhall alone is insufficient here: it proves that a value has some
+type, not that it has the expected connector payload type. Its structural type
+also loses Haskell nominal identity (including recognized SDK BlobRef types) and
+some host wire distinctions. The existing checked-value decoding/presentation path
+requires the expected contract. Retain one generated descriptor per capture,
+rather than introducing a separate generic Dhall reader for browsing or invoking
+the compiler merely to recover that contract. Do not duplicate it per payload.
+
 Opening a capture reads and decodes the index once, checking its shape, producer,
 nonempty identities/fingerprints and unique IDs. Use a keyed representation or
 sorting for identity validation, not quadratic duplicate scanning. Do not parse the
-same document again to extract its header. Inspection never opens position files,
-walks attachment bytes or checks every payload file for existence. Individual
+same document again to extract its header. Inspection never walks attachment
+bytes or checks every payload file for existence. Individual
 payload decoding is the validation boundary for reads; malformed or missing
 payload files fail the requested read without masquerading as Truncated.
 
@@ -533,16 +572,16 @@ framework for this change. Large-index scaling can be evaluated separately.
 
 Retain one local expected-fetch comparison and one publication point:
 
-1. Check changed payloads against their contract and stage complete new payload
-   and position files. Derive blob references from the checked values. Reuse
+1. Check changed payloads and the returned position against their contracts and
+   stage complete new payload files. Derive blob references from the checked values. Reuse
    references for unchanged items; never decode/re-encode their payloads.
 2. Under the existing instance lock, compare the expected fetch ID, apply ordered
    changes to the current index and check the resulting referenced files/blobs
    are complete. Completeness uses storage metadata, not a full reread/hash of
    every unchanged payload. A conflicting or invalid batch publishes nothing.
-3. Atomically replace `state.dhall` with the new index. Evidence metadata, payload
-   references, summary and position reference become visible together.
-4. Reclaim payloads, positions and blobs no longer referenced by the published
+3. Atomically replace `index.dhallb` with the new index. Evidence metadata, payload
+   references, summary and position become visible together.
+4. Reclaim payloads and blobs no longer referenced by the published
    index. Failed/interrupted staging can leave unreferenced files for cleanup,
    never a published pointer to incomplete data. Cleanup failure after replacement
    must not report that publication was rolled back.
@@ -550,7 +589,7 @@ Retain one local expected-fetch comparison and one publication point:
 Truncation removes the payload reference while retaining evidence metadata;
 removal drops the index entry. Failed acquisition leaves the prior index and its
 files usable. No old indices or payload generations are deliberately retained.
-Explicit clear removes index, payloads, position and blobs. Sync positions remain
+Explicit clear removes index (including position), payloads and blobs. Sync positions remain
 connector-owned data with the behavior specified by ADR 0029.
 
 The layout change needs no automatic upgrade mechanism: old monolithic captures
@@ -825,7 +864,7 @@ current payloads and the latest fetch summary remain, with no acquisition histor
 Test consistent reads within an invocation and fresh reads in the next, instance
 isolation, empty versus unfetched captures, and producer replacement.
 
-Instrument storage reads: list opens no payload/position/blob files; show opens
+Instrument storage reads: list opens no payload/blob files; show opens
 only the selected payload; repeated guest reads reuse the captured index. A bad
 unrelated payload must not prevent listing or reading another valid item. Verify
 missing selected files, invalid payloads, duplicate index IDs and producer mismatch
@@ -838,6 +877,10 @@ representative mail capture (roughly 19 MB of evidence plus attachments) and a
 list/show, aiming for a few hundred milliseconds with warm OS caches; report
 actual elapsed times, fixture sizes and cold/warm conditions in the implementation
 PR. This is an end-to-end latency target, not a hardware-independent timeout test.
+Report index bytes per entry and parse/check time on the real capture and a
+10,000-entry fixture. Include realistic external references and attachment metadata;
+do not assume that an index called small will meet the target. If index processing
+alone misses the budget, resolve that before claiming the interactive path is fixed.
 Growing unrelated bodies/attachments must not increase bytes read by list/show.
 Exercise failed staging, publication conflict, truncation and cleanup so no partial
 capture becomes visible and no still-referenced files are reclaimed.
