@@ -16,6 +16,7 @@ library
     Kyyn.Plumbing.Interpreter.SecretStore
     Kyyn.Plumbing.Interpreter.HttpTransport
     Kyyn.Plumbing.Interpreter.BlobStorage
+    Kyyn.Plumbing.Interpreter.ContentDigest
     Kyyn.Plumbing.Interpreter.PluginInteraction
     Kyyn.Plumbing.Interpreter.Judgement
     Kyyn.Plumbing.Interpreter.ModelTurn

@@ -3,7 +3,7 @@
 module Kyyn.Plugin.Host
   ( NetworkHost, Acquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
   , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions, listFiles, readTextFile
-  , BlobRef(..), BlobDownload(..), BlobResponse(..), storeBlob ) where
+  , BlobRef(..), BlobDownload(..), BlobResponse(..), storeBlob, digestText ) where
 
 import Data.Text (Text)
 
@@ -16,7 +16,11 @@ import Kyyn.Types.Blob
 -- | HTTP, secret storage and waiting, combined with an additional capability row.
 type NetworkHost rest = Program (Http :+: (Secrets :+: (Waiting :+: rest)))
 -- | Fetch source data using HTTP, files, secrets, waiting and prior captured evidence.
-type Acquisition payload = NetworkHost (FileRead :+: (BlobAcquisition :+: EvidenceRead payload))
+type Acquisition payload = NetworkHost (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))
+
+-- | Lowercase SHA-256 of each input's exact UTF-8 bytes, preserving list order.
+digestText :: [Text] -> Acquisition payload [Text]
+digestText = Program.request . InRight . InRight . InRight . InRight . InRight . InLeft . DigestText
 
 -- | Download directly into the selected instance's host-side blob store.
 storeBlob :: BlobDownload -> Acquisition payload (Either FetchError BlobResponse)

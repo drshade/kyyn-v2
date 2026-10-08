@@ -21,6 +21,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (renderType, decodeValue, encodeVa
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
+import Kyyn.Plumbing.Interpreter.ContentDigest (runContentDigest)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.HttpTransport (runHttpTransportIO)
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
@@ -100,7 +101,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runFileAcquisitionIO
       . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
-      . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
+      . runContentDigest . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))

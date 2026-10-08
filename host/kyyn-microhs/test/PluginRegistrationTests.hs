@@ -58,6 +58,7 @@ import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import ToolTests (testTools)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
+import Kyyn.Plumbing.Interpreter.ContentDigest (runContentDigest)
 import Kyyn.Porcelain.Capability.KnowledgeBaseInitialization (initialRootFiles)
 import Kyyn.Porcelain.Capability.RootOpening (openCapturedRoot)
 import Kyyn.Porcelain.Capability.Validation (checkRoot)
@@ -155,7 +156,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         absent <- invoke identity method (arguments "one.txt")
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-          (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ runEvidenceAcquisition
+          (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ (runContentDigest . runEvidenceAcquisition)
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope)
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right

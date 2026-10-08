@@ -6,7 +6,7 @@ module Kyyn.Plugin
   , BlobRef(..), readBlob, readBlobText ) where
 
 import Kyyn.Types.Program (Program, (:+:)(..), request)
-import Kyyn.Types.PluginHost (Http, Secrets, Waiting)
+import Kyyn.Types.PluginHost (Http, Secrets, Waiting, ContentDigest)
 import Kyyn.Types.Blob (BlobRef(..), BlobRead(..), BlobAcquisition)
 import qualified Data.ByteString as Bytes
 import Data.Text (Text)
@@ -36,8 +36,8 @@ class ReadsEvidence row payload where
 instance ReadsEvidence (EvidenceRead payload :+: BlobRead) payload where
   injectEvidence = InLeft
 
-instance ReadsEvidence (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload))))) payload where
-  injectEvidence = InRight . InRight . InRight . InRight . InRight
+instance ReadsEvidence (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))))) payload where
+  injectEvidence = InRight . InRight . InRight . InRight . InRight . InRight
 
 -- | List IDs in the selected captured evidence snapshot.
 listEvidenceIds :: ReadsEvidence row payload => EvidenceSnapshot payload -> Program row (Either FetchError [EvidenceId])

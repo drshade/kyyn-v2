@@ -15,18 +15,18 @@ import Kyyn.Types.Program
 import Kyyn.Types.Evidence (EvidenceChange)
 
 executeAcquisition :: forall config payload. Codec config -> Codec payload
-  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload)))))
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload))))))
         (Either FetchError [EvidenceChange payload])) -> IO ()
 executeAcquisition configCodec payloadCodec = executeAcquisitionResult configCodec payloadCodec (listCodec (changeCodec payloadCodec))
 
 executeAcquisitionResult :: forall config payload result. Codec config -> Codec payload -> Codec result
-  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload)))))
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload))))))
         (Either FetchError result)) -> IO ()
 executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
   (config,snapshot) <- input transport configCodec
   execute transport (eitherCodec resultCodec) (handler transport) (selected config snapshot)
   where
-    handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload))))) a -> IO a
+    handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))))) a -> IO a
     handler transport identity (InLeft call) = httpRequest transport identity call
     handler transport identity (InRight (InLeft call)) = secretRequest transport identity call
     handler transport identity (InRight (InRight (InLeft call))) = waitingRequest transport identity call
@@ -38,7 +38,9 @@ executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTra
          ("mediaType",encodeWith (optionalCodec textCodec) media)]) (TE.encodeUtf8 body)
       if B.null raw then either fail pure (decodeWith (eitherCodec blobResponseCodec) reply)
         else fail "Raw body accompanies blob download metadata"
-    handler transport identity (InRight (InRight (InRight (InRight (InRight call))))) = evidenceRequest transport payloadCodec identity call
+    handler transport identity (InRight (InRight (InRight (InRight (InRight (InLeft (DigestText values))))))) =
+      exchange transport identity "digest" "text" (encodeWith (listCodec textCodec) values) (listCodec textCodec)
+    handler transport identity (InRight (InRight (InRight (InRight (InRight (InRight call)))))) = evidenceRequest transport payloadCodec identity call
 
 blobResponseCodec :: Codec BlobResponse
 blobResponseCodec = Codec encode decode

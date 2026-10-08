@@ -157,6 +157,18 @@ test-suite graph-calendar
     bytestring, text, filepath, directory, temporary ==1.3, aeson, process,
     kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters
 
+test-suite graph-mail
+  type: exitcode-stdio-1.0
+  main-is: GraphMailTests.hs
+  other-modules: PluginFetchTests PluginNativeTests
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-microhs, kyyn-domain,
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0,
+    bytestring, text, filepath, directory, temporary ==1.3, aeson, process,
+    kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters
+
 test-suite guest-throughput
   type: exitcode-stdio-1.0
   main-is: ThroughputTests.hs

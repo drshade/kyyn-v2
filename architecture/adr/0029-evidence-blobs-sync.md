@@ -90,6 +90,21 @@ for checking references and publication, not provider requests. Guest downloads
 return only metadata over the existing protocol. The source bytes never enter
 guest memory on this path.
 
+### Payload fingerprints
+
+Capture-once connectors can fingerprint their chosen canonical payload representation
+using the acquisition-only digest capability:
+
+```haskell
+digestText :: [Text] -> Acquisition payload [Text]
+```
+
+The host returns lowercase hexadecimal SHA-256 of each input's exact UTF-8 bytes,
+in order, in one request. The connector owns the representation; nested attachment
+BlobRef hashes participate in it. This does not grant hashing or downloading to
+captured readers. The host implementation is a pure interpreter of `ContentDigest`;
+it uses the same native SHA implementation as blob storage.
+
 ### Reads belong to one captured invocation
 
 ```haskell

@@ -2,7 +2,7 @@
 {-# LANGUAGE GADTs, DuplicateRecordFields #-}
 module Kyyn.Types.PluginHost
   ( HttpRequest(..), HttpResponse(..), HttpError(..), Http(..)
-  , SecretError(..), Secrets(..), Waiting(..), LoginInteraction(..), LoginError(..)
+  , SecretError(..), Secrets(..), Waiting(..), LoginInteraction(..), LoginError(..), ContentDigest(..)
   ) where
 
 import Data.Text (Text)
@@ -32,6 +32,9 @@ data Secrets a where
 
 data Waiting a where
   WaitSeconds :: Int -> Waiting ()
+
+data ContentDigest a where
+  DigestText :: [Text] -> ContentDigest [Text]
 
 data LoginInteraction a where
   DisplayInstructions :: Text -> LoginInteraction ()

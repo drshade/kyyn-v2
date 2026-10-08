@@ -37,6 +37,7 @@ import Kyyn.Plumbing.Protocol.PluginInvocation (statefulAcquisitionSources)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
+import Kyyn.Plumbing.Interpreter.ContentDigest (runContentDigest)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import PluginFetchTests (compileBoth)
 import PluginNativeTests (runStore)
@@ -81,7 +82,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     bodyBytes <- newIORef 0
     start <- getMonotonicTimeNSec
     outcome <- runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $
-      recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ runEvidenceAcquisition $
+      recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ (runContentDigest . runEvidenceAcquisition) $
         fetchEvidence instanceRef package payload program (CheckedValue (contractId config) configuration) Nothing (Just position) ContinueSync Nothing
     _ <- right outcome
     published <- getMonotonicTimeNSec

@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MicrosoftGraph.Http (send, postForm, requireSuccess) where
+module MicrosoftGraph.Http (send, download, postForm, requireSuccess) where
 
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Kyyn.Plugin.Host
+import Kyyn.Plugin (FetchError(..))
 import MicrosoftGraph.Json (form)
 
 send :: HttpRequest -> NetworkHost rest (Either Text HttpResponse)
@@ -12,10 +13,25 @@ send request = do
   case result of
     Left problem -> pure (Left ("HTTP transport failed: " <> Text.pack (show problem)))
     Right response@(HttpResponse status headers _)
-      | status == 429 || status == 503 -> case lookup "retry-after" [(Text.toLower key,value) | (key,value) <- headers] >>= seconds of
+      | status == 429 || status == 503 -> case retryAfter headers of
           Just delay -> waitSeconds delay >> send request
           Nothing -> pure (Left ("Provider returned HTTP " <> Text.pack (show status) <> "; retry later (no usable Retry-After)."))
       | otherwise -> pure (Right response)
+
+download :: BlobDownload -> Acquisition payload (Either Text BlobRef)
+download request = do
+  result <- storeBlob request
+  case result of
+    Left (FetchError problem) -> pure (Left problem)
+    Right (BlobResponse status headers blob)
+      | status == 429 || status == 503 -> case retryAfter headers of
+          Just delay -> waitSeconds delay >> download request
+          Nothing -> pure (Left "Attachment throttled without usable Retry-After; retry later.")
+      | status >= 200 && status < 300 -> pure (maybe (Left "Attachment download returned no content reference") Right blob)
+      | otherwise -> pure (Left ("Attachment download returned HTTP " <> Text.pack (show status)))
+
+retryAfter :: [(Text,Text)] -> Maybe Int
+retryAfter headers = lookup "retry-after" [(Text.toLower key,value) | (key,value) <- headers] >>= seconds
   where
     seconds value = case reads (Text.unpack value) of
       [(n,"")] | n >= 0 && n <= toInteger (maxBound :: Int) -> Just (max 1 (fromInteger n))
