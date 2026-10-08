@@ -1,5 +1,7 @@
 # Kyyn
 
+Track development progress -> https://drshade.github.io/kyyn-v2/
+
 Kyyn is an agent/human workbench and runtime for executable knowledge bases.
 Facts, Haskell schemas, validation, tools and recipes evolve together through
 reviewable proposals in Git.
