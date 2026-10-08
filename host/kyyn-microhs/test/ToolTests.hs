@@ -18,6 +18,8 @@ import Kyyn.Domain.DataType (DataType(..))
 import Kyyn.Domain.Plugin (pluginName, connectorTypeName, connectorName, methodName, bindingName)
 import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..))
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(EvidenceSelection))
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path (DirectoryScope, scopePath, relativePath, relativeName)
@@ -109,8 +111,8 @@ testTools scope toolchain sdk pluginCode plugins = do
           "capability" .= ("plugin" :: String), "method" .= ("read" :: String),
           "arguments" .= object ["plugin" .= ("local-file" :: String), "instance" .= (instanceName :: String),
             "connectorType" .= (kind :: String), "method" .= (method :: String), "input" .= ("one.txt" :: String)]]))
-        response = runPureEff (runFailure (runDhallHandling (emitFrame frame (noReads
-          ((noJudgement . noModel . runToolExecution) (executeTool selected (toJSON (["one.txt"] :: [String]))))))))
+        response = runPureEff (runFailure (runDhallHandling (noEvidence (emitFrame frame (noReads
+          ((noJudgement . noModel . runToolExecution) (executeTool selected (toJSON (["one.txt"] :: [String])))))))))
     assert "Impossible generated request became a user diagnostic" (case response of
       Left (RuntimeUnavailable (ProcessDiagnostic ReadOutput _)) -> True
       _ -> False)
@@ -143,14 +145,17 @@ captureCompilation = reinterpret (runState []) $ \_ (CompileGuest sources) -> do
 
 countReads :: PluginRead :> es => Eff (PluginRead : es) a -> Eff es (a,[ConnectorInstanceRef])
 countReads = reinterpret (runState []) $ \_ operation -> case operation of
-  LoadCapturedInput instanceRef producer payload -> do
+  LoadCapturedInput selection@(EvidenceSelection instanceRef _ _) payload -> do
     modify (instanceRef :)
-    loadCapturedInput instanceRef producer payload
-  ExecuteCapturedMethod payload current method value -> executeCapturedMethod payload current method value
+    loadCapturedInput selection payload
+  ExecuteCapturedMethod current method value -> executeCapturedMethod current method value
   ResolveCapturedBlobs contexts contract value -> resolveCapturedBlobs contexts contract value
 
 noReads :: Eff (PluginRead : es) a -> Eff es a
 noReads = interpret $ \_ _ -> error "Impossible generated request reached captured input"
+
+noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
+noEvidence = interpret $ \_ _ -> error "Impossible generated request reached storage"
 
 emitFrame :: Bytes.ByteString -> Eff (GuestExecution : es) a -> Eff es a
 emitFrame frame = interpret $ \env operation -> case operation of

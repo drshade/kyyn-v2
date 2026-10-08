@@ -2,6 +2,7 @@
 module PluginNativeTests (nativeTests, statefulTests, noNetwork, runStore) where
 
 import Control.Monad (unless, forM_)
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, object, (.=), encode, eitherDecodeStrict, toJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
@@ -10,11 +11,12 @@ import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
 import qualified Effectful.State.Static.Local as State
-import Kyyn.Domain.Contract (checkContract, contractId)
+import Kyyn.Domain.Contract (CheckedContract, checkContract, contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(EvidenceIndex), indexState)
 import Kyyn.Domain.Path
-import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName)
+import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorTypeName(..), pluginName)
 import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
@@ -67,15 +69,15 @@ statefulTests temporary toolchain configType payloadType program = do
       producer = EvidenceProducer package (contractId payload)
       config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
       fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition) $
-        fetchEvidence instanceRef package payload program config Nothing (Just position) mode Nothing
-      load = runStore kb (beginFetch instanceRef producer payload (Just position)) >>= right
+        fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program config Nothing (Just position) mode Nothing
+      load = runStore kb (beginFixture instanceRef producer payload (Just position)) >>= right
   first <- fetch ContinueSync >>= right
-  FetchBaseline _ base _ stored <- load
+  MaterializedBaseline _ base _ stored <- load
   assert "stateful acquisition did not persist its position" (base == Just (snapshotId first) && case stored of
     Just (CheckedValue _ value) -> "first:" `Text.isInfixOf` Text.pack (show value)
     _ -> False)
   second <- fetch ContinueSync >>= right
-  FetchBaseline _ next _ updated <- load
+  MaterializedBaseline _ next _ updated <- load
   assert "stateful acquisition did not resume its prior position" (next == Just (snapshotId second) && first /= second &&
     case updated of Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 2; _ -> False)
   savedPosition <- maybe (fail "Missing prior position") pure updated
@@ -84,7 +86,7 @@ statefulTests temporary toolchain configType payloadType program = do
   _ <- runStore kb (publishFetchWithPosition instanceRef producer payload next Nothing
     [NewEvidence (EvidenceId "preserved") preserved] (Just (position,savedPosition))) >>= right
   _ <- fetch RestartSync >>= right
-  FetchBaseline _ _ capture restarted <- load
+  MaterializedBaseline _ _ capture restarted <- load
   assert "restart did not withhold position" (case restarted of
     Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 1; _ -> False)
   assert "restart discarded existing evidence" (case capture of
@@ -109,7 +111,7 @@ nativeTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition) $
-        fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing ContinueSync Nothing
+        fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config (path :: String)) Nothing Nothing ContinueSync Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
@@ -127,13 +129,15 @@ nativeTests temporary toolchain configType payloadType program = do
   removeFile (directory </> "gone.txt")
   second <- fetch directory >>= right
   CurrentEvidence secondRef secondItems (FetchSummary _ _ added updated removed _) <- load
-  assert "new/updated/removed count wrong" ((added,updated,removed) == (1,1,1) && map fst secondItems == map EvidenceId ["changed.txt","same.txt","new.txt"])
+  assert "new/updated/removed count wrong" ((added,updated,removed) == (1,1,1) && map fst secondItems == map EvidenceId ["changed.txt","new.txt","same.txt"])
   assert "new invocation did not load latest contents" (secondRef == second &&
     lookup (EvidenceId "changed.txt") secondItems /= firstOld)
   assert "previously loaded invocation input changed" (case firstCurrent of
     CurrentEvidence firstRef _ _ -> firstRef == first)
   third <- fetch directory >>= right
   currentThird@(CurrentEvidence _ thirdItems (FetchSummary _ _ addedAgain updatedAgain removedAgain _)) <- load
+  currentThirdIndex <- runStore kb (openCurrentEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package))
+    >>= right >>= maybe (fail "Missing index") pure
   assert "unchanged files emitted spurious updates" ((addedAgain,updatedAgain,removedAgain) == (0,0,0))
   let EvidenceSnapshotRef _ _ thirdId = third
       unchangedHead = runStore kb (evidenceHead instanceRef) >>= right
@@ -157,8 +161,8 @@ nativeTests temporary toolchain configType payloadType program = do
     , "{\"tag\":\"HostRequest\",\"id\":\"2\",\"capability\":\"evidence\",\"method\":\"list\",\"arguments\":{\"snapshot\":\"selected\"}}"
     , "{\"tag\":\"HostRequest\",\"id\":\"1\",\"capability\":\"unknown\",\"method\":\"list\",\"arguments\":{}}"
     ] $ \frame -> do
-      let refused = runPureEff $ runFailure $ runDhallHandling $ noBlobReads $ emitFrame frame $
-            executeCapturedRead program (config directory) payload currentThird payload
+      let refused = runPureEff $ runFailure $ runDhallHandling $ noBlobReads $ noEvidenceReads $ emitFrame frame $
+            executeCapturedRead program (config directory) currentThirdIndex payload
       case refused of
         Left _ -> pure ()
         Right _ -> fail "Malformed or out-of-row guest request was answered"
@@ -172,27 +176,28 @@ nativeTests temporary toolchain configType payloadType program = do
         ]
       answer value = object ["tag" .= ("Right" :: String),"value" .= value]
       expected = map answer
-        [ toJSON (["changed.txt","same.txt","new.txt"] :: [String])
+        [ toJSON (["changed.txt","new.txt","same.txt"] :: [String])
         , object ["tag" .= ("Some" :: String),"value" .= evidenceValue saved]
         , object ["tag" .= ("None" :: String)]
         ]
       completed = object ["text" .= ("changed" :: String)]
       inspectBetween action = exchangeFrames requests expected completed action $
-        executeCapturedRead program (config directory) payload currentThird payload
+        executeCapturedRead program (config directory) currentThirdIndex payload
       advance = do
-        result <- publishFetch instanceRef producer payload (Just thirdId) Nothing [UpdatedEvidence key changed]
+        result <- publishFixture instanceRef producer payload (Just thirdId) Nothing [UpdatedEvidence key changed]
         case result of Right _ -> pure (); Left problem -> error (show problem)
-  stable <- runStore kb (inspectBetween advance) >>= right >>= right
-  assert "captured read changed after concurrent publication" (stable == completed)
+  stable <- runStore kb (inspectBetween (pure ())) >>= right >>= right
+  assert "captured read changed without publication" (stable == completed)
+  runStore kb advance
   CurrentEvidence newestRef newestItems _ <- load
   assert "snapshot fixture did not actually advance stored evidence"
     (newestRef /= third && lookup key newestItems == Just changed)
   let noFiles :: Eff (FileAcquisition : es) a -> Eff es a
       noFiles = interpret $ \_ _ -> error "Acquisition fixture unexpectedly read source files"
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
-        noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThird $
+        noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThirdIndex currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            (runContentDigest . runEvidenceAcquisition) (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing ContinueSync Nothing)
+            (runContentDigest . runEvidenceAcquisition) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -204,21 +209,57 @@ nativeTests temporary toolchain configType payloadType program = do
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
       noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . runEvidenceAcquisition)
-        (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
+        (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."
 
 noNetwork :: Eff (HttpTransport : SecretStore : Waiting : es) a -> Eff es a
 noNetwork = interpret (\_ _ -> error "Unexpected waiting") . interpret (\_ _ -> error "Unexpected secret access") . interpret (\_ _ -> error "Unexpected HTTP")
 
-recordAcquisition :: State.State [String] :> es => CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
-recordAcquisition current@(CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) _ _) =
+recordAcquisition :: State.State [String] :> es => EvidenceIndex -> CurrentEvidence -> Eff (EvidenceStore : es) a -> Eff es a
+recordAcquisition index (CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ identity) items _) =
   interpret $ \_ -> \case
-    BeginFetch _ _ _ Nothing -> State.modify @[String] (++ ["begin"]) >>
-      pure (Right (FetchBaseline "2026-10-07T12:00:00Z" (Just identity) (Just current) Nothing))
-    PublishFetch _ _ _ expected _ [] Nothing | expected == Just identity ->
+    BeginFetch _ _ Nothing -> State.modify @[String] (++ ["begin"]) >>
+      pure (Right (FetchBaseline "2026-10-07T12:00:00Z" (Just identity) (Just index) Nothing))
+    ReadCapturedEvidence actual key | actual == index -> pure (Right (lookup key items))
+    PublishFetch _ _ expected _ [] Nothing | expected == Just identity ->
       State.modify @[String] (++ ["publish"]) >> pure (Right snapshot)
     _ -> error "Acquisition reopened evidence or published against a head other than its loaded input"
+
+noEvidenceReads :: Eff (EvidenceStore : es) a -> Eff es a
+noEvidenceReads = interpret $ \_ _ -> error "Malformed request reached evidence storage"
+
+data CurrentEvidence = CurrentEvidence EvidenceSnapshotRef [(EvidenceId,Evidence CheckedValue)] FetchSummary deriving (Eq, Show)
+data MaterializedBaseline = MaterializedBaseline String (Maybe FetchId) (Maybe CurrentEvidence) (Maybe CheckedValue)
+
+publishFetchWithPosition :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
+  -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue) -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishFetchWithPosition ref (EvidenceProducer package _) = publishFetch (EvidenceSelection ref (ConnectorTypeName "Folder") package)
+
+publishFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
+  -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishFixture ref owner schema base options changes = publishFetchWithPosition ref owner schema base options changes Nothing
+
+materialize :: EvidenceStore :> es => EvidenceIndex -> Eff es (Either EvidenceProblem CurrentEvidence)
+materialize index@(EvidenceIndex snapshot summary _ _) = runExceptT $ do
+  let EvidenceState _ entries = indexState index
+  values <- mapM (\(ident,_) -> do
+    found <- ExceptT (readCapturedEvidence index ident)
+    maybe (throwE (InvalidEvidence "Missing fixture entry")) (pure . (ident,)) found) entries
+  pure (CurrentEvidence snapshot values summary)
+
+loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
+loadCurrentEvidence ref (EvidenceProducer package _) _ = runExceptT $ do
+  index <- ExceptT (openCurrentEvidence (EvidenceSelection ref (ConnectorTypeName "Folder") package))
+  traverse (ExceptT . materialize) index
+
+beginFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
+  -> Eff es (Either EvidenceProblem MaterializedBaseline)
+beginFixture ref (EvidenceProducer package _) schema position = runExceptT $ do
+  FetchBaseline started base capture cursor <- ExceptT (beginFetch (EvidenceSelection ref (ConnectorTypeName "Folder") package) schema position)
+  values <- traverse (ExceptT . materialize) capture
+  pure (MaterializedBaseline started base values cursor)
 
 exchangeFrames :: [Value] -> [Value] -> Value -> Eff es () -> Eff (GuestExecution : es) a -> Eff es a
 exchangeFrames requests answers result between = interpret $ \env -> \case

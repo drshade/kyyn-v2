@@ -7,7 +7,7 @@ module Kyyn.Plumbing.Capability.DocumentPersistence
 import Data.ByteString (ByteString)
 import Effectful (Effect, Eff, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.Path (DirectoryScope)
+import Kyyn.Domain.Path (DirectoryScope, RelativePath)
 
 data DocumentStamp = DocumentStamp
   { identity :: String
@@ -16,7 +16,7 @@ data DocumentStamp = DocumentStamp
 
 -- | Hold the scope's exclusive lock throughout the action.
 data DocumentPersistence :: Effect where
-  WithLockedDocument :: DirectoryScope -> Eff (DocumentAccess : es) a -> DocumentPersistence (Eff es) a
+  WithLockedDocument :: DirectoryScope -> RelativePath -> Eff (DocumentAccess : es) a -> DocumentPersistence (Eff es) a
 type instance DispatchOf DocumentPersistence = Dynamic
 
 data DocumentAccess :: Effect where
@@ -28,8 +28,8 @@ data DocumentAccess :: Effect where
   FreshStamp :: DocumentAccess m DocumentStamp
 type instance DispatchOf DocumentAccess = Dynamic
 
-withLockedDocument :: DocumentPersistence :> es => DirectoryScope -> Eff (DocumentAccess : es) a -> Eff es a
-withLockedDocument scope action = send (WithLockedDocument scope action)
+withLockedDocument :: DocumentPersistence :> es => DirectoryScope -> RelativePath -> Eff (DocumentAccess : es) a -> Eff es a
+withLockedDocument scope name action = send (WithLockedDocument scope name action)
 readCurrent :: DocumentAccess :> es => Eff es (Maybe ByteString)
 readCurrent = send ReadCurrent
 replaceCurrent :: DocumentAccess :> es => ByteString -> Eff es ()

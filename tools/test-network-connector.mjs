@@ -76,6 +76,8 @@ try {
   await fetch();
   const latest = (await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result;
   assert.equal(latest.items[0].fingerprint, payload + ' local');
+  const selected = (await cli(['evidence', 'show', 'network-fixture', 'test', 'one'])).value.result;
+  assert.deepEqual(selected.payload, { tag: 'Available', value: payload + ' local' });
   failFetch = true;
   await cli(['evidence', 'fetch', 'network-fixture', 'test'], 1);
   assert.deepEqual((await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result, latest);

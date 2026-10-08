@@ -5,13 +5,15 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
+import qualified Data.Map.Strict as Map
 import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
-import Kyyn.Domain.Contract (CheckedContract, contractShape, rootType)
+import Kyyn.Domain.Contract (CheckedContract, contractShape)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..), EvidenceSnapshotRef(..), Evidence(..), EvidencePayload(..))
-import Kyyn.Domain.Blob (blobReferences)
+import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..))
+import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..), indexBlobs)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore, readCapturedEvidence)
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
@@ -26,8 +28,8 @@ import Kyyn.Plumbing.Protocol.PluginMessages
 import Kyyn.Plumbing.Protocol.Frame (Frame(..), jsonFrame)
 import System.FilePath (takeDirectory, takeFileName)
 
-answerAcquisition :: (Failure :> es, Files.FileAcquisition :> es)
-  => Maybe CurrentEvidence -> PluginCall -> Eff es Value
+answerAcquisition :: (EvidenceStore :> es, Failure :> es, Files.FileAcquisition :> es)
+  => Maybe EvidenceIndex -> PluginCall -> Eff es Value
 answerAcquisition prior call = case call of
   ListFiles directory recursive -> case directoryScope directory of
     Left message -> pure (failure message)
@@ -38,12 +40,11 @@ answerAcquisition prior call = case call of
       success (object ["contents" .= contents,"fingerprint" .= fingerprint])) <$> Files.readSourceText scope name
   other -> answerEvidence prior other
 
-executeCapturedRead :: (Blobs.BlobStorage :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
-  => CompiledProgram -> CheckedValue -> CheckedContract -> CurrentEvidence -> CheckedContract
+executeCapturedRead :: (EvidenceStore :> es, Blobs.BlobStorage :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
+  => CompiledProgram -> CheckedValue -> EvidenceIndex -> CheckedContract
   -> Eff es (Either [Diagnostic] (Either FetchError Value))
-executeCapturedRead program (CheckedValue _ arguments) payload current@(CurrentEvidence (EvidenceSnapshotRef instanceRef _ _) items _) result = do
-  refs <- either protocolFailure pure (concat <$> traverse (blobReferences (rootType payload))
-    [value | (_,Evidence _ _ (Available (CheckedValue _ value))) <- items])
+executeCapturedRead program (CheckedValue _ arguments) current@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _) result = do
+  let refs = indexBlobs current
   output <- conversationWithBody (\(Frame bytes body) -> if Bytes.null body then decodeFrame bytes else Left "Unexpected raw body")
     program (initialInput arguments) $ \call -> case call of
       ReadBlob ref | ref `elem` refs -> do
@@ -56,18 +57,20 @@ executeCapturedRead program (CheckedValue _ arguments) payload current@(CurrentE
     Left problem -> pure (Right (Left problem))
     Right value -> fmap (fmap (const (Right value))) (encodeValue (contractShape result) value)
 
-answerEvidence :: Failure :> es => Maybe CurrentEvidence -> PluginCall -> Eff es Value
+answerEvidence :: (EvidenceStore :> es, Failure :> es) => Maybe EvidenceIndex -> PluginCall -> Eff es Value
 answerEvidence prior call = case call of
   ListEvidence token -> do
     checkToken token
-    pure (success (toJSON [key | (EvidenceId key,_) <- selected]))
+    pure (success (toJSON (maybe [] (\(EvidenceIndex _ _ _ values) -> Map.keys values) prior)))
   ReadEvidence token key -> do
     checkToken token
+    selected <- case prior of
+      Nothing -> pure Nothing
+      Just index -> readCapturedEvidence index key >>= either (protocolFailure . show) pure
     pure (success (maybe (object ["tag" .= ("None" :: String)])
-      (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value]) (lookup key selected)))
+      (\value -> object ["tag" .= ("Some" :: String),"value" .= evidenceValue value]) selected))
   _ -> protocolFailure "Filesystem acquisition is unavailable in this invocation"
   where
-    selected = maybe [] (\(CurrentEvidence _ values _) -> values) prior
     checkToken token | token == "selected" = pure ()
                      | otherwise = protocolFailure "Unknown evidence snapshot handle"
 

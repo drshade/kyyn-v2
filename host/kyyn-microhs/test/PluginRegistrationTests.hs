@@ -23,7 +23,8 @@ import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Contract (rootType, contractId)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativePath, relativeName)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), CurrentEvidence(..), EvidenceProducer(..), SyncMode(..))
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), SyncMode(..))
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(EvidenceSelection), EvidenceIndex(EvidenceIndex))
 import Kyyn.Domain.GuestApi (ApiModule(..), ApiSymbol(..), Namespace(..))
 import Kyyn.MicroHs.ApiInspection (inspectApi)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -40,7 +41,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
 import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources)
 import Kyyn.Plumbing.Capability.Git (Git)
-import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
+import Kyyn.Porcelain.Capability.EvidenceStore (openCurrentEvidence)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
@@ -145,10 +146,10 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
       readAdapter <- right (capturedReadSources (rootType input) (rootType payloadContract) (rootType output)
         "LocalFile.Read.content" (authored ++ files sdk))
       compileFirstParty (temporary </> "ghc-read") readAdapter
-      mapM_ (\(ConfiguredConnector name _ (PreparedConnector {payloadContract = payload, fetchEntry = entry}) config) -> do
+      mapM_ (\(ConfiguredConnector name _ (PreparedConnector {connectorType = selectedKind, payloadContract = payload, fetchEntry = entry}) config) -> do
         let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
               (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runGuestExecution toolchain (runPluginRead
-                (callCapturedMethod (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer producerIdentity (contractId payload)) payload selected value)))))))) >>= right
+                (callCapturedMethod (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind producerIdentity) payload selected value)))))))) >>= right
             arguments key = toJSON (key :: String)
             hasCode expectedCode result = case result of
               Left diagnostics -> any (\(Diagnostic _ actual _ _) -> expectedCode == actual) diagnostics
@@ -157,11 +158,11 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
           (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ (runContentDigest . runEvidenceAcquisition)
-            (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
+            (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity) payload entry config Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope)
-          (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
+          (openCurrentEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity)))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of
-          Just (CurrentEvidence selected items _) -> selected == snapshot && length items == 1
+          Just (EvidenceIndex selected _ _ items) -> selected == snapshot && length items == 1
           Nothing -> False)
         result <- invoke identity method (arguments "one.txt") >>= right
         assert "Content read returned the wrong payload" (result == (CheckedValue (contractId output) (toJSON ("one" :: String)),[]))

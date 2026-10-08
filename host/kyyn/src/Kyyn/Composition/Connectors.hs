@@ -75,7 +75,7 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
     fmap (fmap (methodListResult . map (\(PreparedMethod method description _ _ _) -> (method,description))))
       (listConnectorMethods kb revision workspace plugin name)
   Cli.ShowConnectorMethod plugin name method workspace -> respond $ runDiscovery host toolchain sdk $ runExceptT $ do
-    (_,_,_,PreparedMethod _ description input output _) <- ExceptT (selectConnectorMethod kb revision workspace plugin name method)
+    (_,_,PreparedMethod _ description input output _) <- ExceptT (selectConnectorMethod kb revision workspace plugin name method)
     inputType <- ExceptT (Right <$> renderType (contractShape input))
     resultType <- ExceptT (Right <$> renderType (contractShape output))
     pure (methodResult method description inputType resultType)
@@ -83,10 +83,10 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
       . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginRead $ runExceptT $ do
-        (instanceRef,producer,payload,selected@(PreparedMethod _ _ input output _)) <-
+        (selection,payload,selected@(PreparedMethod _ _ input output _)) <-
           ExceptT (selectConnectorMethod kb revision Nothing plugin name method)
         value <- ExceptT (decodeValue (contractShape input) (Text.pack inputText))
-        (CheckedValue _ result,blobs) <- ExceptT (callCapturedMethod instanceRef producer payload selected value)
+        (CheckedValue _ result,blobs) <- ExceptT (callCapturedMethod selection payload selected value)
         rendered <- ExceptT (encodeValue (contractShape output) result)
         pure (methodOutputResult result rendered blobs)
 
@@ -105,11 +105,11 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
-  Cli.ListCurrentEvidence plugin name -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $
+  Cli.ListCurrentEvidence plugin name -> inspectEvidence $
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
-  Cli.ShowCurrentEvidence plugin name key -> withRuntime host $ \toolchain sdk -> inspectEvidence toolchain sdk $ runExceptT $ do
-    (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
-    (snapshot,latest,found) <- ExceptT (readCurrentEvidence instanceRef producer payload key)
+  Cli.ShowCurrentEvidence plugin name key -> inspectEvidence $ runExceptT $ do
+    selection <- ExceptT (selectConnectorEvidence kb revision plugin name)
+    (snapshot,latest,payload,found) <- ExceptT (readCurrentEvidence selection key)
     case found of
       Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
       Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item "Payload: truncated")
@@ -117,10 +117,10 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
         rendered <- ExceptT (encodeValue (contractShape payload) value)
         pure (evidenceItemResult snapshot latest key item rendered)
   where
-    inspectEvidence toolchain sdk action = case knowledgeBaseScope kb of
+    inspectEvidence action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-      Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
-        . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvidenceInspection $ action
+      Right scope -> respond $ runBase host . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
+        . runEvidenceInspection $ action
 
 respond :: IO (Either OperationalFailure (Either [Diagnostic] Response)) -> IO Response
 respond = finish . fmap (fmap (either refusal id))

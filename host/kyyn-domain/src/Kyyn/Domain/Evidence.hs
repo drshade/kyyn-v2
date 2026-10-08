@@ -1,13 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evidence
   ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
-  , EvidencePayload(..), Evidence(..), EvidenceChange(..), EvidenceState(..), CurrentEvidence(..), FetchSummary(..)
+  , EvidencePayload(..), Evidence(..), EvidenceChange(..), EvidenceState(..), FetchSummary(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), applyChanges, validateState
-  , evidenceProblemDiagnostic, EvidenceCapture(..), captureEvidence, SyncMode(..), instancePath
+  , evidenceProblemDiagnostic, EvidenceCapture(..), SyncMode(..), instancePath
   ) where
 
 import Control.Monad (foldM, unless)
-import Data.List (nub)
+import Data.List (sort, group)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.ByteString as Bytes
@@ -15,7 +15,6 @@ import Numeric (showHex)
 import Kyyn.Domain.Plugin (PluginName, PackageIdentity, pluginNameText)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 
 newtype FetchId = FetchId String deriving (Eq, Show)
@@ -34,14 +33,7 @@ data FetchSummary = FetchSummary
 data EvidenceState a = EvidenceState
   { latest :: FetchSummary, values :: [(EvidenceId, Evidence a)]
   } deriving (Eq, Show)
-data CurrentEvidence = CurrentEvidence
-  { snapshot :: EvidenceSnapshotRef, items :: [(EvidenceId, Evidence CheckedValue)], latest :: FetchSummary
-  } deriving (Eq, Show)
 data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint, EvidencePayload ())] deriving (Eq, Show)
-
-captureEvidence :: CurrentEvidence -> EvidenceCapture
-captureEvidence (CurrentEvidence snapshot items latest) = EvidenceCapture snapshot latest
-  [(item,token,case payload of Available _ -> Available (); Truncated -> Truncated) | (item,Evidence token _ payload) <- items]
 
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
 data EvidenceProblem = NotFetched | ProducerContractChanged
@@ -89,9 +81,9 @@ applyChanges = foldM step
 
 validateState :: EvidenceState a -> Either EvidenceProblem ()
 validateState (EvidenceState (FetchSummary (FetchId key) at added updated removed _) values) = do
-  let ids = map fst values
+  let ids = [itemId | (EvidenceId itemId,_) <- values]
       validMember (EvidenceId ident,Evidence (EvidenceFingerprint token) _ _) = not (Text.null ident || Text.null token)
   unless (not (null key || null at) && all (>= 0) [added,updated,removed])
     (Left (InvalidEvidence "Invalid latest fetch summary"))
-  unless (length ids == length (nub ids) && all validMember values)
+  unless (all ((== 1) . length) (group (sort ids)) && all validMember values)
     (Left (InvalidEvidence "Invalid or duplicate evidence identities or fingerprints"))

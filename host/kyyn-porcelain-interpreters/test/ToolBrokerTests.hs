@@ -13,6 +13,7 @@ import GuestFixture (fixtureProgram)
 import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.DataType (DataType(StringType))
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex))
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
@@ -23,6 +24,7 @@ import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead(..))
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram)
 
 toolBrokerTests :: IO ()
@@ -40,17 +42,16 @@ toolBrokerTests = do
         [ConfiguredConnector instanceName binding connector (CheckedValue (contractId contract) (string "config"))]]
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")
         (EvidenceProducer (PackageIdentity "package") (contractId contract)) (FetchId "captured")
-      captured = CurrentEvidence snapshot [(EvidenceId "one",Evidence (EvidenceFingerprint "old") []
-        (Available (CheckedValue (contractId contract) (string "old contents"))))] (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing)
+      captured = EvidenceIndex snapshot (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing) contract mempty
       recordReads :: Eff (PluginRead : es) a -> Eff es (a,Int)
       recordReads = reinterpret (runState (0 :: Int)) $ \_ operation -> case operation of
         LoadCapturedInput {} -> error "Recipe input was reread from latest instead of its pinned capture"
         ResolveCapturedBlobs {} -> error "Internal broker resolved surface paths"
-        ExecuteCapturedMethod _ actual _ _ -> do
+        ExecuteCapturedMethod actual _ _ -> do
           unless (actual == captured) (error "Captured evidence changed between reads")
           modify @Int (+ 1)
           pure (Right (Right (CheckedValue (contractId contract) (string "old contents"))))
-      result = runPureEff . runFailure . noModel . noJudgement . recordReads . runConversation $
+      result = runPureEff . runFailure . noModel . noJudgement . noEvidence . recordReads . runConversation $
         executeToolProgram program plugins Nothing [captured] (string "input")
   case result of
     Right (Right value,2) | value == string "completed" -> pure ()
@@ -77,3 +78,6 @@ noModel :: Eff (ModelTurn : es) a -> Eff es a
 noModel = interpret $ \_ _ -> error "Unexpected model call"
 noJudgement :: Eff (Judgement : es) a -> Eff es a
 noJudgement = interpret $ \_ _ -> error "Unexpected judgement call"
+
+noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
+noEvidence = interpret $ \_ _ -> error "Captured method fixture unexpectedly read payloads"

@@ -13,10 +13,11 @@ import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.Judgement (Judgement)
 import Kyyn.Plumbing.Capability.ModelTurn (ModelTurn)
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead, resolveCapturedBlobs)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.Tool
 import Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgramCaptured)
 
-runToolExecution :: (PluginRead :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es, Judgement :> es, ModelTurn :> es)
+runToolExecution :: (EvidenceStore :> es, PluginRead :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es, Judgement :> es, ModelTurn :> es)
   => Eff (ToolExecution : es) a -> Eff es a
 runToolExecution = interpret $ \_ (ExecuteTool (PreparedTool (ToolDescriptor _ _ input output) program plugins model) arguments) -> runExceptT $ do
   _ <- ExceptT (encodeValue (contractShape input) arguments)

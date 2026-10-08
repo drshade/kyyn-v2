@@ -11,6 +11,7 @@ import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.DataType (Shape(..))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Domain.Value (CheckedValue(..))
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
@@ -28,7 +29,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
 runEvidenceAcquisition :: (ContentDigest :> es, BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
-runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
+runEvidenceAcquisition = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
   (arguments,optionsText) <- case (optionsContract,supplied) of
     (Nothing,Nothing) -> pure (configValue,Nothing)
@@ -39,9 +40,8 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package paylo
       let optional = maybe (object ["tag" .= ("None" :: String)])
             (\v -> object ["tag" .= ("Some" :: String),"value" .= v]) decoded
       pure (object ["config" .= configValue,"options" .= optional],Text.unpack <$> rendered)
-  let producer = EvidenceProducer package (contractId payload)
   Store.FetchBaseline startedAt base prior position <- ExceptT
-    (fmap (either (Left . problem) Right) (Store.beginFetch instanceRef producer payload positionContract))
+    (fmap (either (Left . problem) Right) (Store.beginFetch selection payload positionContract))
   let input = case positionContract of
         Nothing -> arguments
         Just _ -> object ["input" .= arguments,"startedAt" .= startedAt,"priorPosition" .=
@@ -62,7 +62,7 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package paylo
         pure (changes,Just (contract,CheckedValue (contractId contract) next))
     changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload delta)
     ExceptT (fmap (either (Left . problem) Right)
-      (Store.publishFetchWithPosition instanceRef producer payload base optionsText changes savedPosition))
+      (Store.publishFetch selection payload base optionsText changes savedPosition))
 
 problem :: EvidenceProblem -> [Diagnostic]
 problem failure = [evidenceProblemDiagnostic failure]
