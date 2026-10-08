@@ -44,7 +44,8 @@ try {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `(let Auth = < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
     | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text, scopes : List Text } >
-    let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text } >
+    let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text }
+      | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
       , mailbox = "user@example.test", calendarId = None Text, sharedCalendar = False

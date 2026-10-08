@@ -1,6 +1,6 @@
 module Kyyn.Porcelain.Protocol.PluginHost (answerNetwork, answerLogin, executeAcquisition, executeLogin) where
 
-import Data.Aeson (Value, encode)
+import Data.Aeson (Value, encode, toJSON, parseJSON)
 import Data.Aeson.Types (Parser)
 import qualified Data.ByteString as Bytes
 import Control.Monad (unless)
@@ -21,18 +21,22 @@ import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (CurrentEvidence, ConnectorInstanceRef)
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
+import qualified Kyyn.Plumbing.Capability.ContentDigest as Digest
 import Kyyn.Plumbing.Protocol.Blob (decodeDownload, downloadResult)
 import Kyyn.Types.Plugin (FetchError(..))
 
-executeAcquisition :: (Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
+executeAcquisition :: (Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)
   => ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
 executeAcquisition instanceRef program config prior = fmap (either
   (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
-  conversationWithBody (decodeHostFrame decode) program (initialInput config)
-    (either (fmap (\result -> (downloadResult result,Bytes.empty)) . Blobs.storeBlobAt instanceRef)
-      (either (fmap (,Bytes.empty) . answerAcquisition prior) answerNetwork))
+  conversationWithBody (decodeHostFrame decodeDigest) program (initialInput config)
+    (either (fmap ((,Bytes.empty) . toJSON) . Digest.digestText)
+      (either (fmap (\result -> (downloadResult result,Bytes.empty)) . Blobs.storeBlobAt instanceRef)
+        (either (fmap (,Bytes.empty) . answerAcquisition prior) answerNetwork)))
   where
+    decodeDigest _ "digest" "text" args = Left <$> parseJSON args
+    decodeDigest body capability method args = Right <$> decode body capability method args
     decode body "blobs" "store" args = Left <$> decodeDownload body args
     decode _ "evidence" method args = Right . Left <$> decodeCall "evidence" method args
     decode _ "files" method args = Right . Left <$> decodeCall "files" method args

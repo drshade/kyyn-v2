@@ -44,6 +44,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
+import Kyyn.Plumbing.Interpreter.ContentDigest (runContentDigest)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Domain.DataType (DataType(..))
 import System.Directory (createDirectory, removeFile, createFileLink)
@@ -65,7 +66,7 @@ statefulTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "stateful-source"
       producer = EvidenceProducer package (contractId payload)
       config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
-      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
+      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition) $
         fetchEvidence instanceRef package payload program config Nothing (Just position) mode Nothing
       load = runStore kb (beginFetch instanceRef producer payload (Just position)) >>= right
   first <- fetch ContinueSync >>= right
@@ -107,7 +108,7 @@ nativeTests temporary toolchain configType payloadType program = do
   let instanceRef = ConnectorInstanceRef plugin "documents"
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
-      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ runEvidenceAcquisition $
+      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition) $
         fetchEvidence instanceRef package payload program (config (path :: String)) Nothing Nothing ContinueSync Nothing
   first <- fetch directory >>= right
   let producer = EvidenceProducer package (contractId payload)
@@ -191,7 +192,7 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing ContinueSync Nothing)
+            (runContentDigest . runEvidenceAcquisition) (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -202,7 +203,7 @@ nativeTests temporary toolchain configType payloadType program = do
       noGuest = interpret $ \_ _ -> error "Invalid options executed a guest"
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
-      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ runEvidenceAcquisition
+      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . runEvidenceAcquisition)
         (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."

@@ -1,4 +1,4 @@
-module MicrosoftGraph.Timestamp (timestamp) where
+module MicrosoftGraph.Timestamp (timestamp, daysBefore) where
 
 import Data.Char (isDigit)
 import Data.Ratio ((%))
@@ -7,6 +7,25 @@ import qualified Data.Text as Text
 -- | Calendar date/time with seconds, optional fraction, and Z or a numeric offset.
 timestamp :: Text.Text -> Either Text.Text Rational
 timestamp = either (Left . Text.pack) Right . parseTimestamp . Text.unpack
+
+-- | Preserve the UTC time of day while shifting a host invocation date backwards.
+daysBefore :: Integer -> Text.Text -> Either Text.Text Text.Text
+daysBefore count input = do
+  _ <- timestamp input
+  if count < 0 || not (Text.isSuffixOf (Text.pack "Z") input) then Left (Text.pack "Expected UTC timestamp and nonnegative days") else pure ()
+  let value = Text.unpack input
+      year = read (take 4 value)
+      month = read (take 2 (drop 5 value))
+      day = read (take 2 (drop 8 value))
+      shift 0 date = Right date
+      shift n (y,m,d) | d > 1 = shift (n-1) (y,m,d-1)
+                      | m > 1 = shift (n-1) (y,m-1,monthDays y (m-1))
+                      | y > 1 = shift (n-1) (y-1,12,31)
+                      | otherwise = Left (Text.pack "Backfill precedes supported dates")
+      monthDays y m = [31,if y `mod` 4 == 0 && (y `mod` 100 /= 0 || y `mod` 400 == 0) then 29 else 28,31,30,31,30,31,31,30,31,30,31] !! (m-1)
+      pad width n = let digits = show (n :: Int) in replicate (width - length digits) '0' ++ digits
+  (y,m,d) <- shift count (year,month,day)
+  pure (Text.pack (pad 4 y ++ "-" ++ pad 2 m ++ "-" ++ pad 2 d ++ drop 10 value))
 
 parseTimestamp :: String -> Either String Rational
 parseTimestamp input = do

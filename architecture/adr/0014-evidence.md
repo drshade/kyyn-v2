@@ -210,7 +210,7 @@ data MailFetch = MailFetch { since :: Maybe Text }
 data MailPosition = MailPosition
   { folders :: [FolderPosition] }
 data FolderPosition = FolderPosition
-  { folderId :: Text, deltaLink :: Text }
+  { folderId :: Text, deltaLink :: Text, since :: Text }
 
 data AttachmentContent = Stored BlobRef | Link Text
 data Attachment = Attachment
@@ -246,8 +246,9 @@ Initial backfill uses `since`, defaulting to 30 days before the invocation's
 captured start time; later fetches follow saved folder continuations. Do not
 silently reinterpret `since` as a new cursor: reject a supplied initial boundary
 once a position exists, with clear/refetch guidance. Follow all pages; failed
-pagination publishes neither messages nor cursors. If a cursor expires, rebuild
-that folder's enumeration, deduplicate against retained IDs and publish only on
+pagination publishes neither messages nor cursors. Store each folder's effective
+initial `since` in its position. If a cursor expires, rebuild
+that folder's enumeration using the same boundary, deduplicate against retained IDs and publish only on
 success. `retentionDays` truncates older message payloads based on received time,
 preserving their IDs/fingerprints/references; it does not remove evidence. A retained
 truncated ID still participates in deduplication. Retention is not a historical-read promise.
@@ -273,7 +274,10 @@ not a failed or deliberately omitted byte download.
 
 File attachments use raw bytes. Attached messages use MIME `.eml`; attached contacts
 and events retain their actual `.vcf`/`.ics` representations. Reference attachments
-remain links rather than attempted `$value` downloads. These distinctions follow
+retain the metadata returned by Graph v1.0, with `Link` identifying the attachment's
+Graph resource URI. It is not a claim to know the target cloud-file URL: v1.0 does
+not expose `sourceUrl`. Do not use a beta call to obtain it or attempt a `$value`
+download. These distinctions follow
 [Graph attachment content](https://learn.microsoft.com/en-us/graph/api/attachment-get).
 All actual downloads use the same status-aware retry route as metadata requests.
 

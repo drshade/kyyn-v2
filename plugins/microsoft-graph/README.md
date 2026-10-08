@@ -1,4 +1,10 @@
-# Microsoft Graph calendar
+# Microsoft Graph
+
+This plugin provides `Calendar` and `Mail` source connectors, with shared Graph
+authentication. Use `plugin guide microsoft-graph` to read this guide from an
+installed package.
+
+## Calendar
 
 The `Calendar` source synchronizes one user's default calendar within a configured
 date window, including recurring occurrences. Event IDs
@@ -37,6 +43,10 @@ let Connector =
       < Calendar :
           { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool
           , windowStart : Text, windowEnd : Text }
+      | Mail :
+          { auth : Auth, mailbox : Text
+          , folders : List < WellKnownFolder : Text | FolderPath : Text >
+          , retentionDays : Integer }
       >
 in [ { name = "work"
      , binding = "workCalendar"
@@ -143,12 +153,73 @@ HTTP 429/503 with numeric `Retry-After` pauses before retrying (at least one sec
 the next fetch reports everything as new.
 Without a usable delay, fetch reports a retry-later error. Ctrl-C interrupts waits.
 
+## Mail
+
+Add a `Mail` instance using the same `Connector` union above. For example, replace
+the instance in the configuration with:
+
+```dhall
+{ name = "sent", binding = "sentMail"
+, connector = Connector.Mail
+    { auth = Auth.DeviceCode
+        { tenant = "YOUR-TENANT-ID", clientId = "YOUR-APP-CLIENT-ID"
+        , tokenKey = "graph-work-refresh", scopes = [ "Calendars.Read", "Mail.Read" ] }
+    , mailbox = "you@example.com"
+    , folders = [ < WellKnownFolder : Text | FolderPath : Text >.WellKnownFolder "sentitems" ]
+    , retentionDays = +90
+    }
+}
+```
+
+`WellKnownFolder` accepts Graph names such as `inbox` and `sentitems`.
+`FolderPath "Projects/Client"` resolves exact display names from the mailbox's
+top-level folders; missing or ambiguous names fail the fetch. Multiple folders
+share one mailbox and capture. Their configuration order decides the first-seen
+folder when the same message appears in more than one. DeviceCode needs delegated
+`Mail.Read` (or appropriate shared-mail permissions); ClientSecret needs consented
+application mail-reading permission. Login again after changing delegated scopes.
+
+After checking and accepting the configuration:
+
+```sh
+kyyn-v2 --kb /path/to/kb plugin connector login microsoft-graph sent
+kyyn-v2 --kb /path/to/kb evidence fetch microsoft-graph sent
+kyyn-v2 --kb /path/to/kb evidence list microsoft-graph sent
+kyyn-v2 --kb /path/to/kb plugin connector method execute microsoft-graph sent message --input '"MESSAGE-ID"'
+kyyn-v2 --kb /path/to/kb plugin connector method execute microsoft-graph sent body --input '"MESSAGE-ID"'
+kyyn-v2 --kb /path/to/kb plugin connector method execute microsoft-graph sent attachments --input '"MESSAGE-ID"'
+```
+
+The first fetch starts 30 days before invocation. To choose another initial boundary,
+use `--options '{ since = Some "2026-09-01T00:00:00Z" }'`. Later fetches follow saved
+folder delta links; supplying `since` again is refused. An expired delta link
+re-enumerates from that folder's original boundary, skipping already captured IDs.
+Changing mailbox or wanting to recapture messages requires `evidence clear` and
+a new fetch; clear removes the local capture, including its attachment bytes.
+
+Mail captures each immutable message ID once, including drafts. Later edits,
+read flags, moves and upstream deletions do not change captured mail. The plain-text
+body preserves quoted correspondence; no second raw parent-message copy is stored.
+Byte-backed attachments (including inline files and attached messages) are stored
+locally and returned as `BlobRef`s. CLI results containing blobs include local paths.
+Linked attachments instead contain their Graph attachment resource URI and metadata,
+not the target cloud-file URL. All folder pages and attachment downloads must succeed
+before the fetch is published.
+
+`retentionDays` must be nonnegative. During fetch it truncates payloads older than
+that age by received time, reclaiming unreferenced attachment bytes. Evidence IDs
+and fingerprints remain, so truncation does not cause repeated capture. Reading a
+truncated message reports that its payload is unavailable. Retention is independent
+of whether any recipe has processed a message.
+
 ## Verification and provider documentation
 
 The `graph-calendar` test compiles the actual adapters under GHC and MicroHs and
 uses a recording provider for authentication, token rotation, pagination, throttling,
 delta continuation, duplicate IDs, removals, resets and failed pages. Live Entra consent/tenant policy remains an opt-in
 test with the user's own app and account.
+The `graph-mail` test exercises recorded-provider acquisition under both compilers,
+including capture-once, attachment retries/failure, retention and fingerprint parity.
 
 - [Calendar delta synchronization](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0)
 - [Event IDs, changeKey and lastModifiedDateTime](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)
@@ -156,3 +227,6 @@ test with the user's own app and account.
 - [Device-code authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)
 - [Application authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow)
 - [Shared calendar access](https://learn.microsoft.com/en-us/graph/outlook-get-shared-events-calendars)
+- [Mail delta synchronization](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0)
+- [Attachment content](https://learn.microsoft.com/en-us/graph/api/attachment-get?view=graph-rest-1.0)
+- [Linked attachment metadata](https://learn.microsoft.com/en-us/graph/api/resources/referenceattachment?view=graph-rest-1.0)
