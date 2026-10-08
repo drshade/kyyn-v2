@@ -182,8 +182,8 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
     assert "same-version truncated content was not restored" (restoredStatus == ExitSuccess && restored == Just (success (toJSON
       [change "Updated" "changed.txt" "changed 🦋\nline two",restoration,change "New" "new.txt" "new",
        object ["tag" .= ("Removed" :: String),"value" .= ("gone.txt" :: String)]])))
-    (relative,relativeTrace,relativeStatus) <- broker Normal program (input (configValue "relative"))
-    assert "relative directory caused host effects" (relative == Just (failure "Folder directory must be absolute") && null relativeTrace && relativeStatus == ExitSuccess)
+    (empty,emptyTrace,emptyStatus) <- broker Normal program (input (configValue ""))
+    assert "empty directory caused host effects" (empty == Just (failure "Folder directory must be nonempty") && null emptyTrace && emptyStatus == ExitSuccess)
     (unreadable,unreadableTrace,unreadableStatus) <- broker DirectoryFailure program (input (configValue "/folder"))
     assert "failed enumeration became removals" (unreadable == Just (failure "Directory unreadable") &&
       unreadableTrace == [("files","list")] && unreadableStatus == ExitSuccess)

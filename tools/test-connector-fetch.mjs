@@ -205,7 +205,10 @@ bulk ids = do
     assert.equal(item.fingerprint, fileFingerprint(path.join(sales, item.id)));
   }
   assert.deepEqual(listedFirst.items.map(item => item.id).sort(), ['removed.txt', 'unchanged.txt', 'updated.txt']);
-  assert(listedFirst.items.every(item => item.fingerprint.length > 0 && Object.keys(item).sort().join(',') === 'fingerprint,id'));
+  assert(listedFirst.items.every(item => item.fingerprint.length > 0 && item.availability === 'Available'
+    && Object.keys(item).sort().join(',') === 'availability,fingerprint,id'));
+  const captured = cli(['evidence', 'show', 'local-file', 'sales', 'updated.txt']).result;
+  assert.deepEqual(captured.externalReferences, [path.join(sales, 'updated.txt')]);
   assert(!JSON.stringify(listedFirst).includes('sales evidence'));
   if (configurationSmoke) {
     assert.equal(current('sales').selection.fetch, first);
