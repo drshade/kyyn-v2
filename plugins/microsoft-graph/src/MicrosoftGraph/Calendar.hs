@@ -35,7 +35,7 @@ fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition
     pure $ case item of
       Nothing -> case old of Nothing -> []; Just _ -> [RemovedEvidence (EvidenceId key)]
       Just (version,event) ->
-        let Event _ _ _ _ _ _ _ _ _ _ _ _ link = event
+        let Event { webLink = link } = event
             evidence = Evidence (EvidenceFingerprint version)
               (if Text.null link then [base <> "/events/" <> Json.escape key] else [link]) event
         in case old of
@@ -104,15 +104,21 @@ eventValue value = do
       event <- Event <$> descriptive ["subject"] value <*> descriptive ["bodyPreview"] value
         <*> (Json.member "start" value >>= eventTime) <*> (Json.member "end" value >>= eventTime)
         <*> person (optionalField "organizer" value)
-        <*> (case optionalField "attendees" value of JSNull -> Right []; entries -> Json.array entries >>= mapM person)
+        <*> (case optionalField "attendees" value of JSNull -> Right []; entries -> Json.array entries >>= mapM attendee)
         <*> descriptive ["location","displayName"] value
         <*> flag "isAllDay" <*> flag "isCancelled"
         <*> descriptive ["type"] value <*> descriptive ["iCalUId"] value <*> descriptive ["lastModifiedDateTime"] value <*> descriptive ["webLink"] value
+        <*> responseValue (optionalField "responseStatus" value)
       pure (key,version,event)
     fieldText key = Json.member key value >>= Json.text
     flag key = case optionalField key value of JSNull -> Right False; item -> Json.boolean item
     eventTime item = EventTime <$> (Json.member "dateTime" item >>= Json.text) <*> (Json.member "timeZone" item >>= Json.text)
     person item = Person <$> descriptive ["emailAddress","name"] item <*> descriptive ["emailAddress","address"] item
+    attendee item = Attendee <$> descriptive ["emailAddress","name"] item
+      <*> descriptive ["emailAddress","address"] item <*> responseValue (optionalField "status" item)
+    responseValue JSNull = Right Nothing
+    responseValue item = Just <$> (ResponseStatus <$> (Json.member "response" item >>= Json.text)
+      <*> Json.optionalText "time" item)
 
 optionalField :: Text -> JSValue -> JSValue
 optionalField key (JSObject fields) = maybe JSNull id (lookup (Text.unpack key) (fromJSObject fields))

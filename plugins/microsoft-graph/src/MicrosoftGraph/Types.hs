@@ -21,12 +21,17 @@ newtype CalendarPosition = CalendarPosition { deltaLink :: Text } deriving (Eq, 
 
 data EventTime = EventTime { dateTime :: Text, timeZone :: Text } deriving (Eq, Show)
 data Person = Person { name :: Text, address :: Text } deriving (Eq, Show)
+data ResponseStatus = ResponseStatus
+  { response :: Text, time :: Maybe Text } deriving (Eq, Show)
+data Attendee = Attendee
+  { name :: Text, address :: Text, status :: Maybe ResponseStatus } deriving (Eq, Show)
 data Event = Event
   { subject :: Text, bodyPreview :: Text
   , start :: EventTime, end :: EventTime
-  , organizer :: Person, attendees :: [Person]
+  , organizer :: Person, attendees :: [Attendee]
   , location :: Text, isAllDay :: Bool, isCancelled :: Bool
   , eventType :: Text, iCalUId :: Text
   , lastModifiedDateTime :: Text, webLink :: Text
+  , responseStatus :: Maybe ResponseStatus
   } deriving (Eq, Show)
 type EventId = Text
