@@ -348,8 +348,9 @@ subtree and globs in plugin code. Evidence ID is an unambiguous driveId/itemId p
 not a path. Retain the folder hierarchy in the connector-owned position so folder
 renames/moves update descendants' paths and scope even when the provider omits
 those descendants. Coalesce repeated item entries before deriving one consistent
-delta against the prior capture. A failed page/hydration leaves the capture and
-position unchanged. A provider-invalidated cursor triggers complete reconciliation,
+delta against the prior capture. A failed page, hydration or content download
+fails the whole fetch after applicable retries, leaving the capture and position
+unchanged. A provider-invalidated cursor triggers complete reconciliation,
 not blind deletion from a partial response.
 
 Hydrate metadata absent from delta before content decisions. Compare `cTag` to the

@@ -124,6 +124,13 @@ replacement, so readers cannot observe published references to incomplete files.
 Evidence, latest-fetch summary and sync position commit together under the existing
 expected-fetch check. Failure leaves that document unchanged.
 
+The completeness check and state-document replacement run together under the
+instance store lock. Reclamation uses that same lock and checks the current
+published references before deleting bytes. Acquisition remains outside the
+lock; concurrent fetches still use the expected-fetch check. This prevents
+reclamation between a successful completeness check and publication, without
+pinning blobs for readers or in-flight acquisitions.
+
 After publication, reclaim bytes no longer referenced by Available payloads in
 latest evidence. Truncated payloads retain evidence metadata but no BlobRefs;
 their former bytes are reclaimed unless another available item still references
