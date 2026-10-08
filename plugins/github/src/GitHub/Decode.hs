@@ -2,14 +2,20 @@
 module GitHub.Decode (issue, comment, review, pullRequest, commit, fileChange, textField, numberField) where
 
 import Data.Text (Text)
-import GitHub.Types
+import GitHub.Types (Account(Account), Comment(Comment), Review(Review), Issue(Issue),
+  PullRequest(PullRequest), CommitIdentity(CommitIdentity), FileChange(FileChange), Commit(Commit))
 import qualified GitHub.Json as J
 import Text.JSON.Types (JSValue)
 
+textField :: Text -> JSValue -> Either Text Text
 textField key value = J.field key value >>= J.text
+numberField :: Text -> JSValue -> Either Text Integer
 numberField key value = J.field key value >>= J.integer
+list :: Text -> (JSValue -> Either Text a) -> JSValue -> Either Text [a]
 list key parse value = J.field key value >>= J.array >>= mapM parse
+body :: JSValue -> Either Text Text
 body value = maybe "" id <$> J.optional "body" J.text value
+account :: JSValue -> Either Text Account
 account value = Account <$> textField "login" value <*> textField "html_url" value
 comment :: JSValue -> Either Text Comment
 comment value = Comment <$> numberField "id" value <*> J.optional "user" account value <*> body value
@@ -32,6 +38,7 @@ pullRequest discussion reviews value = PullRequest discussion <$> (J.field "draf
 fileChange :: JSValue -> Either Text FileChange
 fileChange value = FileChange <$> textField "filename" value <*> textField "status" value
   <*> (if J.has "previous_filename" value then J.optional "previous_filename" J.text value else Right Nothing)
+identity :: JSValue -> Either Text CommitIdentity
 identity value = CommitIdentity <$> textField "name" value <*> textField "email" value <*> textField "date" value
 commit :: [FileChange] -> Bool -> JSValue -> Either Text Commit
 commit files complete value = do

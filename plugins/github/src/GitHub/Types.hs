@@ -1,4 +1,4 @@
-{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE DuplicateRecordFields, NoFieldSelectors #-}
 module GitHub.Types where
 
 import Data.Text (Text)

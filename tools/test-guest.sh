@@ -19,6 +19,7 @@ cabal test queries --test-show-details=direct
 cabal test plugin-fetch --test-show-details=direct
 cabal test graph-calendar --test-show-details=direct
 cabal test graph-mail --test-show-details=direct
+cabal test github --test-show-details=direct
 cabal test plugin-registration --test-show-details=direct
 cabal test judgements --test-show-details=direct
 node tools/test-agentic.mjs

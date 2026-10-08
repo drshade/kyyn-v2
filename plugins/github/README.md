@@ -22,6 +22,7 @@ that generated schema. `RepositoryConfig` has:
   closed items use their GitHub updated timestamp, commits use GitHub's `since` filter.
 - `tokenSecret`: optional name of a KB secret containing a GitHub token. Omitted
   allows public access, subject to GitHub's lower unauthenticated rate limit.
+  A token is effectively required for anything beyond a small repository.
 
 For a fine-grained token, grant repository read permissions for Contents, Issues
 and Pull requests. Store the token with `kyyn-v2 secret set NAME`; never put it in
@@ -51,7 +52,9 @@ SHAs do not refetch commit details. Mutable discussions are deliberately reread 
 comment/review edits are not lost through reliance on a parent timestamp. Large
 repositories may require many API requests; use a token and a suitable initial
 date. A failed or rate-limited fetch publishes nothing; retry after correcting the
-problem. Pagination is followed, including commit file-list pagination.
+problem. Rate-limit diagnostics include available retry/reset headers; the connector
+does not block waiting for an hourly quota reset. Pagination is followed, including
+commit file-list pagination.
 
 There is no automatic expiration and no inferred deletion. Closing or merging is
 an update; an item disappearing from a listing or branch does not remove captured

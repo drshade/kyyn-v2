@@ -4,7 +4,7 @@ module GitHub.Config (validate, repository, validSince) where
 import Data.Char (isAscii, isAlphaNum, isDigit)
 import qualified Data.Text as Text
 import Data.Text (Text)
-import GitHub.Types
+import GitHub.Types (RepositoryConfig(RepositoryConfig))
 import Kyyn.Validation
 
 repository :: Text -> Either Text (Text,Text)

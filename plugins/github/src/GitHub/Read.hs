@@ -2,7 +2,7 @@
 module GitHub.Read (item, issue, pullRequest, commit) where
 
 import Data.Text (Text)
-import GitHub.Types
+import GitHub.Types (RepositoryItem(..), Issue, PullRequest, Commit)
 import Kyyn.Plugin
 
 item :: Text -> EvidenceSnapshot RepositoryItem -> CapturedRead RepositoryItem (Either FetchError RepositoryItem)

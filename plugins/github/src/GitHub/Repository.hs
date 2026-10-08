@@ -6,13 +6,15 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (sort, sortOn, groupBy)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import GitHub.Types
+import GitHub.Types (RepositoryConfig(RepositoryConfig), RepositoryItem(..), FileChange)
 import qualified GitHub.Config as Config
 import qualified GitHub.Decode as Decode
 import qualified GitHub.Http as Http
 import qualified GitHub.Json as Json
+import GitHub.Fingerprint (canonicalItem)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
+import Kyyn.Validation (ValidationReport(..))
 import Text.JSON.Types (JSValue)
 
 fetch :: RepositoryConfig -> EvidenceSnapshot RepositoryItem
@@ -62,11 +64,13 @@ fetch config@(RepositoryConfig url branch since secret) snapshot = fmap (either 
   captured <- forM unseen $ \(key,sha) -> do
     let path = base <> "commits/" <> Json.escape sha <> "?per_page=100"
     (first,files) <- ExceptT (commitFiles base token [] path)
+    actual <- checked (Decode.textField "sha" first)
+    unless (actual == sha) (throwE "GitHub commit details do not match the requested SHA")
     item <- checked (Decode.commit files (length files < 3000) first)
     ref <- checked (Decode.textField "html_url" first)
     pure (EvidenceId key,ref,CommitItem item)
   let values = discussions ++ captured
-  fingerprints <- ExceptT (Right <$> digestText [Text.pack (show item) | (_,_,item) <- values])
+  fingerprints <- ExceptT (Right <$> digestText [canonicalItem item | (_,_,item) <- values])
   unless (length fingerprints == length values) (throwE "Host returned the wrong number of GitHub fingerprints")
   changes <- forM (zip values fingerprints) $ \((key,ref,item),token) -> do
     previous <- ExceptT (fmap (either (\(FetchError message) -> Left message) Right) (readEvidence snapshot key))
@@ -92,7 +96,12 @@ commitFiles base token seen url = runExceptT $ do
   files <- checked (Json.field "files" value >>= Json.array >>= mapM Decode.fileChange)
   rest <- case next of
     Nothing -> pure []
-    Just link -> snd <$> ExceptT (commitFiles base token (url:seen) link)
+    Just link -> do
+      (later,more) <- ExceptT (commitFiles base token (url:seen) link)
+      firstSha <- checked (Decode.textField "sha" value)
+      laterSha <- checked (Decode.textField "sha" later)
+      unless (firstSha == laterSha) (throwE "GitHub commit changed identity between file-list pages")
+      pure more
   pure (value,files ++ rest)
 
 unique :: Ord a => [(a,b)] -> [(a,b)]
