@@ -4,7 +4,7 @@ module Kyyn.Surfaces.Cli
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   , SecretCommand(..), SecretArgument(..)
   , TapCommand(..), GuideSelection(..)
-  , SchemaCommand(..), CollectionCommand(..), FactCommand(..), QueryCommand(..)
+  , SchemaCommand(..), CollectionCommand(..), FactCommand(..), QueryCommand(..), OutputCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -64,7 +64,9 @@ data EvidenceCommand
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
 data QueryCommand = ListQueries | ShowQuery String | ExecuteQuery String (Maybe String) deriving (Eq, Show)
-data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand | RootQuery QueryCommand
+data OutputCommand = ListOutputs | ShowOutput String | PreviewOutput String (Maybe String)
+  | PublishOutput String (Maybe String) (Maybe String) deriving (Eq, Show)
+data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand | RootQuery QueryCommand | RootOutput OutputCommand
   | RootSchema SchemaCommand | RootCollection CollectionCommand | RootFact FactCommand deriving (Eq, Show)
 data SchemaCommand = ListSchemas (Maybe EvolutionId) | ShowSchema String (Maybe EvolutionId) deriving (Eq, Show)
 data CollectionCommand = ListCollections (Maybe EvolutionId) | ShowCollection String (Maybe EvolutionId) deriving (Eq, Show)
@@ -215,6 +217,14 @@ rootParser :: Parser RootCommand
 rootParser = hsubparser
   (group "show" "Inspect the accepted root at the selected revision" (pure ShowRoot)
   <> group "check" "Check the accepted root, including required examples" (pure CheckRoot)
+  <> group "output" "Preview and publish registered outputs" (RootOutput <$> hsubparser
+    (group "list" "List registered outputs" (pure ListOutputs)
+    <> group "show" "Show renderer and sink contracts" (ShowOutput <$> strArgument (metavar "NAME"))
+    <> group "preview" "Render without writing to the sink" (PreviewOutput <$> strArgument (metavar "NAME")
+      <*> optional (strOption (long "input" <> metavar "DHALL" <> help "Typed query arguments")))
+    <> group "publish" "Render and invoke the sink" (PublishOutput <$> strArgument (metavar "NAME")
+      <*> optional (strOption (long "input" <> metavar "DHALL" <> help "Typed query arguments"))
+      <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Typed sink options")))))
   <> group "query" "Discover and execute snapshot queries" (RootQuery <$> hsubparser
     (group "list" "List registered queries" (pure ListQueries)
     <> group "show" "Show query argument and result contracts" (ShowQuery <$> strArgument (metavar "NAME"))

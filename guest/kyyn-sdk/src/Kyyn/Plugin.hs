@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, TypeOperators, OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Plugin
-  ( SourceConnector(..), CapturedMethod(..), Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
+  ( Connector(..), CapturedMethod(..), Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
   , EvidencePayload(..), Evidence(..), EvidenceChange(..), CapturedText(..), FetchContext(..), FetchResult(..), CapturedRead, ReadsEvidence, listEvidenceIds, readEvidence
   , BlobRef(..), readBlob, readBlobText ) where
 
@@ -12,7 +12,7 @@ import qualified Data.ByteString as Bytes
 import Data.Text (Text)
 import qualified Data.Text.Encoding as Text
 import Kyyn.Types.Plugin (EvidenceRead(..), FileRead)
-import Kyyn.Types.Plugin (SourceConnector(..), CapturedMethod(..), EvidenceSnapshot, FetchError(..), CapturedText(..), FetchContext(..), FetchResult(..))
+import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..), EvidenceSnapshot, FetchError(..), CapturedText(..), FetchContext(..), FetchResult(..))
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 
 -- | A plugin method that reads captured evidence without acquiring new source data.

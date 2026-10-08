@@ -2,7 +2,7 @@
 module GitHub.Plugin (connectors) where
 import Kyyn.Plugin
 
-connectors :: [SourceConnector]
+connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Repository", fetch = "GitHub.Repository.fetch"
   , validateConfig = "GitHub.Config.validate", login = Nothing

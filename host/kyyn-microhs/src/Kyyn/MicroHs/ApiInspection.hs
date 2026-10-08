@@ -106,9 +106,10 @@ project declarations (selected,checked,fixities) = do
           fieldNames = [field | (lhs,cs) <- algebraic, Constr _ _ _ _ (Right fs) <- cs,
             (field,_) <- fs, ns == ValueNamespace,
             unIdent origin == defining ++ ".get$." ++ unIdent (fst lhs) ++ "." ++ unIdent field]
-          docs = case [n | n <- declarationNames, n == unQualIdent origin] ++ fieldNames of
-            [n] -> documentationBefore (slocIdent n) sourceLines
-            _ -> Nothing
+          docs = case [doc | n <- [n | n <- declarationNames, n == unQualIdent origin] ++ fieldNames,
+            Just doc <- [documentationBefore (slocIdent n) sourceLines]] of
+            doc:_ -> Just doc
+            [] -> Nothing
           matches = case ns of
             ValueNamespace -> [Sign [visible] t | Sign names t <- defs, unQualIdent origin `elem` names]
               ++ [Sign [visible] (constructorType lhs c) | (lhs,cs) <- algebraic,

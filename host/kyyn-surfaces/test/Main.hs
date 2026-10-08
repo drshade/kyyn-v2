@@ -36,6 +36,11 @@ main = do
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
   succeeds ["root","query","list"] (Invocation selected Human (Root (RootQuery ListQueries)))
+  succeeds ["root","output","list"] (Invocation selected Human (Root (RootOutput ListOutputs)))
+  succeeds ["root","output","show","page"] (Invocation selected Human (Root (RootOutput (ShowOutput "page"))))
+  succeeds ["root","output","preview","page"] (Invocation selected Human (Root (RootOutput (PreviewOutput "page" Nothing))))
+  succeeds ["root","output","publish","page","--input","{=}","--options","{ pathOverride = None Text }"]
+    (Invocation selected Human (Root (RootOutput (PublishOutput "page" (Just "{=}") (Just "{ pathOverride = None Text }")))))
   succeeds ["root","query","show","history"] (Invocation selected Human (Root (RootQuery (ShowQuery "history"))))
   succeeds ["root","query","execute","history"] (Invocation selected Human (Root (RootQuery (ExecuteQuery "history" Nothing))))
   succeeds ["root","query","execute","history","--input","{=}","--json"]

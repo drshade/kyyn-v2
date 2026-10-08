@@ -23,7 +23,7 @@ import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareToolBindings)
 prepareRecipeTypes :: (Schema.SchemaInspection :> es, PluginPreparation :> es, ToolPreparation :> es)
   => FileTree -> FileTree -> SourceRoot -> FileTree
   -> Eff es (Either [Diagnostic] (FileTree, [RelativePath], [(String,CheckedContract)], [String]))
-prepareRecipeTypes sdk before (SourceRoot schema code (RootDefinition _ _ _ _ _ after) _) change = runExceptT $ do
+prepareRecipeTypes sdk before (SourceRoot schema code (RootDefinition _ _ _ _ _ after _) _) change = runExceptT $ do
   authored <- checked (fileTree (files after ++ files change))
   imports <- ExceptT (Schema.inspectImports authored)
   let requested = nub [(endpoint,selected) | (_,names) <- imports, name <- names,

@@ -22,7 +22,7 @@ import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePl
 inspectRecipeContracts :: (Schema.SchemaInspection :> es, ToolPreparation :> es, PluginPreparation :> es)
   => FileTree -> SourceRoot -> [Fact RecipeDefinition]
   -> Eff es (Either [Diagnostic] [(Fact RecipeDefinition, String, CheckedContract)])
-inspectRecipeContracts sdk (SourceRoot schema code (RootDefinition _ _ _ _ _ authored) _) definitions = runExceptT $ do
+inspectRecipeContracts sdk (SourceRoot schema code (RootDefinition _ _ _ _ _ authored _) _) definitions = runExceptT $ do
   _ <- ExceptT (pure (checkRecipeDefinitions definitions))
   base <- checked (fileTree (files authored ++ files sdk))
   flowSources <- if null [() | Fact _ (ClosedRecipe _) <- definitions] then pure base else do

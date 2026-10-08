@@ -17,6 +17,7 @@ library
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
     Kyyn.Plumbing.Capability.GuestExecution Kyyn.Plumbing.Capability.FileAcquisition
     Kyyn.Plumbing.Protocol.PluginMessages
+    Kyyn.Plumbing.Protocol.Sink
     Kyyn.Plumbing.Protocol.Frame
     Kyyn.Plumbing.Capability.GuestCompilation.Types
     Kyyn.Plumbing.Protocol.Validation

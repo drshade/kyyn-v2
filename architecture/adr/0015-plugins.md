@@ -398,7 +398,7 @@ Source registration is a plugin entry module's `connectors` value. Registration
 names implementations; checked function signatures determine their data contracts.
 
 ```haskell
-connectors :: [SourceConnector]
+connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Folder"
   , fetch = "LocalFile.Folder.fetch"
@@ -412,7 +412,8 @@ connectors = [SourceConnector
   }]
 ```
 
-`SourceConnector` is exported through `Kyyn.Plugin`. The connector name must match
+`Connector` and its `SourceConnector` / `SinkConnector` constructors are exported
+through `Kyyn.Plugin`. The connector name must match
 `[A-Z][A-Za-z0-9_]*` and be unique within the plugin; it becomes an alternative in
 the derived Dhall configuration union. Qualified names refer to Haskell declarations,
 not duplicated structural schemas. A fixed adapter evaluates the registration;

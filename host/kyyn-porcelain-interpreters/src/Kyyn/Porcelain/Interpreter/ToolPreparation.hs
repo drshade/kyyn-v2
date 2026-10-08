@@ -34,7 +34,7 @@ runToolPreparation sdk = interpret $ \_ operation -> case operation of
     pure (sources,names)
   PrepareTools code plugins -> runExceptT $ do
     model <- ExceptT (readModelConfiguration code)
-    RootDefinition _ _ _ _ registered _ <- ExceptT (readRootDefinition code)
+    RootDefinition _ _ _ _ registered _ _ <- ExceptT (readRootDefinition code)
     if null registered then pure [] else do
       (declarations,allSources,interfaces,bindings,inspectionSources,_) <- environment sdk code plugins
       forM declarations $ \(ToolDefinition name description inputName outputName implementation) -> do
@@ -53,7 +53,7 @@ runToolPreparation sdk = interpret $ \_ operation -> case operation of
 environment :: (RootStore :> es, SchemaInspection :> es) => FileTree -> FileTree -> [PreparedPlugin]
   -> ExceptT [Diagnostic] (Eff es) ([ToolDefinition],FileTree,[ConnectorInterface],[InstanceBinding],FileTree,[String])
 environment sdk code plugins = do
-  RootDefinition _ _ _ _ declarations authored <- ExceptT (readRootDefinition code)
+  RootDefinition _ _ _ _ declarations authored _ <- ExceptT (readRootDefinition code)
   pluginSources <- traverse (\(name,bytes) -> (,) <$> checked (relativePath name) <*> pure bytes)
     [(name,bytes) | (path,bytes) <- files code,
       Just package <- [stripPrefix "plugins/packages/" (relativeName path)],

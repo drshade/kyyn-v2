@@ -50,9 +50,11 @@ import WorkspaceApiTests (workspaceApiTests)
 import RecipeTests (recipeTests)
 import RecipeInspectionTests (recipeInspectionTests)
 import ToolBrokerTests (toolBrokerTests)
+import DeliveryTests (deliveryTests)
 
 main :: IO ()
 main = do
+  deliveryTests
   recipeTests
   toolBrokerTests
   initializationTests

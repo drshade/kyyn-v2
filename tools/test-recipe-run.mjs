@@ -41,7 +41,7 @@ try {
     '{ provider = < OpenAI | Anthropic >.OpenAI, model = "fixture", credential = "RECIPE_TEST_KEY" }');
   const config = path.join(target, 'plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(config), { recursive: true });
-  fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } >
+  fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >
 in [${['documents', 'prices'].map(name => `{ name = "${name}", binding = "${name}", connector = Connector.Folder { directory = ${JSON.stringify(folder)}, recursive = False } }`).join(', ')}]`);
   fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `module RootV2 where
 import Kyyn.Schema

@@ -24,8 +24,9 @@ import Kyyn.Domain.Diagnostic (Diagnostic(..), DiagnosticLocation(..), errorDiag
 import Kyyn.Domain.Path (RelativePath, relativePath, relativeName)
 import Kyyn.Domain.Root
 import Kyyn.Domain.Query (QueryDefinition(..), QueryDescriptor(..))
+import Kyyn.Domain.Output (OutputDefinition(..), SinkReference(..))
 import Kyyn.Domain.Tool (ToolDefinition(..))
-import Kyyn.Domain.Plugin (methodName, qualifiedTypeName)
+import Kyyn.Domain.Plugin (methodName, qualifiedTypeName, pluginName, connectorName)
 import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
@@ -43,12 +44,20 @@ runRootStore = interpret $ \_ -> \case
     pure (CheckedValue (contractId contract) value)
   ReadRootDefinition code -> runExceptT $ do
     _ <- ExceptT (readModelConfiguration code)
-    manifest <- withExceptT (map manifestDiagnostic) $ decodeFile code "kb.dhall"
-      (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
+    (manifest,manifestSource) <- withExceptT (map manifestDiagnostic) $ do
+      path <- liftChecked (relativePath "kb.dhall")
+      bytes <- maybe (problem "Missing kb.dhall") pure (lookup path (files code))
+      source <- liftChecked (either (Left . show) Right (Text.decodeUtf8' bytes))
+      (_,value) <- ExceptT (Dhall.inferValue source)
+      fields <- record value
+      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs"]) (Keys.keys fields)) "Unexpected kb.dhall field"
+      _ <- ExceptT (Dhall.decodeValue (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
           ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]])),
          ("tools", List (Record [(name, Scalar TextScalar) | name <-
-          ["name", "description", "implementation", "inputType", "resultType"]]))])) >>= record
+          ["name", "description", "implementation", "inputType", "resultType"]]))]))
+          ("(" <> source <> ").{schemaType,schemaMetadata,validator,queries,tools}"))
+      pure (fields,source)
     typeName <- field "schemaType" manifest >>= text
     metadataName <- field "schemaMetadata" manifest >>= text
     validatorName <- field "validator" manifest >>= text
@@ -68,11 +77,28 @@ runRootStore = interpret $ \_ -> \case
         <*> (get "resultType" >>= liftChecked . qualifiedTypeName) <*> get "implementation")
     let toolNames = [name | ToolDefinition name _ _ _ _ <- tools]
     ensure (length toolNames == length (nub toolNames)) "Tool names must be unique"
+    outputs <- case Keys.lookup "outputs" manifest of
+      Nothing -> pure []
+      Just value -> do
+        let textShape = Scalar TextScalar
+            sinkShape = Record [(name,textShape) | name <- ["plugin","instanceName","method"]]
+        _ <- ExceptT (Dhall.decodeValue (List (Record [("name",textShape),("description",textShape),
+          ("query",textShape),("sink",sinkShape)])) ("(" <> manifestSource <> ").outputs"))
+        list value >>= traverse (\item -> do
+          fields <- record item
+          let get name = Text.unpack <$> (field name fields >>= text)
+          sink <- field "sink" fields >>= record
+          let selected name = Text.unpack <$> (field name sink >>= text)
+          reference <- SinkReference <$> (selected "plugin" >>= liftChecked . pluginName)
+            <*> (selected "instanceName" >>= liftChecked . connectorName) <*> (selected "method" >>= liftChecked . methodName)
+          OutputDefinition <$> get "name" <*> get "description" <*> get "query" <*> pure reference)
+    let outputNames = [name | OutputDefinition name _ _ _ <- outputs]
+    ensure (all (not . null) outputNames && length outputNames == length (nub outputNames)) "Output names must be nonempty and unique"
     authored <- traverse (\(name,bytes) -> do
       path <- liftChecked (relativePath name)
       pure (path,bytes)) [(name,bytes) | (path,bytes) <- files code, Just name <- [stripPrefix "src/" (relativeName path)]]
     sources <- liftChecked (fileTree authored)
-    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) declarations tools sources)
+    pure (RootDefinition (Text.unpack typeName) (Text.unpack metadataName) (Text.unpack validatorName) declarations tools sources outputs)
   CheckRootValue selected value -> runExceptT $ do
     let contract = rootSchema selected
     _ <- ExceptT (Dhall.encodeValue (contractShape contract) value)

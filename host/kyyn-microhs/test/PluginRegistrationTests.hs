@@ -39,7 +39,7 @@ import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, sourceFiles, selectedEntry)
-import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources)
+import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, capturedReadSources, sinkSources)
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Porcelain.Capability.EvidenceStore (openCurrentEvidence)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
@@ -69,7 +69,7 @@ import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (createDirectory, createDirectoryIfMissing, findExecutable)
 import System.Environment (getEnv)
-import System.FilePath ((</>), takeDirectory)
+import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Exit (ExitCode(..))
 import System.Info (compilerVersion)
 import System.Process (readProcessWithExitCode)
@@ -106,7 +106,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   forM_ ["name","fetch","validateConfig","login"] $ \field ->
     assert ("Missing reflected connector field documentation: " ++ field)
       (not (null [() | ApiModule _ symbols _ <- api, ApiSymbol name ValueNamespace origin _ _ (Just doc) <- symbols,
-        name == field, "SourceConnector" `isInfixOf` origin, not (null doc)]))
+        name == field, "Connector" `isInfixOf` origin, not (null doc)]))
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope runtime)
   let load path = do
@@ -123,7 +123,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   Bytes.writeFile (sourceDirectory </> "one.txt") "one"
   let configuration :: FilePath -> Bytes.ByteString
       configuration directory = Text.encodeUtf8 (Text.pack (unlines
-        ["let Folder = < Folder : { directory : Text, recursive : Bool } >",
+        ["let Folder = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >",
          "in [ { name = \"sales\", binding = \"salesFiles\", connector = Folder.Folder { directory = " ++ show directory ++ ", recursive = True } }",
          "   , { name = \"support\", binding = \"supportFiles\", connector = Folder.Folder { directory = " ++ show directory ++ ", recursive = False } } ]"]))
   configPath <- right (relativePath "plugins/config/local-file.dhall")
@@ -132,13 +132,19 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
   case prepared of
-    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector {connectorType = kind, configContract = configContract, payloadContract = payloadContract, methods = methods}]) instances] -> do
+    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector {connectorType = kind, configContract = configContract, payloadContract = payloadContract, methods = methods},sink]) instances] -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
       authored <- traverse (\(p,b) -> (,) <$> right (relativePath p) <*> pure b)
         [(p,b) | (path,b) <- files package, Just p <- [stripPrefix "src/" (relativeName path)]]
       adapter <- right (acquisitionSources (rootType configContract) (rootType payloadContract)
         Nothing "LocalFile.Folder.fetch" (authored ++ files sdk))
       compileFirstParty (temporary </> "ghc-acquisition") adapter
+      case sink of
+        PreparedSinkConnector {configContract = c,sinkOptionsContract = o,sinkInputContract = i,sinkResultContract = r} -> do
+          sinkAdapter <- right (sinkSources (rootType c) (rootType o) (rootType i) (rootType r)
+            "LocalFile.Write.publish" "LocalFile.Write.defaults" (authored ++ files sdk))
+          compileFirstParty (temporary </> "ghc-sink") sinkAdapter
+        _ -> fail "Local-file should register a File sink"
       method@(PreparedMethod methodName description input output _) <- case methods of
         [m] -> pure m
         _ -> fail "Local-file should register exactly one content method"
@@ -146,7 +152,8 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
       readAdapter <- right (capturedReadSources (rootType input) (rootType payloadContract) (rootType output)
         "LocalFile.Read.content" (authored ++ files sdk))
       compileFirstParty (temporary </> "ghc-read") readAdapter
-      mapM_ (\(ConfiguredConnector name _ (PreparedConnector {connectorType = selectedKind, payloadContract = payload, fetchEntry = entry}) config) -> do
+      mapM_ (\(ConfiguredConnector name _ selectedConnector config) -> do
+        (selectedKind,payload,entry,_,_,_,_) <- right (sourceDetails selectedConnector)
         let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
               (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runGuestExecution toolchain (runPluginRead
                 (callCapturedMethod (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind producerIdentity) payload selected value)))))))) >>= right
@@ -226,7 +233,7 @@ compileFirstParty directory sources = do
     createDirectoryIfMissing True (takeDirectory target)
     Bytes.writeFile target bytes
   (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fforce-recomp","-i" ++ directory,
-    "-outputdir",directory </> "objects","-main-is","KyynPluginEntry.main",
+    "-outputdir",directory </> "objects","-main-is",takeBaseName (relativeName (selectedEntry sources)) ++ ".main",
     directory </> relativeName (selectedEntry sources),"-o",directory </> "native"] ""
   assert ("GHC rejected first-party local-file acquisition: " ++ out ++ err) (status == ExitSuccess)
 

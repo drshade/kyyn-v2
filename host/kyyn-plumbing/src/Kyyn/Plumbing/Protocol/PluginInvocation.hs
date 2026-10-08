@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, statefulAcquisitionSources, capturedReadSources, loginSources) where
+module Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, statefulAcquisitionSources, capturedReadSources, loginSources, sinkSources) where
 
 import qualified Data.ByteString as Bytes
 import Data.List (nub)
@@ -83,3 +83,23 @@ imports datatypes = ["import qualified " ++ name | name <- nub
 
 utf8 :: String -> Bytes.ByteString
 utf8 = Text.encodeUtf8 . Text.pack
+
+sinkSources :: DataType -> DataType -> DataType -> DataType -> String -> String
+  -> [(RelativePath,Bytes.ByteString)] -> Either String GuestSources
+sinkSources config options input result publish defaults authored = do
+  modules <- traverse bindingModule [publish,defaults]
+  codecs <- traverse (\(name,datatype) -> do
+    path <- relativePath (name ++ ".hs")
+    body <- generateCodecs name datatype
+    pure (path,utf8 body))
+    [("KyynSinkConfig",config),("KyynSinkOptions",options),("KyynSinkInput",input),("KyynSinkResult",result)]
+  entry <- relativePath "KyynSinkEntry.hs"
+  let body = unlines $ ["module KyynSinkEntry where","import Kyyn.Plugin.Sink",
+        "import Kyyn.Runtime.Sink (executeSink)"] ++ ["import qualified " ++ m | m <- nub modules] ++
+        imports [config,options,input,result] ++
+        ["import qualified " ++ m | m <- ["KyynSinkConfig","KyynSinkOptions","KyynSinkInput","KyynSinkResult"]] ++
+        ["selected :: " ++ haskellType config ++ " -> " ++ haskellType options ++ " -> " ++ haskellType input ++
+          " -> Sink (Either SinkError " ++ haskellType result ++ ")",
+         "selected = " ++ publish,"defaults :: " ++ haskellType options,"defaults = " ++ defaults,
+         "main :: IO ()","main = executeSink KyynSinkConfig.rootCodec KyynSinkOptions.rootCodec KyynSinkInput.rootCodec KyynSinkResult.rootCodec defaults selected"]
+  guestSources entry (authored ++ codecs ++ [(entry,utf8 body)])

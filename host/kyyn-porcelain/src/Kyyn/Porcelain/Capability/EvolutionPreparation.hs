@@ -18,7 +18,7 @@ prepareEvolution :: (EvolutionStore :> es, RootOpening :> es)
 prepareEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) = runExceptT $ do
   snapshot@(WorkspaceSnapshot (WorkspaceManifest revision _ _ _ _) beforeCopy target _ _) <- ExceptT (readWorkspace location)
   rootPath <- either (throwE . pure . errorDiagnostic "evolution.capture") pure (rootLocation kb)
-  before@(SourceRoot contract _ (RootDefinition _ _ _ _ _ sources) _) <-
+  before@(SourceRoot contract _ (RootDefinition _ _ _ _ _ sources _) _) <-
     ExceptT (loadSourceAt repository revision (Subtree rootPath))
   unless (beforeCopy == sources) (throwE [errorDiagnostic "evolution.before-mismatch"
     "before/ must match the selected revision's src/ tree; refresh it from that revision"])

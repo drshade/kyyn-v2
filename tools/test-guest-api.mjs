@@ -33,7 +33,7 @@ try {
   assert.deepEqual(modules, ['Agentic', 'Agentic.Contract', 'Agentic.Core', 'Agentic.Describe',
     'Agentic.Interpret', 'Agentic.Questions', 'Agentic.Runtime', 'Agentic.Schema', 'Agentic.Scripted',
     'Agentic.Settings', 'Agentic.Value', 'Agentic.ViaLLM', 'Kyyn.Edit', 'Kyyn.Evolution',
-    'Kyyn.Evolution.Proposal', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Plugin.Host', 'Kyyn.Query',
+    'Kyyn.Evolution.Proposal', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Plugin.Host', 'Kyyn.Plugin.Sink', 'Kyyn.Query',
     'Kyyn.Recipe', 'Kyyn.Schema', 'Kyyn.Validation']);
   assert(modules.every(name => listing.origins[name] === 'sdk'));
   const kyynModules = modules.filter(name => name.startsWith('Kyyn.'));
@@ -94,7 +94,8 @@ try {
   assert.ok(!query.symbols.some(s => s.name === 'CollectionBinding' && s.namespace === 'value'));
   const forbidden = ['Pure', 'Request', 'EvidenceRead', 'FileRead', 'request', 'interpretProgram', 'SnapshotRead', 'ReadAccess', 'runLocally',
     'CheckResult', 'checkReport', 'EvolutionOutput', 'evaluateEvolution'];
-  for (const name of kyynModules) assert.ok(json('guest', 'module', 'show', name).symbols.every(s => !forbidden.includes(s.name)));
+  for (const name of kyynModules) assert.ok(json('guest', 'module', 'show', name).symbols.every(s =>
+    !forbidden.includes(s.name) || s.definedAs === 'Kyyn.Types.Blob.get$.BlobDownload.request'), name);
   assert.equal(call('guest', 'module', 'show', 'Kyyn.Types.Fact').status, 1);
   for (const args of [['module', 'show', 'Kyyn.Missing'], ['symbol', 'show', 'Kyyn.Edit.missing']]) {
     const response = call('--json', 'guest', ...args);

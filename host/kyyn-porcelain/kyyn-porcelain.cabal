@@ -14,6 +14,7 @@ library
     Kyyn.Porcelain.Capability.Connector
     Kyyn.Porcelain.Capability.PluginPreparation
     Kyyn.Porcelain.Capability.PluginLogin
+    Kyyn.Porcelain.Capability.Delivery
     Kyyn.Porcelain.Capability.PluginRead
     Kyyn.Porcelain.Capability.Tool
     Kyyn.Porcelain.Capability.PluginInstallation
