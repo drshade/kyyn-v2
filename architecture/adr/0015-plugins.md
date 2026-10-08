@@ -529,8 +529,8 @@ listConnectorMethods
 
 data PluginRead :: Effect where
   LoadCapturedInput :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-    -> PluginRead m (Either [Diagnostic] CurrentEvidence)
-  ExecuteCapturedMethod :: CurrentEvidence -> PreparedMethod -> Value
+    -> PluginRead m (Either [Diagnostic] EvidenceIndex)
+  ExecuteCapturedMethod :: EvidenceIndex -> PreparedMethod -> Value
     -> PluginRead m (Either [Diagnostic] (Either FetchError CheckedValue))
 ```
 
@@ -542,9 +542,11 @@ is not an additional authored registration form.
 
 PluginRead checks a method's structural input before dispatch and validates its
 result contract. Declared FetchError remains distinct from storage/contract
-diagnostics and operational Failure. The explicit CurrentEvidence value lets a
-composed tool reuse one invocation-local capture instead of reopening it for each
-call. Guest proxies retain native input/output types; these structural host values
+diagnostics and operational Failure. The explicit EvidenceIndex value lets a
+composed tool reuse one invocation-local index instead of reopening it for each
+call. Payloads are read selectively through EvidenceStore under
+[ADR 0014](0014-evidence.md). Generic evidence list/show uses the lighter selection
+operation there, not PluginPreparation. Guest proxies retain native input/output types; these structural host values
 do not expose an unchecked byte-call API to authors.
 
 This block defines source preparation and captured reading; it does not grant

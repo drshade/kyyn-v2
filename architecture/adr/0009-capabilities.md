@@ -319,17 +319,20 @@ it dispatches, not GuestCompilation. For example:
 
 ```haskell
 executeAcquisition
-  :: (GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, BlobStorage :> es,
+  :: (GuestExecution :> es, EvidenceStore :> es, ContentDigest :> es,
+      FileAcquisition :> es, HttpTransport :> es, BlobStorage :> es,
       SecretStore :> es, Waiting :> es, Failure :> es)
-  => CompiledProgram -> Value -> Maybe CurrentEvidence
+  => CompiledProgram -> Value -> Maybe EvidenceIndex
   -> Eff es (Either [Diagnostic] Value)
 ```
 
-The acquisition workflow loads current evidence before entering the broker.
+The acquisition workflow opens the current evidence index before entering the broker.
 Its argument value is assembled from checked config and typed fetch options;
 the envelope is wire data, not a value stamped with the config-only contract.
-Guest evidence reads use that immutable input directly; the broker has no
-EvidenceStore requirement. Publication uses the loaded fetch as its expected base.
+Guest evidence enumeration uses that captured index; individual reads use
+EvidenceStore to decode only the selected payload under [ADR 0014](0014-evidence.md).
+The broker does not reopen a newer index for each request. Publication uses the
+captured fetch as its expected base.
 When the producer has changed, acquisition instead starts empty and uses the
 head observed before the refused load as its replacement base.
 

@@ -164,7 +164,7 @@ persistence exposes a scoped local effect, like ProcessExecution/ProcessPipes:
 ```haskell
 data DocumentPersistence :: Effect where
   WithLockedDocument
-    :: DirectoryScope -> Eff (DocumentAccess : es) a
+    :: DirectoryScope -> RelativePath -> Eff (DocumentAccess : es) a
     -> DocumentPersistence (Eff es) a
 
 data DocumentAccess :: Effect where
@@ -179,8 +179,10 @@ data DocumentStamp = DocumentStamp
 
 The native interpreter holds the scope's exclusive lock throughout the callback,
 releasing it on success, failure or
-cancellation. Current bytes occupy `state.dhall`; replacement uses a temporary
-file and rename within that directory. Missing current data is optional, but
+cancellation. The caller supplies the current document's filename (for example,
+`state.dhall` or the evidence store's `index.dhallb`); replacement uses a temporary
+file and rename within that directory. The scope still owns one current document,
+not independently locked members of a multi-document transaction. Missing current data is optional, but
 unreadable data is Failure.
 Clearing removes the scoped directory and its contents and reports whether it existed.
 Its lock file is a sibling
