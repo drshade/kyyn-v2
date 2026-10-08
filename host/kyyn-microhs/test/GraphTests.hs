@@ -1,5 +1,6 @@
 -- Actual Graph adapters under GHC/MicroHs with recording providers: auth modes,
 -- polling, rotation, throttling, pagination, delta continuation and reset failures.
+-- Preserves attendee/mailbox response status, including absent and malformed data.
 -- Includes 1,000 long-ID events with populated prior evidence, ordered deltas and
 -- last-copy duplicate handling under the broker's per-invocation timeout.
 -- No live credentials, consent or mailbox coverage.
@@ -106,6 +107,7 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
       if device then assert "refresh not persisted before Graph read"
         (take 3 trace == ["get:refresh","token:refresh_token","put:refresh"]) else pure ()
     deltaTests program
+    responseTests program
     (nullableResponder,_) <- provider False
     let nullable capability method args = if capability == "http" then do
           url <- get "url" args
@@ -164,6 +166,64 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
 
 deltaUrl :: String
 deltaUrl = "https://graph.microsoft.com/v1.0/calendarView/delta?$deltatoken=saved"
+
+responseTests :: CreateProcess -> IO ()
+responseTests program = do
+  let stamp = "2026-09-01T09:00:00Z" :: String
+      responses = ["accepted","tentativelyAccepted","declined","none","notResponded","organizer","futureResponse"] :: [String]
+      status :: String -> Value
+      status response = object ["response" .= response,"time" .= stamp]
+      attendee response = object ["emailAddress" .= person,"status" .= status response]
+      fixture = setField "attendees" (toJSON (map attendee responses))
+        (setField "responseStatus" (status ("tentativelyAccepted" :: String))
+          (event "changed" "response-version" stamp))
+      trial entry = do
+        (fallback,_) <- provider False
+        let respond capability method args = if capability == "http" then do
+              url <- get "url" args
+              if "graph.microsoft.com" `isInfixOf` url
+                then pure (http 200 [] (deltaPage [entry]))
+                else fallback capability method args
+              else fallback capability method args
+        (result,_,exitStatus) <- brokerWith Normal respond program
+          (input False (some (object ["deltaLink" .= deltaUrl])))
+        assert "response-status guest failed" (exitStatus == ExitSuccess)
+        pure result
+      payloadOf result = do
+        changes <- maybe (fail "missing response result") (\value -> get "value" value >>= get "changes") result
+        case changes :: [Value] of
+          [change] -> get "value" change >>= get "evidence" >>= get "payload"
+          _ -> fail "expected one response update"
+  result <- trial fixture
+  assert "response-only version update was lost" (tags result == Right ["Updated"])
+  payload <- payloadOf result
+  own <- get "responseStatus" payload
+  assert "mailbox response lost" (own == some (object ["response" .= ("tentativelyAccepted" :: String),"time" .= some (toJSON stamp)]))
+  attendees <- get "attendees" payload
+  actual <- mapM (get "status") (attendees :: [Value])
+  assert "attendee responses/times lost" (actual == [some (object ["response" .= value,"time" .= some (toJSON stamp)]) | value <- responses])
+  forM_ [event "changed" "response-version" stamp,
+    setField "responseStatus" Null (setField "attendees" (toJSON [setField "status" Null (attendee "accepted")]) fixture)] $ \entry -> do
+    absent <- trial entry >>= payloadOf
+    absentOwn <- get "responseStatus" absent
+    absentAttendees <- get "attendees" absent
+    absentStatuses <- mapM (get "status") (absentAttendees :: [Value])
+    assert "missing/null status invented a response" (absentOwn == none && absentStatuses == [none])
+  noTime <- trial (setField "responseStatus" (object ["response" .= ("accepted" :: String)]) fixture) >>= payloadOf
+  noTimeStatus <- get "responseStatus" noTime
+  assert "missing response time invented a timestamp"
+    (noTimeStatus == some (object ["response" .= ("accepted" :: String),"time" .= none]))
+  forM_ [Bool True, object [], object ["response" .= True], object ["response" .= ("" :: String)]] $ \invalid -> do
+    malformed <- trial (setField "responseStatus" invalid
+      (setField "attendees" (toJSON [setField "status" invalid (attendee "accepted")]) fixture)) >>= payloadOf
+    malformedOwn <- get "responseStatus" malformed
+    malformedAttendees <- get "attendees" malformed
+    malformedStatuses <- mapM (get "status") (malformedAttendees :: [Value])
+    assert "unusable optional status discarded the event or invented a response"
+      (malformedOwn == none && malformedStatuses == [none])
+  badTime <- trial (setField "responseStatus" (object ["response" .= ("accepted" :: String),"time" .= True]) fixture) >>= payloadOf
+  badTimeStatus <- get "responseStatus" badTime
+  assert "unusable timestamp discarded a valid response" (badTimeStatus == noTimeStatus)
 
 deltaPage :: [Value] -> Value
 deltaPage entries = object ["value" .= entries,"@odata.deltaLink" .= deltaUrl]
@@ -330,7 +390,8 @@ provider failPage = do
 
 captured :: Value
 captured = object ["subject" .= ("Subject" :: String),"bodyPreview" .= ("Preview" :: String),"start" .= eventTime,"end" .= eventTime,
-  "organizer" .= person,"attendees" .= [person],"location" .= ("Office" :: String),"isAllDay" .= False,"isCancelled" .= False,
+  "organizer" .= person,"attendees" .= [setField "status" none person],"responseStatus" .= none,
+  "location" .= ("Office" :: String),"isAllDay" .= False,"isCancelled" .= False,
   "eventType" .= ("singleInstance" :: String),"iCalUId" .= ("ical" :: String),"lastModifiedDateTime" .= ("2026-09-01T00:00:00Z" :: String),"webLink" .= ("https://outlook.example/event" :: String)]
 eventTime :: Value
 eventTime = object ["dateTime" .= ("2026-09-01T10:00:00" :: String),"timeZone" .= ("UTC" :: String)]

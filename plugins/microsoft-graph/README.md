@@ -6,6 +6,15 @@ identify evidence; Graph's returned ETag (or `changeKey`) identifies updates. Th
 the latest captured event without contacting Microsoft. Descriptive fields omitted
 by Graph are empty; absent participant lists are empty and absent flags are false.
 
+Each attendee includes name, address and optional `status`; the event's optional
+`responseStatus` is the configured mailbox owner's response. A status contains
+Graph's `response` text (`accepted`, `tentativelyAccepted`, `declined`, `none`,
+`notResponded` or `organizer`) and optional response `time`. Missing/null status
+is absent, not an inferred response. Unusable response data is also absent; an
+unusable timestamp does not discard a valid response. Provider response strings
+are preserved. Graph's `none` with time `0001-01-01T00:00:00Z` is a placeholder,
+not an actual reply timestamp.
+
 ## Install and configure
 
 From this committed checkout, with an initialized KB:
@@ -133,6 +142,7 @@ test with the user's own app and account.
 
 - [Calendar delta synchronization](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0)
 - [Event IDs, changeKey and lastModifiedDateTime](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)
+- [Attendee and mailbox-owner response status](https://learn.microsoft.com/en-us/graph/api/resources/responsestatus?view=graph-rest-1.0)
 - [Device-code authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)
 - [Application authentication](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow)
 - [Shared calendar access](https://learn.microsoft.com/en-us/graph/outlook-get-shared-events-calendars)
