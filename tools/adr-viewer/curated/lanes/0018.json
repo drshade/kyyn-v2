@@ -1,0 +1,1076 @@
+{
+  "adr": "0018",
+  "title": "CLI, MCP and web share application operations",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0018.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Typed application operations are the one shared surface; transports are adapters",
+      "detail": "CLI parsing, MCP requests and web events translate into typed application operations; codecs (e.g. MCP JSON to ListEvolutionsRequest) are adapter code, so JSON never reaches the domain and adapters never implement acceptance rules or reach into Git/runtime/persistence interpreters. Each operation composes only the handlers it needs, so metadata operations such as listing need no compilation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ListEvolutions",
+        "ListEvolutionsRequest",
+        "decodeListRequest",
+        "encodeEvolutionSummaries",
+        "EvolutionFilter",
+        "KnowledgeBaseRef",
+        "RequestDiagnostic"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR 44's CLI routes through porcelain capabilities with command-specific composition and pure adapters in kyyn-surfaces (after PR 43 made listing compiler-free); the illustrated MCP codec identifiers never appear because only the CLI adapter exists."
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0018.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Discoverable optparse CLI with human/structured output, no daemon",
+      "detail": "The CLI uses optparse-applicative, explicit KB selection, human and stable structured output, file I/O, stdout results separate from progress/errors and meaningful exit codes, without needing a daemon.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR 44 adds the typed optparse-applicative parser with human/JSON results and distinct exits."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "MCP exports selectively discoverable typed methods with JSON Schema",
+      "detail": "MCP exposes named typed methods with generated input/output schemas and structured results, plus exact source contracts as resources; never a single untyped command-string tool. KB tools, validation and plugin acquisition methods are exposed without a generic tool lifecycle.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No MCP server or `mcp serve` command exists in host/ at end of history."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Web and MCP are equal first-class surfaces over one loop",
+      "detail": "Web (human understanding/review) and MCP (agent authoring/execution) both expose the inspect-explore-propose-compare loop without an actor-permission split; the first local workbench is anchored on one reporting journey, not a dashboard framework.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No web or MCP surface implemented; all delivered journeys are CLI-only."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Record browsing uses host-checked structure; interpretation via named guest queries",
+      "detail": "Web (human understanding/review) and MCP (agent authoring/execution) both expose the inspect-explore-propose-compare loop without an actor-permission split; the first local workbench is anchored on one reporting journey and must support contributing feedback and examples, not a dashboard framework.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CheckedContract"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 137,
+        "evidence": "PR 177 root fact/collection browsing uses checked roles (Title) host-side; named query listing/execution (`root query`) is still absent."
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0018.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Browsing never invokes output sinks; publication is explicit",
+      "detail": "Record/query browsing is independent of outputs: output controls select a renderer/sink binding, prepare its typed input and invoke it only on explicit request; refreshing or inspecting never publishes.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No `output` command group or sink invocation surface exists in the CLI."
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0018.07",
+      "seq": 42,
+      "pr": 43,
+      "summary": "Split capabilities by dependency set; no dummy handlers",
+      "detail": "Each command installs exactly the interpreters its effect row needs; operations with different dependencies get separate capabilities (EvolutionAuthoring vs compiler-free EvolutionStore) rather than placeholder handlers or a lazy global runtime.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionAuthoring",
+        "ReadWorkspace",
+        "runEvolutionAuthoring"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 42,
+        "evidence": "PR 43 moves creation/capture into EvolutionAuthoring and removes placeholder RootOpening handlers."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.08",
+      "seq": 43,
+      "pr": 44,
+      "summary": "CLI uses `kyyn <noun-path> <verb>` navigation, not a kernel inventory",
+      "detail": "Commands follow useful containment (connectors under plugins, schema/facts/queries under root) with intention verbs; no redundant kb prefix, duplicate shortcuts or empty placeholder groups. The sketch lists kb, root, evolution, plugin, output, secret, web, mcp and doctor.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 implements root show/check and the evolution group under this hierarchy; other groups arrive in later slices."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.09",
+      "seq": 43,
+      "pr": 44,
+      "summary": "`--kb PATH` selects a KB directory inside a discovered Git repo",
+      "detail": "All KB-scoped commands share `--kb PATH` (default `.`); the repository and KB prefix are discovered via Git plumbing, several KBs may share one repo and HEAD (so another KB's Before becomes outdated), and there is no remembered active KB.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "DiscoverRepository"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44: repository discovery through Git plumbing and KB selection/manifest recognition."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.10",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Verbs: list/show/check; evaluate saves, check validates, accept publishes",
+      "detail": "Consistent verbs across groups; `evolution evaluate` executes and saves a candidate, `check` validates it, `accept` freshly checks and publishes without rerunning; inspection never fetches, accepts or invokes sinks.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "Prepare"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 implements the evolution verb set."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 51,
+        "how": "replaced",
+        "by": "0018.17"
+      }
+    },
+    {
+      "id": "0018.11",
+      "seq": 43,
+      "pr": 44,
+      "summary": "One JSON envelope and fixed exit-code table for all commands",
+      "detail": "`--json` emits {outcome,result,diagnostics} on stdout; diagnostics keep severity/code/location; exits are 0 success, 1 refusal, 2 usage, 3 operational, 4 checkout recovery (retaining the accepting revision), 130 interrupt, rendering ADR 0019 outcomes.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.02"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "Succeeded"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44: human/JSON results and distinct outcome exits."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.12",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Selection uses checkout HEAD; detached HEAD is refused",
+      "detail": "Snapshot reads use the resolved HEAD commit, the current branch is passed explicitly to acceptance, detached HEAD is a `git.detached-head` refusal (not a CheckoutMismatch), `--before` takes a full commit ID, and creation emits a stable ID and workspace path.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "CheckoutMismatch"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 implements fixed-revision selection and branch handling."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.13",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Acceptance identity comes from GIT_AUTHOR/COMMITTER environment",
+      "detail": "The composition root reads GIT_AUTHOR_NAME/EMAIL with optional committer overrides and the host clock; missing identity is an actionable refusal, never an anonymous commit or prompt.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 composition resolved identity from the environment."
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 44,
+        "how": "replaced",
+        "by": "0018.15"
+      }
+    },
+    {
+      "id": "0018.14",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Parsing/rendering in kyyn-surfaces; composition in kyyn; workflows in porcelain",
+      "detail": "Host configuration and interpretation live in `kyyn`, pure parsing/rendering in `kyyn-surfaces`, shared workflows in porcelain capabilities reusable by CLI/MCP/Web; surfaces never compose root opening, validation or evolution execution; metadata commands avoid the SDK.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.01"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 keeps pure adapters in kyyn-surfaces and native composition in host/kyyn, enforced by the import check."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.15",
+      "seq": 44,
+      "pr": 47,
+      "summary": "Acceptance identity from Git config user.name/email via plumbing",
+      "detail": "Identity is read through Git plumbing so Git resolves local/global/XDG/includes, with HOME/XDG forwarded to every Git call; no CLI or environment override; hooks stay enabled with an explicit environment; blank identity refuses before compilation.",
+      "kind": "replace",
+      "supersedes": [
+        "0018.13"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "GitUser",
+        "readUserIdentity",
+        "Repository",
+        "Diagnostic"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 44,
+        "evidence": "PR 47 adds readUserIdentity plumbing and removes the env override path."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.16",
+      "seq": 50,
+      "pr": 54,
+      "summary": "`kb init` creates and commits an empty validated KB",
+      "detail": "`kb new <name>` becomes `kb init` at `--kb PATH` (which may not yet exist): it commits a validated empty root and reports revision, branch, path and sync status, using the ordinary exit table with a scoped `git restore` hint on exit 4.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.08"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "KnowledgeBaseInitialization",
+        "runKnowledgeBaseInitialization"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 50,
+        "evidence": "PR 54 implements the initialization capability and CLI wiring."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.17",
+      "seq": 51,
+      "pr": 56,
+      "summary": "`evolution check` evaluates, saves and validates in one step",
+      "detail": "The public `evaluate` command is removed: `check` captures and evaluates the workspace, saves its candidate and validates it, with a three-row outcome table distinguishing pre-candidate refusal, failing saved candidate and success.",
+      "kind": "replace",
+      "supersedes": [
+        "0018.10"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "checkEvolution",
+        "LoadRootInputAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 51,
+        "evidence": "PR 56 composes public check and removes public evaluate."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.18",
+      "seq": 56,
+      "pr": 66,
+      "summary": "`guest module/symbol` discovers the installed SDK from a shipped catalogue",
+      "detail": "Agents can discover public SDK signatures and `-- |` documentation without a Kyyn checkout; the catalogue is generated at build from checked MicroHs exports, shipped as Dhall, and read without KB selection, Git or compilation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "ApiInspection",
+        "ApiModule"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 56,
+        "evidence": "PR 66 implements catalogue generation and guest discovery commands."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.19",
+      "seq": 58,
+      "pr": 69,
+      "summary": "Show public data/newtype declarations projected to exports",
+      "detail": "Discovery shows data/newtype declarations limited to exported constructors/selectors, abstract headers, no derived instances, marks compiler fallbacks, and keeps exact compiler identities in JSON.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.18"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 58,
+        "evidence": "PR 69 projects parsed declarations through checked exports."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.20",
+      "seq": 61,
+      "pr": 74,
+      "summary": "Derive constructor/selector signatures from source, including CPP",
+      "detail": "Signatures are derived from declarations with trivial GADT equalities specialised and authored parameter names retained; CPP sources are preprocessed with the compiler's macros; no instance dictionaries leak.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.19"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 61,
+        "evidence": "PR 74 source-derived signatures with CPP fixture."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.21",
+      "seq": 62,
+      "pr": 77,
+      "summary": "Catalogue modules come from kyyn-sdk's author facades only",
+      "detail": "Public modules are kyyn-sdk's exposed concept facades (Schema, Validation, Query, Evolution, ...), not the shared wire-profile package's exports.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.18"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 62,
+        "evidence": "PR 77 regroups facades and restricts the catalogue inventory."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.22",
+      "seq": 63,
+      "pr": 75,
+      "summary": "`--evolution ID` adds generated workspace modules to discovery",
+      "detail": "Discovery can include Kyyn.Workspace.Evolution/Before/After generated for a workspace's current source, without compiling the author's possibly broken Evolution.hs, via separate WorkspaceApi porcelain and ApiInspection plumbing sharing endpoint preparation with evaluation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "WorkspaceApi",
+        "InspectWorkspaceApi",
+        "WorkspaceCatalogue",
+        "InspectApiModules",
+        "EvolutionWorkspace",
+        "FileTree"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 68,
+        "evidence": "WorkspaceApi lands at seq 67 and PR 83 (seq 68) wires the CLI and marks the design implemented."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.23",
+      "seq": 65,
+      "pr": 79,
+      "summary": "Composition root configures MHSCPPHS once from the resolved runtime",
+      "detail": "Before installing compiler interpreters the composition root sets the unpatched compiler's preprocessor variable from the runtime; interpreters never mutate the environment.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.22"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "MHSCPPHS"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 65,
+        "evidence": "PR 79 configures startup environment in composition."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.24",
+      "seq": 70,
+      "pr": 86,
+      "summary": "`plugin install --from SOURCE [--path]` copies a plugin package",
+      "detail": "Installation prepares a copied source package and reports name/location/origin without compiling, configuring, fetching or committing; ADR 0015 owns source and manifest contracts.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "SOURCE",
+        "SUBDIRECTORY"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 74,
+        "evidence": "PR 90 (seq 74) installs plugin source through the CLI."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 79,
+        "how": "replaced",
+        "by": "0018.26"
+      }
+    },
+    {
+      "id": "0018.25",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Surfaces expose evidence investigation: history, change index, KB helpers",
+      "detail": "MCP/surfaces expose configured instances, fetch history and a payload-free change index alongside plugin read methods and registered KB helpers with typed discovery; fetching/reading is distinguished from accepting a curation evolution.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.03"
+      ],
+      "sections": [
+        "Decision / MCP and Web"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "CLI pieces land at PRs 101/106/107 (seq 82-87); no MCP surface exists."
+      },
+      "confidence": "low",
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0018.45"
+      }
+    },
+    {
+      "id": "0018.26",
+      "seq": 79,
+      "pr": 98,
+      "summary": "Plugin installation targets an evolution workspace only",
+      "detail": "`plugin install` requires `--evolution ID` and writes only into that evolution's target, so plugins reach the accepted root through the ordinary check/accept workflow.",
+      "kind": "replace",
+      "supersedes": [
+        "0018.24"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 79,
+        "evidence": "PR 98 requires the selector and target-scoped writes."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.27",
+      "seq": 82,
+      "pr": 101,
+      "summary": "Connector discovery commands and an `evidence` noun path",
+      "detail": "`plugin connector list/schema show [--evolution]` support configuration authoring; `evidence fetch/history list/change list` operate on the accepted root only, payload-free, with distinct plugin.* and evidence.* diagnostic codes.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "INSTANCE",
+        "PLUGIN",
+        "FetchSummary"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 82,
+        "evidence": "PR 101 implements connector discovery, fetch and history/change inspection."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0018.28"
+      }
+    },
+    {
+      "id": "0018.28",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Latest-only evidence: no historical selection, add `evidence clear`",
+      "detail": "History/change listing always ends at the latest fetch (`--since` only), `evidence clear` discards an instance's local evidence and markers, and cursor/not-fetched diagnostics replace history-unavailable.",
+      "kind": "replace",
+      "supersedes": [
+        "0018.27"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "CapturedText",
+        "EvidenceChangeMarker",
+        "EvidenceFingerprint"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR 104 (seq 85) implements latest-only storage, exclusive --since and clear."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0018.45"
+      }
+    },
+    {
+      "id": "0018.29",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Plugin methods always read latest evidence; cursors select no old content",
+      "detail": "The investigation surface offers the change index since a curation cursor; payload reads always use the latest capture.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.25"
+      ],
+      "sections": [
+        "Decision / MCP and Web"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR 104 implements latest-only reads."
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 89,
+        "how": "removed"
+      }
+    },
+    {
+      "id": "0018.30",
+      "seq": 85,
+      "pr": 104,
+      "summary": "`evidence clear` needs no runtime or plugin preparation",
+      "detail": "Clearing is runtime-free and reports whether a cache existed.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.28"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 85,
+        "evidence": "PR 104 implements runtime-free clear."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0018.45"
+      }
+    },
+    {
+      "id": "0018.31",
+      "seq": 86,
+      "pr": 106,
+      "summary": "`plugin connector method list/show/execute` with typed Dhall I/O",
+      "detail": "Registered captured-evidence readers are discoverable (also on draft targets) without invocation; execution accepts only accepted instances with hermetically decoded Dhall input, Dhall or JSON output, and neither fetches nor edits the root.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [
+        "CapturedMethod",
+        "PluginRead",
+        "listConnectorMethods"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 86,
+        "evidence": "PR 106 implements discovery and invocation."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.32",
+      "seq": 87,
+      "pr": 107,
+      "summary": "`root tool list/show/execute` for registered KB helpers",
+      "detail": "KB-authored investigation helpers are listed/shown (also on drafts) by compiling declarations without running them, executed only from the accepted root, with tool.unknown/preparation/failed diagnostics.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [
+        "KyynToolCalls",
+        "ToolPreparation",
+        "FetchError"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 87,
+        "evidence": "PR 107 registers helpers and exposes root tool commands."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.33",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Recipe surface: list recipes and query net pending changes to acknowledge",
+      "detail": "The investigation surface additionally lists/shows root-owned recipes and queries net pending changes per recipe and connector instance, identifying the fetch scope so authors acknowledge it explicitly; fetching or reading never acknowledges anything.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.25"
+      ],
+      "sections": [
+        "Decision / MCP and Web"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 93,
+        "evidence": "PR 114 (seq 93) implements recipe list/show and pending list after PRs 111-113."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0018.44"
+      }
+    },
+    {
+      "id": "0018.34",
+      "seq": 93,
+      "pr": 114,
+      "summary": "`root recipe list/show` and `root recipe pending list` CLI",
+      "detail": "Recipe instructions and net pending evidence are CLI commands over the accepted root; list/show need no runtime bundle and pending results carry a fixed scope and net change list.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.33"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [
+        "RecipeStore",
+        "LoadRecipesAt",
+        "RECIPE"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 93,
+        "evidence": "PR 114 adds RecipeStore and the CLI."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0018.44"
+      }
+    },
+    {
+      "id": "0018.35",
+      "seq": 101,
+      "pr": 126,
+      "summary": "Inside a KB, guest discovery adds generated tool-authoring bindings",
+      "detail": "Within a KB, discovery adds Kyyn.Connectors, the judgement facade and generated plugin facades for the accepted root or `--evolution` target, using the execution binding generator; fixed SDK lookups stay catalogue-only and generation failure degrades to `guest.bindings-unavailable`.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.18",
+        "0018.22"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "InspectToolApi",
+        "Connectors",
+        "Plugins",
+        "Judgement"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 101,
+        "evidence": "PR 126 implements selected-root discovery with shared generation."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.36",
+      "seq": 114,
+      "pr": 148,
+      "summary": "Tap and packaged-guide commands under the selected KB",
+      "detail": "`tap add/remove/list/update`, `plugin search` and `plugin guide` (also pre-install) share `--kb` scope and need no valid executable root; ADR 0015 owns semantics.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 119,
+        "evidence": "PRs 154/155 (seq 118-119) add plugin list/show/guide, taps, search and qualified install."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.37",
+      "seq": 133,
+      "pr": 171,
+      "summary": "Judgement discovery moves to the Kyyn.Agentic facade",
+      "detail": "The KB-scoped catalogue exposes Kyyn.Agentic instead of Kyyn.Judgement; judgement authoring docs come from upstream Agentic.Questions.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.35"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "Agentic",
+        "Questions"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 133,
+        "evidence": "PR 171 deletes Kyyn.Judgement and adopts Agentic."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.38",
+      "seq": 136,
+      "pr": 176,
+      "summary": "Read-only root browsing: schema, collection and validated facts",
+      "detail": "`root schema/collection list/show [--evolution]` use source-only schema inspection without facts or validators; `root fact list/show` read the validated accepted root via RootStore.readCollection and refuse `--evolution`.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.05"
+      ],
+      "sections": [
+        "Decision / Root browsing"
+      ],
+      "anchors": [
+        "readCollection",
+        "RootStore",
+        "Validated",
+        "COLLECTION"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 137,
+        "evidence": "PR 177 (seq 137) implements root browsing."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.39",
+      "seq": 136,
+      "pr": 176,
+      "summary": "KB-authored modules join guest discovery with sdk/generated/kb origins",
+      "detail": "Modules under the root's source tree are listed without type-checking all helpers and shown by checking the selected module; origins are labelled and `--evolution` selects target source.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 138,
+        "evidence": "PR 178 (seq 138) implements authored module discovery."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.40",
+      "seq": 139,
+      "pr": 180,
+      "summary": "Recipe-flow discovery uses a same-schema FactEdits binding context",
+      "detail": "Kyyn.Workspace.FactEdits is discoverable when the root has collections; recipe inspection uses its own same-schema binding context, never merged with a draft evolution's Before/After bindings.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "FactEdits"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 140,
+        "evidence": "PR 181 (seq 140) generates recipe dependencies separately and exposes FactEdits."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.41",
+      "seq": 141,
+      "pr": 182,
+      "summary": "Module show lists explicit instance headers separately",
+      "detail": "Module inspection lists explicit instance headers declared in that module (making generated Contract/Options instances discoverable) in a separate `instances` list; no imported/derived inventory.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.18"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "Contract"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 141,
+        "evidence": "PR 182 projects instance headers into catalogue format 2."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.42",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Command hierarchy adds already-built recipe, login, evidence and secret commands",
+      "detail": "The desired-state hierarchy adds commands that no node covered but the CLI already had: `root recipe describe/run`, `plugin connector login/show <instance>`, `evidence list` and `evidence fetch --options`, and `secret show`.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 140,
+        "evidence": "secret show arrived with PR 122 (seq 98), evidence list PR 138 (seq 107), fetch options PR 145 (seq 111), connector login PR 147 (seq 113), recipe run PR 168 (seq 131), recipe describe PR 181 (seq 140)."
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0018.43",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Discovery may reuse ADR 0005's disposable content-keyed inspection cache",
+      "detail": "Native API inspection may reuse the disposable content-keyed cache, relaxing seq 63's 'inspection creates no durable cache' rule; discovery still never writes the workspace or Git refs or saves/checks a candidate.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.22"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 106,
+        "evidence": "PR 136 (seq 106) cached native inspection results across CLI invocations."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.44",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Recipes expose typed state; `run --input`, `evolution new --recipe`",
+      "detail": "Recipe list/show expose method, state type and current state; closed flows take a typed request via `root recipe run NAME [--input]`; recipe-based workspaces come from `evolution new --recipe`; pending/acknowledgement commands are removed.",
+      "kind": "replace",
+      "supersedes": [
+        "0018.33",
+        "0018.34"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [
+        "RECIPE"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR 210 (seq 162) implements typed per-recipe state, RecipeBased workspaces and removes pending machinery."
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0018.45",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Evidence investigation is current-only: `evidence list/show/clear`",
+      "detail": "History and change commands are replaced by current evidence enumeration and payload inspection with the latest fetch summary; clearing removes capture, summary and position but not facts or recipe state; missing evidence never claims upstream deletion.",
+      "kind": "replace",
+      "supersedes": [
+        "0018.25",
+        "0018.28",
+        "0018.30"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "`evidence list` existed since seq 107; PR 210 (seq 162) removes historical APIs and adds current payload inspection."
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 53,
+      "pr": 60,
+      "note": "Adds an example of ADR 0010's numbered-slug evolution ID; ID format is owned by ADR 0010 and the commands already took the full ID."
+    },
+    {
+      "seq": 68,
+      "pr": 83,
+      "note": "Drops 'Proposed' from the workspace-discovery heading and contracts once implemented; records realisation of the seq 63 discovery node, no new requirement."
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Replaces the deleted curation walkthrough link with a user-guide link."
+    },
+    {
+      "seq": 159,
+      "pr": 207,
+      "note": "Removes residual wording about the retired fetch-history/pending-work selector after PR 206; no change in requirement."
+    }
+  ],
+  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment: six Decision nodes. The transport-codec paragraph is an example elaborating the shared-operations commitment and is merged into 0018.01, as is the metadata-only listing point; the founding Alternatives (local single-owner, bind locally, guard foreign origins) and Verification (listing never starts MicroHs, same result across surfaces) produce no nodes. The founding MCP/Web half (0018.03, .04, .06, and the codec part of .01) is still unrealised at cursor 166: every journey shipped is CLI-only, though the founding Verification demanded that Web and MCP be designed and tested in each slice rather than added after the CLI. The title still promises three shared surfaces. The 'CLI navigation and KB selection' subsection (seq 43) became the de facto CLI spec and absorbed decisions that are not about surface sharing (Git identity, hooks, MHSCPPHS, SDK catalogue presentation); it may deserve its own ADR. The evidence/curation surface churned hard: fetch history with --at (seq 82), then latest-only with cursors (84), then recipe-scoped pending/acknowledgement (89/93), then typed recipe state with current-only evidence (158). Each was implemented before being replaced, and nodes .25, .27-.30 and .33-.34 have all ended by seq 158. At seq 89 the 'plugin methods read latest evidence' rule was delegated to ADR 0014 rather than reversed, so .29 is recorded as removed, not replaced. Seq 143 (desired-state reconciliation): metadata removal, the RootStore-to-Git-discovery wording, root schema/collection/fact argument changes (covered by root browsing .38), tap/plugin-install forms (.36/.26), the InspectRootApi/ApiOrigin/ApiSelection contract (restating .39's sdk/generated/kb origins) and dropping `plugin update` are editorial. Two nodes come from it: .42, already-built commands no node covered (code_first), and .43, which relaxes seq 63's no-durable-cache rule to allow ADR 0005's inspection cache. That is a partial reversal, modelled as a refine so the discovery node stays current. Seq 158 also rewrites the 143 hierarchy's `recipe run <plugin> <instance>...` to `run --input`; that is covered by .44 and not modelled as ending .42. The hierarchy still lists root query, output, web/mcp serve, doctor and kb show, none implemented. Seq 65 (MHSCPPHS configuration) is a borderline low-level refine. .05 is marked realised by CLI root browsing (seq 137), though the founding text pictured a web workbench and named guest queries are still absent."
+}

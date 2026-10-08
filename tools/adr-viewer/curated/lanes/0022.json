@@ -1,0 +1,144 @@
+{
+  "adr": "0022",
+  "title": "Proprietary now; deliberate dependency and future licensing choices",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0022.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Kyyn-owned code is proprietary, all rights reserved, for now",
+      "detail": "Kernel, SDK, first-party code and docs are all-rights-reserved during development: no permissive headers, no promise of redistribution rights, no claim of being open source. A future permissive release needs an explicit owner decision.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "The first Kyyn packages (PR 6) declare license NONE with an all-rights-reserved copyright; README states the project is proprietary"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0022.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Licensing policy never overrides third-party notices; distributed sources are reviewed",
+      "detail": "The policy does not relicense copied code or rewrite existing notices. Every source actually shipped (native binaries, guest bundles, generated code, tools, web assets, including native-linked MicroHs modules) is reviewed, its notices preserved and local patches documented.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Dependency selection and distribution"
+      ],
+      "anchors": [
+        "MicroHs"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR 6 vendors MicroHs/json/transformers with a source, hash and license inventory (vendor/README.md); PR 8 adds docs/dependency-sources.md"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0022.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugin architecture independent of licensing; no signing or approval service",
+      "detail": "External extensibility and the plugin authoring boundary do not depend on the licensing choice, and proprietary development implies no mandatory signing/approval service or plugin compatibility lock.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 1,
+        "evidence": "Negative constraint; no code existed and no signing/approval service was ever introduced"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0022.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Dependencies chosen for current proprietary and possible future permissive release",
+      "detail": "Dependency adoption considers both the proprietary policy and a possible permissive release; license questions are identified before adopting code and resolved explicitly (with legal review when unclear), never by silently changing policy or treating future open source as permission now.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Dependency selection and distribution"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "Dependency source/license records accompany adoption from PR 8 (docs/dependency-sources.md) onward; this is a process commitment, so evidence is indirect"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0022.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Guest JSON library choice gated on license terms plus compatibility proof",
+      "detail": "The guest JSON library (Aeson vs microaeson candidates) stays unselected until its exact source/dependency terms are checked alongside the compatibility proof; API convenience alone does not approve it for a guest bundle.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Dependency selection and distribution"
+      ],
+      "anchors": [
+        "Aeson",
+        "microaeson"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 5,
+        "evidence": "PR 5 retained source/license and compatibility evidence before the owner accepted the library choice"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0022.06",
+      "seq": 5,
+      "pr": 5,
+      "summary": "Selected host/guest JSON libraries recorded in ADR 0007 with license evidence",
+      "detail": "The JSON choice is now made (Aeson on the host, unchanged json-0.11 modules on MicroHs, owned by ADR 0007), with source/license evidence retained; the check of exact terms alongside the compatibility proof still applies to any change.",
+      "kind": "refine",
+      "supersedes": [
+        "0022.05"
+      ],
+      "sections": [
+        "Dependency selection and distribution"
+      ],
+      "anchors": [
+        "json"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "PR 6 vendors json-0.11 with its BSD-3-Clause license recorded in vendor/README.md"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Repoints license evidence from the deleted protocol investigation to the vendor inventory and dependency-sources docs"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Metadata reconciliation: drops the Status preamble, whose content the Decision section already states"
+    }
+  ],
+  "notes": "A small, policy-only lane that barely moved: one substantive change (seq 5, the JSON library getting selected, with ownership handed to ADR 0007) and two documentation-housekeeping steps. Realisation is mostly about repository hygiene rather than code: the all-rights-reserved posture shows up as license: NONE plus an all-rights-reserved copyright in Kyyn-owned cabal files, and the vendor/ inventory records upstream licenses (MicroHs Apache-2.0, json/transformers BSD-3, agentic BSD-2). Worth watching: the vendor table notes MicroHs currently comes from the owner's fork with a GC fix, so the 'document local patches' rule is in active use. The founding Decision paragraph on third-party notices was merged into the source-review node because the dependency section restates it; 'Verification and later release' produced no node."
+}

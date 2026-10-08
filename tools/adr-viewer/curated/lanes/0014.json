@@ -1,0 +1,1629 @@
+{
+  "adr": "0014",
+  "title": "Current evidence and recipe-owned state",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0014.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugin connectors acquire typed evidence; the KB interprets it",
+      "detail": "Plugin source connectors acquire and normalize provider data into typed views, and KB functions interpret those views into candidate knowledge. Provider grouping/pagination belongs to the plugin; KB-specific classification belongs to the KB.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "Typed acquisition proven in #96 (seq 78) and run natively in #99/#100; KB-side interpretation via typed tools composing captured plugin reads arrives in #107"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0014.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Evidence identity includes plugin, named connector instance and configuration",
+      "detail": "Evidence is identified by producing plugin, named connector instance, its configuration and method, so two instances of the same connector type never share evidence; secret values are never part of identity.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ConnectorInstanceRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 77,
+        "evidence": "PR #95 keys evidence per connector instance with per-instance documents; two-instance journeys in #100/#101"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Evidence is an ignored local cache, replaceable on refresh",
+      "detail": "Evidence lives in an ignored checkout-local cache that a refresh may replace; Kyyn keeps source identity, fetch time, producer identity and references with it, not eternal schema custody.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No evidence store existed before seq 76 replaced this with retained fetch history"
+      },
+      "ended": {
+        "seq": 76,
+        "how": "replaced",
+        "by": "0014.13"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Snapshot-scoped typed pages with opaque cursors and EvidenceProblem",
+      "detail": "Reads go through a fixed EvidenceSnapshot exposing typed pages with opaque cursors bound to the query and snapshot; replacement, incompleteness and producer changes are EvidenceProblem data, not storage failures.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvidenceSnapshot",
+        "readEvidencePage",
+        "PageRequest",
+        "EvidenceReplaced",
+        "EvidenceIncomplete",
+        "ProducerContractChanged",
+        "EvidenceProblem"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "readEvidencePage/PageRequest never appeared in code; removed at seq 76"
+      },
+      "ended": {
+        "seq": 76,
+        "how": "replaced",
+        "by": "0014.13"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Acquisition checkpoints advance only after persistence; partial runs distinguishable",
+      "detail": "Acquisition checkpoints advance only after fetched data is persisted and incomplete runs stay distinguishable from complete snapshots; a checkpoint is not proof that evidence became accepted knowledge.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "Replaced by single complete-batch publication (no checkpoint lifecycle) at seq 76 before any implementation"
+      },
+      "ended": {
+        "seq": 76,
+        "how": "replaced",
+        "by": "0014.12"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "No kernel review queue; KBs model completeness with ordinary facts",
+      "detail": "Kyyn has no kernel-enforced queue of evidence awaiting review, dismissal or acceptance; a KB that needs to prove every item was considered models that with ordinary facts, queries and validation. Interrupted curation stays repeatable through stable IDs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 1,
+        "evidence": "Negative constraint; no review-queue machinery existed in code at founding"
+      },
+      "ended": {
+        "seq": 89,
+        "how": "replaced",
+        "by": "0014.31"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0014.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Evolution entries may read or acquire evidence via snapshot refs",
+      "detail": "An evolution entry may invoke a plugin to read an existing evidence snapshot or explicitly acquire new evidence, with generated proxies carrying a snapshot reference so later pages never silently switch; candidate checking uses captured inputs, not fresh evidence.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvidenceRef",
+        "EvidenceSnapshotRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "Effectful evolution acquisition was never built; ADR 0010 made evolution execution pure and the section was deleted at seq 97"
+      },
+      "ended": {
+        "seq": 97,
+        "how": "removed"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Provenance is declared through each step's Rationale with EvidenceRefs",
+      "detail": "Supporting provenance is the explanation plus EvidenceRef list in each evolution step's Rationale; reading evidence does not cite it, fetching creates no review obligation, and the kernel does not infer support from call traces.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Rationale",
+        "EvidenceRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 32,
+        "evidence": "PR #33 adds Rationale/EvidenceRef/StepObservation with ordered rationale in the SDK"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Citations carry durable plugin-chosen source identity, not versions or hashes",
+      "detail": "An archived citation retains producer/connector identity, the plugin's best available scoped source ID and useful links, meaning 'this source supports the rationale' rather than an immutable historical version; no versions, fingerprints or content hashes are required.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvidenceRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 77,
+        "evidence": "PR #95 assembles EvidenceRef citations host-side from plugin-supplied references, without fingerprints"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plugin change invalidates evidence and refetches; accepted facts survive",
+      "detail": "When a plugin changes (by package identity, not just schema), affected evidence and bindings are invalidated, consumers repaired and evidence refetched, with no per-run schema negotiation; accepted facts are never deleted because evidence expired.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Updates and alternatives"
+      ],
+      "anchors": [
+        "PackageIdentity"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 77,
+        "evidence": "PR #95 binds stored evidence to producer PackageIdentity and refuses producer-mismatched reads"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.11",
+      "seq": 32,
+      "pr": 33,
+      "summary": "EvidenceRef is a durable citation value, distinct from snapshot handles",
+      "detail": "EvidenceRef {producer, connector, source, references} is the shared durable citation value; EvidenceSnapshotRef separately selects cached data, and a citation must never silently become a cache-lookup handle.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvidenceRef",
+        "EvidenceSnapshotRef"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 32,
+        "evidence": "PR #33 ships EvidenceRef in the SDK as durable source references, not live snapshot handles"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.12",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Plugins declare New/Updated/Removed deltas, published as one complete batch",
+      "detail": "The plugin decides which items are new, updated (full replacement payload) or removed versus its prior snapshot; the host checks delta consistency but never derives changes. One complete batch publishes atomically against an expected base; failure publishes nothing and there is no partial-run lifecycle.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.05"
+      ],
+      "sections": [
+        "Decision / A fetch changes an evidence snapshot"
+      ],
+      "anchors": [
+        "EvidenceChange",
+        "NewEvidence",
+        "UpdatedEvidence",
+        "RemovedEvidence",
+        "Evidence",
+        "FetchError"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 80,
+        "evidence": "Store consistency in #95 (seq 77); native acquisition publishing complete batches in #99"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.13",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Retain every successful fetch delta; explicit historical evidence selection",
+      "detail": "Every successful fetch and its delta payloads are retained until explicit deletion, with CurrentEvidence/AtFetch selection, reconstruction from deltas and per-invocation fixed selections, replacing the replaceable-cache model.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.03",
+        "0014.04"
+      ],
+      "sections": [
+        "Decision / Retained fetches and explicit selection"
+      ],
+      "anchors": [
+        "Fetch",
+        "EvidenceSelection",
+        "CurrentEvidence",
+        "AtFetch",
+        "selectEvidence",
+        "readFetchesBetween",
+        "readEvidence",
+        "HistoryUnavailable"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 77,
+        "evidence": "PR #95 implements retained Dhall history, AtFetch selection and reconstruction"
+      },
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0014.24"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.14",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Payload-free change summaries with host-assembled citations",
+      "detail": "Investigation sees only payload-free change summaries (fetch, kind, item, citation); the host assembles EvidenceRef from producer/instance identity, item ID and plugin references, using a removed item's preceding references.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Retained fetches and explicit selection"
+      ],
+      "anchors": [
+        "EvidenceChangeSummary",
+        "listEvidenceChanges",
+        "ChangeKind"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 77,
+        "evidence": "Code in #95; CLI change listing in #101 (seq 82)"
+      },
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0014.27"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.15",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Fix per-instance evidence selections for the whole invocation",
+      "detail": "Named bindings select current evidence by default, resolved and held per instance for the whole invocation; explicit historical selections are invocation inputs, never edits to generated connector values.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Retained fetches and explicit selection"
+      ],
+      "anchors": [
+        "EvidenceSnapshotRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 80,
+        "evidence": "PR #99 broker binds guest evidence reads to the selected snapshot"
+      },
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0014.26"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.16",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Investigate through typed plugin methods and KB tools; no generic viewEvidence",
+      "detail": "Plugins advertise typed documented methods (viewEmail, getAttachments) that interpret captured payloads, composed by KB tools across plugins; there is no generic viewEvidence and viewing never silently fetches.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Investigation and curation"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 composes captured plugin reads in typed KB tools (after #106 local-file content methods)"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.56"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.17",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Curation progress is a KB-authored cursor advanced only by acceptance",
+      "detail": "Curation progress is ordinary KB data such as a workflow-specific last-curated fetch, updated with facts in an evolution and advanced only by acceptance; there is no global curated flag or per-item review queue.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.06"
+      ],
+      "sections": [
+        "Decision / Investigation and curation"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "Never implemented; replaced by host-owned recipe acknowledgements at seq 89"
+      },
+      "ended": {
+        "seq": 89,
+        "how": "replaced",
+        "by": "0014.30"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.18",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Producer change keeps old bytes uninterpreted; refetch starts empty",
+      "detail": "After a plugin change, retained old bytes are not reinterpreted under the new contract; a refetch starts from an empty compatible snapshot and old curation cursors cannot cross that boundary.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.10"
+      ],
+      "sections": [
+        "Updates and alternatives"
+      ],
+      "anchors": [
+        "ProducerContractChanged"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 77,
+        "evidence": "PR #95 archives old documents and requires empty-base publication on producer change"
+      },
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0014.28"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.19",
+      "seq": 76,
+      "pr": 94,
+      "summary": "Folder connector: directory plus recursive flag, complete enumeration required",
+      "detail": "The first folder connector config is only directory and recursive flag (no globs); it must enumerate successfully before treating missing paths as removals, and an unreadable directory is an error.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / A fetch changes an evidence snapshot"
+      ],
+      "anchors": [
+        "FolderConfig"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 81,
+        "evidence": "Folder fixture in #96 (seq 78); FolderConfig in the first-party local-file package in #100"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.20",
+      "seq": 77,
+      "pr": 95,
+      "summary": "One locked, atomically replaced Dhall document per connector instance",
+      "detail": "Each instance's evidence lives in one typed .kyyn/evidence/<plugin>-<hex instance>/state.dhall document recording producer identity, under a native file lock with atomic replacement, with the shared .kyyn/.gitignore ignore rule.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.13"
+      ],
+      "sections": [
+        "Decision / Retained fetches and explicit selection"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 77,
+        "evidence": "PR #95 implements the per-instance Dhall document with filelock and atomic replace"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.21",
+      "seq": 82,
+      "pr": 101,
+      "summary": "Acquisition only uses configured instances from the checked accepted root",
+      "detail": "Evidence fetching uses a configured instance from the checked accepted root; a draft evolution's configuration can be inspected but cannot start or advance evidence before acceptance.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / A fetch changes an evidence snapshot"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 82,
+        "evidence": "PR #101 'evidence fetch' uses the checked accepted root only"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.22",
+      "seq": 83,
+      "pr": 102,
+      "summary": "EvidenceStore is a porcelain capability over scoped DocumentPersistence",
+      "detail": "EvidenceStore's interpreter owns delta application, producer selection and expected-base publication, using ADR 0003's scoped DocumentPersistence for native IO with one lock spanning read, check, encode and replace.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.20"
+      ],
+      "sections": [
+        "Decision / Retained fetches and explicit selection"
+      ],
+      "anchors": [
+        "EvidenceStore",
+        "DocumentPersistence"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102 introduces semantic EvidenceStore over DocumentPersistence preserving the lock"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.23",
+      "seq": 83,
+      "pr": 102,
+      "summary": "Load the selected snapshot once per invocation; release lock before guest code",
+      "detail": "For one plugin invocation the host loads the selected snapshot once and answers later reads from that immutable value, releasing the store lock before guest code or acquisition.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.15"
+      ],
+      "sections": [
+        "Decision / Retained fetches and explicit selection"
+      ],
+      "anchors": [
+        "loadEvidenceSnapshot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102 adds invocation-scoped evidence snapshots (loadEvidenceSnapshot)"
+      },
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0014.26"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.24",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Keep only the latest captured value per evidence item",
+      "detail": "Each instance has one latest captured state; a successful fetch replaces, adds and removes items and persistent storage holds only current values. Historical selection, payload replay, baselines and producer archives are removed: Kyyn keeps a KB current, not a forensic archive.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.13"
+      ],
+      "sections": [
+        "Decision / One current captured value per evidence item"
+      ],
+      "anchors": [
+        "loadCurrentEvidence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR #104 implements latest-only storage, discarding superseded payloads"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.25",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Connectors supply an opaque nonempty fingerprint per evidence item",
+      "detail": "Every evidence item carries a connector-supplied nonempty EvidenceFingerprint, an opaque equality token for captured content (content hash, provider revision or stable projection); updates with an unchanged fingerprint are refused as invalid deltas.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One current captured value per evidence item"
+      ],
+      "anchors": [
+        "EvidenceFingerprint"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR #104 adds fingerprinted Evidence and native content hashing"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.26",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Each invocation reads one immutable view of the latest capture",
+      "detail": "A plugin invocation reads one immutable in-memory view of the latest capture whose lifetime the host owns; refresh does not change a loaded invocation, and unfetched or incompatible instances are actionable errors, not empty input.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.15",
+        "0014.23"
+      ],
+      "sections": [
+        "Decision / Atomic refresh and invocation-local reads"
+      ],
+      "anchors": [
+        "CurrentEvidence",
+        "loadCurrentEvidence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR #104 loads current evidence once before guest execution"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.27",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Retain payload-free fetch change markers to support curation cursors",
+      "detail": "Fetch identity, predecessor, time and lightweight per-item change markers (kind, ID, fingerprint, citation) are retained until clearing to support KB curation cursors; unknown cursors are errors, never empty results.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.14"
+      ],
+      "sections": [
+        "Decision / Payload-free change tracking"
+      ],
+      "anchors": [
+        "EvidenceChangeMarker",
+        "Fetch",
+        "listEvidenceChanges"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR #104 implements payload-free history and cursor diagnostics"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.28",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Plugin change: refetch replaces capture and markers; scoped clear",
+      "detail": "Evidence is bound to producing plugin source and contract; after an update the refetch replaces the instance's capture and marker history, and 'evidence clear PLUGIN INSTANCE' discards local cache without touching accepted facts.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.18"
+      ],
+      "sections": [
+        "Decision / Plugin changes and cache replacement"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR #104 adds producer reset and runtime-free evidence clear"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.29",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Recipes are KB-owned task identities with agent instructions",
+      "detail": "A recipe is a KB-owned identity plus agent instructions (e.g. sync todos) in the accepted root, changed through evolutions; it is not a scheduled job, entry point or kernel-managed workflow, and an evolution names at most one.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Recipes name the task, not an execution workflow"
+      ],
+      "anchors": [
+        "RecipeId",
+        "Recipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 91,
+        "evidence": "Pure types in #111 (seq 90); persisted declarations in #112"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.30",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Evolutions explicitly declare batch or item acknowledgements per recipe",
+      "detail": "An evolution result may declare EntireBatch or IndividualRecords acknowledgements for its one recipe via withCuration; they are never inferred from reads or citations, and the host resolves them against the named fetch during preparation.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.17"
+      ],
+      "sections": [
+        "Decision / Declare what was handled; derive progress in the host"
+      ],
+      "anchors": [
+        "Acknowledgement",
+        "EntireBatch",
+        "IndividualRecords",
+        "Curation",
+        "withCuration",
+        "EvidenceScope"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 92,
+        "evidence": "PR #113 implements withCuration and preparation-time resolution"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.31",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Host-owned Git-tracked register of acknowledged ID/fingerprint states",
+      "detail": "The host owns a Git-tracked Dhall register mapping recipe and instance to producer plus acknowledged ID/fingerprint states, published with facts at acceptance; fetching never changes it.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.06"
+      ],
+      "sections": [
+        "Decision / Accepted progress and net pending evidence"
+      ],
+      "anchors": [
+        "CurationProgress",
+        "CurationRegister"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 91,
+        "evidence": "PR #112 persists host-owned curation progress"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.32",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Pending work is the net difference between acknowledged and current state",
+      "detail": "Pending discovery compares each item's acknowledged state with the current capture (net New/Updated/Removed), without fetch history; an empty result does not mean the task is complete.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Accepted progress and net pending evidence"
+      ],
+      "anchors": [
+        "PendingEvidence",
+        "pendingEvidence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 93,
+        "evidence": "Pure comparison in #111 (seq 90); CLI pending discovery in #114"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.33",
+      "seq": 90,
+      "pr": 111,
+      "summary": "Recipes in kb.dhall manifest; register at root/curation.dhall",
+      "detail": "Recipe declarations persist as a required recipes field in root/kb.dhall and the register at root/curation.dhall, excluded from target code and absent meaning empty.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.29",
+        "0014.31"
+      ],
+      "sections": [
+        "Decision / Recipes name the task, not an execution workflow",
+        "Decision / Accepted progress and net pending evidence"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 91,
+        "evidence": "PR #112 implements manifest recipes and root/curation.dhall"
+      },
+      "ended": {
+        "seq": 94,
+        "how": "replaced",
+        "by": "0014.37"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.34",
+      "seq": 91,
+      "pr": 112,
+      "summary": "Canonical sorted Dhall register schema with strict validation",
+      "detail": "The register document is a sorted list of recipe/plugin/instance/producer/contract entries with acknowledged ID/fingerprint lists; duplicates and empty fields are refused as curation.invalid-register.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.33"
+      ],
+      "sections": [
+        "Decision / Accepted progress and net pending evidence"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 91,
+        "evidence": "PR #112 adds the canonical register codec"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.35",
+      "seq": 92,
+      "pr": 113,
+      "summary": "Resolve acknowledgement scopes by replaying the fetch marker chain",
+      "detail": "Preparation projects the stored marker chain to reconstruct item states through the named fetch, records the stored producer, and gives concrete curation.* repair diagnostics.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.30"
+      ],
+      "sections": [
+        "Decision / Declare what was handled; derive progress in the host"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 92,
+        "evidence": "PR #113 resolves fixed fetch scopes from retained markers"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.36",
+      "seq": 93,
+      "pr": 114,
+      "summary": "CLI recipe list/show/pending via a read-only RecipeStore",
+      "detail": "root recipe list/show/pending list are served by a read-only RecipeStore over Git; pending discovery prepares the connector and compares register and capture from the same revision.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Recipes name the task, not an execution workflow"
+      ],
+      "anchors": [
+        "RecipeStore",
+        "LoadRecipesAt",
+        "LoadCurationAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 93,
+        "evidence": "PR #114 adds the CLI commands and RecipeStore"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.37",
+      "seq": 94,
+      "pr": 116,
+      "summary": "Recipes are typed KB facts edited by ordinary evolutions",
+      "detail": "Recipes become identified Fact Recipe data in a KnowledgeBase wrapper, edited with the same collection operations, rationale and review as domain facts and persisted in root/recipes.dhall rather than the manifest.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.33"
+      ],
+      "sections": [
+        "Decision / Recipes name the task, not an execution workflow"
+      ],
+      "anchors": [
+        "KnowledgeBase",
+        "onFacts",
+        "recipes"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 96,
+        "evidence": "SDK values in #117 (seq 95); full integration in #118"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.57"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.38",
+      "seq": 94,
+      "pr": 116,
+      "summary": "Recipe changes are a distinct review report case",
+      "detail": "The host derives recipe additions/updates/removals by ID and reports them as a RecipeChange case beside domain fact changes, in archive version 3.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Recipes name the task, not an execution workflow"
+      ],
+      "anchors": [
+        "RecipeChange",
+        "StepReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 96,
+        "evidence": "PR #118 reports recipe changes distinctly (archive v3)"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.58"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.39",
+      "seq": 107,
+      "pr": 138,
+      "summary": "'evidence list' shows current IDs and fingerprints only",
+      "detail": "evidence list PLUGIN INSTANCE lists the latest capture's IDs and fingerprints without payloads or recipe filtering and changes no curation progress.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Payload-free change tracking"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 107,
+        "evidence": "PR #138 adds evidence list"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.56"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.40",
+      "seq": 108,
+      "pr": 140,
+      "summary": "Local-file fingerprint is host SHA-256 over framed path and bytes",
+      "detail": "Host file acquisition returns lowercase SHA-256 over the length-framed UTF-8 path and captured bytes, used directly by the folder connector.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.25"
+      ],
+      "sections": [
+        "Decision / One current captured value per evidence item"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 108,
+        "evidence": "PR #140 implements the framed SHA-256 token"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.41",
+      "seq": 109,
+      "pr": 142,
+      "summary": "Fetch IDs are random 8-hex tokens, redrawn on collision",
+      "detail": "New fetch IDs are eight lowercase hex digits from 32 random bits, redrawn on collision with the instance's retained history.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.27"
+      ],
+      "sections": [
+        "Decision / Payload-free change tracking"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 109,
+        "evidence": "PR #142 implements random IDs with collision redraw"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.42",
+      "seq": 109,
+      "pr": 142,
+      "summary": "Citations name the instance and are labelled declared, not verified",
+      "detail": "EvidenceRef's field becomes instanceName and human reports label citations as declared, not verified evidence.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.11"
+      ],
+      "sections": [
+        "Decision / Declared provenance"
+      ],
+      "anchors": [
+        "EvidenceRef"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 109,
+        "evidence": "PR #142 renames the field and labels report citations"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.43",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Connectors may advertise typed per-fetch options, checked before invocation",
+      "detail": "evidence fetch accepts an optional value of the connector's advertised options type, checked before execution; options are non-secret invocation data recorded as normalized Dhall in fetch history, and the connector owns defaulting.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Connector-owned fetch options",
+        "Decision / Payload-free change tracking"
+      ],
+      "anchors": [
+        "suppliedOptions"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 111,
+        "evidence": "PR #145 implements typed fetch options, discovery and history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.44",
+      "seq": 110,
+      "pr": 144,
+      "summary": "Graph calendar: full events listing with changeKey and modified-time bounds",
+      "detail": "The first calendar connector paginates the full events collection (not calendarView), uses event ID and changeKey, optionally bounds upserts by lastModifiedDateTime, and detects removals only against the complete unfiltered listing.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph calendar acquisition"
+      ],
+      "anchors": [
+        "CalendarFetch"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 113,
+        "evidence": "PR #147 adds the Graph calendar source with full-list removals and bounds"
+      },
+      "ended": {
+        "seq": 157,
+        "how": "replaced",
+        "by": "0014.54"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.45",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Recipes are OpenAgent instructions or ClosedAgent flow references",
+      "detail": "The Recipe type becomes OpenAgent instructions or ClosedAgent naming a callable flow (ADR 0028 executes it); old instruction-only payloads decode as OpenAgent and switching modes is a recipe update.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.37"
+      ],
+      "sections": [
+        "Decision / Recipes name the curation task"
+      ],
+      "anchors": [
+        "OpenAgent",
+        "ClosedAgent",
+        "FlowEntryRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 130,
+        "evidence": "PR #167 represents and typechecks closed recipes"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.57"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.46",
+      "seq": 134,
+      "pr": 173,
+      "summary": "Producer mismatch yields Reconciliation with the full current ID set",
+      "detail": "When a refetched producer differs from accepted recipe progress, pending discovery returns Reconciliation with the current IDs rather than a fake delta; only EntireBatch can establish the new producer.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.32"
+      ],
+      "sections": [
+        "Decision / Accepted progress and net pending evidence"
+      ],
+      "anchors": [
+        "Reconciliation"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 135,
+        "evidence": "PR #174 returns explicit Reconciliation for producer changes"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.47",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Payload availability (Available/Truncated) is independent of evidence changes",
+      "detail": "Evidence payloads are Available or Truncated; truncation keeps ID, fingerprint and references, and same-fingerprint SetEvidencePayload truncates or restores without change markers. Reads, discovery and plugin methods must distinguish a truncated payload from an absent ID.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Payload availability is independent of evidence changes",
+        "Decision / One current captured value per evidence item"
+      ],
+      "anchors": [
+        "EvidencePayload",
+        "Available",
+        "Truncated",
+        "SetEvidencePayload"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 166,
+        "evidence": "PR #214 implements Available/Truncated payloads and fingerprint-checked SetEvidencePayload across guest codecs, persistence, reads and CLI"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.48",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Binary and large-text payloads are BlobRefs, not embedded content",
+      "detail": "Binary and large-text payloads use typed BlobRefs under ADR 0029 rather than embedded contents; state.dhall stays metadata and typed values, never base64 bytes.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.24"
+      ],
+      "sections": [
+        "Decision / One current captured value per evidence item"
+      ],
+      "anchors": [
+        "BlobRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No BlobRef in code by end of history; PR #214 explicitly defers blob storage"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.49",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Evidence state stores the connector's optional checked sync position",
+      "detail": "Each instance's state document also stores the connector's optional checked sync position, published atomically with evidence (ADR 0029 owns its semantics).",
+      "kind": "refine",
+      "supersedes": [
+        "0014.20"
+      ],
+      "sections": [
+        "Decision / One current captured value per evidence item",
+        "Decision / Payload-free change tracking"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 156,
+        "evidence": "PR #203 persists typed connector sync positions atomically with evidence"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.50",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Graph Mail connector: immutable IDs, per-folder delta, capture-only",
+      "detail": "A Mail connector captures newly encountered messages per mailbox using immutable message IDs and one delta continuation per configured folder, with since-based backfill, retention by truncation and no mirroring of deletions, moves or flags.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MailConfig",
+        "MailFolder",
+        "MailFetch",
+        "MailPosition",
+        "Attachment"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "microsoft-graph plugin has only Calendar; no MailConfig in code by end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.51",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Teams meeting artifacts connector: every transcript and attendance report",
+      "detail": "A meeting-artifacts connector captures every transcript and attendance report keyed by artifact kind, meeting and Graph ID, with no best-transcript selection or occurrence inference and a bounded look-back.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MeetingRef",
+        "MeetingArtifact"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No MeetingArtifact in code by end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.52",
+      "seq": 151,
+      "pr": 197,
+      "summary": "SharePoint/OneDrive files connector via drive delta with glob scope",
+      "detail": "A files connector resolves site, drive or shared URL to IDs, follows drive-root delta filtered to a folder subtree and include globs, keys items by driveId/itemId and emits removals for deletions or scope exits.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "FilesScope",
+        "FilesConfig",
+        "FilePayload"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No FilesConfig in code by end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.53",
+      "seq": 151,
+      "pr": 197,
+      "summary": "Pending removals require explicit connector removal markers",
+      "detail": "An absent ID is pending Removed only with an explicit unsuperseded connector removal marker; absence after cache clear or refetch never invents a deletion.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.32",
+        "0014.46"
+      ],
+      "sections": [
+        "Decision / Accepted progress and net pending evidence"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "Superseded at seq 158 before any implementation"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0014.55"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.54",
+      "seq": 157,
+      "pr": 204,
+      "summary": "Graph calendar uses calendarView delta over a fixed occurrence window",
+      "detail": "The Calendar connector syncs the default calendar through calendarView delta over a configured fixed window, saving the opaque deltaLink as its position, using etag/changeKey, honouring @removed and restarting a full baseline on 410/syncStateNotFound.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.44"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph calendar acquisition"
+      ],
+      "anchors": [
+        "CalendarPosition"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 157,
+        "evidence": "PR #204 implements Calendar delta sync and restart with fake-server and live verification"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.55",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Persist current evidence and latest-fetch summary; no processing log",
+      "detail": "Evidence state is current values, producer identity, sync position and one FetchSummary with counts; there is no acquisition log, removal-marker history, recipe watermark, acknowledgement register or pending/reconciliation result, so recipe curation bookkeeping is gone.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.27",
+        "0014.41",
+        "0014.30",
+        "0014.31",
+        "0014.32",
+        "0014.34",
+        "0014.35",
+        "0014.36",
+        "0014.46",
+        "0014.53"
+      ],
+      "sections": [
+        "Decision / Current evidence, not a processing log"
+      ],
+      "anchors": [
+        "FetchSummary"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 removes pending/acknowledgement/curation machinery and historical evidence APIs and keeps one latest-fetch summary"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.56",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Generic current-evidence enumeration and reads alongside typed plugin methods",
+      "detail": "listEvidenceIds/readEvidence and generated typed instance bindings let KB tools and recipe flows enumerate and read current evidence without a change list; CLI/MCP list and inspect items, and plugin methods remain optional richer views.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.16",
+        "0014.39"
+      ],
+      "sections": [
+        "Decision / Investigation reads the current evidence"
+      ],
+      "anchors": [
+        "listEvidenceIds",
+        "readEvidence",
+        "ReadsEvidence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 adds current evidence listing/inspection and generated typed connector Evidence modules"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.57",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Each recipe owns an always-present typed state value",
+      "detail": "A recipe is a method (OpenAgent/ClosedAgent) plus a typed state value whose contract comes from an authored type or the closed flow's signature, persisted per recipe; generated createRecipe/updateRecipe/removeRecipe handles create, migrate and remove it, with () for stateless recipes and no absent first-run state.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.37",
+        "0014.45"
+      ],
+      "sections": [
+        "Decision / Each recipe owns an always-present typed state"
+      ],
+      "anchors": [
+        "RecipeMethod",
+        "StoredRecipe",
+        "RecipeType",
+        "RecipeDefinition",
+        "createRecipe",
+        "updateRecipe",
+        "removeRecipe",
+        "unitRecipeType",
+        "openRecipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "State edits in #208/#209 (seqs 160-161); complete typed creation/migration in #210"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.58",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Recipe state changes only through reviewed evolutions",
+      "detail": "A recipe-based evolution selects exactly one existing recipe and proposes facts plus its next state; creation and schema changes are ad hoc. State-only proposals are valid, state is reviewed with before/after contracts, and Kyyn never interprets state as a cursor or proof of processing.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.38"
+      ],
+      "sections": [
+        "Decision / Recipe state changes only through evolutions"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 adds explicit AdHoc/RecipeBased workspaces with state in candidates and review archives"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.59",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Plugin change leaves recipe state untouched; no forced reconciliation",
+      "detail": "A producer change replaces the capture and position on successful refetch, but recipe state is neither reset nor forced through reconciliation; authors decide how to adapt.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.28"
+      ],
+      "sections": [
+        "Decision / Plugin changes and cache replacement"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 removes reconciliation machinery; state persists independently of evidence"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.60",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Graph content always downloaded; any download failure fails the whole fetch",
+      "detail": "Mail captures each message once (drafts included) with readable text inline and every byte-backed attachment downloaded, with no size/media skip policy; files content is always a BlobRef. A failed page, hydration or download fails the whole fetch, leaving evidence and position unchanged, and mail retention is independent of recipe state.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.50",
+        "0014.52"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files",
+        "Decision / One current captured value per evidence item"
+      ],
+      "anchors": [
+        "AttachmentContent",
+        "FilePayload"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No Mail or Files connector in code by end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.61",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Blob references do not pin bytes against concurrent refresh or clear",
+      "detail": "Invocation-local blob reads use the captured context, but references no longer keep bytes alive against a concurrent refresh or clear; ADR 0029 owns blob lifetime, which assumes non-overlapping tool use.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.48"
+      ],
+      "sections": [
+        "Decision / Atomic refresh and invocation-local reads"
+      ],
+      "anchors": [
+        "BlobRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No blob storage in code by end of history"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 78,
+      "pr": 96,
+      "note": "Status line only: records two-compiler guest acquisition proof and that the store implements snapshot selection."
+    },
+    {
+      "seq": 80,
+      "pr": 99,
+      "note": "Status line and EvidenceSnapshotRef wording updated for the native acquisition broker; no new requirement."
+    },
+    {
+      "seq": 81,
+      "pr": 100,
+      "note": "Status line only: plugin registration and configured native fetches implemented."
+    },
+    {
+      "seq": 85,
+      "pr": 104,
+      "note": "Status accepted plus reconciliation to the implementation: the folder fingerprint combines path with digest (plugin-specific detail of 0014.25)."
+    },
+    {
+      "seq": 95,
+      "pr": 117,
+      "note": "Status accepted; Recipe field renamed recipeInstructions to match the SDK slice."
+    },
+    {
+      "seq": 96,
+      "pr": 118,
+      "note": "Status implemented; documents always-written recipes.dhall, RecordedFact and recipe.* diagnostics matching the implementation of 0014.37/0014.38."
+    },
+    {
+      "seq": 97,
+      "pr": 121,
+      "note": "Deletes 'Effectful preparation remains separate from acceptance' (evolution execution made pure in ADR 0010); recorded as ended/removed on 0014.07 with no replacement node."
+    },
+    {
+      "seq": 111,
+      "pr": 145,
+      "note": "Status update plus the legacy rule that history records without options read as absent; implements 0014.43."
+    },
+    {
+      "seq": 113,
+      "pr": 147,
+      "note": "Status line only: Graph calendar connector implemented (realises 0014.44)."
+    },
+    {
+      "seq": 121,
+      "pr": 157,
+      "note": "Archive version wording delegated to ADR 0010."
+    },
+    {
+      "seq": 130,
+      "pr": 167,
+      "note": "Status wording: both recipe constructors persisted and inspectable (realises 0014.45)."
+    },
+    {
+      "seq": 131,
+      "pr": 168,
+      "note": "Status wording: ADR 0028 owns closed flow execution into drafts."
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Link retarget from the deleted walkthrough to docs/guide.md."
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: drops status/basis lines and aligns type sketches with code (EvidenceScope string fields, opaque CurationRegister/CurationEntry, PendingEvidence over host EvidenceSnapshotRef, guest projection via ADR 0028, 'publication rewrites this document'). Each change rewords something an existing node (0014.20, 0014.30, 0014.34, 0014.32/46) already covers; no new commitment."
+    },
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "String to Text across type sketches following packed guest transport; no architectural change."
+    },
+    {
+      "seq": 159,
+      "pr": 207,
+      "note": "Wording cleanup removing residual curation-model archaeology after 0014.55-0014.59; no change in requirements."
+    },
+    {
+      "seq": 162,
+      "pr": 210,
+      "note": "Reconciles the invocation view to include the latest FetchSummary while implementing the seq-158 design (realisation evidence for 0014.55-0014.59)."
+    }
+  ],
+  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Spec ahead of code at end of history: BlobRefs (0014.48, 0014.61) and the Mail, Teams meeting-artifact and SharePoint/OneDrive connectors (0014.50-0014.52, refined by 0014.60 at seq 164) are unrealised; payload availability (0014.47) was realised by PR #214 at seq 166 (cursor), and the sync-position slice (0014.49) by PR #203. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (after the older inference) adds 0014.60 (whole-fetch failure, always-download Graph content) and 0014.61 (blob refs no longer pin bytes)."
+}

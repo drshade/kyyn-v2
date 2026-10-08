@@ -1,0 +1,578 @@
+{
+  "adr": "0008",
+  "title": "Domain authors write typed functions, not adapters",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0008.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Authors write plain typed modules; Kyyn generates adapters and codecs",
+      "detail": "The authored surface is ordinary MicroHs schema/code modules, generated bindings, pure functions and explicit capability operations. Kyyn generates entry adapters, codecs, transport and registration wrappers; no authored main, manual JSON/Dhall decoding, response IDs or runtime paths.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 11,
+        "evidence": "PR #12 evaluates named schema metadata through a generated guest entry; validation (#25) and query (#27) entries follow the same pattern"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Three KB entry kinds: Query, Evolution, Validation",
+      "detail": "KB code has exactly three entry-point kinds; a report is a query result, evaluating a workspace is not a fourth model, and plugin methods are integration operations, not entry kinds. An evolution returns a root that Kyyn turns into a candidate; it never calls a nested propose or self-accepts.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "Validation executed at seq 24, queries at seq 26, evolution workspaces evaluated into candidates at seq 34 (PR #35)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Output renderers are pure snapshot computations; host invokes sinks",
+      "detail": "An output declaration binds an ordinary renderer function to a typed plugin sink. Rendering is selected-snapshot computation like a query, possibly composing queries; generated adapters prepare values and a separate host operation invokes the sink.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No renderer/output/sink code exists in kyyn-v2 at end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "One `evolution` binding per workspace; arguments bound in source",
+      "detail": "Each evolution workspace exposes a single `evolution` binding, with helper selection and arguments written in source (e.g. `evolution = importSales September`), so evaluation needs no named-entry/arguments manifest.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "Conventional evolution binding prepared and evaluated in PR #35 (cf. 0010.10)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Authors export pure SchemaMetadata assigning roles to real fields",
+      "detail": "Alongside the schema, authors export a pure SchemaMetadata value attaching KB-defined roles, collection identities and reference targets to actual fields; the host uses it for titles/timelines/badges without knowing the domain. Names are validated against extracted declarations.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SchemaMetadata"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 11,
+        "evidence": "SchemaMetadata code_added at seq 11 (PR #12 evaluates named Haskell schema metadata); checked with structure at seq 12"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "One plugin package registers checked methods under connector types",
+      "detail": "Registration binds a name and description to an implementation with checked contracts and capability requirements; fixed plugin functions coexist with discovered domain methods. Related connector methods live in one source-distributed plugin package, and named instances of a connector type share code but not configuration or identity.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CapabilityId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 81,
+        "evidence": "PR #100 registers source connectors and validates root-owned instance configuration; plugin packages installed from source at seq 72-74"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Generated Method handles typecheck registerMethod implementations",
+      "detail": "In the guest API a generated, constructor-private `Method requests input output` fixes types and request algebra, so `registerMethod` cannot attach an unrelated function; RegisteredMethod hides the types only after the check.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Method",
+        "RegisteredMethod",
+        "registerMethod"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "registerMethod/RegisteredMethod never appear in code; tools use a kb.dhall registry (seq 87) and plugins signature-derived registration (seq 116), yet the ADR still shows this API"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Host sees structural descriptors; queries resolve by root-local name",
+      "detail": "The host uses MethodDescriptor/QueryDescriptor with checked input/output contracts rather than Haskell types. A query is a root-local name plus contract, resolved in the selected root's code at execution and compared, so saved examples test revised implementations without pinning old code.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "MethodDescriptor",
+        "QueryDescriptor",
+        "MethodIdentity",
+        "CheckedContract"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "QueryDescriptor and contract checks at invocation in PR #27; saved examples compare contract fingerprints in #28. MethodDescriptor/MethodIdentity never implemented"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "KB helpers call generated typed plugin proxies; provider parsing stays in plugin",
+      "detail": "KB code calls generated bindings with concrete input/output types that route through the host and the plugin's own capability context; provider JSON interpretation belongs inside the plugin, never the KB.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 generates phantom-typed instance handles and concrete read proxies importing real plugin types"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Small SDK; reuse existing libraries and mechanically generated optics",
+      "detail": "Provide a small SDK for identified facts, diagnostics, exact-value adapters and evolution composition; do not build a Kyyn arithmetic library or grow custom optics in place of evaluating dependencies. Keep After imports qualified and generate record field optics mechanically.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 55,
+        "evidence": "Optics code_added at seq 55 with generated collection handles and field optics (cf. 0010.45)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.11",
+      "seq": 26,
+      "pr": 27,
+      "summary": "Queries registered in kb.dhall; generated KyynQueryBindings with Query alias",
+      "detail": "Queries are `args -> Query result` over generated collection bindings, registered as a `queries` list in kb.dhall naming qualified Haskell exports (not repeated structural types) with explicit metadata exports. Kyyn inspects schema first, then generates KyynQueryBindings; schema modules must not depend on it and collisions are diagnostics.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KyynQueryBindings",
+        "QueryDescriptor"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 26,
+        "evidence": "PR #27 implements generated bindings, query adapter, discovery and execution"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.12",
+      "seq": 26,
+      "pr": 27,
+      "summary": "Query execution alone cannot mint a Validated Root",
+      "detail": "RootExecution takes only structurally checked roots; the Validated Root wrapper is reserved for the required-example validation gate in ADR 0011.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 26,
+        "evidence": "Negative constraint; no Validated wrapper existed in code at seq 26 so execution conformed"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.13",
+      "seq": 27,
+      "pr": 28,
+      "summary": "checkRoot alone produces Validated Root; surfaces browse through it",
+      "detail": "ADR 0011's checkRoot produces Validated Root after code, semantic and example checks; RootExecution still evaluates unvalidated candidates. CLI/Web/MCP browsing must use the validated boundary, not raw checking.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.12"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 27,
+        "evidence": "PR #28: only checking code constructs the private Validated wrapper; Validated code_added seq 27"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.14",
+      "seq": 62,
+      "pr": 77,
+      "summary": "Author API grouped into concept facades over existing definitions",
+      "detail": "The installed SDK exposes concept facades (Kyyn.Schema, Validation, Query, Evolution, Edit, Optics) reexporting existing definitions, with execution internals kept out; the discovery catalogue derives only from kyyn-sdk's facade list.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Evolution",
+        "Optics",
+        "Validation"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 62,
+        "evidence": "PR #77 adds the six facades and moves scaffolds/examples to concept imports"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.15",
+      "seq": 76,
+      "pr": 94,
+      "summary": "KB tools: a fourth entry kind composing captured-evidence reads",
+      "detail": "Adds the KB tool entry point: authored functions composing plugin methods over captured evidence (optionally selected-root reads) for agent investigation, registered with checked contracts, without acquisition, sink calls or root mutation. Queries, validators and renderers gain no plugin access.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.02"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Proposed addition: composed KB investigation tools"
+      ],
+      "anchors": [
+        "SnapshotRead"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 87,
+        "evidence": "PR #107 composes captured plugin reads in registered KB tools with root tool list/show/execute"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.16",
+      "seq": 78,
+      "pr": 96,
+      "summary": "Generated KyynPluginBindings with Acquisition and CapturedRead aliases",
+      "detail": "Plugin entries get generated KyynPluginBindings: acquisition entries an Acquisition alias with filesystem/evidence helpers, captured readers a CapturedRead alias with evidence helpers only, injecting requests into the capability sum without exposing codecs. Kyyn.Plugin joins the author facades.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KyynPluginBindings",
+        "Acquisition",
+        "CapturedRead",
+        "Plugin"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 78,
+        "evidence": "PR #96 generates acquisition/captured-read bindings and proves them under GHC and MicroHs"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0008.23"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.17",
+      "seq": 83,
+      "pr": 102,
+      "summary": "Generated bindings reexport acquisition vocabulary, not registration declarations",
+      "detail": "Generated plugin bindings reexport Program, EvidenceSnapshot, FetchError, EvidenceId, Evidence and EvidenceChange; SourceConnector and its fields come only via the plugin entry module's direct Kyyn.Plugin import.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.16"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SourceConnector",
+        "EvidenceSnapshot",
+        "FetchError"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102 (879424a): generated acquisition bindings no longer reexport registration selectors"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0008.23"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.18",
+      "seq": 87,
+      "pr": 107,
+      "summary": "Tools registered in kb.dhall; bindings import plugins' real types",
+      "detail": "KB tools are a `tools` list beside `queries` in kb.dhall naming qualified exports; whole-root checking compiles them without invoking. Generated caller bindings import plugins' actual contract-bearing modules rather than structural copies, and module-path conflicts are reported.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.15"
+      ],
+      "sections": [
+        "Decision / Composed KB investigation tools"
+      ],
+      "anchors": [
+        "Plugins"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 87,
+        "evidence": "PR #107 implements the tools registry, generated proxies and CLI invocation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.19",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Recipes guide agents; SDK exposes acknowledgement vocabulary",
+      "detail": "Recipes (owned by ADR 0014) are not executable registry entries; agents investigate with queries/tools then prepare an evolution following the recipe, using generated acknowledgement helpers without register or fingerprint plumbing.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Recipe-guided authoring"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 92,
+        "evidence": "Acknowledgement declarations carried in evolution output from seq 92 (cf. 0014.30, 0010.48)"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0008.25"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.20",
+      "seq": 94,
+      "pr": 116,
+      "summary": "Kyyn.Evolution carries the KnowledgeBase/recipe vocabulary",
+      "detail": "The evolution facade exposes the guest KnowledgeBase wrapper and recipe vocabulary so recipes are edited with the same evolution/edit vocabulary as domain facts.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.14"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KnowledgeBase"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 96,
+        "evidence": "First-class recipes in typed evolutions implemented at seq 96 (cf. 0010.49)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.21",
+      "seq": 97,
+      "pr": 121,
+      "summary": "Evolution entry follows ADR 0010's pure transformation contract",
+      "detail": "The Evolution entry no longer uses declared capabilities to obtain inputs; it produces a candidate through a pure transformation, with investigation happening beforehand in tools.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.02"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 34,
+        "evidence": "Evolution execution was only ever Program NoRequests from PR #35 (cf. 0010.51)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.22",
+      "seq": 99,
+      "pr": 123,
+      "summary": "KB tools compose captured evidence and model judgements, not root reads",
+      "detail": "The tool row loses its 'proposed' status and the optional SnapshotRead of the selected root; tools now compose captured-evidence reads and ADR 0027 model judgements, still without acquisition, sinks or root mutation.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.18"
+      ],
+      "sections": [
+        "Decision",
+        "Decision / Composed KB investigation tools"
+      ],
+      "anchors": [
+        "SnapshotRead"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "Judgement calls in KB tools implemented in the next PR (cf. 0027.01)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0008.23",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Plugins import Kyyn.Plugin.Host; contracts derived from authored signatures",
+      "detail": "The generated per-entry KyynPluginBindings author route is retired: plugins import Kyyn.Plugin for registration/data and Kyyn.Plugin.Host for payload-parameterized capabilities, and the compiler derives contracts from ordinary signatures. Private generated adapters supply only codecs/transport.",
+      "kind": "replace",
+      "supersedes": [
+        "0008.16",
+        "0008.17"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 116,
+        "evidence": "Kyyn/Plugin/Host.hs from seq 112; PR #151 implements signature-derived plugin registration"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.24",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Facades add Kyyn.Plugin.Host, Kyyn.Recipe and Kyyn.Evolution.Proposal",
+      "detail": "The concept-grouped author API is no longer a fixed count and includes plugin host capabilities, recipe inputs and declarative fact-edit proposals.",
+      "kind": "refine",
+      "supersedes": [
+        "0008.14",
+        "0008.20"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Proposal",
+        "Recipe"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 130,
+        "evidence": "Plugin/Host.hs at seq 112, Evolution/Proposal.hs at seq 124, Kyyn/Recipe.hs at seq 130"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0008.25",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Recipe-based evolutions propose fact edits plus next typed state",
+      "detail": "Recipes own typed state; after investigating with tools an agent prepares a recipe-based evolution containing fact edits and the next state, with generated bindings exposing that state without Dhall or protocol plumbing.",
+      "kind": "replace",
+      "supersedes": [
+        "0008.19"
+      ],
+      "sections": [
+        "Decision / Recipe-guided authoring"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 implements typed per-recipe state creation and migration (cf. 0014.57)"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Also drops status/date metadata and the 'surface wrappers not implemented yet' remark: desired-state cleanup with no architectural change"
+    },
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "Example tool types switch String to Text to match the packed-Text SDK; illustration only"
+    }
+  ],
+  "notes": "Two founding guest APIs were never built yet are still in the ADR: the generated Method handle with registerMethod/RegisteredMethod (0008.07) and the host MethodDescriptor/MethodIdentity (half of 0008.08). Tools ended up registered in kb.dhall (seq 87) and plugins through signature-derived registration (seq 116), so the ADR text describes a registration API the code never used. The output/renderer commitment (0008.03) is also entirely unrealised. The plugin-authoring route went round in a circle: seq 78 introduced generated per-entry KyynPluginBindings, seq 83 tightened them, then code moved to a hand-written Kyyn.Plugin.Host with signature-derived contracts (seq 112-116) and the ADR caught up only in the seq 143 reconcile. The KB-tool entry kind (seq 76) contradicts the founding 'three entry kinds, no fourth model' wording; I recorded it as a refine of 0008.02 instead of a replace because the other three kinds remain. Seq 97 (pure evolution) is treated as code_first because evolution execution was never effectful."
+}

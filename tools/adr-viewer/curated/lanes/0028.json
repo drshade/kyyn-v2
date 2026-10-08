@@ -1,0 +1,605 @@
+{
+  "adr": "0028",
+  "title": "Typed agentic tools and explicitly executable recipes",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0028.01",
+      "seq": 122,
+      "pr": 159,
+      "summary": "KB flows are Agentic arrows over the guest Program; library owns loop",
+      "detail": "A flow is the upstream haskell-agentic arrow with Kyyn's typed guest program as its effect; the library owns the turn/tool-dispatch loop and Kyyn adds no agent loop, scheduler or goal selection. Flow-backed tools expose ordinary checked contracts and gain no ability to accept roots, acquire evidence or invoke sinks; query/validation/evolution get no model access.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / A flow belongs to the KB, not to an autonomous kernel"
+      ],
+      "anchors": [
+        "Agentic",
+        "interpret",
+        "Flow",
+        "liftTool"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 128,
+        "evidence": "PR #165: ordinary KB tools execute upstream Agentic flows through generated Kyyn.Agentic; guest owns nested calls/retries (first proven in test-only PR #160, seq 123)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.02",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Host supplies one model turn; credentials stay host-side; no usage limits",
+      "detail": "The guest asks the host for a single model turn (ModelTurn/TakeModelTurn) using KB-configured provider/model and a secret-store key; credential values never cross into guest code or diagnostics and provider IO never enters the guest. No request limits, spend budgets or usage accounting.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / The host provides a turn, not a provider SDK to the guest"
+      ],
+      "anchors": [
+        "ModelTurn",
+        "TakeModelTurn",
+        "ModelConfiguration",
+        "ModelFailure",
+        "Conversation"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 127,
+        "evidence": "PR #164 adds the native ModelTurn host capability with ModelConfiguration and secret-store resolution (code_added ModelTurn/TakeModelTurn at 127); guest wiring followed in PR #165"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.03",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Generate Agentic codecs from authored types; one schema authority",
+      "detail": "Authored Haskell types and ADR 0005 remain the only schema authority; Kyyn generates the library's explicit Codec/schema projection from them (no GHC Generic metadata in the guest, no hand-written parallel Contract). Unsupported projections fail before any model call.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Keep one schema authority and preserve Judgement semantics"
+      ],
+      "anchors": [
+        "Contract",
+        "CheckedContract"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 126,
+        "evidence": "PR #163 'Derive Agentic contracts from checked Kyyn types' generates explicit Agentic Codec/schema from resolved DataType; no Generic deriving"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.04",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Keep ADR 0027's Jev Judgement semantics; no library judge facade yet",
+      "detail": "ADR 0027 owns Jev semantics (explicit criteria, fixed-point values, whole-batch errors, ordinal scales); similarly named library types must not replace them, and a unified judge facade waits for an upstream-compatible bridge. Never silently substitute an LLM for Jev.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Keep one schema authority and preserve Judgement semantics",
+        "Context"
+      ],
+      "anchors": [
+        "Judgement"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint: Kyyn's own Judgement SDK from ADR 0027 was in place and no library facade existed at seq 122"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0028.15"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0028.05",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Closed recipe names a type-checked callable KB function, no registry",
+      "detail": "A closed recipe's constructor holds a reference to a regular KB function, resolved and type-checked like a tool entry (diagnostics for bad names/signatures), not a serialized closure; there is no separate recipe-flow registration list, and recipe definitions change only through authored evolutions.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Open and closed recipes share ordinary curation"
+      ],
+      "anchors": [
+        "ClosedAgent",
+        "FlowEntryRef",
+        "closedRecipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 130,
+        "evidence": "PR #167: OpenAgent/ClosedAgent FlowEntryRef; root validation resolves and typechecks closed flows without executing them"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.06",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Closed runs consume captured pending evidence; reuse curation acknowledgements",
+      "detail": "Open and closed recipes share one recipe ID and ADR 0014 curation register. A closed run captures Before plus pending evidence for selected instances, gives the flow typed pending data and captured reads only, and returns ProposedCuration declaring EntireBatch/IndividualRecords acknowledgements; reading or citing never acknowledges.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Open and closed recipes share ordinary curation"
+      ],
+      "anchors": [
+        "RecipeInput",
+        "ProposedCuration",
+        "Curation",
+        "EntireBatch",
+        "IndividualRecords",
+        "EvidenceScope"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 131,
+        "evidence": "PR #168: root recipe run captures Before and selected pending evidence, runs the closed flow and saves the typed proposal with curation declaration"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0028.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.07",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Closed agents return ordered typed fact edits, never code",
+      "detail": "Closed agents return data: ProposedStep (Rationale + edits) over a generated root-specific sum of FactEdit Append/Replace/Remove per domain collection, applied in order through the existing append/update/remove combinators with no partial root on failure. The edit type cannot touch schema, code, configuration or recipe definitions.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Describe fact edits as data"
+      ],
+      "anchors": [
+        "FactEdit",
+        "ProposedStep",
+        "RootEdit",
+        "Append",
+        "Replace",
+        "Remove",
+        "Rationale",
+        "FactEdits"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 124,
+        "evidence": "PR #161 generates Kyyn.Workspace.FactEdits bindings and Kyyn.Evolution.Proposal types from the checked root contract (proved with fixtures in PR #160)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.08",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Freeze recipe output as Dhall draft evolution; checks never rerun flow",
+      "detail": "All model calls happen during the run; the host writes an ordinary Draft workspace against the captured Before with the frozen proposal persisted as Dhall and a generated pure evolution applying it. Check, diff, readiness and acceptance are unchanged, never rerun models, and a run never marks Ready or accepts; stale-base rules still apply.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Freeze the result, then use the existing evolution path"
+      ],
+      "anchors": [
+        "EvolutionWorkspace",
+        "prepareRecipeEvolution",
+        "proposeFromRecipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 125,
+        "evidence": "PR #162 'Persist fact proposals as ordinary pure evolutions': proposal.dhall + generated Evolution.hs in a Draft, existing check/accept authoritative; wired to recipe run in PR #168"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.09",
+      "seq": 122,
+      "pr": 159,
+      "summary": "Describe flow structure without models; test via deterministic replay",
+      "detail": "Tool/recipe inspection exposes the library's description projection without invoking models and without claiming safety; evolution reports name the producing recipe, no transcript ledger. Flows are tested with record/replay fixtures that refuse missing recordings and never contact providers.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Describe the method and test execution honestly"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 140,
+        "evidence": "Recording-provider tests landed with PRs #164/#165; the description projection shipped as root recipe describe in PR #181"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0028.10",
+      "seq": 127,
+      "pr": 164,
+      "summary": "Native OpenAI/Anthropic adapters; explicit keys, no env fallback",
+      "detail": "Both providers come from upstream native packages; the host passes the resolved secret explicitly and missing/empty secrets fail before provider construction with no environment/dotenv fallback. Provider/HTTP errors become typed sanitized failures; cancellation propagates.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.02"
+      ],
+      "sections": [
+        "Decision / The host provides a turn, not a provider SDK to the guest"
+      ],
+      "anchors": [
+        "OpenAI",
+        "Anthropic",
+        "ModelFailure"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #164 links agentic-openai/anthropic, resolves SecretStore first, tests missing credentials with ambient vars present and sanitized failures"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.11",
+      "seq": 128,
+      "pr": 165,
+      "summary": "Optional root/model.dhall, checked at root open, captured per tool",
+      "detail": "Model selection is accepted-root configuration in optional root/model.dhall (provider, model, credential name), changed through evolutions; malformed config is rejected by root checking, absence is fine until a model is requested, and tool preparation captures the selection with the source tree rather than rereading the checkout.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.02"
+      ],
+      "sections": [
+        "Decision / The host provides a turn, not a provider SDK to the guest"
+      ],
+      "anchors": [
+        "ModelConfiguration"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #165: root/model.dhall validated during root opening, captured in PreparedTool, shown by root tool show"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.12",
+      "seq": 129,
+      "pr": 166,
+      "summary": "Import Kyyn.Contracts.<Module>.<Type> to get generated Contract instances",
+      "detail": "Flows request a generated Contract instance by importing Kyyn.Contracts.<Module>.<Type> (); the host parses imports with the compiler and generates codec + instance for monomorphic data/newtype declarations at defining names. No registration list or handwritten contract; aliases redirect, containers need named wrappers, defining modules must not import their own contracts.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.03"
+      ],
+      "sections": [
+        "Decision / Keep one schema authority and preserve Judgement semantics"
+      ],
+      "anchors": [
+        "Contracts",
+        "Module",
+        "extractTodo"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #166 generates Contract instances from authored type imports; agentic-contracts tests pass under GHC/MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.13",
+      "seq": 130,
+      "pr": 167,
+      "summary": "Concrete RecipeInput: recipe ID, root, PendingEvidence per scope",
+      "detail": "Kyyn.Recipe.RecipeInput carries the recipe ID, selected domain root and PendingEvidence per captured instance (EvidenceScope plus New/Updated/Removed PendingChange IDs); the flow type drops the separate RecipeCalls parameter.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.06"
+      ],
+      "sections": [
+        "Decision / Open and closed recipes share ordinary curation"
+      ],
+      "anchors": [
+        "RecipeInput",
+        "PendingEvidence",
+        "PendingChange",
+        "Updated",
+        "Removed"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #167 adds concrete Kyyn.Recipe input (code_added RecipeInput, PendingChange at 130)"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0028.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.14",
+      "seq": 131,
+      "pr": 168,
+      "summary": "Multi-instance recipe run; acknowledgements limited to supplied scopes",
+      "detail": "root recipe run NAME PLUGIN INSTANCE [...] selects one or more captured instances; reads of other instances capture lazily but never expand curation scopes. Returned scopes must be supplied ones and individual IDs must be in that pending batch; empty pending input is valid.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.06"
+      ],
+      "sections": [
+        "Decision / Open and closed recipes share ordinary curation"
+      ],
+      "anchors": [
+        "proposeFromRecipe",
+        "RecipeExecution"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #168 installed journey covers two scopes, captured reads, wrong scope/ID refusals and empty pending input"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0028.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.15",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Agentic owns judgement types; Kyyn only hosts Jev SystemOne",
+      "detail": "Reversing 0028.04: upstream Agentic owns question/answer types for SystemOne as for SystemTwo; Kyyn supplies credentials, wire encoding and host interpretation, not a competing judgement API, reusing the same one-turn abstraction. Thresholds stay authored policy; Jev is not silently replaced by an LLM.",
+      "kind": "replace",
+      "supersedes": [
+        "0028.04"
+      ],
+      "sections": [
+        "Decision / Keep one schema authority and preserve Judgement semantics",
+        "Context"
+      ],
+      "anchors": [
+        "Judgement",
+        "interpret"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171 executes Agentic judge through upstream agentic-jev SystemOne and deletes public Kyyn.Judgement"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.16",
+      "seq": 134,
+      "pr": 173,
+      "summary": "Generated contract import also yields Options for nullary enums",
+      "detail": "For nonempty all-nullary enums the Kyyn.Contracts import also generates upstream Options (constructor labels, declaration order, no descriptions) so choice/score work without handwritten instances; records/payload sums get Contract only, and custom Options mean authoring the instances instead of importing.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.12"
+      ],
+      "sections": [
+        "Decision / Keep one schema authority and preserve Judgement semantics"
+      ],
+      "anchors": [
+        "Options"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 135,
+        "evidence": "PR #174: generated Kyyn.Contracts imports supply Contract plus Options for nonempty nullary enums; agentic-contracts tests pass"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.17",
+      "seq": 135,
+      "pr": 174,
+      "summary": "Producer replacement gives recipes Reconciliation; whole-batch acknowledgement only",
+      "detail": "When a connector's producer changes, closed recipe input carries ADR 0014's explicit Reconciliation with current IDs instead of fabricated net changes; such scopes permit only EntireBatch acknowledgement or omission, never IndividualRecords.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.14"
+      ],
+      "sections": [
+        "Decision / Open and closed recipes share ordinary curation"
+      ],
+      "anchors": [
+        "Reconciliation"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #174 returns explicit Reconciliation (code_added at 135); installed journey refuses individual acks and clears on full-batch acceptance"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0028.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.18",
+      "seq": 139,
+      "pr": 180,
+      "summary": "root recipe describe renders closed flows source-only (tree/dot/mermaid)",
+      "detail": "root recipe show stays metadata-only; root recipe describe NAME compiles the flow's description projection from the accepted source with no model, secret or evidence handlers and never interprets actions. Tree by default, exclusive --dot/--mermaid, raw stdout, --json wrapper; open recipes get a diagnostic.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.09"
+      ],
+      "sections": [
+        "Decision / Describe the method and test execution honestly"
+      ],
+      "anchors": [
+        "describeRecipe",
+        "RecipeInspection",
+        "DescriptionFormat",
+        "SourceRoot",
+        "FlowEntryRef"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 140,
+        "evidence": "PR #181 implements RecipeInspection describe with tree/--dot/--mermaid (code_added at 140)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.19",
+      "seq": 144,
+      "pr": 190,
+      "summary": "Generated recipe entry is literally evolution = frozen",
+      "detail": "The generated workspace entry exposes the captured proposal as a typed value (evolution = frozen); Kyyn validates the Dhall before guest compilation and decoding lives in generated plumbing, so a decode failure is a diagnostic, not a fabricated step or rationale.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.08"
+      ],
+      "sections": [
+        "Decision / Freeze the result, then use the existing evolution path"
+      ],
+      "anchors": [
+        "evolution",
+        "Evolution"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #190 generates the typed value from proposal.dhall and returns EvolutionFailure on decode failure; fact-edit-bindings and recipe-run journey pass"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.20",
+      "seq": 149,
+      "pr": 195,
+      "summary": "Probability in model contracts reuses upstream instance per ADR 0005",
+      "detail": "The known Probability scalar follows ADR 0005's model and storage projections: generated model contracts reuse upstream's Probability contract rather than generating a competing instance.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.12"
+      ],
+      "sections": [
+        "Decision / Keep one schema authority and preserve Judgement semantics"
+      ],
+      "anchors": [
+        "Probability"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #195 adds Probability scalar recognition with separate storage/wire and model leaf codecs; installed journey covers generated model instance"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0028.21",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Closed recipes take typed request, root and recipe state",
+      "detail": "Curation bookkeeping is gone: a run selects exactly one recipe and the flow receives RecipeInput root/input/state (state always initialised at recipe creation, contract derived from the flow signature) and returns RecipeProposal steps plus next state. root recipe run NAME --input DHALL checks the request; flows read current evidence lazily via generated bindings, and the flow name stays stored in the recipe.",
+      "kind": "replace",
+      "supersedes": [
+        "0028.06",
+        "0028.13",
+        "0028.14",
+        "0028.17"
+      ],
+      "sections": [
+        "Decision / Open and closed recipes share typed recipe state",
+        "Context"
+      ],
+      "anchors": [
+        "RecipeInput",
+        "RecipeProposal",
+        "ReviewState",
+        "DhallText",
+        "proposeFromRecipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 closes #205: closed flows accept typed invocation input plus current root/state and return fact-edit/state proposals; curation machinery removed (SDK foundation in PR #208)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.22",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Proposals may be state-only; next state touches only selected recipe",
+      "detail": "Alongside fact edits the proposal carries a separately typed next state that updates only the selected recipe; a root with no domain collections still allows a state-only proposal with an empty step list, without a dummy fact collection.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.07"
+      ],
+      "sections": [
+        "Decision / Describe fact edits as data"
+      ],
+      "anchors": [
+        "RecipeProposal"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 installed journeys include state-only recipe execution; unrelated recipe state preserved"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0028.23",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Frozen recipe evolution applies edits and returns proposed recipe state",
+      "detail": "The frozen workspace persists steps and next state as Dhall; the generated RecipeEvolution Root State applies edits to Before and returns the proposed state, with definitions/schema/configuration unchanged. Failed or cancelled runs change no accepted recipe state.",
+      "kind": "refine",
+      "supersedes": [
+        "0028.19"
+      ],
+      "sections": [
+        "Decision / Freeze the result, then use the existing evolution path"
+      ],
+      "anchors": [
+        "RecipeEvolution",
+        "ReviewState"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210: explicit RecipeBased workspaces edit facts and selected recipe state; frozen proposals check and accept without replay (RecipeEvolution code_added at 160)"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 124,
+      "pr": 161,
+      "note": "Renames example RootEdit constructors to the generated Edit_<field> convention; same PR implements 0028.07"
+    },
+    {
+      "seq": 133,
+      "pr": 171,
+      "note": "Implementation-status preamble update only (Jev SystemOne now implemented); realises 0028.15"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: drops status/date and implementation-status preamble, replaces illustrative Flow/ModelTurn/TurnRequest/prepareRecipeEvolution sketches with the shipped types (ExceptT FetchError Tool flow, Agentic.Runtime Conversation/Turn, proposeFromRecipe effect row) and turns the compatibility proof into a Verification section; all restate nodes .01/.02/.08 as already implemented"
+    },
+    {
+      "seq": 159,
+      "pr": 207,
+      "note": "Wording cleanup removing residual pending-batch phrasing after the 0028.21 redesign"
+    }
+  ],
+  "notes": "Born mid-history at seq 122 (PR #159) as a design-only ADR for issue #158; the founding version split into 9 decisions, one per Decision subsection except 'Keep one schema authority and preserve Judgement semantics', which was split because codec generation (.03) and Jev-semantics preservation (.04) are independent and had different fates. Spec ran ahead of code only briefly: a dense run of PRs #160-#168 (seq 123-131) implemented nearly every founding node within a day, and each design PR (#173, #180, #206) was implemented by the next PR(s). Two reversals: (1) seq 132 abandoned the founding promise to keep ADR 0027's Kyyn-owned Judgement semantics and adopted upstream Agentic types wholesale (0028.04 -> .15), in lockstep with 0027's rewrite; (2) seq 158 tore out the whole pending-evidence/acknowledgement curation model that .06/.13/.14/.17 had refined over five steps (incl. the multi-instance CLI and producer Reconciliation shipped only ~3 days earlier) and replaced it with typed per-recipe state (.21-.23), implemented at seq 162. The seq 143 reconciliation is treated as fully editorial for this lane because the code (Flow over ExceptT FetchError Tool, proposeFromRecipe, liftTool) already existed from seq 128/131 and nodes .01/.02/.08 cover those commitments; it notably deleted the in-ADR compatibility proof. 0028.09 (describe + replay testing) is a judgement call: replay tests landed at 127/128 but the describe projection only at 140 under the refined node .18. 0028.05 (ClosedAgent reference) survives seq 158 in substance even though the ClosedAgent identifier left this ADR; 0028.20 (Probability) is a thin pointer to ADR 0005 and could arguably be editorial."
+}

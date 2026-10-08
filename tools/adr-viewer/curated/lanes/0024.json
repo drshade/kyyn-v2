@@ -1,0 +1,105 @@
+{
+  "adr": "0024",
+  "title": "Fresh-agent scenarios and two-part field reports",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0024.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Versioned scenario packages run by a fresh, unscripted agent",
+      "detail": "Each scenario packages a synthetic seeded KB, fixed plugin sources and inputs, a user-level task, declared starting knowledge/tools, observable outcome checks and a reflection prompt. A fresh agent without implementation context gets the task and normal product discovery, never a tool-name script or the evaluator's checklist.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Only architecture/field-experience scenario/report templates exist; the README states they are 'not an implemented harness or evidence that a scenario has run'"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0024.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Optional MCP adapter-boundary instrumentation as a test observer",
+      "detail": "Runs go through the real MCP adapter, instrumenting discovery and calls with operation IDs, timing, status, selected snapshot/candidate and response volume, plus CLI/file-edit fallbacks and human intervention. Instrumentation is an optional observer, not a KB effect or mandatory production provenance ledger.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No MCP telemetry observer in the host; only opt-in CLI phase timings (PR #134), which are not this instrumentation"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0024.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Two-part field reports: observed outcome plus agent's own account",
+      "detail": "The agent's experience account is collected before it sees the evaluator's interpretation, results are inspected independently, and the report pairs trace/outcome with experience plus reviewer synthesis. Hidden chain-of-thought is never requested.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "report-template.md encodes the shape but no field report has been produced"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0024.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Labelled access conditions, recorded run identity, repeats, visible failures",
+      "detail": "Natural-access and MCP-only probe runs are labelled; exact build, scenario revision, model/harness/config, prompt, tool catalog and cache state are recorded. Important comparisons repeat, and partial, failed, cancelled or assisted runs stay visible.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Experiment discipline"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No runs exist to which the discipline applies"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0024.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Scenarios cover installation, schema authoring and labelled web handoffs",
+      "detail": "Scenarios include agent-driven install/readiness and opening a KB for a human (ADR 0025), Haskell schema-authoring ergonomics without reopening the authority decision, and web/human handoffs where any agent-simulated human is labelled and cannot establish human usability.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Experiment discipline"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No scenarios of any kind have been run"
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Front-matter/title reformat and removal of the Proposed status line; content unchanged"
+    }
+  ],
+  "notes": "The lane is pure method: founded at seq 1 and only reformatted at seq 143, and none of it is realised. The repo carries scenario and report templates (architecture/field-experience/) that explicitly disclaim being a harness or evidence of a run, and PROJECT-PRACTICES defers field runs until the relevant product paths exist. It is the clearest case of spec far ahead of code; the nearest related code (opt-in CLI phase timings, PR #134) is not the MCP-boundary observer described here. The 'Experiment discipline' section was treated as decision content (it is not Context/Consequences/Verification) and split into run discipline vs scenario coverage."
+}

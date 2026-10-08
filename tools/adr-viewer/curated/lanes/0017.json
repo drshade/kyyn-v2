@@ -1,0 +1,276 @@
+{
+  "adr": "0017",
+  "title": "Outputs bind snapshot renderers to typed plugin sinks",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0017.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Outputs bind KB renderers to configured sinks over one selected root",
+      "detail": "An output binds a KB-authored renderer, which may compose dependent queries, to a configured sink connector whose input type it produces; every read uses the same selected root. Browsing never updates an external output, sink invocation needs no evolution, and changing an output definition or sink configuration is an ordinary evolution.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No output, renderer or sink code exists in kyyn-v2 at end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "One pure snapshot-read form for queries and renderers",
+      "detail": "Queries and renderers are KB code, not function-valued facts, and share one registered form returning a SnapshotRead Program interpreted against the selected snapshot; pure calculations are lifted, and SnapshotRead permits no acquisition, sink invocation or publication.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Root data and authored declarations"
+      ],
+      "anchors": [
+        "SnapshotRead",
+        "query"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 26,
+        "evidence": "PR #27 implements the shared SnapshotRead Program algebra for queries (renderers never built)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0017.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Output GADT pairs renderer with a generated typed SinkBinding",
+      "detail": "`Output` takes the renderer function and a generated `SinkBinding input` that cannot be forged from a source connector or mismatched sink; KbDefinition holds existential SomeQuery/SomeOutput lists from which generated registration supplies names, contracts and codecs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Root data and authored declarations"
+      ],
+      "anchors": [
+        "Output",
+        "SinkBinding",
+        "SomeQuery",
+        "SomeOutput",
+        "KbDefinition",
+        "FileSink"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "SinkBinding/KbDefinition/SomeOutput never appeared in code (the 'Output' identifier at seq 6 is unrelated)"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0017.11"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Queries stay independently callable via queryRoot on a Validated root",
+      "detail": "queryRoot runs a query by descriptor and checked arguments against a Validated Root, with RootExecution checking contracts, so Web/MCP can show structured results without a renderer or sink and without reimplementing calculations in JS.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Preparing an output"
+      ],
+      "anchors": [
+        "queryRoot",
+        "QueryDescriptor",
+        "CheckedValue",
+        "RootExecution",
+        "Validated"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 27,
+        "evidence": "queryRoot code_added at seq 26 over structurally checked roots; the Validated Root gate arrives at seq 27 (PR #28)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0017.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "prepareOutput checks renderer result against the sink's input contract",
+      "detail": "Preparation evaluates the renderer in RootExecution (no PluginInvocation) and checks its result against the sink binding resolved from the same root. PreparedOutput is an ordinary, unretained value; a later update may re-render and need not reproduce a preview.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Preparing an output"
+      ],
+      "anchors": [
+        "OutputDescriptor",
+        "PreparedOutput",
+        "prepareOutput"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No prepareOutput/OutputDescriptor in code"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Large payloads use immutable ArtifactStore references",
+      "detail": "Large file/document inputs may reference immutable artifacts (bytes plus media type) that must resolve to fixed bytes or fail; this is optional, not a universal document conversion, and no generic Destination type is added.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Preparing an output"
+      ],
+      "anchors": [
+        "Artifact",
+        "ArtifactId",
+        "ArtifactStore",
+        "loadArtifact"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "ArtifactStore/loadArtifact never appear in code"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Delivery capability explicitly invokes sinks and records outcomes",
+      "detail": "A host Delivery effect (InvokeSink, InspectDelivery) lowers to PluginInvocation and filesystem plumbing, persists dispatch intent before acting and validates results. The first file sink is a first-party plugin whose relative paths resolve against the KB directory; normal updates use an accepted snapshot.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Invoking the sink"
+      ],
+      "anchors": [
+        "Delivery",
+        "InvokeSink",
+        "InspectDelivery",
+        "DeliveryRecord",
+        "DeliveryId",
+        "runDelivery",
+        "PluginInvocation"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No Delivery effect or sink plugin exists; PluginInvocation (seq 78) serves acquisition only"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Sink failures: idempotency per sink, Uncertain outcomes, no rollback",
+      "detail": "Sinks declare idempotent replacement versus non-idempotent actions; pre-dispatch failures are distinct from Uncertain dispatch, which is never silently retried, and sink failure cannot roll back accepted knowledge or external effects.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Failure behavior"
+      ],
+      "anchors": [
+        "DeliveryOutcome",
+        "Acknowledged",
+        "FailedBeforeDispatch",
+        "RejectedByDestination",
+        "Uncertain"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No delivery outcome types in code ('Acknowledged' at seq 92 is curation, unrelated)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.09",
+      "seq": 26,
+      "pr": 27,
+      "summary": "Generated per-KB Query alias; renderers are `args -> Query input`",
+      "detail": "The query/renderer form becomes the SDK Query monad specialised by a generated `type Query a = SDK.Query Root a`; the root is implicit and queries compose directly in do-notation instead of threading an explicit root.",
+      "kind": "refine",
+      "supersedes": [
+        "0017.02"
+      ],
+      "sections": [
+        "Decision / Root data and authored declarations"
+      ],
+      "anchors": [
+        "KyynQueryBindings"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 26,
+        "evidence": "PR #27 generates the root-specific Query alias and collection bindings"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.10",
+      "seq": 26,
+      "pr": 27,
+      "summary": "queryRoot returns QueryResult with an ordered read trace",
+      "detail": "Query invocation returns the checked result together with the ordered snapshot-read trace from ADR 0009, laying ground for future query explanation without committing to a predicate language.",
+      "kind": "refine",
+      "supersedes": [
+        "0017.04"
+      ],
+      "sections": [
+        "Decision / Preparing an output"
+      ],
+      "anchors": [
+        "QueryResult"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 26,
+        "evidence": "QueryResult code_added at seq 26; PR #27 returns ordered traces"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0017.11",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Outputs registered in kb.dhall naming renderer export and sink reference",
+      "detail": "Instead of an authored Output GADT and SinkBinding, outputs are kb.dhall entries naming a renderer export and a plugin/instance/method SinkReference. The host inspects both signatures and generates an adapter that type-checks renderer result against sink input; the manifest is the authority.",
+      "kind": "replace",
+      "supersedes": [
+        "0017.03"
+      ],
+      "sections": [
+        "Decision / Root data and authored declarations"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No output registration, OutputDefinition or SinkReference exists in code"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 26,
+      "pr": 27,
+      "note": "Also flips status to Accepted and adds explicitly non-committal 'future directions' for SQL-like query explanation and host-side execution"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Also swaps the status line for front matter and adjusts Verification wording to the named-entry form; metadata/verification only"
+    }
+  ],
+  "notes": "The output half of this ADR has never been built: every node about renderers, sinks, preparation, delivery, artifacts and failure semantics (0017.01, .03, .05-.08, .11) is unrealised at the end of history, more than 160 steps after the founding spec. The only realised parts are the query mechanics this ADR shares with 0008/0009 (seq 26). Even so, seq 143 redesigned the unbuilt output declaration, replacing the authored Output GADT, SinkBinding and existential KbDefinition with kb.dhall named-entry registration, so that it matches how queries and tools ended up being registered. That is a spec-only rewrite of a spec-only design. The Delivery/Invoking-the-sink and Failure-behavior sections are still the founding text, untouched. The seq 26 'future directions' paragraph (SQL-like query explanation, host-side query execution) is explicitly disclaimed as not a commitment, so I left it out of the nodes. Founding Verification demands (Web/MCP queries, HTML preview isolation) produce no nodes."
+}

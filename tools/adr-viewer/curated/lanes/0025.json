@@ -1,0 +1,189 @@
+{
+  "adr": "0025",
+  "title": "Agent-driven setup and per-KB execution",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0025.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "An agent installs Kyyn, checks readiness, opens KB for human",
+      "detail": "The setup journey is agent-driven: an agent bootstraps/installs Kyyn, checks readiness, locates or creates a KB and launches its Web interface, explaining what was installed and what remains. No graphical installer or global daemon is a prerequisite.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Only a developer install script (tools/install-cli.sh, PR #49) and kb init (PR #54) exist; no readiness check command or Web interface to launch"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0025.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Secrets set up per selected KB checkout, CLI-only",
+      "detail": "Local secret setup targets the explicitly selected KB checkout's store (ADR 0016); an agent can help populate keys before sources/sinks run, values never travel through Git or come from another KB, and setup works from the CLI without Web or MCP.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 98,
+        "evidence": "PR #122 adds checkout-local SecretStore with kyyn secret set/list/remove; Git-ignored values, no Web/MCP needed"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0025.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "One-shot CLI commands with explicit KB selection, no server",
+      "detail": "Ordinary CLI operations select a repository/KB explicitly, execute directly and exit with structured results and useful exit codes, requiring neither a Web server nor an MCP connection.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44 exposes the evolution journey through an optparse CLI with shared --kb PATH, human/JSON results and distinct exits"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0025.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Web and MCP are explicit on-demand per-KB processes",
+      "detail": "A Web command starts a local server for one KB, reports its address and can open a browser; an MCP command serves one KB over stdio with an accurate client configuration example. Servers are explicit process choices started again on demand; leaving them running is not required KB state and stopping one need not stop the other.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "The CLI has no web, mcp or serve command at end of history; no server code in host/"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0025.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "No global KB registry, session broker or in-memory owner",
+      "detail": "Multiple processes may use the same repo and caches, sharing only persisted KB/workspace state; opening a KB is selection, not a canonical session object, and does not inject its tools into other agent sessions. ADR 0012's local-head rule covers concurrency; holding an immutable Validated Root is a snapshot, not ownership.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; no code existed at seq 1 and no registry or session broker was ever built (each CLI call selects --kb)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0025.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Lazy startup: cheap metadata operations never compile KB code",
+      "detail": "Startup inspects identity/metadata without checking every root or compiling plugins; the first operation needing executable code may compile on a fresh clone and report progress/failure, while cheap operations such as listing drafts stay usable independently. Clients observe each other via persisted state; no collaborative editing or cross-process cancellation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #43 (seq 42) made EvolutionStore compiler-free; PR #44 ensures metadata-only commands neither read the SDK nor start MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0025.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Closing keeps drafts and never claims to roll back effects",
+      "detail": "Closing stops a server/connection or lets a one-shot command finish; drafts remain files, neither accepted nor deleted. Owned in-flight work is cancelled and resources released (ADRs 0007/0019), and once acceptance or external dispatch happened the actual outcome is reported rather than a rollback.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision proposed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "Draft workspaces are ordinary files and the CLI reports publication/interruption outcomes honestly (PRs #42/#44); server shutdown is moot as no servers exist"
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0025.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Automation is plain shell scripting; unready accept exits non-zero",
+      "detail": "There is no Kyyn runner, scheduler, retry, task inbox or agent launcher: an external script creates a workspace, runs the user's own agent harness, then calls accept. Acceptance requires Ready plus a checked current candidate and matching base; otherwise it exits non-zero with a diagnostic, keeps the workspace, never marks Ready itself and never reruns acquisition.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Automation is ordinary CLI scripting"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44 provides evolution new/ready/accept with distinct outcome exits; acceptStoredEvolution refuses NotReady without changing the workspace"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0025.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Scripted accept composes with an explicit output-publish command",
+      "detail": "After acceptance, the same script updates a declared output with ordinary typed renderer arguments via ADR 0017's preparation and explicit sink invocation, with no interactive preview; a failed acceptance stops a stop-on-error script before the sink runs, and uncertain sink outcomes are surfaced honestly.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Automation is ordinary CLI scripting"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No output command group or sink invocation exists in the CLI at end of history"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 43,
+      "pr": 44,
+      "note": "Delegates CLI navigation/KB selection to ADR 0018 and updates the illustrative script to pass the returned workspace ID and say 'output publish'; no change to what setup or automation requires"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Metadata reconciliation only: frontmatter id/title, drops Status/Basis, renames 'Decision proposed' to 'Decision'"
+    }
+  ],
+  "notes": "Founding ADR with no ### subsections; 'Decision proposed' plus 'Automation is ordinary CLI scripting' were split into 9 commitments. 'First useful journey' was treated like Verification (a target end-to-end scenario spanning ADR 0021 slices 3-4) and produced no node. This lane never made a substantive decision after seq 1: its two later touches are editorial, so it is a fossil of the original product vision. That vision is half built: the CLI-shaped parts (one-shot commands with --kb, lazy compiler-free metadata ops, checkout-local secrets, scriptable accept with honest exits) were realised around seq 42-43 and 98, but everything server- or setup-shaped (agent bootstrap/readiness, per-KB Web and MCP processes, output publish in the automation script) is unrealised at end of history, so the ADR's headline 'agent installs Kyyn and opens the KB in a browser' journey remains white. 0025.05 (no registry/broker) is a negative constraint marked same_step only because nothing contrary was ever built; 0025.07 (closing) is low confidence since there are no servers to close."
+}

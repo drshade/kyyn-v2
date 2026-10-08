@@ -1,0 +1,212 @@
+{
+  "adr": "0023",
+  "title": "Two first-class interfaces with a shared design and review loop",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0023.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Web for humans and MCP for agents are equal product surfaces",
+      "detail": "Web (meaning, design, examples, review) and MCP (technical construction, editing, repeatable execution) are equally important first-class surfaces sharing concrete objects (KB, workspace, candidate, example, diagnostic, artifact, feedback), with no mandatory conversation platform.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "kyyn-v2 has only a CLI surface (host/kyyn-surfaces/Cli.hs); no Web or MCP adapter exists by the end of history"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0023.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Agent builds evolution to Ready; human reviews and accepts",
+      "detail": "The initial authoring workflow: an agent creates a workspace, populates its evolution binding, trials it and marks it Ready; the human inspects changes, outputs, checks and rationale, requests revisions and may accept. These are workflow expectations, not role-based permissions.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionWorkspace",
+        "EvolutionStore"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Workspace creation (seq 31), candidate checking (seq 36) and Ready/accept lifecycle (PR #42) exist through the CLI, not yet through Web/MCP",
+        "seq": 41
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0023.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "No graphical evolution-source authoring or helper-launch catalogue",
+      "detail": "Parity means shared review objects and operations, not a GUI for every source operation: no helper-launch catalogue, argument-to-source generator or separate invocation model; typed query/example forms remain data interfaces.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; nothing of the kind exists in code",
+        "seq": 1
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0023.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "No Kyyn task/inbox object; Kyyn never orchestrates the agent",
+      "detail": "Requests for new work before an evolution exists go to the user's agent, not a Kyyn task or inbox; examples and review notes support feedback without orchestrating the responding agent, and agent-less preparation conveniences are not required.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; no task/inbox or agent-orchestration objects exist",
+        "seq": 1
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0023.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Review notes stored in EvolutionStore against captured work or results",
+      "detail": "addReviewNote attaches free-text feedback to a fixed ReviewSubject (captured work, even uncompilable, or an exact evaluated candidate) and a meaningful ReviewTarget (whole, fact, example, source span, artifact); notes are not executable instructions and need no separate approval/ticket subsystem.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "addReviewNote",
+        "ReviewSubject",
+        "ReviewTarget",
+        "CapturedWork",
+        "EvaluatedResult",
+        "ReviewNoteId",
+        "FactTarget",
+        "SourceTarget",
+        "ArtifactTarget"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No ReviewSubject/ReviewTarget/addReviewNote code appears in anchors or kyyn-v2"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0023.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Typed data examples saved into workspace, distinct from free-text notes",
+      "detail": "Executable examples name a query with typed arguments/expected results (buildable as Web forms), saved via saveExample into the workspace's target/examples, which marks it Draft and requires re-checking; they become root material on acceptance.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "saveExample",
+        "Example",
+        "ExampleId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Typed query examples and root validation against them land in PR #28; an EvolutionStore saveExample that marks the workspace Draft is not present",
+        "seq": 27
+      },
+      "confidence": "low"
+    },
+    {
+      "id": "0023.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Review shows fact, output, source and check diffs with step report",
+      "detail": "Review presents fact/schema differences, view-output differences, KB source changes and changed/removed checks, alongside the ordered step report pairing changed records with declared rationale and evidence; reviewer notes never become evidence.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Rationale"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "CLI `evolution show` presents step reports (seq 33/54) and plugin changes (seq 121), but there is no review surface with view-output or source/check comparisons"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0023.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "recordHistory reads per-record timeline from Git and archived reports",
+      "detail": "recordHistory over EvolutionStore returns revision-fixed, newest-first RecordHistoryEntry values (recorded change with optional rationale, or unannotated Git diff), stating gaps rather than inventing lineage; no new provenance service or archived-code execution.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "recordHistory",
+        "RecordHistoryEntry",
+        "HistoricalChange",
+        "RecordedChange",
+        "UnannotatedChange",
+        "GitDiff"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No recordHistory or RecordHistoryEntry code exists"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0023.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Previews pinned to base/result; acceptance revision-checked from any client",
+      "detail": "Both surfaces identify the base and evaluated result a preview shows; edits or rebases need fresh checks. Acceptance is an explicit operation on a checked evolution conditional on Before.revision matching head, regardless of client, with no authority hierarchy or cross-client editing coordinator.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Before",
+        "Candidate",
+        "GitRevision"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Persisted candidates (PR #37) and acceptance checked against Before (PR #42) exist via CLI",
+        "seq": 41
+      },
+      "confidence": "medium"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Reconciliation: frontmatter/status cleanup, 'proposed' dropped from the ADR 0010 layout reference, and the MCP table cell 'stable paging' reworded to 'identified collection reads' following the whole-collection-read decision owned elsewhere"
+    }
+  ],
+  "notes": "This lane is almost static: founded at seq 1 and only touched by the seq 143 reconciliation, so it is effectively a statement of intent that the code has barely reached. The headline commitment (Web and MCP as equal first-class surfaces) is unrealised: the only surface in kyyn-v2 is the CLI. Review notes and recordHistory have no code at all. What is realised is the CLI-level substrate the ADR assumes: evolution workspaces, Ready/accept lifecycle, Before-revision-checked acceptance, persisted step reports and typed query examples. The one substantive wording change at seq 143 (MCP 'stable paging' to 'identified collection reads') quietly drops a pagination expectation; treated as editorial because the owning decision lives in another ADR. Split judgement: with no ### subsections, the Decision was split into nine commitments; the 'Boundaries and alternatives' section (thin transport adapters over shared operations, Web/MCP never calling each other, notifications not canonical state) was treated like an alternatives/consequences section and produced no node, consistent with 0015's 'Alternatives and consequences'."
+}

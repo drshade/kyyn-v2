@@ -1,0 +1,251 @@
+{
+  "adr": "0020",
+  "title": "One installation supplies the execution toolchain",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0020.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Installation bundles the full guest toolchain; runtime uses only it",
+      "detail": "Installation provides the native kernel, pinned MicroHs compiler/evaluator, cpphs, base/SDK libraries, guest codecs, native libraries, web assets and notices. Runtime package compilation uses only these bundled tools and captured local source, never system Cabal resolution or a network download during validation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44 stages the bundled runtime (GHC-built MicroHs as bin/mhs, evaluator, cpphs, SDK) used by the installed CLI journey; web assets absent"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0020.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Rerunnable agent-drivable installer with structured SetupReport and readiness check",
+      "detail": "A bootstrap-supplied, safe-to-rerun install returns a SetupReport of installed components and outstanding requirements (missing component, permission, authentication, unsupported configuration), and a separate readiness/doctor operation runs an offline compile without provisioning. Permissions and human authentication surface as explicit needs-input, never silent privilege escalation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SetupReport",
+        "SetupRequirement",
+        "InstalledComponent",
+        "MissingComponent",
+        "PermissionRequired",
+        "AuthenticationRequired",
+        "UnsupportedConfiguration",
+        "ComponentName"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No SetupReport/readiness command in code; only the developer install-cli.sh exists (seq 46)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0020.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Toolchain distribution is distinct from source-only tap plugin install",
+      "detail": "Installing Kyyn may download verified pinned release artifacts, but tap plugins are vendored as source and compiled locally; no tap-supplied executables or plugin attestation service, and no plugin version pins or negotiation for the first release.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 74,
+        "evidence": "PR #90 installs plugin source through the CLI, compiled locally with the bundled toolchain"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0020.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "GHC, C compiler and Node.js are build-time dependencies only",
+      "detail": "Source and release builds may use GHC, a C compiler and Node.js, and generated scanners are release build inputs; none is required on an ordinary user's machine.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "PR #44: 'GHC is build-time only'; installed CLI runs KB code through bundled MicroHs"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0020.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Web UI ships as prebuilt static assets served natively",
+      "detail": "Node.js tooling builds the Web UI into static browser assets packaged with Kyyn and served by the native application; the installed app needs no Node server, package manager or dev server.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No web/ directory or asset build exists at end of history; seq 143 PR lists Web as desired, not available"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0020.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Bundled tools located by absolute path, not PATH mutation",
+      "detail": "Bundled tools, including cpphs via MHSCPPHS, are invoked through absolute paths rather than requiring users to modify PATH.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "MHSCPPHS"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 6,
+        "evidence": "MHSCPPHS first used in code in PR #6 MicroHs integration"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0020.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Separate vendored source, disposable caches, secrets and authored files",
+      "detail": "Vendored source and origins travel with the KB but generated executables do not. Build identity covers source, contract, compiler, options, SDK and dependencies, so a runtime version change invalidates binaries, never accepted facts, with no cross-version artifact portability claim.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "BuildIdentity"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 104,
+        "evidence": "BuildIdentity from PR #8; per-KB disposable compiled-artifact cache keyed by build identity in PR #132; checkout-local secrets at seq 98"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0020.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Git plumbing via a tested Git executable behind a capability",
+      "detail": "Canonical Git operations go through a Git executable behind the Git capability rather than a libgit2 binding, and missing Git is an actionable installation requirement; bundling versus locating Git is unsettled.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 19,
+        "evidence": "PR #20 implements the read-only Git boundary through the Git executable (GitUnavailable diagnostic); write side in PR #23"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0020.09",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Staged compiler is the GHC-built pinned MicroHs",
+      "detail": "The bundled compiler is the pinned MicroHs built with GHC; GHC is needed to build it, not to execute KB code. Native library dependencies and notices still need distribution review.",
+      "kind": "refine",
+      "supersedes": [
+        "0020.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR #44 stages the upstream GHC-built MicroHs compiler under bin/mhs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0020.10",
+      "seq": 46,
+      "pr": 49,
+      "summary": "Development install deploys kyyn-v2 bundle and resolves symlinked runtime",
+      "detail": "A source-build convenience installs the staged bundle under PREFIX/lib/kyyn-v2 and links bin/kyyn-v2, temporarily named to coexist with v1. Runtime discovery canonicalises the link to find bundled assets. It is explicitly not the cross-platform release installer.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 46,
+        "evidence": "PR #49 adds tools/install-cli.sh and canonicalised executable-path runtime discovery"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0020.11",
+      "seq": 55,
+      "pr": 64,
+      "summary": "SDK edit dependencies ship as vendored transformers source subset",
+      "detail": "The guest SDK's fact-editing dependencies ship as an unmodified, licensed transformers source subset with compiler-selected CPP branches, so users never install another package manager or fetch libraries to edit facts.",
+      "kind": "refine",
+      "supersedes": [
+        "0020.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReaderT"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 55,
+        "evidence": "PR #64 stages the unmodified transformers subset with its license in vendor/"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 43,
+      "pr": 44,
+      "note": "Also converts status line to front-matter metadata and basis statement"
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Repoints install-command ownership from docs/cli-development.md to the user guide and staging script"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: removes status/date/basis, rephrases the distribution-review caveat and drops 'exact command names are illustrative'; no new requirement"
+    }
+  ],
+  "notes": "This ADR is about distribution, and it remains mostly aspirational. The parts that sit inside the dev loop are real: bundled MicroHs/cpphs (built at 43), Git via executable (19), build identity and per-KB caches (8, 104) and vendored transformers (55). The user-facing promises are all unrealised: the SetupReport/readiness installer, Web assets and cross-platform/WSL release proof. The only installer that exists is the kyyn-v2 developer script (seq 46), and the ADR is careful to say it is not the release installer. The founding Decision has no subsections, so I split it into 8 commitments. I kept 'build tools are build-time only' (0020.04) separate from 'Web as static assets' (0020.05) because one is realised and the other is not. 0020.03 overlaps ADR 0015's plugin-install decision, and I dated it by the first source-plugin install."
+}

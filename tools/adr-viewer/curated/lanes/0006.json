@@ -1,0 +1,1167 @@
+{
+  "adr": "0006",
+  "title": "Materialized facts and runtime data loading",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0006.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "One materialized Dhall fact tree, host-decoded, readable without replay",
+      "detail": "Keep one current materialized fact tree of data-only Dhall files per identified fact, parsed and structurally checked by the host library; guests receive decoded typed values, never Dhall. Dhall is the chosen format with no parallel JSON path or speculative storage abstraction; reads never replay mutation history.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DhallHandling"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Checked Dhall decoding lands at seq 14 (PR #15); RootStore materializes and reopens fact snapshots at seq 16 (PR #17)",
+        "seq": 16
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Stable FactIds and store-owned collection routing, no path semantics",
+      "detail": "Collection routing belongs to the root contract/store; stable FactIds address values rather than positions or display names, ordered collections preserve order explicitly, unordered ones use deterministic ID order, and generated routing detects ID/path collisions.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FactId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #17 RootStore membership lists reject duplicate IDs and missing/unlisted files; unordered-collection metadata was never implemented (membership preserves guest order)",
+        "seq": 16
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0006.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "RootStore effect with explicit snapshot selection and typed read failures",
+      "detail": "Host RootStore operations take an explicitly selected revision/root; the head is resolved once and passed on, never an ambient latest root. ReadFact distinguishes absent IDs from unknown collections and corrupt storage, and LoadRootValueForChecking is the explicit path for structurally readable but unvalidated roots, including evolution sources.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootStore",
+        "ResolveHead",
+        "LoadRootAt",
+        "LoadRootValueForChecking",
+        "ReadFact",
+        "CheckedValue",
+        "runRootStore"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "RootStore, CheckedValue and LoadRootValueForChecking first appear in code at seq 16 (PR #17)",
+        "seq": 16
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0006.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "MaterializeRoot writes a separate snapshot; export yields complete RootFiles",
+      "detail": "MaterializeRoot verifies a value against the target contract and writes a separate snapshot without advancing the accepted ref; ExportRootFiles supplies publication with a complete fixed RootFiles tree, not an editable directory.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "MaterializeRoot",
+        "ExportRootFiles",
+        "RootFiles"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Reworked at seq 4 before any RootStore code existed"
+      },
+      "ended": {
+        "seq": 4,
+        "how": "replaced",
+        "by": "0006.13"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Saved examples load with recorded contracts, never silently rebound",
+      "detail": "ReadExamples loads a root's saved assertions with their recorded contracts and does not run them or rebind them to new query contracts; checking reports incompatibility. It accepts raw roots so candidates can be checked before validation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadExamples",
+        "Example"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "ReadExamples first appears in code with PR #28 (validate roots against saved query examples)",
+        "seq": 27
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Snapshot-bound opaque-cursor paging for fact browsing",
+      "detail": "Browsing uses a Page/PageRequest envelope with opaque cursors tied to the selected snapshot and query; paging is a user-facing operation, not a paged storage engine or incremental evaluator, and mismatched cursors are errors.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PageCursor",
+        "PageRequest",
+        "FirstPage",
+        "ContinuePage",
+        "ListFacts"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Page/PageCursor never appeared in code; ListFacts-style browsing arrived at seq 137 without cursors"
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0006.44"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Fact envelope keeps identity outside the typed payload",
+      "detail": "Guest Fact pairs a FactId with the payload so migrations can reshape payloads without replacing identity; generated collection bindings carry collection ID and payload codec, and no native host function imports the payload type.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FactId",
+        "CollectionBinding"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Fact/FactId added to shared/kyyn-types at seq 12 (PR #13); generated CollectionBinding at seq 26",
+        "seq": 12
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0006.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "One complete root/ publication subtree, separate from evolutions and caches",
+      "detail": "Accepted executable knowledge lives in one root/ subtree (kb.dhall, src/, facts/, examples/, plugins/) apart from evolutions/ and ignored .kyyn/; exporting the whole subtree means absence is deletion, and per-collection ordered ID lists record membership including empty collections.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootStore"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "Export of complete validated roots at seq 28 (PR #29); acceptance publishes the complete root subtree at seq 41 (PR #42); examples/todos uses the layout",
+        "seq": 41
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Fact files hold the full envelope at an ID-derived path",
+      "detail": "Each fact file encodes the full Fact envelope; its path derives from collection and ID through an unambiguous encoding and a path/envelope mismatch is an error. Titles are never IDs.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #17 RootStore writes envelope files and rejects path/envelope mismatches",
+        "seq": 16
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Non-secret connector config is root material; secrets never are",
+      "detail": "Named connector instances persist in root/plugins/config/<plugin>.dhall, checked against the plugin's connector configuration schemas and captured with the root's code; secrets and machine-local settings never become facts. Malformed config fails the whole load rather than disabling a connector.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #100 registers source connectors and validates root-owned configuration under plugins/config/",
+        "seq": 81
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.11",
+      "seq": 1,
+      "pr": null,
+      "summary": "Cache compiled guest artifacts by complete build identity",
+      "detail": "Compiled guest artifacts are reusable by complete source, contract, SDK, dependency, compiler and build-option identity, with fact contents excluded from the key; entries publish atomically and partial artifacts are never cache hits.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Replaced at seq 8 by a no-persistent-cache stance before any cache existed"
+      },
+      "ended": {
+        "seq": 8,
+        "how": "replaced",
+        "by": "0006.14"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.12",
+      "seq": 1,
+      "pr": null,
+      "summary": "No separate inspection cache; whole-root in-memory evaluation",
+      "detail": "Schema inspection and metadata evaluation may rerun on each load with no dedicated cache; evaluation and validation are whole-root and in memory, with no lazy or incremental guest evaluation promised.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "Negative constraint; no inspection cache existed until seq 106",
+        "seq": 1
+      },
+      "ended": {
+        "seq": 106,
+        "how": "replaced",
+        "by": "0006.42"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.13",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Materialization returns immutable FileTrees; exports replace whole prefixed subtrees",
+      "detail": "MaterializeRoot produces an in-memory file tree and SaveCandidate owns persistence; snapshots and captured workspace material are plain immutable FileTrees in kyyn-domain. RootStore exports prefix root and EvolutionStore its archive prefix, each replacing its complete subtree so missing paths mean deletion.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FileTree",
+        "SubtreeReplacement",
+        "FactSnapshot",
+        "SaveCandidate",
+        "MaterializeRoot"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "FileTree and in-memory MaterializeRoot land at seq 16 (PR #17); SaveCandidate at seq 36; complete-subtree export at seq 28",
+        "seq": 16
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0006.14",
+      "seq": 8,
+      "pr": 8,
+      "summary": "No persistent compile cache yet; compiled values reused in-process",
+      "detail": "Compilation stays separate from runtime fact inputs: the runtime boundary returns an immutable compiled value reusable across inputs, and persistent caching is deferred until a concrete journey needs it, then keyed by full source/toolchain/build identity.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.11"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CompileGuest",
+        "BuildIdentity",
+        "withCompiledEntry"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #8 adds compileGuest/withCompiledEntry returning a compiled entry without persistent caching",
+        "seq": 8
+      },
+      "ended": {
+        "seq": 106,
+        "how": "replaced",
+        "by": "0006.41"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.15",
+      "seq": 12,
+      "pr": 13,
+      "summary": "Positional Fact constructor; FactId encodes as plain text",
+      "detail": "The SDK Fact uses a positional constructor to avoid an id selector in author imports while its data representation stays the id/value envelope; the recognised FactId encodes as plain text, not a tagged constructor.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FactId"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #13 adds shared/kyyn-types Fact.hs and codec handling",
+        "seq": 12
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.16",
+      "seq": 14,
+      "pr": 15,
+      "summary": "DhallHandling decodes self-contained text against a checked contract",
+      "detail": "The decode boundary takes a checked contract and supplied text, performs no file reads, rejects all imports, normalizes and converts to the guest codec representation while retaining contract identity; the library adapter stays in plumbing interpreters.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CheckedDhallValue",
+        "DhallHandling"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #15 implements the DhallHandling capability and interpreter",
+        "seq": 14
+      },
+      "ended": {
+        "seq": 16,
+        "how": "replaced",
+        "by": "0006.18"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.17",
+      "seq": 15,
+      "pr": 16,
+      "summary": "EncodeValue renders checked runtime values as self-contained Dhall",
+      "detail": "Encoding takes a checked contract and wire value and renders Dhall through the library AST, returning text rather than writing files; semantic values round-trip but formatting does not.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.16"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EncodeValue"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #16 adds EncodeValue",
+        "seq": 15
+      },
+      "ended": {
+        "seq": 16,
+        "how": "replaced",
+        "by": "0006.18"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.18",
+      "seq": 16,
+      "pr": 17,
+      "summary": "Shape-directed DhallHandling, unaware of layout or contract identity",
+      "detail": "DhallHandling decodes and encodes by Shape only; whole-contract identity and collection layout move to RootStore, which supplies shapes and storage structures such as membership lists.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.16",
+        "0006.17"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DhallHandling"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #17 reworks the capability to shapes as RootStore lands",
+        "seq": 16
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.19",
+      "seq": 16,
+      "pr": 17,
+      "summary": "RootStore checks values by whole-contract identity before materializing",
+      "detail": "RootStore checks runtime values, materializes them into immutable trees and reopens them, tagging checked values with whole-contract identity so a role-only contract change rejects old values; materialization neither validates semantically nor runs guest code.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.03",
+        "0006.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CheckRootValue",
+        "MaterializeRoot",
+        "RootStore"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #17 implements CheckRootValue/MaterializeRoot",
+        "seq": 16
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.20",
+      "seq": 16,
+      "pr": 17,
+      "summary": "Hex-encoded fact layout with per-collection index membership",
+      "detail": "facts/root.dhall holds non-collection fields; each collection uses facts/c-<hex>/index.dhall plus f-<hex>.dhall files to avoid filename collisions, with readable IDs only inside envelopes and membership files.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.09",
+        "0006.02"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #17 RootStore layout",
+        "seq": 16
+      },
+      "ended": {
+        "seq": 17,
+        "how": "replaced",
+        "by": "0006.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.21",
+      "seq": 17,
+      "pr": 18,
+      "summary": "Readable fact paths with ~hex escaping for unsafe names",
+      "detail": "Collection and ID names made of lowercase ASCII letters, digits, hyphens and underscores pass through (except index and device names); every other name is ~ plus lowercase UTF-8 hex, keeping paths like facts/todos/todo-001.dhall readable without collisions.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.20"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #18 changes RootStore path encoding",
+        "seq": 17
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.22",
+      "seq": 19,
+      "pr": 20,
+      "summary": "Git plumbing resolves a revision once and captures that fixed subtree",
+      "detail": "ResolveRevision returns a full commit ID and ReadTreeAt captures the subtree at that fixed revision, never the working tree; symlinks/submodules are explicit failures and the interpreter runs through ProcessExecution with a supplied Git executable.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.03"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ResolveRevision",
+        "ReadTreeAt",
+        "Repository"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #20 implements the Git reader",
+        "seq": 19
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.23",
+      "seq": 21,
+      "pr": 22,
+      "summary": "Separate RootOpening effect; accepted roots open only from fixed revisions",
+      "detail": "Locating source and inspecting schema move from RootStore into a separate RootOpening effect over captured trees or a fixed Git revision; drafts open from captured file trees, accepted roots only from a revision, and the result is Root, not Validated Root.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.03",
+        "0006.22"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootOpening",
+        "OpenCapturedRoot",
+        "LoadRootAt",
+        "TreePath"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #22 adds RootOpening; OpenKnowledgeBase/ResolveHead are dropped from RootStore",
+        "seq": 21
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.24",
+      "seq": 21,
+      "pr": 22,
+      "summary": "kb.dhall manifest selects authored declarations; reserved root locations",
+      "detail": "Each root has a kb.dhall manifest selecting qualified schema exports (not a second schema), authored modules under src/, and distinct reserved locations; the installed runtime supplies the SDK sources, which participate in compilation identity.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootOpening"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #22 opens roots from manifests",
+        "seq": 21
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.25",
+      "seq": 24,
+      "pr": 25,
+      "summary": "Manifest must declare a validator; one shared ReadRootDefinition",
+      "detail": "kb.dhall requires a validator export with no implicit success when absent; RootStore's ReadRootDefinition decodes the manifest for both opening and execution so neither duplicates layout or Dhall handling.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.24"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadRootDefinition",
+        "RootDefinition"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #25 adds ReadRootDefinition and validator execution",
+        "seq": 24
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.26",
+      "seq": 25,
+      "pr": 26,
+      "summary": "Materialization targets a RootContract distinct from value contracts",
+      "detail": "MaterializeRoot takes a RootContract, separating persistent root layout from the value contracts of its payloads.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.19"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootContract"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #26 introduces RootContract",
+        "seq": 25
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.27",
+      "seq": 26,
+      "pr": 27,
+      "summary": "Manifest registers named queries",
+      "detail": "kb.dhall gains a queries registration list; names must be nonempty and unique, and query contracts are inspected on discovery/invocation rather than by the opener.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.25"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #27 adds typed snapshot queries and manifest registration",
+        "seq": 26
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.28",
+      "seq": 27,
+      "pr": 28,
+      "summary": "Examples stored as fixed three-file directories with fingerprint checks",
+      "detail": "Examples occupy examples/<encoded-name>/ with exactly example.dhall, arguments.dhall and expected.dhall; ReadExamples uses query descriptors from the same root and compares whole-contract fingerprints before decoding, and EncodeExample returns a FileTree.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.05"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadExamples",
+        "EncodeExample",
+        "QueryDescriptor"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #28 implements example storage and validation",
+        "seq": 27
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.29",
+      "seq": 28,
+      "pr": 29,
+      "summary": "Export only validated roots, combining captured trees without re-encoding",
+      "detail": "ExportRootFiles takes a Validated Root and combines captured fact and code trees (examples, configuration, supporting files) without reading disk or re-encoding; RootStore gains no Git dependency and export does not accept anything.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ExportRootFiles"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #29 implements ExportRootFiles",
+        "seq": 28
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.30",
+      "seq": 29,
+      "pr": 30,
+      "summary": "Source-only root opening without decoding facts",
+      "detail": "OpenCapturedSource/LoadSourceAt return contract, code snapshot and definition without decoding facts, so missing or corrupt facts do not block evolution scaffolding.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.23"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SourceRoot",
+        "LoadSourceAt",
+        "OpenCapturedSource"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #30 adds source-only loading",
+        "seq": 29
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.31",
+      "seq": 43,
+      "pr": 44,
+      "summary": "KB directory resolves to repository and subtree through Git",
+      "detail": "DiscoverRepository maps an explicitly selected KB directory to a repository and WholeTree/Subtree via Git, with a single selection diagnostic for non-working-trees; Git plumbing knows nothing of KB layouts.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.22"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DiscoverRepository",
+        "DirectoryScope"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #44 adds repository discovery for the CLI",
+        "seq": 43
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.32",
+      "seq": 51,
+      "pr": 56,
+      "summary": "Evolution capture inspects the Before root once and reuses it",
+      "detail": "LoadRootInputAt captures the Before subtree, inspects schema once and returns undecoded facts plus source dependency paths so evolution capture avoids recompilation; it claims no validation.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.23"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadRootInputAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #56 reuses captured Before inputs",
+        "seq": 51
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.33",
+      "seq": 54,
+      "pr": 63,
+      "summary": "Dhall for all persisted structured data; JSON only on the wire",
+      "detail": "Workspace manifests, candidate records and accepted reports all persist as Dhall, disposable storage included; JSON remains only the guest protocol and CLI/MCP interface projection.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.01"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #63 persists candidates and reports as typed Dhall",
+        "seq": 54
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.34",
+      "seq": 66,
+      "pr": 81,
+      "summary": "Source-only capture skips fact blobs entirely",
+      "detail": "LoadSourceAt excludes the facts location before reading bytes, so unreadable facts cannot block source inspection, while retaining all other root material for seeding workspaces.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.30"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadSourceAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #81 skips fact blobs in Git capture",
+        "seq": 66
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.35",
+      "seq": 67,
+      "pr": 82,
+      "summary": "Facts added to a prepared SourceRoot without re-inspection",
+      "detail": "LoadRootFactsAt adds a revision's undecoded fact files to an already prepared SourceRoot, scoped to the facts location, so evolution capture prepares both endpoints once.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.32"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadRootFactsAt",
+        "SourceRoot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #82 shares endpoint preparation",
+        "seq": 67
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.36",
+      "seq": 81,
+      "pr": 100,
+      "summary": "Plugin config decoded during root preparation, carried raw on opening",
+      "detail": "Raw opening carries config files as bytes; PrepareRoot uses PluginPreparation to decode every instance against its connector config contract and compile declared methods, failing the whole preparation on malformed config.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.10"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PrepareRoot",
+        "PluginPreparation"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #100 adds PluginPreparation",
+        "seq": 81
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.37",
+      "seq": 91,
+      "pr": 112,
+      "summary": "Host-owned curation register stored as root material",
+      "detail": "A host-owned CurationRegister lives in the root beside facts, read by ReadRootCuration and loaded with facts by LoadRootMaterialAt; code may not overlap it.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CurationRegister",
+        "ReadRootCuration",
+        "LoadRootMaterialAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #112 persists host-owned curation progress",
+        "seq": 91
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0006.47"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.38",
+      "seq": 91,
+      "pr": 112,
+      "summary": "Manifest also registers tools and recipe declarations",
+      "detail": "kb.dhall carries tools registrations (ADR 0008) and recipe declarations (ADR 0014) alongside queries.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.27"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "evidence": "Tools entered the manifest with PR #107 (seq 87); recipes in the manifest with PR #112 at this step",
+        "seq": 87
+      },
+      "ended": {
+        "seq": 143,
+        "how": "replaced",
+        "by": "0006.45"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0006.39",
+      "seq": 94,
+      "pr": 116,
+      "summary": "Recipes are first-class root facts read, materialized and exported",
+      "detail": "Recipes become [Fact Recipe] root material read by ReadRootRecipes, passed to MaterializeRoot and included in ExportRootFiles alongside domain facts and curation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadRootRecipes",
+        "Recipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #118 implements ReadRootRecipes and root/recipes.dhall",
+        "seq": 96
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.40",
+      "seq": 96,
+      "pr": 118,
+      "summary": "Materialize a KnowledgeBase value of domain facts plus recipes",
+      "detail": "MaterializeRoot takes KnowledgeBase CheckedValue (domain root and recipes together) and returns diagnostics instead of assuming success.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.26",
+        "0006.39"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "MaterializeRoot",
+        "KnowledgeBase"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #118 carries KnowledgeBase through evolution and storage",
+        "seq": 96
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.41",
+      "seq": 106,
+      "pr": 136,
+      "summary": "Runtime boundary owns compiled-artifact caching",
+      "detail": "Persistent compiled-artifact caching is now the runtime boundary's responsibility (ADR 0002) rather than deferred; compilation remains separate from fact inputs.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.14"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "evidence": "PR #132 (seq 104) added the per-KB .kyyn/compiled cache before this ADR caught up",
+        "seq": 104
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.42",
+      "seq": 106,
+      "pr": 136,
+      "summary": "Inspection reuse delegated to ADR 0005; processes may duplicate work",
+      "detail": "Schema-inspection reuse is allowed and owned by ADR 0005; metadata evaluation and validation stay in-memory whole-root, and concurrent processes may duplicate preparation without a coordinator.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.12"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "InspectionCache"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #136 adds InspectionCache across CLI invocations",
+        "seq": 106
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.43",
+      "seq": 114,
+      "pr": 148,
+      "summary": "Tracked taps.dhall sits outside root publication",
+      "detail": "KB-local tap declarations live in a Git-tracked top-level taps.dhall with disposable .kyyn/taps/ downloads; being tracked does not make discovery configuration part of the accepted root.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #155 (seq 119) adds tracked taps.dhall and ignored tap caches",
+        "seq": 119
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.44",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Whole-collection reads from a validated snapshot replace paging",
+      "detail": "ReadCollection returns a collection's complete identified values from an explicit validated snapshot; listing and ID selection are projections, a missing ID is a not-found diagnostic, and failures are never empty results. Cursor paging is gone.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadCollection",
+        "CheckRootValue"
+      ],
+      "realised": {
+        "how": "code_first",
+        "evidence": "ReadCollection existed from seq 26 (PR #27); ID listing/browsing at seq 137; Page/cursor types never existed",
+        "seq": 26
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.45",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Recipes live in recipes.dhall, not manifest fields",
+      "detail": "Recipes are separate typed root material in recipes.dhall rather than kb.dhall declarations; the manifest keeps schema, validator, queries and tools.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.38"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "evidence": "PR #118 (seq 96) moved recipes to root/recipes.dhall and out of the manifest",
+        "seq": 96
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0006.46",
+      "seq": 143,
+      "pr": 186,
+      "summary": "Manifest registers named outputs",
+      "detail": "kb.dhall additionally carries named outputs registrations defined by ADR 0017.",
+      "kind": "refine",
+      "supersedes": [
+        "0006.45"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No outputs field in the manifest decoder or example KBs"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0006.47",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Recipe definitions with typed per-recipe state replace curation register",
+      "detail": "Root material holds recipe definitions in recipes.dhall plus per-recipe typed state files read against their checked contracts; a declared recipe with missing state is invalid, and the host curation register is removed.",
+      "kind": "replace",
+      "supersedes": [
+        "0006.37"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "StoredRecipe",
+        "TypeRef",
+        "ReadRootRecipes"
+      ],
+      "realised": {
+        "how": "later_step",
+        "evidence": "PR #210 (seq 162) implements typed per-recipe state and removes CurationRegister/ReadRootCuration",
+        "seq": 162
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 6,
+      "pr": 6,
+      "note": "Broadens the allowlist of pure kyyn-domain modules plumbing may import; enforcement detail, not a new storage commitment"
+    },
+    {
+      "seq": 70,
+      "pr": 86,
+      "note": "Adds plugins/ to the reserved-locations list; the founding layout already reserved root/plugins/"
+    },
+    {
+      "seq": 76,
+      "pr": 94,
+      "note": "Stops claiming evidence shares the fact paging envelope; evidence paging is ADR 0014's concern, fact paging unchanged here"
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "'Propose' becomes 'Use' and the walkthrough link points at the user guide; layout already implemented"
+    },
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "FactId wraps Text instead of String to match packed transport; representation detail with no architectural change"
+    },
+    {
+      "seq": 4,
+      "pr": 4,
+      "note": "Partly editorial: front-matter/status block replaces the old status line"
+    },
+    {
+      "seq": 27,
+      "pr": 28,
+      "note": "Partly editorial: status flips proposed -> accepted"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Partly editorial: status/basis removal, 'initial'/'unimplemented' wording reconciled, CheckRootValue listed (already code since seq 16), CollectionBinding ownership deferred to ADR 0009, 'Propose' dropped from fact-envelope rule"
+    }
+  ],
+  "notes": "The busiest lane of the three: ADR 0006 was used as the running implementation log for RootStore/RootOpening, so most steps are same_step refinements written by the PR that implemented them. Notable reversals: (1) the compiled-artifact cache went founded -> withdrawn at seq 8 ('add only when needed') -> silently built by PR #132 at seq 104 -> spec caught up at seq 106, alongside dropping the 'no inspection cache' stance; (2) snapshot-bound cursor paging was never coded and was deleted at seq 143 in favour of whole-collection ReadCollection, which had existed since seq 26; (3) RootStore lost its opening/ResolveHead role to a separate RootOpening effect at seq 21; (4) recipes went manifest declarations (seq 91) -> root facts (seq 94/96) -> definitions plus typed state (seq 158), but the manifest text kept 'recipes' until seq 143, so the spec lagged code by ~47 steps; (5) fact path encoding flipped from hex to readable pass-through one step after landing. Still unrealised: manifest 'outputs' registrations added at seq 143, and unordered-collection ordering metadata. Splitting judgement calls: the Dhall-handling chain (seq 14/15 then replaced at 16) and the opening chain (19, 21, 29, 51, 66, 67) were modelled as refines since the explicit-snapshot commitment never reversed."
+}

@@ -1,0 +1,607 @@
+{
+  "adr": "0027",
+  "title": "Agentic judgements backed by Jev",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0027.01",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Typed yes/no, choice and scale questions in every KB tool row",
+      "detail": "The generated Kyyn.Judgement module adds judge/yesNo/choice/scale to the existing tool row, with answer spaces from ordinary Enum/Bounded/Show types and no per-tool opt-in. Results mirror the provider's semantics (probabilities, distributions, weighted score) with no invented decisions, thresholds or abstention.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Authoring is typed"
+      ],
+      "anchors": [
+        "judge",
+        "yesNo",
+        "choice",
+        "scale",
+        "Question",
+        "YesNoAnswer",
+        "ChoiceAnswer",
+        "ScaleAnswer",
+        "Context"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124 (Closes #120) ships the typed SDK and generated Kyyn.Judgement injection into the existing tool row"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.16"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.02",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Double results stay outside KB contracts; tools project them",
+      "detail": "Judgement answers use SDK-owned finite Double values that are not part of the ADR 0005 contract subset; a tool returning a judgement must project it into supported types such as a decision constructor or integer basis points.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Authoring is typed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124 shipped Double-valued answers outside the registerable contract subset"
+      },
+      "ended": {
+        "seq": 102,
+        "how": "replaced",
+        "by": "0027.14"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.03",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Fixed Jev endpoint, model jev-1.13.0 and JEV_TOKEN as host constants",
+      "detail": "One native Jev interpreter uses a fixed HTTPS endpoint, model jev-1.13.0 and secret name JEV_TOKEN as host implementation constants, with no provider registry, configuration document or manifest field.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One provider interpreter and a local secret"
+      ],
+      "anchors": [
+        "JEV_TOKEN"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124: fixed endpoint and model mapping in Kyyn.Plumbing.Capability.Judgement.Jev"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.19"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.04",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Key read from checkout-local SecretStore at invocation, never sent to guest",
+      "detail": "The handler resolves JEV_TOKEN from the selected KB checkout's local secret store when invoked, returns a typed missing-secret failure naming the setup command, and authenticates its own request; root checking never reads credentials.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / One provider interpreter and a local secret"
+      ],
+      "anchors": [
+        "SecretStore",
+        "MissingSecret",
+        "JEV_TOKEN"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124: host plumbing reads JEV_TOKEN from SecretStore; installed missing-secret journey"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.05",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Host Judgement effect over the existing Program continuation",
+      "detail": "Generated guest code lowers typed questions to closed requests over the existing request/response loop, keeping constructor mapping in the guest; a separate host Judgement plumbing effect owns HTTPS, with no guest HTTP or secret constructors and a recording interpreter for tests.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Host interpretation and the existing continuation"
+      ],
+      "anchors": [
+        "Judgement",
+        "runJudgementIO"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124 adds the host Judgement effect, native HTTPS interpreter and continuation wiring"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.19"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.06",
+      "seq": 99,
+      "pr": 123,
+      "summary": "One judge call sends exactly one question; no batching, cache or retry",
+      "detail": "Each judge call makes a single provider request containing one question; authors compose calls normally, and there is no batch scheduler, persistent cache, automatic retry or async job mechanism.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Host interpretation and the existing continuation"
+      ],
+      "anchors": [
+        "judge"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "Replaced by the applicative batch inside implementing PR #124 itself; single-question requests never shipped"
+      },
+      "ended": {
+        "seq": 100,
+        "how": "replaced",
+        "by": "0027.10"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.07",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Doubles cross the guest wire as round-trippable decimal strings",
+      "detail": "The private guest protocol keeps ADR 0007's numeric-string profile: finite doubles travel as round-trippable decimal strings in fixed SDK codecs verified under both compilers.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Host interpretation and the existing continuation"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124: private numeric-string codecs checked under GHC and MicroHs"
+      },
+      "ended": {
+        "seq": 102,
+        "how": "replaced",
+        "by": "0027.15"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.08",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Expected failures are typed JudgementFailure data, validated at boundary",
+      "detail": "Missing secrets, invalid questions, auth/rate-limit refusals, unavailability and malformed replies are typed JudgementFailure values, never fabricated answers. The host validates answer kind, coverage, ranges and distribution totals with a documented tolerance; diagnostics never echo keys, prompts or bodies.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Expected failure is data, not fabricated judgement"
+      ],
+      "anchors": [
+        "JudgementFailure",
+        "AuthenticationRejected",
+        "RateLimited",
+        "ProviderUnavailable",
+        "RequestRejected",
+        "InvalidProviderResponse",
+        "InvalidQuestion"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124: typed failures, boundary validation and sanitized diagnostics with recording/loopback tests"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.09",
+      "seq": 99,
+      "pr": 123,
+      "summary": "Judgement only in KB tools; not queries, validators, renderers, evolutions",
+      "detail": "The capability is available to KB tools only; snapshot queries, validation, renderers, plugin captured reads and pure evolutions do not gain it, and tools cannot publish knowledge or accept evolutions.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Where the capability belongs"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 100,
+        "evidence": "PR #124: both compilers reject judgement use in query and pure-validator contexts"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.10",
+      "seq": 100,
+      "pr": 124,
+      "summary": "Applicative Questions batch in one request; whole-batch failure",
+      "detail": "Questions compose applicatively (no Monad), and judge sends the complete batch over one context as q0..qN; the host checks the exact answer-key set and any failure fails the whole request with no partial value. Empty batches are refused before secret lookup.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.06"
+      ],
+      "sections": [
+        "Decision / Authoring is typed",
+        "Decision / Host interpretation and the existing continuation"
+      ],
+      "anchors": [
+        "Questions",
+        "ask",
+        "JudgementRequest",
+        "QuestionSpec",
+        "JudgementAnswer"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 100,
+        "evidence": "PR #124 body: applicative composition and native provider batch mapping implemented; monadic Questions rejected by both compilers"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.16"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.11",
+      "seq": 100,
+      "pr": 124,
+      "summary": "yesNo requires descriptions for both True and False",
+      "detail": "A yes/no question supplies criteria for both alternatives, which become the provider's yes/no criteria; empty descriptions are refused before sending.",
+      "kind": "refine",
+      "supersedes": [
+        "0027.01"
+      ],
+      "sections": [
+        "Decision / Authoring is typed"
+      ],
+      "anchors": [
+        "yesNo"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 100,
+        "evidence": "PR #124: yes/no criteria tests and blank-description installed journey"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.16"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.12",
+      "seq": 100,
+      "pr": 124,
+      "summary": "Results carry answers only; no model-identity wrapper",
+      "detail": "The Judged wrapper with model identity is dropped: results contain only answers, and provider/model selection stays a host constant outside the guest result.",
+      "kind": "refine",
+      "supersedes": [
+        "0027.01"
+      ],
+      "sections": [
+        "Decision / Authoring is typed"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 100,
+        "evidence": "PR #124 body: no model wrapper in the shipped SDK"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.17"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.13",
+      "seq": 100,
+      "pr": 124,
+      "summary": "Distribution tolerance 1e-3 and required scale legend check",
+      "detail": "Provider distribution totals are checked against a 1e-3 tolerance and the Score answer's legend must match the submitted scale levels.",
+      "kind": "refine",
+      "supersedes": [
+        "0027.08"
+      ],
+      "sections": [
+        "Decision / Expected failure is data, not fabricated judgement"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 100,
+        "evidence": "PR #124 review: tolerance relaxed to 1e-3 with regression; legend check retained"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.21"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.14",
+      "seq": 102,
+      "pr": 128,
+      "summary": "Contract-safe fixed-point answers returnable directly from tools",
+      "detail": "Probabilities and confidences become integer basis points and scores milli-levels, with named OptionProbability records, so a tool can return a complete ChoiceAnswer/ScaleAnswer over its own enum without projecting; Double is private to provider validation, rounded once half-to-even.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.02"
+      ],
+      "sections": [
+        "Decision / Authoring is typed"
+      ],
+      "anchors": [
+        "Probability",
+        "Score",
+        "OptionProbability",
+        "atLeast",
+        "probabilityText",
+        "scoreText"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 102,
+        "evidence": "PR #128: SDK types, host conversion and installed JSON/Dhall result journey"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.17"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.15",
+      "seq": 102,
+      "pr": 128,
+      "summary": "Guest wire carries basis points and milli-levels as integer strings",
+      "detail": "The private protocol encodes probability basis points and score milli-levels as integer strings in fixed SDK codecs, converting provider numbers on the host after validation.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.07"
+      ],
+      "sections": [
+        "Decision / Host interpretation and the existing continuation"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 102,
+        "evidence": "PR #128: private wire uses integer strings, checked under both compilers"
+      },
+      "ended": {
+        "seq": 132,
+        "how": "replaced",
+        "by": "0027.22"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.16",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Agentic.judge and Questions are the sole judgement authoring interface",
+      "detail": "Authors use haskell-agentic's judge/Questions/yesNo/choice/score inside ordinary Flows interpreted by the generated runtime; the public Kyyn.Judgement modules and duplicate question/answer types are removed with no compatibility shim.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.01",
+        "0027.10",
+        "0027.11"
+      ],
+      "sections": [
+        "Decision / One authoring interface"
+      ],
+      "anchors": [
+        "Agentic",
+        "judge",
+        "Questions",
+        "interpret",
+        "YesNo",
+        "Choice",
+        "score"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171 deletes Kyyn.Judgement and executes Agentic judge; generated discovery no longer advertises the old modules"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.17",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Agentic owns answer semantics; tools project into public contracts",
+      "detail": "Probability, choice and weighted Double score semantics come from upstream Agentic; these internal workflow values do not expand the public schema subset, so registered tools project judgements into declared contracts such as integer basis points.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.12",
+        "0027.14"
+      ],
+      "sections": [
+        "Decision / One authoring interface"
+      ],
+      "anchors": [
+        "Agentic",
+        "Contract"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171: old answer records deleted; upgrade note projects via Q.basisPoints to an Integer tool result"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.18",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Tools and closed recipes share one judgement broker; queries stay pure",
+      "detail": "The host Judgement plumbing serves both KB tools and closed-recipe preparation through the same broker, while queries, validators and pure evolution transforms gain no model capability and root checking compiles flows without executing them.",
+      "kind": "refine",
+      "supersedes": [
+        "0027.09"
+      ],
+      "sections": [
+        "Decision / The host supplies SystemOne"
+      ],
+      "anchors": [
+        "Judgement"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171: installed recipe journey including needsJev refusal over the shared ToolBroker"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.19",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Native upstream agentic-jev via ProvidesSystemOne; no Kyyn Jev client",
+      "detail": "SystemOne is supplied by the upstream agentic-jev adapter through ProvidesSystemOne, mirroring SystemTwo; the host effect carries upstream JudgeRequest/[Answer], and Kyyn owns no Jev request builder or answer model. Model jev-1.13.0 remains fixed.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.03",
+        "0027.05"
+      ],
+      "sections": [
+        "Decision / The host supplies SystemOne"
+      ],
+      "anchors": [
+        "ProvidesSystemOne",
+        "SystemOne",
+        "JudgeRequest",
+        "Answer",
+        "ModelFailure"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171 vendors agentic-jev and routes Judge through it"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.20",
+      "seq": 132,
+      "pr": 170,
+      "summary": "JEV_TOKEN passed explicitly; empty key refuses; no environment fallback",
+      "detail": "The key is resolved from the checkout-local SecretStore and passed explicitly to the adapter; missing or empty keys refuse before constructing the provider, and environment credentials are never consulted.",
+      "kind": "refine",
+      "supersedes": [
+        "0027.04"
+      ],
+      "sections": [
+        "Decision / The host supplies SystemOne"
+      ],
+      "anchors": [
+        "JEV_TOKEN",
+        "SecretStore"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171: per-KB explicit JEV_TOKEN; test sets ambient JEV_TOKEN and expects refusal"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.21",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Sanitized provider failures terminate the flow; no partial batches",
+      "detail": "Provider/HTTP exceptions become sanitized host failures following the SystemTwo pattern; failure terminates the flow through its error channel, cancellation propagates, and there are no fabricated answers or partial batches.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.08",
+        "0027.13"
+      ],
+      "sections": [
+        "Decision / The host supplies SystemOne"
+      ],
+      "anchors": [
+        "ModelFailure",
+        "FetchError"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171: sanitized failure and cancellation tests; JudgementFailure code removed"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0027.22",
+      "seq": 132,
+      "pr": 170,
+      "summary": "Upstream JudgeRequest/[Answer] over the continuation with Agentic value codec",
+      "detail": "The existing continuation protocol carries upstream JudgeRequest and answers using the internal Agentic value codec shared with SystemTwo (numeric strings for probabilities/indices, decimal strings for scores), without changing persisted fact formats.",
+      "kind": "replace",
+      "supersedes": [
+        "0027.15"
+      ],
+      "sections": [
+        "Decision / Wire encoding is plumbing, not a domain shim"
+      ],
+      "anchors": [
+        "JudgeRequest",
+        "Answer"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 133,
+        "evidence": "PR #171 adds JudgementWire/ModelWire guest codecs checked under GHC and MicroHs"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 133,
+      "pr": 171,
+      "note": "Only flips status accepted->implemented; the PR is the implementation of the seq-132 design and serves as realisation evidence for 0027.16-0027.22."
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Repo-wide desired-state reconciliation: drops status/date metadata and rewrites the 'remove Kyyn.Judgement, no shim' migration sentence as the desired state 'Agentic owns the author-facing types'; no commitment beyond 0027.16/0027.17."
+    }
+  ],
+  "notes": "Born at seq 99 (PR #123) as a design-only ADR for issue #120, the first guest-facing consumer of local secrets (#119/#122). Founding split follows the five Decision subsections, with three splits for independently evolving commitments: 'Authoring is typed' -> typed questions (01) and Double-outside-contracts (02); 'One provider interpreter and a local secret' -> fixed constants (03) and secret resolution (04); 'Host interpretation' -> host effect (05), one-question-per-call (06) and decimal-string wire (07). Answer-semantics wording was folded into 01 and boundary validation into 08 (the older inference had them as separate nodes, giving 12 founding nodes instead of 9). Spec and code stayed tightly coupled: each design step (99, 132) was implemented by the very next PR (100, 133), and PR #124 amended the ADR while implementing it, so single-question-per-call (06) was replaced before ever shipping. Numeric detour: 99 kept Double out of contracts (02); 102 reversed that with fixed-point Probability/Score returnable directly (14); 132 reverted to upstream Double scores plus projection (17); ADRs 0005/0028 later (seq 149) added Probability contracts outside this lane, partly reopening the 102 idea. The seq-132 rewrite (title 'Typed model judgements in KB tools' -> 'Agentic judgements backed by Jev') was the owner choosing upstream haskell-agentic types over compatibility three weeks after shipping a bespoke SDK; only the local-secret rule (04, refined by 20) and tool-only scope (09, refined by 18 to include closed recipes) survive. Kyyn-specific semantics lost at 132 with no upstream equivalent: two-sided yes/no criteria (11) and the typed JudgementFailure taxonomy (08). Note ProvidesSystemOne/JudgeRequest identifiers first appear in code at seq 123 (vendored agentic library) but Kyyn only used them from seq 133. Seq 143 contained nothing new for this lane and is fully editorial."
+}

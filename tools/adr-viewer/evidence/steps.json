@@ -1,0 +1,1846 @@
+[
+  {
+    "seq": 0,
+    "sha": "0e8d5ba3eb269c1f74000fa02e0959f67417b242",
+    "date": "2026-09-07T15:17:39+02:00",
+    "title": "first commit",
+    "adrs": []
+  },
+  {
+    "seq": 1,
+    "sha": "deca3d0c6a1790a363edb2b1f29d5cf68bfcdbd3",
+    "date": "2026-09-07T16:28:44+02:00",
+    "title": "Establish Kyyn architecture and monorepo boundaries",
+    "adrs": [
+      "0001",
+      "0002",
+      "0003",
+      "0004",
+      "0005",
+      "0006",
+      "0007",
+      "0008",
+      "0009",
+      "0010",
+      "0011",
+      "0012",
+      "0013",
+      "0014",
+      "0015",
+      "0016",
+      "0017",
+      "0018",
+      "0019",
+      "0020",
+      "0021",
+      "0022",
+      "0023",
+      "0024",
+      "0025",
+      "0026"
+    ]
+  },
+  {
+    "seq": 2,
+    "sha": "86a16d1b8677d4bb366aea74759721812500b47e",
+    "date": "2026-09-07T17:43:19+02:00",
+    "pr": 1,
+    "title": "Adopt SDLC foundation and prospective project practices",
+    "adrs": [
+      "0005"
+    ]
+  },
+  {
+    "seq": 3,
+    "sha": "6a121aa7ed51fef0588b3000df99dcc6a0059aee",
+    "date": "2026-09-07T17:54:19+02:00",
+    "pr": 2,
+    "title": "Resolve SDLC adoption review follow-ups",
+    "adrs": []
+  },
+  {
+    "seq": 4,
+    "sha": "b4457cbf753f82f5d683c3a97c669d4045ef489c",
+    "date": "2026-09-07T20:03:03+02:00",
+    "pr": 4,
+    "title": "Align architecture for the first local evolution slice",
+    "adrs": [
+      "0004",
+      "0006",
+      "0010",
+      "0011",
+      "0012",
+      "0021"
+    ]
+  },
+  {
+    "seq": 5,
+    "sha": "0896751bf3b9fdb2bf03c4b8d0e8d2b3240c3837",
+    "date": "2026-09-07T20:41:29+02:00",
+    "pr": 5,
+    "title": "Accept the guest JSON profile with retained compatibility evidence",
+    "adrs": [
+      "0007",
+      "0022"
+    ]
+  },
+  {
+    "seq": 6,
+    "sha": "6468f878850f904536b48456c1c296030bf3a306",
+    "date": "2026-09-07T22:37:34+02:00",
+    "pr": 6,
+    "title": "Implement compiler-inspected ADT codecs with real MicroHs tests",
+    "adrs": [
+      "0006",
+      "0007",
+      "0026"
+    ]
+  },
+  {
+    "seq": 7,
+    "sha": "d4cde39bc54745dbe4a1f9d124b1f3b7aac74826",
+    "date": "2026-09-07T23:06:56+02:00",
+    "pr": 7,
+    "title": "Scope native guest process execution through effects",
+    "adrs": [
+      "0002"
+    ]
+  },
+  {
+    "seq": 8,
+    "sha": "e5b2b9d545e32600ea89144dc0739aa4ac28c660",
+    "date": "2026-09-08T07:34:24+02:00",
+    "pr": 8,
+    "title": "Compile captured MicroHs sources without a user C toolchain",
+    "adrs": [
+      "0002",
+      "0003",
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "seq": 9,
+    "sha": "48c02d86b20bfec1cf8bb6ebcc50b8d3d05d5d40",
+    "date": "2026-09-08T08:07:13+02:00",
+    "pr": 9,
+    "title": "Cache compiled Cabal dependencies in CI",
+    "adrs": []
+  },
+  {
+    "seq": 10,
+    "sha": "3516435e2872f43f8947232aaf7703a5812db5a3",
+    "date": "2026-09-08T08:44:50+02:00",
+    "pr": 11,
+    "title": "Use fast checks for iteration and full integration at issue completion",
+    "adrs": []
+  },
+  {
+    "seq": 11,
+    "sha": "ef56d261f50da47ea25ba3e8707d7cbcb57cd756",
+    "date": "2026-09-08T09:24:39+02:00",
+    "pr": 12,
+    "title": "Evaluate named Haskell schema metadata through the guest runtime",
+    "adrs": [
+      "0005",
+      "0026"
+    ]
+  },
+  {
+    "seq": 12,
+    "sha": "a6cf8c219af19ab6ea8326127996124581db9922",
+    "date": "2026-09-08T10:54:44+02:00",
+    "pr": 13,
+    "title": "Check structural schema and metadata as one contract",
+    "adrs": [
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "seq": 13,
+    "sha": "0d333a42a1f4f87ad14fc0b4b4cef0905e859d15",
+    "date": "2026-09-08T11:02:27+02:00",
+    "pr": 14,
+    "title": "Make CI manual-only and verification proportionate",
+    "adrs": []
+  },
+  {
+    "seq": 14,
+    "sha": "3bb948c00e4524b0588b17818a88df7e2cb09374",
+    "date": "2026-09-08T11:17:04+02:00",
+    "pr": 15,
+    "title": "Add checked Dhall value decoding through host plumbing",
+    "adrs": [
+      "0006"
+    ]
+  },
+  {
+    "seq": 15,
+    "sha": "e30fd8c8698e72aaa17b8062b1076a344064898a",
+    "date": "2026-09-08T11:27:24+02:00",
+    "pr": 16,
+    "title": "Encode runtime values as checked Dhall for materialization",
+    "adrs": [
+      "0006"
+    ]
+  },
+  {
+    "seq": 16,
+    "sha": "42654a21be607ba5fa2998c5d8e86996a7a2904a",
+    "date": "2026-09-08T11:47:06+02:00",
+    "pr": 17,
+    "title": "Materialize and reopen root fact snapshots through RootStore",
+    "adrs": [
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "seq": 17,
+    "sha": "433860bf417531c5cefa1c68d8062c117a9a0a86",
+    "date": "2026-09-08T11:53:47+02:00",
+    "pr": 18,
+    "title": "Keep ordinary fact paths readable",
+    "adrs": [
+      "0006"
+    ]
+  },
+  {
+    "seq": 18,
+    "sha": "7dadac9681fcad2bfd5af19a65adce6566ab0ffd",
+    "date": "2026-09-08T11:58:34+02:00",
+    "pr": 19,
+    "title": "Inspect captured Haskell schemas through a plumbing capability",
+    "adrs": [
+      "0005"
+    ]
+  },
+  {
+    "seq": 19,
+    "sha": "3cd5ae2487593d6f71358561366874a1ef9ff0a3",
+    "date": "2026-09-08T12:10:16+02:00",
+    "pr": 20,
+    "title": "Capture fixed Git subtrees for root opening",
+    "adrs": [
+      "0006"
+    ]
+  },
+  {
+    "seq": 20,
+    "sha": "efc57ef49bfc435bdf86a2decebe9147d73cb274",
+    "date": "2026-09-08T12:15:09+02:00",
+    "pr": 21,
+    "title": "Capture local directories as immutable file trees",
+    "adrs": [
+      "0003"
+    ]
+  },
+  {
+    "seq": 21,
+    "sha": "d16bb281cc1ab3b9142365cd59e91c2010d6bd89",
+    "date": "2026-09-08T12:30:04+02:00",
+    "pr": 22,
+    "title": "Open roots from manifests and fixed captured sources",
+    "adrs": [
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "seq": 22,
+    "sha": "2f7971a1819678fa0b1e976f1685b8880bc132f1",
+    "date": "2026-09-08T13:13:23+02:00",
+    "pr": 23,
+    "title": "Add Git commit construction and conditional branch update",
+    "adrs": [
+      "0012"
+    ]
+  },
+  {
+    "seq": 23,
+    "sha": "b62df443063f6cbab9b8e1eb019a5f7de36fedf3",
+    "date": "2026-09-08T13:28:46+02:00",
+    "pr": 24,
+    "title": "Add shared validation reports and MicroHs report wire",
+    "adrs": [
+      "0011"
+    ]
+  },
+  {
+    "seq": 24,
+    "sha": "07512a18dd80b2e21843fe36325137bd41bb00ac",
+    "date": "2026-09-08T13:45:08+02:00",
+    "pr": 25,
+    "title": "Execute captured root validation through MicroHs",
+    "adrs": [
+      "0006",
+      "0011"
+    ]
+  },
+  {
+    "seq": 25,
+    "sha": "f238bc5f0b7950ec476730b243762070d73104af",
+    "date": "2026-09-08T13:59:09+02:00",
+    "pr": 26,
+    "title": "Separate value contracts from persistent root layout",
+    "adrs": [
+      "0004",
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "seq": 26,
+    "sha": "72968c0fda5c6a45ba0ff9959034a33a90b905e5",
+    "date": "2026-09-08T14:59:42+02:00",
+    "pr": 27,
+    "title": "Add typed snapshot queries with generated bindings and read traces",
+    "adrs": [
+      "0006",
+      "0008",
+      "0009",
+      "0011",
+      "0017"
+    ]
+  },
+  {
+    "seq": 27,
+    "sha": "524e6739a894e83ff9f81c5bddf9f9e5deafb41b",
+    "date": "2026-09-08T15:17:49+02:00",
+    "pr": 28,
+    "title": "Validate roots against saved query examples",
+    "adrs": [
+      "0004",
+      "0006",
+      "0008",
+      "0011"
+    ]
+  },
+  {
+    "seq": 28,
+    "sha": "e916a71132f53f327b52c4d0e39a547d14a26632",
+    "date": "2026-09-08T15:29:08+02:00",
+    "pr": 29,
+    "title": "Export exact validated roots for Git publication",
+    "adrs": [
+      "0004",
+      "0006",
+      "0012"
+    ]
+  },
+  {
+    "seq": 29,
+    "sha": "7f17c3d2fe2dd3d704da08f6cd5a5d9442d87e98",
+    "date": "2026-09-08T15:48:24+02:00",
+    "pr": 30,
+    "title": "Capture evolution workspace inputs and load source-only roots",
+    "adrs": [
+      "0006",
+      "0010"
+    ]
+  },
+  {
+    "seq": 30,
+    "sha": "ec5d0c127bf16716fe94b49741506520d0050d99",
+    "date": "2026-09-08T16:01:02+02:00",
+    "pr": 31,
+    "title": "Verify captured evolutions against their selected Before source",
+    "adrs": [
+      "0004",
+      "0010"
+    ]
+  },
+  {
+    "seq": 31,
+    "sha": "2f9e006c630fa533af2194006a3760930298f916",
+    "date": "2026-09-08T16:13:48+02:00",
+    "pr": 32,
+    "title": "Create draft evolution workspaces from a selected revision",
+    "adrs": [
+      "0003",
+      "0010"
+    ]
+  },
+  {
+    "seq": 32,
+    "sha": "fde808747fffa132f68f79632bc4bdef5e64091a",
+    "date": "2026-09-08T16:36:50+02:00",
+    "pr": 33,
+    "title": "Add typed evolution composition and generated root bindings",
+    "adrs": [
+      "0009",
+      "0010",
+      "0014"
+    ]
+  },
+  {
+    "seq": 33,
+    "sha": "700c7a4f314589a6944abde0df5b607e1c152f49",
+    "date": "2026-09-08T18:31:12+02:00",
+    "pr": 34,
+    "title": "Check evolution observations and derive per-fact reports",
+    "adrs": [
+      "0010"
+    ]
+  },
+  {
+    "seq": 34,
+    "sha": "3e0f8d970c39f88cac149b0572bbcfa97fba5f6a",
+    "date": "2026-09-08T18:59:36+02:00",
+    "pr": 35,
+    "title": "Prepare and evaluate captured evolution workspaces",
+    "adrs": [
+      "0005",
+      "0010"
+    ]
+  },
+  {
+    "seq": 35,
+    "sha": "3bb8b62925657c5033fe5872499fb8cb37ced57c",
+    "date": "2026-09-08T19:12:34+02:00",
+    "pr": 36,
+    "title": "Add atomic saved-result pointer plumbing",
+    "adrs": [
+      "0003",
+      "0010"
+    ]
+  },
+  {
+    "seq": 36,
+    "sha": "affedab45b6b25161c9194cfbc469b1ea2c362f2",
+    "date": "2026-09-08T20:19:48+02:00",
+    "pr": 37,
+    "title": "Persist and check evaluated evolution candidates",
+    "adrs": [
+      "0004",
+      "0010",
+      "0011"
+    ]
+  },
+  {
+    "seq": 37,
+    "sha": "0a600c7aee848b3babb97497df95b24878acc45c",
+    "date": "2026-09-08T20:31:46+02:00",
+    "pr": 38,
+    "title": "Find authoritative evolution acceptance in Git history",
+    "adrs": [
+      "0010",
+      "0012"
+    ]
+  },
+  {
+    "seq": 38,
+    "sha": "dc4f95b56caa191719a4a1ca89ca62228ac6d304",
+    "date": "2026-09-08T20:46:46+02:00",
+    "pr": 39,
+    "title": "Add authoritative evolution lifecycle operations",
+    "adrs": [
+      "0003",
+      "0010",
+      "0012"
+    ]
+  },
+  {
+    "seq": 39,
+    "sha": "c8dcb5724877b2b26bd602f4837e3e6866c5de1f",
+    "date": "2026-09-08T20:59:45+02:00",
+    "pr": 40,
+    "title": "Export checked evolution archives alongside root snapshots",
+    "adrs": [
+      "0010",
+      "0012"
+    ]
+  },
+  {
+    "seq": 40,
+    "sha": "a04fcac68821eb73d2a5ce5a952d008ff5b47981",
+    "date": "2026-09-08T21:26:20+02:00",
+    "pr": 41,
+    "title": "Add scoped Git checkout inspection and synchronization",
+    "adrs": [
+      "0010",
+      "0012"
+    ]
+  },
+  {
+    "seq": 41,
+    "sha": "a3c147a7613feccb8121b08f971e47ecfc240179",
+    "date": "2026-09-08T21:54:15+02:00",
+    "pr": 42,
+    "title": "Compose evolution acceptance and explicit checkout recovery",
+    "adrs": [
+      "0012"
+    ]
+  },
+  {
+    "seq": 42,
+    "sha": "424707d8dd1b8abf43ae8d2357b12b15090e627f",
+    "date": "2026-09-08T22:07:13+02:00",
+    "pr": 43,
+    "title": "Separate evolution authoring from compiler-free storage",
+    "adrs": [
+      "0010",
+      "0018",
+      "0019"
+    ]
+  },
+  {
+    "seq": 43,
+    "sha": "f907a9d7ac5ae0a5509c1ed89f77803b7dc9066b",
+    "date": "2026-09-09T11:49:58+02:00",
+    "pr": 44,
+    "title": "Expose the first evolution journey through the CLI",
+    "adrs": [
+      "0002",
+      "0006",
+      "0010",
+      "0011",
+      "0018",
+      "0020",
+      "0025"
+    ]
+  },
+  {
+    "seq": 44,
+    "sha": "04683ecf8b22acff7347049b733ef092dc041a1c",
+    "date": "2026-09-09T12:48:22+02:00",
+    "pr": 47,
+    "title": "Use configured Git identity for acceptance",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 45,
+    "sha": "3afb8635d7b6d588759663425c4192dede5d4aae",
+    "date": "2026-09-09T14:45:51+02:00",
+    "pr": 48,
+    "title": "Prepare root programs once for checking",
+    "adrs": [
+      "0002",
+      "0010",
+      "0011"
+    ]
+  },
+  {
+    "seq": 46,
+    "sha": "f8e416631868386e3fc9e90bec3a67a93e9afafd",
+    "date": "2026-09-09T14:58:00+02:00",
+    "pr": 49,
+    "title": "Install the complete local CLI as kyyn-v2",
+    "adrs": [
+      "0020"
+    ]
+  },
+  {
+    "seq": 47,
+    "sha": "050a308a2e74521f49525f557285240a0e4643d7",
+    "date": "2026-09-09T15:28:25+02:00",
+    "pr": 50,
+    "title": "Show available commands for incomplete CLI invocations",
+    "adrs": []
+  },
+  {
+    "seq": 48,
+    "sha": "1358b324ea9cb4a29342785357a7ed099cfe1539",
+    "date": "2026-09-09T15:48:00+02:00",
+    "pr": 52,
+    "title": "Support initial Git publication for KB initialization",
+    "adrs": [
+      "0012"
+    ]
+  },
+  {
+    "seq": 49,
+    "sha": "f8657d053e40bda8fdb57f8c6fa255fbc730f449",
+    "date": "2026-09-09T15:50:55+02:00",
+    "pr": 53,
+    "title": "Support genuinely empty roots for initialization",
+    "adrs": [
+      "0005"
+    ]
+  },
+  {
+    "seq": 50,
+    "sha": "c5d796b14df023c6ba3c24d5bb61a5c1f55b0088",
+    "date": "2026-09-09T16:45:03+02:00",
+    "pr": 54,
+    "title": "Initialize empty knowledge bases through kb init",
+    "adrs": [
+      "0010",
+      "0012",
+      "0018"
+    ]
+  },
+  {
+    "seq": 51,
+    "sha": "0cf4cd089559e497602ccce2fe064b1cd8b603b2",
+    "date": "2026-09-09T20:59:21+02:00",
+    "pr": 56,
+    "title": "Check current evolutions and reuse captured Before inputs",
+    "adrs": [
+      "0006",
+      "0010",
+      "0018"
+    ]
+  },
+  {
+    "seq": 52,
+    "sha": "240cbe40b570083207341c7135b53b424a08be45",
+    "date": "2026-09-09T22:17:55+02:00",
+    "pr": 58,
+    "title": "Simplify evolution authoring to Before and After steps",
+    "adrs": [
+      "0010",
+      "0012",
+      "0021"
+    ]
+  },
+  {
+    "seq": 53,
+    "sha": "1a27ed11e99177c15ebe9b3dc37918dcc6e0e521",
+    "date": "2026-09-09T23:05:39+02:00",
+    "pr": 60,
+    "title": "Use numbered slugs for evolution workspaces",
+    "adrs": [
+      "0010",
+      "0018"
+    ]
+  },
+  {
+    "seq": 54,
+    "sha": "c15c5529886d82e29eb8d99bd328bd3e8941d33a",
+    "date": "2026-09-10T13:35:41+02:00",
+    "pr": 63,
+    "title": "Persist evolution candidates and reports as typed Dhall",
+    "adrs": [
+      "0006",
+      "0010"
+    ]
+  },
+  {
+    "seq": 55,
+    "sha": "e79e5d1d6b4bacf7275a4f016c622f0507fc915c",
+    "date": "2026-09-10T13:36:15+02:00",
+    "pr": 64,
+    "title": "Add fact-aware State edits and generated collection optics",
+    "adrs": [
+      "0010",
+      "0020"
+    ]
+  },
+  {
+    "seq": 56,
+    "sha": "760d6fd7ae50ef0ee11b636358d9be1622fd1c6d",
+    "date": "2026-09-10T14:44:48+02:00",
+    "pr": 66,
+    "title": "Discover the installed guest SDK API",
+    "adrs": [
+      "0018",
+      "0026"
+    ]
+  },
+  {
+    "seq": 57,
+    "sha": "d8e4df5cf2c47440f5a72aed7d194d8cdef747b1",
+    "date": "2026-09-10T15:41:10+02:00",
+    "pr": 67,
+    "title": "Format guest discovery documentation as comments",
+    "adrs": []
+  },
+  {
+    "seq": 58,
+    "sha": "0b19cef4b9461ee50cd8a992990e959c17637bcd",
+    "date": "2026-09-10T16:31:48+02:00",
+    "pr": 69,
+    "title": "Show public guest data and newtype declarations",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 59,
+    "sha": "963b557768c93b6aef8a6b8506facabd1a0ca706",
+    "date": "2026-09-10T16:40:23+02:00",
+    "pr": 70,
+    "title": "Place discovery origins above signatures",
+    "adrs": []
+  },
+  {
+    "seq": 60,
+    "sha": "d651151181a0e7763ae89700a5b6ab86e12076dd",
+    "date": "2026-09-10T17:34:50+02:00",
+    "pr": 73,
+    "title": "Exclude compiler dictionaries from guest discovery",
+    "adrs": []
+  },
+  {
+    "seq": 61,
+    "sha": "782cd104b1c1d956c198c31fb18786ea441ccfff",
+    "date": "2026-09-10T18:06:59+02:00",
+    "pr": 74,
+    "title": "Show source-derived guest signatures without compiler machinery",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 62,
+    "sha": "f72267bf46c99952da0a4c03fa9886dfb4b3d5de",
+    "date": "2026-09-11T07:48:43+02:00",
+    "pr": 77,
+    "title": "Group guest author APIs into Schema, Validation, Query and Evolution",
+    "adrs": [
+      "0008",
+      "0018"
+    ]
+  },
+  {
+    "seq": 63,
+    "sha": "d02e5fc4e3bd68640ce9fead428b8217303cdc44",
+    "date": "2026-09-11T07:51:24+02:00",
+    "pr": 75,
+    "title": "Design evolution workspace API discovery",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 64,
+    "sha": "884921124f5d2cfa6417ef9d72a43e0f4f4aa983",
+    "date": "2026-09-11T08:26:27+02:00",
+    "pr": 78,
+    "title": "Document generated workspace evolution bindings",
+    "adrs": []
+  },
+  {
+    "seq": 65,
+    "sha": "6e735aef1ffc715f57e42f12fcf142696efa7edd",
+    "date": "2026-09-11T08:37:58+02:00",
+    "pr": 79,
+    "title": "Add captured API inspection plumbing capability",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 66,
+    "sha": "382a05c49c52cab8585ad812bb609470f2173eef",
+    "date": "2026-09-11T08:52:33+02:00",
+    "pr": 81,
+    "title": "Skip fact blobs during source-only Git capture",
+    "adrs": [
+      "0006"
+    ]
+  },
+  {
+    "seq": 67,
+    "sha": "619e1b0929ba7046551ccb0e5ec4f259c38e7ced",
+    "date": "2026-09-11T10:12:20+02:00",
+    "pr": 82,
+    "title": "Share evolution endpoint preparation with workspace discovery",
+    "adrs": [
+      "0006",
+      "0010"
+    ]
+  },
+  {
+    "seq": 68,
+    "sha": "6de5d617de63d30721b7dd67f5f42ec2f8a3726f",
+    "date": "2026-09-11T12:09:04+02:00",
+    "pr": 83,
+    "title": "Discover generated evolution APIs from the CLI",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 69,
+    "sha": "a90d9b10b4cc4f6ef672913ea2a71f8079a70624",
+    "date": "2026-09-11T13:30:58+02:00",
+    "pr": 84,
+    "title": "Document temporary directory choice for installed tests",
+    "adrs": []
+  },
+  {
+    "seq": 70,
+    "sha": "9567476f3c249aff9e4f3d38e6cdd395535e068b",
+    "date": "2026-09-11T14:17:00+02:00",
+    "pr": 86,
+    "title": "Specify plugin installation from local packages and Git subdirectories",
+    "adrs": [
+      "0006",
+      "0015",
+      "0018"
+    ]
+  },
+  {
+    "seq": 71,
+    "sha": "db5c2170078b7ea34a6d9f8faf8ff30b9be70869",
+    "date": "2026-09-11T14:34:14+02:00",
+    "pr": 88,
+    "title": "Require Git source revisions for plugin installation",
+    "adrs": [
+      "0015"
+    ]
+  },
+  {
+    "seq": 72,
+    "sha": "985e0614553a0de1f3444719fd9a253397c3bc24",
+    "date": "2026-09-11T14:45:27+02:00",
+    "pr": 87,
+    "title": "Add Git-backed plugin package contracts and acquisition plumbing",
+    "adrs": []
+  },
+  {
+    "seq": 73,
+    "sha": "0631b89656924c64ac9b517483f107967b44d0f7",
+    "date": "2026-09-11T14:59:41+02:00",
+    "pr": 89,
+    "title": "Install captured plugin packages through typed porcelain",
+    "adrs": []
+  },
+  {
+    "seq": 74,
+    "sha": "64f6615ce502b5ee71a2eed4c98925bb32907f06",
+    "date": "2026-09-11T15:32:51+02:00",
+    "pr": 90,
+    "title": "Install plugin source through the CLI",
+    "adrs": [
+      "0015"
+    ]
+  },
+  {
+    "seq": 75,
+    "sha": "8d9c044083c857cc27bd4d0176317d0c0ae59503",
+    "date": "2026-09-11T15:48:05+02:00",
+    "pr": 92,
+    "title": "Use the shipped native compiler for guest integration",
+    "adrs": []
+  },
+  {
+    "seq": 76,
+    "sha": "74a7a3ab060006ee9f2ee5709fc5054b578b8cd3",
+    "date": "2026-09-11T18:16:40+02:00",
+    "pr": 94,
+    "title": "docs: fetch history, connector bindings and typed curation tools",
+    "adrs": [
+      "0006",
+      "0008",
+      "0009",
+      "0010",
+      "0014",
+      "0015",
+      "0016",
+      "0018"
+    ]
+  },
+  {
+    "seq": 77,
+    "sha": "686900ff035460243cffee691a754196a1d3f829",
+    "date": "2026-09-11T19:17:25+02:00",
+    "pr": 95,
+    "title": "feat: scoped Dhall evidence history and publication",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 78,
+    "sha": "dba8124c51cf140766419fc0600022b7bdb32e8f",
+    "date": "2026-09-11T19:41:45+02:00",
+    "pr": 96,
+    "title": "Prove typed plugin acquisition across GHC and MicroHs",
+    "adrs": [
+      "0007",
+      "0008",
+      "0009",
+      "0014"
+    ]
+  },
+  {
+    "seq": 79,
+    "sha": "dec74be0b8fe71bc4ed14b0ed27831bbef54eff9",
+    "date": "2026-09-14T10:33:55+02:00",
+    "pr": 98,
+    "title": "Install plugins into evolution targets only",
+    "adrs": [
+      "0015",
+      "0018"
+    ]
+  },
+  {
+    "seq": 80,
+    "sha": "7c827f06147a888adec2ad7c61dee9b003f4d41e",
+    "date": "2026-09-14T11:06:26+02:00",
+    "pr": 99,
+    "title": "Interpret acquisition through native host capabilities",
+    "adrs": [
+      "0007",
+      "0009",
+      "0014"
+    ]
+  },
+  {
+    "seq": 81,
+    "sha": "02c22fea3da9899b2c12363f9a8490b263059027",
+    "date": "2026-09-14T11:37:59+02:00",
+    "pr": 100,
+    "title": "Register source connectors and validate root-owned configuration",
+    "adrs": [
+      "0006",
+      "0007",
+      "0009",
+      "0014",
+      "0015",
+      "0016"
+    ]
+  },
+  {
+    "seq": 82,
+    "sha": "ff7bed23e5bb424472cb40041c6dc16df35aa155",
+    "date": "2026-09-14T12:14:34+02:00",
+    "pr": 101,
+    "title": "Expose connector fetching and retained evidence inspection",
+    "adrs": [
+      "0014",
+      "0018"
+    ]
+  },
+  {
+    "seq": 83,
+    "sha": "bd32ce2b298d4a1f3479b669539fe572dbbbc2e3",
+    "date": "2026-09-14T13:16:24+02:00",
+    "pr": 102,
+    "title": "Clarify capability ownership and scoped evidence access",
+    "adrs": [
+      "0002",
+      "0003",
+      "0008",
+      "0009",
+      "0014"
+    ]
+  },
+  {
+    "seq": 84,
+    "sha": "15c47e3426f33a4079027c42a95f8bf2f9dabab3",
+    "date": "2026-09-15T08:03:31+02:00",
+    "pr": 103,
+    "title": "Use latest-only evidence with lightweight curation changes",
+    "adrs": [
+      "0003",
+      "0007",
+      "0009",
+      "0014",
+      "0015",
+      "0016",
+      "0018"
+    ]
+  },
+  {
+    "seq": 85,
+    "sha": "e664d57a519e39dcbb250dcdd842256890aa7b60",
+    "date": "2026-09-15T08:50:37+02:00",
+    "pr": 104,
+    "title": "Implement latest-only evidence and curation markers",
+    "adrs": [
+      "0003",
+      "0009",
+      "0014",
+      "0018"
+    ]
+  },
+  {
+    "seq": 86,
+    "sha": "105bf79109a6c1297cf1504afdfd20e17bceed21",
+    "date": "2026-09-15T09:24:54+02:00",
+    "pr": 106,
+    "title": "Add typed local-file content discovery and invocation",
+    "adrs": [
+      "0009",
+      "0015",
+      "0018"
+    ]
+  },
+  {
+    "seq": 87,
+    "sha": "c2bd7850bf51432fe56c323375a0c12365876ef1",
+    "date": "2026-09-15T10:17:53+02:00",
+    "pr": 107,
+    "title": "Compose captured plugin reads in typed KB tools",
+    "adrs": [
+      "0008",
+      "0009",
+      "0016",
+      "0018"
+    ]
+  },
+  {
+    "seq": 88,
+    "sha": "4277edde2081e9e22979f5de17cd861f79919bbd",
+    "date": "2026-09-21T16:40:50+02:00",
+    "pr": 108,
+    "title": "Adopt upstream MicroHs path quoting fix",
+    "adrs": [
+      "0002",
+      "0026"
+    ]
+  },
+  {
+    "seq": 89,
+    "sha": "e910bdbf5461b009cf2541721acb6da1cfc6aea6",
+    "date": "2026-09-23T09:36:16+02:00",
+    "pr": 110,
+    "title": "Design recipe-scoped curation and evidence acknowledgements",
+    "adrs": [
+      "0008",
+      "0010",
+      "0012",
+      "0014",
+      "0018"
+    ]
+  },
+  {
+    "seq": 90,
+    "sha": "1d7ee1463673fbfce2525d6b1806ef283c79cf22",
+    "date": "2026-09-23T09:45:57+02:00",
+    "pr": 111,
+    "title": "Implement pure recipe curation and net pending evidence",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 91,
+    "sha": "98a71c01dbeb47c50132d59c5db4e8b47f416cab",
+    "date": "2026-09-23T10:27:45+02:00",
+    "pr": 112,
+    "title": "Persist recipes and host-owned curation progress",
+    "adrs": [
+      "0004",
+      "0006",
+      "0014"
+    ]
+  },
+  {
+    "seq": 92,
+    "sha": "0f9bb38510a44564b4ee4b3ab6f2caa0130bca90",
+    "date": "2026-09-23T11:16:48+02:00",
+    "pr": 113,
+    "title": "Prepare recipe acknowledgements with evolution candidates",
+    "adrs": [
+      "0010",
+      "0014"
+    ]
+  },
+  {
+    "seq": 93,
+    "sha": "db1acb8b6ef1f8a45c3f538c8d9cdb8b981494cf",
+    "date": "2026-09-23T12:14:56+02:00",
+    "pr": 114,
+    "title": "Discover recipe instructions and net pending evidence",
+    "adrs": [
+      "0014",
+      "0018"
+    ]
+  },
+  {
+    "seq": 94,
+    "sha": "7744bd2d4f03335939816dce501312dae9282d19",
+    "date": "2026-09-23T14:37:46+02:00",
+    "pr": 116,
+    "title": "Design first-class recipes in typed evolutions",
+    "adrs": [
+      "0004",
+      "0006",
+      "0008",
+      "0010",
+      "0014"
+    ]
+  },
+  {
+    "seq": 95,
+    "sha": "5669f08916fd3eaced428ed55feb779ca513a4f6",
+    "date": "2026-09-23T14:45:31+02:00",
+    "pr": 117,
+    "title": "Add KnowledgeBase and recipe editing values to the SDK",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 96,
+    "sha": "e8d8545239d6142a6cd821ae9d00ce08793102b4",
+    "date": "2026-09-23T16:03:05+02:00",
+    "pr": 118,
+    "title": "Evolve recipes as first-class knowledge-base data",
+    "adrs": [
+      "0006",
+      "0010",
+      "0014"
+    ]
+  },
+  {
+    "seq": 97,
+    "sha": "235b9c96ee0e733360bd18529eae7fd6b30ef5b9",
+    "date": "2026-09-24T10:11:26+02:00",
+    "pr": 121,
+    "title": "design: local secrets and pure evolution execution",
+    "adrs": [
+      "0008",
+      "0009",
+      "0010",
+      "0014",
+      "0016"
+    ]
+  },
+  {
+    "seq": 98,
+    "sha": "2a57bac33f5c5a1275bf3ff1361f346406b28126",
+    "date": "2026-09-24T10:26:52+02:00",
+    "pr": 122,
+    "title": "feat: checkout-local secrets and CLI",
+    "adrs": [
+      "0016"
+    ]
+  },
+  {
+    "seq": 99,
+    "sha": "5818597b459a3e9c7f61a2ec3757789d3394ab0f",
+    "date": "2026-09-24T10:35:25+02:00",
+    "pr": 123,
+    "title": "design: typed model judgements for KB tools",
+    "adrs": [
+      "0008",
+      "0009",
+      "0027"
+    ]
+  },
+  {
+    "seq": 100,
+    "sha": "ae28d1bc7ca003beb670e9dbcb6bf46590ce21ff",
+    "date": "2026-09-24T11:19:19+02:00",
+    "pr": 124,
+    "title": "feat: typed host judgements in KB tools",
+    "adrs": [
+      "0027"
+    ]
+  },
+  {
+    "seq": 101,
+    "sha": "7374196f4b0ec643607c5090d99bb4f7f7bafbdc",
+    "date": "2026-09-24T12:37:26+02:00",
+    "pr": 126,
+    "title": "Expose KB tool APIs through guest discovery",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 102,
+    "sha": "e2db5dd5874119c5677657ec4711b654da5ec633",
+    "date": "2026-09-24T15:03:38+02:00",
+    "pr": 128,
+    "title": "Allow distinct badges and contract-safe judgement results",
+    "adrs": [
+      "0005",
+      "0027"
+    ]
+  },
+  {
+    "seq": 103,
+    "sha": "180d9d87841deb2c23ad4ae9269f8563767fd6c7",
+    "date": "2026-09-24T20:13:47+02:00",
+    "pr": 130,
+    "title": "Make compiler diagnostics actionable for KB authors",
+    "adrs": [
+      "0019"
+    ]
+  },
+  {
+    "seq": 104,
+    "sha": "39fc9a9816a3719ba6d7440b0dcf8b646bb1a3a9",
+    "date": "2026-09-24T20:23:40+02:00",
+    "pr": 132,
+    "title": "Reuse compiled guest artifacts per KB",
+    "adrs": [
+      "0002"
+    ]
+  },
+  {
+    "seq": 105,
+    "sha": "b71cb994689ab68b20104f0266cd722a8ccb672f",
+    "date": "2026-09-24T20:54:20+02:00",
+    "pr": 134,
+    "title": "Expose opt-in command phase timings",
+    "adrs": []
+  },
+  {
+    "seq": 106,
+    "sha": "6d1f3a463db1106e44c785c1f86d54bc5c711a62",
+    "date": "2026-09-24T21:25:39+02:00",
+    "pr": 136,
+    "title": "Cache native inspection results across CLI invocations",
+    "adrs": [
+      "0005",
+      "0006"
+    ]
+  },
+  {
+    "seq": 107,
+    "sha": "bd43484335f82fa13548c506b708a2f1656eb8bb",
+    "date": "2026-09-25T09:17:43+02:00",
+    "pr": 138,
+    "title": "List current captured evidence IDs",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 108,
+    "sha": "157df949ac2137ff030b3a0241b3fc46b7c4a2d9",
+    "date": "2026-09-25T10:52:55+02:00",
+    "pr": 140,
+    "title": "Make file fingerprints opaque and label evidence instances consistently",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 109,
+    "sha": "512c8a3184bbfd681016102c0409e9f223e72769",
+    "date": "2026-09-25T11:37:22+02:00",
+    "pr": 142,
+    "title": "Improve fetch IDs, curation scopes and citation clarity",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 110,
+    "sha": "461e4ce850bf1e057a16919ac30ff6413b5a2cc2",
+    "date": "2026-09-25T21:46:17+02:00",
+    "pr": 144,
+    "title": "Design: typed fetch options and plugin-owned Graph acquisition",
+    "adrs": [
+      "0009",
+      "0014",
+      "0015",
+      "0016"
+    ]
+  },
+  {
+    "seq": 111,
+    "sha": "e2034585aa6d537d062c2d4519635225ceb28315",
+    "date": "2026-09-25T22:07:21+02:00",
+    "pr": 145,
+    "title": "Typed connector fetch options, discovery and history",
+    "adrs": [
+      "0009",
+      "0014",
+      "0015"
+    ]
+  },
+  {
+    "seq": 112,
+    "sha": "178e74d80e6c8da9bf2efffde20e1fccf03c3112",
+    "date": "2026-09-28T08:39:19+02:00",
+    "pr": 146,
+    "title": "Add typed plugin network host transport",
+    "adrs": [
+      "0009"
+    ]
+  },
+  {
+    "seq": 113,
+    "sha": "68debc0cd6441939209b81aebb0b29bcbfefc044",
+    "date": "2026-09-29T14:07:58+02:00",
+    "pr": 147,
+    "title": "Add Graph calendar source and unified acquisition capabilities",
+    "adrs": [
+      "0009",
+      "0014",
+      "0015",
+      "0016"
+    ]
+  },
+  {
+    "seq": 114,
+    "sha": "2fdc71669add5c62228c90326c7b0ba28933b6d2",
+    "date": "2026-09-29T14:08:34+02:00",
+    "pr": 148,
+    "title": "Document KB-local taps and discoverable plugin guides",
+    "adrs": [
+      "0006",
+      "0015",
+      "0018"
+    ]
+  },
+  {
+    "seq": 115,
+    "sha": "e23898936cdccb41f68e57c0ab9db9959c3030e7",
+    "date": "2026-09-29T14:15:32+02:00",
+    "pr": 150,
+    "title": "Specify signature-derived plugin registration and shared evidence helpers",
+    "adrs": [
+      "0009",
+      "0015"
+    ]
+  },
+  {
+    "seq": 116,
+    "sha": "a12856f2a844ab78a8b7898f13152334e2b16c96",
+    "date": "2026-09-29T14:35:47+02:00",
+    "pr": 151,
+    "title": "Implement signature-derived plugin registration",
+    "adrs": [
+      "0009",
+      "0015"
+    ]
+  },
+  {
+    "seq": 117,
+    "sha": "d869eb29a387b06937beb1213a16eff370f912e4",
+    "date": "2026-09-29T15:18:59+02:00",
+    "pr": 152,
+    "title": "Fix CPP source discovery with the upstream MicroHs update",
+    "adrs": [
+      "0002"
+    ]
+  },
+  {
+    "seq": 118,
+    "sha": "1a468546243d91ae29d274fecf88f0dbfe3d3e86",
+    "date": "2026-09-29T15:37:48+02:00",
+    "pr": 154,
+    "title": "Expose plugin list, package details and guides",
+    "adrs": [
+      "0015"
+    ]
+  },
+  {
+    "seq": 119,
+    "sha": "b81652a146a5cb5fc9a23c91fada8fa0b79dcc62",
+    "date": "2026-09-29T16:14:42+02:00",
+    "pr": 155,
+    "title": "Add KB-local taps and plugin discovery",
+    "adrs": [
+      "0015"
+    ]
+  },
+  {
+    "seq": 120,
+    "sha": "7862b5593e71f89fb14b954158066ec650af4dbb",
+    "date": "2026-09-30T09:55:19+02:00",
+    "pr": 156,
+    "title": "Fix plugin re-vendoring and missing bundled compiler config",
+    "adrs": [
+      "0015"
+    ]
+  },
+  {
+    "seq": 121,
+    "sha": "7c8ee93d079466d0b1505b8dd631cfa0073f12a7",
+    "date": "2026-09-30T13:50:45+02:00",
+    "pr": 157,
+    "title": "Show plugin upgrades in saved evolution reports and tap sync revisions",
+    "adrs": [
+      "0010",
+      "0014",
+      "0015"
+    ]
+  },
+  {
+    "seq": 122,
+    "sha": "36d396988a3705e403de4a52abb14d33e51ff4a4",
+    "date": "2026-10-01T20:13:59+02:00",
+    "pr": 159,
+    "title": "docs: propose typed agentic tools and executable recipes",
+    "adrs": [
+      "0001",
+      "0009",
+      "0010",
+      "0014",
+      "0028"
+    ]
+  },
+  {
+    "seq": 123,
+    "sha": "3bd83b4c48971b12e893933915998da8367a7587",
+    "date": "2026-10-01T20:28:13+02:00",
+    "pr": 160,
+    "title": "test: prove agentic host turns and fact-edit proposals",
+    "adrs": []
+  },
+  {
+    "seq": 124,
+    "sha": "645d9330a94113d10366f7db5518e9b787821852",
+    "date": "2026-10-01T21:11:47+02:00",
+    "pr": 161,
+    "title": "feat: generate typed fact-edit proposal bindings",
+    "adrs": [
+      "0028"
+    ]
+  },
+  {
+    "seq": 125,
+    "sha": "b7bfdcb1aa2e0cbec3d181af98705a30151133e3",
+    "date": "2026-10-01T21:42:15+02:00",
+    "pr": 162,
+    "title": "Persist fact proposals as ordinary pure evolutions",
+    "adrs": []
+  },
+  {
+    "seq": 126,
+    "sha": "a1aea431e63e425908e13e69ebe2c8c0824035fb",
+    "date": "2026-10-02T08:25:02+02:00",
+    "pr": 163,
+    "title": "Derive Agentic contracts from checked Kyyn types",
+    "adrs": []
+  },
+  {
+    "seq": 127,
+    "sha": "306200c4d5afcc34e9517163f1581d53458a27ba",
+    "date": "2026-10-02T08:50:47+02:00",
+    "pr": 164,
+    "title": "Add model-turn providers with explicit local credentials",
+    "adrs": [
+      "0028"
+    ]
+  },
+  {
+    "seq": 128,
+    "sha": "3b27e38f03e11c5bd529ef97330c3c1d0b8b7689",
+    "date": "2026-10-02T10:51:30+02:00",
+    "pr": 165,
+    "title": "Connect guest model turns to captured KB configuration",
+    "adrs": [
+      "0028"
+    ]
+  },
+  {
+    "seq": 129,
+    "sha": "8556fed329dde967885f6721d6ece9409baf4916",
+    "date": "2026-10-02T11:45:32+02:00",
+    "pr": 166,
+    "title": "Generate model Contract instances from authored type imports",
+    "adrs": [
+      "0028"
+    ]
+  },
+  {
+    "seq": 130,
+    "sha": "c5a8f9481a78b7bcfc4366bbf5341d9da3391806",
+    "date": "2026-10-02T13:53:13+02:00",
+    "pr": 167,
+    "title": "Represent and typecheck closed recipes",
+    "adrs": [
+      "0010",
+      "0014",
+      "0028"
+    ]
+  },
+  {
+    "seq": 131,
+    "sha": "9b6f15ef2ed0582746bad124fb3a276e7d4d2156",
+    "date": "2026-10-02T14:27:43+02:00",
+    "pr": 168,
+    "title": "Run closed recipes into draft evolutions",
+    "adrs": [
+      "0014",
+      "0028"
+    ]
+  },
+  {
+    "seq": 132,
+    "sha": "f985992db429838152bfb56d1e3c2b76e030da11",
+    "date": "2026-10-02T16:50:29+02:00",
+    "pr": 170,
+    "title": "Use Agentic as the sole judgement authoring interface",
+    "adrs": [
+      "0027",
+      "0028"
+    ]
+  },
+  {
+    "seq": 133,
+    "sha": "d85078240e254823f72f82fada8d82640d755df0",
+    "date": "2026-10-02T17:08:16+02:00",
+    "pr": 171,
+    "title": "Execute Agentic judge through Jev SystemOne",
+    "adrs": [
+      "0018",
+      "0027",
+      "0028"
+    ]
+  },
+  {
+    "seq": 134,
+    "sha": "57f25071e03ee18453edabcae46ae99d57cdb598",
+    "date": "2026-10-02T17:56:45+02:00",
+    "pr": 173,
+    "title": "Clarify producer reconciliation and enum Options generation",
+    "adrs": [
+      "0014",
+      "0028"
+    ]
+  },
+  {
+    "seq": 135,
+    "sha": "23b538e8b5e863774836d7810d5dc38dc93cbe94",
+    "date": "2026-10-02T18:06:46+02:00",
+    "pr": 174,
+    "title": "Reconcile changed producers in recipes and derive enum Options",
+    "adrs": [
+      "0028"
+    ]
+  },
+  {
+    "seq": 136,
+    "sha": "7f900efe70659b1df8eb8534dafa10ec0645c4ef",
+    "date": "2026-10-05T10:03:54+02:00",
+    "pr": 176,
+    "title": "Define KB API and root knowledge browsing",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 137,
+    "sha": "7f0d9a1e7de5742f09dc47499717078c9ae591c4",
+    "date": "2026-10-05T10:12:28+02:00",
+    "pr": 177,
+    "title": "Browse root schemas collections and facts",
+    "adrs": []
+  },
+  {
+    "seq": 138,
+    "sha": "498659c2731498f6193320783be9500b7e55ae4a",
+    "date": "2026-10-05T10:20:27+02:00",
+    "pr": 178,
+    "title": "Discover KB-authored modules signatures and documentation",
+    "adrs": []
+  },
+  {
+    "seq": 139,
+    "sha": "29e61dfc93dad7e8ac725661f5f7543bc5add55c",
+    "date": "2026-10-05T12:38:48+02:00",
+    "pr": 180,
+    "title": "Clarify recipe description and discovery contexts",
+    "adrs": [
+      "0018",
+      "0028"
+    ]
+  },
+  {
+    "seq": 140,
+    "sha": "c0fc93c08ed2d6be2c18ef30d07d078a16b45d4e",
+    "date": "2026-10-05T12:51:40+02:00",
+    "pr": 181,
+    "title": "Describe closed recipes and discover their generated fact edits",
+    "adrs": []
+  },
+  {
+    "seq": 141,
+    "sha": "3c99c22fe8354d48601e9d4307bcab897e745398",
+    "date": "2026-10-05T13:39:31+02:00",
+    "pr": 182,
+    "title": "Show checked instance headers in guest module discovery",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 142,
+    "sha": "181c6e62ccec29195303cba47bd92504a4b3883e",
+    "date": "2026-10-05T14:00:36+02:00",
+    "pr": 184,
+    "title": "Consolidate user guides, verification docs and architecture navigation",
+    "adrs": [
+      "0002",
+      "0006",
+      "0007",
+      "0010",
+      "0011",
+      "0014",
+      "0018",
+      "0020",
+      "0021",
+      "0022",
+      "0026"
+    ]
+  },
+  {
+    "seq": 143,
+    "sha": "2f671aa90904c46923dababd6de3c14c84f434b4",
+    "date": "2026-10-05T17:21:11+02:00",
+    "pr": 186,
+    "title": "docs: reconcile ADRs as desired-state architecture",
+    "adrs": [
+      "0001",
+      "0002",
+      "0003",
+      "0004",
+      "0005",
+      "0006",
+      "0007",
+      "0008",
+      "0009",
+      "0010",
+      "0011",
+      "0012",
+      "0013",
+      "0014",
+      "0015",
+      "0016",
+      "0017",
+      "0018",
+      "0019",
+      "0020",
+      "0021",
+      "0022",
+      "0023",
+      "0024",
+      "0025",
+      "0026",
+      "0027",
+      "0028"
+    ]
+  },
+  {
+    "seq": 144,
+    "sha": "9340e58333be406761bcdd040a0062128849c8bc",
+    "date": "2026-10-05T17:48:36+02:00",
+    "pr": 190,
+    "title": "Simplify captured evolutions to evolution = frozen",
+    "adrs": [
+      "0028"
+    ]
+  },
+  {
+    "seq": 145,
+    "sha": "108e8c0ea8f8c4a885fbf3f6a8263784c3b10fb2",
+    "date": "2026-10-06T08:06:32+02:00",
+    "pr": 191,
+    "title": "Discover frozen proposal modules in evolution workspaces",
+    "adrs": []
+  },
+  {
+    "seq": 146,
+    "sha": "7e13b01ecad57438de04422a59cdf52345fd5942",
+    "date": "2026-10-06T09:38:05+02:00",
+    "pr": 192,
+    "title": "Simplify recipe authoring with pure helpers and Step",
+    "adrs": []
+  },
+  {
+    "seq": 147,
+    "sha": "b647a8c16709b33b4f7cd6135b33a45972d3d5d0",
+    "date": "2026-10-06T09:58:04+02:00",
+    "pr": 193,
+    "title": "Add acknowledgeItems for explicit partial curation",
+    "adrs": []
+  },
+  {
+    "seq": 148,
+    "sha": "05efbc25776d4c2fca75a913388e04a216d3fba6",
+    "date": "2026-10-06T12:29:43+02:00",
+    "pr": 194,
+    "title": "Upgrade Agentic to 0.2.0.4 and document typed judgement routing",
+    "adrs": []
+  },
+  {
+    "seq": 149,
+    "sha": "d7d3276ea49e5ba7b89cc87d505cede1185853fd",
+    "date": "2026-10-06T12:54:52+02:00",
+    "pr": 195,
+    "title": "Support Probability contracts and exact basis-point storage",
+    "adrs": [
+      "0005",
+      "0028"
+    ]
+  },
+  {
+    "seq": 150,
+    "sha": "3182684d1a581ee7cec38c9ffe24f1ffeab4999e",
+    "date": "2026-10-06T15:39:40+02:00",
+    "pr": 196,
+    "title": "Bump Agentic to 0.2.0.5",
+    "adrs": []
+  },
+  {
+    "seq": 151,
+    "sha": "3e9f6226bb67c98ad982e87624604ebb57841983",
+    "date": "2026-10-06T18:30:23+02:00",
+    "pr": 197,
+    "title": "Design Graph sources, streamed evidence blobs and typed sync positions",
+    "adrs": [
+      "0005",
+      "0009",
+      "0014",
+      "0015",
+      "0016",
+      "0029"
+    ]
+  },
+  {
+    "seq": 152,
+    "sha": "d9cbef5454cfd50c95b8880d85f8b890901a2157",
+    "date": "2026-10-06T22:18:31+02:00",
+    "pr": 198,
+    "title": "Temporarily pin MicroHs large-line GC fix",
+    "adrs": []
+  },
+  {
+    "seq": 153,
+    "sha": "e3df64e725a5a39c185532c04c1f88083332b158",
+    "date": "2026-10-06T22:43:22+02:00",
+    "pr": 200,
+    "title": "Replace quadratic calendar ID scans",
+    "adrs": []
+  },
+  {
+    "seq": 154,
+    "sha": "066285d08d88cf86bfc6276a7e6908aa100eeebb",
+    "date": "2026-10-06T23:51:17+02:00",
+    "pr": 201,
+    "title": "Specify packed guest text and chunk-framed binary transport",
+    "adrs": [
+      "0007",
+      "0009"
+    ]
+  },
+  {
+    "seq": 155,
+    "sha": "6210aa9dd0cc9814f4b8dfc6a5a0207db897bea3",
+    "date": "2026-10-07T00:38:43+02:00",
+    "pr": 202,
+    "title": "Implement packed guest data transport",
+    "adrs": [
+      "0005",
+      "0006",
+      "0008",
+      "0010",
+      "0014",
+      "0016",
+      "0029"
+    ]
+  },
+  {
+    "seq": 156,
+    "sha": "2f000d75f6c01980ba4b26227259d1c98e95ae63",
+    "date": "2026-10-07T08:33:04+02:00",
+    "pr": 203,
+    "title": "Persist typed connector sync positions with evidence",
+    "adrs": [
+      "0029"
+    ]
+  },
+  {
+    "seq": 157,
+    "sha": "be36b9b3eeff5027d5bb7b4b837d0cf2829210bf",
+    "date": "2026-10-07T08:48:18+02:00",
+    "pr": 204,
+    "title": "Use Calendar delta sync and support explicit sync restart",
+    "adrs": [
+      "0014",
+      "0016",
+      "0029"
+    ]
+  },
+  {
+    "seq": 158,
+    "sha": "fadc526ef7bb68de83dbca8bc96ac55339bbf6e4",
+    "date": "2026-10-07T10:26:21+02:00",
+    "pr": 206,
+    "title": "Design: recipe-owned typed state and current evidence investigation",
+    "adrs": [
+      "0004",
+      "0006",
+      "0008",
+      "0010",
+      "0012",
+      "0014",
+      "0018",
+      "0028",
+      "0029"
+    ]
+  },
+  {
+    "seq": 159,
+    "sha": "57bfe4b67ef70eac918956536ca1aed71b998c58",
+    "date": "2026-10-07T10:30:43+02:00",
+    "pr": 207,
+    "title": "Docs: remove residual curation-model archaeology",
+    "adrs": [
+      "0014",
+      "0018",
+      "0028",
+      "0029"
+    ]
+  },
+  {
+    "seq": 160,
+    "sha": "d797e2c32c87268c7b3e5d5ff6b84feddeba7819",
+    "date": "2026-10-07T10:35:28+02:00",
+    "pr": 208,
+    "title": "Add typed recipe state edits using the existing evolution core",
+    "adrs": []
+  },
+  {
+    "seq": 161,
+    "sha": "38331fd17239cf4e254dce7bd612ab451ff399f6",
+    "date": "2026-10-07T11:49:12+02:00",
+    "pr": 209,
+    "title": "Support unit contracts for stateless recipe state",
+    "adrs": [
+      "0005"
+    ]
+  },
+  {
+    "seq": 162,
+    "sha": "9bea26d382fc90c3f9122b904f6019c192577e70",
+    "date": "2026-10-07T17:26:52+02:00",
+    "pr": 210,
+    "title": "Typed per-recipe state creation and migration",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 163,
+    "sha": "06dbc9b0c27d6fb1f6fe4f04f10370d25b1a8ea0",
+    "date": "2026-10-08T09:02:04+02:00",
+    "pr": 211,
+    "title": "Expose calendar attendee and mailbox response status",
+    "adrs": []
+  },
+  {
+    "seq": 164,
+    "sha": "ac78a6e3b2d5af826c352fea7d70a219363a536c",
+    "date": "2026-10-08T15:21:03+02:00",
+    "pr": 212,
+    "title": "docs: simplify evidence capture and blob lifetime",
+    "adrs": [
+      "0014",
+      "0029"
+    ]
+  },
+  {
+    "seq": 165,
+    "sha": "2e2d7f1c9ed1f8c613c88ca4870685b1b9550d95",
+    "date": "2026-10-08T15:36:37+02:00",
+    "pr": 213,
+    "title": "feat(graph): share configured delegated scopes across connectors",
+    "adrs": []
+  },
+  {
+    "seq": 166,
+    "sha": "a099ec52e24a3b4483e2ba2812bfb58a97d1bbd0",
+    "date": "2026-10-08T15:59:37+02:00",
+    "pr": 214,
+    "title": "feat(evidence): separate payload availability from source changes",
+    "adrs": []
+  }
+]

@@ -1,0 +1,627 @@
+{
+  "adr": "0012",
+  "title": "Acceptance is one conditional step from local head",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0012.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Accept only when Before.revision equals current local head",
+      "detail": "The acceptance rule is strict equality between the evolution's Before revision and the current local accepted head, not ancestry or timestamps; divergent bases are refused. No ETags, extra lifecycle states, attempt archives or approval protocols enforce it.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Implementation responsibilities and exclusions"
+      ],
+      "anchors": [
+        "Before",
+        "BaseMismatch",
+        "GitRevision"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 composes RootPublication with base check and BaseMismatch (code_added at 41)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Only Ready workspaces with freshly checked, unchanged inputs are accepted",
+      "detail": "Accept requires the workspace to be Ready (author intent; Draft is never implicitly submitted, Accepted never replayed), a checked result and unchanged captured inputs; otherwise NotAccepted leaves head and workspace untouched. Changed inputs mean rerunning checks, not reusing an old result.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "NotReady",
+        "EvolutionState",
+        "MatchesCapturedInputs",
+        "WorkspaceChanged"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 publication performs readiness/captured-input checks (NotReady, WorkspaceChanged code_added at 41)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "RootPublication publishes fixed checked material; never evaluates code",
+      "detail": "AcceptEvolution takes a branch and a CheckedEvolution (Candidate (Validated Root)) whose context alone supplies KB and expected base. The interpreter needs no execution, plugin or schema parser and assembles store-exported file trees (ExportRootFiles, ExportAcceptedWorkspace) rather than unwrapping paths or duplicating encoders.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootPublication",
+        "AcceptEvolution",
+        "CheckedEvolution",
+        "runRootPublication",
+        "ExportRootFiles",
+        "ExportAcceptedWorkspace"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42: RootPublication composes Git and store capabilities with no candidate load, compiler or validation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Exact evaluation report commits with root in same commit",
+      "detail": "The candidate's exact EvolutionReport, derived during evaluation, is published into the retained evolution workspace alongside captured source in the same commit as the root, so history can explain intermediate steps without rerunning archived code. No separate provenance commit, receipt or database.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionReport",
+        "ExportAcceptedWorkspace"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "Archive export in PR #40 (seq 39) composed with root export into one commit by PR #42"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Fresh process loads and rechecks saved candidate before accepting",
+      "detail": "A new CLI/Web process uses LoadCandidate then checkCandidate and passes only a successful checked value to AcceptEvolution; missing saved material is an actionable request to evaluate, a saved passing report never substitutes for fresh validation, and source acquisition or the entry are never rerun.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadCandidate",
+        "checkCandidate"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 acceptStoredEvolution loads and freshly checks the saved candidate before publication"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Commit on Before, then atomic compare-and-swap of local ref",
+      "detail": "Build the complete Git tree and a commit whose parent is Before.revision, then advance the branch with an atomic expected-old compareAndSwapRef; commit construction and ref update are separate Git primitives below publication. A refused swap leaves the ref unchanged even if objects were written.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "createCommit",
+        "compareAndSwapRef",
+        "RefUpdate",
+        "RefUpdated",
+        "RefNotUpdated",
+        "GitTree",
+        "CommitMetadata"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 22,
+        "evidence": "PR #23 adds CreateCommit and atomic CompareAndSwapRef with real-Git concurrent two-writer tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Concurrency is local-only: losing swap refuses, no coordinator",
+      "detail": "Multiple instances may share a repository; the loser's conditional update refuses with expected/actual revisions and the author rebases. No singleton daemon or cross-instance coordinator, and the guarantee reserves no remote branch: push rejection and upstream conflicts are ordinary Git workflow.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "BaseMismatch"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "CAS refusal tested in PR #23; publication reports BaseMismatch with revisions in PR #42; no coordinator exists"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Typed result separates not-accepted from accepted-with-checkout-problems",
+      "detail": "AcceptanceResult distinguishes NotAccepted (BaseMismatch, NotReady, CheckoutMismatch, WorkspaceChanged, OverlappingEdits) from AcceptedCommit with a WorkingTreeOutcome. Errors after a successful ref update must still report the accepted commit, never invite a retry as if nothing happened.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "AcceptanceResult",
+        "AcceptanceProblem",
+        "NotAccepted",
+        "AcceptedCommit",
+        "WorkingTreeOutcome",
+        "OverlappingEdits",
+        "CheckoutMismatch"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 introduces AcceptanceResult/AcceptanceProblem/WorkingTreeOutcome (code_added at 41)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Accepted ref is the ordinary checked-out branch, not refs/kyyn",
+      "detail": "Acceptance publishes to the ordinary local branch, which must be checked out for the operation; detached HEAD or a different checked-out branch is refused with an explanation. No private Kyyn ref history or long-lived branch/session manager.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Working tree, index and other drafts"
+      ],
+      "anchors": [
+        "LocalBranch",
+        "CheckoutMismatch"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #42 publication refuses with CheckoutMismatch (branch inspection added in PR #41)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "Accepting tree replaces only root and this archive; index untouched",
+      "detail": "Drafts stay ordinary uncommitted files. The accepting tree is Before's tree with the root/ and selected evolutions/<id>/ subtrees replaced (missing files are deletions), never sourced from the user's index or other drafts; afterwards only written paths are synchronized, unrelated staged/unstaged work is preserved and known overlapping edits are refused first.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Working tree, index and other drafts"
+      ],
+      "anchors": [
+        "OverlappingEdits",
+        "WorkingTreeOutcome"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "Index-free construction (PR #23), scoped sync (PR #41) and overlap refusal composed in PR #42 with real-Git draft/rebase fixtures"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.11",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Recover from process death via Git history: AlreadyAccepted",
+      "detail": "Before loading a candidate, look up whether this workspace's Accepted archive was introduced on the branch (FindAcceptance walks ancestors for the commit with parent Before that introduced it); if so return AlreadyAccepted with that revision. A lost CAS race repeats the lookup once before BaseMismatch. Git, not the local manifest or a recovery coordinator, is authoritative; reverts make lookup return Nothing.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Concurrent instances and upstream",
+        "Decision"
+      ],
+      "anchors": [
+        "FindAcceptance",
+        "AlreadyAccepted",
+        "KnowledgeBase"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "FindAcceptance implemented in PR #38 (seq 37); AlreadyAccepted and pre-load lookup composed in PR #42"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.12",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Stores own subtree prefixes; sync covers worktree, index and deletions",
+      "detail": "Publication applies complete subtree replacements whose KB-relative prefixes come from RootStore/EvolutionStore rather than hardcoding layout, and post-update synchronization covers paths written or removed in both working tree and index.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.10"
+      ],
+      "sections": [
+        "Working tree, index and other drafts"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 41,
+        "evidence": "PR #41 synchronizeCheckout restores staged and worktree paths incl. deletions; PR #42 uses pure store location helpers"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0012.13",
+      "seq": 22,
+      "pr": 23,
+      "summary": "GitTree replacements and explicit commit metadata; refusal semantics defined",
+      "detail": "GitTree is non-overlapping complete subtree replacements (empty removes; unrelated entries keep objects/modes; replacement files are 100644) built from Git objects without the index. CommitMetadata supplies message and explicit author/committer identity and dates, never the clock. A refused CAS reports a later observation; failure while the ref still holds the expected value is an operational failure.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "GitTree",
+        "CommitMetadata",
+        "FileTree",
+        "RefNotUpdated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #23 implements these primitives with real-repository tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.14",
+      "seq": 22,
+      "pr": 23,
+      "summary": "KB initialization makes the first commit, separately from acceptance",
+      "detail": "Creating the first commit is a separate initialization operation; evolution acceptance always advances an existing local head.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 50,
+        "evidence": "PR #54 implements kb init through a dedicated KnowledgeBaseInitialization capability"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.15",
+      "seq": 28,
+      "pr": 29,
+      "summary": "The root validated is exactly the root committed",
+      "detail": "Within publication, ExportRootFiles reads only the validated value's captured files; it never reloads the checkout or substitutes a freshly materialized root. No bare-root commit helper may stand in for full acceptance.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.03"
+      ],
+      "sections": [
+        "Decision",
+        "Implementation responsibilities and exclusions"
+      ],
+      "anchors": [
+        "ExportRootFiles"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #29 adds ExportRootFiles over Validated Root without disk reads (code_added at 28)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.16",
+      "seq": 37,
+      "pr": 38,
+      "summary": "FindAcceptance walks all parents, diagnoses ambiguity, reads only manifests",
+      "detail": "The lookup returns diagnostics or an optional introducing commit: it visits each reachable commit once across all parents, an introduction has Before as parent and does not inherit the Accepted/Before pair (so merges resolve to the original), multiple introductions are ambiguous, missing history is a diagnostic. It reads only manifest.dhall via readFileAt/readCommitParents; no cap, index or cache.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.11"
+      ],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "FindAcceptance",
+        "readFileAt",
+        "readCommitParents"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #38 implements FindAcceptance with real-Git history fixtures (code_added at 37)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.17",
+      "seq": 39,
+      "pr": 40,
+      "summary": "Archive export reads only notes live; two replacements, one commit",
+      "detail": "The accepted archive comes from captured manifest, source and fixed report; only notes/ is read from the live workspace. Root export and archive export return two subtree replacements for one commit, not two publication steps.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ExportAcceptedWorkspace"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #40 implements ExportAcceptedWorkspace (code_added at 39)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.18",
+      "seq": 40,
+      "pr": 41,
+      "summary": "Published means ref observed at desired revision; interruption gives no outcome",
+      "detail": "RefUpdated means the desired commit is observed in the ref, so a non-zero update exit with the ref already at the desired revision counts as published. Checkout sync failure is reported alongside AcceptedCommit, not as a Failure hiding it; asynchronous interruption yields no normal outcome and is resolved by the history lookup.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.08"
+      ],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "RefUpdated",
+        "AcceptedCommit"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #41 adds the repeat-CAS regression and ref-result classification correction"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.19",
+      "seq": 40,
+      "pr": 41,
+      "summary": "Git exposes scoped checkout inspection and path-limited synchronization",
+      "detail": "checkedOutBranch, checkoutChanges (index vs revision, worktree vs index and untracked incl. ignored) and synchronizeCheckout (path-limited restore --staged --worktree --no-overlay, then recheck) are separate from commit/CAS. Untracked files absent from the commit are retained and reported incomplete, never deleted.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.12"
+      ],
+      "sections": [
+        "Working tree, index and other drafts"
+      ],
+      "anchors": [
+        "checkedOutBranch",
+        "checkoutChanges",
+        "synchronizeCheckout",
+        "CheckoutChanges"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #41 implements the three operations with tracked/untracked real-Git fixtures (code_added at 40)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.20",
+      "seq": 41,
+      "pr": 42,
+      "summary": "acceptStoredEvolution: semantic application operation, lookup before load",
+      "detail": "The application operation lives with semantic evolution operations, not adapters: it calls FindAcceptanceOnBranch first, otherwise loads and checks the saved candidate and publishes only a passing result; missing/stale/rejected material is NotAccepted InvalidMaterial. It has no Git or filesystem dependency, and publication drops FileSystem from its row.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.05"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "acceptStoredEvolution",
+        "InvalidMaterial",
+        "FindAcceptanceOnBranch",
+        "RootExecution"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #42 implements acceptStoredEvolution (code_added at 41)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.21",
+      "seq": 41,
+      "pr": 42,
+      "summary": "Explicit checkout recovery syncs to current head, not original commit",
+      "detail": "RecoverAcceptedEvolution requires the branch checked out, finds this workspace's acceptance at HEAD and synchronizes only root and this archive's paths to the current head (so later accepted work is not rolled back), returning both accepting and checkout revisions. It never reevaluates or creates another commit.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "RecoverAcceptedEvolution",
+        "CheckoutRecovery"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #42 implements explicit recovery with separate accepting/current checkout revisions"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.22",
+      "seq": 48,
+      "pr": 52,
+      "summary": "Optional parent and absent-ref swap support initial publication",
+      "detail": "createCommit takes Maybe parent (Nothing builds a parentless commit from an empty tree) and compareAndSwapRef takes Maybe expected (Nothing requires the branch ref to be absent); evolution acceptance still supplies Just Before.revision.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.14",
+        "0012.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "createCommit",
+        "compareAndSwapRef"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #52 generalizes the Git primitives with real-Git unborn-repository tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.23",
+      "seq": 50,
+      "pr": 54,
+      "summary": "KnowledgeBaseInitialization: read-only prepare, publish only a validated scaffold",
+      "detail": "Initialization uses its own capability, not an evolution workspace: preparation is read-only; publication accepts only a checked Validated Root, creates directories/Git, commits, conditionally publishes and syncs root/ only. It refuses existing root/evolutions content, detached HEAD and nesting in another KB, and reports incomplete sync with the published revision.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.14"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KnowledgeBaseInitialization",
+        "PrepareKnowledgeBase",
+        "PublishInitialRoot",
+        "InitializationTarget",
+        "InitializationResult",
+        "runKnowledgeBaseInitialization",
+        "DirectoryScope",
+        "OpenCapturedRoot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #54 implements kb init via KnowledgeBaseInitialization (code_added at 50)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.24",
+      "seq": 52,
+      "pr": 58,
+      "summary": "Archived manifests read by projection; active manifests strictly",
+      "detail": "History lookup projects only the metadata it needs (Before, name, explanation, state) from archived manifests, while active workspace manifests are read strictly; extra historical fields never require rewriting accepted archives.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.16"
+      ],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "evidence": "PR #58 keeps archive metadata reads projected while active manifests remain strict"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0012.25",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Curation progress register publishes in the same accepting commit",
+      "detail": "Under ADR 0014's curation model, root export includes the candidate's resolved host-owned progress register, so facts, progress and archive publish through the one conditional commit; publication never consults the evidence cache or re-resolves against a newer fetch, and inspection shows acknowledgements even with an empty fact diff.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 92,
+        "evidence": "PR #112 carries the register in Root and root export; PR #113 resolves it at preparation so acceptance needs no evidence store"
+      },
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0012.26"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.26",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Recipe definitions and typed state publish with facts in one commit",
+      "detail": "Under the recipe-state model, root export includes each recipe's definition and checked state; facts, state and archive publish through the same conditional commit, publication does not consult the evidence cache, and inspection includes state-only changes.",
+      "kind": "replace",
+      "supersedes": [
+        "0012.25"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR #210 adds checked Dhall persistence for accepted recipe state and removes the curation register"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 38,
+      "pr": 39,
+      "note": "Only updates the implementation-status paragraph to say lifecycle reads and Ready/Draft transitions (owned by ADR 0010) are implemented"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: drops status/date/basis and the implementation-status section, removes 'proposed/not implemented' qualifiers from the curation paragraph, and corrects the archive record format to Dhall to match code; no change in what acceptance requires"
+    }
+  ],
+  "notes": "0012 is a founding ADR with no ### subsections; it was split into 10 commitments along its prose (base equality, readiness, publication purity, report-in-commit, fresh-process recheck, commit+CAS, local-only concurrency, typed result, ordinary branch, scoped tree/checkout). The spec ran well ahead of code for a day: everything was specified at seq 1 and then built bottom-up by PRs #23-#42 (seq 22-41), with the ADR carrying a running 'implemented so far / not yet AcceptEvolution' status paragraph that grew each step until #42 composed the whole sequence; most founding nodes therefore realise at seq 41. The biggest design addition was crash recovery (seq 4): authoritative Git-history FindAcceptance + AlreadyAccepted, later hardened with merge/ambiguity semantics (37), an 'observed ref = published' rule for non-zero update exits (40) and explicit RecoverAcceptedEvolution that syncs to current head rather than the original commit (41). Initialization was carved out as a separate first-commit path (22 -> 48 -> 50). The lane was barely touched after seq 52 except as a downstream of ADR 0014's curation churn: progress-register publication (89, realised 92) was replaced by recipe-state publication (158, realised 162) without touching the core acceptance rules. Judgement calls: 0012.12 and 0012.24 are small refinements that could be read as editorial; seq 40's added CommitMetadata parameter on AcceptEvolution was folded into 0012.18/0012.19 rather than given its own node."
+}

@@ -1,0 +1,380 @@
+{
+  "adr": "0003",
+  "title": "Effects express architectural dependencies",
+  "cursor": 163,
+  "nodes": [
+    {
+      "id": "0003.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Layered effectful architecture; only native plumbing interpreters touch IO",
+      "detail": "Host operations use effectful with explicit rows, separated into domain, porcelain capabilities, porcelain interpreters, plumbing capabilities with native interpreters, and adapters/composition. Only native plumbing interpreters may use IOE or native libraries, and GHC package visibility plus import checks enforce the dependency DAG.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Effect",
+        "Porcelain",
+        "Plumbing",
+        "Interpreter"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 7,
+        "evidence": "Domain/plumbing packages and check-imports.mjs from PR #6; first plumbing-interpreters package with IO-confined ProcessExecution in PR #7"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0003.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Capability and Interpreter module namespaces for porcelain and plumbing",
+      "detail": "Modules live under Kyyn.{Porcelain,Plumbing}.{Capability,Interpreter}.*; a capability owns its vocabulary and combinators, its interpreter owns handler installation, and no .IO suffix is used until a second interpreter exists.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Capability",
+        "Interpreter"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "Kyyn.Plumbing.Capability.FileSystem / Kyyn.Plumbing.Interpreter.FileSystem pair added in PR #8"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0003.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Operations take explicit context, return data; run/execute naming",
+      "detail": "Every operation takes explicit KB/snapshot/workspace context and returns data, with no whole-environment AppEffects row. run… is reserved for effect interpretation and execute… for application execution that composes interpreters, while business logic stays in the effectful operation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "AppEffects",
+        "runFileSystemIO",
+        "Execution"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 43,
+        "evidence": "run… interpreters from PR #7/#8; execute… command composition first appears with host/kyyn Composition in PR #44"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0003.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Application composition lives in Kyyn.Application.Compose, never 'Runner'",
+      "detail": "Composition belongs in Kyyn.Application.Compose with optional Kyyn.Application.Execution.* modules; interpreter installers stay with their interpreter modules.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Application",
+        "Compose",
+        "Runner"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "Composition was built as Kyyn.Composition in host/kyyn (PR #44); no Kyyn.Application.Compose module exists at end of history, though the ADR still names it"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0003.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Plumbing FileSystem takes caller scope and relative path, no KB nouns",
+      "detail": "The filesystem plumbing exposes operations over opaque DirectoryScope and RelativePath values and knows nothing of facts or evolutions; native failures become Failure rather than empty data. Atomic single-file replacement is not KB-level atomicity, which acceptance owns.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FileSystem",
+        "DirectoryScope",
+        "RelativePath",
+        "ReadBytes",
+        "ListEntries",
+        "WriteBytesAtomically",
+        "runFileSystemIO"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 8,
+        "evidence": "FileSystem, DirectoryScope, ReadBytes, runFileSystemIO first appear in code in PR #8"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Guest file writes lower through writeRequestedFile with explicit base",
+      "detail": "The host adapter for guest filesystem writes resolves path text against a composition-supplied base (the KB checkout for a file sink) into scoped FileSystem calls, needing no IOE in its row; it is location resolution, not a grant registry.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "writeRequestedFile"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "writeRequestedFile never appears in code; file sinks remain unbuilt per seq 143 PR body"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.07",
+      "seq": 8,
+      "pr": 8,
+      "summary": "FileSystem gains scoped temporary directories; plain writes not atomic",
+      "detail": "WithTemporaryScope creates and always removes a private child of an explicitly supplied parent; WriteBytes populates private scopes without atomic-replacement promises, and paths are checked relative with no empty, . or .. components. ListEntries/WriteBytesAtomically are dropped from the initial API.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.05"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "WithTemporaryScope",
+        "WriteBytes",
+        "runFileSystemIO"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 8,
+        "evidence": "PR #8 implements scoped FileSystem with temporary-directory cleanup for MicroHs compilation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.08",
+      "seq": 20,
+      "pr": 21,
+      "summary": "ReadTree captures a directory into an immutable FileTree",
+      "detail": "ReadTree captures files under a scope with relative paths, rejecting symlinks, dropping empty dirs and mode bits, and failing on missing directories; it is sequential, not an atomic snapshot.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadTree",
+        "FileTree"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 20,
+        "evidence": "PR #21 adds FileSystem.ReadTree with tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.09",
+      "seq": 31,
+      "pr": 32,
+      "summary": "CreateUniqueDirectory reserves a fresh random hex child exclusively",
+      "detail": "Exclusive directory creation with random Word64 names, retrying only on collision and never reusing existing entries; allocation, not cryptographic identity.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CreateUniqueDirectory"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 31,
+        "evidence": "PR #32 implements exclusive allocation with concurrency tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.10",
+      "seq": 35,
+      "pr": 36,
+      "summary": "ReplaceBytes atomic rename; ReadOptionalBytes distinguishes only missing paths",
+      "detail": "ReplaceBytes writes a temp file in the destination directory and renames it over, so readers see old or new; ReadOptionalBytes returns Nothing only for missing paths, keeping unreadable data a Failure.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReplaceBytes",
+        "ReadOptionalBytes"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 35,
+        "evidence": "PR #36 implements both with concurrency/cleanup tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.11",
+      "seq": 38,
+      "pr": 39,
+      "summary": "ListDirectory enumerates immediate names; Nothing means absent",
+      "detail": "Shallow sorted enumeration without reading contents; absent directory is Nothing, empty is Just [], other errors remain Failure.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.10"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ListDirectory"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 38,
+        "evidence": "PR #39 adds ListDirectory for lifecycle enumeration"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.12",
+      "seq": 83,
+      "pr": 102,
+      "summary": "Guest compilation and guest execution are distinct plumbing capabilities",
+      "detail": "GuestCompilation only compiles and GuestExecution owns one-shot and conversational execution; callers running an existing artifact need only GuestExecution, and both interpreters lower through FileSystem and ProcessExecution without IOE.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "GuestCompilation",
+        "GuestExecution",
+        "SchemaInspection",
+        "runSchemaInspectionIO"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102 commit 1cebb68 moves execution into GuestExecution; GuestCompilation only compiles"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.13",
+      "seq": 83,
+      "pr": 102,
+      "summary": "Scoped locked-document persistence effect with current and archives",
+      "detail": "DocumentPersistence exposes WithLockedDocument, a scoped local effect holding an exclusive lock across read/check/replace, with current state.dhall, archive operations and fresh stamps; it knows nothing of KBs or connectors.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DocumentPersistence",
+        "DocumentAccess",
+        "WithLockedDocument",
+        "ArchiveCurrent",
+        "ClearArchives",
+        "DocumentStamp"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 83,
+        "evidence": "PR #102 commit 0663ec1 adds EvidenceStore over scoped DocumentPersistence"
+      },
+      "ended": {
+        "seq": 84,
+        "how": "replaced",
+        "by": "0003.14"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.14",
+      "seq": 84,
+      "pr": 103,
+      "summary": "Document persistence is latest-only; archive operations removed",
+      "detail": "Following the latest-only evidence decision, DocumentAccess drops ArchiveCurrent/ClearArchives; only current bytes are retained under the scoped lock.",
+      "kind": "replace",
+      "supersedes": [
+        "0003.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DocumentAccess",
+        "ReadCurrent",
+        "ReplaceCurrent"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 85,
+        "evidence": "PR #104: 'Scoped document persistence without archive operations'"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0003.15",
+      "seq": 85,
+      "pr": 104,
+      "summary": "ClearCurrent removes the scope, reports existence; lock is a sibling",
+      "detail": "Clearing deletes the scoped directory and returns whether it existed; the lock file sits beside the directory so clearing never changes lock identity, and replacement recreates the directory.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.14"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ClearCurrent"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 85,
+        "evidence": "PR #104: stable lock identity across clear; clear returns whether a cache existed"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 8,
+      "pr": 8,
+      "note": "Also converts status line to front-matter metadata and basis statement"
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation: removes status/date/basis, renames the table example to checkEvolution/executeCheckEvolution, and moves the runSchemaInspectionIO row to ADR 0005 (ownership move, not a change in requirement)"
+    }
+  ],
+  "notes": "Most of the lane is the FileSystem plumbing API growing one primitive per implementation PR (seqs 8-38), each written and built in the same step, so the spec tracked code tightly. The founding API itself was revised before any code: ListEntries/WriteBytesAtomically were dropped at seq 8 and atomic replacement only came back as ReplaceBytes at seq 35. Two founding commitments are still unrealised: Kyyn.Application.Compose (code uses Kyyn.Composition and the ADR was never corrected, even in the seq 143 reconciliation) and writeRequestedFile for guest/file-sink writes. The DocumentPersistence archive capability lived for a single step (83->84) before the latest-only evidence reversal removed it. I treated the five-layer list, package DAG and IOE confinement as one founding node, because they form one commitment."
+}

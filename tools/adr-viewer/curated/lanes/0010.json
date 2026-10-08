@@ -1,0 +1,1410 @@
+{
+  "adr": "0010",
+  "title": "One evolution mechanism for facts, schema and meaning",
+  "cursor": 166,
+  "nodes": [
+    {
+      "id": "0010.01",
+      "seq": 1,
+      "pr": null,
+      "summary": "Evolution is an effectful entry kind producing a candidate, never self-accepting",
+      "detail": "An evolution is one of three KB entry-point kinds; its entry may obtain evidence through declared host/plugin capabilities (Program calls) and returns the after value with step observations, from which Kyyn materializes a candidate. It replaces a separate proposal-authoring tool and never calls propose or accepts itself.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Evolution",
+        "EvolutionOutput",
+        "Program",
+        "MicrosoftCalls",
+        "fromEmail"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "PR 35 evaluates captured workspaces into an EvaluatedEvolution, but only via Program NoRequests; the effectful capability half was never built and was dropped at seq 52/97"
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 52,
+        "how": "replaced",
+        "by": "0010.41"
+      }
+    },
+    {
+      "id": "0010.02",
+      "seq": 1,
+      "pr": null,
+      "summary": "Typed composable Evolution steps with declared rationale and associative observations",
+      "detail": "Evolution before after is a fallible pure transformation built with evolve/identity and composed with >=>; EvolutionOutput and StepObservation are abstract so authors obtain output only via evaluateEvolution. Composition is associative, identity adds no observations, and modify/remove/append work on stable fact IDs with diagnostics for missing/duplicate targets.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Composition and lifecycle"
+      ],
+      "anchors": [
+        "Evolution",
+        "evolve",
+        "identityEvolution",
+        "evaluateEvolution",
+        "EvolutionOutput",
+        "StepObservation",
+        "Rationale",
+        "EvidenceRef",
+        "EvolutionFailure"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 32,
+        "evidence": "PR 33 adds guest kyyn-sdk Evolution/Internal with associativity/identity tests under GHC and MicroHs"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.03",
+      "seq": 1,
+      "pr": null,
+      "summary": "Host verifies observations form the complete Before-to-After chain",
+      "detail": "The host compares contract identities and decoded values so the first observed before equals the selected Before, adjacent endpoints match and the final after equals the returned result; an empty chain only for an unchanged root. This guarantees report completeness without trusting author-claimed change lists.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "StepObservation",
+        "EvolutionRejected"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 33,
+        "evidence": "PR 34 implements checkEvolutionReport chain checks with discontinuity tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.04",
+      "seq": 1,
+      "pr": null,
+      "summary": "Before pinned to a Git commit; After has no revision; author-directed rebase",
+      "detail": "Before identifies the source root by Git commit revision with schema derived from that commit; After describes only the target schema since its commit does not yet exist. An unaccepted evolution is rebased by the author updating Before.revision and re-evaluating; no automatic conflict resolution, and acceptance requires Before.revision == local head.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Updating the base before acceptance"
+      ],
+      "anchors": [
+        "Before",
+        "After",
+        "GitRevision",
+        "CheckedContract"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 30,
+        "evidence": "PR 31 captures Before via LoadSourceAt at the manifest revision; capture tests re-capture against a second revision and publication tests reject stale bases"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0010.05",
+      "seq": 1,
+      "pr": null,
+      "summary": "Workspace folder holds complete target copy, not a patch overlay",
+      "detail": "Each evolution lives at evolutions/<id>/ with manifest, before/ (source schema copy), target/ (complete proposed non-fact root contents) and change/ (Evolution.hs and helpers). Facts are produced by the evolution, never edited in target/facts; the cost of full copies is accepted over overlay/tombstone machinery.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionWorkspace",
+        "WorkspaceSnapshot"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 31,
+        "evidence": "PR 32 creates workspaces copying src/ to before/ and the non-fact root to target/; PR 30 projection rejects target/facts"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.06",
+      "seq": 1,
+      "pr": null,
+      "summary": "Coexisting schemas use distinct module names with qualified aliases",
+      "detail": "Schema definitions needed together in an evolution build get distinct module names (e.g. SchemaV1/SchemaV2) imported qualified as Before/After, while ordinary code keeps a friendly Schema alias. The accepted root keeps only current definitions; older ones live in archives and Git. This is the owner-selected convention, not a version registry.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SchemaV1",
+        "SchemaV2"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 32,
+        "evidence": "PR 33 MicroHs proof compiles SchemaV1/SchemaV2 modules side by side through Before/After aliases"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.07",
+      "seq": 1,
+      "pr": null,
+      "summary": "Capture fixes workspace inputs; EvolutionStore effect owns workspace operations",
+      "detail": "Capture snapshots source, target schema, examples and supporting files into a fixed CapturedEvolution with one base/provenance context before evaluation, without compiling them. An EvolutionStore effect lists/creates/captures/saves/loads/marks/matches/exports workspaces, returning entities; listing needs no compiler.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionStore",
+        "CaptureEvolution",
+        "CapturedEvolution",
+        "EvolutionContext",
+        "MatchesCapturedInputs",
+        "ListEvolutions",
+        "CreateEvolution",
+        "runEvolutionStore"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 30,
+        "evidence": "PR 31 implements Before-verified capture and live input matching in the EvolutionStore interpreter"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.08",
+      "seq": 1,
+      "pr": null,
+      "summary": "Candidates saved in ignored local storage behind an atomic latest pointer",
+      "detail": "SaveCandidate persists the materialized root, context and derived report as fixed bytes so another process can load them; LoadCandidate returns the latest or Nothing, and malformed results fail rather than triggering re-evaluation. Saves are complete before becoming latest; no attempt history or approved-candidate registry.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SaveCandidate",
+        "LoadCandidate",
+        "Candidate"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 36,
+        "evidence": "PR 37 persists and reloads candidates with an atomic latest pointer using PR 36's ReplaceBytes"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.09",
+      "seq": 1,
+      "pr": null,
+      "summary": "Execution evaluates possibly invalid Before; compile vs refusal rejections",
+      "detail": "EvolutionExecution prepares sources, compiles via GuestCompilation and evaluates against the structurally readable Before (which need not validate, so evolutions can repair bad facts). Ill-typed proposals yield ProposedCodeRejected, refusals EvolutionRejected; applyEvolution saves the candidate before returning it.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionExecution",
+        "EvaluateEvolution",
+        "EvaluatedEvolution",
+        "PreviewRejection",
+        "ProposedCodeRejected",
+        "EvolutionRejected",
+        "applyEvolution",
+        "LoadRootAt"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 36,
+        "evidence": "PR 35 implements EvaluateEvolution with MicroHs; PR 37 adds applyEvolution materialize-and-save"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.10",
+      "seq": 1,
+      "pr": null,
+      "summary": "One conventional evolution binding per workspace, arguments bound in source",
+      "detail": "Each workspace exposes a single guest binding `evolution` with business arguments bound in ordinary source; there is no separate entry-selection field, argument manifest or recorded invocation. Checking and acceptance use the materialized result, never a second execution or replay of live effects.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "evolution"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "PR 35's generated adapter compiles and runs change/Evolution.hs's evolution binding"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.11",
+      "seq": 1,
+      "pr": null,
+      "summary": "Per-fact step reports derived from boundaries, rationale declared by author",
+      "detail": "The host derives an ordered EvolutionReport of StepReports, each with the author's Rationale and actual FactChanges (contract-tagged before/after values readable without old code). Rationale is declared, not inferred; the fixed report is archived with captured source in the accepting commit and never regenerated by rerunning.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Declared rationale and record history"
+      ],
+      "anchors": [
+        "EvolutionReport",
+        "StepReport",
+        "FactChange",
+        "RecordedFact",
+        "CollectionId",
+        "FactId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 33,
+        "evidence": "PR 34 derives ordered per-fact reports; PR 40 archives them with acceptance"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.12",
+      "seq": 1,
+      "pr": null,
+      "summary": "Per-record history walks Git and accepted evolution reports",
+      "detail": "Record history selects a revision and (CollectionId, FactId), walks Git and accepted reports, and returns matching changes with declared rationale without historical guest execution or a provenance database. Ordinary Git edits show rationale as unavailable rather than borrowing a neighbouring report.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Declared rationale and record history"
+      ],
+      "anchors": [
+        "CollectionId",
+        "FactId"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "evidence": "No per-fact history walk found in host code or CLI; only whole-evolution archived report inspection (PR 44) exists"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0010.13",
+      "seq": 1,
+      "pr": null,
+      "summary": "Lifecycle Draft/Ready/Accepted; accepted workspaces kept, not re-runnable",
+      "detail": "Only Draft, Ready and Accepted persist; Ready is author intent and acceptance requires it plus unchanged captured inputs, with no Stale state or watcher. Accepted workspaces are retained as archaeology outside normal builds and are never replayed; only unaccepted workspaces are removable via an explicit operation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Composition and lifecycle"
+      ],
+      "anchors": [
+        "EvolutionState",
+        "Draft",
+        "Ready",
+        "Accepted",
+        "MarkReady",
+        "MarkDraft",
+        "EvolutionFilter",
+        "Reviewable",
+        "AllEvolutions"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 38,
+        "evidence": "PR 39 implements listing, Ready/Draft transitions and filters; no explicit unaccepted-workspace removal operation found"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0010.14",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Build preparation rejects module-name collisions; identical modules deduplicated",
+      "detail": "Module inventory and collision diagnostics belong to build preparation inside EvaluateEvolution: identical shared modules compile once, differing same-named definitions are rejected with locations, and import-path order never picks a winner.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.06"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvaluateEvolution"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 34,
+        "evidence": "PR 35 build preparation deduplicates identical files and rejects differing same-named paths"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.15",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Stable evolution IDs resolved explicitly; names may repeat",
+      "detail": "EvolutionSummary carries a stable EvolutionId alongside a repeatable human name; commands use the ID and ResolveEvolution reports unknown IDs without creating a workspace, so publication need not reconstruct directory conventions.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ResolveEvolution",
+        "EvolutionId",
+        "EvolutionSummary"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 38,
+        "evidence": "ResolveEvolution first appears in code with PR 39 lifecycle operations"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.16",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Committed Git acceptance outranks local manifest state in listings",
+      "detail": "ListEvolutions and ReadEvolutionState pin HEAD once and use the ADR 0012 acceptance lookup; an Accepted archive outranks a stale local Ready manifest, so interrupted synchronization never invites re-accepting the same change.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.13"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ListEvolutions",
+        "ReadEvolutionState"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 38,
+        "evidence": "PR 39 lifecycle operations consult FindAcceptance (PR 38) before local manifests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.17",
+      "seq": 4,
+      "pr": 4,
+      "summary": "Archive export is a KB-prefixed subtree replacement with notes directory",
+      "detail": "ExportAcceptedWorkspace produces a complete subtree replacement under the KB-relative evolutions/<id> prefix instead of loose workspace files, and the layout gains a notes/ directory excluded from evaluation inputs.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ExportAcceptedWorkspace",
+        "SubtreeReplacement"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 39,
+        "evidence": "PR 40 implements ExportAcceptedWorkspace returning a prefixed FileTree"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.18",
+      "seq": 29,
+      "pr": 30,
+      "summary": "Hermetic Dhall manifest and pure captured-input equality",
+      "detail": "The manifest is a fixed Dhall record (full commit ID, name, explanation, state); WorkspaceStore projects an explicit FileTree and matchesCapturedInputs compares Before, name, explanation and exact before/target/change bytes, excluding formatting, lifecycle state and notes. RootOpening, not RootStore, supplies source contracts.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "WorkspaceStore",
+        "ReadWorkspaceSnapshot",
+        "matchesCapturedInputs",
+        "FileTree",
+        "RootOpening",
+        "LoadSourceAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 29,
+        "evidence": "PR 30 implements WorkspaceStore projection and pure matching with tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.19",
+      "seq": 30,
+      "pr": 31,
+      "summary": "Capture requires before/ to equal the selected commit's src exactly",
+      "detail": "Capture loads Before via LoadSourceAt and requires the projected before/ tree to match the commit's authored src/ byte-for-byte, returning a refresh diagnostic otherwise; the Before contract always comes from Git, never copied modules. Target compiler input is derived at build preparation, not stored.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.04"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadSourceAt",
+        "RootContract",
+        "CaptureEvolution"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 30,
+        "evidence": "PR 31 implements Before-verified capture with exact tree equality"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.20",
+      "seq": 30,
+      "pr": 31,
+      "summary": "Local Accepted label never establishes acceptance",
+      "detail": "Only the committed archive and its introducing commit establish acceptance (ADR 0012); a manifest state of Accepted alone is not a successful acceptance lookup.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.16"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Accepted",
+        "FindAcceptance"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 38,
+        "evidence": "PR 39 returns evolution.unverified-acceptance for local-only Accepted labels"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.21",
+      "seq": 30,
+      "pr": 31,
+      "summary": "Evolution IDs are lowercase hexadecimal directory keys",
+      "detail": "IDs are nonempty lowercase hex directory keys distinct from names, needing no escaping; location is derived from KB and ID rather than stored as a path.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.15"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 31,
+        "evidence": "PR 32 allocates exclusive hexadecimal directories at creation"
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 53,
+        "how": "replaced",
+        "by": "0010.43"
+      }
+    },
+    {
+      "id": "0010.22",
+      "seq": 31,
+      "pr": 32,
+      "summary": "Single creation scaffold with exclusive directory allocation",
+      "detail": "Creation has one form: copy src/ to before/ and all non-fact root files to target/, write a Draft manifest, and exclusively allocate the directory; the KeepSchema/NewSchema request is dropped because authors just edit target/.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CreateEvolution",
+        "EncodeWorkspaceSnapshot",
+        "TargetSchemaRequest"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 31,
+        "evidence": "PR 32 implements creation and exclusive allocation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.23",
+      "seq": 32,
+      "pr": 33,
+      "summary": "Explicit generated RootBinding values replace a type-indexed class",
+      "detail": "evolve takes explicit RootBinding values pairing whole contract identity with encoder, since a type-class would conflate distinct metadata contracts on the same Haskell type (e.g. metadata-only edges).",
+      "kind": "refine",
+      "supersedes": [
+        "0010.02"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "RootBinding",
+        "RecordableRoot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 32,
+        "evidence": "PR 33 implements RootBinding and generated bindings under GHC and MicroHs"
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 52,
+        "how": "replaced",
+        "by": "0010.42"
+      }
+    },
+    {
+      "id": "0010.24",
+      "seq": 32,
+      "pr": 33,
+      "summary": "Creation writes a real identity evolution entry",
+      "detail": "Workspace creation emits change/Evolution.hs with a polymorphic identity `evolution` entry valid for the copied same-schema target, which authors refine with concrete types.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.10"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "identityEvolution",
+        "evolution"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 32,
+        "evidence": "PR 33 checklist: real identity scaffold emitted by creation"
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 52,
+        "how": "replaced",
+        "by": "0010.41"
+      }
+    },
+    {
+      "id": "0010.25",
+      "seq": 33,
+      "pr": 34,
+      "summary": "Chain checking uses host-inspected contracts; SDK privacy is not enforcement",
+      "detail": "The Internal module is only an import convention; host checks against independently inspected contracts (never guest-supplied descriptions) are the true completeness boundary, rejecting duplicate IDs at every boundary.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.03"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkEvolutionReport",
+        "EvolutionObservation"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 33,
+        "evidence": "PR 34 implements checkEvolutionReport against inspected contracts"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.26",
+      "seq": 33,
+      "pr": 34,
+      "summary": "Reports keyed by collection and FactId; contract changes are interpretation changes",
+      "detail": "Changes are matched by collection identity plus FactId, not position, ordered by step then key; RecordedFact carries the whole root contract so metadata-only contract changes record retained facts as changed, with no second compatibility identity.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.11"
+      ],
+      "sections": [
+        "Declared rationale and record history"
+      ],
+      "anchors": [
+        "RecordedFact",
+        "FactChange",
+        "RootContract"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 33,
+        "evidence": "PR 34 derives position-independent per-fact reports"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.27",
+      "seq": 34,
+      "pr": 35,
+      "summary": "Named intermediate schema bindings declared in the manifest",
+      "detail": "Manifests gain an intermediates list of {name, schemaType, schemaMetadata}, letting authors declare explicit Mid schemas that are inspected and bound alongside generated beforeRoot/afterRoot.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "intermediates"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 34,
+        "evidence": "PR 35 implements manifest intermediates with round-trip and matching"
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 52,
+        "how": "replaced",
+        "by": "0010.42"
+      }
+    },
+    {
+      "id": "0010.28",
+      "seq": 34,
+      "pr": 35,
+      "summary": "Build closure from compiler source paths; only .hs authored inputs",
+      "detail": "SchemaInspection returns the compiler-loaded source paths that select the Before subset; target sources and change/ stay available, generated adapters never overwrite authored files, and .lhs/.hsc are rejected so extension search cannot choose a different definition.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.14"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "SchemaInspection"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 34,
+        "evidence": "PR 35 implements closure selection and extension rejection"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.29",
+      "seq": 34,
+      "pr": 35,
+      "summary": "Execution loads its own Before; target validators compile at checking",
+      "detail": "EvaluateEvolution takes only the CapturedEvolution and loads Before itself, since a Root value cannot prove origin; independent target validators/queries compile during candidate checking, so evaluation answers 'does it run' and checking 'is it acceptable'.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.09"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvaluateEvolution",
+        "CheckRootCode",
+        "NoRequests"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 34,
+        "evidence": "PR 35 removes the Root argument and runs real MicroHs evaluation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.30",
+      "seq": 35,
+      "pr": 36,
+      "summary": "Host-detected chain mismatch is ProposedCodeRejected",
+      "detail": "A malformed observation chain is classified as ProposedCodeRejected with a host diagnostic, reserving EvolutionRejected for guest refusals.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.25"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ProposedCodeRejected",
+        "EvolutionRejected"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 35,
+        "evidence": "PR 36 body: host-invalid evolution output now returns ProposedCodeRejected"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.31",
+      "seq": 36,
+      "pr": 37,
+      "summary": "Candidate store layout, fingerprint restore and stale diagnostics",
+      "detail": "Candidates are written to fresh .kyyn/candidates/<id>/ directories (capture, root, metadata/report) published via an atomic latest pointer; restore re-checks contracts by fingerprint and reports candidate.stale on incompatibility rather than migrating. Target code is a pure projection, not a store effect.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "LoadCandidate",
+        "SaveCandidate",
+        "ReplaceBytes",
+        "TargetCode"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 36,
+        "evidence": "PR 37 implements persistence, reload and fingerprint checks"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.32",
+      "seq": 38,
+      "pr": 39,
+      "summary": "Lifecycle summaries, ExcludeDrafts filter and unverified-acceptance diagnostic",
+      "detail": "Summaries carry workspace, name, state and accepting commit; ExcludeDrafts replaces Reviewable as a pure filter; local Accepted without Git confirmation is an evolution.unverified-acceptance diagnostic; MarkReady/MarkDraft atomically rewrite only the manifest and keep captured inputs matching.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.16",
+        "0010.20"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionSummary",
+        "ExcludeDrafts",
+        "ReadDirectoryAt",
+        "MarkReady",
+        "MarkDraft"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 38,
+        "evidence": "PR 39 implements lifecycle operations"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.33",
+      "seq": 39,
+      "pr": 40,
+      "summary": "Export from captured bytes plus live notes; durable versioned result record",
+      "detail": "Export admits only Candidate (Validated Root), emits an Accepted manifest from captured values, exact source bytes and the fixed report, reading only notes/ live; result.json is durable history whose future readers must support or diagnose old versions, never require replay.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.17"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ExportAcceptedWorkspace",
+        "Subtree",
+        "Validated"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 39,
+        "evidence": "PR 40 implements export and shared EvolutionRecord codec"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.34",
+      "seq": 40,
+      "pr": 41,
+      "summary": "Reserved result record file excluded from captured inputs",
+      "detail": "Workspace projection accepts but ignores the root-level host-produced result file, excluding it from snapshots and input comparison; its presence never establishes acceptance.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.18"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "WorkspaceSnapshot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 40,
+        "evidence": "PR 41 body: workspace projection accepts the reserved result file"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.35",
+      "seq": 42,
+      "pr": 43,
+      "summary": "EvolutionAuthoring separated from compiler-free EvolutionStore",
+      "detail": "Create and Capture move to an EvolutionAuthoring effect that needs RootOpening; EvolutionStore keeps metadata, candidate and archive operations installable without compiler or SDK, exposing ReadWorkspace for authoring to delegate to.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.07"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionAuthoring",
+        "runEvolutionAuthoring",
+        "ReadWorkspace"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 42,
+        "evidence": "PR 43 moves the constructors and adds the authoring interpreter"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.36",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Archived report inspection requires confirmed acceptance",
+      "detail": "ReadEvolutionSummary and ReadArchivedReport take an explicit revision; an archived report is only trusted when the history lookup confirms acceptance, otherwise evolution.unverified-report, and accepted inspection needs no candidate cache or live manifest.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "ReadEvolutionSummary",
+        "ReadArchivedReport",
+        "FindAcceptance"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 implements the store operations and CLI inspection"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.37",
+      "seq": 43,
+      "pr": 44,
+      "summary": "Shared porcelain evaluate/check workspace operations for all surfaces",
+      "detail": "evaluateWorkspace and checkWorkspace in porcelain capture-apply and load-check candidates; CLI, MCP and Web reuse them instead of their own workflows.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "evaluateWorkspace",
+        "checkWorkspace",
+        "CheckResult"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 43,
+        "evidence": "PR 44 exposes the journey through the CLI using these operations"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.38",
+      "seq": 50,
+      "pr": 54,
+      "summary": "Candidate save creates its own .kyyn/.gitignore",
+      "detail": "Rather than relying on a KB template, saving a candidate writes .kyyn/.gitignore containing * when absent, without touching the user's top-level ignore rules.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.31"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 50,
+        "evidence": "PR 54 code writes .kyyn/.gitignore (readOptionalBytes/replaceBytes)"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0010.39",
+      "seq": 51,
+      "pr": 56,
+      "summary": "Capture carries Before input Root and closure into execution",
+      "detail": "Capture reads the Before subtree once and passes the input Root and source closure to execution as invocation-local values, so execution no longer reloads or reinspects Before.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.29"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CapturedEvolution",
+        "SourceRoot",
+        "LoadRootInputAt"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 51,
+        "evidence": "PR 56 adds LoadRootInputAt and removes the reload"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.40",
+      "seq": 51,
+      "pr": 56,
+      "summary": "Single author-facing checkEvolution; acceptance uses checkSavedCandidate",
+      "detail": "checkEvolution captures, evaluates, saves and validates in one action; checkSavedCandidate checks the saved result without re-execution and is what acceptance uses.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.37"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "checkEvolution",
+        "checkSavedCandidate"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 51,
+        "evidence": "PR 56 implements the single public check"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.41",
+      "seq": 52,
+      "pr": 58,
+      "summary": "Authored entry is a pure Evolution Before After value",
+      "detail": "The workspace entry becomes `evolution :: Evolution Before.Root After.Root`; the generated adapter applies it and calls evaluateEvolution. The effectful Program entry and separate proposal-wrapping are dropped; the identity scaffold uses qualified Before/After aliases of the same schema.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.01",
+        "0010.24"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Evolution",
+        "evolution",
+        "identityEvolution"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 52,
+        "evidence": "PR 58 implements the direct entry adapter and concrete identity scaffold"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.42",
+      "seq": 52,
+      "pr": 58,
+      "summary": "Exactly two endpoint contracts via editBefore, evolve and editAfter",
+      "detail": "A workspace has only Before and After contracts: optional Before edits, one transition, then After edits, using generated helpers; RootBinding becomes internal, intermediate declarations are removed, and multiple schema transitions need separate evolutions.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.27",
+        "0010.23"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "editBefore",
+        "editAfter",
+        "evolve",
+        "RootBinding"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 52,
+        "evidence": "PR 58 removes intermediates and generates endpoint helpers"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.43",
+      "seq": 53,
+      "pr": 60,
+      "summary": "Numbered slug evolution IDs like 000001-add-review-status",
+      "detail": "IDs are a six-digit local sequence plus a slug of the name, allocated by scanning live evolutions/ and exclusive creation; refuse at 999999, no counter file, and the ID stays fixed if the name changes.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.21"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionId"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 53,
+        "evidence": "PR 60 implements numbered slug allocation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.44",
+      "seq": 54,
+      "pr": 63,
+      "summary": "Candidate and result records persisted as typed Dhall",
+      "detail": "candidate.dhall/result.dhall replace JSON: a fixed header with version and endpoint contracts as postordered declaration tables, then a shape-directed decode of typed per-step changes; no JSON persistence path.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.33"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "EvolutionRecord"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 54,
+        "evidence": "PR 63 implements shared Dhall record codec"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.45",
+      "seq": 55,
+      "pr": 64,
+      "summary": "Fact-aware StateT edits with generated collection handles and optics",
+      "detail": "Same-schema edits are `Edit root = StateT root (Either EvolutionFailure)` with within/current/update/remove/append over generated per-collection handles and a small van Laarhoven optics set; editAfter becomes edit, and one edit is one rationale/boundary.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.42"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Edit",
+        "CollectionEdit",
+        "Collection",
+        "within",
+        "append",
+        "modifying",
+        "assigning",
+        "StateT",
+        "ReaderT"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 55,
+        "evidence": "PR 64 adds State edits, optics and generated collection modules"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.46",
+      "seq": 67,
+      "pr": 82,
+      "summary": "One shared endpoint preparation for capture and workspace discovery",
+      "detail": "PreparedEvolution opens Before, verifies the copy, then opens the target once; capture and API discovery both use it, and capture retains the prepared After so execution skips another schema inspection.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.39"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "PreparedEvolution",
+        "SourceRoot"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 67,
+        "evidence": "PR 82 implements prepareEvolution and WorkspaceApi"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.47",
+      "seq": 89,
+      "pr": 110,
+      "summary": "Evolution output may carry an optional recipe curation declaration",
+      "detail": "An evolution may attach one optional recipe curation declaration (explicit handled evidence, independent of step citations); candidate preparation resolves it into host-owned progress and saves both with the result for review and publication. Acknowledgement-only identity evolutions are valid.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "Curation",
+        "withCuration"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 92,
+        "evidence": "PR 113 implements withCuration attachment, resolution at candidate preparation and persistence in saved/archived records (record v2)."
+      },
+      "confidence": "high",
+      "ended": {
+        "seq": 158,
+        "how": "replaced",
+        "by": "0010.53"
+      }
+    },
+    {
+      "id": "0010.48",
+      "seq": 94,
+      "pr": 116,
+      "summary": "Evolutions transform a KnowledgeBase wrapper carrying recipes",
+      "detail": "Entries become Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root) so recipes are first-class data edited with the same vocabulary; onFacts/zoom facts lift domain helpers, recipes are produced by the evolution not target files, and no legacy bare-Root adapter is kept.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.41"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "KnowledgeBase",
+        "onFacts",
+        "Recipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 96,
+        "evidence": "PR 118 implements KnowledgeBase evolution values (SDK groundwork in PR 117)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.49",
+      "seq": 96,
+      "pr": 118,
+      "summary": "Reports distinguish recipe changes from domain fact changes",
+      "detail": "StepReport changes become a Change union with RecipeChange alongside FactChange, and EvolutionReport carries curation; archive v3 with v1/v2 readers retained.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.26"
+      ],
+      "sections": [
+        "Declared rationale and record history"
+      ],
+      "anchors": [
+        "Change",
+        "RecipeChange"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 96,
+        "evidence": "PR 118 adds RecipeChange and v3 archives"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.50",
+      "seq": 97,
+      "pr": 121,
+      "summary": "Evolution execution is pure; investigation happens during authoring",
+      "detail": "An evolution never requests host or plugin effects; agents investigate with tools while authoring and encode chosen changes, rationale and evidence references in source. Evaluation and checking never invoke models or acquire evidence, and plugin dispatch is removed from execution.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.41"
+      ],
+      "sections": [
+        "Decision / Pure evolution execution"
+      ],
+      "anchors": [
+        "EvolutionExecution",
+        "PluginInvocation"
+      ],
+      "realised": {
+        "how": "code_first",
+        "seq": 34,
+        "evidence": "Execution was only ever specialized to Program NoRequests since PR 35; the spec caught up"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.51",
+      "seq": 121,
+      "pr": 157,
+      "summary": "Record v4 includes host-derived plugin package comparison",
+      "detail": "New EvolutionRecords use version 4 with plugin upgrade summaries derived from captured package bytes; v1–3 stay readable and missing summaries are never reconstructed from current source.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.44"
+      ],
+      "sections": [
+        "Decision / Pure evolution execution"
+      ],
+      "anchors": [
+        "EvolutionRecord"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 121,
+        "evidence": "PR 157 persists plugin comparisons in v4"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.52",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Evolutions are either ad hoc or recipe-based",
+      "detail": "A captured EvolutionKind distinguishes AdHoc (general schema/fact/recipe-definition changes) from RecipeBased RecipeId (facts plus one recipe's state, preserving schema, recipe definitions, source and config). The kind selects the entry signature and scaffold; changing it or rebasing invalidates the candidate.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Ad hoc and recipe-based authoring"
+      ],
+      "anchors": [
+        "EvolutionKind",
+        "AdHoc",
+        "RecipeBased",
+        "RecipeId"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR 210 adds explicit AdHoc/RecipeBased workspaces"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.53",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Recipe-based evolutions edit facts plus typed recipe state",
+      "detail": "RecipeEvolution/RecipeEdit sequence editFacts with get/put/modifyRecipeState for the selected recipe, lowered to the common observation/check/report path; state is never Maybe and state-only edits are reviewable. This replaces curation declarations and host-owned progress.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.47"
+      ],
+      "sections": [
+        "Decision / Ad hoc and recipe-based authoring"
+      ],
+      "anchors": [
+        "RecipeEvolution",
+        "RecipeEdit",
+        "recipeEdit",
+        "editFacts",
+        "putRecipeState"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "PR 208 adds SDK RecipeEdit; PR 210 integrates persistence, entrypoints and removes curation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.54",
+      "seq": 158,
+      "pr": 206,
+      "summary": "Reports tagged by evolution kind; recipe changes keyed by RecipeId",
+      "detail": "EvolutionReport becomes EvolutionReport EvolutionKind [StepReport] and RecipeChange records StoredRecipe values by RecipeId; recipe-based archives retain recipe identity and state changes with contracts.",
+      "kind": "refine",
+      "supersedes": [
+        "0010.49"
+      ],
+      "sections": [
+        "Decision",
+        "Declared rationale and record history"
+      ],
+      "anchors": [
+        "EvolutionReport",
+        "RecipeChange",
+        "StoredRecipe"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 162,
+        "evidence": "StoredRecipe and recipe state archives appear with PR 210"
+      },
+      "confidence": "high"
+    }
+  ],
+  "editorial": [
+    {
+      "seq": 37,
+      "pr": 38,
+      "note": "Adds Git to the store handler's dependency list to match the implemented FindAcceptance lookup; no new requirement."
+    },
+    {
+      "seq": 45,
+      "pr": 48,
+      "note": "Renames CheckRootCode to PrepareRoot to match code; the 'validators compile at checking' decision is unchanged."
+    },
+    {
+      "seq": 76,
+      "pr": 94,
+      "note": "Points evidence retention at ADR 0014 instead of restating it; ownership cross-reference, no change to evolution mechanics."
+    },
+    {
+      "seq": 92,
+      "pr": 113,
+      "note": "EvolutionRecord v2 carrying the curation declaration is a format bump: seq 89 (0010.47) already required the declaration to be saved with the result. Records realisation of 0010.47; no new requirement."
+    },
+    {
+      "seq": 122,
+      "pr": 159,
+      "note": "Removes the stale 'entry may acquire evidence during evaluation' paragraph already contradicted by seq 97 and links ADR 0028; no new evolution requirement."
+    },
+    {
+      "seq": 130,
+      "pr": 167,
+      "note": "Record v5 only follows ADR 0014's OpenAgent/ClosedAgent recipe constructors, keeping v1-4 readable. It is a format bump with no change to what this ADR requires."
+    },
+    {
+      "seq": 142,
+      "pr": 184,
+      "note": "Link updates after walkthroughs/CLI notes were folded into docs/guide.md."
+    },
+    {
+      "seq": 143,
+      "pr": 186,
+      "note": "Desired-state reconciliation, all editorial. Removing status/date/basis metadata and 'implemented' qualifiers is metadata. Capture preparing both source endpoints through RootOpening, with After retained and no ReadRootDefinition/SchemaSource in execution, restates 0010.46. The pure EvolutionExecution effect row (GuestExecution, no PluginInvocation/ProcessExecution) restates 0010.50. applyEvolution resolving curation through EvidenceStore restates 0010.47. The Reviewable-to-ExcludeDrafts lifecycle filter restates 0010.32. The verification wording is editorial too. No uncovered commitment or reversal."
+    },
+    {
+      "seq": 155,
+      "pr": 202,
+      "note": "CollectionEdit reader String→Text to match the packed-Text transport implementation."
+    }
+  ],
+  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment into 13 nodes: entry kind, composition, chain check, Before/After revisions (absorbing the 'Updating the base' section's author-directed rebase), workspace layout, module naming, capture/store, candidate storage, execution, binding convention, reports, record history and lifecycle. The Composition section's mechanics are merged into 0010.02. Alternatives and verification produce no nodes. The large founding spec was then implemented almost line by line over PRs 30-44 (seq 29-43). Each PR tightened the signatures it built, so most refinements are same_step and spec and code moved in lockstep. Reversals: (1) the founding effectful entry (Program MicrosoftCalls, evidence acquired during evaluation) was never built; execution was only ever Program NoRequests (seq 34). Seq 52 replaced it with a pure Evolution value, seq 97 declared pure execution (0010.50, code_first) and seq 122 deleted the leftover text. (2) Explicit intermediate schema bindings were specified and built at seq 34, then removed at seq 52 in favour of exactly two endpoint contracts. (3) Curation (seq 89, built at 92) was replaced by typed recipe state at seq 158, built by seq 162. Persistence moved from JSON (seq 39) to typed Dhall (seq 54), and the record version climbed v2 to v5. Under the format-bump rule, v2 (seq 92) and v5 (seq 130) are editorial because they only carry what other nodes or ADR 0014 already require. v4 (seq 121, 0010.51) stays a refine because it newly requires reports to carry the host-derived plugin package comparison, so plugin-only upgrades are reviewable. Seq 143 is wholly editorial under the reconciliation rule: every change restates an existing node. Still unrealised at cursor 166: per-record history (0010.12) and the explicit 'remove unaccepted workspace' operation folded into 0010.13. Rebasing exists only as editing the manifest revision and re-capturing. Seq 4 and seq 30 each bundle several small store/lifecycle mechanics, split into separate refines. Seq 4's front-matter change is editorial within a step that also makes nodes."
+}
