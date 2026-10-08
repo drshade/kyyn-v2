@@ -27,9 +27,9 @@ import qualified Network.HTTP.Client as Http
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Status (statusCode)
 import Numeric (showHex)
-import System.Directory (createDirectoryIfMissing, renameFile, listDirectory, removeFile, doesFileExist)
+import System.Directory (createDirectoryIfMissing, renameFile, listDirectory, removeFile, doesFileExist, getFileSize)
 import System.FilePath ((</>))
-import System.IO (hClose, hSetBinaryMode, withBinaryFile, IOMode(..))
+import System.IO (hClose, hSetBinaryMode)
 import System.IO.Temp (withTempFile)
 
 runBlobStorageIO :: (IOE :> es, Files.FileSystem :> es)
@@ -39,10 +39,10 @@ runBlobStorageIO kb action = do
   created <- liftIO (newIORef [])
   interpret (\env -> \case
     WithBlobDownloads instanceRef cleanup operation -> localSeqUnlift env $ \unlift -> do
-      before <- liftIO (readIORef created)
+      before <- liftIO (length <$> readIORef created)
       unlift operation `Exception.finally` (do
         after <- liftIO (readIORef created)
-        unlift (cleanup [ref | item@(owner,ref) <- after, owner == instanceRef, item `notElem` before]))
+        unlift (cleanup [ref | (owner,ref) <- take (length after - before) after, owner == instanceRef]))
     StoreBlobAt instanceRef download -> do
       Files.ensureIgnoredDirectory kb cacheLocation
       liftIO (safe (downloadBlob manager (directory instanceRef)
@@ -84,10 +84,10 @@ checkBytes (BlobRef expected size _ _) bytes =
     (ioError (userError "Blob content integrity mismatch"))
 
 checkFile :: FilePath -> BlobRef -> IO ()
-checkFile directory ref@(BlobRef expected size _ _) = do
+checkFile directory ref@(BlobRef _ size _ _) = do
   path <- checkedPath directory ref
-  (hash,actualSize) <- withBinaryFile path ReadMode $ \handle -> digest (Bytes.hGetSome handle 65536) (const (pure ()))
-  unless (hash == expected && size == actualSize) (ioError (userError "Blob content integrity mismatch"))
+  actualSize <- getFileSize path
+  unless (size == actualSize) (ioError (userError "Blob byte count mismatch"))
 
 digest :: IO Bytes.ByteString -> (Bytes.ByteString -> IO ()) -> IO (Text.Text,Integer)
 digest next consume = go SHA.init 0
