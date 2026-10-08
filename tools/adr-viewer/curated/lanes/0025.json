@@ -1,7 +1,7 @@
 {
   "adr": "0025",
   "title": "Agent-driven setup and per-KB execution",
-  "cursor": 166,
+  "cursor": 169,
   "nodes": [
     {
       "id": "0025.01",

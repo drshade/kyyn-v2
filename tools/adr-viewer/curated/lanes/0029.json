@@ -1,7 +1,7 @@
 {
   "adr": "0029",
   "title": "Evidence blobs and connector-owned sync positions",
-  "cursor": 166,
+  "cursor": 169,
   "nodes": [
     {
       "id": "0029.01",
@@ -18,8 +18,9 @@
         "BlobRef"
       ],
       "realised": {
-        "how": "unrealised",
-        "evidence": "BlobRef never appears in code by end of history; seq 156/157 PRs explicitly say 'no blobs'"
+        "how": "later_step",
+        "seq": 167,
+        "evidence": "PR #215 adds the nominal SDK BlobRef, found by nominal contract walk (blobReferences), stored per instance under blobs/<sha256>"
       },
       "confidence": "high"
     },
@@ -74,8 +75,9 @@
         "EvidenceSnapshot"
       ],
       "realised": {
-        "how": "unrealised",
-        "evidence": "No blob read operations in code"
+        "how": "later_step",
+        "seq": 167,
+        "evidence": "PR #215: CapturedRead = EvidenceRead :+: BlobRead; the broker rejects references outside the captured input, and missing/corrupt bytes are errors with refetch guidance"
       },
       "confidence": "high"
     },
@@ -124,10 +126,11 @@
         "BlobRef"
       ],
       "realised": {
-        "how": "unrealised",
-        "evidence": "Depends on BlobRef, which was never implemented"
+        "how": "later_step",
+        "seq": 167,
+        "evidence": "PR #215: CLI/composed-tool method results resolve BlobRefs via the checked contract and list each blob's local path; no file-mode read-only enforcement found, MCP path not separately evidenced"
       },
-      "confidence": "high"
+      "confidence": "medium"
     },
     {
       "id": "0029.06",
@@ -216,9 +219,9 @@
         "StoreBlob"
       ],
       "realised": {
-        "how": "unrealised",
-        "seq": null,
-        "evidence": "No StoreBlob/BlobDownload in code; PR #214 says blob storage is a later slice"
+        "how": "later_step",
+        "seq": 167,
+        "evidence": "PR #215 streams downloads natively to a hashed temporary file and renames only complete downloads; BlobDownload has no size or media-type policy"
       },
       "confidence": "high"
     },
@@ -242,11 +245,33 @@
         "ConnectorInstanceRef"
       ],
       "realised": {
-        "how": "unrealised",
-        "seq": null,
-        "evidence": "No BlobStorage or blob reclamation in code; PR #214 says blob storage is a later slice"
+        "how": "later_step",
+        "seq": 167,
+        "evidence": "PR #215: PublishFetch checks all references under the instance lock before replacing state, then reclaims unreferenced blobs; acquisition-scoped cleanup on failure. The PR body says result/publication assertions were still being added"
       },
       "confidence": "medium"
+    },
+    {
+      "id": "0029.11",
+      "seq": 168,
+      "pr": 217,
+      "summary": "Acquisition-only digestText fingerprints connector-chosen canonical payloads",
+      "detail": "Capture-once connectors fingerprint their own canonical payload representation with digestText, which returns lowercase hex SHA-256 of each input's UTF-8 bytes in one batched request; nested BlobRef hashes participate. The capability is acquisition-only (never granted to captured readers) and the host implements it as a pure ContentDigest interpreter sharing blob storage's native SHA.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Payload fingerprints"
+      ],
+      "anchors": [
+        "ContentDigest",
+        "digestText"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 168,
+        "evidence": "PR #217 adds the batched native ContentDigest capability with a pure interpreter, used by Graph Mail fingerprints"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -264,7 +289,12 @@
       "seq": 159,
       "pr": 207,
       "note": "Context-section rewording removing curation-model archaeology"
+    },
+    {
+      "seq": 167,
+      "pr": 215,
+      "note": "Byte reads now travel in ADR 0007's raw body section instead of a binary-to-text codec in the string profile; the transport change is owned and recorded in lane 0007 (0007.21), and this lane's commitments (whole-blob reads, no author-visible base64) are unchanged"
     }
   ],
-  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented. Both changes withdraw something an earlier node stated, so they are replacements that restate the surviving core: 0029.09 replaces 0029.02 (no maxBytes or media-type policy), and 0029.10 replaces 0029.04 (BlobScope reader protection withdrawn in favour of a store lock and an explicit non-overlapping-use assumption). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there."
+  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented. Both changes withdraw something an earlier node stated, so they are replacements that restate the surviving core: 0029.09 replaces 0029.02 (no maxBytes or media-type policy), and 0029.10 replaces 0029.04 (BlobScope reader protection withdrawn in favour of a store lock and an explicit non-overlapping-use assumption). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there. Seq 167 (PR #215) then built the whole blob half at once: BlobRef, host-streamed downloads, scoped captured reads, publication checks with reclamation, and CLI result paths, so 0029.01, 0029.03, 0029.05, 0029.09 and 0029.10 are realised there (0029.05 at medium confidence: paths are listed but not made read-only, and MCP is not separately evidenced). Its wording change moving byte reads onto ADR 0007's raw body is editorial here. Seq 168 (PR #217, Graph Mail) added payload fingerprints (0029.11), built in the same step."
 }
