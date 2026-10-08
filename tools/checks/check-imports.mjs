@@ -159,6 +159,7 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.Sink': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.List', 'Data.Text'],
   'Kyyn.Plumbing.Capability.ContentDigest': ['Data.Text', 'Effectful', 'Effectful.Dispatch.Dynamic'],
   'Kyyn.Plumbing.Capability.BlobStorage': ['Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Evidence', 'Kyyn.Types.Blob', 'Kyyn.Types.Plugin'],
   'Kyyn.Plumbing.Protocol.Blob': ['Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Text.Encoding', 'Kyyn.Domain.Blob', 'Kyyn.Types.Blob', 'Kyyn.Types.PluginHost', 'Kyyn.Types.Plugin'],
@@ -275,7 +276,7 @@ const interpreterModules = {
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static', 'Effectful.State.Static.Local', 'System.FilePath',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Output', 'Kyyn.Domain.Path', 'Kyyn.Domain.Value',
     'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.GuestExecution',
-    'Kyyn.Plumbing.Capability.ProcessExecution', 'Kyyn.Plumbing.Protocol.Frame', 'Kyyn.Plumbing.Protocol.PluginMessages', 'Kyyn.Porcelain.Capability.Delivery', 'Kyyn.Porcelain.Capability.PluginPreparation'],
+    'Kyyn.Plumbing.Capability.ProcessExecution', 'Kyyn.Plumbing.Protocol.Frame', 'Kyyn.Plumbing.Protocol.PluginMessages', 'Kyyn.Plumbing.Protocol.Sink', 'Kyyn.Porcelain.Capability.Delivery', 'Kyyn.Porcelain.Capability.PluginPreparation'],
   'Kyyn.Porcelain.Protocol.EvidencePayload': ['Control.Monad', 'Control.Monad.Trans.Except', 'Data.ByteString', 'Data.Set', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.EvidenceIndex', 'Kyyn.Domain.Path', 'Kyyn.Domain.Value', 'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.Failure', 'System.FilePath'],
   'Kyyn.Porcelain.Protocol.EvidenceIndex': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.ByteString', 'Data.Map.Strict', 'Data.Text', 'Effectful', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.EvidenceIndex', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Protocol.DataType', 'Kyyn.Types.SchemaMetadata'],
   'Kyyn.Plumbing.Interpreter.ContentDigest': ['Crypto.Hash.SHA256', 'Data.ByteString', 'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Plumbing.Capability.ContentDigest', 'Numeric'],

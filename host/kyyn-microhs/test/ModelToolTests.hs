@@ -35,7 +35,8 @@ import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.KnowledgeBaseInitialization (initialRootFiles)
-import Kyyn.Porcelain.Capability.PluginRead (PluginRead)
+import Kyyn.Porcelain.Capability.PluginRead (PluginRead(..))
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.RootStore (readRootDefinition)
 import Kyyn.Porcelain.Capability.Tool
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
@@ -126,7 +127,7 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
       assert "Root accepted malformed model configuration"
         (case runPureEff (runDhallHandling (runRootStore (readRootDefinition tree))) of Left _ -> True; Right _ -> False)
   let invoke tool handler = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
-        . runGuestExecution toolchain . noReads . noJudgement . handler . runToolExecution $
+        . runGuestExecution toolchain . noEvidence . noReads . noJudgement . handler . runToolExecution $
           executeTool tool (toJSON ("input" :: String))
   (result,turns) <- invoke selected (recording expected) >>= right
   (CheckedValue _ value,[]) <- right result
@@ -169,6 +170,9 @@ noReads = interpret $ \_ operation -> case operation of
   _ -> error "Model fixture unexpectedly read evidence"
 noJudgement :: Eff (Judgement : es) a -> Eff es a
 noJudgement = interpret $ \_ _ -> error "Model fixture unexpectedly requested Judgement"
+
+noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
+noEvidence = interpret $ \_ _ -> error "Model fixture unexpectedly accessed evidence storage"
 
 withoutModel :: PreparedTool -> PreparedTool
 withoutModel (PreparedTool a b c _) = PreparedTool a b c Nothing

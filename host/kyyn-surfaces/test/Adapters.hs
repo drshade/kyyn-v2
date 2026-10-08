@@ -127,6 +127,8 @@ main = do
           ShowRoot -> inspectionCheckResult revision <$> inspectRootAt kb revision
           CheckRoot -> checkResult "Root" <$> checkRootAt kb revision
           RootTool _ -> error "Tool commands have their own dispatcher"
+          RootQuery _ -> error "Query commands have their own dispatcher"
+          RootOutput _ -> error "Output commands have their own dispatcher"
           RootRecipe _ -> error "Recipe commands have their own dispatcher"
           RootSchema _ -> error "Schema commands have their own dispatcher"
           RootCollection _ -> error "Collection commands have their own dispatcher"

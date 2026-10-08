@@ -1,9 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase, DataKinds #-}
 module Kyyn.Porcelain.Interpreter.Delivery (runDelivery) where
 
-import Control.Monad (unless)
-import Data.Aeson (Value(..), encode, object, (.=), (.:), withObject)
-import Data.Aeson.Types (Parser, parseEither)
+import Data.Aeson (Value(..), encode, object, (.=))
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
@@ -26,6 +24,7 @@ import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Protocol.Frame (Frame(..), jsonFrame)
 import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), decodeFrameWith, encodeResponse, success)
+import Kyyn.Plumbing.Protocol.Sink (decodeSinkCall, parseSinkResult, sinkRejection)
 import Kyyn.Porcelain.Capability.Delivery
 import Kyyn.Porcelain.Capability.PluginPreparation (ConfiguredConnector(..), PreparedConnector(..))
 
@@ -48,7 +47,7 @@ runDelivery base = interpret $ \_ -> \case
               (_,dispatched) <- get @(Integer,Bool)
               pure ((if dispatched then Uncertain else FailedBeforeDispatch) (errorDiagnostic "output.delivery" message))
             decode (Frame metadata body)
-              | Bytes.null body = decodeFrameWith call metadata
+              | Bytes.null body = decodeFrameWith decodeSinkCall metadata
               | otherwise = Left "Unexpected body in sink frame"
             respond frame = case decode frame of
               Right (HostRequest identity (path,content)) -> do
@@ -59,15 +58,15 @@ runDelivery base = interpret $ \_ -> \case
                     (Right directory,Right file) | not (null path) && '\0' `notElem` path -> do
                       put (expected + 1,True)
                       result <- publishBytes directory file (Text.encodeUtf8 content)
-                      pure (either rejection (success . String . Text.pack . const target) result)
-                    _ -> put (expected + 1,dispatched) >> pure (rejection "Invalid output path")
+                      pure (either sinkRejection (const (success (String (Text.pack target)))) result)
+                    _ -> put (expected + 1,dispatched) >> pure (sinkRejection "Invalid output path")
                   pure (Just (jsonFrame (encodeResponse identity reply)))
               _ -> pure Nothing
         (do
           (lastFrame,ProcessExit status stderr) <- executeGuest entry (jsonFrame (Lazy.toStrict
             (encode (object ["config" .= config,"options" .= options,"input" .= input])))) respond
           if status /= 0 then uncertain ("Sink exited unsuccessfully: " ++ show stderr) else case decode lastFrame of
-            Right (Completed result) -> case parseEither resultValue result of
+            Right (Completed result) -> case parseSinkResult result of
               Left problem -> uncertain problem
               Right (Left (kind,message)) -> pure ((if kind == "Rejected" then RejectedByDestination else Uncertain)
                 (errorDiagnostic "output.sink" message))
@@ -76,20 +75,3 @@ runDelivery base = interpret $ \_ -> \case
                 Right _ -> pure (Acknowledged (CheckedValue (contractId resultType) value))
             _ -> uncertain "Sink did not complete with a typed result")
           `catchError` \_ (failure :: OperationalFailure) -> uncertain (show failure)
-  where
-    call :: String -> String -> Value -> Parser (FilePath,Text.Text)
-    call "files" "write" = withObject "file write" $ \fields -> (,) <$> fields .: "path" <*> fields .: "content"
-    call _ _ = const (fail "Unsupported sink capability")
-    rejection :: String -> Value
-    rejection message = object ["tag" .= ("Left" :: String),"value" .= object
-      ["kind" .= ("Rejected" :: String),"message" .= message]]
-    resultValue :: Value -> Parser (Either (String,String) Value)
-    resultValue = withObject "sink result" $ \fields -> do
-      tag <- fields .: "tag"
-      case tag :: String of
-        "Right" -> Right <$> fields .: "value"
-        "Left" -> fields .: "value" >>= withObject "sink error" (\details -> do
-          kind <- details .: "kind"
-          unless (kind `elem` ["Rejected","Uncertain" :: String]) (fail "Unknown sink error kind")
-          Left . (kind,) <$> details .: "message")
-        _ -> fail "Unknown sink result"

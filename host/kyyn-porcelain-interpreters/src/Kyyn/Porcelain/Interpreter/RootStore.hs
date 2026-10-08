@@ -44,7 +44,7 @@ runRootStore = interpret $ \_ -> \case
     pure (CheckedValue (contractId contract) value)
   ReadRootDefinition code -> runExceptT $ do
     _ <- ExceptT (readModelConfiguration code)
-    manifest <- withExceptT (map manifestDiagnostic) $ do
+    (manifest,manifestSource) <- withExceptT (map manifestDiagnostic) $ do
       path <- liftChecked (relativePath "kb.dhall")
       bytes <- maybe (problem "Missing kb.dhall") pure (lookup path (files code))
       source <- liftChecked (either (Left . show) Right (Text.decodeUtf8' bytes))
@@ -57,7 +57,7 @@ runRootStore = interpret $ \_ -> \case
          ("tools", List (Record [(name, Scalar TextScalar) | name <-
           ["name", "description", "implementation", "inputType", "resultType"]]))]))
           ("(" <> source <> ").{schemaType,schemaMetadata,validator,queries,tools}"))
-      pure fields
+      pure (fields,source)
     typeName <- field "schemaType" manifest >>= text
     metadataName <- field "schemaMetadata" manifest >>= text
     validatorName <- field "validator" manifest >>= text
@@ -82,8 +82,8 @@ runRootStore = interpret $ \_ -> \case
       Just value -> do
         let textShape = Scalar TextScalar
             sinkShape = Record [(name,textShape) | name <- ["plugin","instanceName","method"]]
-        _ <- ExceptT (Dhall.encodeValue (List (Record [("name",textShape),("description",textShape),
-          ("query",textShape),("sink",sinkShape)])) value)
+        _ <- ExceptT (Dhall.decodeValue (List (Record [("name",textShape),("description",textShape),
+          ("query",textShape),("sink",sinkShape)])) ("(" <> manifestSource <> ").outputs"))
         list value >>= traverse (\item -> do
           fields <- record item
           let get name = Text.unpack <$> (field name fields >>= text)
