@@ -21,7 +21,7 @@ instance A.Contract EvidenceRef where
   contract = A.record "Evidence citation" $ EvidenceRef
     <$> stringField "producer" producer <*> stringField "connector" instanceName
     <*> stringField "source" source
-    <*> A.required "externalReferences" "External references" references
+    <*> A.required "externalReferences" "External references" externalReferences
 
 stringField name getter = A.required name "" getter
 

@@ -698,7 +698,7 @@ in [ { name = "website", binding = "website"
      } ]
 ```
 
-Add an `outputs` field to `kb.dhall`:
+Populate the `outputs` list in `kb.dhall` (add the field in older KBs):
 
 ```dhall
 outputs =
