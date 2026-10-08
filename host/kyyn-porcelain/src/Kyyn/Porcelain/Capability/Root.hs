@@ -1,6 +1,6 @@
 module Kyyn.Porcelain.Capability.Root
   ( checkRootAt, inspectRootAt, sourceCodeAt, sourceRootAt, listRootTools, selectRootTool
-  , selectSchemaType, selectCollection ) where
+  , selectSchemaType, selectCollection, prepareRootAt ) where
 
 import Effectful (Eff, (:>))
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
@@ -20,7 +20,7 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Root (Root, CheckedValue, SourceRoot(..))
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootAt, loadSourceAt, openCapturedSource)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as Evolution
-import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
+import Kyyn.Porcelain.Capability.RootExecution (RootExecution, PreparedRoot, prepareRoot)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.Validation (checkRoot)
 import Kyyn.Porcelain.Validated (Validated, validatedValue)
@@ -72,6 +72,13 @@ selectRootTool kb revision workspace name = runExceptT $ do
   case [tool | tool@(PreparedTool (ToolDescriptor actual _ _ _) _ _ _) <- tools, actual == name] of
     [tool] -> pure tool
     _ -> throwE [errorDiagnostic "tool.unknown" ("No registered tool named " ++ coerce name)]
+
+prepareRootAt :: (RootOpening :> es, RootExecution :> es)
+  => KnowledgeBase -> GitRevision -> Eff es (Either [Diagnostic] PreparedRoot)
+prepareRootAt kb@(KnowledgeBase repository _) revision = runExceptT $ do
+  path <- ExceptT (pure (either (Left . pure . errorDiagnostic "kb.path") Right (rootLocation kb)))
+  root <- ExceptT (loadRootAt repository revision (Subtree path))
+  ExceptT (prepareRoot root)
 
 checkRootAt :: (RootOpening :> es, RootExecution :> es, RootStore :> es)
   => KnowledgeBase -> GitRevision -> Eff es (CheckResult (Validated Root))

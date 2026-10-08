@@ -4,7 +4,7 @@ module Kyyn.Surfaces.Cli
   , GuestCommand(..), PluginCommand(..), ConnectorCommand(..), EvidenceCommand(..), ToolCommand(..), RecipeCommand(..)
   , SecretCommand(..), SecretArgument(..)
   , TapCommand(..), GuideSelection(..)
-  , SchemaCommand(..), CollectionCommand(..), FactCommand(..)
+  , SchemaCommand(..), CollectionCommand(..), FactCommand(..), QueryCommand(..)
   ) where
 
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..), evolutionId, evolutionIdName)
@@ -63,7 +63,8 @@ data EvidenceCommand
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
 data KbCommand = InitKb deriving (Eq, Show)
-data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand
+data QueryCommand = ListQueries | ShowQuery String | ExecuteQuery String (Maybe String) deriving (Eq, Show)
+data RootCommand = ShowRoot | CheckRoot | RootTool ToolCommand | RootRecipe RecipeCommand | RootQuery QueryCommand
   | RootSchema SchemaCommand | RootCollection CollectionCommand | RootFact FactCommand deriving (Eq, Show)
 data SchemaCommand = ListSchemas (Maybe EvolutionId) | ShowSchema String (Maybe EvolutionId) deriving (Eq, Show)
 data CollectionCommand = ListCollections (Maybe EvolutionId) | ShowCollection String (Maybe EvolutionId) deriving (Eq, Show)
@@ -214,6 +215,11 @@ rootParser :: Parser RootCommand
 rootParser = hsubparser
   (group "show" "Inspect the accepted root at the selected revision" (pure ShowRoot)
   <> group "check" "Check the accepted root, including required examples" (pure CheckRoot)
+  <> group "query" "Discover and execute snapshot queries" (RootQuery <$> hsubparser
+    (group "list" "List registered queries" (pure ListQueries)
+    <> group "show" "Show query argument and result contracts" (ShowQuery <$> strArgument (metavar "NAME"))
+    <> group "execute" "Execute a query against the accepted root" (ExecuteQuery <$> strArgument (metavar "NAME")
+      <*> optional (strOption (long "input" <> metavar "DHALL" <> help "Typed query arguments; omitted only for unit")))))
   <> group "schema" "Explore reachable root schema types" (RootSchema <$> hsubparser
     (group "list" "List reachable named types" (ListSchemas <$> workspace)
     <> group "show" "Show a type's structure and field roles" (ShowSchema <$> argument nonempty (metavar "TYPE") <*> workspace)))

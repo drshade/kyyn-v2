@@ -8,7 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   exposed-modules: Kyyn.Surfaces.Cli Kyyn.Surfaces.Result Kyyn.Surfaces.GuestApi Kyyn.Surfaces.Connectors
-    Kyyn.Surfaces.Tools Kyyn.Surfaces.Recipes Kyyn.Surfaces.Plugins Kyyn.Surfaces.RootBrowsing
+    Kyyn.Surfaces.Tools Kyyn.Surfaces.Queries Kyyn.Surfaces.Recipes Kyyn.Surfaces.Plugins Kyyn.Surfaces.RootBrowsing
   default-language: GHC2021
   default-extensions: NoFieldSelectors
   ghc-options: -Wall -Werror
