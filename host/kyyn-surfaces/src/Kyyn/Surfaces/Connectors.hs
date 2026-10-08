@@ -49,9 +49,12 @@ fetchResult snapshot@(EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ i
 evidenceListResult :: EvidenceCapture -> Response
 evidenceListResult (EvidenceCapture snapshot latest items) = success
   (object ["selection" .= context snapshot, "latest" .= summaryValue latest, "items" .=
-    [object ["id" .= key,"fingerprint" .= fingerprint] | (EvidenceId key,EvidenceFingerprint fingerprint) <- items]])
+    [object ["id" .= key,"fingerprint" .= fingerprint,"availability" .= availability payload] | (EvidenceId key,EvidenceFingerprint fingerprint,payload) <- items]])
   (summaryLines latest ++ if null items then ["No current evidence."] else
-    [Text.unpack key ++ "  " ++ Text.unpack fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
+    [Text.unpack key ++ "  " ++ Text.unpack fingerprint ++ "  " ++ availability payload | (EvidenceId key,EvidenceFingerprint fingerprint,payload) <- items])
+  where
+    availability (Available ()) = "Available" :: String
+    availability Truncated = "Truncated"
 
 evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> Text.Text -> Response
 evidenceItemResult snapshot latest (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) rendered = success

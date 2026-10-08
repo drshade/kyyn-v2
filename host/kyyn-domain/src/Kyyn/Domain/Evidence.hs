@@ -28,11 +28,11 @@ data EvidenceState a = EvidenceState
 data CurrentEvidence = CurrentEvidence
   { snapshot :: EvidenceSnapshotRef, items :: [(EvidenceId, Evidence CheckedValue)], latest :: FetchSummary
   } deriving (Eq, Show)
-data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint)] deriving (Eq, Show)
+data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint, EvidencePayload ())] deriving (Eq, Show)
 
 captureEvidence :: CurrentEvidence -> EvidenceCapture
 captureEvidence (CurrentEvidence snapshot items latest) = EvidenceCapture snapshot latest
-  [(item,token) | (item,Evidence token _ _) <- items]
+  [(item,token,case payload of Available _ -> Available (); Truncated -> Truncated) | (item,Evidence token _ payload) <- items]
 
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
 data EvidenceProblem = NotFetched | ProducerContractChanged

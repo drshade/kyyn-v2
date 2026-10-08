@@ -264,6 +264,8 @@ returns structured JSON.
 external source references (`externalReferences`). The payload is `Available a`
 or `Truncated`: truncation retains the item's ID and fingerprint but not its
 content. It is distinct from removal, an absent item or an unfetched connector.
+`evidence list` shows availability beside each ID and fingerprint. Authored tools
+pattern-match `Available value` or `Truncated` when reading evidence.
 JSON inspection exposes that tagged payload; human inspection says when content
 is truncated. Neither retrieves historical contents. Connectors may restore the
 same version with `SetEvidencePayload`; truncation/restoration does not count as

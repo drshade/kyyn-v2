@@ -163,7 +163,7 @@ main = do
     f1 <- run (publishFetch instanceA producer contract Nothing (Just "first-options") first) >>= right
     EvidenceCapture at1 summary1 listedFirst <- listing instanceA producer >>= right
     assert "listing lost first IDs or fingerprints" (at1 == f1 &&
-      listedFirst == [(itemA,EvidenceFingerprint "old"),(itemB,EvidenceFingerprint "removed")])
+      listedFirst == [(itemA,EvidenceFingerprint "old",Available ()),(itemB,EvidenceFingerprint "removed",Available ())])
     let emptyInstance = ConnectorInstanceRef (either error id (pluginName "folder")) "empty"
     emptyFetch <- run (publishFetch emptyInstance producer contract Nothing Nothing []) >>= right
     EvidenceCapture emptyAt (FetchSummary _ _ adds updates removals _) listedEmpty <- listing emptyInstance producer >>= right
@@ -177,7 +177,7 @@ main = do
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
     EvidenceCapture at2 summary2@(FetchSummary identity time added updated removed options) listedLatest <- listing instanceA producer >>= right
-    assert "listing retained removed item or old fingerprint" (at2 == f2 && listedLatest == [(itemA,EvidenceFingerprint "new")])
+    assert "listing retained removed item or old fingerprint" (at2 == f2 && listedLatest == [(itemA,EvidenceFingerprint "new",Available ())])
     assert "latest summary lost identity, count or options" (identity == key f2 && (added,updated,removed) == (0,1,1) && options == suppliedOptions && summary2 /= summary1)
     assert "fetch timestamp is not ISO 8601 UTC" (case iso8601ParseM time :: Maybe UTCTime of
       Just _ -> last time == 'Z'; Nothing -> False)
