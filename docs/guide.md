@@ -651,6 +651,9 @@ of external evidence do not alter a saved proposal.
 ## Explore schemas, collections and facts
 
 ```sh
+kyyn-v2 --kb PATH root query list
+kyyn-v2 --kb PATH root query show report
+kyyn-v2 --kb PATH root query execute report --input '{=}'
 kyyn-v2 --kb PATH root schema list
 kyyn-v2 --kb PATH root schema show Tasks.Todo
 kyyn-v2 --kb PATH root collection list
