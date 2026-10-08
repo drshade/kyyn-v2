@@ -8,4 +8,9 @@
   , source = "https://github.com/drshade/kyyn-v2"
   , path = "plugins/microsoft-graph"
   }
+, { name = "github"
+  , description = "Repository issues, pull requests and commit metadata"
+  , source = "https://github.com/drshade/kyyn-v2"
+  , path = "plugins/github"
+  }
 ]

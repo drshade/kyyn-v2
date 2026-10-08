@@ -240,6 +240,8 @@ The name selects the instance in commands; the binding names its generated guest
 value in `Kyyn.Connectors`. Check, review, ready and accept the evolution.
 For Microsoft Graph authentication/configuration use
 `plugin guide first-party/microsoft-graph` (or the installed plugin's guide).
+For repository issues, pull requests and commit metadata, use
+`plugin guide first-party/github` for configuration and capture scope.
 
 ## Fetch and inspect evidence
 
