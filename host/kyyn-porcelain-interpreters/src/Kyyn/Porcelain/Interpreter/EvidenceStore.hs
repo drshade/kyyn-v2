@@ -15,7 +15,7 @@ import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.KnowledgeBase (cacheLocation)
 import qualified Kyyn.Domain.Failure as Failure
-import Kyyn.Domain.Path (DirectoryScope, scopePath, relativeName, directoryScope)
+import Kyyn.Domain.Path (DirectoryScope, scopePath, relativeName, directoryScope, relativePath)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence, DocumentAccess, DocumentStamp(..), withLockedDocument)
 import qualified Kyyn.Plumbing.Capability.DocumentPersistence as Document
@@ -91,7 +91,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
       let path = scopePath kb </> relativeName cacheLocation </> "evidence" </> instancePath instanceRef
       in case directoryScope path of
         Left message -> raiseFailure (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.InspectEntry path message))
-        Right scope -> withLockedDocument scope action
+        Right scope -> withLockedDocument scope (either error id (relativePath "state.dhall")) action
 
 type Result es = ExceptT EvidenceProblem (Eff es)
 

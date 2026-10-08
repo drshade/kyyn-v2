@@ -16,6 +16,7 @@ library
     Kyyn.Porcelain.Interpreter.EvidenceInspection
     Kyyn.Porcelain.Interpreter.EvidenceStore
     Kyyn.Porcelain.Protocol.EvidencePersistence
+    Kyyn.Porcelain.Protocol.EvidenceIndex
     Kyyn.Porcelain.Protocol.RecipePersistence
     Kyyn.Porcelain.Protocol.RecipeBindings
     Kyyn.Porcelain.Protocol.RecipeContracts
@@ -45,7 +46,16 @@ library
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-plumbing,
-    effectful-core ==2.6.1.0, aeson, bytestring, text, transformers, filepath
+    effectful-core ==2.6.1.0, aeson, bytestring, text, transformers, filepath, containers
+
+test-suite evidence-index
+  type: exitcode-stdio-1.0
+  main-is: EvidenceIndexTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain-interpreters,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson, text
 
 test-suite plugin-installation
   type: exitcode-stdio-1.0

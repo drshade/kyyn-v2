@@ -11,6 +11,10 @@ import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.Text.Encoding as Text
 import Data.Text (Text)
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Dhall.Binary as Binary
+import qualified Dhall.Core as Dhall
+import qualified Dhall.Parser as Parser
 import Effectful (runPureEff)
 import Kyyn.Domain.DataType
 import Kyyn.Plumbing.Capability.DhallHandling
@@ -21,6 +25,28 @@ import Kyyn.Types.SchemaMetadata
 
 main :: IO ()
 main = do
+  imported <- either (fail . show) pure (Parser.exprFromText "fixture" "env:KYYN_BINARY_IMPORT_MUST_NOT_RESOLVE")
+  let importBytes = Lazy.toStrict (Binary.encodeExpression (Dhall.denote imported))
+  case runPureEff (runDhallHandling (decodeBinaryValue (Scalar TextScalar) importBytes)) of
+    Left _ -> pure ()
+    Right _ -> fail "Binary Dhall import accepted"
+  let envelopeShape = Record [("header",Scalar BoolScalar),("body",Scalar TextScalar)]
+      envelope = object ["header" .= True, "body" .= ("Snow 雪" :: Text)]
+  envelopeBytes <- either (fail . show) pure (runPureEff (runDhallHandling (encodeBinaryValue envelopeShape envelope)))
+  envelopeValue <- either (fail . show) pure (runPureEff (runDhallHandling
+    (decodeBinaryEnvelope (Scalar BoolScalar) (const (Right (Scalar TextScalar))) envelopeBytes)))
+  unless (envelopeValue == envelope) (fail "Descriptor-driven binary envelope changed")
+  case runPureEff (runDhallHandling (decodeBinaryEnvelope (Scalar BoolScalar) (const (Right (Scalar IntegerScalar))) envelopeBytes)) of
+    Left _ -> pure ()
+    Right _ -> fail "Binary envelope ignored derived body type"
+  forM_ ["", "not binary Dhall"] $ \bytes ->
+    case runPureEff (runDhallHandling (decodeBinaryValue (Scalar TextScalar) bytes)) of
+      Left _ -> pure ()
+      Right _ -> fail "Malformed binary Dhall accepted"
+  stringBytes <- either (fail . show) pure (runPureEff (runDhallHandling (encodeBinaryValue (Scalar TextScalar) (String "value"))))
+  case runPureEff (runDhallHandling (decodeBinaryValue (Scalar BoolScalar) stringBytes)) of
+    Left _ -> pure ()
+    Right _ -> fail "Binary value ignored its expected type"
   let probability = Scalar ProbabilityScalar
   forM_ ["0", "8500", "10000"] $ \n -> do
     encoded <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue probability (String n))))
@@ -97,6 +123,9 @@ main = do
 
 roundTrip :: CheckedContract -> Value -> IO ()
 roundTrip contract value = do
+  binary <- either (fail . show) pure (runPureEff (runDhallHandling (encodeBinaryValue (contractShape contract) value)))
+  binaryDecoded <- either (fail . show) pure (runPureEff (runDhallHandling (decodeBinaryValue (contractShape contract) binary)))
+  unless (binaryDecoded == value) (fail "Binary Dhall round trip changed value")
   rendered <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue (contractShape contract) value)))
   decoded <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue (contractShape contract) rendered)))
   unless (decoded == value)

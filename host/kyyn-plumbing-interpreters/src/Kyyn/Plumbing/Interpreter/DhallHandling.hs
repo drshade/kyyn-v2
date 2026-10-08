@@ -12,6 +12,9 @@ import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Void (Void)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Dhall.Binary as Binary
 import qualified Dhall.Core as D
 import qualified Dhall.Map as Map
 import qualified Dhall.Parser as Parser
@@ -30,14 +33,34 @@ runDhallHandling :: Eff (DhallHandling : es) a -> Eff es a
 runDhallHandling = interpret $ \_ -> \case
   DecodeValue contract contents -> pure (decodeValueSource contract contents)
   EncodeValue contract value -> pure (encodeValueSource contract value)
+  DecodeBinaryValue contract contents -> pure $ do
+    expression <- binaryExpression contents
+    checkedValue contract expression
+  DecodeBinaryEnvelope headerShape bodyShape contents -> pure $ do
+    expression <- binaryExpression contents
+    header <- checkedValue headerShape (D.Field expression (D.makeFieldSelection "header"))
+    body <- bodyShape header
+    checkedValue (Record [("header",headerShape),("body",body)]) expression
+  EncodeBinaryValue contract value -> pure $ do
+    expression <- checkedExpression contract value
+    pure (Lazy.toStrict (Binary.encodeExpression (D.denote expression)))
   RenderType contract -> pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr (project contract))) <> "\n")
+
+binaryExpression :: ByteString -> Either [Diagnostic] (D.Expr Src Void)
+binaryExpression contents = D.denote <$> first (pure . errorDiagnostic "dhall.binary" . show)
+  (Binary.decodeExpression (Lazy.fromStrict contents) :: Either Binary.DecodingFailure (D.Expr Void Void))
 
 encodeValueSource :: Shape -> Value -> Either [Diagnostic] Text
 encodeValueSource contract value = do
+  expression <- checkedExpression contract value
+  pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr expression)) <> "\n")
+
+checkedExpression :: Shape -> Value -> Either [Diagnostic] (D.Expr Src Void)
+checkedExpression contract value = do
   expression <- first (pure . errorDiagnostic "dhall.wire-value") (fromWire contract value)
   _ <- first (pure . errorDiagnostic "dhall.internal-encoding" . show)
     (TypeCheck.typeOf (D.Annot expression (project contract)))
-  pure (renderStrict (layoutPretty defaultLayoutOptions (Pretty.prettyExpr expression)) <> "\n")
+  pure expression
 
 fromWire :: Shape -> Value -> Either String (D.Expr Src Void)
 fromWire (Scalar TextScalar) (String text) = Right (D.TextLit (D.Chunks [] text))
@@ -111,6 +134,12 @@ decodeValueSource :: Shape -> Text -> Either [Diagnostic] Value
 decodeValueSource contract source = do
   parsed <- first (problem "dhall.parse" . show) (Parser.exprFromText "fact contents" source)
   closed <- traverse (const (Left (problem "dhall.import" "Fact contents must be self-contained; imports are not supported"))) parsed
+  checkedValue contract closed
+  where
+    problem code message = [errorDiagnostic code message]
+
+checkedValue :: Shape -> D.Expr Src Void -> Either [Diagnostic] Value
+checkedValue contract closed = do
   _ <- first (problem "dhall.type" . show)
     (TypeCheck.typeOf (D.Annot closed (project contract)))
   value <- first (problem "dhall.internal-conversion") (toWire contract (D.normalize closed))

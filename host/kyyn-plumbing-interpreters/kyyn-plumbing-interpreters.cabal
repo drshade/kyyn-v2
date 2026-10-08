@@ -130,7 +130,7 @@ test-suite dhall-values
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
-    kyyn-plumbing-interpreters, kyyn-types, effectful-core ==2.6.1.0, aeson, text
+    kyyn-plumbing-interpreters, kyyn-types, effectful-core ==2.6.1.0, aeson, text, bytestring, dhall ==1.42.3
 
 test-suite processes
   type: exitcode-stdio-1.0

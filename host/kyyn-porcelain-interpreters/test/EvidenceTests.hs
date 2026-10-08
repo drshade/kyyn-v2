@@ -319,7 +319,7 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
 type Recording = (Maybe Bytes.ByteString,[String])
 
 recordDocuments :: State.State Recording :> es => Eff (DocumentPersistence : es) a -> Eff es a
-recordDocuments = interpret $ \env (WithLockedDocument _ action) ->
+recordDocuments = interpret $ \env (WithLockedDocument _ _ action) ->
   localLiftUnlift env SeqUnlift $ \liftLocal unlift ->
     unlift (interpret (\_ operation -> liftLocal (recordDocument operation)) action)
 

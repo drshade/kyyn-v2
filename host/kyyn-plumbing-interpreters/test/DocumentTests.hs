@@ -10,7 +10,7 @@ import Control.Monad (replicateM_, unless)
 import qualified Data.ByteString.Char8 as Bytes
 import Data.Either (isLeft)
 import Effectful (Eff, IOE, runEff, liftIO)
-import Kyyn.Domain.Path (DirectoryScope, directoryScope)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, RelativePath, relativePath)
 import Kyyn.Plumbing.Capability.DocumentPersistence
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
@@ -24,7 +24,10 @@ assert :: String -> Bool -> IO ()
 assert message condition = unless condition (fail message)
 
 execute :: DirectoryScope -> Eff '[DocumentAccess, DocumentPersistence, Failure, IOE] a -> IO a
-execute scope action = runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope action))) >>= either (fail . show) pure
+execute scope action = runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope documentName action))) >>= either (fail . show) pure
+
+documentName :: RelativePath
+documentName = either error id (relativePath "state.dhall")
 
 main :: IO ()
 main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
@@ -34,6 +37,15 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   assert "missing document wasn't optional" (empty == Nothing)
   exists <- doesDirectoryExist path
   assert "read created the document directory" (not exists)
+  let binaryScope = either error id (directoryScope (directory </> "binary"))
+      binaryName = either error id (relativePath "index.dhallb")
+  binary <- runEff (runFailure (runDocumentPersistenceIO (withLockedDocument binaryScope binaryName $ do
+    replaceCurrent "\NUL\255\128"
+    readCurrent))) >>= either (fail . show) pure
+  assert "explicit binary document changed bytes" (binary == Just "\NUL\255\128")
+  binaryExists <- doesFileExist (directory </> "binary/index.dhallb")
+  oldExists <- doesFileExist (directory </> "binary/state.dhall")
+  assert "document persistence ignored explicit filename" (binaryExists && not oldExists)
   execute scope (replaceCurrent "0")
   let increment = execute scope $ do
         bytes <- readCurrent
@@ -95,10 +107,10 @@ main = withSystemTempDirectory "kyyn-document-" $ \directory -> do
   _ <- execute scope readCurrent
   createDirectory path
   createDirectory (path </> "state.dhall")
-  refused <- runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope (replaceCurrent "cannot replace directory"))))
+  refused <- runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope documentName (replaceCurrent "cannot replace directory"))))
   assert "replacement failure swallowed" (isLeft refused)
   entries <- listDirectory path
   assert "failed replacement left temporary file" (all (not . Bytes.isPrefixOf ".pending-" . Bytes.pack) entries)
-  unreadable <- runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope readCurrent)))
+  unreadable <- runEff (runFailure (runDocumentPersistenceIO (withLockedDocument scope documentName readCurrent)))
   assert "directory read reported as absent" (isLeft unreadable)
   putStrLn "Document persistence: scoped locking, atomic replacement, clearing, failures and cancellation passed."
