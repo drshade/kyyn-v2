@@ -1,0 +1,5 @@
+-- Standalone project: the ADR viewer is a development tool, deliberately not
+-- part of the root cabal.project build or its test gate.
+packages: .
+optimization: True
+tests: True
