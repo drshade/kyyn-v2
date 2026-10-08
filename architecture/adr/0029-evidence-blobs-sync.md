@@ -7,7 +7,7 @@ title: 'Evidence blobs and connector-owned sync positions'
 ## Context
 
 Mail attachments, meeting transcripts and drive files need captured bytes without
-embedding binaries or large text in `state.dhall` or sending downloads through
+embedding binaries in evidence payloads or sending downloads through
 the MicroHs process. Incremental providers also need a continuation position that
 advances atomically with the evidence it describes. Plugins own provider-specific
 acquisition; the host supplies blob storage and position persistence.
@@ -134,12 +134,13 @@ return BlobRefs when a caller needs the file rather than its interpreted content
 ### Publication and reclamation
 
 Successful fetch publication checks that every resulting reference resolves to a
-complete blob in that instance. Blobs must exist before the atomic state-document
-replacement, so readers cannot observe published references to incomplete files.
+complete blob in that instance. Blobs must exist before the atomic evidence-index
+replacement specified in [ADR 0014](0014-evidence.md), so readers cannot observe
+published references to incomplete files.
 Evidence, latest-fetch summary and sync position commit together under the existing
 expected-fetch check. Failure leaves that document unchanged.
 
-The completeness check and state-document replacement run together under the
+The completeness check and index replacement run together under the
 instance store lock. Reclamation uses that same lock and checks the current
 published references before deleting bytes. Acquisition remains outside the
 lock; concurrent fetches still use the expected-fetch check. This prevents
@@ -147,7 +148,9 @@ reclamation between a successful completeness check and publication, without
 pinning blobs for readers or in-flight acquisitions.
 
 After publication, reclaim bytes no longer referenced by Available payloads in
-latest evidence. Truncated payloads retain evidence metadata but no BlobRefs;
+latest evidence. The index records host-derived blob references for each Available
+payload, so this does not require decoding every unchanged payload. Truncated
+payloads retain evidence metadata but no BlobRefs;
 their former bytes are reclaimed unless another available item still references
 them. External references, fingerprints, citations and recipe state do not retain
 bytes. Clean up temporary/unpublished downloads after failure or cancellation
@@ -219,8 +222,9 @@ same type in context/result. Stateless connectors may keep the existing signatur
 they have no stored position. A connector needing invocation time but no provider
 cursor can use a nullary position type. No kernel Graph deltaLink type exists.
 
-The host stores checked position data in the ignored Dhall state document, separate
-from evidence payloads. First acquisition or changed producer supplies `Nothing`.
+The host stores checked position data in a separate ignored Dhall file referenced
+by the current evidence index (ADR 0014). Generic evidence inspection does not
+decode it. First acquisition or changed producer supplies `Nothing`.
 Changed code/contract must never reuse an incompatible position. Replacing
 the producer clears the old position together with old evidence on successful
 publication; a failed replacement leaves the old stored capture untouched and

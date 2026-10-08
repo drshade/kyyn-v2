@@ -128,8 +128,8 @@ Retained references are source citations, not references keeping discarded blobs
 alive. Only Available payloads own blob references. Metadata persists until an
 explicit connector removal or instance cache clearing; payload retention does not
 promise bounded metadata storage or current upstream liveness. Truncated entries
-still contribute to whole-document read/rewrite cost in `state.dhall`; truncation
-reduces payload storage, not that scaling cost. It introduces no paging engine.
+still contribute to index size; truncation reduces payload storage, not metadata
+growth. It introduces no paging engine.
 
 The first-party folder connector starts with:
 
@@ -374,29 +374,68 @@ capture, sync position and latest-fetch summary unchanged. Publication checks th
 fetch ID (or no fetch for a new instance) so a concurrent acquisition cannot apply its delta against a different
 base. This is local update consistency, not a curation approval workflow.
 
-A plugin invocation reads one immutable in-memory view of the latest captured
-evidence. The host owns its lifetime and releases the store lock before running
-guest code or external acquisition. Refresh does not change an already-loaded
-invocation's input; the next invocation uses the latest capture. That in-memory
-view lasts only for its invocation. Blob reads use that captured context, but
-references do not pin bytes against concurrent refresh or clearing. ADR 0029
-owns blob lifetime.
+A plugin invocation captures the latest evidence **index**, not every payload.
+The host releases the store lock before running guest code or external acquisition.
+Enumeration uses that index; individual reads load only the selected payload.
+Repeated reads do not silently switch to a newer index. The next invocation opens
+the latest successful publication.
+
+The index contains immutable payload-file references. Assume non-overlapping tool
+use, as for attachment blobs in ADR 0029: references do not pin files against a
+concurrent refresh or clear. Missing referenced files are storage failures, not
+absent evidence or automatic refetches. No read leases, retained generations or
+historical-read API are introduced. This replaces eager in-memory materialization;
+it does not promise snapshot isolation across overlapping read/reclamation.
 
 ```haskell
--- Host-side materialization of current captured evidence.
-data CurrentEvidence = CurrentEvidence
-  { snapshot :: EvidenceSnapshotRef
-  , items :: [(EvidenceId, Evidence CheckedValue)]
-  , latest :: FetchSummary
+data EvidenceSelection = EvidenceSelection
+  { instanceRef :: ConnectorInstanceRef
+  , connectorType :: ConnectorTypeName
+  , packageIdentity :: PackageIdentity
   }
 
-loadCurrentEvidence
+-- Host-side invocation input. PayloadLocation is private to storage;
+-- it is neither a provider ID nor a path exposed to guest code.
+data EvidenceIndex = EvidenceIndex
+  { snapshot :: EvidenceSnapshotRef
+  , latest :: FetchSummary
+  , payloadContract :: CheckedContract
+  , items :: Map EvidenceId (Evidence PayloadLocation)
+  }
+
+openCurrentEvidence
   :: EvidenceStore :> es
-  => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
-  -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
+  => EvidenceSelection
+  -> Eff es (Either EvidenceProblem (Maybe EvidenceIndex))
+
+readCapturedEvidence
+  :: EvidenceStore :> es
+  => EvidenceIndex -> EvidenceId
+  -> Eff es (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
+
+listCapturedEvidence :: EvidenceIndex -> EvidenceCapture
+
+selectEvidence
+  :: RootOpening :> es
+  => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
+  -> Eff es (Either [Diagnostic] EvidenceSelection)
 
 -- The guest sees a typed EvidenceSnapshot read handle, not the host representation.
 ```
+
+`EvidenceSelection` identifies the instance, connector kind and current package
+identity from the accepted source/configuration. `openCurrentEvidence` checks that
+the stored capture belongs to that selection. The checked contract is reconstructed
+from its stored compiler-derived descriptor; it is not accepted as an independently
+authored schema. Preparing a typed plugin method also checks that its expected
+payload contract agrees with the index before dispatch.
+
+`readCapturedEvidence` returns Nothing for an ID absent from the captured index,
+returns a Truncated envelope without opening a payload file, and decodes/checks
+only the selected Available payload. Envelope metadata comes from the index.
+`listCapturedEvidence` projects metadata and availability without reading payloads.
+The public inspection operations remain effects; their interpreter uses these
+store operations rather than materializing all evidence.
 
 An instance without a successful fetch is different from an available empty capture.
 Acquisition can start from empty evidence for its first fetch. Reading an unfetched
@@ -430,10 +469,93 @@ not accepted facts, recipe state or citations.
 
 EvidenceStore is a porcelain capability. Its interpreter owns delta application,
 producer checks and expected-base publication. Scoped DocumentPersistence from
-[ADR 0003](0003-effects.md) owns native locking and atomic replacement. Persist one
-typed document at `.kyyn/evidence/<plugin>-<hex instance>/state.dhall`; the instance
-component is lowercase hexadecimal UTF-8. The checkout-local ignore rule belongs
-to `.kyyn/.gitignore`. Blob lifetime remains owned by ADR 0029.
+[ADR 0003](0003-effects.md) owns native locking and atomic index replacement;
+FileSystem owns payload-file IO. Neither introduces IOE into porcelain.
+The checkout-local ignore rule belongs to `.kyyn/.gitignore`.
+
+### Indexed Dhall storage and selective reads
+
+The instance directory is `.kyyn/evidence/<plugin>-<hex instance>/`, where the
+instance component is lowercase hexadecimal UTF-8. Its layout is:
+
+```text
+state.dhall             current index and publication metadata; no payload bodies
+payloads/<key>.dhall     one Available item's checked payload per referenced file
+positions/<key>.dhall    optional checked connector sync position
+blobs/<sha256>           captured attachment bytes (ADR 0029)
+```
+
+The index holds producer/connector identity, the compiler-derived payload contract
+descriptor, latest-fetch summary, optional position-file reference and an entry per
+evidence ID. Each entry contains fingerprint, external references and either
+Truncated or a payload-file reference. The latter also records that payload's
+referenced BlobRefs, derived by the host using its nominal contract walker when
+the payload is checked. This lets publication and reclamation determine file
+reachability without reopening every unchanged payload. It is storage metadata,
+not another plugin-authored declaration.
+
+Payload and position files are self-contained Dhall. Keys are host-generated safe,
+immutable storage identities, independent of arbitrary provider IDs and opaque
+evidence fingerprints. A changed file gets a new key; never overwrite a file still
+named by the current index. The physical identity algorithm is private to the
+interpreter, not a new guest capability or evidence versioning scheme.
+
+Persist the payload descriptor as part of the capture so generic inspection needs
+no compiler. Its authority is the successful checked fetch that wrote it, bound to
+the existing producer identity. This is a projection of the Haskell contract, not
+a second schema to maintain. Producer mismatch refuses the read as before; do not
+reinterpret old payloads or introduce a new compatibility policy.
+
+Opening a capture reads and decodes the index once, checking its shape, producer,
+nonempty identities/fingerprints and unique IDs. Use a keyed representation or
+sorting for identity validation, not quadratic duplicate scanning. Do not parse the
+same document again to extract its header. Inspection never opens position files,
+walks attachment bytes or checks every payload file for existence. Individual
+payload decoding is the validation boundary for reads; malformed or missing
+payload files fail the requested read without masquerading as Truncated.
+
+Generic CLI/MCP `evidence list` and `evidence show` resolve the selected accepted
+instance and source identity without preparing all plugins, compiling guest entry
+points or running plugin registration/configuration-validation code. A narrow
+source/configuration selection operation supplies `EvidenceSelection`; it is not
+`preparePlugins` with an otherwise unused runtime installed. Metadata needed to
+decode captured payloads comes from the stored descriptor. This works with empty
+compiler caches. Typed plugin methods still prepare the method they execute;
+they use the same selective evidence reads, not a second storage path.
+
+Listing is O(index size). Showing one item is O(index size + selected payload size)
+on a fresh CLI process, not O(total payload bytes). An invocation reuses its decoded
+index and keyed lookup; it does not reparse it on each guest read. Do not add a
+daemon, database, cross-command memory cache, secondary per-ID index or pagination
+framework for this change. Large-index scaling can be evaluated separately.
+
+### Publishing an indexed capture
+
+Retain one local expected-fetch comparison and one publication point:
+
+1. Check changed payloads against their contract and stage complete new payload
+   and position files. Derive blob references from the checked values. Reuse
+   references for unchanged items; never decode/re-encode their payloads.
+2. Under the existing instance lock, compare the expected fetch ID, apply ordered
+   changes to the current index and check the resulting referenced files/blobs
+   are complete. Completeness uses storage metadata, not a full reread/hash of
+   every unchanged payload. A conflicting or invalid batch publishes nothing.
+3. Atomically replace `state.dhall` with the new index. Evidence metadata, payload
+   references, summary and position reference become visible together.
+4. Reclaim payloads, positions and blobs no longer referenced by the published
+   index. Failed/interrupted staging can leave unreferenced files for cleanup,
+   never a published pointer to incomplete data. Cleanup failure after replacement
+   must not report that publication was rolled back.
+
+Truncation removes the payload reference while retaining evidence metadata;
+removal drops the index entry. Failed acquisition leaves the prior index and its
+files usable. No old indices or payload generations are deliberately retained.
+Explicit clear removes index, payloads, position and blobs. Sync positions remain
+connector-owned data with the behavior specified by ADR 0029.
+
+The layout change needs no automatic upgrade mechanism: old monolithic captures
+are refused with a clear/refetch diagnostic, not silently discarded or interpreted
+as empty. An explicit clear removes the old capture.
 
 Distinguish unfetched, fetched-empty, incompatible producer, truncated payload,
 malformed storage and publication conflict. A missing ID or cleared cache is not
@@ -459,7 +581,7 @@ readEvidence
 ```
 
 Generated instance bindings expose equivalent typed reads to KB tools and recipe
-flows, not only plugin implementations. The broker captures each instance lazily
+flows, not only plugin implementations. The broker captures each instance's index
 on its first read and reuses it for that invocation. CLI/MCP provide current item
 listing and payload inspection/export, including availability and source references.
 Plugin methods such as `viewEmail` or `getAttachments` may provide more useful
@@ -702,6 +824,23 @@ stable fingerprints, failed pages and expected-base conflicts. Verify that only
 current payloads and the latest fetch summary remain, with no acquisition history.
 Test consistent reads within an invocation and fresh reads in the next, instance
 isolation, empty versus unfetched captures, and producer replacement.
+
+Instrument storage reads: list opens no payload/position/blob files; show opens
+only the selected payload; repeated guest reads reuse the captured index. A bad
+unrelated payload must not prevent listing or reading another valid item. Verify
+missing selected files, invalid payloads, duplicate index IDs and producer mismatch
+remain explicit failures. Generic inspection must succeed with compiler execution
+disabled, including with cold compilation caches.
+
+Measure fresh CLI processes for list and repeated individual show against the
+representative mail capture (roughly 19 MB of evidence plus attachments) and a
+2,000-item fixture. The local interactive target is under one second per ordinary
+list/show, aiming for a few hundred milliseconds with warm OS caches; report
+actual elapsed times, fixture sizes and cold/warm conditions in the implementation
+PR. This is an end-to-end latency target, not a hardware-independent timeout test.
+Growing unrelated bodies/attachments must not increase bytes read by list/show.
+Exercise failed staging, publication conflict, truncation and cleanup so no partial
+capture becomes visible and no still-referenced files are reclaimed.
 
 Prove generic guest enumeration/read and agent payload inspection of current
 evidence; compose reads across plugins. Cache clearing must leave accepted facts,
