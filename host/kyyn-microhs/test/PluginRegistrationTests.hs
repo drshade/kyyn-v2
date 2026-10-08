@@ -69,7 +69,7 @@ import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import System.Directory (createDirectory, createDirectoryIfMissing, findExecutable)
 import System.Environment (getEnv)
-import System.FilePath ((</>), takeDirectory)
+import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Exit (ExitCode(..))
 import System.Info (compilerVersion)
 import System.Process (readProcessWithExitCode)
@@ -233,7 +233,7 @@ compileFirstParty directory sources = do
     createDirectoryIfMissing True (takeDirectory target)
     Bytes.writeFile target bytes
   (status,out,err) <- readProcessWithExitCode ghc ["-v0","-fforce-recomp","-i" ++ directory,
-    "-outputdir",directory </> "objects","-main-is","KyynPluginEntry.main",
+    "-outputdir",directory </> "objects","-main-is",takeBaseName (relativeName (selectedEntry sources)) ++ ".main",
     directory </> relativeName (selectedEntry sources),"-o",directory </> "native"] ""
   assert ("GHC rejected first-party local-file acquisition: " ++ out ++ err) (status == ExitSuccess)
 
