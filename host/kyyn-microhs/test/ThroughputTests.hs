@@ -19,9 +19,10 @@ import Effectful.Dispatch.Dynamic (interpret)
 import GHC.Clock (getMonotonicTimeNSec)
 import Kyyn.Domain.Contract (checkContract, contractId)
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), indexState)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path
-import Kyyn.Domain.Plugin (PackageIdentity(..), pluginName)
+import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorTypeName(..), pluginName)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.MicroHs.Inspection (inspectDataType)
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
@@ -35,7 +36,7 @@ import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Protocol.PluginInvocation (statefulAcquisitionSources)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
-import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
+import Kyyn.Porcelain.Capability.EvidenceStore (openCurrentEvidence, readCapturedEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
 import Kyyn.Plumbing.Interpreter.ContentDigest (runContentDigest)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
@@ -75,7 +76,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     let folder = temporary </> show pages
         instanceRef = ConnectorInstanceRef plugin "calendar"
         package = PackageIdentity "throughput-fixture"
-        producer = EvidenceProducer package (contractId payload)
+        selection = EvidenceSelection instanceRef (ConnectorTypeName "Calendar") package
     createDirectory folder
     kb <- right (directoryScope folder)
     cursor <- newIORef 0
@@ -83,16 +84,21 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     start <- getMonotonicTimeNSec
     outcome <- runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $
       recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ (runContentDigest . runEvidenceAcquisition) $
-        fetchEvidence instanceRef package payload program (CheckedValue (contractId config) configuration) Nothing (Just position) ContinueSync Nothing
+        fetchEvidence selection payload program (CheckedValue (contractId config) configuration) Nothing (Just position) ContinueSync Nothing
     _ <- right outcome
     published <- getMonotonicTimeNSec
-    current <- runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "No published capture") pure
-    let CurrentEvidence _ items _ = current
+    current <- runStore kb (openCurrentEvidence selection) >>= right >>= maybe (fail "No published capture") pure
+    let EvidenceState _ metadata = indexState current
+    items <- mapM (\(key,_) -> do
+      evidence <- runStore kb (readCapturedEvidence current key) >>= right >>= maybe (fail "Missing item") pure
+      pure (key,evidence)) metadata
     unless (length items == pages * 100) (fail "Published evidence count differs")
     unless (sort [key | (EvidenceId key,_) <- items] == sort [itemId n | n <- [1 .. pages*100]]) (fail "Published IDs differ")
-    forM_ items $ \(_,Evidence fingerprint _ (Available (CheckedValue _ value))) ->
-      unless (fingerprint == EvidenceFingerprint "version" && value == captured)
-        (fail "Published Dhall payload differs from provider evidence")
+    forM_ items $ \(_,evidence) -> case evidence of
+      Evidence fingerprint _ (Available (CheckedValue _ value)) ->
+        unless (fingerprint == EvidenceFingerprint "version" && value == captured)
+          (fail "Published Dhall payload differs from provider evidence")
+      _ -> fail "Fixture payload unexpectedly truncated"
     verified <- getMonotonicTimeNSec
     total <- readIORef bodyBytes
     let seconds a b = fromIntegral (b-a) / 1000000000 :: Double

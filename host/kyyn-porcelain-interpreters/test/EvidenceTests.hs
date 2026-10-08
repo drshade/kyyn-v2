@@ -7,7 +7,8 @@ module Main (main) where
 
 import Control.Concurrent.Async (concurrently)
 import Control.Monad (unless)
-import Data.Aeson (Value(..), object, (.=))
+import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Data.Aeson (Value(..))
 import qualified Data.ByteString.Char8 as Bytes
 import Data.Either (isLeft)
 import qualified Data.Text as Text
@@ -18,31 +19,35 @@ import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
 import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue, sdkBlobRefType)
-import Kyyn.Domain.DataType (DataType(..), Shape(..))
+import Kyyn.Domain.DataType (DataType(..))
 import Kyyn.Domain.Evidence
-import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), PayloadLocation(..), payloadLocation)
-import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativeName)
-import Kyyn.Domain.Plugin (pluginName, PackageIdentity(..), ConnectorTypeName(..))
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(EvidenceIndex), PayloadLocation(..), payloadLocation, indexState)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativeName, relativePath)
+import Kyyn.Domain.Plugin (pluginName, PackageIdentity(..), ConnectorTypeName(..), ConnectorName(..))
+import Kyyn.Domain.FileTree (fileTree)
+import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
 import Kyyn.Porcelain.Capability.EvidenceStore
+import Kyyn.Plumbing.Capability.Git (Git(..))
 import qualified Kyyn.Porcelain.Capability.EvidenceInspection as Inspection
 import Kyyn.Porcelain.Interpreter.EvidenceInspection (runEvidenceInspection)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
-import Kyyn.Plumbing.Capability.Failure (Failure)
+import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
-import Kyyn.Porcelain.Capability.PluginRead (resolveCapturedBlobs)
+import Kyyn.Porcelain.Capability.PluginRead (resolveCapturedBlobs, loadCapturedInput)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
-import Kyyn.Porcelain.Protocol.EvidencePersistence
 import qualified Kyyn.Porcelain.Protocol.EvidenceIndex as Index
 import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectory, doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath ((</>))
@@ -74,6 +79,48 @@ value name = Evidence (EvidenceFingerprint (Text.pack name)) [Text.pack ("/sourc
 execute :: DirectoryScope -> Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
 execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) action)))) >>= right
 
+selectionFor :: ConnectorInstanceRef -> EvidenceProducer -> EvidenceSelection
+selectionFor ref (EvidenceProducer package _) = EvidenceSelection ref (ConnectorTypeName "Folder") package
+
+publishFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
+  -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishFixture ref owner schema base options changes = publishFetchWithPosition ref owner schema base options changes Nothing
+
+publishFetchWithPosition :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
+  -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue) -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishFetchWithPosition ref owner = publishFetch (selectionFor ref owner)
+
+materialize :: EvidenceStore :> es => EvidenceIndex -> Eff es (Either EvidenceProblem CurrentEvidence)
+materialize index@(EvidenceIndex snapshot summary _ _) = runExceptT $ do
+  let EvidenceState _ entries = indexState index
+  values <- mapM (\(ident,_) -> do
+    found <- ExceptT (readCapturedEvidence index ident)
+    case found of
+      Just evidence -> pure (ident,evidence)
+      Nothing -> throwE (InvalidEvidence "Test index lost entry")) entries
+  pure (CurrentEvidence snapshot values summary)
+
+loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
+loadCurrentEvidence ref owner expected = runExceptT $ do
+  index <- ExceptT (openCurrentEvidence (selectionFor ref owner))
+  traverse (\captured@(EvidenceIndex _ _ schema _) -> do
+    unless (contractId expected == contractId schema) (throwE ProducerContractChanged)
+    ExceptT (materialize captured)) index
+
+data CurrentEvidence = CurrentEvidence EvidenceSnapshotRef [(EvidenceId,Evidence CheckedValue)] FetchSummary deriving (Eq, Show)
+data MaterializedBaseline = MaterializedBaseline String (Maybe FetchId) (Maybe CurrentEvidence) (Maybe CheckedValue)
+
+beginFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
+  -> Eff es (Either EvidenceProblem MaterializedBaseline)
+beginFixture ref owner schema position = runExceptT $ do
+  FetchBaseline started base capture cursor <- ExceptT (beginFetch (selectionFor ref owner) schema position)
+  values <- traverse (ExceptT . materialize) capture
+  pure (MaterializedBaseline started base values cursor)
+
+noGit :: Eff (Git : es) a -> Eff es a
+noGit = interpret $ \_ _ -> error "Already selected evidence requested Git"
+
 key :: EvidenceSnapshotRef -> FetchId
 key (EvidenceSnapshotRef _ _ identity) = identity
 
@@ -83,7 +130,7 @@ captureContents = fmap (\(CurrentEvidence snapshot values _) -> (snapshot,values
 availabilityProof :: IO ()
 availabilityProof = withSystemTempDirectory "kyyn-payload-" $ \directory -> do
   scope <- right (directoryScope directory)
-  let publish prior changes = execute scope (publishFetch instanceA producer contract prior Nothing changes) >>= right
+  let publish prior changes = execute scope (publishFixture instanceA producer contract prior Nothing changes) >>= right
       load = execute scope (loadCurrentEvidence instanceA producer contract) >>= right >>= maybe (fail "Missing capture") pure
   first <- publish Nothing [NewEvidence itemA (value "first")]
   second <- publish (Just (key first)) [SetEvidencePayload itemA (EvidenceFingerprint "first") Truncated]
@@ -97,6 +144,8 @@ availabilityProof = withSystemTempDirectory "kyyn-payload-" $ \directory -> do
 
 main :: IO ()
 main = do
+  selectionProof
+  cleanupFailureProof
   selectiveIndexProof
   indexedPublicationProof
   recordingProof
@@ -128,40 +177,20 @@ main = do
   newTruncated <- right (applyChanges [] [NewEvidence itemA (Evidence (EvidenceFingerprint "first") [] Truncated)])
   removedTruncated <- right (applyChanges newTruncated [RemovedEvidence itemA])
   assert "truncated evidence cannot be removed" (null removedTruncated)
-  truncatedBytes <- right (runPureEff (runDhallHandling (encodeState producer contract (EvidenceState summary truncated))))
-  truncatedState <- right (runPureEff (runDhallHandling (decodeState producer contract truncatedBytes)))
-  assert "Dhall lost truncation" (truncatedState == EvidenceState summary truncated)
-  assert "truncation retained payload" (not (Bytes.isInfixOf "payload-only-old" truncatedBytes))
   sequential <- right (applyChanges [] [NewEvidence itemA (value "a"),UpdatedEvidence itemA (value "b"),RemovedEvidence itemA])
   assert "changes not applied in order" (null sequential)
-  let state = EvidenceState summary initial
   assert "duplicate stored IDs accepted" (isLeft (validateState (EvidenceState summary (initial ++ initial))))
   assert "invalid summary accepted" (isLeft (validateState (EvidenceState (FetchSummary (FetchId "") "" (-1) 0 0 Nothing) [])))
-  bytes <- right (runPureEff (runDhallHandling (encodeState producer contract state)))
-  restored <- right (runPureEff (runDhallHandling (decodeState producer contract bytes)))
-  assert "Dhall state round trip differs" (state == restored)
-  assert "stored evidence is not current-only" (Bytes.isInfixOf "latest" bytes && not (Bytes.isInfixOf "history" bytes))
-  assert "Dhall import accepted" (isLeft (runPureEff (runDhallHandling (decodeHeader "./untrusted.dhall"))))
-  header <- right (runPureEff (runDhallHandling (decodeHeader bytes)))
-  assert "header loses current" (header == EvidenceHeader (PackageIdentity "package-contents-one")
-    (contractFingerprint (contractId contract)) (FetchId "one"))
-  let wrongProducer = EvidenceProducer (PackageIdentity "different-source") (contractId contract)
-      headerOnly = interpret $ \_ request -> case request of
-        DecodeValue (Record fields) _ | map fst fields == ["producer","contract","current"] ->
-          pure (Right (object ["producer" .= ("package-contents-one" :: String),
-            "contract" .= contractFingerprint (contractId contract),"current" .= ("one" :: String)]))
-        _ -> error "Producer refusal attempted payload decoding or encoding"
-  assert "producer mismatch reached payload decoder"
-    (runPureEff (headerOnly (decodeState wrongProducer contract bytes)) == Left ProducerContractChanged)
   withSystemTempDirectory "kyyn-evidence-" $ \directory -> do
     scope <- right (directoryScope directory)
     let run :: Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
         run = execute scope
         load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
-        listing instanceRef owner = run (runEvidenceInspection (Inspection.currentEvidence instanceRef owner contract))
-        inspect instanceRef owner item = run (runEvidenceInspection (Inspection.readCurrentEvidence instanceRef owner contract item))
+        listing instanceRef owner = run (noGit (runEvidenceInspection (Inspection.currentEvidence (selectionFor instanceRef owner))))
+        inspect instanceRef owner item = fmap (fmap (\(at,latestSummary,_,found) -> (at,latestSummary,found)))
+          (run (noGit (runEvidenceInspection (Inspection.readCurrentEvidence (selectionFor instanceRef owner) item))))
         storePath = directory </> ".kyyn/evidence/folder-73616c6573"
-        statePath = storePath </> "state.dhall"
+        statePath = storePath </> "index.dhallb"
     empty <- load instanceA producer
     assert "new store has current evidence" (empty == Nothing)
     absentListing <- listing instanceA producer
@@ -171,20 +200,20 @@ main = do
     let ignorePath = directory </> ".kyyn/.gitignore"
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
-    f1 <- run (publishFetch instanceA producer contract Nothing (Just "first-options") first) >>= right
+    f1 <- run (publishFixture instanceA producer contract Nothing (Just "first-options") first) >>= right
     EvidenceCapture at1 summary1 listedFirst <- listing instanceA producer >>= right
     assert "listing lost first IDs or fingerprints" (at1 == f1 &&
       listedFirst == [(itemA,EvidenceFingerprint "old",Available ()),(itemB,EvidenceFingerprint "removed",Available ())])
     let emptyInstance = ConnectorInstanceRef (either error id (pluginName "folder")) "empty"
-    emptyFetch <- run (publishFetch emptyInstance producer contract Nothing Nothing []) >>= right
+    emptyFetch <- run (publishFixture emptyInstance producer contract Nothing Nothing []) >>= right
     EvidenceCapture emptyAt (FetchSummary _ _ adds updates removals _) listedEmpty <- listing emptyInstance producer >>= right
     assert "fetched empty capture refused" (emptyAt == emptyFetch && null listedEmpty && (adds,updates,removals) == (0,0,0))
     ignore <- Bytes.readFile ignorePath
     assert "first publication did not ignore local evidence" (ignore == "*\n")
     Bytes.writeFile ignorePath "*\n# preserve local comment\n"
-    independent <- run (publishFetch instanceB producer contract Nothing Nothing [NewEvidence itemA (value "independent")]) >>= right
+    independent <- run (publishFixture instanceB producer contract Nothing Nothing [NewEvidence itemA (value "independent")]) >>= right
     let suppliedOptions = Just "{ label = \"scoped\" }"
-    f2 <- run (publishFetch instanceA producer contract (Just (key f1)) suppliedOptions second) >>= right
+    f2 <- run (publishFixture instanceA producer contract (Just (key f1)) suppliedOptions second) >>= right
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
     EvidenceCapture at2 summary2@(FetchSummary identity time added updated removed options) listedLatest <- listing instanceA producer >>= right
@@ -204,26 +233,30 @@ main = do
     persisted <- Bytes.readFile statePath
     assert "old contents or history remain on disk"
       (not (any (\old -> Bytes.isInfixOf old persisted) ["payload-only-old","payload-only-removed","first-options","history"])
-        && Bytes.isInfixOf "payload-only-new" persisted)
+        && not (Bytes.isInfixOf "payload-only-new" persisted))
     withSystemTempDirectory "kyyn-other-evidence-" $ \otherDirectory -> do
       otherScope <- right (directoryScope otherDirectory)
       otherHead <- execute otherScope (evidenceHead instanceA) >>= right
       assert "same instance leaked into another KB" (otherHead == Nothing)
-    stale <- run (publishFetch instanceA producer contract (Just (key f1)) Nothing [])
+    stale <- run (publishFixture instanceA producer contract (Just (key f1)) Nothing [])
     assert "stale base accepted" (stale == Left BaseSnapshotConflict)
-    wrong <- run (publishFetch instanceA producer contract (Just (key f2)) Nothing [NewEvidence itemA (value "bad")])
+    wrong <- run (publishFixture instanceA producer contract (Just (key f2)) Nothing [NewEvidence itemA (value "bad")])
     assert "invalid batch accepted" (isLeft wrong)
-    invalidPayload <- run (publishFetch instanceA producer contract (Just (key f2)) Nothing
+    invalidPayload <- run (publishFixture instanceA producer contract (Just (key f2)) Nothing
       [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (Available (CheckedValue (contractId contract) (Bool True))))])
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
     let boolContract = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
     wrongContract <- run (loadCurrentEvidence instanceA producer boolContract)
     assert "evidence decoded under wrong contract" (wrongContract == Left ProducerContractChanged)
+    guestContract <- run (noGuestExecution (runPluginRead (loadCapturedInput (selectionFor instanceA producer) boolContract)))
+    assert "guest binding accepted incompatible stored descriptor" (case guestContract of
+      Left diagnostics -> "evidence.producer-changed" `Text.isInfixOf` Text.pack (show diagnostics)
+      Right _ -> False)
     tip <- run (evidenceHead instanceA) >>= right
     assert "refusal changed head" (tip == Just (key f2))
     (left,rightResult) <- concurrently
-      (run (publishFetch instanceA producer contract (Just (key f2)) Nothing []))
-      (run (publishFetch instanceA producer contract (Just (key f2)) Nothing []))
+      (run (publishFixture instanceA producer contract (Just (key f2)) Nothing []))
+      (run (publishFixture instanceA producer contract (Just (key f2)) Nothing []))
     f3 <- case (left,rightResult) of
       (Right result,Left BaseSnapshotConflict) -> pure result
       (Left BaseSnapshotConflict,Right result) -> pure result
@@ -233,17 +266,17 @@ main = do
     assert "same-schema producer change accepted" (incompatible == Left ProducerContractChanged)
     incompatibleListing <- listing instanceA changedProducer
     assert "listing swallowed producer refusal" (incompatibleListing == Left [evidenceProblemDiagnostic ProducerContractChanged])
-    failedReset <- run (publishFetch instanceA changedProducer contract (Just (key f3)) Nothing [RemovedEvidence itemA])
+    failedReset <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [RemovedEvidence itemA])
     assert "invalid new-producer batch accepted" (isLeft failedReset)
     retained <- load instanceA producer
     assert "failed producer refetch changed evidence" (captureContents retained == Just (f3,[(itemA,value "new")]))
-    _ <- run (publishFetch instanceA changedProducer contract (Just (key f3)) Nothing [NewEvidence itemA (value "refetched")]) >>= right
+    _ <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [NewEvidence itemA (value "refetched")]) >>= right
     oldProducer <- run (loadCurrentEvidence instanceA producer contract)
     assert "old producer reinterpreted" (oldProducer == Left ProducerContractChanged)
     replaced <- Bytes.readFile statePath
     assert "producer replacement retained prior contents" (not (Bytes.isInfixOf "payload-only-new" replaced))
     entries <- listDirectory storePath
-    assert "producer replacement retained extra documents" (entries == ["state.dhall"])
+    assert "producer replacement retained extra documents" (length entries == 2 && all (`elem` entries) ["index.dhallb","payloads"])
     existed <- run (clearEvidence instanceA)
     assert "clearing present evidence reported no cache" existed
     remaining <- doesDirectoryExist storePath
@@ -253,13 +286,13 @@ main = do
     assert "clear failed or crossed instance boundary" (absent == Nothing && otherStill == other)
     absentClear <- run (clearEvidence instanceA)
     assert "clearing absent evidence reported a cache" (not absentClear)
-    fresh <- run (publishFetch instanceA changedProducer contract Nothing Nothing []) >>= right
+    fresh <- run (publishFixture instanceA changedProducer contract Nothing Nothing []) >>= right
     emptyCapture <- load instanceA changedProducer
     assert "empty capture confused with not fetched" (captureContents emptyCapture == Just (fresh,[]))
     Bytes.writeFile statePath "{ malformed = True }"
     bad <- run (loadCurrentEvidence instanceA changedProducer contract)
     assert "malformed evidence became absent" (case bad of Left (InvalidEvidence _) -> True; _ -> False)
-    badFetch <- run (publishFetch instanceA changedProducer contract (Just (key fresh)) Nothing [])
+    badFetch <- run (publishFixture instanceA changedProducer contract (Just (key fresh)) Nothing [])
     assert "fetch silently replaced unreadable data" (isLeft badFetch)
     _ <- run (clearEvidence instanceA)
     _ <- load instanceA changedProducer
@@ -270,6 +303,14 @@ main = do
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
+    Bytes.writeFile (storePath </> "state.dhall") "legacy capture"
+    legacy <- run (openCurrentEvidence (selectionFor instanceA producer))
+    assert "legacy capture silently became unfetched" (case legacy of
+      Left problem@(InvalidEvidence _) -> "clear" `Text.isInfixOf` Text.toLower (Text.pack (show (evidenceProblemDiagnostic problem)))
+      _ -> False)
+    _ <- run (clearEvidence instanceA)
+    legacyGone <- doesDirectoryExist storePath
+    assert "clear retained legacy capture" (not legacyGone)
   putStrLn "Evidence store: current payloads, latest summary, Dhall, producer reset, clear and concurrent publication passed."
 
 positionProof :: IO ()
@@ -278,20 +319,20 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   let run :: Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
       run = execute scope
       cursor label = CheckedValue (contractId contract) (String label)
-      begin owner = run (beginFetch instanceA owner contract (Just contract)) >>= right
+      begin owner = run (beginFixture instanceA owner contract (Just contract)) >>= right
       publish owner base changes label = run (publishFetchWithPosition instanceA owner contract base Nothing changes
         (Just (contract,cursor label)))
-      path = directory </> ".kyyn/evidence/folder-73616c6573/state.dhall"
-  FetchBaseline started base prior position <- begin producer
+      path = directory </> ".kyyn/evidence/folder-73616c6573/index.dhallb"
+  MaterializedBaseline started base prior position <- begin producer
   assert "new acquisition has prior state" (base == Nothing && prior == Nothing && position == Nothing)
   assert "invocation time is not UTC" (case iso8601ParseM started :: Maybe UTCTime of
     Just _ -> last started == 'Z'; Nothing -> False)
   first <- publish producer Nothing [NewEvidence itemA (value "initial")] "cursor-one" >>= right
-  FetchBaseline _ firstBase firstCapture firstPosition <- begin producer
+  MaterializedBaseline _ firstBase firstCapture firstPosition <- begin producer
   assert "position and capture did not reload together" (firstBase == Just (key first) &&
     captureContents firstCapture == Just (first,[(itemA,value "initial")]) && firstPosition == Just (cursor "cursor-one"))
   second <- publish producer firstBase [] "cursor-two" >>= right
-  FetchBaseline _ secondBase _ secondPosition <- begin producer
+  MaterializedBaseline _ secondBase _ secondPosition <- begin producer
   assert "empty batch did not advance position" (secondBase == Just (key second) && secondPosition == Just (cursor "cursor-two"))
   before <- Bytes.readFile path
   conflict <- publish producer firstBase [] "stale-cursor"
@@ -304,20 +345,20 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   after <- Bytes.readFile path
   assert "failed publication changed stored bytes" (before == after)
   let replacement = EvidenceProducer (PackageIdentity "replacement") (contractId contract)
-  FetchBaseline _ replacementBase replacementPrior replacementPosition <- begin replacement
+  MaterializedBaseline _ replacementBase replacementPrior replacementPosition <- begin replacement
   assert "new producer inherited old state" (replacementBase == secondBase && replacementPrior == Nothing && replacementPosition == Nothing)
   failed <- publish replacement replacementBase [RemovedEvidence itemA] "replacement-position"
   assert "invalid replacement accepted" (isLeft failed)
   retained <- Bytes.readFile path
   assert "failed replacement altered old capture" (retained == before)
   new <- publish replacement replacementBase [] "replacement-position" >>= right
-  FetchBaseline _ newBase newCapture newPosition <- begin replacement
+  MaterializedBaseline _ newBase newCapture newPosition <- begin replacement
   assert "replacement did not reset capture and position" (newBase == Just (key new) &&
     captureContents newCapture == Just (new,[]) && newPosition == Just (cursor "replacement-position"))
   old <- run (loadCurrentEvidence instanceA producer contract)
   assert "old producer read replacement capture" (old == Left ProducerContractChanged)
   _ <- run (clearEvidence instanceA)
-  FetchBaseline _ clearedBase clearedCapture clearedPosition <- begin replacement
+  MaterializedBaseline _ clearedBase clearedCapture clearedPosition <- begin replacement
   assert "clear retained position" (clearedBase == Nothing && clearedCapture == Nothing && clearedPosition == Nothing)
 
 type Recording = (Maybe Bytes.ByteString,[String])
@@ -344,12 +385,15 @@ recordingProof = do
   let scope = either error id (directoryScope "/recording-kb")
       files = interpret $ \_ operation -> case operation of
         ReadOptionalBytes _ _ -> pure (Just "*")
+        EntryExists _ _ -> pure False
+        FileSize _ _ -> pure (Just 24)
+        ListDirectory _ -> pure (Just [])
         _ -> error "Semantic publication requested unexpected filesystem work"
       (result,(_,trace)) = runPureEff . State.runState ((Nothing,[]) :: Recording) . runFailure . files
         . runDhallHandling . recordDocuments . noBlobs . runEvidenceStore scope $ do
-          first <- publishFetch instanceA producer contract Nothing Nothing [NewEvidence itemA (value "recorded")]
-          conflict <- publishFetch instanceA producer contract Nothing Nothing []
-          second <- publishFetch instanceA producer contract (Just (FetchId "00000001")) Nothing []
+          first <- publishFixture instanceA producer contract Nothing Nothing []
+          conflict <- publishFixture instanceA producer contract Nothing Nothing []
+          second <- publishFixture instanceA producer contract (Just (FetchId "00000001")) Nothing []
           pure (first,conflict,second)
   (first,conflict,second) <- right result
   _ <- right first
@@ -367,16 +411,16 @@ blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \direc
       blobDirectory = directory </> ".kyyn/evidence" </> instancePath instanceA </> "blobs"
       blobPath = blobDirectory </> "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       item = Evidence (EvidenceFingerprint "same") [] (Available (CheckedValue (contractId payload) (blobValue ref)))
-      publish base changes = execute scope (publishFetch instanceA owner payload base Nothing changes)
+      publish base changes = execute scope (publishFixture instanceA owner payload base Nothing changes)
   missing <- publish Nothing [NewEvidence itemA item]
   assert "dangling blob published" (isLeft missing)
   assert "failed blob publication advanced head" . (== Right Nothing) =<< execute scope (evidenceHead instanceA)
   createDirectoryIfMissing True blobDirectory
   Bytes.writeFile blobPath ""
   first <- publish Nothing [NewEvidence itemA item,NewEvidence itemB item] >>= right
-  captured <- execute scope (loadCurrentEvidence instanceA owner payload) >>= right >>= maybe (fail "No blob capture") pure
+  captured <- execute scope (openCurrentEvidence (selectionFor instanceA owner)) >>= right >>= maybe (fail "No blob capture") pure
   let resolve contexts output = execute scope (noGuestExecution (runPluginRead (resolveCapturedBlobs contexts payload output)))
-  resolved <- resolve [(payload,captured)] (blobValue ref) >>= right
+  resolved <- resolve [captured] (blobValue ref) >>= right
   assert "blob surface lost originating path" (resolved == [ResolvedBlob ref blobPath])
   assert "forged result resolved without capture" . isLeft =<< resolve [] (blobValue ref)
   execute scope (discardFetchBlobs instanceA Nothing [ref])
@@ -385,7 +429,7 @@ blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \direc
   assert "truncating one use deleted shared blob" =<< doesFileExist blobPath
   _ <- publish (Just (key second)) [SetEvidencePayload itemB (EvidenceFingerprint "same") Truncated] >>= right
   assert "truncated payload retained bytes" . not =<< doesFileExist blobPath
-  assert "old capture resolved reclaimed bytes" . isLeft =<< resolve [(payload,captured)] (blobValue ref)
+  assert "old capture resolved reclaimed bytes" . isLeft =<< resolve [captured] (blobValue ref)
 
 noGuestExecution :: Eff (GuestExecution : es) a -> Eff es a
 noGuestExecution = interpret $ \_ _ -> error "Blob resolution invoked a guest"
@@ -437,7 +481,7 @@ selectiveIndexProof = do
 indexedPublicationProof :: IO ()
 indexedPublicationProof = withSystemTempDirectory "kyyn-index-publication-" $ \directory -> do
   scope <- right (directoryScope directory)
-  let publish base changes = execute scope (publishIndexedFetch selection contract base Nothing changes Nothing)
+  let publish base changes = execute scope (publishFetch selection contract base Nothing changes Nothing)
       open = execute scope (openCurrentEvidence selection) >>= right >>= maybe (fail "Missing index") pure
       payloadDirectory = directory </> ".kyyn/evidence" </> instancePath instanceA </> "payloads"
   first <- publish Nothing [NewEvidence itemA (value "first"),NewEvidence itemB (value "second")] >>= right
@@ -451,5 +495,61 @@ indexedPublicationProof = withSystemTempDirectory "kyyn-index-publication-" $ \d
   index <- open
   selected <- execute scope (readCapturedEvidence index itemA)
   assert "unchanged payload not reused" (selected == Right (Just (value "first")))
+  selectedName <- case remaining of
+    [name] -> pure name
+    _ -> fail "Expected one retained payload"
+  let selectedPath = payloadDirectory </> selectedName
+  original <- Bytes.readFile selectedPath
+  Bytes.writeFile selectedPath (Bytes.replicate (Bytes.length original) 'x')
+  corrupt <- execute scope (readCapturedEvidence index itemA)
+  assert "same-size payload corruption was accepted" (case corrupt of
+    Left (InvalidEvidence message) -> "hash" `Text.isInfixOf` Text.pack message
+    _ -> False)
+  Bytes.writeFile selectedPath original
   _ <- publish (Just (key second)) [RemovedEvidence itemA] >>= right
   assert "removal did not reclaim payload" . null =<< listDirectory payloadDirectory
+
+selectionProof :: IO ()
+selectionProof = do
+  scope <- right (directoryScope "/fixture")
+  prefix <- right (relativePath "nested")
+  revision <- right (gitRevision (replicate 40 'a'))
+  plugin <- right (pluginName "folder")
+  manifest <- right (relativePath "kyyn-plugin.dhall")
+  source <- right (relativePath "src/Folder.hs")
+  tree <- right (fileTree [(manifest,"{ name = \"folder\", entryModule = \"Folder\" }"),
+    (source,"module Folder where\n")])
+  let kb = KnowledgeBase (Repository scope) (Subtree prefix)
+      configuration :: Bytes.ByteString
+      configuration = "[{ name = \"sales\", binding = \"sales\", connector = < Folder : { path : Text } >.Folder { path = \"/source\" } }]"
+      git = interpret $ \_ request -> case request of
+        ReadTreeAt (Repository actual) selectedRevision (Subtree path) []
+          | actual == scope && selectedRevision == revision && relativeName path == "nested/root/plugins/packages/folder/source" -> pure (Right tree)
+        ReadFileAt (Repository actual) selectedRevision path
+          | actual == scope && selectedRevision == revision && relativeName path == "nested/root/plugins/config/folder.dhall" -> pure (Right (Just configuration))
+        _ -> error "Evidence selection read outside its selected package/configuration"
+      noStore = interpret $ \_ (_ :: EvidenceStore m a) -> error "Source selection opened the evidence store"
+      selectionResult = runPureEff . runDhallHandling . git . noStore . runEvidenceInspection $
+        Inspection.selectEvidence kb revision plugin (ConnectorName "sales")
+  EvidenceSelection ref kind (PackageIdentity identity) <- right selectionResult
+  assert "lightweight selection changed connector identity"
+    (ref == ConnectorInstanceRef plugin "sales" && kind == ConnectorTypeName "Folder" && length identity == 64)
+
+cleanupFailureProof :: IO ()
+cleanupFailureProof = do
+  scope <- right (directoryScope "/recording-kb")
+  let files = interpret $ \_ operation -> case operation of
+        EntryExists _ _ -> pure False
+        ReadOptionalBytes _ _ -> pure (Just "*")
+        ListDirectory _ -> raiseFailure (Failure.StorageUnavailable (Failure.StorageDiagnostic Failure.ListDirectory "payloads" "fixture failure"))
+        _ -> error "Unexpected filesystem operation during empty publication"
+      (outcome,(stored,trace)) = runPureEff . State.runState ((Nothing,[]) :: Recording) . runFailure . files
+        . runDhallHandling . recordDocuments . noBlobs . runEvidenceStore scope $
+          publishFetch selection contract Nothing Nothing [] Nothing
+  assert "cleanup failure was not identified as post-publication" (case outcome of
+    Left failure -> "was published" `Text.isInfixOf` Text.pack (show failure)
+    Right _ -> False)
+  assert "cleanup failure lost the publication point" (trace == ["read","stamp","replace"])
+  bytes <- maybe (fail "Cleanup failure erased committed index") pure stored
+  _ <- right (runPureEff (runDhallHandling (Index.decodeIndex bytes)))
+  pure ()

@@ -8,16 +8,17 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..), ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
-import Kyyn.Domain.Contract (CheckedContract, contractId, contractShape)
+import Kyyn.Domain.Contract (CheckedContract, contractShape)
 import Kyyn.Domain.DataType (Shape)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceProducer(..), EvidenceCapture, SyncMode(..))
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceSnapshotRef, EvidenceCapture, SyncMode(..))
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (GitRevision, TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Plugin
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition, fetchEvidence)
-import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, currentEvidence)
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(EvidenceSelection))
+import Kyyn.Porcelain.Capability.EvidenceInspection (EvidenceInspection, currentEvidence, selectEvidence)
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
 import Kyyn.Porcelain.Capability.PluginPreparation
 import Kyyn.Porcelain.Capability.PluginLogin (PluginLogin, loginPlugin)
@@ -82,32 +83,27 @@ connectorFetchOptions kb revision workspace plugin name = runExceptT $ do
 
 selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> MethodName
-  -> Eff es (Either [Diagnostic] (ConnectorInstanceRef,EvidenceProducer,CheckedContract,PreparedMethod))
+  -> Eff es (Either [Diagnostic] (EvidenceSelection,CheckedContract,PreparedMethod))
 selectConnectorMethod kb revision workspace plugin name method = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, methods = methods}) _) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {connectorType = kind, payloadContract = payload, methods = methods}) _) <-
     checked (selectedInstance plugin name plugins)
   case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
-    [selected] -> pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload,selected)
+    [selected] -> pure (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity,payload,selected)
     _ -> throwE [errorDiagnostic "plugin.method-unknown" ("No captured method named " ++ coerce method)]
 
-connectorCurrentEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es, EvidenceInspection :> es)
+connectorCurrentEvidence :: EvidenceInspection :> es
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
   -> Eff es (Either [Diagnostic] EvidenceCapture)
 connectorCurrentEvidence kb revision plugin name = runExceptT $ do
-  (instanceRef,producer,payload) <- ExceptT (selectConnectorEvidence kb revision plugin name)
-  ExceptT (currentEvidence instanceRef producer payload)
+  selection <- ExceptT (selectConnectorEvidence kb revision plugin name)
+  ExceptT (currentEvidence selection)
 
-selectConnectorEvidence :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
+selectConnectorEvidence :: EvidenceInspection :> es
   => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
-  -> Eff es (Either [Diagnostic] (ConnectorInstanceRef,EvidenceProducer,CheckedContract))
-selectConnectorEvidence kb revision plugin name = runExceptT $ do
-  code <- sourceAt kb revision Nothing
-  plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload}) _) <-
-    checked (selectedInstance plugin name plugins)
-  pure (ConnectorInstanceRef plugin (coerce name),EvidenceProducer identity (contractId payload),payload)
+  -> Eff es (Either [Diagnostic] EvidenceSelection)
+selectConnectorEvidence = selectEvidence
 
 fetchConfiguredConnector
   :: (RootOpening :> es, RootExecution :> es, RootStore :> es, EvidenceAcquisition :> es)
@@ -121,9 +117,9 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name su
   report <- case validation of
     Rejected (ValidationReport diagnostics) -> throwE diagnostics
     Passed _ diagnostics -> pure diagnostics
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options, syncPositionContract = position}) config) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {connectorType = kind, payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options, syncPositionContract = position}) config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
-  snapshot <- ExceptT (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config options position mode supplied)
+  snapshot <- ExceptT (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity) payload entry config options position mode supplied)
   let ValidationReport warnings = report
       notes = [Diagnostic Warning "plugin.sync-stateless" "This connector has no sync position; --restart-sync has no effect." Nothing |
         mode == RestartSync, Nothing <- [position]]

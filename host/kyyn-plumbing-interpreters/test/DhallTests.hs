@@ -25,6 +25,17 @@ import Kyyn.Types.SchemaMetadata
 
 main :: IO ()
 main = do
+  forM_ ["[ { name = \"mail\", binding = \"mail\", connector = < Mail : { enabled : Bool } | Calendar : {} >.Mail { enabled = True } } ]",
+      "[] : List { name : Text, binding : Text, connector : < Folder : { path : Text } > }",
+      "{ count = +42, confidence = 8500, nothing = None Text, flags = [ True, False ] }"] $ \contents -> do
+    (shape,value) <- either (fail . show) pure (runPureEff (runDhallHandling (inferValue contents)))
+    encoded <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue shape value)))
+    roundtrip <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue shape encoded)))
+    unless (roundtrip == value) (fail "Inferred configuration changed during round trip")
+  forM_ ["env:KYYN_CONFIG_IMPORT_MUST_NOT_RESOLVE", "1.25", "10001", "True : Text"] $ \contents ->
+    case runPureEff (runDhallHandling (inferValue contents)) of
+      Left _ -> pure ()
+      Right _ -> fail "Invalid or unsupported inferred value accepted"
   imported <- either (fail . show) pure (Parser.exprFromText "fixture" "env:KYYN_BINARY_IMPORT_MUST_NOT_RESOLVE")
   let importBytes = Lazy.toStrict (Binary.encodeExpression (Dhall.denote imported))
   case runPureEff (runDhallHandling (decodeBinaryValue (Scalar TextScalar) importBytes)) of

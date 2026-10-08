@@ -375,6 +375,8 @@ evaluationMock expected answer = interpret $ \_ -> \case
 
 failPublication :: (FileSystem :> es, Failure :> es) => OperationalFailure -> Eff (FileSystem : es) a -> Eff es a
 failPublication failure = interpret $ \_ -> \case
+  FileSize _ _ -> error "Publication unexpectedly requested file size"
+  RemoveFile _ _ -> error "Publication unexpectedly removed a file"
   ReplaceBytes {} -> raiseFailure failure
   ReplaceTree {} -> error "Candidate persistence must not replace directory trees"
   WithTemporaryScope {} -> error "Candidate persistence requested a temporary scope"

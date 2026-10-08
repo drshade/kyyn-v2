@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.DhallHandling
-  ( DhallHandling(..), decodeValue, encodeValue, decodeBinaryValue, decodeBinaryEnvelope, encodeBinaryValue, renderType ) where
+  ( DhallHandling(..), decodeValue, inferValue, encodeValue, decodeBinaryValue, decodeBinaryEnvelope, encodeBinaryValue, renderType ) where
 
 import Data.Aeson (Value)
 import Data.Text (Text)
@@ -11,6 +11,7 @@ import Kyyn.Domain.DataType (Shape)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 
 data DhallHandling :: Effect where
+  InferValue :: Text -> DhallHandling m (Either [Diagnostic] (Shape, Value))
   DecodeValue :: Shape -> Text -> DhallHandling m (Either [Diagnostic] Value)
   EncodeValue :: Shape -> Value -> DhallHandling m (Either [Diagnostic] Text)
   DecodeBinaryValue :: Shape -> ByteString -> DhallHandling m (Either [Diagnostic] Value)
@@ -21,6 +22,9 @@ data DhallHandling :: Effect where
   RenderType :: Shape -> DhallHandling m Text
 
 type instance DispatchOf DhallHandling = Dynamic
+
+inferValue :: DhallHandling :> es => Text -> Eff es (Either [Diagnostic] (Shape,Value))
+inferValue = send . InferValue
 
 decodeValue :: DhallHandling :> es => Shape -> Text -> Eff es (Either [Diagnostic] Value)
 decodeValue shape = send . DecodeValue shape

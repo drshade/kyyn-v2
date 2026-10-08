@@ -528,7 +528,7 @@ listConnectorMethods
   -> Eff es (Either [Diagnostic] [PreparedMethod])
 
 data PluginRead :: Effect where
-  LoadCapturedInput :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract
+  LoadCapturedInput :: EvidenceSelection -> CheckedContract
     -> PluginRead m (Either [Diagnostic] EvidenceIndex)
   ExecuteCapturedMethod :: EvidenceIndex -> PreparedMethod -> Value
     -> PluginRead m (Either [Diagnostic] (Either FetchError CheckedValue))

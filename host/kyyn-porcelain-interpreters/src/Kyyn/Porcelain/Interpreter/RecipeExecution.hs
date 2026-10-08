@@ -28,12 +28,13 @@ import Kyyn.Plumbing.Protocol.FactProposal (proposalShape, parseProposal)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, loadRootValueForChecking)
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareToolBindings)
 import Kyyn.Porcelain.Capability.PluginRead (PluginRead)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.RecipeExecution
 import Kyyn.Porcelain.Protocol.ToolBindings (pluginBindings)
 import Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram)
 import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 
-runRecipeExecution :: (RootStore :> es, ToolPreparation :> es, SchemaInspection :> es, GuestCompilation :> es,
+runRecipeExecution :: (EvidenceStore :> es, RootStore :> es, ToolPreparation :> es, SchemaInspection :> es, GuestCompilation :> es,
   GuestExecution :> es, PluginRead :> es, Failure :> es, Judgement :> es, ModelTurn :> es, DhallHandling :> es)
   => Eff (RecipeExecution : es) a -> Eff es a
 runRecipeExecution = interpret $ \_ (ExecuteRecipeFlow root@(Root contract _ code _) plugins entry@(FlowEntryRef name) (CheckedValue stateIdentity stateValue) request) -> runExceptT $ do

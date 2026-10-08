@@ -31,6 +31,13 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
 
 runDhallHandling :: Eff (DhallHandling : es) a -> Eff es a
 runDhallHandling = interpret $ \_ -> \case
+  InferValue contents -> pure $ do
+    parsed <- first (pure . errorDiagnostic "dhall.parse" . show) (Parser.exprFromText "value" contents)
+    expression <- traverse (const (Left [errorDiagnostic "dhall.import" "Values must be self-contained; imports are not supported"])) parsed
+    inferred <- first (pure . errorDiagnostic "dhall.type" . show) (TypeCheck.typeOf expression)
+    shape <- first (pure . errorDiagnostic "dhall.shape") (inferredShape (D.normalize inferred))
+    value <- first (pure . errorDiagnostic "dhall.value") (toWire shape (D.normalize expression))
+    pure (shape,value)
   DecodeValue contract contents -> pure (decodeValueSource contract contents)
   EncodeValue contract value -> pure (encodeValueSource contract value)
   DecodeBinaryValue contract contents -> pure $ do
@@ -38,9 +45,18 @@ runDhallHandling = interpret $ \_ -> \case
     checkedValue contract expression
   DecodeBinaryEnvelope headerShape bodyShape contents -> pure $ do
     expression <- binaryExpression contents
-    header <- checkedValue headerShape (D.Field expression (D.makeFieldSelection "header"))
+    inferred <- first (pure . errorDiagnostic "dhall.type" . show) (TypeCheck.typeOf expression)
+    let normalized = D.normalize expression
+    headerExpression <- case normalized of
+      D.RecordLit fields -> maybe (Left [errorDiagnostic "dhall.type" "Binary envelope is missing its header"])
+        (Right . D.recordFieldValue) (Map.lookup "header" fields)
+      _ -> Left [errorDiagnostic "dhall.type" "Binary envelope must be a record"]
+    header <- checkedValue headerShape headerExpression
     body <- bodyShape header
-    checkedValue (Record [("header",headerShape),("body",body)]) expression
+    let expected = Record [("header",headerShape),("body",body)]
+    unless (D.judgmentallyEqual inferred (project expected))
+      (Left [errorDiagnostic "dhall.type" "Binary envelope does not match its declared contract"])
+    first (pure . errorDiagnostic "dhall.internal-conversion") (toWire expected normalized)
   EncodeBinaryValue contract value -> pure $ do
     expression <- checkedExpression contract value
     pure (Lazy.toStrict (Binary.encodeExpression (D.denote expression)))
@@ -49,6 +65,19 @@ runDhallHandling = interpret $ \_ -> \case
 binaryExpression :: ByteString -> Either [Diagnostic] (D.Expr Src Void)
 binaryExpression contents = D.denote <$> first (pure . errorDiagnostic "dhall.binary" . show)
   (Binary.decodeExpression (Lazy.fromStrict contents) :: Either Binary.DecodingFailure (D.Expr Void Void))
+
+inferredShape :: D.Expr Src Void -> Either String Shape
+inferredShape D.Text = Right (Scalar TextScalar)
+inferredShape D.Integer = Right (Scalar IntegerScalar)
+inferredShape D.Bool = Right (Scalar BoolScalar)
+inferredShape D.Natural = Right (Scalar ProbabilityScalar)
+inferredShape (D.App D.List element) = List <$> inferredShape element
+inferredShape (D.App D.Optional element) = Optional <$> inferredShape element
+inferredShape (D.Record fields) = Record <$> traverse
+  (\(name,field) -> (Text.unpack name,) <$> inferredShape (D.recordFieldValue field)) (Map.toList fields)
+inferredShape (D.Union alternatives) = Union <$> traverse
+  (\(name,field) -> (Text.unpack name,) <$> traverse inferredShape field) (Map.toList alternatives)
+inferredShape _ = Left "The inferred Dhall type is outside Kyyn's data vocabulary"
 
 encodeValueSource :: Shape -> Value -> Either [Diagnostic] Text
 encodeValueSource contract value = do

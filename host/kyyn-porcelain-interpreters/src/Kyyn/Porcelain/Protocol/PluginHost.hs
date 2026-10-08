@@ -19,15 +19,17 @@ import Kyyn.Porcelain.Protocol.PluginBroker (protocolFailure, conversationWithBo
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Evidence (CurrentEvidence, ConnectorInstanceRef)
+import Kyyn.Domain.Evidence (ConnectorInstanceRef)
+import Kyyn.Domain.EvidenceIndex (EvidenceIndex)
+import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import qualified Kyyn.Plumbing.Capability.ContentDigest as Digest
 import Kyyn.Plumbing.Protocol.Blob (decodeDownload, downloadResult)
 import Kyyn.Types.Plugin (FetchError(..))
 
-executeAcquisition :: (Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
+executeAcquisition :: (EvidenceStore :> es, Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)
-  => ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
+  => ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe EvidenceIndex -> Eff es (Either [Diagnostic] Value)
 executeAcquisition instanceRef program config prior = fmap (either
   (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
   conversationWithBody (decodeHostFrame decodeDigest) program (initialInput config)
