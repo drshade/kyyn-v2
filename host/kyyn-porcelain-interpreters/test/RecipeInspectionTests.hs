@@ -31,7 +31,7 @@ import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 recipeInspectionTests :: RootContract -> IO ()
 recipeInspectionTests contract = do
   let empty = either error id (fileTree [])
-      source = SourceRoot contract empty (RootDefinition "Example.Root" "Example.metadata" "Example.validate" [] [] empty) []
+      source = SourceRoot contract empty (RootDefinition "Example.Root" "Example.metadata" "Example.validate" [] [] empty []) []
       perform :: DescriptionFormat -> Bytes.ByteString -> ProcessExit -> Either OperationalFailure (Either [Diagnostic] Text)
       perform format output exit = runPureEff . runFailure
         . interpret (\_ -> \case

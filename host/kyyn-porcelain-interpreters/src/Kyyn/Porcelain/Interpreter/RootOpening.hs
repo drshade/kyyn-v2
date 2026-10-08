@@ -93,7 +93,7 @@ openSource
   :: (Schema.SchemaInspection :> es, RootStore :> es)
   => FileTree -> FileTree -> Eff es (Either [Diagnostic] SourceRoot)
 openSource sdk tree = runExceptT $ do
-  definition@(RootDefinition typeName metadataName _ _ _ authored) <- ExceptT (readRootDefinition tree)
+  definition@(RootDefinition typeName metadataName _ _ _ authored _) <- ExceptT (readRootDefinition tree)
   source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
   Schema.InspectedSchema inspected closure <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))

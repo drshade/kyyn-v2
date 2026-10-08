@@ -1,9 +1,10 @@
-{-# LANGUAGE GADTs, LambdaCase #-}
+{-# LANGUAGE GADTs, LambdaCase, DataKinds #-}
 module Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation) where
 
 import Control.Monad (forM, unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (encode)
+import Data.Aeson (encode, eitherDecodeStrict)
+import GHC.Records (getField)
 import Data.Coerce (coerce)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
@@ -19,7 +20,7 @@ import Kyyn.Domain.FileTree (FileTree, files, fileTree)
 import Kyyn.Domain.Path (relativePath, relativeName)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, decodeValue, encodeValue)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry, executeCompiled)
@@ -29,7 +30,7 @@ import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, inspectPlugi
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure)
-import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, statefulAcquisitionSources, capturedReadSources, loginSources)
+import Kyyn.Plumbing.Protocol.PluginInvocation (acquisitionSources, statefulAcquisitionSources, capturedReadSources, loginSources, sinkSources)
 import Kyyn.Plumbing.Protocol.Validation (validationSources, decodeReport)
 import Kyyn.Porcelain.Capability.PluginPreparation
 
@@ -41,7 +42,7 @@ runPluginPreparation sdk = interpret $ \_ -> \case
   ValidatePlugins plugins -> runExceptT $ do
     reports <- forM [(plugin,instanceName,entry,config) |
       PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
-      ConfiguredConnector instanceName _ (PreparedConnector {validationEntry = entry}) config <- instances] $
+      ConfiguredConnector instanceName _ connector config <- instances, let entry = getField @"validationEntry" connector] $
       \(plugin,instanceName,entry,CheckedValue _ config) -> do
         let label = pluginNameText plugin ++ "/" ++ coerce instanceName
         bytes <- ExceptT (Right <$> executeCompiledEntry label entry (Lazy.toStrict (encode config)))
@@ -76,7 +77,26 @@ prepare sdk code = do
     let sources = authored ++ files sdk
     sourceTree <- checked label (fileTree sources)
     let contract structure = either throwE pure (checkContract structure (SchemaMetadata [] [] []))
-    connectors <- forM declarations $ \(ConnectorDeclaration connector fetch validate declaredMethods login) -> do
+    connectors <- forM declarations $ \case
+     SinkDeclaration connector validate publish defaults -> do
+      let connectorLabel = label ++ "/" ++ coerce connector
+      signature <- located connectorLabel (inspectPluginFunction sourceTree SinkEntry publish)
+      (c,o,i,r) <- case signature of
+        SinkSignature c o i r -> pure (c,o,i,r)
+        _ -> bad connectorLabel "Expected sink signature"
+      config <- contract c
+      options <- contract o
+      input <- contract i
+      result <- contract r
+      adapter <- checked connectorLabel (sinkSources c o i r publish defaults sources)
+      publisher <- located connectorLabel (compileGuest adapter)
+      validation <- checked connectorLabel (validationSources c validate sources)
+      validator <- located connectorLabel (compileGuest validation)
+      bytes <- ExceptT (Right <$> executeCompiledEntry connectorLabel publisher "\"Defaults\"")
+      value <- checked connectorLabel (eitherDecodeStrict bytes)
+      _ <- located connectorLabel (encodeValue (contractShape options) value)
+      pure (PreparedSinkConnector connector config validator input options result publisher (CheckedValue (contractId options) value))
+     ConnectorDeclaration connector fetch validate declaredMethods login -> do
       let connectorLabel = label ++ "/" ++ coerce connector
       signature <- located connectorLabel (inspectPluginFunction sourceTree AcquisitionEntry fetch)
       (configType,optionsType,payloadType,positionType) <- case signature of
@@ -118,7 +138,7 @@ configure code packages = do
     let name = pluginNameText plugin
         label = "plugin " ++ name
         configFile = "plugins/config/" ++ name ++ ".dhall"
-        configContracts = [(connector,contract) | PreparedConnector {connectorType = connector, configContract = contract} <- connectors]
+        configContracts = [(getField @"connectorType" c,getField @"configContract" c) | c <- connectors]
     instances <- case lookup configFile entries of
       Nothing -> pure []
       Just bytes -> do
@@ -126,9 +146,9 @@ configure code packages = do
         value <- located label (decodeValue (instanceShape [(n,contractShape c) | (n,c) <- configContracts]) text)
         selected <- checked label (decodeInstances value)
         forM selected $ \(instanceName,binding,kind,configuration) -> case
-          [c | c@(PreparedConnector {connectorType = n}) <- connectors, n == kind] of
-            [c@(PreparedConnector {configContract = contract})] -> pure
-              (ConfiguredConnector instanceName binding c (CheckedValue (contractId contract) configuration))
+          [c | c <- connectors, getField @"connectorType" c == kind] of
+            [c] -> pure
+              (ConfiguredConnector instanceName binding c (CheckedValue (contractId (getField @"configContract" c)) configuration))
             _ -> bad (label ++ "/" ++ coerce instanceName) "Unknown connector type"
     pure (PreparedPlugin package instances)
   let bindings = [binding | PreparedPlugin _ instances <- plugins, ConfiguredConnector _ binding _ _ <- instances]

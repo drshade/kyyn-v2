@@ -7,6 +7,7 @@ import Kyyn.Domain.Recipe (StoredRecipe)
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Query (QueryDefinition)
+import Kyyn.Domain.Output (OutputDefinition)
 import Kyyn.Domain.Tool (ToolDefinition)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Data.List (isPrefixOf)
@@ -45,5 +46,5 @@ data SourceRoot = SourceRoot
   , loadedSources :: [RelativePath] } deriving (Eq, Show)
 data RootDefinition = RootDefinition
   { schemaType :: String, schemaMetadata :: String, validator :: String
-  , queries :: [QueryDefinition], tools :: [ToolDefinition], sources :: FileTree }
+  , queries :: [QueryDefinition], tools :: [ToolDefinition], sources :: FileTree, outputs :: [OutputDefinition] }
   deriving (Eq, Show)

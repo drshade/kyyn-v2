@@ -83,7 +83,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) beforeFiles code changeFiles capturedNotes
       context = EvolutionContext kb identity (Before revision schema) snapshot
       captured = CapturedEvolution context (Root schema facts code []) []
-        (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] beforeFiles) [])
+        (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] beforeFiles []) [])
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       recipeValues = [Fact (FactId "syncTodos") (unitRecipe (KB.OpenAgent "Read and explain λ"))]
@@ -180,7 +180,7 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft AdHoc) empty migratedCode empty empty
       migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
       migratedCapture = CapturedEvolution migratedContext (Root schema facts code []) []
-        (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] empty) [])
+        (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] empty []) [])
       migratedReport = EvolutionReport [] [StepReport (Rationale "New schema" [])
         [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue

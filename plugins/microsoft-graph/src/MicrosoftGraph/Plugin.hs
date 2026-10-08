@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Plugin (connectors) where
 import Kyyn.Plugin
-connectors :: [SourceConnector]
+connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Calendar"
   , fetch = "MicrosoftGraph.Calendar.fetch", validateConfig = "MicrosoftGraph.Config.validate"

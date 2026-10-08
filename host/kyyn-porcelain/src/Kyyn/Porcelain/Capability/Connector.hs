@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DataKinds #-}
 module Kyyn.Porcelain.Capability.Connector
   ( listConfiguredConnectors, connectorConfigurationSchema, fetchConfiguredConnector, loginConfiguredConnector
   , connectorCurrentEvidence, clearConnectorEvidence
@@ -6,6 +6,7 @@ module Kyyn.Porcelain.Capability.Connector
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Coerce (coerce)
+import GHC.Records (getField)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..), ValidationReport(..), CheckResult(..), checkReport, errorDiagnostic)
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
@@ -37,8 +38,9 @@ loginConfiguredConnector :: (RootOpening :> es, Evolution.EvolutionStore :> es, 
 loginConfiguredConnector kb revision plugin name = runExceptT $ do
   code <- sourceAt kb revision Nothing
   plugins <- ExceptT (preparePlugins code)
-  (package,instanceValue@(ConfiguredConnector _ _ PreparedConnector {loginEntry = entry} config)) <-
+  (package,instanceValue@(ConfiguredConnector _ _ connector config)) <-
     checked (selectedInstance plugin name plugins)
+  (_,_,_,_,_,entry,_) <- checked (sourceDetails connector)
   selected <- maybe (throwE [errorDiagnostic "plugin.login-unsupported" "This connector does not provide a login operation."]) pure entry
   report <- ExceptT (validatePlugins [PreparedPlugin package [instanceValue]])
   case checkReport () report of
@@ -54,7 +56,7 @@ listConfiguredConnectors kb revision workspace plugin = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   PreparedPlugin _ instances <- checked (selectedPlugin plugin plugins)
-  pure [(name,binding,kind) | ConfiguredConnector name binding (PreparedConnector {connectorType = kind}) _ <- instances]
+  pure [(name,binding,getField @"connectorType" connector) | ConfiguredConnector name binding connector _ <- instances]
 
 connectorConfigurationSchema :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> Eff es (Either [Diagnostic] Shape)
@@ -62,14 +64,15 @@ connectorConfigurationSchema kb revision workspace plugin = runExceptT $ do
   code <- sourceAt kb revision workspace
   packages <- ExceptT (preparePackages code)
   PreparedPackage _ _ connectors <- checked (selectedPackage plugin packages)
-  pure (instanceShape [(name,contractShape config) | PreparedConnector {connectorType = name, configContract = config} <- connectors])
+  pure (instanceShape [(getField @"connectorType" c,contractShape (getField @"configContract" c)) | c <- connectors])
 
 listConnectorMethods :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> Eff es (Either [Diagnostic] [PreparedMethod])
 listConnectorMethods kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (_,ConfiguredConnector _ _ (PreparedConnector {methods = methods}) _) <- checked (selectedInstance plugin name plugins)
+  (_,ConfiguredConnector _ _ connector _) <- checked (selectedInstance plugin name plugins)
+  (_,_,_,methods,_,_,_) <- checked (sourceDetails connector)
   pure methods
 
 connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
@@ -78,7 +81,8 @@ connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, Plu
 connectorFetchOptions kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (_,ConfiguredConnector _ _ (PreparedConnector {fetchOptionsContract = options}) _) <- checked (selectedInstance plugin name plugins)
+  (_,ConfiguredConnector _ _ connector _) <- checked (selectedInstance plugin name plugins)
+  (_,_,_,_,options,_,_) <- checked (sourceDetails connector)
   pure options
 
 selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
@@ -87,8 +91,9 @@ selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, Plu
 selectConnectorMethod kb revision workspace plugin name method = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {connectorType = kind, payloadContract = payload, methods = methods}) _) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ connector _) <-
     checked (selectedInstance plugin name plugins)
+  (kind,payload,_,methods,_,_,_) <- checked (sourceDetails connector)
   case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
     [selected] -> pure (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity,payload,selected)
     _ -> throwE [errorDiagnostic "plugin.method-unknown" ("No captured method named " ++ coerce method)]
@@ -117,8 +122,9 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name su
   report <- case validation of
     Rejected (ValidationReport diagnostics) -> throwE diagnostics
     Passed _ diagnostics -> pure diagnostics
-  (PreparedPackage _ identity _,ConfiguredConnector _ _ (PreparedConnector {connectorType = kind, payloadContract = payload, fetchEntry = entry, fetchOptionsContract = options, syncPositionContract = position}) config) <-
+  (PreparedPackage _ identity _,ConfiguredConnector _ _ connector config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
+  (kind,payload,entry,_,options,_,position) <- checked (sourceDetails connector)
   snapshot <- ExceptT (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity) payload entry config options position mode supplied)
   let ValidationReport warnings = report
       notes = [Diagnostic Warning "plugin.sync-stateless" "This connector has no sync position; --restart-sync has no effect." Nothing |

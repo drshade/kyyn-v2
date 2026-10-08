@@ -9,7 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Evolution.Proposal Kyyn.Recipe
-    Kyyn.Plugin Kyyn.Plugin.Host
+    Kyyn.Plugin Kyyn.Plugin.Host Kyyn.Plugin.Sink
   other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror

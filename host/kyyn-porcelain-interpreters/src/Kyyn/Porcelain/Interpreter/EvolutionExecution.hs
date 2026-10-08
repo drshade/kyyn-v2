@@ -48,9 +48,9 @@ runEvolutionExecution
 runEvolutionExecution sdk = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)
       (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) before target change _)) source@(Root actual _ acceptedCode recipes) closure
-      targetSource@(SourceRoot after preparedCode (RootDefinition _ _ _ _ _ targetSources) _))) -> runExceptT $ do
+      targetSource@(SourceRoot after preparedCode (RootDefinition _ _ _ _ _ targetSources _) _))) -> runExceptT $ do
   unless (actual == expected) (reject "evolution.before-contract" "Captured input does not match Before's contract")
-  RootDefinition _ _ _ _ _ acceptedSources <- proposed (readRootDefinition acceptedCode)
+  RootDefinition _ _ _ _ _ acceptedSources _ <- proposed (readRootDefinition acceptedCode)
   unless (before == acceptedSources) (reject "evolution.before-source" "Captured input does not match Before's source")
   unless (target == preparedCode) (reject "evolution.after-source" "Prepared After does not match the captured target")
   selectedRecipe <- case kind of

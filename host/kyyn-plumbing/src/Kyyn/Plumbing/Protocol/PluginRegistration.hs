@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure) where
 
 import Control.Monad (unless, forM)
@@ -12,7 +13,7 @@ import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import Kyyn.Domain.Plugin (ConnectorDeclaration(..), CapturedMethodDeclaration(..), connectorTypeName, methodName)
 import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
-import Kyyn.Types.Plugin (SourceConnector(SourceConnector), CapturedMethod(CapturedMethod))
+import Kyyn.Types.Plugin (Connector(..), CapturedMethod(CapturedMethod))
 
 registrationFailure :: Bytes.ByteString -> String
 registrationFailure bytes = "Could not evaluate connector registration.\n" ++ message ++ hint
@@ -39,9 +40,15 @@ registrationSources entryModule sources = do
 decodeConnectors :: Bytes.ByteString -> Either String [ConnectorDeclaration]
 decodeConnectors bytes = do
   declarations <- eitherDecodeStrict bytes >>= parseEither (withArray "connectors" (traverse connector . toList))
-  let names = [name | SourceConnector name _ _ _ _ <- declarations]
+  let names = map (\case SourceConnector name _ _ _ _ -> name; SinkConnector name _ _ _ -> name) declarations
   unless (length names == length (nub names)) (Left "Connector type names must be unique within a plugin")
-  forM declarations $ \(SourceConnector nameText fetchText validateText methods loginText) -> do
+  forM declarations $ \case
+   SinkConnector nameText validateText publishText defaultsText -> do
+    name <- connectorTypeName (Text.unpack nameText)
+    let validate = Text.unpack validateText; publish = Text.unpack publishText; defaults = Text.unpack defaultsText
+    _ <- traverse bindingModule [validate,publish,defaults]
+    pure (SinkDeclaration name validate publish defaults)
+   SourceConnector nameText fetchText validateText methods loginText -> do
     let name = Text.unpack nameText; fetch = Text.unpack fetchText; validate = Text.unpack validateText
         login = fmap Text.unpack loginText
     checkedName <- connectorTypeName name
@@ -58,12 +65,13 @@ decodeConnectors bytes = do
       pure (CapturedMethodDeclaration checkedMethod description implementation)
     pure (ConnectorDeclaration checkedName fetch validate checkedMethods login)
   where
-    connector = withObject "source connector" $ \fields -> do
-      unless (sort (Keys.keys fields) == ["fetch","login","methods","name","validateConfig"])
-        (fail "Unexpected or missing source connector fields")
-      SourceConnector <$> fields .: "name"
+    connector = withObject "connector" $ \fields -> case sort (Keys.keys fields) of
+     ["defaultOptions","name","publish","validateConfig"] -> SinkConnector <$> fields .: "name"
+        <*> fields .: "validateConfig" <*> fields .: "publish" <*> fields .: "defaultOptions"
+     ["fetch","login","methods","name","validateConfig"] -> SourceConnector <$> fields .: "name"
         <*> fields .: "fetch" <*> fields .: "validateConfig" <*> (fields .: "methods" >>= traverse method)
         <*> (fields .: "login" >>= optional)
+     _ -> fail "Unexpected or missing connector fields"
     optional = withObject "optional export" $ \value -> do
       tag <- value .: "tag"
       case tag :: String of

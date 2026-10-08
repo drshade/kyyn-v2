@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blobs.Plugin where
 import Kyyn.Plugin
-connectors :: [SourceConnector]
+connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Files", fetch = "Blobs.Source.fetch", validateConfig = "Blobs.Source.validate"
   , login = Nothing

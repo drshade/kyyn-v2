@@ -19,7 +19,7 @@ import Kyyn.Plumbing.Capability.FileSystem
 import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, pathIsSymbolicLink, doesDirectoryExist, doesFileExist, renameFile)
 import qualified System.Directory as Directory
 import System.FilePath (takeDirectory, (</>))
-import System.IO (hClose, hSetBinaryMode)
+import System.IO (hClose, hSetBinaryMode, openBinaryTempFileWithDefaultPermissions)
 import System.IO.Temp (createTempDirectory, withTempFile)
 import System.IO.Error (isAlreadyExistsError, isDoesNotExistError)
 import System.Random (randomIO)
@@ -56,6 +56,16 @@ runFileSystemIO parent = interpret $ \env -> \case
       Bytes.hPut handle bytes
       hClose handle
       renameFile temporary target
+  PublishBytes scope path bytes -> liftIO $ do
+    let target = scopedPath scope path
+        directory = takeDirectory target
+        ignoreError action = action `IO.catch` \(_ :: IOException) -> pure ()
+    result <- try $ do
+      createDirectoryIfMissing True directory
+      IO.bracket (openBinaryTempFileWithDefaultPermissions directory ".kyyn-output-")
+        (\(temporary,handle) -> ignoreError (hClose handle) >> ignoreError (Directory.removeFile temporary))
+        (\(temporary,handle) -> Bytes.hPut handle bytes >> hClose handle >> renameFile temporary target)
+    pure (either (Left . displayException @IOException) Right result)
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
   ReplaceTree staging scope path tree -> native Failure.ReplaceDirectoryTree (scopedPath scope path)
     (replaceDirectoryTree (scopePath staging) (scopedPath scope path) tree)

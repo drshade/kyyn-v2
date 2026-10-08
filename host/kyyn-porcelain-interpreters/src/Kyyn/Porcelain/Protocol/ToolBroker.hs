@@ -69,8 +69,9 @@ executeToolProgramCaptured program plugins model captured arguments = runExceptT
       pure (either (\(FetchError message) -> failure (Text.unpack message)) (\(CheckedValue _ resultValue) -> success resultValue) reply)
     connector configured plugin kind instanceName = do
       let label = pluginNameText plugin ++ "/" ++ coerce instanceName
-      (PreparedPackage _ identity _, ConfiguredConnector _ _ (PreparedConnector {connectorType = actual, payloadContract = payload, methods = methods}) _) <-
+      (PreparedPackage _ identity _, ConfiguredConnector _ _ selected _) <-
         either (protocolFailure . ((label ++ ": ") ++) . show) pure (selectedInstance plugin instanceName configured)
+      (actual,payload,_,methods,_,_,_) <- either (protocolFailure . show) pure (sourceDetails selected)
       if actual /= kind then protocolFailure (label ++ ": connector type differs from the requested method") else pure ()
       pure (identity,payload,methods)
     capture plugin kind instanceName identity payload = do

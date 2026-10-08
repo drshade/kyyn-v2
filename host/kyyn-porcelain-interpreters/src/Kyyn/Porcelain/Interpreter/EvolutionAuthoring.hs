@@ -49,7 +49,7 @@ create :: (RootOpening.RootOpening :> es, WorkspaceStore.WorkspaceStore :> es,
   -> Eff es (Either [Diagnostic] EvolutionWorkspace)
 create kb@(KnowledgeBase repository@(Repository scope) _) (EvolutionName name) revision kind proposal = runExceptT $ do
     rootPath <- checked (rootLocation kb)
-    source@(SourceRoot contract code (RootDefinition selected _ _ _ _ sources) _) <-
+    source@(SourceRoot contract code (RootDefinition selected _ _ _ _ sources _) _) <-
       ExceptT (RootOpening.loadSourceAt repository revision (Subtree rootPath))
     stateContract <- case kind of
       AdHoc -> pure Nothing

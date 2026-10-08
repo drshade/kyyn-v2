@@ -56,7 +56,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
       root = Root contract facts code []
       prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] []
-        (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")])) []
+        (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")]) []) []
       capture proposed = CapturedEvolution (EvolutionContext kb identifier (Before revision contract)
         (WorkspaceSnapshot (WorkspaceManifest revision "Test" "Review" Draft AdHoc)
           before proposed (tree [("Evolution.hs","captured entry")]) (tree []))) root [path "Example.hs",path "Helper.hs"] prepared

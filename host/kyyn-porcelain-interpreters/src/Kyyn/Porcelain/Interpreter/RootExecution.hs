@@ -30,6 +30,7 @@ import Kyyn.Porcelain.Capability.RootExecution (RootExecution(..))
 import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins, validatePlugins)
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareTools)
 import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
+import Kyyn.Porcelain.Protocol.OutputBindings (prepareOutputs)
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..), PreparedQuery(..))
 
 runRootExecution
@@ -40,7 +41,7 @@ runRootExecution sdk = interpret $ \_ -> \case
   PrepareRoot root@(Root contract _ code recipes) -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
     _ <- ExceptT (prepareTools code plugins)
-    definition@(RootDefinition _ _ validator declarations _ authored) <- ExceptT (readRootDefinition code)
+    definition@(RootDefinition _ _ validator declarations _ authored outputs) <- ExceptT (readRootDefinition code)
     states <- ExceptT (inspectRecipeContracts sdk (SourceRoot contract code definition [])
       [Fact identity (recipeDefinition recipe) | Fact identity recipe <- recipes])
     _ <- forM (zip recipes states) $ \(Fact identity (StoredRecipe _ name expected (CheckedValue fingerprint value)),
@@ -58,8 +59,9 @@ runRootExecution sdk = interpret $ \_ -> \case
         (querySources contract (rootType input) (rootType result) selected (files authored ++ files sdk))
       entry <- ExceptT (first (map (compilerContext "query")) <$> compileGuest sources)
       pure (PreparedQuery descriptor selected entry)
-    pure (PreparedRoot root validator validatorEntry queries plugins)
-  ValidateRoot (PreparedRoot root selected entry _ plugins) -> runExceptT $ do
+    preparedOutput <- prepareOutputs sdk authored code queries plugins outputs
+    pure (PreparedRoot root validator validatorEntry queries plugins preparedOutput)
+  ValidateRoot (PreparedRoot root selected entry _ plugins _) -> runExceptT $ do
     CheckedValue _ value <- ExceptT (loadRootValueForChecking root)
     output <- ExceptT (Right <$> executeCompiledEntry selected entry (Bytes.toStrict (encode value)))
     case decodeReport output of
@@ -67,7 +69,7 @@ runRootExecution sdk = interpret $ \_ -> \case
       Right (ValidationReport report) -> do
         ValidationReport pluginReport <- ExceptT (validatePlugins plugins)
         pure (ValidationReport (report ++ pluginReport))
-  ExecuteQuery (PreparedRoot root _ _ queries _) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
+  ExecuteQuery (PreparedRoot root _ _ queries _ _) (QueryDescriptor name _ expectedInput expectedResult) (CheckedValue identity arguments) -> runExceptT $ do
     PreparedQuery (QueryDescriptor _ _ input result) selected entry <- case
       [q | q@(PreparedQuery (QueryDescriptor n _ _ _) _ _) <- queries, n == name] of
         [d] -> pure d

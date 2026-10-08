@@ -62,8 +62,8 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
   InspectWorkspaceApi workspace -> runExceptT $ do
     PreparedEvolution (EvolutionContext kb@(KB.KnowledgeBase repository _) _ (Before revision _)
       (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) _ _ change _))
-      beforeSource@(SourceRoot before _ (RootDefinition _ _ _ _ _ beforeSources) closure)
-      afterSource@(SourceRoot after _ (RootDefinition _ _ _ _ _ afterSources) afterClosure) <- ExceptT (prepareEvolution workspace)
+      beforeSource@(SourceRoot before _ (RootDefinition _ _ _ _ _ beforeSources _) closure)
+      afterSource@(SourceRoot after _ (RootDefinition _ _ _ _ _ afterSources _) afterClosure) <- ExceptT (prepareEvolution workspace)
     (recipeBindings,recipeClosure,_,recipeNames) <- ExceptT (prepareRecipeTypes sdk beforeSources afterSource change)
     old <- checked (fileTree [(p,b) | (p,b) <- files beforeSources, p `elem` (closure ++ recipeClosure)])
     new <- checked (fileTree [(p,b) | (p,b) <- files afterSources, p `elem` afterClosure])

@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, replaceTree, readTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, publishBytes, replaceTree, readTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -14,6 +14,7 @@ data FileSystem :: Effect where
   ReadOptionalBytes :: DirectoryScope -> RelativePath -> FileSystem m (Maybe ByteString)
   WriteBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
   ReplaceBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m ()
+  PublishBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m (Either String ())
   ReplaceTree :: DirectoryScope -> DirectoryScope -> RelativePath -> FileTree -> FileSystem m ()
   ReadTree :: DirectoryScope -> FileSystem m FileTree
   ListDirectory :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
@@ -41,6 +42,10 @@ writeBytes scope path = send . WriteBytes scope path
 
 replaceBytes :: FileSystem :> es => DirectoryScope -> RelativePath -> ByteString -> Eff es ()
 replaceBytes scope path = send . ReplaceBytes scope path
+
+-- Replace an external document with ordinary creation permissions and a recoverable IO error.
+publishBytes :: FileSystem :> es => DirectoryScope -> RelativePath -> ByteString -> Eff es (Either String ())
+publishBytes scope path = send . PublishBytes scope path
 
 -- The staging scope must share the destination filesystem and sit outside any
 -- tree the caller treats as authoritative material.

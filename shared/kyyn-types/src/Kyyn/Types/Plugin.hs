@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, NoFieldSelectors #-}
 module Kyyn.Types.Plugin
-  ( SourceConnector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
+  ( Connector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
 
 import Data.Text (Text)
 
@@ -22,7 +22,7 @@ data FetchResult payload position = FetchResult
 newtype ConnectorInstance connector = ConnectorInstance Text
 
 -- | Register a source connector in the plugin entry module's connectors value.
-data SourceConnector = SourceConnector
+data Connector = SourceConnector
   { -- | Unique connector type name: an ASCII uppercase letter followed by letters, digits or underscores.
     name :: Text
   , -- | Qualified acquisition function; its checked signature supplies the data contracts.
@@ -33,6 +33,12 @@ data SourceConnector = SourceConnector
     methods :: [CapturedMethod]
   , -- | Optional qualified Config -> PluginLogin (Either LoginError ()) function.
     login :: Maybe Text
+  }
+  | SinkConnector
+  { name :: Text
+  , validateConfig :: Text
+  , publish :: Text
+  , defaultOptions :: Text
   } deriving (Eq, Show)
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.

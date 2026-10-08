@@ -11,7 +11,7 @@ library
     Kyyn.Types.Program Kyyn.Types.Query
     Kyyn.Types.Evidence Kyyn.Types.Evolution
     Kyyn.Types.Plugin Kyyn.Types.KnowledgeBase
-    Kyyn.Types.PluginHost
+    Kyyn.Types.PluginHost Kyyn.Types.Sink
     Kyyn.Types.Blob
   default-language: Haskell2010
   ghc-options: -Wall -Werror

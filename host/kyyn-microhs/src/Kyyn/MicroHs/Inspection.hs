@@ -153,6 +153,22 @@ lowerRecipeSignature table signature = do
     _ -> Left "invalid flow arguments"
 
 lowerPluginSignature :: Constructors -> PluginEntryKind -> Expr -> Either String PluginSignature
+lowerPluginSignature table SinkEntry signature = do
+  let (vars,body) = stripForall signature
+      (args,result) = arrows body
+      app name value = case unApps value of
+        (EVar n,xs) | unIdent n == name -> Right xs
+        _ -> Left ("expected " ++ name)
+  unless (null vars) (Left "sink entry must have concrete types")
+  (configuration,options,input) <- case args of [c,o,i] -> Right (c,o,i); _ -> Left "expected three sink arguments"
+  (row,answer) <- app "Kyyn.Types.Program.Program" result >>= \xs -> case xs of
+    [r,a] -> Right (r,a); _ -> Left "expected Program"
+  unless (eqEType row (EVar (mkIdent "Kyyn.Types.Sink.FileWrite"))) (Left "expected SinkCalls capability row")
+  (problem,value) <- app "Data.Either.Either" answer >>= \xs -> case xs of
+    [p,v] -> Right (p,v); _ -> Left "expected Either SinkError Result"
+  unless (eqEType problem (EVar (mkIdent "Kyyn.Types.Sink.SinkError"))) (Left "expected SinkError")
+  SinkSignature <$> lowerType table [] [] configuration <*> lowerType table [] [] options
+    <*> lowerType table [] [] input <*> lowerType table [] [] value
 lowerPluginSignature table kind signature = do
   -- These are the pinned compiler's resolved identities, not source-level aliases.
   let (vars,body) = stripForall signature

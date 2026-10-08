@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Fixture.Plugin where
 import Kyyn.Plugin
-connectors :: [SourceConnector]
+connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Network"
   , fetch = "Fixture.Fetch.fetch", validateConfig = "Fixture.Config.validate", methods = []

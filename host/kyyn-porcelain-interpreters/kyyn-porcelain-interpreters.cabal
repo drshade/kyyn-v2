@@ -23,9 +23,11 @@ library
     Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Protocol.ToolBroker
     Kyyn.Porcelain.Protocol.ToolBindings
+    Kyyn.Porcelain.Protocol.OutputBindings
     Kyyn.Porcelain.Protocol.PluginHost
     Kyyn.Porcelain.Interpreter.PluginPreparation
     Kyyn.Porcelain.Interpreter.PluginLogin
+    Kyyn.Porcelain.Interpreter.Delivery
     Kyyn.Porcelain.Interpreter.PluginRead
     Kyyn.Porcelain.Interpreter.ToolPreparation
     Kyyn.Porcelain.Interpreter.ToolExecution
