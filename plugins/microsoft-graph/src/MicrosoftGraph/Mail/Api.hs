@@ -62,9 +62,8 @@ delta token = runExceptT . pages []
       | otherwise = do
           response@(HttpResponse status _ body) <- ExceptT (get token url)
           let expired = case Json.parse body >>= Json.member "error" >>= textField "code" of
-                Right "syncStateNotFound" -> True
-                Right "InvalidDeltaToken" -> True
-                _ -> False
+                Right code -> Text.toLower code `elem` ["syncstatenotfound", "invaliddeltatoken"]
+                Left _ -> False
           if status == 410 || (status >= 400 && expired) then pure Nothing else do
             value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
             entries <- either throwE pure (Json.member "value" value >>= Json.array)

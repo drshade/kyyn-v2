@@ -1,5 +1,5 @@
 // Install actual Graph source, discover contracts, accept configuration and check
-// RSVP payload discovery, shared delegated scope validation and missing-secret
+// RSVP/Mail/blob payload discovery, shared delegated scope validation and missing-secret
 // failures. No live provider requests.
 
 import assert from 'node:assert/strict';
@@ -49,7 +49,12 @@ try {
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
       , mailbox = "user@example.test", calendarId = None Text, sharedCalendar = False
-      , windowStart = "2026-01-01T00:00:00Z", windowEnd = "2027-01-01T00:00:00Z" } } ]) : (${schema})`);
+      , windowStart = "2026-01-01T00:00:00Z", windowEnd = "2027-01-01T00:00:00Z" } }
+      , { name = "sent", binding = "sentMail", connector = Connector.Mail
+          { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
+          , mailbox = "user@example.test"
+          , folders = [ < WellKnownFolder : Text | FolderPath : Text >.WellKnownFolder "sentitems" ]
+          , retentionDays = +90 } } ]) : (${schema})`);
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
@@ -62,7 +67,18 @@ try {
   assert.match(method.resultType, /\bstatus\s*:\s*Optional/);
   assert.match(method.resultType, /\bresponse\s*:\s*Text/);
   assert.match(method.resultType, /\btime\s*:\s*Optional Text/);
+  const mail = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'sent']).result;
+  assert.match(mail.fetchOptionsType, /since\s*:\s*Optional Text/);
+  const mailMethod = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'sent', 'message']).result;
+  assert.match(mailMethod.resultType, /body\s*:\s*Text/);
+  assert.match(mailMethod.resultType, /attachments/);
+  assert.match(mailMethod.resultType, /sha256/);
+  assert.match(mailMethod.resultType, /Link\s*:\s*Text/);
   for (const args of [['plugin', 'connector', 'login', 'microsoft-graph', 'test'], ['evidence', 'fetch', 'microsoft-graph', 'test']]) {
+    const result = cli(args, 1);
+    assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
+  }
+  for (const args of [['plugin', 'connector', 'login', 'microsoft-graph', 'sent'], ['evidence', 'fetch', 'microsoft-graph', 'sent']]) {
     const result = cli(args, 1);
     assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
   }

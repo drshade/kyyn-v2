@@ -206,7 +206,8 @@ Linked attachments instead contain their Graph attachment resource URI and metad
 not the target cloud-file URL. All folder pages and attachment downloads must succeed
 before the fetch is published.
 
-`retentionDays` must be nonnegative. During fetch it truncates payloads older than
+`retentionDays` must be nonnegative; zero retains identities but truncates messages
+received before the fetch start immediately. During fetch it truncates payloads older than
 that age by received time, reclaiming unreferenced attachment bytes. Evidence IDs
 and fingerprints remain, so truncation does not cause repeated capture. Reading a
 truncated message reports that its payload is unavailable. Retention is independent
