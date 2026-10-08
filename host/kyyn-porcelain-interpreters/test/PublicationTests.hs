@@ -318,7 +318,7 @@ validationMock :: Maybe Bool -> Eff (RootExecution : es) a -> Eff es a
 validationMock mode = interpret $ \_ operation -> case mode of
   Nothing -> error "Publication/recovery invoked validation"
   Just valid -> case operation of
-    PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
+    PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] [] []))
     ValidateRoot _ -> pure (Right (ValidationReport (if valid then [] else [errorDiagnostic "test.invalid" "Invalid candidate"])))
     ExecuteQuery {} -> error "Unexpected query"
 

@@ -34,6 +34,7 @@ node tools/test-model-tool.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-probability.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-unit-contract.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-query-cli.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-output-cli.mjs "$journey_stage/install/bin/kyyn-v2"
 make -C vendor/MicroHs bin/mhs
 export MHSDIR="$journey_stage/install/lib/kyyn-v2/lib/kyyn/microhs"
 export MHSCPPHS="$MHSDIR/bin/cpphs"

@@ -1,5 +1,26 @@
 # Local files
 
+This plugin supplies the `Folder` source and `File` sink.
+
+## File sink
+
+`File` writes UTF-8 `Text` content. Configure `{ path : Text }`; relative paths
+resolve against the KB directory. Invocation options have type
+`{ pathOverride : Optional Text }`, defaulting to `None Text`. A successful result
+is the resolved absolute destination path.
+
+Register an output in `kb.dhall` naming a query that returns `Text` and the
+configured File instance with `method = "publish"`. Use `root output show NAME`
+to inspect contracts, `root output preview NAME` to render without writing, and
+`root output publish NAME` to write. Query arguments use `--input`; sink overrides
+use `--options '{ pathOverride = Some "other/page.html" }'`.
+
+Publication creates missing parent directories and atomically replaces the
+destination. A destination symlink is replaced, not followed. Replacement takes
+ordinary file-creation permissions subject to umask. Empty paths are rejected.
+
+## Folder source
+
 The `Folder` source connector captures regular UTF-8 text files. Configure an
 KB-relative or absolute `directory` and whether to read child directories with `recursive`.
 Relative paths are resolved against the KB directory, not the shell's working directory.
@@ -27,7 +48,7 @@ Named instance configuration belongs in the evolution target's
 `plugins/config/local-file.dhall`, for example:
 
 ```dhall
-let Connector = < Folder : { directory : Text, recursive : Bool } >
+let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >
 in [ { name = "documents"
      , binding = "documents"
      , connector = Connector.Folder

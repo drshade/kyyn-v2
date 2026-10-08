@@ -2,7 +2,7 @@
 module Kyyn.Composition.Outputs (dispatchOutputs) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (Value, object, (.=))
+import Data.Aeson (Value(..), object, (.=))
 import Data.Coerce (coerce)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
@@ -39,7 +39,7 @@ dispatchOutputs host command (SelectedKb kb revision _) = withRuntime host $ \to
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
       Right scope -> run $ do
         prepared <- ExceptT (Root.prepareRootAt kb revision)
-        selected@(PreparedOutput _ _ configured) <- select prepared name
+        selected@(PreparedOutput (OutputDefinition _ _ _ reference) _ configured) <- select prepared name
         (_,optionsType,resultType,defaults,_) <- sinkDetails selected
         options <- maybe (pure defaults) (arguments optionsType . Just) suppliedOptions
         content <- render prepared selected supplied
@@ -47,10 +47,11 @@ dispatchOutputs host command (SelectedKb kb revision _) = withRuntime host $ \to
         case outcome of
           Acknowledged (CheckedValue _ value) -> do
             rendered <- ExceptT (encodeValue (contractShape resultType) value)
-            pure (success (object ["publication" .= ("Acknowledged" :: String),"result" .= value]) [Text.unpack rendered])
-          RejectedByDestination diagnostic -> pure (Response Refused (object ["publication" .= ("RejectedByDestination" :: String)]) [] [diagnostic])
-          FailedBeforeDispatch diagnostic -> pure (Response Failed (object ["publication" .= ("FailedBeforeDispatch" :: String)]) [] [diagnostic])
-          Uncertain diagnostic -> pure (Response Incomplete (object ["publication" .= ("Uncertain" :: String)]) [] [diagnostic])
+            pure (success (object ["publication" .= ("Acknowledged" :: String),"sink" .= sinkValue reference,"result" .= value])
+              ["Sink: " ++ sinkLabel reference,Text.unpack rendered])
+          RejectedByDestination diagnostic -> pure (Response Refused (object ["publication" .= ("RejectedByDestination" :: String),"sink" .= sinkValue reference]) [] [diagnostic])
+          FailedBeforeDispatch diagnostic -> pure (Response Failed (object ["publication" .= ("FailedBeforeDispatch" :: String),"sink" .= sinkValue reference]) [] [diagnostic])
+          Uncertain diagnostic -> pure (Response Incomplete (object ["publication" .= ("Uncertain" :: String),"sink" .= sinkValue reference]) [] [diagnostic])
     _ -> run $ do
       prepared <- ExceptT (Root.prepareRootAt kb revision)
       case command of
@@ -81,7 +82,8 @@ dispatchOutputs host command (SelectedKb kb revision _) = withRuntime host $ \to
           rendered <- ExceptT (encodeValue (contractShape output) value)
           configText <- ExceptT (encodeValue (contractShape configType) config)
           pure (success (object ["sink" .= sinkValue reference,"configuration" .= config,"content" .= value])
-            ["Sink: " ++ sinkLabel reference,"Configuration: " ++ Text.unpack configText,Text.unpack rendered])
+            ["Sink: " ++ sinkLabel reference,"Configuration: " ++ Text.unpack configText,
+             Text.unpack (case value of String content -> content; _ -> rendered)])
 
 select :: PreparedRoot -> String -> ExceptT [Diagnostic] (Eff es) PreparedOutput
 select prepared name = case [o | o@(PreparedOutput (OutputDefinition n _ _ _) _ _) <- preparedOutputs prepared, n == name] of
@@ -103,10 +105,12 @@ arguments contract supplied = do
 
 render :: (DhallHandling :> es, RootExecution :> es) => PreparedRoot -> PreparedOutput -> Maybe String
   -> ExceptT [Diagnostic] (Eff es) CheckedValue
-render prepared (PreparedOutput _ descriptor@(QueryDescriptor _ _ input _) _) supplied = do
+render prepared (PreparedOutput _ descriptor@(QueryDescriptor _ _ input _) (ConfiguredConnector _ _ connector _)) supplied = do
   args <- arguments input supplied
-  QueryResult result _ <- ExceptT (queryRoot prepared descriptor args)
-  pure result
+  QueryResult (CheckedValue _ value) _ <- ExceptT (queryRoot prepared descriptor args)
+  case connector of
+    PreparedSinkConnector {sinkInputContract = sinkInput} -> pure (CheckedValue (contractId sinkInput) value)
+    PreparedConnector{} -> throwE [errorDiagnostic "output.sink-required" "Output requires a sink connector"]
 
 sinkLabel :: SinkReference -> String
 sinkLabel (SinkReference plugin instanceName method) = pluginNameText plugin ++ "/" ++ coerce instanceName ++ "/" ++ coerce method

@@ -78,7 +78,7 @@ try {
   const target = path.join(draft.path, 'target');
   const config = path.join(target, 'plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(config), { recursive: true });
-  fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } >
+  fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >
 in [{ name = "documents", binding = "documents", connector = Connector.Folder { directory = ${JSON.stringify(source)}, recursive = True } }]`);
   const manifest = path.join(target, 'kb.dhall');
   const empty = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';

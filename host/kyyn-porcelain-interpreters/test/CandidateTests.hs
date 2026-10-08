@@ -378,6 +378,7 @@ failPublication failure = interpret $ \_ -> \case
   FileSize _ _ -> error "Publication unexpectedly requested file size"
   RemoveFile _ _ -> error "Publication unexpectedly removed a file"
   ReplaceBytes {} -> raiseFailure failure
+  PublishBytes {} -> error "Candidate persistence must not publish external files"
   ReplaceTree {} -> error "Candidate persistence must not replace directory trees"
   WithTemporaryScope {} -> error "Candidate persistence requested a temporary scope"
   ReadBytes scope path -> send (ReadBytes scope path)
@@ -393,7 +394,7 @@ failPublication failure = interpret $ \_ -> \case
 
 validationMock :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a
 validationMock expected report = interpret $ \_ -> \case
-  PrepareRoot root | root == expected -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
+  PrepareRoot root | root == expected -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] [] []))
   ValidateRoot root | preparedRoot root == expected -> pure (Right report)
   _ -> error "Candidate checking changed roots or executed a query"
 

@@ -648,6 +648,90 @@ and accept the draft as usual; those operations do not invoke the flow again.
 Malformed proposal data is rejected before guest compilation. Subsequent reads
 of external evidence do not alter a saved proposal.
 
+## Queries and file outputs
+
+Register a query in the evolution target's `kb.dhall` to expose a stable read
+interface. A renderer is a query too: it produces a sink's input. For example,
+add `src/Reporting.hs` to the target:
+
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+module Reporting where
+import Data.Text (Text)
+import Kyyn.Schema
+import KyynQueryBindings (Query)
+
+type Input = ()
+type Output = Text
+metadata :: SchemaMetadata
+metadata = SchemaMetadata [] [] []
+
+page :: Input -> Query Output
+page () = pure "<!doctype html><title>My KB</title><h1>Hello</h1>"
+```
+
+The implementation can invoke other queries against the same root, using the
+generated `KyynQueryBindings` collection handles. Add its registration to
+`queries` in `kb.dhall`:
+
+```dhall
+{ name = "page", description = "HTML page", implementation = "Reporting.page"
+, inputType = "Reporting.Input", inputMetadata = "Reporting.metadata"
+, resultType = "Reporting.Output", resultMetadata = "Reporting.metadata"
+}
+```
+
+Install `local-file` into the same evolution. Its `File` sink accepts `Text`:
+
+```sh
+kyyn-v2 plugin install --evolution ID first-party/local-file
+kyyn-v2 plugin connector schema show local-file --evolution ID
+```
+
+Use the advertised union in `plugins/config/local-file.dhall`:
+
+```dhall
+let Connector = < Folder : { directory : Text, recursive : Bool }
+                | File : { path : Text } >
+in [ { name = "website", binding = "website"
+     , connector = Connector.File { path = "published/index.html" }
+     } ]
+```
+
+Add an `outputs` field to `kb.dhall`:
+
+```dhall
+outputs =
+  [ { name = "website", description = "Publish the KB page", query = "page"
+    , sink = { plugin = "local-file", instanceName = "website", method = "publish" }
+    } ]
+```
+
+Check and accept the evolution as usual. The compiler checks that the query's
+result type matches the sink input; a `String` result is not `Text`, despite both
+having the same Dhall representation. Then:
+
+```sh
+kyyn-v2 root output list
+kyyn-v2 root output show website
+kyyn-v2 root output preview website
+kyyn-v2 root output publish website
+kyyn-v2 root output publish website --options '{ pathOverride = Some "preview/index.html" }'
+```
+
+`--input` supplies typed query arguments; omit it for `()`. `--options` supplies
+typed sink options; omit it to use the plugin's defaults. `show` displays both
+contracts and the defaults. Preview displays rendered content and configured
+sink settings without writing. Publish rerenders from the selected accepted root
+and calls the sink. Relative paths resolve from the KB directory, not the shell's
+working directory; absolute paths are supported too.
+
+The file sink writes UTF-8, creates parent directories and atomically replaces
+the destination. A successful result is its absolute path. Rejection means the
+destination refused the request; an uncertain result means a write may have
+happened but could not be acknowledged. Inspect the destination before retrying
+an uncertain operation. `--json` provides structured results for all commands.
+
 ## Explore schemas, collections and facts
 
 ```sh

@@ -229,7 +229,7 @@ opening kb@(KnowledgeBase repository _) revision root = interpret $ \_ -> \case
 
 execution :: State [String] :> es => Eff (RootExecution : es) a -> Eff es a
 execution = interpret $ \_ -> \case
-  PrepareRoot root -> record "prepare" >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] []))
+  PrepareRoot root -> record "prepare" >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] [] []))
   ValidateRoot _ -> record "validate" >> pure (Right (ValidationReport [warning]))
   _ -> error "Unexpected query execution"
 

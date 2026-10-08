@@ -21,7 +21,7 @@ data FetchResult payload position = FetchResult
 -- | A configured instance of one connector type.
 newtype ConnectorInstance connector = ConnectorInstance Text
 
--- | Register a source connector in the plugin entry module's connectors value.
+-- | Register source and sink connectors in the plugin entry module's connectors value.
 data Connector = SourceConnector
   { -- | Unique connector type name: an ASCII uppercase letter followed by letters, digits or underscores.
     name :: Text
@@ -37,7 +37,9 @@ data Connector = SourceConnector
   | SinkConnector
   { name :: Text
   , validateConfig :: Text
+  -- | Qualified Config -> Options -> Input -> Sink (Either SinkError Result).
   , publish :: Text
+  -- | Qualified pure Options value used when invocation options are omitted.
   , defaultOptions :: Text
   } deriving (Eq, Show)
 

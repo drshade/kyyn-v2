@@ -44,7 +44,7 @@ function cli(args, expected = 0) {
 }
 const config = directory => `{ directory = ${JSON.stringify(directory)}, recursive = True }`;
 const instance = (name, directory) => `{ name = "${name}", binding = "${name}", connector = Connector.Folder ${config(directory)} }`;
-const configuration = entries => 'let Connector = < Folder : { directory : Text, recursive : Bool } >\nin [ '
+const configuration = entries => 'let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >\nin [ '
   + entries.map(([name, directory]) => instance(name, directory)).join(', ') + ' ]\n';
 const fetch = name => cli(['evidence', 'fetch', 'local-file', name]).result.fetch;
 const counts = summary => [summary.added, summary.updated, summary.removed];

@@ -106,7 +106,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   forM_ ["name","fetch","validateConfig","login"] $ \field ->
     assert ("Missing reflected connector field documentation: " ++ field)
       (not (null [() | ApiModule _ symbols _ <- api, ApiSymbol name ValueNamespace origin _ _ (Just doc) <- symbols,
-        name == field, "SourceConnector" `isInfixOf` origin, not (null doc)]))
+        name == field, "Connector" `isInfixOf` origin, not (null doc)]))
   scope <- right (directoryScope temporary)
   toolchain <- GuestToolchain <$> right (directoryScope runtime)
   let load path = do
@@ -123,7 +123,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   Bytes.writeFile (sourceDirectory </> "one.txt") "one"
   let configuration :: FilePath -> Bytes.ByteString
       configuration directory = Text.encodeUtf8 (Text.pack (unlines
-        ["let Folder = < Folder : { directory : Text, recursive : Bool } >",
+        ["let Folder = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >",
          "in [ { name = \"sales\", binding = \"salesFiles\", connector = Folder.Folder { directory = " ++ show directory ++ ", recursive = True } }",
          "   , { name = \"support\", binding = \"supportFiles\", connector = Folder.Folder { directory = " ++ show directory ++ ", recursive = False } } ]"]))
   configPath <- right (relativePath "plugins/config/local-file.dhall")
@@ -132,7 +132,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
   case prepared of
-    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector {connectorType = kind, configContract = configContract, payloadContract = payloadContract, methods = methods}]) instances] -> do
+    [PreparedPlugin (PreparedPackage plugin identity [PreparedConnector {connectorType = kind, configContract = configContract, payloadContract = payloadContract, methods = methods},PreparedSinkConnector{}]) instances] -> do
       assert "plugin registration lost connector type or instances" (kind == ConnectorTypeName "Folder" && length instances == 2)
       authored <- traverse (\(p,b) -> (,) <$> right (relativePath p) <*> pure b)
         [(p,b) | (path,b) <- files package, Just p <- [stripPrefix "src/" (relativeName path)]]
