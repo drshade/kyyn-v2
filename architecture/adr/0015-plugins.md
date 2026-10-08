@@ -345,7 +345,10 @@ both, with multiple configured instances of either kind. Kind is declared on the
 connector type and inherited by its instances, not another installation or
 permission lifecycle. Shared health/configuration helpers remain ordinary methods.
 A sink's declared operation input is the exact type a KB renderer must produce;
-[outputs](0017-outputs.md) owns that binding and invocation model.
+its separately typed invocation options control delivery and have a plugin-declared
+default. Configuration, input, options and result contracts are discoverable;
+[outputs](0017-outputs.md) owns that binding and invocation model. The host does
+not interpret plugin-specific option fields or merge them into saved config.
 
 For example:
 

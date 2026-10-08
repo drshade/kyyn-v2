@@ -40,7 +40,7 @@ Capability boundaries by program context (not a separate permission-role system)
 | Source acquisition method | HTTP/filesystem acquisition, secret read/write, prior evidence snapshot reads | Interactive login, KB acceptance, sink invocation |
 | Explicit connector login | HTTP, secret read/write, user instructions and cancellable waits | Evidence publication, KB acceptance |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
-| Sink connector method | Prepared typed input and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
+| Sink connector method | Prepared typed input, separately typed invocation options and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
 
 A plugin can export source and sink connectors, but registration and host
 dispatch use the declared capabilities of the selected method. Provider-read
@@ -136,6 +136,36 @@ data CapturedText = CapturedText Text EvidenceFingerprint
 type CapturedRead payload a = Program (EvidenceRead payload :+: BlobRead) a
 ```
 
+Sink execution has its own request row; acquiring or reading evidence does not
+grant writes. The initial row supports the text-file sink:
+
+```haskell
+data SinkError = SinkRejected Text | SinkUncertain Text
+
+data FileWrite a where
+  WriteTextFile :: FilePath -> Text -> FileWrite (Either SinkError FilePath)
+
+type SinkCalls = FileWrite
+```
+
+WriteTextFile uses the `files/write` request with `{ path : Text, content : Text }`.
+The host encodes content as UTF-8, resolves a relative path against the invocation's
+KB directory, creates parents, and atomically replaces the target as specified in
+ADR 0017. Its checked response is Either SinkError FilePath; Right contains the
+resolved absolute destination. The wire adapter supplies codecs; guest authors
+do not construct wire envelopes. No bytes/base64 contract is implied by this
+text-only request. FileRead and FileWrite share path resolution: relative paths
+resolve against the invocation's KB directory, never the shell working directory
+or temporary guest directory; absolute paths remain supported. ListFiles returns
+paths relative to its selected directory, so the folder connector joins that
+directory to each returned path before requesting ReadTextFile.
+
+A host failure known to precede replacement returns SinkRejected (parent directory
+creation may already have occurred). If replacement may have happened but success
+cannot be established, it returns SinkUncertain. The file sink propagates these
+results and delivery maps them under ADR 0017. Cancellation or transport loss may
+prevent a guest response; the host must not infer a rejected write from that loss.
+
 `BlobRead` and acquisition-only `BlobAcquisition` are defined by
 [ADR 0029](0029-evidence-blobs-sync.md). Both read contexts remain tied to the same
 invocation-local evidence capture; blob reads do not grant filesystem browsing.
@@ -156,9 +186,8 @@ The snapshot argument is explicit. `Host.Acquisition` is the SDK row defined bel
 captured readers have the snapshot questions above and reads of its referenced blobs. Native text
 acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
 from the same captured bytes. The SDK's `readTextFile` returns both together.
-The folder
-proof requires an absolute directory and returns a typed error before requesting
-effects for a relative path. Enumeration failure is a typed error, never an empty
+The folder connector accepts both KB-relative and absolute directories using the
+same host path resolution as the file sink. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised
 under both compilers with recording responses. The native MicroHs broker additionally
 exercises live filesystem acquisition and EvidenceStore publication, including
