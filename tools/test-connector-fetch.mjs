@@ -25,10 +25,10 @@ const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-connector-fetch-')
 const checkout = path.join(temporary, 'checkout');
 const kb = path.join(checkout, 'knowledge');
 const source = path.join(temporary, 'source');
-const sales = path.join(temporary, 'sales');
+const sales = path.join(kb, 'sales');
 const support = path.join(temporary, 'support');
 const taskHome = path.join(temporary, 'home');
-for (const directory of [checkout, sales, support, taskHome]) fs.mkdirSync(directory);
+for (const directory of [checkout, sales, support, taskHome]) fs.mkdirSync(directory, { recursive: true });
 const env = { ...process.env, HOME: taskHome, XDG_CONFIG_HOME: path.join(temporary, 'xdg'),
   GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(taskHome, '.gitconfig') };
 function git(directory, ...args) {
@@ -115,12 +115,12 @@ fetch config options snapshot = case options of
   assert.match(schema, /directory/);
   assert.match(schema, /recursive/);
   assert.match(schema, /Folder/);
-  fs.writeFileSync(configPath, configuration([['sales', 'relative-folder'], ['support', support]]));
+  fs.writeFileSync(configPath, configuration([['sales', ''], ['support', support]]));
   const rejected = cli(['evolution', 'check', draft.id], 1);
   assert(rejected.diagnostics.some(diagnostic => diagnostic.code === 'local-file.directory'
     && diagnostic.message.includes('local-file/sales')), JSON.stringify(rejected));
   // The emitted schema is directly usable as the configuration's annotation.
-  fs.writeFileSync(configPath, `(${configuration([['sales', sales], ['support', support]])}) : (${schema})\n`);
+  fs.writeFileSync(configPath, `(${configuration([['sales', 'sales'], ['support', support]])}) : (${schema})\n`);
   if (toolChecks) {
     const discoveryStarted = performance.now();
     const modules = cli(['guest', 'module', 'list', '--evolution', draft.id]).result.modules;
@@ -205,7 +205,10 @@ bulk ids = do
     assert.equal(item.fingerprint, fileFingerprint(path.join(sales, item.id)));
   }
   assert.deepEqual(listedFirst.items.map(item => item.id).sort(), ['removed.txt', 'unchanged.txt', 'updated.txt']);
-  assert(listedFirst.items.every(item => item.fingerprint.length > 0 && Object.keys(item).sort().join(',') === 'fingerprint,id'));
+  assert(listedFirst.items.every(item => item.fingerprint.length > 0 && item.availability === 'Available'
+    && Object.keys(item).sort().join(',') === 'availability,fingerprint,id'));
+  const captured = cli(['evidence', 'show', 'local-file', 'sales', 'updated.txt']).result;
+  assert.deepEqual(captured.externalReferences, [path.join(sales, 'updated.txt')]);
   assert(!JSON.stringify(listedFirst).includes('sales evidence'));
   if (configurationSmoke) {
     assert.equal(current('sales').selection.fetch, first);

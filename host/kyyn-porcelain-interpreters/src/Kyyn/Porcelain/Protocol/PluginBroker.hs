@@ -16,7 +16,7 @@ import Kyyn.Domain.EvidenceIndex (EvidenceIndex(..), indexBlobs)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore, readCapturedEvidence)
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
-import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
+import Kyyn.Domain.Path (DirectoryScope, scopePath, directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Plugin (FetchError(..))
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
@@ -26,18 +26,18 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
 import qualified Kyyn.Plumbing.Capability.FileAcquisition as Files
 import Kyyn.Plumbing.Protocol.PluginMessages
 import Kyyn.Plumbing.Protocol.Frame (Frame(..), jsonFrame)
-import System.FilePath (takeDirectory, takeFileName)
+import System.FilePath (takeDirectory, takeFileName, (</>))
 
 answerAcquisition :: (EvidenceStore :> es, Failure :> es, Files.FileAcquisition :> es)
-  => Maybe EvidenceIndex -> PluginCall -> Eff es Value
-answerAcquisition prior call = case call of
-  ListFiles directory recursive -> case directoryScope directory of
+  => DirectoryScope -> Maybe EvidenceIndex -> PluginCall -> Eff es Value
+answerAcquisition base prior call = case call of
+  ListFiles directory recursive -> case directoryScope (scopePath base </> directory) of
     Left message -> pure (failure message)
     Right scope -> either failure (success . toJSON . map relativeName) <$> Files.listSourceFiles scope recursive
-  ReadText path -> case (,) <$> directoryScope (takeDirectory path) <*> relativePath (takeFileName path) of
+  ReadText path -> case (,) <$> directoryScope (scopePath base </> takeDirectory path) <*> relativePath (takeFileName path) of
     Left message -> pure (failure message)
-    Right (scope,name) -> either failure (\(Files.CapturedText contents (Files.EvidenceFingerprint fingerprint)) ->
-      success (object ["contents" .= contents,"fingerprint" .= fingerprint])) <$> Files.readSourceText scope name
+    Right (scope,name) -> either failure (\(Files.CapturedText contents (Files.EvidenceFingerprint fingerprint) resolved) ->
+      success (object ["contents" .= contents,"fingerprint" .= fingerprint,"path" .= resolved])) <$> Files.readSourceText scope name
   other -> answerEvidence prior other
 
 executeCapturedRead :: (EvidenceStore :> es, Blobs.BlobStorage :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)

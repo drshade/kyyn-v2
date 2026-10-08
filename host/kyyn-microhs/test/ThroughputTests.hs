@@ -83,7 +83,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     bodyBytes <- newIORef 0
     start <- getMonotonicTimeNSec
     outcome <- runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $
-      recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ (runContentDigest . runEvidenceAcquisition) $
+      recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ (runContentDigest . runEvidenceAcquisition kb) $
         fetchEvidence selection payload program (CheckedValue (contractId config) configuration) Nothing (Just position) ContinueSync Nothing
     _ <- right outcome
     published <- getMonotonicTimeNSec

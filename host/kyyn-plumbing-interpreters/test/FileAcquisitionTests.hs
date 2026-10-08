@@ -25,8 +25,8 @@ main = withSystemTempDirectory "kyyn-file-acquisition-" $ \directory -> do
   repeated <- capture
   unless (repeated == first) (fail "Stable file capture changed")
   case first of
-    Right (CapturedText "abc" (EvidenceFingerprint token))
-      | Text.length token == 64 && Text.all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
+    Right (CapturedText "abc" (EvidenceFingerprint token) resolved)
+      | resolved == directory </> "source.txt" && Text.length token == 64 && Text.all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
     _ -> fail "Expected captured content and lowercase SHA-256 fingerprint"
   Bytes.writeFile (directory </> "other.txt") "abc"
   moved <- runEff (runFileAcquisitionIO (readSourceText scope (either error id (relativePath "other.txt"))))
@@ -34,7 +34,7 @@ main = withSystemTempDirectory "kyyn-file-acquisition-" $ \directory -> do
   write "abcd"
   changed <- capture
   case changed of
-    Right (CapturedText "abcd" token) | first /= Right (CapturedText "abc" token) -> pure ()
+    Right (CapturedText "abcd" token resolved) | first /= Right (CapturedText "abc" token resolved) -> pure ()
     _ -> fail "Changed bytes did not change captured text and fingerprint"
   write (Bytes.pack [255,254])
   invalid <- capture

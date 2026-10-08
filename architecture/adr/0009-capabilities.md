@@ -131,7 +131,8 @@ data FileRead a where
   ListFiles :: FilePath -> Bool -> FileRead (Either FetchError [FilePath])
   ReadTextFile :: FilePath -> FileRead (Either FetchError CapturedText)
 
-data CapturedText = CapturedText Text EvidenceFingerprint
+data CapturedText = CapturedText Text EvidenceFingerprint FilePath
+  -- Resolved absolute source path, suitable for evidence references.
 
 type CapturedRead payload a = Program (EvidenceRead payload :+: BlobRead) a
 ```

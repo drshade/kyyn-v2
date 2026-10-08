@@ -4,7 +4,7 @@ import Data.Text (Text)
 
 -- | Read UTF-8 text files from a local folder.
 data FolderConfig = FolderConfig
-  { -- | Absolute directory to read.
+  { -- | Directory to read, relative to the KB or absolute.
     directory :: FilePath
   , -- | Include files in child directories.
     recursive :: Bool

@@ -31,7 +31,7 @@ runFileAcquisitionIO = interpret $ \_ -> \case
     let fingerprint = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
           (Bytes.unpack (SHA256.hash (Lazy.toStrict (Builder.toLazyByteString
             (framed (Text.encodeUtf8 (Text.pack source)) <> framed bytes)))))
-    pure (CapturedText contents (EvidenceFingerprint (Text.pack fingerprint)))
+    pure (CapturedText contents (EvidenceFingerprint (Text.pack fingerprint)) source)
   where
     framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes
 

@@ -9,6 +9,7 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.DataType (Shape(..))
+import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..))
@@ -28,8 +29,8 @@ import Kyyn.Plumbing.Protocol.PluginMessages (changesShape, parseChanges)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
 runEvidenceAcquisition :: (ContentDigest :> es, BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
-    DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
-runEvidenceAcquisition = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
+    DhallHandling :> es, Failure :> es) => DirectoryScope -> Eff (EvidenceAcquisition : es) a -> Eff es a
+runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
   (arguments,optionsText) <- case (optionsContract,supplied) of
     (Nothing,Nothing) -> pure (configValue,Nothing)
@@ -49,7 +50,7 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence selection@(EvidenceSelect
             (\(CheckedValue _ value) -> object ["tag" .= ("Some" :: String),"value" .= value])
             (case mode of ContinueSync -> position; RestartSync -> Nothing)]
   ExceptT $ withBlobDownloads instanceRef (Store.discardFetchBlobs instanceRef base) $ runExceptT $ do
-    result <- ExceptT (executeAcquisition instanceRef program input prior)
+    result <- ExceptT (executeAcquisition baseDirectory instanceRef program input prior)
     (delta,savedPosition) <- case positionContract of
       Nothing -> do
         _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)

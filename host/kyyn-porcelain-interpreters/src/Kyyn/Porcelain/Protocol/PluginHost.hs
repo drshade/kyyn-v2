@@ -18,6 +18,7 @@ import Kyyn.Plumbing.Protocol.Frame (Frame(..))
 import Kyyn.Porcelain.Protocol.PluginBroker (protocolFailure, conversationWithBody, answerAcquisition)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef)
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex)
@@ -29,13 +30,13 @@ import Kyyn.Types.Plugin (FetchError(..))
 
 executeAcquisition :: (EvidenceStore :> es, Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)
-  => ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe EvidenceIndex -> Eff es (Either [Diagnostic] Value)
-executeAcquisition instanceRef program config prior = fmap (either
+  => DirectoryScope -> ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe EvidenceIndex -> Eff es (Either [Diagnostic] Value)
+executeAcquisition base instanceRef program config prior = fmap (either
   (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
   conversationWithBody (decodeHostFrame decodeDigest) program (initialInput config)
     (either (fmap ((,Bytes.empty) . toJSON) . Digest.digestText)
       (either (fmap (\result -> (downloadResult result,Bytes.empty)) . Blobs.storeBlobAt instanceRef)
-        (either (fmap (,Bytes.empty) . answerAcquisition prior) answerNetwork)))
+        (either (fmap (,Bytes.empty) . answerAcquisition base prior) answerNetwork)))
   where
     decodeDigest _ "digest" "text" args = Left <$> parseJSON args
     decodeDigest body capability method args = Right <$> decode body capability method args

@@ -9,7 +9,7 @@ import qualified FolderSchema as Schema
 fetch :: Schema.Config -> EvidenceSnapshot Schema.Document
   -> Acquisition Schema.Document (Either FetchError [EvidenceChange Schema.Document])
 fetch (Schema.Config directory recursive) prior
-  | null directory || head directory /= '/' = pure (Left (FetchError "Folder directory must be absolute"))
+  | null directory = pure (Left (FetchError "Folder directory must be nonempty"))
   | otherwise = listFiles directory recursive `andThen` \paths ->
       listEvidenceIds prior `andThen` \previousIds -> do
         previousResults <- mapM (readEvidence prior) previousIds
@@ -22,7 +22,7 @@ fetch (Schema.Config directory recursive) prior
                 texts <- sequence contents
                 let old = [(key,value) | (key,Just value) <- zip previousIds previous]
                     current = [(EvidenceId (Text.pack path),Evidence token
-                      [Text.pack (fullPath path)] (Available (Schema.Document text))) | (path,CapturedText text token) <- zip paths texts]
+                      [Text.pack resolved] (Available (Schema.Document text))) | (path,CapturedText text token resolved) <- zip paths texts]
                     changes = concatMap (changed old) current
                     removed = [RemovedEvidence key | key <- previousIds, key `notElem` map fst current]
                 pure (changes ++ removed)
