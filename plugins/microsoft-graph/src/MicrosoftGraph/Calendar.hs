@@ -116,9 +116,10 @@ eventValue value = do
     person item = Person <$> descriptive ["emailAddress","name"] item <*> descriptive ["emailAddress","address"] item
     attendee item = Attendee <$> descriptive ["emailAddress","name"] item
       <*> descriptive ["emailAddress","address"] item <*> responseValue (optionalField "status" item)
-    responseValue JSNull = Right Nothing
-    responseValue item = Just <$> (ResponseStatus <$> (Json.member "response" item >>= Json.text)
-      <*> Json.optionalText "time" item)
+    responseValue item = Right $ case Json.member "response" item >>= Json.text of
+      Right response | not (Text.null response) ->
+        Just (ResponseStatus response (either (const Nothing) id (Json.optionalText "time" item)))
+      _ -> Nothing
 
 optionalField :: Text -> JSValue -> JSValue
 optionalField key (JSObject fields) = maybe JSNull id (lookup (Text.unpack key) (fromJSObject fields))

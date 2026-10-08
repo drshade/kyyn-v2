@@ -10,7 +10,10 @@ Each attendee includes name, address and optional `status`; the event's optional
 `responseStatus` is the configured mailbox owner's response. A status contains
 Graph's `response` text (`accepted`, `tentativelyAccepted`, `declined`, `none`,
 `notResponded` or `organizer`) and optional response `time`. Missing/null status
-is absent, not an inferred response. Provider response strings are preserved.
+is absent, not an inferred response. Unusable response data is also absent; an
+unusable timestamp does not discard a valid response. Provider response strings
+are preserved. Graph's `none` with time `0001-01-01T00:00:00Z` is a placeholder,
+not an actual reply timestamp.
 
 ## Install and configure
 

@@ -213,12 +213,17 @@ responseTests program = do
   noTimeStatus <- get "responseStatus" noTime
   assert "missing response time invented a timestamp"
     (noTimeStatus == some (object ["response" .= ("accepted" :: String),"time" .= none]))
-  forM_ [setField "responseStatus" (Bool True) fixture,
-    setField "attendees" (toJSON [setField "status" (object ["response" .= True]) (attendee "accepted")]) fixture,
-    setField "responseStatus" (object ["response" .= ("accepted" :: String),"time" .= True]) fixture] $ \entry -> do
-    malformed <- trial entry
-    assert "malformed status lost event context or produced evidence"
-      (case resultError malformed of Right message -> "Graph event changed:" `isInfixOf` message; _ -> False)
+  forM_ [Bool True, object [], object ["response" .= True], object ["response" .= ("" :: String)]] $ \invalid -> do
+    malformed <- trial (setField "responseStatus" invalid
+      (setField "attendees" (toJSON [setField "status" invalid (attendee "accepted")]) fixture)) >>= payloadOf
+    malformedOwn <- get "responseStatus" malformed
+    malformedAttendees <- get "attendees" malformed
+    malformedStatuses <- mapM (get "status") (malformedAttendees :: [Value])
+    assert "unusable optional status discarded the event or invented a response"
+      (malformedOwn == none && malformedStatuses == [none])
+  badTime <- trial (setField "responseStatus" (object ["response" .= ("accepted" :: String),"time" .= True]) fixture) >>= payloadOf
+  badTimeStatus <- get "responseStatus" badTime
+  assert "unusable timestamp discarded a valid response" (badTimeStatus == noTimeStatus)
 
 deltaPage :: [Value] -> Value
 deltaPage entries = object ["value" .= entries,"@odata.deltaLink" .= deltaUrl]

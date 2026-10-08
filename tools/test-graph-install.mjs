@@ -1,5 +1,5 @@
 // Install actual Graph source, discover contracts, accept configuration and check
-// missing-secret failures. No consent flow, live mailbox or provider requests.
+// RSVP payload discovery and missing-secret failures. No live provider requests.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,6 +56,10 @@ try {
   assert.equal(descriptor.fetchOptionsType, null);
   const method = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'test', 'event']).result;
   assert.match(method.resultType, /bodyPreview/);
+  assert.match(method.resultType, /responseStatus\s*:\s*Optional/);
+  assert.match(method.resultType, /\bstatus\s*:\s*Optional/);
+  assert.match(method.resultType, /\bresponse\s*:\s*Text/);
+  assert.match(method.resultType, /\btime\s*:\s*Optional Text/);
   for (const args of [['plugin', 'connector', 'login', 'microsoft-graph', 'test'], ['evidence', 'fetch', 'microsoft-graph', 'test']]) {
     const result = cli(args, 1);
     assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
