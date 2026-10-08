@@ -146,7 +146,7 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   assert.match(JSON.stringify(cli(['guest', 'module', 'show', 'KyynFrozenProposal', '--evolution', proposal.id])), /RecipeEvolution/);
   fs.writeFileSync(path.join(folder, 'todo.txt'), 'Newer source text');
   cli(['evidence', 'fetch', 'local-file', 'documents']);
-  assert.equal(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result.payload.text, 'Newer source text');
+  assert.equal(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result.payload.value.text, 'Newer source text');
   cli(['evolution', 'check', proposal.id]);
   cli(['evolution', 'check', proposal.id]);
   assert.equal(fs.readFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'utf8'), frozen);
