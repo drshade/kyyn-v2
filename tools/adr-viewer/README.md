@@ -80,9 +80,11 @@ browser. It is self-contained and is not committed.
 When asked to bring the history up to date:
 
 1. Run `extract`. Note the last seq in `evidence/steps.json`.
-2. Run `check`. Lanes reported as "N steps behind" are your work list. A lane
-   file is missing for an ADR that has never been curated; create it, starting
-   at the ADR's founding step.
+2. Run `check`. Lanes reported as "N steps behind" are your work list. These are
+   warnings, not failures. A lane file is missing for an ADR that has never been
+   curated; create it, starting at the ADR's founding step. To see which lanes
+   have spec changes rather than only realisation checks, read each new step's
+   `adrs` list in `evidence/steps.json`.
 3. For each behind lane, work through the steps after its cursor, in order:
    - Steps that changed this ADR are in `evidence/worklists/<ADR>.jsonl` (each
      entry has `diff`, `body`, `code_files`, `spec_added`, `spec_removed`,
@@ -95,10 +97,14 @@ When asked to bring the history up to date:
      step's seq. Never change a node's history otherwise: earlier nodes keep
      their meaning, and new understanding becomes new nodes.
    - Set `cursor` to the last seq.
+   - When a step changed several ADRs, read how already-current sibling lanes
+     treated that step (read-only) and stay consistent with them.
 4. Run `check` until it reports no errors, and read the warnings.
 5. `render` and open the page if asked to show the result.
 
-Do one lane at a time and keep each lane's edit self-contained, so the diff of
+Keep lane files formatted as two-space-indented JSON with a trailing newline,
+and non-ASCII characters left unescaped, so diffs stay reviewable. Do one lane
+at a time and keep each lane's edit self-contained, so the diff of
 each `curated/lanes/<ADR>.json` reads as that lane's update. You may read
 `../../` source to judge realisation; do not modify anything outside this
 directory.
@@ -118,10 +124,13 @@ For each step that changed the ADR:
    - `refine`: extends or sharpens an existing decision without contradicting
      it, such as adding a field, a rule or a failure case. List it in
      `supersedes`. The old node stops being live; its decision continues in the
-     refinement.
-   - `replace`: the earlier decision is no longer the architecture. List it in
-     `supersedes` and set the old node's `ended` to
-     `{ "seq": <this step>, "how": "replaced", "by": "<new id>" }`.
+     refinement. Use refine only when everything the old node required still
+     holds.
+   - `replace`: the earlier decision is no longer the architecture, or any
+     requirement or guarantee it stated is withdrawn, even if its core
+     survives. List it in `supersedes` and set the old node's `ended` to
+     `{ "seq": <this step>, "how": "replaced", "by": "<new id>" }`. The new
+     node restates whatever survives.
    - Deleted with no replacement: set the old node's `ended` with
      `"how": "removed"`. Put the step in `editorial` if it creates no node.
 4. **Is it realised, and when?**
@@ -130,10 +139,18 @@ For each step that changed the ADR:
    - `later_step`: implemented by a later step. Give that step's `seq`.
    - `code_first`: the code already did it before the spec said so, so the ADR
      caught up. Give the `seq` where the code appeared.
-   - `unrealised`: no evidence the code does it yet. `seq` is null.
-   - `unknown`: cannot tell. `seq` is null.
+   - `unrealised`: no evidence the code does it yet. `seq` is null (write it
+     explicitly).
+   - `unknown`: cannot tell. `seq` is null (write it explicitly).
 
-   Prefer explicit PR bodies over anchor presence.
+   Prefer explicit PR bodies over anchor presence. Treat "Governing ADRs" lines
+   in PR bodies as a hint about where to look, not as evidence: PRs often name
+   an ADR whose remaining parts they explicitly defer. When a step builds a
+   node's core commitment but parts depend on things that do not exist yet
+   (for example rules for connectors not yet written), mark it realised,
+   lower `confidence`, and say what is missing in `evidence`. If an unbuilt part
+   is a separable commitment of its own, it should have been its own node; do
+   not split history retroactively, but note it in `notes`.
 
 Consistency rules (other lanes are curated separately, so apply these exactly):
 
