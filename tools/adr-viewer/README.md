@@ -106,7 +106,8 @@ When asked to bring the history up to date:
      their meaning, and new understanding becomes new nodes.
    - When a step changed several ADRs, read how already-current sibling lanes
      treated it (read-only) and stay consistent with them.
-   - Set `cursor` to the last step.
+   - Set `cursor` to the last step. This applies equally when the lane had open
+     decisions and none of the listed steps realised them.
 4. Run `check` until it reports no errors, and read the warnings. "Behind"
    warnings are expected until every cursor is advanced. Run `pending` again;
    it should report that all lanes are current.
@@ -162,6 +163,18 @@ For each step that changed the ADR:
    is a separable commitment of its own, it should have been its own node; do
    not split history retroactively, but note it in `notes`.
 
+Judging evidence:
+
+- **PR bodies are written before merge.** A body that says "draft" or lists
+  remaining work describes the PR at the time it was written, so confirm
+  against the merged code. The merged code is the evidence.
+- **Anchors from this tool are excluded.** `extract` does not count
+  `tools/adr-viewer/` as code. An anchor's `code_added` therefore never comes
+  from curated lanes that merely name it.
+- **The `evidence` string of a still-unrealised node may be kept current** (for
+  example when the reason it is unbuilt changes), since that is not history.
+  Do not alter a realised or ended node's fields except to correct an error.
+
 Consistency rules (other lanes are curated separately, so apply these exactly):
 
 - **Founding granularity:** the founding step is the ADR's first version.
@@ -177,6 +190,19 @@ Consistency rules (other lanes are curated separately, so apply these exactly):
   realised `code_first`. A reversal is a `replace`.
 - **Version or format bumps** are a `refine` only when they change what the
   architecture requires; otherwise they are editorial.
+- **Several live successors:** when an earlier decision continues in more than
+  one live node (for example a connector refined in one node and its download
+  policy replaced in another), a later change supersedes the successor whose
+  topic it changes. If it changes several, list each one.
+- **Changes owned by another ADR:** when a step rewords, in this ADR, a
+  requirement another ADR owns (a transport rule restated here, say), it is
+  editorial in this lane. The decision is recorded in the owning ADR's lane.
+- **Partly built multi-case decisions:** when a decision applies to each of
+  several cases (connectors, surfaces) and only some exist, mark it realised
+  once it holds for every case that exists, lower `confidence`, and name the
+  missing cases in `evidence`. When the decision is about the set itself ("one
+  package holds Calendar, Mail, Meetings and Files"), it stays unrealised until
+  the set is complete.
 - **Negative constraints** ("there is no X", "never Y") are `same_step` if the
   code at that time conforms, otherwise `unknown`.
 

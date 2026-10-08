@@ -131,8 +131,11 @@ identifiers = Set.fromList . go
     inner c = start c || isDigit c || c == '\''
 
 -- | Code is anything outside the architecture and docs trees that is not Markdown.
+-- This tool's own directory is excluded: its curated lanes name ADR anchors and
+-- would otherwise read as those anchors appearing in code.
 isCodePath :: Text -> Bool
-isCodePath p = not (any (`T.isPrefixOf` p) ["architecture/", "docs/"]) && not (".md" `T.isSuffixOf` p)
+isCodePath p = not (any (`T.isPrefixOf` p) ["architecture/", "docs/", "tools/adr-viewer/"])
+  && not (".md" `T.isSuffixOf` p)
 
 -- | @architecture/adr/0014-evidence.md@ to @0014@; the template is not an ADR.
 adrFileId :: Text -> Maybe Text

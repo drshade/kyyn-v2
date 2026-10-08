@@ -31,6 +31,8 @@ main = do
   assert "section path wrong" (Map.member "Decision / Paths" (sections adrText))
   assert "title wrong" (titleOf adrText == Just "Storage")
   assert "ADR file id wrong" (adrFileId "architecture/adr/0014-evidence.md" == Just "0014")
+  assert "viewer's own files counted as code" (not (isCodePath "tools/adr-viewer/curated/lanes/0001.json"))
+  assert "host source not counted as code" (isCodePath "host/kyyn/src/Main.hs")
   assert "template treated as ADR" (adrFileId "architecture/adr/0000-template.md" == Nothing)
 
   -- A replaced node realised before replacement, then a current replacement.

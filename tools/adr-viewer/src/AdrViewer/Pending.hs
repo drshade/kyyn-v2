@@ -9,6 +9,7 @@ import AdrViewer.Check (Inputs(..))
 import AdrViewer.Model (liveUntil)
 import AdrViewer.Types
 import Data.Aeson (Value, object, (.=))
+import qualified Data.Map.Strict as Map
 import Data.Maybe (isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -50,9 +51,13 @@ renderPending lastSeq ps
   | null ps = "All lanes are current through step " <> tshow lastSeq <> ".\n"
   | otherwise = T.unlines $
       ("Evidence runs through step " <> tshow lastSeq <> ". " <> tshow (length ps) <> " lanes need work.")
-      : concatMap lane ps
+      : "" : "New steps:" : map stepLine newSteps <> concatMap lane ps
   where
     lane p = "" : header p : body p
+    newSteps = Map.elems (Map.fromList [ (stepSeq st, st) | p <- ps, lpCursor p /= Nothing
+                                        , st <- lpCurate p <> lpCheck p ])
+    stepLine st = "  " <> tshow (stepSeq st) <> maybe "" (\n -> " #" <> tshow n) (stepPr st) <> "  " <> stepTitle st
+                    <> if null (stepAdrs st) then "  (no ADR changes)" else "  (ADRs " <> T.intercalate ", " (stepAdrs st) <> ")"
     header p = lpAdr p <> " " <> maybe "" id (lpTitle p) <> "  ("
       <> maybe "no lane file: create it from the founding step" (\c -> "cursor " <> tshow c) (lpCursor p) <> ")"
     body p = case lpCursor p of
@@ -63,6 +68,7 @@ renderPending lastSeq ps
         <> [ "  open decisions: " <> T.intercalate ", " [nodeId n <> " " <> nodeSummary n | n <- lpOpen p]
            | not (null (lpOpen p)), not (null (lpCurate p) && null (lpCheck p)) ]
         <> [ "  nothing to curate and no open decisions: advance the cursor" | null (lpCurate p), null (lpOpen p) ]
+        <> [ "  if no listed step realises an open decision: advance the cursor" | null (lpCurate p), not (null (lpOpen p)) ]
     steps ss = T.intercalate ", " [tshow (stepSeq s) <> maybe "" (\n -> " (#" <> tshow n <> ")") (stepPr s) | s <- ss]
 
 pendingJson :: Int -> [LanePending] -> Value
