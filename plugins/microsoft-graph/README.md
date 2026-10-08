@@ -90,10 +90,11 @@ requests consent for Calendar and Mail together; no additional permissions are
 requested automatically. Scopes may be short names or Graph-qualified names
 such as `https://graph.microsoft.com/Calendars.Read`.
 
-`sharedCalendar = True` requires `Calendars.Read.Shared` in that list; the signed-in
+`sharedCalendar = True` requires `Calendars.Read.Shared` or `Calendars.ReadWrite.Shared`
+in that list (case-insensitive); the signed-in
 user must also have access to the configured mailbox/calendar. Adding delegated
-scopes requires running login again. Calendar configuration checks its required
-scope without checking remote consent.
+scopes requires running login again. Configuration checks shared-calendar scope
+without checking remote consent; own-calendar permission is checked by Graph.
 `sharedCalendar` only affects delegated DeviceCode authentication; ClientSecret
 uses the application's consented permissions.
 

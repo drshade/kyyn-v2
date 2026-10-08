@@ -79,6 +79,10 @@ try {
   assert.match(JSON.stringify(missingScope), /Calendars.Read.Shared/);
   fs.writeFileSync(delegatedPath, delegatedConfig('[ "https://graph.microsoft.com/Calendars.Read.Shared", "Mail.Read" ]'));
   cli(['evolution', 'check', delegated.id]);
+  fs.writeFileSync(delegatedPath, delegatedConfig('[ "https://graph.microsoft.com/calendars.readwrite.shared" ]'));
+  cli(['evolution', 'check', delegated.id]);
+  fs.writeFileSync(delegatedPath, delegatedConfig('[ "Calendars.Read.Shared" ]').replace('sharedCalendar = True', 'sharedCalendar = False'));
+  cli(['evolution', 'check', delegated.id]);
   assert.equal(git(kb, 'rev-parse', 'HEAD'), head);
   console.log('Installed Graph plugin: schema, validation, acceptance, method discovery and missing-secret paths passed (no provider calls).');
 } finally {

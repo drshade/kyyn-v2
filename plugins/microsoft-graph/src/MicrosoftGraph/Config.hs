@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MicrosoftGraph.Config (validate, scope, window) where
+module MicrosoftGraph.Config (validate, window) where
 
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -20,15 +20,12 @@ validate config@(CalendarConfig auth mailbox _ _ _ _) = ValidationReport $
     DeviceCode _ _ _ scopes ->
       [errorDiagnostic "graph.scopes" "Delegated scopes must be nonempty individual scope names without whitespace." |
         null scopes || any (\s -> Text.null s || Text.any isSpace s) scopes] <>
-      [errorDiagnostic "graph.scopes" ("Calendar requires delegated scope " <> scope config <> "; include it in auth.scopes and run connector login.") |
-        scope config `notElem` map qualify scopes]
+      [errorDiagnostic "graph.scopes" "Shared calendar access requires Calendars.Read.Shared or Calendars.ReadWrite.Shared in auth.scopes; run connector login after changing scopes." |
+        sharedCalendar config && not (any (`elem` ["calendars.read.shared","calendars.readwrite.shared"]) (map normalize scopes))]
   where
     (tenant,client,key) = case auth of ClientSecret t c k -> (t,c,k); DeviceCode t c k _ -> (t,c,k)
-    qualify s | "https://graph.microsoft.com/" `Text.isPrefixOf` s = s
-              | otherwise = "https://graph.microsoft.com/" <> s
-
-scope :: CalendarConfig -> Text
-scope (CalendarConfig _ _ _ shared _ _) = "https://graph.microsoft.com/Calendars.Read" <> if shared then ".Shared" else ""
+    normalize s = let lower = Text.toLower s
+      in maybe lower id (Text.stripPrefix "https://graph.microsoft.com/" lower)
 
 window :: CalendarConfig -> Either Text (Text,Text)
 window (CalendarConfig _ _ calendar _ start end) = do
