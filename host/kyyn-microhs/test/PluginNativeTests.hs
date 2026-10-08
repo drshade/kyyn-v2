@@ -68,7 +68,7 @@ statefulTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "stateful-source"
       producer = EvidenceProducer package (contractId payload)
       config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
-      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition) $
+      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition kb) $
         fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program config Nothing (Just position) mode Nothing
       load = runStore kb (beginFixture instanceRef producer payload (Just position)) >>= right
   first <- fetch ContinueSync >>= right
@@ -95,10 +95,10 @@ statefulTests temporary toolchain configType payloadType program = do
 
 nativeTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
 nativeTests temporary toolchain configType payloadType program = do
-  let directory = temporary </> "source-files"
-      kbPath = temporary </> "kb"
-  createDirectory directory
+  let kbPath = temporary </> "kb"
+      directory = kbPath </> "source-files"
   createDirectory kbPath
+  createDirectory directory
   Bytes.writeFile (directory </> "same.txt") "same"
   Bytes.writeFile (directory </> "changed.txt") "old"
   Bytes.writeFile (directory </> "gone.txt") "gone"
@@ -110,9 +110,9 @@ nativeTests temporary toolchain configType payloadType program = do
   let instanceRef = ConnectorInstanceRef plugin "documents"
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
-      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition) $
+      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition kb) $
         fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config (path :: String)) Nothing Nothing ContinueSync Nothing
-  first <- fetch directory >>= right
+  first <- fetch "source-files" >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
   firstCurrent@(CurrentEvidence _ firstItems _) <- load
@@ -197,7 +197,7 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThirdIndex currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            (runContentDigest . runEvidenceAcquisition) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing ContinueSync Nothing)
+            (runContentDigest . runEvidenceAcquisition kb) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -208,7 +208,7 @@ nativeTests temporary toolchain configType payloadType program = do
       noGuest = interpret $ \_ _ -> error "Invalid options executed a guest"
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
-      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . runEvidenceAcquisition)
+      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . runEvidenceAcquisition kb)
         (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."

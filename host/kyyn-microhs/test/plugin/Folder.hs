@@ -22,7 +22,7 @@ fetch (Schema.Config directory recursive) prior
                 texts <- sequence contents
                 let old = [(key,value) | (key,Just value) <- zip previousIds previous]
                     current = [(EvidenceId (Text.pack path),Evidence token
-                      [Text.pack (fullPath path)] (Available (Schema.Document text))) | (path,CapturedText text token) <- zip paths texts]
+[Text.pack resolved] (Available (Schema.Document text))) | (path,CapturedText text token resolved) <- zip paths texts]
                     changes = concatMap (changed old) current
                     removed = [RemovedEvidence key | key <- previousIds, key `notElem` map fst current]
                 pure (changes ++ removed)

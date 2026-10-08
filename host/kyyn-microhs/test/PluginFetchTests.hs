@@ -304,7 +304,7 @@ respond scenario capability method arguments = case (capability,method) of
     contents <- maybe (fail "Unexpected file path") pure (lookup (path :: String)
       [("/folder/changed.txt","changed 🦋\nline two"),("/folder/same.txt","same"),("/folder/new.txt","new")])
     pure (if scenario == FileFailure then failure "File unreadable" else success
-      (object ["contents" .= (contents :: Text.Text),"fingerprint" .= ("recorded-" <> contents)]))
+      (object ["contents" .= (contents :: Text.Text),"fingerprint" .= ("recorded-" <> contents),"path" .= path]))
   ("evidence","list") -> do
     checkSnapshot arguments
     pure (success (toJSON ["gone.txt","changed.txt","same.txt" :: String]))

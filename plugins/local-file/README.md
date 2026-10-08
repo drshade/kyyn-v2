@@ -1,7 +1,8 @@
 # Local files
 
 The `Folder` source connector captures regular UTF-8 text files. Configure an
-absolute `directory` and whether to read child directories with `recursive`.
+KB-relative or absolute `directory` and whether to read child directories with `recursive`.
+Relative paths are resolved against the KB directory, not the shell's working directory.
 Symbolic links and non-UTF-8 files are unsupported; a failed fetch publishes no batch.
 
 Evidence IDs are relative paths. Changing a file produces an update; adding or

@@ -56,8 +56,8 @@ data EvidenceRead payload a where
   ReadEvidence :: EvidenceSnapshot payload -> EvidenceId
     -> EvidenceRead payload (Either FetchError (Maybe (Evidence payload)))
 
--- | Decoded text and a fingerprint covering its source path and captured bytes.
-data CapturedText = CapturedText Text EvidenceFingerprint deriving (Eq, Show)
+-- | Decoded text, fingerprint and the resolved absolute source path.
+data CapturedText = CapturedText Text EvidenceFingerprint FilePath deriving (Eq, Show)
 
 data FileRead a where
   ListFiles :: FilePath -> Bool -> FileRead (Either FetchError [FilePath])

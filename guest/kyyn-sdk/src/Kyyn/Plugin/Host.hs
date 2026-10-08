@@ -28,7 +28,7 @@ storeBlob = Program.request . InRight . InRight . InRight . InRight . InLeft . S
 -- | An explicit login program that can display instructions to the user.
 type PluginLogin = NetworkHost LoginInteraction
 
--- | Enumerate source files relative to the selected absolute directory.
+-- | Enumerate paths relative to a directory, itself KB-relative or absolute.
 listFiles :: FilePath -> Bool -> Acquisition payload (Either FetchError [FilePath])
 listFiles directory recursive = Program.request (InRight (InRight (InRight (InLeft (ListFiles directory recursive)))))
 

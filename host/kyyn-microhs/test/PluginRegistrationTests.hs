@@ -127,7 +127,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
          "in [ { name = \"sales\", binding = \"salesFiles\", connector = Folder.Folder { directory = " ++ show directory ++ ", recursive = True } }",
          "   , { name = \"support\", binding = \"supportFiles\", connector = Folder.Folder { directory = " ++ show directory ++ ", recursive = False } } ]"]))
   configPath <- right (relativePath "plugins/config/local-file.dhall")
-  code <- right (fileTree (installed ++ [(configPath,configuration sourceDirectory)]))
+  code <- right (fileTree (installed ++ [(configPath,configuration "documents")]))
   prepared <- runPreparation scope toolchain sdk (preparePlugins code) >>= right
   report <- runPreparation scope toolchain sdk (validatePlugins prepared) >>= right
   assert "valid configuration was rejected" (report == ValidationReport [])
@@ -157,7 +157,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         absent <- invoke identity method (arguments "one.txt")
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-          (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ (runContentDigest . runEvidenceAcquisition)
+          (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ (runContentDigest . runEvidenceAcquisition scope)
             (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity) payload entry config Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope)
           (openCurrentEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity)))))) >>= right >>= right
@@ -175,7 +175,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
     _ -> fail "Wrong plugin registration shape"
   testTools scope toolchain sdk code prepared
   initial <- right initialRootFiles
-  invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "relative")]))
+  invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
     (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runPluginPreparation sdk
       (runToolPreparation sdk (runRootOpening sdk . runRootExecution sdk $ do

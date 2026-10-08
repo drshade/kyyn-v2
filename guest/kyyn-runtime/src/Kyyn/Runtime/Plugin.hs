@@ -93,12 +93,13 @@ fileRequest transport identity (ReadTextFile path) = exchange transport identity
 capturedTextCodec :: Codec CapturedText
 capturedTextCodec = Codec encode decode
   where
-    encode (CapturedText contents (EvidenceFingerprint fingerprint)) = record
-      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint)]
+    encode (CapturedText contents (EvidenceFingerprint fingerprint) path) = record
+      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint),("path",encodeWith stringCodec path)]
     decode value = do
-      values <- fields ["contents","fingerprint"] value
+      values <- fields ["contents","fingerprint","path"] value
       CapturedText <$> field "contents" textCodec values
         <*> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
+        <*> field "path" stringCodec values
 
 evidenceRequest :: Transport -> Codec payload -> Integer -> EvidenceRead payload a -> IO a
 evidenceRequest transport _ identity (ListEvidenceIds (EvidenceSnapshot snapshot)) = exchange transport identity "evidence" "list"

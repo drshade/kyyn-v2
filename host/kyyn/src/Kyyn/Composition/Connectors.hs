@@ -101,7 +101,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runFileAcquisitionIO
       . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
-      . runContentDigest . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
+      . runContentDigest . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition scope $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
         let Response outcome result humanLines diagnostics = fetchResult snapshot
         pure (Response outcome result humanLines (warnings ++ diagnostics))
