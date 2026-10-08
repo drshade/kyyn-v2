@@ -141,7 +141,9 @@ data FolderConfig = FolderConfig
 ```
 
 No patterns/globs initially. It enumerates the configured directory, optionally
-recursively. Enumeration and file reads must succeed before a complete batch is
+recursively. Relative directories resolve against the KB directory; absolute
+directories remain supported under ADR 0009's shared file path contract.
+Enumeration and file reads must succeed before a complete batch is
 published; unreadability is not an empty directory or evidence of deletion.
 Switching directories has the plugin-defined consequences of its identity policy.
 

@@ -154,7 +154,11 @@ KB directory, creates parents, and atomically replaces the target as specified i
 ADR 0017. Its checked response is Either SinkError FilePath; Right contains the
 resolved absolute destination. The wire adapter supplies codecs; guest authors
 do not construct wire envelopes. No bytes/base64 contract is implied by this
-text-only request. Source FileRead retains its existing absolute-path contract.
+text-only request. FileRead and FileWrite share path resolution: relative paths
+resolve against the invocation's KB directory, never the shell working directory
+or temporary guest directory; absolute paths remain supported. ListFiles returns
+paths relative to its selected directory, so the folder connector joins that
+directory to each returned path before requesting ReadTextFile.
 
 A host failure known to precede replacement returns SinkRejected (parent directory
 creation may already have occurred). If replacement may have happened but success
@@ -182,9 +186,8 @@ The snapshot argument is explicit. `Host.Acquisition` is the SDK row defined bel
 captured readers have the snapshot questions above and reads of its referenced blobs. Native text
 acquisition decodes UTF-8 and computes a lowercase hexadecimal SHA-256 fingerprint
 from the same captured bytes. The SDK's `readTextFile` returns both together.
-The folder
-proof requires an absolute directory and returns a typed error before requesting
-effects for a relative path. Enumeration failure is a typed error, never an empty
+The folder connector accepts both KB-relative and absolute directories using the
+same host path resolution as the file sink. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised
 under both compilers with recording responses. The native MicroHs broker additionally
 exercises live filesystem acquisition and EvidenceStore publication, including
