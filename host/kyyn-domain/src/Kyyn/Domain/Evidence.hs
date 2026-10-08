@@ -3,13 +3,16 @@ module Kyyn.Domain.Evidence
   ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
   , EvidencePayload(..), Evidence(..), EvidenceChange(..), EvidenceState(..), CurrentEvidence(..), FetchSummary(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), applyChanges, validateState
-  , evidenceProblemDiagnostic, EvidenceCapture(..), captureEvidence, SyncMode(..)
+  , evidenceProblemDiagnostic, EvidenceCapture(..), captureEvidence, SyncMode(..), instancePath
   ) where
 
 import Control.Monad (foldM, unless)
 import Data.List (nub)
 import qualified Data.Text as Text
-import Kyyn.Domain.Plugin (PluginName, PackageIdentity)
+import qualified Data.Text.Encoding as Text
+import qualified Data.ByteString as Bytes
+import Numeric (showHex)
+import Kyyn.Domain.Plugin (PluginName, PackageIdentity, pluginNameText)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Value (CheckedValue)
@@ -18,6 +21,12 @@ import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePay
 newtype FetchId = FetchId String deriving (Eq, Show)
 data SyncMode = ContinueSync | RestartSync deriving (Eq, Show)
 data ConnectorInstanceRef = ConnectorInstanceRef PluginName String deriving (Eq, Show)
+
+instancePath :: ConnectorInstanceRef -> FilePath
+instancePath (ConnectorInstanceRef plugin name) = pluginNameText plugin ++ "-" ++
+  concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
+    (Bytes.unpack (Text.encodeUtf8 (Text.pack name)))
+
 data EvidenceProducer = EvidenceProducer PackageIdentity ContractId deriving (Eq, Show)
 data FetchSummary = FetchSummary
   { identity :: FetchId, fetchedAt :: String, added :: Integer, updated :: Integer, removed :: Integer, suppliedOptions :: Maybe String

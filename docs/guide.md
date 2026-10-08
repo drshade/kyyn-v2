@@ -283,6 +283,24 @@ fetch starts empty and reports everything as new.
 Refetch to rebuild it. Clearing evidence does not remove accepted facts or recipe
 state.
 
+### Captured files in plugin results
+
+Plugins can store attachments or other binary evidence with `storeBlob` from
+`Kyyn.Plugin.Host`. The host downloads the bytes and returns a `BlobRef`; the
+plugin includes that reference in its evidence payload. HTTP status and headers
+remain available to the plugin for retry decisions.
+
+Captured plugin methods use `readBlob` for bytes or `readBlobText` for strict
+UTF-8 text. They can only read references from their captured evidence. To let an
+agent inspect a file itself, return its `BlobRef` instead. Connector method and
+KB tool results include local paths alongside those references; JSON results
+with blobs use `{ "value": ..., "blobs": [{ "reference": ..., "path": ... }] }`.
+Results without blobs keep their ordinary result shape.
+
+These are local captured files, not permanent exports. Refreshing, truncating or
+clearing evidence can remove them. Neither a missing file nor a captured read
+implicitly downloads anything from the source.
+
 ## Tools and models
 
 Register a helper in the target `kb.dhall` `tools` list, with its name,

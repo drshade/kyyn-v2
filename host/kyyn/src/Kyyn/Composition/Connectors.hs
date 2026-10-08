@@ -20,6 +20,7 @@ import Kyyn.MicroHs.Toolchain (GuestToolchain)
 import Kyyn.Plumbing.Capability.DhallHandling (renderType, decodeValue, encodeValue)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.HttpTransport (runHttpTransportIO)
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
@@ -79,25 +80,25 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
     pure (methodResult method description inputType resultType)
   Cli.ExecuteConnectorMethod plugin name method inputText -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
+    Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
       . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginRead $ runExceptT $ do
         (instanceRef,producer,payload,selected@(PreparedMethod _ _ input output _)) <-
           ExceptT (selectConnectorMethod kb revision Nothing plugin name method)
         value <- ExceptT (decodeValue (contractShape input) (Text.pack inputText))
-        CheckedValue _ result <- ExceptT (callCapturedMethod instanceRef producer payload selected value)
+        (CheckedValue _ result,blobs) <- ExceptT (callCapturedMethod instanceRef producer payload selected value)
         rendered <- ExceptT (encodeValue (contractShape output) result)
-        pure (methodOutputResult result rendered)
+        pure (methodOutputResult result rendered blobs)
 
 dispatchEvidence :: Host -> Cli.EvidenceCommand -> SelectedKb -> IO Response
 dispatchEvidence host command (SelectedKb kb revision _) = case command of
   Cli.ClearEvidence plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right scope -> finish $ runBase host . runDocumentPersistenceIO . runEvidenceStore scope $ do
+    Right scope -> finish $ runBase host . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) $ do
       existed <- clearConnectorEvidence plugin name
       pure (clearResult plugin name existed)
   Cli.FetchConnector plugin name options mode -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope . runFileAcquisitionIO
+    Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runFileAcquisitionIO
       . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
       . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition $ runExceptT $ do
         (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
@@ -117,7 +118,7 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
   where
     inspectEvidence toolchain sdk action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-      Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
+      Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
         . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvidenceInspection $ action
 
 respond :: IO (Either OperationalFailure (Either [Diagnostic] Response)) -> IO Response

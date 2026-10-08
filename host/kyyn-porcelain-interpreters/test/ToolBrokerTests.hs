@@ -45,7 +45,7 @@ toolBrokerTests = do
       recordReads :: Eff (PluginRead : es) a -> Eff es (a,Int)
       recordReads = reinterpret (runState (0 :: Int)) $ \_ operation -> case operation of
         LoadCapturedInput {} -> error "Recipe input was reread from latest instead of its pinned capture"
-        ExecuteCapturedMethod actual _ _ -> do
+        ExecuteCapturedMethod _ actual _ _ -> do
           unless (actual == captured) (error "Captured evidence changed between reads")
           modify @Int (+ 1)
           pure (Right (Right (CheckedValue (contractId contract) (string "old contents"))))

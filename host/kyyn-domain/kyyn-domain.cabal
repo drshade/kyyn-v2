@@ -15,6 +15,7 @@ library
     Kyyn.Domain.Tap
     Kyyn.Domain.Tool
     Kyyn.Domain.Evidence
+    Kyyn.Domain.Blob
     Kyyn.Domain.Secret
     Kyyn.Domain.Model
     Kyyn.Domain.FactProposal

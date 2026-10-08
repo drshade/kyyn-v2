@@ -22,6 +22,7 @@ import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Capability.RecipeStore (loadRecipesAt)
 import Kyyn.Porcelain.Interpreter.RecipeStore (runRecipeStore)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
@@ -44,7 +45,7 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
       runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
-      . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
+      . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
       . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
         result <- proposeFromRecipe kb revision recipe (Text.pack <$> request)
         pure $ case result of

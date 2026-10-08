@@ -6,6 +6,7 @@ import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Text as Text
 import Kyyn.Domain.Evidence
+import Kyyn.Domain.Blob (ResolvedBlob(..), blobValue)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Surfaces.Result (Response, success)
@@ -39,8 +40,11 @@ methodResult name description input output = success
   (object ["name" .= text name,"description" .= description,"inputType" .= input,"resultType" .= output])
   [text name ++ " — " ++ description,"Input: " ++ Text.unpack input,"Result: " ++ Text.unpack output]
 
-methodOutputResult :: Value -> Text.Text -> Response
-methodOutputResult value rendered = success value [Text.unpack (Text.stripEnd rendered)]
+methodOutputResult :: Value -> Text.Text -> [ResolvedBlob] -> Response
+methodOutputResult value rendered [] = success value [Text.unpack (Text.stripEnd rendered)]
+methodOutputResult value rendered blobs = success
+  (object ["value" .= value,"blobs" .= [object ["reference" .= blobValue ref,"path" .= path] | ResolvedBlob ref path <- blobs]])
+  (Text.unpack (Text.stripEnd rendered) : ["Blob: " ++ path | ResolvedBlob _ path <- blobs])
 
 fetchResult :: EvidenceSnapshotRef -> Response
 fetchResult snapshot@(EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ identity) = success (context snapshot)

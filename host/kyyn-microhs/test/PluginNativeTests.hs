@@ -36,6 +36,8 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -47,7 +49,7 @@ import Kyyn.Domain.DataType (DataType(..))
 import System.Directory (createDirectory, removeFile, createFileLink)
 import System.FilePath ((</>))
 
-type StoreEffects = '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
+type StoreEffects = '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, ProcessExecution, Failure, IOE]
 
 statefulTests :: FilePath -> FilePath -> DataType -> DataType -> CompiledProgram -> IO ()
 statefulTests temporary toolchain configType payloadType program = do
@@ -154,8 +156,8 @@ nativeTests temporary toolchain configType payloadType program = do
     , "{\"tag\":\"HostRequest\",\"id\":\"2\",\"capability\":\"evidence\",\"method\":\"list\",\"arguments\":{\"snapshot\":\"selected\"}}"
     , "{\"tag\":\"HostRequest\",\"id\":\"1\",\"capability\":\"unknown\",\"method\":\"list\",\"arguments\":{}}"
     ] $ \frame -> do
-      let refused = runPureEff $ runFailure $ runDhallHandling $ emitFrame frame $
-            executeCapturedRead program (config directory) currentThird payload
+      let refused = runPureEff $ runFailure $ runDhallHandling $ noBlobReads $ emitFrame frame $
+            executeCapturedRead program (config directory) payload currentThird payload
       case refused of
         Left _ -> pure ()
         Right _ -> fail "Malformed or out-of-row guest request was answered"
@@ -175,7 +177,7 @@ nativeTests temporary toolchain configType payloadType program = do
         ]
       completed = object ["text" .= ("changed" :: String)]
       inspectBetween action = exchangeFrames requests expected completed action $
-        executeCapturedRead program (config directory) currentThird payload
+        executeCapturedRead program (config directory) payload currentThird payload
       advance = do
         result <- publishFetch instanceRef producer payload (Just thirdId) Nothing [UpdatedEvidence key changed]
         case result of Right _ -> pure (); Left problem -> error (show problem)
@@ -187,7 +189,7 @@ nativeTests temporary toolchain configType payloadType program = do
   let noFiles :: Eff (FileAcquisition : es) a -> Eff es a
       noFiles = interpret $ \_ _ -> error "Acquisition fixture unexpectedly read source files"
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
-        noNetwork $ noFiles $ recordAcquisition currentThird $
+        noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
             runEvidenceAcquisition (fetchEvidence instanceRef package payload program (config directory) Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
@@ -200,7 +202,7 @@ nativeTests temporary toolchain configType payloadType program = do
       noGuest = interpret $ \_ _ -> error "Invalid options executed a guest"
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
-      noNetwork $ noFiles $ noEvidence $ noGuest $ runEvidenceAcquisition
+      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ runEvidenceAcquisition
         (fetchEvidence instanceRef package payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."
@@ -242,9 +244,14 @@ emitFrame frame = interpret $ \env -> \case
     _ <- unlift (respond (Wire.jsonFrame frame))
     pure (Wire.jsonFrame frame,ProcessExit 0 Bytes.empty)
 
+noBlobReads :: Eff (BlobStorage : es) a -> Eff es a
+noBlobReads = interpret $ \env operation -> case operation of
+  WithBlobDownloads _ _ action -> localSeqUnlift env (\unlift -> unlift action)
+  _ -> error "Invalid request reached blob storage"
+
 runStore :: DirectoryScope -> Eff StoreEffects a -> IO a
 runStore kb action = runEff (runFailure (runProcessExecutionIO (runFileSystemIO kb
-  (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore kb action))))) >>= right
+  (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO kb . runEvidenceStore kb) action))))) >>= right
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

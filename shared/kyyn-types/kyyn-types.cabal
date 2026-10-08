@@ -12,6 +12,7 @@ library
     Kyyn.Types.Evidence Kyyn.Types.Evolution
     Kyyn.Types.Plugin Kyyn.Types.KnowledgeBase
     Kyyn.Types.PluginHost
+    Kyyn.Types.Blob
   default-language: Haskell2010
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, text
+  build-depends: base >=4.20 && <4.21, text, bytestring

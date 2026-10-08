@@ -19,20 +19,24 @@ import Kyyn.Porcelain.Protocol.PluginBroker (protocolFailure, conversationWithBo
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Evidence (CurrentEvidence)
+import Kyyn.Domain.Evidence (CurrentEvidence, ConnectorInstanceRef)
+import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
+import Kyyn.Plumbing.Protocol.Blob (decodeDownload, downloadResult)
 import Kyyn.Types.Plugin (FetchError(..))
 
-executeAcquisition :: (GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
+executeAcquisition :: (Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)
-  => CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
-executeAcquisition program config prior = fmap (either
+  => ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe CurrentEvidence -> Eff es (Either [Diagnostic] Value)
+executeAcquisition instanceRef program config prior = fmap (either
   (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
   conversationWithBody (decodeHostFrame decode) program (initialInput config)
-    (either (fmap (,Bytes.empty) . answerAcquisition prior) answerNetwork)
+    (either (fmap (\result -> (downloadResult result,Bytes.empty)) . Blobs.storeBlobAt instanceRef)
+      (either (fmap (,Bytes.empty) . answerAcquisition prior) answerNetwork))
   where
-    decode _ "evidence" method args = Left <$> decodeCall "evidence" method args
-    decode _ "files" method args = Left <$> decodeCall "files" method args
-    decode body capability method args = Right <$> decodePluginHostCall body capability method args
+    decode body "blobs" "store" args = Left <$> decodeDownload body args
+    decode _ "evidence" method args = Right . Left <$> decodeCall "evidence" method args
+    decode _ "files" method args = Right . Left <$> decodeCall "files" method args
+    decode body capability method args = Right . Right <$> decodePluginHostCall body capability method args
 
 executeLogin :: (GuestExecution :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Interaction.LoginInteraction :> es, Failure :> es)
@@ -61,7 +65,7 @@ answerLogin call = answerNetwork call
 decodeHostFrame :: (Bytes.ByteString -> String -> String -> Value -> Parser call) -> Frame -> Either String (PluginFrame call)
 decodeHostFrame decode (Frame metadata body) = do
   frame <- decodeFrameWith (\capability method arguments -> do
-    unless (Bytes.null body || (capability == "http" && method == "send")) (fail "Unexpected raw body")
+    unless (Bytes.null body || (capability == "http" && method == "send") || (capability == "blobs" && method == "store")) (fail "Unexpected raw body")
     decode body capability method arguments) metadata
   case frame of
     Completed _ | not (Bytes.null body) -> Left "Raw body accompanies terminal result"

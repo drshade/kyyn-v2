@@ -30,6 +30,8 @@ import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath, relativePath)
 import Kyyn.Domain.Plugin (PluginSource(..), pluginSource)
 import Kyyn.Domain.Publication (InitializationTarget(..))
@@ -92,7 +94,7 @@ import System.FilePath ((</>))
 
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
 type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
-type Evaluation = EvolutionExecution ': Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': EvidenceStore ': DocumentPersistence ': Runtime
+type Evaluation = EvolutionExecution ': Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': EvidenceStore ': BlobStorage ': DocumentPersistence ': Runtime
 type Checking = RootExecution ': ToolPreparation ': PluginPreparation ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
@@ -103,7 +105,7 @@ runAuthoring host toolchain sdk = runRuntime host toolchain . runPluginPreparati
   . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring
 
 runEvaluation :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Evaluation a -> IO (Either OperationalFailure a)
-runEvaluation host toolchain sdk scope = runRuntime host toolchain . runDocumentPersistenceIO . runEvidenceStore scope
+runEvaluation host toolchain sdk scope = runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
   . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
 
 runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)

@@ -41,10 +41,11 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.KnowledgeBaseInitialization (initialRootFiles)
 import Kyyn.Porcelain.Capability.PluginPreparation
-import Kyyn.Porcelain.Capability.PluginRead (PluginRead(..), loadCapturedInput, executeCapturedMethod)
+import Kyyn.Porcelain.Capability.PluginRead (PluginRead(..), loadCapturedInput, executeCapturedMethod, resolveCapturedBlobs)
 import Kyyn.Porcelain.Capability.EvidenceStore (clearEvidence)
 import Kyyn.Porcelain.Capability.Tool
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
@@ -114,12 +115,12 @@ testTools scope toolchain sdk pluginCode plugins = do
       Left (RuntimeUnavailable (ProcessDiagnostic ReadOutput _)) -> True
       _ -> False)
   let invoke input = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-        (runGuestExecution toolchain (runDocumentPersistenceIO (runEvidenceStore scope (runPluginRead
+        (runGuestExecution toolchain (runDocumentPersistenceIO ((runBlobStorageIO scope . runEvidenceStore scope) (runPluginRead
           (countReads ((noJudgement . noModel . runToolExecution) (executeTool selected input))))))))))) >>= right
   (response,loads) <- invoke (toJSON (["one.txt","one.txt"] :: [String]))
   value <- right response
   assert "Tool did not compose instances or catch the typed missing-ID failure"
-    (value == CheckedValue (contractId result) (toJSON (replicate 4 ("one" :: String))))
+    (value == (CheckedValue (contractId result) (toJSON (replicate 4 ("one" :: String))),[]))
   assert "Repeated calls reloaded captured input" (map (\(ConnectorInstanceRef _ name) -> name) loads == ["support","sales"])
   (invalid,invalidLoads) <- invoke (toJSON True)
   assert "Tool accepted an invalid argument" (case invalid of Left _ -> True; Right _ -> False)
@@ -127,7 +128,7 @@ testTools scope toolchain sdk pluginCode plugins = do
   case plugins of
     [PreparedPlugin (PreparedPackage plugin _ _) _] -> do
       _ <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO
-        (runEvidenceStore scope (clearEvidence (ConnectorInstanceRef plugin "sales"))))))) >>= right
+        ((runBlobStorageIO scope . runEvidenceStore scope) (clearEvidence (ConnectorInstanceRef plugin "sales"))))))) >>= right
       (absent,_) <- invoke (toJSON (["one.txt"] :: [String]))
       assert "Missing capture was catchable or lost instance context" (case absent of
         Left diagnostics -> any (\(Diagnostic _ name message _) -> name == "evidence.not-fetched" && "local-file/sales" `isInfixOf` Text.unpack message) diagnostics
@@ -145,7 +146,8 @@ countReads = reinterpret (runState []) $ \_ operation -> case operation of
   LoadCapturedInput instanceRef producer payload -> do
     modify (instanceRef :)
     loadCapturedInput instanceRef producer payload
-  ExecuteCapturedMethod current method value -> executeCapturedMethod current method value
+  ExecuteCapturedMethod payload current method value -> executeCapturedMethod payload current method value
+  ResolveCapturedBlobs contexts contract value -> resolveCapturedBlobs contexts contract value
 
 noReads :: Eff (PluginRead : es) a -> Eff es a
 noReads = interpret $ \_ _ -> error "Impossible generated request reached captured input"

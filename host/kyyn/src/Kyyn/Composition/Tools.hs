@@ -33,6 +33,7 @@ import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import Kyyn.Porcelain.Interpreter.ToolPreparation (runToolPreparation)
 import Kyyn.Porcelain.Interpreter.ToolExecution (runToolExecution)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Connectors (methodOutputResult)
 import Kyyn.Surfaces.Tools (toolListResult, toolResult)
@@ -58,11 +59,11 @@ dispatchTools host command (SelectedKb kb revision _) = withRuntime host $ \tool
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> finish $ fmap (fmap (either refusal id)) $
       runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
-        . runDocumentPersistenceIO . runEvidenceStore scope . runPluginRead
+        . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
         . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runToolExecution $ runExceptT $ do
           selected@(PreparedTool (ToolDescriptor _ _ input output) _ _ _) <- ExceptT (selectRootTool kb revision Nothing name)
           value <- ExceptT (decodeValue (contractShape input) (Text.pack arguments))
-          CheckedValue _ result <- ExceptT (executeTool selected value)
+          (CheckedValue _ result,blobs) <- ExceptT (executeTool selected value)
           rendered <- ExceptT (encodeValue (contractShape output) result)
-          pure (methodOutputResult result rendered)
+          pure (methodOutputResult result rendered blobs)
   where descriptor (PreparedTool value _ _ _) = value

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceStore
   ( EvidenceStore(..), evidenceHead, publishFetch, loadCurrentEvidence
-  , clearEvidence
+  , clearEvidence, discardFetchBlobs
   , FetchBaseline(..), beginFetch, publishFetchWithPosition
   ) where
 
@@ -10,8 +10,10 @@ import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Value (CheckedValue)
+import Kyyn.Domain.Blob (BlobRef)
 
 data EvidenceStore :: Effect where
+  DiscardFetchBlobs :: ConnectorInstanceRef -> Maybe FetchId -> [BlobRef] -> EvidenceStore m ()
   BeginFetch :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
     -> EvidenceStore m (Either EvidenceProblem FetchBaseline)
   EvidenceHead :: ConnectorInstanceRef -> EvidenceStore m (Either EvidenceProblem (Maybe FetchId))
@@ -24,6 +26,9 @@ data EvidenceStore :: Effect where
   ClearEvidence :: ConnectorInstanceRef -> EvidenceStore m Bool
 
 type instance DispatchOf EvidenceStore = Dynamic
+
+discardFetchBlobs :: EvidenceStore :> es => ConnectorInstanceRef -> Maybe FetchId -> [BlobRef] -> Eff es ()
+discardFetchBlobs instanceRef base = send . DiscardFetchBlobs instanceRef base
 
 data FetchBaseline = FetchBaseline
   { startedAt :: String, expectedHead :: Maybe FetchId

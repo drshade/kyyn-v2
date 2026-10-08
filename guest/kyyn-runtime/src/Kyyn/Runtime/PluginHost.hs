@@ -3,34 +3,55 @@
 module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeAcquisitionResult, executeLogin) where
 
 import Kyyn.Runtime.Json
-import Kyyn.Runtime.Plugin (exchange, exchangeBody, execute, input, eitherCodec, changeCodec, fileRequest, evidenceRequest)
+import Kyyn.Runtime.Plugin (exchange, exchangeBody, execute, input, eitherCodec, changeCodec, fileRequest, evidenceRequest, blobCodec)
 import Kyyn.Runtime.Transport
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Kyyn.Types.PluginHost
+import Kyyn.Types.Blob
 import Kyyn.Types.Plugin (EvidenceSnapshot, FileRead, EvidenceRead, FetchError)
 import Kyyn.Types.Program
 import Kyyn.Types.Evidence (EvidenceChange)
 
 executeAcquisition :: forall config payload. Codec config -> Codec payload
-  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload)))))
         (Either FetchError [EvidenceChange payload])) -> IO ()
 executeAcquisition configCodec payloadCodec = executeAcquisitionResult configCodec payloadCodec (listCodec (changeCodec payloadCodec))
 
 executeAcquisitionResult :: forall config payload result. Codec config -> Codec payload -> Codec result
-  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))
+  -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload)))))
         (Either FetchError result)) -> IO ()
 executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
   (config,snapshot) <- input transport configCodec
   execute transport (eitherCodec resultCodec) (handler transport) (selected config snapshot)
   where
-    handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload)))) a -> IO a
+    handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: EvidenceRead payload))))) a -> IO a
     handler transport identity (InLeft call) = httpRequest transport identity call
     handler transport identity (InRight (InLeft call)) = secretRequest transport identity call
     handler transport identity (InRight (InRight (InLeft call))) = waitingRequest transport identity call
     handler transport identity (InRight (InRight (InRight (InLeft call)))) = fileRequest transport identity call
-    handler transport identity (InRight (InRight (InRight (InRight call)))) = evidenceRequest transport payloadCodec identity call
+    handler transport identity (InRight (InRight (InRight (InRight (InLeft (StoreBlob (BlobDownload (HttpRequest method url headers body) name media))))))) = do
+      (reply,raw) <- exchangeBody transport identity "blobs" "store" (record
+        [("method",encodeWith textCodec method),("url",encodeWith textCodec url),
+         ("headers",encodeWith headersCodec headers),("name",encodeWith (optionalCodec textCodec) name),
+         ("mediaType",encodeWith (optionalCodec textCodec) media)]) (TE.encodeUtf8 body)
+      if B.null raw then either fail pure (decodeWith (eitherCodec blobResponseCodec) reply)
+        else fail "Raw body accompanies blob download metadata"
+    handler transport identity (InRight (InRight (InRight (InRight (InRight call))))) = evidenceRequest transport payloadCodec identity call
+
+blobResponseCodec :: Codec BlobResponse
+blobResponseCodec = Codec encode decode
+  where
+    encode (BlobResponse status headers blob) = record
+      [("status",encodeWith integerCodec (toInteger status)),("headers",encodeWith headersCodec headers),
+       ("blob",encodeWith (optionalCodec blobCodec) blob)]
+    decode value = do
+      values <- fields ["status","headers","blob"] value
+      status <- field "status" integerCodec values
+      if status < 100 || status > 599 then Left "Invalid blob HTTP status" else
+        BlobResponse (fromInteger status) <$> field "headers" headersCodec values
+          <*> field "blob" (optionalCodec blobCodec) values
 
 executeLogin :: Codec config
   -> (config -> Program (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) (Either LoginError ())) -> IO ()

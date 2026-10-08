@@ -15,9 +15,10 @@ import Kyyn.Domain.Contract (CheckedContract, contractId)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Domain.Blob (BlobRef, parseBlob)
 
 data PluginCall = ListFiles FilePath Bool | ReadText FilePath
-  | ListEvidence String | ReadEvidence String EvidenceId deriving (Eq, Show)
+  | ListEvidence String | ReadEvidence String EvidenceId | ReadBlob BlobRef deriving (Eq, Show)
 data PluginFrame call = HostRequest Integer call | Completed Value deriving (Eq, Show)
 
 decodeFrame :: Bytes.ByteString -> Either String (PluginFrame PluginCall)
@@ -25,6 +26,7 @@ decodeFrame = decodeFrameWith decodeCall
 
 decodeCall :: String -> String -> Value -> Parser PluginCall
 decodeCall capability method arguments = case (capability, method) of
+  ("blobs","read") -> ReadBlob <$> parseBlob arguments
   ("files","list") -> exact ["directory","recursive"] (\a -> ListFiles <$> a .: "directory" <*> a .: "recursive") arguments
   ("files","read") -> exact ["path"] (fmap ReadText . (.: "path")) arguments
   ("evidence","list") -> exact ["snapshot"] (fmap ListEvidence . (.: "snapshot")) arguments

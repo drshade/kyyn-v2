@@ -8,9 +8,11 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
-import Kyyn.Domain.Contract (CheckedContract, contractShape)
+import Kyyn.Domain.Contract (CheckedContract, contractShape, rootType)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..))
+import Kyyn.Domain.Evidence (CurrentEvidence(..), EvidenceId(..), EvidenceSnapshotRef(..), Evidence(..), EvidencePayload(..))
+import Kyyn.Domain.Blob (blobReferences)
+import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
 import Kyyn.Domain.Path (directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Value (CheckedValue(..))
@@ -36,11 +38,20 @@ answerAcquisition prior call = case call of
       success (object ["contents" .= contents,"fingerprint" .= fingerprint])) <$> Files.readSourceText scope name
   other -> answerEvidence prior other
 
-executeCapturedRead :: (GuestExecution :> es, Failure :> es, DhallHandling :> es)
-  => CompiledProgram -> CheckedValue -> CurrentEvidence -> CheckedContract
+executeCapturedRead :: (Blobs.BlobStorage :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
+  => CompiledProgram -> CheckedValue -> CheckedContract -> CurrentEvidence -> CheckedContract
   -> Eff es (Either [Diagnostic] (Either FetchError Value))
-executeCapturedRead program (CheckedValue _ arguments) current result = do
-  output <- conversation decodeFrame program (initialInput arguments) (answerEvidence (Just current))
+executeCapturedRead program (CheckedValue _ arguments) payload current@(CurrentEvidence (EvidenceSnapshotRef instanceRef _ _) items _) result = do
+  refs <- either protocolFailure pure (concat <$> traverse (blobReferences (rootType payload))
+    [value | (_,Evidence _ _ (Available (CheckedValue _ value))) <- items])
+  output <- conversationWithBody (\(Frame bytes body) -> if Bytes.null body then decodeFrame bytes else Left "Unexpected raw body")
+    program (initialInput arguments) $ \call -> case call of
+      ReadBlob ref | ref `elem` refs -> do
+        bytes <- Blobs.readBlobAt instanceRef ref
+        pure $ either (\(FetchError message) -> (failure (Text.unpack message),Bytes.empty))
+          (\raw -> (success (object []),raw)) bytes
+      ReadBlob _ -> pure (failure "Blob reference is not in this captured input",Bytes.empty)
+      _ -> (,Bytes.empty) <$> answerEvidence (Just current) call
   case output of
     Left problem -> pure (Right (Left problem))
     Right value -> fmap (fmap (const (Right value))) (encodeValue (contractShape result) value)

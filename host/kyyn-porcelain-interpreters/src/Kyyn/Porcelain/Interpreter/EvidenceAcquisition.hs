@@ -19,12 +19,13 @@ import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Porcelain.Protocol.PluginHost (executeAcquisition)
 import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage, withBlobDownloads)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
 import Kyyn.Plumbing.Protocol.PluginMessages (changesShape, parseChanges)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
-runEvidenceAcquisition :: (Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
+runEvidenceAcquisition :: (BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => Eff (EvidenceAcquisition : es) a -> Eff es a
 runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
@@ -46,20 +47,21 @@ runEvidenceAcquisition = interpret $ \_ (FetchEvidence instanceRef package paylo
           maybe (object ["tag" .= ("None" :: String)])
             (\(CheckedValue _ value) -> object ["tag" .= ("Some" :: String),"value" .= value])
             (case mode of ContinueSync -> position; RestartSync -> Nothing)]
-  result <- ExceptT (executeAcquisition program input prior)
-  (delta,savedPosition) <- case positionContract of
-    Nothing -> do
-      _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
-      pure (result,Nothing)
-    Just contract -> do
-      _ <- ExceptT (encodeValue (Record [("changes",changesShape (contractShape payload)),
-        ("position",contractShape contract)]) result)
-      (changes,next) <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure
-        (parseEither (withObject "fetch result" $ \fields -> (,) <$> fields .: "changes" <*> fields .: "position") result)
-      pure (changes,Just (contract,CheckedValue (contractId contract) next))
-  changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload delta)
-  ExceptT (fmap (either (Left . problem) Right)
-    (Store.publishFetchWithPosition instanceRef producer payload base optionsText changes savedPosition))
+  ExceptT $ withBlobDownloads instanceRef (Store.discardFetchBlobs instanceRef base) $ runExceptT $ do
+    result <- ExceptT (executeAcquisition instanceRef program input prior)
+    (delta,savedPosition) <- case positionContract of
+      Nothing -> do
+        _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
+        pure (result,Nothing)
+      Just contract -> do
+        _ <- ExceptT (encodeValue (Record [("changes",changesShape (contractShape payload)),
+          ("position",contractShape contract)]) result)
+        (changes,next) <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure
+          (parseEither (withObject "fetch result" $ \fields -> (,) <$> fields .: "changes" <*> fields .: "position") result)
+        pure (changes,Just (contract,CheckedValue (contractId contract) next))
+    changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload delta)
+    ExceptT (fmap (either (Left . problem) Right)
+      (Store.publishFetchWithPosition instanceRef producer payload base optionsText changes savedPosition))
 
 problem :: EvidenceProblem -> [Diagnostic]
 problem failure = [evidenceProblemDiagnostic failure]

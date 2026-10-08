@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeApplications, LambdaCase #-}
-module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram) where
+module Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram, executeToolProgramCaptured) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value, encode)
@@ -8,8 +8,8 @@ import Data.Coerce (coerce)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Error.Static (runErrorNoCallStack, throwError)
-import Effectful.State.Static.Local (evalState, get, modify)
-import Kyyn.Domain.Contract (contractId)
+import Effectful.State.Static.Local (runState, get, modify)
+import Kyyn.Domain.Contract (CheckedContract, contractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), CurrentEvidence(..), EvidenceSnapshotRef(..), EvidenceProducer(..))
 import Kyyn.Domain.Plugin (pluginNameText, ConnectorName(..), MethodName(..))
@@ -32,8 +32,14 @@ import Kyyn.Porcelain.Protocol.PluginBroker (conversation, protocolFailure, answ
 executeToolProgram :: (PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
   => CompiledProgram -> [PreparedPlugin] -> Maybe ModelConfiguration -> [CurrentEvidence]
   -> Value -> Eff es (Either [Diagnostic] Value)
-executeToolProgram program plugins model captured arguments = runExceptT $ do
-  result <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ evalState [(instanceRef,current) | current@(CurrentEvidence (EvidenceSnapshotRef instanceRef _ _) _ _) <- captured] $
+executeToolProgram program plugins model captured arguments = fmap (fmap fst)
+  (executeToolProgramCaptured program plugins model captured arguments)
+
+executeToolProgramCaptured :: (PluginRead :> es, GuestExecution :> es, Failure :> es, Judgement.Judgement :> es, Model.ModelTurn :> es)
+  => CompiledProgram -> [PreparedPlugin] -> Maybe ModelConfiguration -> [CurrentEvidence]
+  -> Value -> Eff es (Either [Diagnostic] (Value, [(CheckedContract,CurrentEvidence)]))
+executeToolProgramCaptured program plugins model captured arguments = runExceptT $ do
+  (result,contexts) <- ExceptT $ runErrorNoCallStack @[Diagnostic] $ runState @[(ConnectorInstanceRef,(CheckedContract,CurrentEvidence))] [] $
     conversation decodeToolFrame program (Lazy.toStrict (encode arguments)) $ \case
       ToolJudgement request -> Judgement.judge request >>= either protocolFailure pure . Judgement.encodeReply
       ToolModel request -> case model of
@@ -49,7 +55,7 @@ executeToolProgram program plugins model captured arguments = runExceptT $ do
         current <- capture plugin instanceName identity payload
         answerEvidence (Just current) (ReadEvidence "selected" key)
   value <- either (\(FetchError message) -> throwE [errorDiagnostic "tool.failed" (Text.unpack message)]) pure result
-  pure value
+  pure (value,map snd contexts)
   where
     answerPlugin configured plugin kind instanceName methodName value = do
       (identity,payload,methods) <- connector configured plugin kind instanceName
@@ -57,7 +63,7 @@ executeToolProgram program plugins model captured arguments = runExceptT $ do
         [m] -> pure m
         _ -> protocolFailure (pluginNameText plugin ++ "/" ++ coerce instanceName ++ ": no captured method named " ++ coerce methodName)
       current <- capture plugin instanceName identity payload
-      reply <- executeCapturedMethod current method value >>= either throwError pure
+      reply <- executeCapturedMethod payload current method value >>= either throwError pure
       pure (either (\(FetchError message) -> failure (Text.unpack message)) (\(CheckedValue _ resultValue) -> success resultValue) reply)
     connector configured plugin kind instanceName = do
       let label = pluginNameText plugin ++ "/" ++ coerce instanceName
@@ -67,10 +73,12 @@ executeToolProgram program plugins model captured arguments = runExceptT $ do
       pure (identity,payload,methods)
     capture plugin instanceName identity payload = do
       let instanceRef = ConnectorInstanceRef plugin (coerce instanceName)
-      loaded <- lookup instanceRef <$> get @[(ConnectorInstanceRef,CurrentEvidence)]
+      loaded <- lookup instanceRef <$> get @[(ConnectorInstanceRef,(CheckedContract,CurrentEvidence))]
       case loaded of
-        Just current -> pure current
+        Just (_,current) -> pure current
         Nothing -> do
-          current <- loadCapturedInput instanceRef (EvidenceProducer identity (contractId payload)) payload >>= either throwError pure
-          modify ((instanceRef,current):)
+          current <- case [c | c@(CurrentEvidence (EvidenceSnapshotRef selected _ _) _ _) <- captured, selected == instanceRef] of
+            c:_ -> pure c
+            [] -> loadCapturedInput instanceRef (EvidenceProducer identity (contractId payload)) payload >>= either throwError pure
+          modify ((instanceRef,(payload,current)):)
           pure current

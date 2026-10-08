@@ -1,9 +1,10 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, identityCodec, evidenceCodec, changeCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, identityCodec, evidenceCodec, changeCodec, blobCodec) where
 
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 import Kyyn.Types.Plugin
+import Kyyn.Types.Blob
 import Kyyn.Types.Program
 import Kyyn.Runtime.Transport
 import qualified Data.ByteString as B
@@ -40,11 +41,32 @@ fetchResultCodec payloadCodec positionCodec = Codec encode decode
       values <- fields ["changes","position"] value
       FetchResult <$> field "changes" (listCodec (changeCodec payloadCodec)) values <*> field "position" positionCodec values
 
-executeCapturedRead :: Codec arguments -> Codec payload -> Codec result
-  -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload) (Either FetchError result)) -> IO ()
+executeCapturedRead :: forall arguments payload result. Codec arguments -> Codec payload -> Codec result
+  -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload :+: BlobRead) (Either FetchError result)) -> IO ()
 executeCapturedRead argumentCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
   (arguments, snapshot) <- input transport argumentCodec
-  execute transport (eitherCodec resultCodec) (evidenceRequest transport payloadCodec) (selected arguments snapshot)
+  execute transport (eitherCodec resultCodec) (handler transport) (selected arguments snapshot)
+  where
+    handler :: Transport -> Integer -> (EvidenceRead payload :+: BlobRead) a -> IO a
+    handler transport identity (InLeft call) = evidenceRequest transport payloadCodec identity call
+    handler transport identity (InRight (ReadBlob ref)) = do
+      (reply,raw) <- exchangeBody transport identity "blobs" "read" (encodeWith blobCodec ref) B.empty
+      result <- either fail pure (decodeWith (eitherCodec (Codec (const (record [])) (\value -> fields [] value >> Right ()))) reply)
+      case result of
+        Left problem | B.null raw -> pure (Left problem)
+                     | otherwise -> fail "Raw body accompanies failed blob read"
+        Right () -> pure (Right raw)
+
+blobCodec :: Codec BlobRef
+blobCodec = Codec encode decode
+  where
+    encode (BlobRef hash size media name) = record
+      [("sha256",encodeWith textCodec hash),("size",encodeWith integerCodec size),
+       ("mediaType",encodeWith textCodec media),("name",encodeWith (optionalCodec textCodec) name)]
+    decode value = do
+      values <- fields ["sha256","size","mediaType","name"] value
+      BlobRef <$> field "sha256" textCodec values <*> field "size" integerCodec values
+        <*> field "mediaType" textCodec values <*> field "name" (optionalCodec textCodec) values
 
 input :: Transport -> Codec a -> IO (a, EvidenceSnapshot payload)
 input transport codec = do
