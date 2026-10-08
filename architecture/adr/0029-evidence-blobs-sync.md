@@ -53,7 +53,6 @@ data BlobDownload = BlobDownload
   { request :: HttpRequest
   , name :: Maybe Text
   , mediaType :: Maybe Text
-  , maxBytes :: Maybe Integer
   }
 
 data BlobResponse = BlobResponse
@@ -71,9 +70,9 @@ storeBlob :: BlobDownload
 
 The native interpreter streams the response into a temporary file while hashing
 and counting it. It makes a complete blob available only after successful stream
-completion; truncation, cancellation, disk failure and an exceeded requested limit
-return failure without a usable reference. `maxBytes` is the connector's explicit
-download policy, not a universal schema-bound system. The request can supply known
+completion; truncated transfers, cancellation and disk failure return failure
+without a usable reference. There is no download-size or media-type exclusion
+policy. The request can supply known
 attachment metadata; omitted metadata uses response headers/defaults.
 
 Completed successful HTTP responses return a blob, including zero-byte content.
@@ -122,48 +121,37 @@ return BlobRefs when a caller needs the file rather than its interpreted content
 Successful fetch publication checks that every resulting reference resolves to a
 complete blob in that instance. Blobs must exist before the atomic state-document
 replacement, so readers cannot observe published references to incomplete files.
-Evidence, change markers and sync position commit together under the existing
+Evidence, latest-fetch summary and sync position commit together under the existing
 expected-fetch check. Failure leaves that document unchanged.
 
 After publication, reclaim bytes no longer referenced by Available payloads in
 latest evidence. Truncated payloads retain evidence metadata but no BlobRefs;
-their former bytes are reclaimed unless another available item or active invocation
-still needs them. Source references/fingerprints do not retain bytes. Also
-reclaim temporary/unpublished downloads after failure or cancellation. In-flight
-captured readers and concurrent acquisitions keep their required bytes alive
-until their scoped use ends; cleanup cannot race them, including across local
-Kyyn processes. Interrupted cleanup may leave garbage, never dangling published
-references. Subsequent cleanup removes abandoned work after establishing it is
-not active. Native scoped lifetime handling belongs beneath the plumbing effect,
-not in plugin code or a public durable-session API.
+their former bytes are reclaimed unless another available item still references
+them. External references, fingerprints, citations and recipe state do not retain
+bytes. Clean up temporary/unpublished downloads after failure or cancellation
+without removing bytes referenced by the prior published evidence document.
+Interrupted cleanup may leave garbage for a subsequent cleanup.
 
-The host boundary makes instance and lifetime explicit. These signatures omit
-private paths and lock implementation, not the required scoped ownership:
+Assume non-overlapping tool use for blob lifetime. Reading while another operation
+reclaims or clears the same instance's bytes has undefined behavior; there are no
+reader leases, pin registry, cross-process lifetime coordination or guarantee that
+an old invocation remains readable after refresh. This does not weaken complete
+download-before-publication or the existing expected-fetch publication check.
+
+The host boundary makes the owning instance explicit. The porcelain checks
+reachability against the invocation's captured evidence before invoking reads;
+the plumbing interpreter owns storage mechanics, not a durable read session:
 
 ```haskell
-data BlobScope -- host-only lifetime of one instance's active capture/acquisition
-
-withBlobScope
-  :: BlobStorage :> es
-  => ConnectorInstanceRef -> [BlobRef] -> (BlobScope -> Eff es a) -> Eff es a
-
 storeBlobAt
   :: BlobStorage :> es
-  => BlobScope -> BlobDownload -> Eff es (Either FetchError BlobResponse)
+  => ConnectorInstanceRef -> BlobDownload -> Eff es (Either FetchError BlobResponse)
 
 readBlobAt
   :: BlobStorage :> es
-  => BlobScope -> BlobRef -> Eff es (Either FetchError ByteString)
+  => ConnectorInstanceRef -> BlobRef -> Eff es (Either FetchError ByteString)
 ```
 
-Opening a capture and protecting its references must be coordinated with
-publication/cleanup; a scope cannot be acquired after its bytes were reclaimed.
-The new scope also protects downloads until publication/failure has resolved.
-The porcelain composes this boundary with EvidenceStore; its IO interpreter
-owns the filesystem/resource mechanics.
-
-Neither citations nor recipe state retain evidence-store blobs. Retaining bytes
-briefly for an active invocation is not offering historical fetch selection.
 Clearing an instance clears its blobs along with its evidence and sync position.
 Payload truncation/restoration follows ADR 0014 and is not a source-removal event.
 
@@ -230,15 +218,16 @@ positions have different owners and must not advance each other.
 
 Exercise the same generated guest API under GHC and MicroHs. Verify binary and
 large-text downloads without bytes in guest download replies, zero-byte content,
-status/header preservation, retry/cancellation, actual-size limits and UTF-8 failure.
+status/header preservation, retry/cancellation and UTF-8 failure.
 Check reference discovery through nested contracts, hash/size integrity and refusal
 of references outside the captured instance. A KB helper composing two plugin
 reads must expose the correct local files without granting it acquisition.
 
-Race publication, failed acquisition and blob reads across processes. Verify old
-invocations remain readable, new invocations see latest, and cleanup removes
-unreferenced/abandoned bytes without retaining history. Test surface file usability
-after method return and explicit instance clearing.
+Verify complete blobs precede publication, failed acquisition preserves prior
+evidence and its blobs, and sequential refresh/cleanup removes unreferenced bytes
+without retaining history. Test surface file usability after method return until
+refresh or explicit instance clearing. Concurrent read/reclamation behavior is
+not a supported guarantee or a verification requirement.
 
 Check positions across empty batches, pagination failure, local base conflict,
 restart and producer changes. A cursor must never describe changes that were not
@@ -249,4 +238,4 @@ Verify new/updated evidence with Truncated payloads, same-fingerprint restoratio
 and truncation independently of recipe processing. Truncation releases blobs
 without changing evidence fingerprints or recipe state; explicit source removal
 still removes the entry. Check that shared blobs survive until their final Available
-reference and active invocation are released.
+reference is removed.
