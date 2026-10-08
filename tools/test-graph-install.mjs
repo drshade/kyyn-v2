@@ -1,5 +1,6 @@
 // Install actual Graph source, discover contracts, accept configuration and check
-// RSVP payload discovery and missing-secret failures. No live provider requests.
+// RSVP payload discovery, shared delegated scope validation and missing-secret
+// failures. No live provider requests.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -42,7 +43,7 @@ try {
   const configPath = path.join(draft.path, 'target/plugins/config/microsoft-graph.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `(let Auth = < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
-    | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text } >
+    | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text, scopes : List Text } >
     let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
@@ -64,6 +65,20 @@ try {
     const result = cli(args, 1);
     assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
   }
+  const delegated = cli(['evolution', 'new', 'delegated-scopes']).result;
+  const delegatedPath = path.join(delegated.path, 'target/plugins/config/microsoft-graph.dhall');
+  const applicationConfig = fs.readFileSync(delegatedPath, 'utf8');
+  function delegatedConfig(scopes) {
+    return applicationConfig.replace(
+      'Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }',
+      `Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-graph-secret", scopes = ${scopes} }`
+    ).replace('sharedCalendar = False', 'sharedCalendar = True');
+  }
+  fs.writeFileSync(delegatedPath, delegatedConfig('[ "Calendars.Read", "Mail.Read" ]'));
+  const missingScope = cli(['evolution', 'check', delegated.id], 1);
+  assert.match(JSON.stringify(missingScope), /Calendars.Read.Shared/);
+  fs.writeFileSync(delegatedPath, delegatedConfig('[ "https://graph.microsoft.com/Calendars.Read.Shared", "Mail.Read" ]'));
+  cli(['evolution', 'check', delegated.id]);
   assert.equal(git(kb, 'rev-parse', 'HEAD'), head);
   console.log('Installed Graph plugin: schema, validation, acceptance, method discovery and missing-secret paths passed (no provider calls).');
 } finally {

@@ -31,7 +31,7 @@ printed by `evolution new`. Use the discovered schema to check this configuratio
 ```dhall
 let Auth =
       < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
-      | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text }
+      | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text, scopes : List Text }
       >
 let Connector =
       < Calendar :
@@ -45,6 +45,7 @@ in [ { name = "work"
              { tenant = "YOUR-TENANT-ID"
              , clientId = "YOUR-APP-CLIENT-ID"
              , tokenKey = "graph-work-refresh"
+             , scopes = [ "Calendars.Read" ]
              }
          , mailbox = "you@example.com"
          , calendarId = None Text
@@ -82,9 +83,17 @@ kyyn-v2 --kb /path/to/kb plugin connector login microsoft-graph work
 Follow the displayed Microsoft sign-in instructions. The refresh token is saved
 under `tokenKey` in this KB's ignored local secret store. Fetch refreshes the access
 token and persists any replacement refresh token. It never starts an interactive
-login. `sharedCalendar = True` requests `Calendars.Read.Shared` instead; the signed-in
-user must also have access to the configured mailbox/calendar. Changing delegated
-scope requires running login again.
+login. Both login and refresh request the whole configured `scopes` list, plus
+`offline_access`. Use the same tenant, client ID, token key and scope list across
+instances that share a login. For example, `[ "Calendars.Read", "Mail.Read" ]`
+requests consent for Calendar and Mail together; no additional permissions are
+requested automatically. Scopes may be short names or Graph-qualified names
+such as `https://graph.microsoft.com/Calendars.Read`.
+
+`sharedCalendar = True` requires `Calendars.Read.Shared` in that list; the signed-in
+user must also have access to the configured mailbox/calendar. Adding delegated
+scopes requires running login again. Calendar configuration checks its required
+scope without checking remote consent.
 `sharedCalendar` only affects delegated DeviceCode authentication; ClientSecret
 uses the application's consented permissions.
 

@@ -5,7 +5,7 @@ module MicrosoftGraph.Types where
 import Data.Text (Text)
 data GraphAuth
   = ClientSecret { tenant :: Text, clientId :: Text, secretKey :: Text }
-  | DeviceCode { tenant :: Text, clientId :: Text, tokenKey :: Text }
+  | DeviceCode { tenant :: Text, clientId :: Text, tokenKey :: Text, scopes :: [Text] }
   deriving (Eq, Show)
 
 data CalendarConfig = CalendarConfig
