@@ -38,8 +38,10 @@ kyyn-v2 --kb /path/to/my-kb root show
 
 `--kb` defaults to the current directory. The KB may be a subdirectory of a
 larger Git repository, and one repository may contain several KBs. Use
-`--json` before the command for structured results. `--help` works at every
-command level; `--runtime DIRECTORY` and `--git EXECUTABLE` are optional overrides.
+`--json` for structured results; global options can appear before or after
+subcommands and their arguments. Dhall remains the default for typed values.
+`--help` works at every command level; `--runtime DIRECTORY` and
+`--git EXECUTABLE` are optional overrides.
 
 Initialization creates and commits an empty root using your configured Git
 identity and initial-branch preference. Configure `user.name` and

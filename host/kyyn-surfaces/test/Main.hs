@@ -35,6 +35,19 @@ main = do
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
+  let evidenceArgs = ["evidence","show","local-file","sales","notes.txt"]
+      methodArgs = ["plugin","connector","method","show","local-file","sales","content"]
+  forM_ [(evidenceArgs, Evidence (ShowCurrentEvidence localFile sales (EvidenceId "notes.txt"))),
+         (methodArgs, Plugin (Connector (ShowConnectorMethod localFile sales content Nothing)))] $ \(args,cmd) ->
+    forM_ [0 .. length args] $ \position ->
+      succeeds (take position args ++ ["--json"] ++ drop position args)
+        (Invocation selected Json cmd)
+  succeeds ["root","--kb","nested/kb","show","--git","/bin/git","--runtime","/opt/kyyn","--json"]
+    (Invocation (Selection "nested/kb" (Just "/bin/git") (Just "/opt/kyyn")) Json (Root ShowRoot))
+  succeeds ["root","tool","execute","content","--input=--json"]
+    (Invocation selected Human (Root (RootTool (ExecuteTool content "--json"))))
+  succeeds ["evidence","show","local-file","sales","--","--json"]
+    (Invocation selected Human (Evidence (ShowCurrentEvidence localFile sales (EvidenceId "--json"))))
   succeeds ["root","schema","list"] (Invocation selected Human (Root (RootSchema (ListSchemas Nothing))))
   succeeds ["root","schema","show","Todos.Root","--evolution","abc123"]
     (Invocation selected Human (Root (RootSchema (ShowSchema "Todos.Root" (Just identity)))))
