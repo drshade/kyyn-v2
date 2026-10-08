@@ -7,6 +7,7 @@ import Kyyn.Composition.Runtime
 import Kyyn.Composition.Timings
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
+import Kyyn.Composition.Queries (dispatchQueries)
 import Kyyn.Composition.RootBrowsing (dispatchSchema, dispatchCollection, dispatchFacts)
 import Kyyn.Composition.Recipes (dispatchRecipes)
 import Kyyn.Composition.Secrets (executeSecrets)
@@ -283,6 +284,7 @@ dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
   Cli.RootSchema command -> dispatchSchema host command selected
   Cli.RootCollection command -> dispatchCollection host command selected
   Cli.RootFact command -> dispatchFacts host command selected
+  Cli.RootQuery command -> dispatchQueries host command selected
   Cli.RootTool command -> dispatchTools host command selected
   Cli.RootRecipe command -> dispatchRecipes host command selected
   Cli.ShowRoot -> withRoot (inspectionCheckResult revision <$> Root.inspectRootAt kb revision)

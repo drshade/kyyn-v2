@@ -35,6 +35,11 @@ main = do
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
+  succeeds ["root","query","list"] (Invocation selected Human (Root (RootQuery ListQueries)))
+  succeeds ["root","query","show","history"] (Invocation selected Human (Root (RootQuery (ShowQuery "history"))))
+  succeeds ["root","query","execute","history"] (Invocation selected Human (Root (RootQuery (ExecuteQuery "history" Nothing))))
+  succeeds ["root","query","execute","history","--input","{=}","--json"]
+    (Invocation selected Json (Root (RootQuery (ExecuteQuery "history" (Just "{=}")))))
   let evidenceArgs = ["evidence","show","local-file","sales","notes.txt"]
       methodArgs = ["plugin","connector","method","show","local-file","sales","content"]
   forM_ [(evidenceArgs, Evidence (ShowCurrentEvidence localFile sales (EvidenceId "notes.txt"))),

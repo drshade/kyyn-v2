@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
-  'kyyn-surfaces': ['Kyyn.Domain.Blob', 'Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Recipe', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+  'kyyn-surfaces': ['Kyyn.Domain.Query', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Recipe', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
     'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Secret',
     'Kyyn.Domain.Plugin', 'Kyyn.Domain.Tap',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
@@ -12,7 +12,7 @@ const allowed = {
     'Kyyn.Domain.EvolutionReport', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Path', 'Kyyn.Domain.Publication',
     'Kyyn.Domain.Root', 'Kyyn.Domain.Workspace', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Types.Fact',
     'Kyyn.Porcelain.Validated'],
-  'kyyn': ['Kyyn.Plumbing.Interpreter.ContentDigest', 'Kyyn.Plumbing.Interpreter.BlobStorage', 'Kyyn.Plumbing.Capability.BlobStorage', 'Kyyn.Plumbing.Interpreter.ModelTurn', 'Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
+  'kyyn': ['Kyyn.Domain.Query', 'Kyyn.Composition.Queries', 'Kyyn.Surfaces.Queries', 'Kyyn.Porcelain.Capability.Validation', 'Kyyn.Plumbing.Interpreter.ContentDigest', 'Kyyn.Plumbing.Interpreter.BlobStorage', 'Kyyn.Plumbing.Capability.BlobStorage', 'Kyyn.Plumbing.Interpreter.ModelTurn', 'Kyyn.Composition.Recipes', 'Kyyn.Surfaces.Recipes', 'Kyyn.Porcelain.Capability.Recipe', 'Kyyn.Porcelain.Capability.RecipeStore', 'Kyyn.Porcelain.Interpreter.RecipeStore', 'Kyyn.Plumbing.Capability.DocumentPersistence', 'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Plumbing.Interpreter.DocumentPersistence','Control.Applicative', 'Control.Monad.Trans.Except', 'Control.Monad.IO.Class',
     'Kyyn.Build', 'Kyyn.MicroHs.Interpreter.InspectionCache', 'Kyyn.Composition.Timings', 'Kyyn.MicroHs.Timing', 'Data.IORef', 'GHC.Clock', 'Effectful.Dispatch.Dynamic', 'Effectful.Exception', 'Kyyn.Domain.CompiledProgram',
     'Kyyn.Composition.Secrets', 'Kyyn.Domain.Secret', 'Kyyn.Plumbing.Capability.SecretStore',
     'Kyyn.Plumbing.Interpreter.SecretStore', 'Kyyn.Plumbing.Interpreter.HttpTransport', 'Kyyn.Plumbing.Interpreter.PluginInteraction', 'Kyyn.Porcelain.Interpreter.PluginLogin', 'Kyyn.Plumbing.Interpreter.Judgement', 'Control.Exception', 'Data.Aeson', 'Data.ByteString.Char8', 'Data.Text.Encoding', 'System.IO',
