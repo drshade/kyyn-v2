@@ -228,6 +228,10 @@ Errors (render refuses):
 Warnings:
 
 - a lane is behind the evidence
+- a `replace` whose superseded node has no `ended`, or an `ended.by` naming a
+  different node; an `ended.by` node that does not list the ended node in its
+  `supersedes`
+- a `realised.seq` beyond the last step
 - a node's seq is not a step that changed its ADR
 - a realisation is dated inconsistently with its `how`
 - a replacement is not named
@@ -240,8 +244,10 @@ The browser only compares those values with the step being shown, and draws.
 - A node is **live** from its `seq` until the earliest of its `ended.seq` and
   the seq of any node that supersedes it.
 - It counts as **realised** from `same_step` (its own seq) or `later_step` and
-  `code_first` (`max(seq, realised.seq)`), but only if that happens while it is
-  live. A node never turns back from realised to specified.
+  `code_first` (`max(seq, realised.seq)`), provided that is no later than the
+  step at which it stops being live. A decision implemented by the same step
+  that supersedes it still counts as delivered. A node never turns back from
+  realised to specified.
 - **Tracks:** a successor takes its predecessor's row when that predecessor has
   just stopped being live. Otherwise it takes the free row nearest its
   predecessor. Rows never overlap in time.

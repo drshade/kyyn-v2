@@ -54,6 +54,12 @@ main = do
   assert "dangling supersedes accepted" (any (T.isInfixOf "unknown node" . dMessage) errors)
   assert "uncovered step accepted" (any (T.isInfixOf "neither a node seq" . dMessage) errors)
   assert "lane JSON does not round-trip" (decode (encode lane) == Just lane)
+  let warnings l = [dMessage d | d <- checkLane steps adrs "0001.json" l, dSeverity d == Warning]
+      unended = lane { laneNodes = [a { nodeEnded = Nothing }, b, c] }
+      future = lane { laneNodes = [a { nodeRealised = Realised LaterStep (Just 99) "" }, b, c] }
+  assert "replace without ended not warned" (any (T.isInfixOf "which has no ended") (warnings unended))
+  assert "realised beyond last step not warned" (any (T.isInfixOf "beyond the last step") (warnings future))
+  assert "consistent lane warned" (null (warnings lane { laneNodes = [a { nodeEnded = Just (Ended 5 Replaced (Just "0001.02")) }, b, c] }))
 
   let props = stdArgs { maxSuccess = 300, chatty = False }
       prop name p = quickCheckWithResult props p >>= \r -> case r of

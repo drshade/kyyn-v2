@@ -637,7 +637,12 @@
         "seq": 85,
         "evidence": "PR #104 loads current evidence once before guest execution"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0014.61"
+      }
     },
     {
       "id": "0014.27",
@@ -1212,7 +1217,12 @@
         "seq": null,
         "evidence": "No BlobRef in code by end of history; PR #214 explicitly defers blob storage"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0014.60"
+      }
     },
     {
       "id": "0014.49",
@@ -1259,7 +1269,12 @@
         "seq": null,
         "evidence": "microsoft-graph plugin has only Calendar; no MailConfig in code by end of history"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0014.64"
+      }
     },
     {
       "id": "0014.51",
@@ -1304,7 +1319,12 @@
         "seq": null,
         "evidence": "No FilesConfig in code by end of history"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0014.64"
+      }
     },
     {
       "id": "0014.53",
@@ -1492,40 +1512,14 @@
       "id": "0014.60",
       "seq": 164,
       "pr": 212,
-      "summary": "Graph content always downloaded; any download failure fails the whole fetch",
-      "detail": "Mail captures each message once (drafts included) with readable text inline and every byte-backed attachment downloaded, with no size/media skip policy; files content is always a BlobRef. A failed page, hydration or download fails the whole fetch, leaving evidence and position unchanged, and mail retention is independent of recipe state.",
-      "kind": "refine",
-      "supersedes": [
-        "0014.50",
-        "0014.52"
-      ],
-      "sections": [
-        "Decision / Microsoft Graph mail, meeting artifacts and files",
-        "Decision / One current captured value per evidence item"
-      ],
-      "anchors": [
-        "AttachmentContent",
-        "FilePayload"
-      ],
-      "realised": {
-        "how": "unrealised",
-        "seq": null,
-        "evidence": "No Mail or Files connector in code by end of history"
-      },
-      "confidence": "high"
-    },
-    {
-      "id": "0014.61",
-      "seq": 164,
-      "pr": 212,
-      "summary": "Blob references do not pin bytes against concurrent refresh or clear",
-      "detail": "Invocation-local blob reads use the captured context, but references no longer keep bytes alive against a concurrent refresh or clear; ADR 0029 owns blob lifetime, which assumes non-overlapping tool use.",
-      "kind": "refine",
+      "summary": "Captured files and attachments are BlobRefs; mail text is ordinary payload",
+      "detail": "Narrows 0014.48: captured files and attachments use typed BlobRefs under ADR 0029, but mail's readable text body is an ordinary field of its payload rather than a large-text BlobRef. Withdrawing the large-text case makes this a replacement that restates the surviving rule.",
+      "kind": "replace",
       "supersedes": [
         "0014.48"
       ],
       "sections": [
-        "Decision / Atomic refresh and invocation-local reads"
+        "Decision / One current captured value per evidence item"
       ],
       "anchors": [
         "BlobRef"
@@ -1533,9 +1527,103 @@
       "realised": {
         "how": "unrealised",
         "seq": null,
-        "evidence": "No blob storage in code by end of history"
+        "evidence": "No BlobRef in code; blob storage is a later slice (PR #214)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.61",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Invocations read one immutable view; blob references do not pin bytes",
+      "detail": "Each invocation still reads one immutable in-memory view of the latest capture whose lifetime the host owns (the surviving core of 0014.26). The guarantee that refresh must not reclaim bytes an active reader still needs is withdrawn: blob reads use the captured context but do not pin bytes against a concurrent refresh or clear, and ADR 0029 owns blob lifetime.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.26"
+      ],
+      "sections": [
+        "Decision / Atomic refresh and invocation-local reads"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "code_first",
+        "seq": 85,
+        "evidence": "The immutable per-invocation view has existed since PR #104 (seq 85); the blob part is a negative constraint over blob storage that is not built yet"
       },
       "confidence": "medium"
+    },
+    {
+      "id": "0014.62",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Mail captures each message once, drafts included, text inline",
+      "detail": "Refines 0014.50: each message, including drafts, is captured once and its first contents stand even if later edited or sent; readable text lives directly in the payload with no second raw HTML/MIME archive; body and attachments belong to one payload; retentionDays is explicit configuration independent of recipe state and may truncate before any recipe reads it.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.50"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MailFetch",
+        "retentionDays"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No Mail connector in code; the microsoft-graph plugin has only Calendar"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.63",
+      "seq": 164,
+      "pr": 212,
+      "summary": "Files connector content is always a stored BlobRef",
+      "detail": "Refines 0014.52: a captured file's content is always a BlobRef (FileContent and its SkippedFile case are gone from the payload).",
+      "kind": "refine",
+      "supersedes": [
+        "0014.52"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "FilePayload",
+        "BlobRef"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No Files connector in code"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.64",
+      "seq": 164,
+      "pr": 212,
+      "summary": "No download skip policy; any download failure fails the whole fetch",
+      "detail": "Withdraws the size/media-type download policy and Skipped/SkippedFile results from the Mail and Files connectors: byte-backed attachments and file content are always downloaded, and a failed page, hydration or content download fails the whole fetch after applicable retries, publishing neither partial items nor a new sync position.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.50",
+        "0014.52"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "AttachmentContent",
+        "MailFetch"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "No Mail or Files connector in code"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -1625,5 +1713,5 @@
       "note": "Reconciles the invocation view to include the latest FetchSummary while implementing the seq-158 design (realisation evidence for 0014.55-0014.59)."
     }
   ],
-  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Spec ahead of code at end of history: BlobRefs (0014.48, 0014.61) and the Mail, Teams meeting-artifact and SharePoint/OneDrive connectors (0014.50-0014.52, refined by 0014.60 at seq 164) are unrealised; payload availability (0014.47) was realised by PR #214 at seq 166 (cursor), and the sync-position slice (0014.49) by PR #203. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (after the older inference) adds 0014.60 (whole-fetch failure, always-download Graph content) and 0014.61 (blob refs no longer pin bytes)."
+  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Spec ahead of code at end of history: BlobRefs (0014.60) and the Mail, Teams meeting-artifact and SharePoint/OneDrive connectors (0014.51, 0014.62-0014.64) are unrealised; payload availability (0014.47) was realised by PR #214 at seq 166 (cursor), and the sync-position slice (0014.49) by PR #203. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch)."
 }

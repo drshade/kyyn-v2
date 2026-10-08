@@ -47,7 +47,12 @@
         "how": "unrealised",
         "evidence": "No StoreBlob/BlobDownload in code"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0029.09"
+      }
     },
     {
       "id": "0029.03",
@@ -97,7 +102,12 @@
         "how": "unrealised",
         "evidence": "No BlobScope/BlobStorage in code"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 164,
+        "how": "replaced",
+        "by": "0029.10"
+      }
     },
     {
       "id": "0029.05",
@@ -192,9 +202,9 @@
       "id": "0029.09",
       "seq": 164,
       "pr": 212,
-      "summary": "No download-size or media-type exclusion policy for blobs",
-      "detail": "BlobDownload drops maxBytes: there is no connector size limit or media-type skip policy, so a blob is either fully downloaded or the acquisition fails (truncation, cancellation, disk failure) without a usable reference.",
-      "kind": "refine",
+      "summary": "Host-streamed blob downloads with no size or media-type policy",
+      "detail": "Downloads still stream through the host to a hashed temporary file, and only complete downloads yield a reference (the surviving core of 0029.02). BlobDownload drops maxBytes, so there is no connector size limit or media-type skip policy: a download either completes or fails the acquisition.",
+      "kind": "replace",
       "supersedes": [
         "0029.02"
       ],
@@ -216,9 +226,9 @@
       "id": "0029.10",
       "seq": 164,
       "pr": 212,
-      "summary": "Store lock serialises publish and reclaim; no reader pins",
-      "detail": "Completeness check, state replacement and reclamation run under the instance store lock, with reclamation checking current published references. BlobScope and cross-process reader/acquisition protection are dropped: blob lifetime assumes non-overlapping tool use, and concurrent read versus reclaim/clear is undefined.",
-      "kind": "refine",
+      "summary": "Blobs complete before publish; reclaim under store lock, no reader pins",
+      "detail": "Publication still verifies every reference resolves to a complete blob before the atomic state replacement, and unreferenced bytes are still reclaimed (the surviving core of 0029.04), now under the instance store lock. The host-only BlobScope and cross-process reader protection are withdrawn: blob lifetime assumes non-overlapping tool use, and concurrent read versus reclaim or clear is undefined.",
+      "kind": "replace",
       "supersedes": [
         "0029.04"
       ],
@@ -256,5 +266,5 @@
       "note": "Context-section rewording removing curation-model archaeology"
     }
   ],
-  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented: 0029.09 drops the maxBytes download policy (refines 0029.02), and 0029.10 swaps the host-only BlobScope cross-process lifetime for a store lock around publish/reclaim plus an explicit non-overlapping-use assumption (refines 0029.04). 0029.10 was judged a refine rather than a replace because complete-before-publication and reclamation of unreferenced bytes carry on; only the reader-protection part is withdrawn, which a reviewer may prefer to read as a replacement. This matches ADR 0014's treatment of the same step (0014.61). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there."
+  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented. Both changes withdraw something an earlier node stated, so they are replacements that restate the surviving core: 0029.09 replaces 0029.02 (no maxBytes or media-type policy), and 0029.10 replaces 0029.04 (BlobScope reader protection withdrawn in favour of a store lock and an explicit non-overlapping-use assumption). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there."
 }

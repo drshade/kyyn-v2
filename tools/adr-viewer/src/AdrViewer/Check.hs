@@ -78,6 +78,14 @@ checkLane steps adrs file lane = concat
                    _ -> []
                | p <- nodeSupersedes n ]
       , realisation n
+      , [ nwarn ("replaces " <> p <> ", which has no ended") | nodeKind n == Replace, p <- nodeSupersedes n
+        , Just o <- [Map.lookup p byId], isNothing (nodeEnded o) ]
+      , [ nwarn ("replaces " <> p <> ", which is ended by " <> b) | nodeKind n == Replace, p <- nodeSupersedes n
+        , Just o <- [Map.lookup p byId], Just e <- [nodeEnded o], Just b <- [endedBy e], b /= nodeId n
+        , maybe True ((/= Replace) . nodeKind) (Map.lookup b byId) || p `notElem` maybe [] nodeSupersedes (Map.lookup b byId) ]
+      , [ nwarn ("ended by " <> b <> ", which does not list it in supersedes") | Just e <- [nodeEnded n], Just b <- [endedBy e]
+        , Just o <- [Map.lookup b byId], nodeId n `notElem` nodeSupersedes o ]
+      , [ nwarn ("realised.seq " <> tshow s <> " is beyond the last step") | Just s <- [realisedSeq (nodeRealised n)], s > lastSeq ]
       , case nodeEnded n of
           Nothing -> []
           Just e -> concat
