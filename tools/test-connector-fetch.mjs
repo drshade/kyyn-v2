@@ -294,15 +294,21 @@ bulk ids = do
   assert.equal(cli(['evidence', 'fetch', 'local-file', 'draft-only'], 1).diagnostics[0].code, 'plugin.instance-unknown');
   const evidenceDirectory = path.join(kb, '.kyyn/evidence');
   const stored = fs.readdirSync(evidenceDirectory, { withFileTypes: true }).filter(entry => entry.isDirectory())
-    .map(entry => fs.readFileSync(path.join(evidenceDirectory, entry.name, 'state.dhall'), 'utf8')).join('\n');
-  assert(!stored.includes('history'), 'Acquisition history was retained');
-  assert(!stored.includes(first), 'First fetch summary was retained');
-  assert(!stored.includes(second), 'Second fetch summary was retained');
-  assert(!stored.includes('Original sales evidence'), 'Superseded payload was retained');
-  assert(!stored.includes('Removed sales evidence'), 'Removed payload was retained');
-  assert(stored.includes('Changed sales evidence'), 'Current evidence was not persisted');
+    .flatMap(entry => {
+      const directory = path.join(evidenceDirectory, entry.name);
+      return [fs.readFileSync(path.join(directory, 'index.dhallb')),
+        ...fs.readdirSync(path.join(directory, 'payloads')).map(name =>
+          fs.readFileSync(path.join(directory, 'payloads', name)))];
+    });
+  const persisted = Buffer.concat(stored);
+  assert(!persisted.includes('history'), 'Acquisition history was retained');
+  assert(!persisted.includes(first), 'First fetch summary was retained');
+  assert(!persisted.includes(second), 'Second fetch summary was retained');
+  assert(!persisted.includes('Original sales evidence'), 'Superseded payload was retained');
+  assert(!persisted.includes('Removed sales evidence'), 'Removed payload was retained');
+  assert(persisted.includes('Changed sales evidence'), 'Current evidence was not persisted');
   fs.unlinkSync(path.join(sales, 'bad.bin'));
-  const salesState = path.join(evidenceDirectory, 'local-file-73616c6573', 'state.dhall');
+  const salesState = path.join(evidenceDirectory, 'local-file-73616c6573', 'index.dhallb');
   fs.writeFileSync(salesState, '{ broken = True }');
   const invalid = cli(['evidence', 'list', 'local-file', 'sales'], 1);
   assert.equal(invalid.diagnostics[0].code, 'evidence.invalid-data');
