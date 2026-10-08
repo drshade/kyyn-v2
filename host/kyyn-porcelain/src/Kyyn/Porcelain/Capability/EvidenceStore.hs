@@ -3,6 +3,7 @@ module Kyyn.Porcelain.Capability.EvidenceStore
   ( EvidenceStore(..), evidenceHead, publishFetch, loadCurrentEvidence
   , clearEvidence, discardFetchBlobs
   , FetchBaseline(..), beginFetch, publishFetchWithPosition
+  , openCurrentEvidence, readCapturedEvidence, publishIndexedFetch
   ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -11,8 +12,14 @@ import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Blob (BlobRef)
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection, EvidenceIndex)
 
 data EvidenceStore :: Effect where
+  OpenCurrentEvidence :: EvidenceSelection -> EvidenceStore m (Either EvidenceProblem (Maybe EvidenceIndex))
+  ReadCapturedEvidence :: EvidenceIndex -> EvidenceId -> EvidenceStore m (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
+  PublishIndexedFetch :: EvidenceSelection -> CheckedContract -> Maybe FetchId -> Maybe String
+    -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue)
+    -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   DiscardFetchBlobs :: ConnectorInstanceRef -> Maybe FetchId -> [BlobRef] -> EvidenceStore m ()
   BeginFetch :: ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe CheckedContract
     -> EvidenceStore m (Either EvidenceProblem FetchBaseline)
@@ -54,3 +61,15 @@ loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidencePr
 loadCurrentEvidence instanceRef producer = send . LoadCurrentEvidence instanceRef producer
 clearEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> Eff es Bool
 clearEvidence = send . ClearEvidence
+
+openCurrentEvidence :: EvidenceStore :> es => EvidenceSelection -> Eff es (Either EvidenceProblem (Maybe EvidenceIndex))
+openCurrentEvidence = send . OpenCurrentEvidence
+
+readCapturedEvidence :: EvidenceStore :> es => EvidenceIndex -> EvidenceId
+  -> Eff es (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
+readCapturedEvidence index = send . ReadCapturedEvidence index
+
+publishIndexedFetch :: EvidenceStore :> es => EvidenceSelection -> CheckedContract -> Maybe FetchId -> Maybe String
+  -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue)
+  -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
+publishIndexedFetch selected contract base options changes = send . PublishIndexedFetch selected contract base options changes

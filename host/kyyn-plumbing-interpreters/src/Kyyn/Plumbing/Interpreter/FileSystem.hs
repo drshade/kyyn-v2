@@ -66,6 +66,18 @@ runFileSystemIO parent = interpret $ \env -> \case
       Left err | isDoesNotExistError err -> pure Nothing
                | otherwise -> ioError err
   CreateUniqueDirectory scope -> native Failure.CreateUniqueDirectory (scopePath scope) (allocateDirectory (scopePath scope))
+  FileSize scope path -> native Failure.InspectEntry (scopedPath scope path) $ do
+    result <- try (Directory.getFileSize (scopedPath scope path))
+    case result of
+      Right size -> pure (Just size)
+      Left err | isDoesNotExistError err -> pure Nothing
+               | otherwise -> ioError err
+  RemoveFile scope path -> native Failure.WriteFile (scopedPath scope path) $ do
+    result <- try (Directory.removeFile (scopedPath scope path))
+    case result of
+      Right () -> pure ()
+      Left err | isDoesNotExistError err -> pure ()
+               | otherwise -> ioError err
   CreateDirectory scope -> native Failure.CreateDirectory (scopePath scope) $ do
     created <- try (Directory.createDirectory (scopePath scope))
     case created of

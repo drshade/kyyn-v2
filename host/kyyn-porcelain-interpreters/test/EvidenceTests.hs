@@ -20,8 +20,9 @@ import Kyyn.Domain.Contract
 import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue, sdkBlobRefType)
 import Kyyn.Domain.DataType (DataType(..), Shape(..))
 import Kyyn.Domain.Evidence
-import Kyyn.Domain.Path (DirectoryScope, directoryScope)
-import Kyyn.Domain.Plugin (pluginName, PackageIdentity(..))
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), PayloadLocation(..), payloadLocation)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativeName)
+import Kyyn.Domain.Plugin (pluginName, PackageIdentity(..), ConnectorTypeName(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling(..))
@@ -42,6 +43,7 @@ import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Protocol.EvidencePersistence
+import qualified Kyyn.Porcelain.Protocol.EvidenceIndex as Index
 import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectory, doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -95,6 +97,8 @@ availabilityProof = withSystemTempDirectory "kyyn-payload-" $ \directory -> do
 
 main :: IO ()
 main = do
+  selectiveIndexProof
+  indexedPublicationProof
   recordingProof
   positionProof
   availabilityProof
@@ -391,3 +395,61 @@ noBlobs = interpret $ \_ operation -> case operation of
   CheckBlobsAt _ [] -> pure (Right ())
   ReclaimBlobsAt _ [] -> pure ()
   _ -> error "Non-blob fixture requested blob IO"
+
+selection :: EvidenceSelection
+selection = EvidenceSelection instanceA (ConnectorTypeName "Folder") (PackageIdentity "package-contents-one")
+
+selectiveIndexProof :: IO ()
+selectiveIndexProof = do
+  let payload = "\"selected payload\""
+      location@(PayloadLocation hash _ _) = payloadLocation payload []
+      wanted = "payloads/" ++ Text.unpack hash ++ ".dhall"
+      summary = FetchSummary (FetchId "indexed") "2026-10-08T00:00:00Z" 3 0 0 Nothing
+      document = Index.IndexDocument (PackageIdentity "package-contents-one") (ConnectorTypeName "Folder") contract
+        (EvidenceState summary
+          [(itemA,Evidence (EvidenceFingerprint "one") [] (Available location))
+          ,(itemB,Evidence (EvidenceFingerprint "two") [] (Available (PayloadLocation (Text.replicate 64 "b") 900 [])))
+          ,(EvidenceId "truncated",Evidence (EvidenceFingerprint "three") [] Truncated)]) Nothing
+      scope = either error id (directoryScope "/recording-kb")
+      files = interpret $ \_ operation -> case operation of
+        ReadOptionalBytes _ path -> do
+          State.modify @Recording (\(stored,trace) -> (stored,trace ++ [relativeName path]))
+          pure (Just (if relativeName path == wanted then payload else "corrupt unrelated payload"))
+        _ -> error "Index inspection requested unexpected filesystem work"
+  bytes <- right (runPureEff (runDhallHandling (Index.encodeIndex document)))
+  let (result,(_,trace)) = runPureEff . State.runState ((Just bytes,[]) :: Recording) . runFailure . files
+        . runDhallHandling . recordDocuments . noBlobs . runEvidenceStore scope $ do
+          opened <- openCurrentEvidence selection
+          case opened of
+            Right (Just index) -> do
+              selected <- readCapturedEvidence index itemA
+              missing <- readCapturedEvidence index (EvidenceId "absent")
+              truncated <- readCapturedEvidence index (EvidenceId "truncated")
+              pure (selected,missing,truncated)
+            _ -> error "Cannot open test index"
+  (selected,missing,truncated) <- right result
+  assert "selected payload did not decode" (selected == Right (Just (Evidence (EvidenceFingerprint "one") []
+    (Available (CheckedValue (contractId contract) (String "selected payload"))))))
+  assert "missing evidence not absent" (missing == Right Nothing)
+  assert "truncated evidence lost metadata" (truncated == Right (Just (Evidence (EvidenceFingerprint "three") [] Truncated)))
+  assert "index read more than selected payload" (trace == ["read",wanted])
+
+indexedPublicationProof :: IO ()
+indexedPublicationProof = withSystemTempDirectory "kyyn-index-publication-" $ \directory -> do
+  scope <- right (directoryScope directory)
+  let publish base changes = execute scope (publishIndexedFetch selection contract base Nothing changes Nothing)
+      open = execute scope (openCurrentEvidence selection) >>= right >>= maybe (fail "Missing index") pure
+      payloadDirectory = directory </> ".kyyn/evidence" </> instancePath instanceA </> "payloads"
+  first <- publish Nothing [NewEvidence itemA (value "first"),NewEvidence itemB (value "second")] >>= right
+  conflict <- publish Nothing [UpdatedEvidence itemA (value "conflict")]
+  assert "indexed publication ignored expected fetch" (conflict == Left BaseSnapshotConflict)
+  names <- listDirectory payloadDirectory
+  assert "failed CAS wrote payload" (length names == 2)
+  second <- publish (Just (key first)) [SetEvidencePayload itemB (EvidenceFingerprint "second") Truncated] >>= right
+  remaining <- listDirectory payloadDirectory
+  assert "truncation did not reclaim payload" (length remaining == 1)
+  index <- open
+  selected <- execute scope (readCapturedEvidence index itemA)
+  assert "unchanged payload not reused" (selected == Right (Just (value "first")))
+  _ <- publish (Just (key second)) [RemovedEvidence itemA] >>= right
+  assert "removal did not reclaim payload" . null =<< listDirectory payloadDirectory

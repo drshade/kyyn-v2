@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, replaceTree, readTree, listDirectory, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, replaceTree, readTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -17,6 +17,8 @@ data FileSystem :: Effect where
   ReplaceTree :: DirectoryScope -> DirectoryScope -> RelativePath -> FileTree -> FileSystem m ()
   ReadTree :: DirectoryScope -> FileSystem m FileTree
   ListDirectory :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
+  FileSize :: DirectoryScope -> RelativePath -> FileSystem m (Maybe Integer)
+  RemoveFile :: DirectoryScope -> RelativePath -> FileSystem m ()
   EntryExists :: DirectoryScope -> RelativePath -> FileSystem m Bool
   DirectoryExists :: DirectoryScope -> FileSystem m Bool
   CreateUniqueDirectory :: DirectoryScope -> FileSystem m RelativePath
@@ -50,6 +52,12 @@ readTree = send . ReadTree
 
 listDirectory :: FileSystem :> es => DirectoryScope -> Eff es (Maybe [RelativePath])
 listDirectory = send . ListDirectory
+
+fileSize :: FileSystem :> es => DirectoryScope -> RelativePath -> Eff es (Maybe Integer)
+fileSize scope = send . FileSize scope
+
+removeFile :: FileSystem :> es => DirectoryScope -> RelativePath -> Eff es ()
+removeFile scope = send . RemoveFile scope
 
 entryExists :: FileSystem :> es => DirectoryScope -> RelativePath -> Eff es Bool
 entryExists scope = send . EntryExists scope

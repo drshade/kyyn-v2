@@ -1,11 +1,15 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.EvidenceIndex
   ( EvidenceSelection(..), PayloadLocation(..), EvidenceIndex(..)
-  , indexCapture, indexBlobs, indexState, indexedEvidence
+  , indexCapture, indexBlobs, indexState, indexedEvidence, payloadLocation
   ) where
 
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
+import qualified Data.Text as Text
+import qualified Data.ByteString as Bytes
+import qualified Crypto.Hash.SHA256 as SHA
+import Numeric (showHex)
 import Kyyn.Domain.Blob (BlobRef)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Evidence
@@ -19,6 +23,12 @@ data EvidenceSelection = EvidenceSelection
 data PayloadLocation = PayloadLocation
   { sha256 :: Text, size :: Integer, blobs :: [BlobRef]
   } deriving (Eq, Show)
+
+payloadLocation :: Bytes.ByteString -> [BlobRef] -> PayloadLocation
+payloadLocation bytes = PayloadLocation digest (toInteger (Bytes.length bytes))
+  where
+    digest = Text.pack (concatMap hex (Bytes.unpack (SHA.hash bytes)))
+    hex value = let digits = showHex value "" in replicate (2 - length digits) '0' ++ digits
 
 data EvidenceIndex = EvidenceIndex
   { snapshot :: EvidenceSnapshotRef, latest :: FetchSummary
