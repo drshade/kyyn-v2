@@ -16,7 +16,7 @@ fetch (Config endpoint key localPath) snapshot = do
           local <- readTextFile localPath
           case local of
             Left problem -> pure (Left problem)
-Right (CapturedText suffix _ _) -> do
+            Right (CapturedText suffix _ _) -> do
               waitSeconds 0
               previous <- readEvidence snapshot (EvidenceId "one")
               let combined = contents <> suffix
