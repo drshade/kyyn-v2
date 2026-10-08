@@ -84,7 +84,12 @@ kyyn
     query
       list
       show <name>
-      execute <name>
+      execute <name> [--input <dhall>]
+    output
+      list
+      show <name>
+      preview <name> [--input <dhall>]
+      publish <name> [--input <dhall>] [--options <dhall>]
     tool
       list [--evolution <id>]
       show <name> [--evolution <id>]
@@ -129,11 +134,6 @@ kyyn
     list <plugin> <instance>
     show <plugin> <instance> <id>
     clear <plugin> <instance>
-  output
-    list
-    show <name>
-    prepare <name>
-    publish <name>
   secret
     list
     show <name>
@@ -652,6 +652,16 @@ when the caller wants to update an external output. Refreshing a view or inspect
 a query result never invokes a sink. Renderers may compose multiple queries; the
 generated registration and preparation contract is owned by ADR 0017, not a
 browser-side query graph or a separate UI renderer registry.
+
+Output inspection exposes the query argument/result contracts and the sink's
+options/default/result contracts. CLI `root output preview` uses `--input` for
+query arguments and performs no writes. `root output publish` accepts the same
+query arguments plus separate `--options` for the sink; both are Dhall checked
+against their own contracts. Omitted query input is allowed for a unit argument;
+omitted sink options select the plugin-declared default. MCP and Web expose the
+same separation rather than a single merged parameter object. The host has no
+generic `--path` flag for publishing: destination overrides belong to the selected
+sink's options. ADR 0017 owns execution and path resolution.
 
 ## Alternatives and consequences
 

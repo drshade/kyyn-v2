@@ -57,6 +57,13 @@ unknown entry, unsupported shape, mismatched type or source connector used as a
 sink; matching textual names alone does not establish compatibility.
 The manifest is the registration authority; generated adapters are disposable.
 
+Query is the read-only execution context, not a distinct renderer lifecycle.
+A renderer is itself a query whose result is suitable for a sink. Queries are
+also public typed read interfaces: consumers use their declared result types
+rather than depending on the KB's internal fact layout. Authors can preserve that
+interface while changing storage schemas; Kyyn exposes the checked contract but
+does not introduce contract versioning or automatic compatibility guarantees.
+
 The renderer is an ordinary function in the snapshot-query context. It can combine
 several queries, including dependent calls:
 
@@ -113,7 +120,8 @@ For outputs, the host has a generated structural counterpart of the declaration:
 
 ```haskell
 data OutputDescriptor
-  -- Root-local output name, argument and sink-input contracts, bound sink reference.
+  -- Root-local name, query-argument, sink-input, sink-options and result contracts,
+  -- bound sink reference. Contracts derive from the checked guest declarations.
 
 data PreparedOutput
   -- Checked renderer result and selected sink binding for an invocation.
@@ -164,35 +172,75 @@ resolve the fixed bytes or fail, not read whatever is now at a mutable filename.
 Unknown IDs return Nothing; missing/corrupt bytes for a known artifact are failure.
 No new universal Destination type sits alongside the configured sink binding.
 
+### Query arguments and sink options
+
+Query arguments determine the content. Sink options control delivery for one
+invocation. They have separate plugin/KB-authored types and separate checked
+values; neither is an untyped override map or a host-owned set of file flags.
+The sink's configuration is accepted root data; invocation options do not mutate it.
+The sink declares a typed default for omitted options. An operation without
+options uses the unit type. Inspection exposes both input contracts and the
+default options, so CLI/MCP consumers need not inspect plugin source.
+
+The guest boundary has the following shape (private registration representation
+is omitted):
+
+```haskell
+publish :: Config -> Options -> Input -> Program SinkCalls Result
+defaultOptions :: Options
+```
+
+Config, Options, Input and Result are selected-plugin types. The generated adapter
+checks the renderer result against Input; the host checks query arguments and
+sink options independently before execution. Neither options nor config become
+an extra argument to the renderer. Invalid options must cause no sink invocation.
+
 ### Invoking the sink
 
 Delivery is the host application capability that invokes the prepared sink input
-and retains its outcome. It is not another plugin model or a KB-authored workflow.
+and returns its outcome. It is not another plugin model or a KB-authored workflow.
 The caller explicitly requests this operation after preparation; automation can
 compose the two without an intervening human interaction.
 
 ```haskell
 data Delivery :: Effect where
-  InvokeSink :: PreparedOutput -> Delivery m DeliveryOutcome
-  InspectDelivery :: DeliveryId -> Delivery m (Maybe DeliveryRecord)
+  InvokeSink :: PreparedOutput -> CheckedValue -> Delivery m DeliveryOutcome
+    -- Second argument: separately checked sink options.
 
 runDelivery
-  :: (PluginInvocation :> es, FileSystem :> es, Failure :> es)
+  :: (PluginInvocation :> es, Failure :> es)
   => Eff (Delivery : es) a -> Eff es a
 
 data DeliveryOutcome
-  = Acknowledged DeliveryId DeliveryAcknowledgment
-  | FailedBeforeDispatch DeliveryId Diagnostic
-  | RejectedByDestination DeliveryId Diagnostic
-  | Uncertain DeliveryId Diagnostic
+  = Acknowledged CheckedValue
+  | FailedBeforeDispatch Diagnostic
+  | RejectedByDestination Diagnostic
+  | Uncertain Diagnostic
 ```
 
-Delivery lowers to the existing PluginInvocation boundary and filesystem plumbing
-for its local dispatch/outcome records. PluginInvocation installs the sink's own
+Delivery lowers to the existing PluginInvocation boundary. There is no mandatory
+delivery ledger, dispatch-intent record or delivery ID. PluginInvocation installs the sink's own
 capabilities; the sink describes effects and the native host performs them.
 The first file sink is a first-party plugin using host filesystem capabilities,
 not a parallel native destination API. HTTP/Git sinks use their appropriate host
 capabilities through the same plugin boundary.
+
+The `local-file` plugin supplies the file sink alongside its existing source.
+Its query result is text content; the destination is separate configuration:
+
+```haskell
+data FileConfig = FileConfig { path :: FilePath }
+data FilePublishOptions = FilePublishOptions { pathOverride :: Maybe FilePath }
+type Input = Text
+defaultOptions = FilePublishOptions Nothing
+```
+
+The sink uses pathOverride when supplied, otherwise the configured path. It writes
+UTF-8 text, creates missing parent directories, and replaces the destination using
+a temporary file and atomic rename in the destination directory. No expected-old
+content hash, compare-and-swap, approval token or publication proposal is required.
+Repeated publications replace the file; competing writers are not coordinated.
+Binary files and multi-file output are not part of this contract.
 
 For the file sink, path text is plugin input/configuration, not native IO or a
 host-imported plugin configuration type. The plugin issues a filesystem write
@@ -212,12 +260,12 @@ Verify the selected sink/method and checked input
 contract before dispatch and validate its returned result through the plugin's
 advertised result contract. Unexpected exceptions/protocol loss are not success.
 
-DeliveryRecord identifies the sink operation that was attempted, its dispatch
-state and outcome for later inspection; it does not require retaining a preview
-or its prepared value. Persist dispatch intent before an external action
-can occur. InspectDelivery returns recorded data, never invokes a sink or rerenders;
-Nothing means an unknown ID, not a successful invocation. These are concrete
-external-write outcomes, not a new generic operation registry or approval receipt.
+Publishing is one application action: select the accepted root once, prepare the
+typed value and invoke its sink with checked options. Preview only prepares the
+value and never invokes a sink or creates directories. It is optional, not an
+approval step. Publication need not compare the selected root with a newer head
+before dispatch. Returned results identify the selected root and sink; they do not
+require a persistent receipt or claim exactly-once execution.
 
 Use an accepted snapshot for normal output updates. Explicit candidate export
 for discussion may use a validated candidate, clearly identified as such rather
@@ -233,10 +281,11 @@ do not infer idempotency from its name. Use provider support where available,
 without implementing exactly-once distributed coordination.
 
 A known pre-dispatch failure is not Uncertain. If dispatch may have occurred but
-its result was not recorded, report Uncertain rather than silently retrying or
+its result cannot be established, report Uncertain rather than silently retrying or
 claiming rejection. Failure or cancellation of a sink invocation cannot roll back
-accepted knowledge or undo an external action. Inspect the recorded outcome and
-repair as appropriate. No external-state reconciliation or source-version custody
+accepted knowledge or undo an external action. A process crash may leave no result;
+inspect the destination before retrying a non-idempotent action.
+No external-state reconciliation or source-version custody
 system is implied.
 
 ## Verification
@@ -259,3 +308,10 @@ using changed inputs and verify the newly selected result, not enforced equality
 with an old preview. Test a structured non-file sink input without a universal
 artifact conversion, failed/uncertain invocation, and explicit repeatable file
 replacement. Keep HTML previews isolated from the workbench's privileged origin.
+
+Check query arguments and sink options independently; reject invalid values before
+dispatch. Verify omitted options use the declared default, an override changes
+only that invocation, and relative paths resolve against the KB even from another
+working directory. Prove UTF-8 text output, parent creation, complete replacement,
+and that preview leaves the destination untouched. No retained preview or ledger
+may be required for publishing.

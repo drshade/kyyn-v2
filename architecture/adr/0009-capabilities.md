@@ -40,7 +40,7 @@ Capability boundaries by program context (not a separate permission-role system)
 | Source acquisition method | HTTP/filesystem acquisition, secret read/write, prior evidence snapshot reads | Interactive login, KB acceptance, sink invocation |
 | Explicit connector login | HTTP, secret read/write, user instructions and cancellable waits | Evidence publication, KB acceptance |
 | Captured-evidence plugin method | Typed reads of the selected evidence snapshot; pure interpretation | Live acquisition, secrets, sinks, KB acceptance |
-| Sink connector method | Prepared typed input and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
+| Sink connector method | Prepared typed input, separately typed invocation options and instance config; filesystem/Git/HTTP/Secrets as declared | KB acceptance or implicit curation |
 
 A plugin can export source and sink connectors, but registration and host
 dispatch use the declared capabilities of the selected method. Provider-read
