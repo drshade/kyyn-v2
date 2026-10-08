@@ -3,10 +3,8 @@ module Kyyn.Porcelain.Interpreter.EvidenceInspection (runEvidenceInspection) whe
 
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import qualified Data.ByteString as Bytes
 import Data.Coerce (coerce)
 import qualified Data.Text.Encoding as Text
-import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -16,10 +14,10 @@ import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Git (TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (relativePath, relativeName)
-import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorName(..), pluginNameText, manifestName, entryModule)
+import Kyyn.Domain.Plugin (ConnectorName(..), pluginNameText, manifestName, entryModule)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, inferValue)
 import qualified Kyyn.Plumbing.Capability.Git as Git
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIdentity)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, packageIdentity)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Porcelain.Capability.RootStore (rootLocation)
@@ -42,8 +40,7 @@ runEvidenceInspection = interpret $ \_ request -> case request of
     unless (manifestName manifest == plugin) (throwE [errorDiagnostic "plugin.manifest-name" "Installed plugin manifest name differs from its directory"])
     entry <- checked (relativePath ("src/" ++ map (\c -> if c == '.' then '/' else c) (entryModule manifest) ++ ".hs"))
     source <- checked (guestSources entry (files tree))
-    let identity = PackageIdentity (concatMap (\b -> let digits = showHex b "" in replicate (2 - length digits) '0' ++ digits)
-          (Bytes.unpack (sourceIdentity source)))
+    let identity = packageIdentity source
     configPath <- checked (relativePath (base ++ "config/" ++ label ++ ".dhall"))
     configuration <- ExceptT (Git.readFileAt repository revision configPath) >>= maybe
       (throwE [errorDiagnostic "plugin.instance-unknown" "No instances configured for this plugin"]) pure

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Capability.GuestCompilation.Types
   ( GuestSources, guestSources, sourceFiles, selectedEntry, sourceIdentity
-  , bindingModule ) where
+  , packageIdentity, bindingModule ) where
 
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.ByteString (ByteString)
@@ -12,7 +12,8 @@ import Data.List (sortOn, nub, isPrefixOf, isSuffixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path
-import Kyyn.Domain.Plugin (bindingModule)
+import Kyyn.Domain.Plugin (PackageIdentity(..), bindingModule)
+import Numeric (showHex)
 
 data GuestSources = GuestSources RelativePath [(RelativePath, ByteString)] deriving (Eq, Show)
 
@@ -31,6 +32,10 @@ guestSources entry files
 
 sourceFiles :: GuestSources -> [(RelativePath, ByteString)]
 sourceFiles (GuestSources _ files) = files
+
+packageIdentity :: GuestSources -> PackageIdentity
+packageIdentity = PackageIdentity . concatMap hex . Bytes.unpack . sourceIdentity
+  where hex byte = let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits
 
 selectedEntry :: GuestSources -> RelativePath
 selectedEntry (GuestSources entry _) = entry

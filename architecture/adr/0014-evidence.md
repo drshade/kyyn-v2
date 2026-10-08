@@ -585,11 +585,11 @@ framework for this change. Large-index scaling can be evaluated separately.
 
 Retain one local expected-fetch comparison and one publication point:
 
-1. Check changed payloads and the returned position against their contracts and
+1. Under the existing instance lock, compare the expected fetch ID, then
+   check changed payloads and the returned position against their contracts and
    stage complete new payload files. Derive blob references from the checked values. Reuse
    references for unchanged items; never decode/re-encode their payloads.
-2. Under the existing instance lock, compare the expected fetch ID, apply ordered
-   changes to the current index and check the resulting referenced files/blobs
+2. Still under that lock, apply ordered changes to the current index and check the resulting referenced files/blobs
    are complete. Completeness uses storage metadata, not a full reread/hash of
    every unchanged payload. A conflicting or invalid batch publishes nothing.
 3. Atomically replace `index.dhallb` with the new index. Evidence metadata, payload

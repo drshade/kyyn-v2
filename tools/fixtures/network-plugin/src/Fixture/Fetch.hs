@@ -20,7 +20,7 @@ fetch (Config endpoint key localPath) snapshot = do
               waitSeconds 0
               previous <- readEvidence snapshot (EvidenceId "one")
               let combined = contents <> suffix
-                  evidence = Evidence (EvidenceFingerprint combined) [endpoint,Text.pack localPath] combined
+                  evidence = Evidence (EvidenceFingerprint combined) [endpoint,Text.pack localPath] (Available combined)
               pure $ case previous of
                 Left problem -> Left problem
                 Right Nothing -> Right [NewEvidence (EvidenceId "one") evidence]

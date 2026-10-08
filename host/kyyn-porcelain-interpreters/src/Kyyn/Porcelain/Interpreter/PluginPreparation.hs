@@ -10,7 +10,6 @@ import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub, stripPrefix, isPrefixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (rootType, contractShape, contractId, checkContract)
@@ -25,7 +24,7 @@ import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeCompiledEntry, executeCompiled)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, sourceIdentity)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, packageIdentity)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection, inspectPluginFunction)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
@@ -110,7 +109,7 @@ prepare sdk code = do
         adapter <- checked connectorLabel (loginSources (rootType config) selected sources)
         located (connectorLabel ++ " " ++ selected ++ " (expected Config -> PluginLogin (Either LoginError ()))") (compileGuest adapter)) login
       pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry position)
-    pure (PreparedPackage (manifestName manifest) (PackageIdentity (hex (sourceIdentity captured))) connectors)
+    pure (PreparedPackage (manifestName manifest) (packageIdentity captured) connectors)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]
 configure code packages = do
@@ -151,5 +150,3 @@ checked :: String -> Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked label = either (bad label) pure
 bad :: String -> String -> ExceptT [Diagnostic] (Eff es) a
 bad label message = throwE [errorDiagnostic "plugin.preparation" (label ++ ": " ++ message)]
-hex :: Bytes.ByteString -> String
-hex = concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits) . Bytes.unpack

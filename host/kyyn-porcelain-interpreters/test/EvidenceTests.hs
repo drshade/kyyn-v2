@@ -44,6 +44,7 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import Kyyn.Porcelain.Capability.PluginRead (resolveCapturedBlobs, loadCapturedInput)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, packageIdentity)
 import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -532,6 +533,8 @@ selectionProof = do
       selectionResult = runPureEff . runDhallHandling . git . noStore . runEvidenceInspection $
         Inspection.selectEvidence kb revision plugin (ConnectorName "sales")
   EvidenceSelection ref kind (PackageIdentity identity) <- right selectionResult
+  captured <- right (guestSources source [(manifest,"{ name = \"folder\", entryModule = \"Folder\" }"),(source,"module Folder where\n")])
+  assert "compiler-free selection differs from preparation package identity" (PackageIdentity identity == packageIdentity captured)
   assert "lightweight selection changed connector identity"
     (ref == ConnectorInstanceRef plugin "sales" && kind == ConnectorTypeName "Folder" && length identity == 64)
 

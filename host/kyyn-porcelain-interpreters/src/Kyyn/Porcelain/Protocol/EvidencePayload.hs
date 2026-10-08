@@ -16,6 +16,8 @@ import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, directorySc
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
+import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
+import qualified Kyyn.Domain.Failure as Failure
 import qualified Kyyn.Plumbing.Capability.FileSystem as Files
 import System.FilePath ((</>))
 
@@ -27,7 +29,7 @@ storePayload scope contract (CheckedValue identity value) = runExceptT $ do
   refs <- either (throwE . InvalidEvidence) pure (blobReferences (rootType contract) value)
   let bytes = Text.encodeUtf8 source
       location@(PayloadLocation _ size _) = payloadLocation bytes refs
-      path = payloadPath location
+  path <- either throwE pure (payloadPath location)
   current <- ExceptT (Right <$> Files.fileSize scope path)
   case current of
     Just existing | existing /= size -> throwE (InvalidEvidence "Stored payload size does not match its content address")
@@ -38,7 +40,8 @@ storePayload scope contract (CheckedValue identity value) = runExceptT $ do
 readPayload :: (FileSystem :> es, DhallHandling :> es)
   => DirectoryScope -> CheckedContract -> PayloadLocation -> Eff es (Either EvidenceProblem CheckedValue)
 readPayload scope contract location@(PayloadLocation expectedHash size _) = runExceptT $ do
-  bytes <- ExceptT (Right <$> Files.readOptionalBytes scope (payloadPath location)) >>= maybe
+  path <- either throwE pure (payloadPath location)
+  bytes <- ExceptT (Right <$> Files.readOptionalBytes scope path) >>= maybe
     (throwE (InvalidEvidence "Referenced evidence payload is missing")) pure
   unless (toInteger (Bytes.length bytes) == size) (throwE (InvalidEvidence "Evidence payload byte count changed"))
   let PayloadLocation actualHash _ _ = payloadLocation bytes []
@@ -49,16 +52,20 @@ readPayload scope contract location@(PayloadLocation expectedHash size _) = runE
 
 checkPayloads :: FileSystem :> es => DirectoryScope -> [PayloadLocation] -> Eff es (Either EvidenceProblem ())
 checkPayloads scope locations = runExceptT $ forM_ locations $ \location@(PayloadLocation _ expected _) -> do
-  actual <- ExceptT (Right <$> Files.fileSize scope (payloadPath location))
+  path <- either throwE pure (payloadPath location)
+  actual <- ExceptT (Right <$> Files.fileSize scope path)
   unless (actual == Just expected) (throwE (InvalidEvidence "Referenced evidence payload is missing or incomplete"))
 
-reclaimPayloads :: FileSystem :> es => DirectoryScope -> [PayloadLocation] -> Eff es ()
+reclaimPayloads :: (FileSystem :> es, Failure :> es) => DirectoryScope -> [PayloadLocation] -> Eff es ()
 reclaimPayloads scope locations = do
-  let directory = either error id (directoryScope (scopePath scope </> "payloads"))
+  let path = scopePath scope </> "payloads"
       retained = Set.fromList [Text.unpack hash ++ ".dhall" | PayloadLocation hash _ _ <- locations]
+  directory <- either (raiseFailure . Failure.StorageUnavailable . Failure.StorageDiagnostic Failure.ListDirectory path)
+    pure (directoryScope path)
   names <- Files.listDirectory directory
   forM_ (maybe [] id names) $ \name ->
     unless (relativeName name `Set.member` retained) (Files.removeFile directory name)
 
-payloadPath :: PayloadLocation -> RelativePath
-payloadPath (PayloadLocation hash _ _) = either error id (relativePath ("payloads/" ++ Text.unpack hash ++ ".dhall"))
+payloadPath :: PayloadLocation -> Either EvidenceProblem RelativePath
+payloadPath (PayloadLocation hash _ _) = either (Left . InvalidEvidence) Right
+  (relativePath ("payloads/" ++ Text.unpack hash ++ ".dhall"))
