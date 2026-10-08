@@ -17,6 +17,7 @@ import Effectful (Eff, IOE, runEff, runPureEff, (:>), UnliftStrategy(..))
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
 import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract
+import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue, sdkBlobRefType)
 import Kyyn.Domain.DataType (DataType(..), Shape(..))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Path (DirectoryScope, directoryScope)
@@ -33,10 +34,15 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
+import Kyyn.Porcelain.Capability.PluginRead (resolveCapturedBlobs)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Porcelain.Protocol.EvidencePersistence
-import System.Directory (createDirectory, removeDirectory, doesFileExist, doesDirectoryExist, listDirectory)
+import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectory, doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -63,8 +69,8 @@ itemB = EvidenceId "b.txt"
 value :: String -> Evidence CheckedValue
 value name = Evidence (EvidenceFingerprint (Text.pack name)) [Text.pack ("/source/" ++ name)] (Available (CheckedValue (contractId contract) (String (Text.pack ("payload-only-" ++ name)))))
 
-execute :: DirectoryScope -> Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
-execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope action)))) >>= right
+execute :: DirectoryScope -> Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) action)))) >>= right
 
 key :: EvidenceSnapshotRef -> FetchId
 key (EvidenceSnapshotRef _ _ identity) = identity
@@ -92,6 +98,7 @@ main = do
   recordingProof
   positionProof
   availabilityProof
+  blobPublicationProof
   let first = [NewEvidence itemA (value "old"),NewEvidence itemB (value "removed")]
       second = [UpdatedEvidence itemA (value "new"),RemovedEvidence itemB]
       summary = FetchSummary (FetchId "one") "2026-09-11T00:00:00Z" 2 0 0 Nothing
@@ -144,7 +151,7 @@ main = do
     (runPureEff (headerOnly (decodeState wrongProducer contract bytes)) == Left ProducerContractChanged)
   withSystemTempDirectory "kyyn-evidence-" $ \directory -> do
     scope <- right (directoryScope directory)
-    let run :: Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+    let run :: Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
         run = execute scope
         load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
         listing instanceRef owner = run (runEvidenceInspection (Inspection.currentEvidence instanceRef owner contract))
@@ -254,7 +261,7 @@ main = do
     _ <- load instanceA changedProducer
     createDirectory storePath
     createDirectory statePath
-    failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope (evidenceHead instanceA)))))
+    failedRead <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (evidenceHead instanceA)))))
     assert "storage error became absent evidence" (isLeft failedRead)
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
@@ -264,7 +271,7 @@ main = do
 positionProof :: IO ()
 positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   scope <- right (directoryScope directory)
-  let run :: Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
+  let run :: Eff '[EvidenceStore, BlobStorage, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
       run = execute scope
       cursor label = CheckedValue (contractId contract) (String label)
       begin owner = run (beginFetch instanceA owner contract (Just contract)) >>= right
@@ -335,7 +342,7 @@ recordingProof = do
         ReadOptionalBytes _ _ -> pure (Just "*")
         _ -> error "Semantic publication requested unexpected filesystem work"
       (result,(_,trace)) = runPureEff . State.runState ((Nothing,[]) :: Recording) . runFailure . files
-        . runDhallHandling . recordDocuments . runEvidenceStore scope $ do
+        . runDhallHandling . recordDocuments . noBlobs . runEvidenceStore scope $ do
           first <- publishFetch instanceA producer contract Nothing Nothing [NewEvidence itemA (value "recorded")]
           conflict <- publishFetch instanceA producer contract Nothing Nothing []
           second <- publishFetch instanceA producer contract (Just (FetchId "00000001")) Nothing []
@@ -346,3 +353,41 @@ recordingProof = do
   assert "collision was not redrawn" (second == Right (EvidenceSnapshotRef instanceA producer (FetchId "00000002")))
   assert "conflict wrote or collision reused an ID"
     (trace == ["read","stamp","replace","read","read","stamp","stamp","replace"])
+
+blobPublicationProof :: IO ()
+blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \directory -> do
+  scope <- right (directoryScope directory)
+  payload <- right (checkContract sdkBlobRefType (SchemaMetadata [] [] []))
+  let owner = EvidenceProducer (PackageIdentity "blob-fixture") (contractId payload)
+      ref = BlobRef "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" 0 "application/test" Nothing
+      blobDirectory = directory </> ".kyyn/evidence" </> instancePath instanceA </> "blobs"
+      blobPath = blobDirectory </> "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      item = Evidence (EvidenceFingerprint "same") [] (Available (CheckedValue (contractId payload) (blobValue ref)))
+      publish base changes = execute scope (publishFetch instanceA owner payload base Nothing changes)
+  missing <- publish Nothing [NewEvidence itemA item]
+  assert "dangling blob published" (isLeft missing)
+  assert "failed blob publication advanced head" . (== Right Nothing) =<< execute scope (evidenceHead instanceA)
+  createDirectoryIfMissing True blobDirectory
+  Bytes.writeFile blobPath ""
+  first <- publish Nothing [NewEvidence itemA item,NewEvidence itemB item] >>= right
+  captured <- execute scope (loadCurrentEvidence instanceA owner payload) >>= right >>= maybe (fail "No blob capture") pure
+  let resolve contexts output = execute scope (noGuestExecution (runPluginRead (resolveCapturedBlobs contexts payload output)))
+  resolved <- resolve [(payload,captured)] (blobValue ref) >>= right
+  assert "blob surface lost originating path" (resolved == [ResolvedBlob ref blobPath])
+  assert "forged result resolved without capture" . isLeft =<< resolve [] (blobValue ref)
+  execute scope (discardFetchBlobs instanceA Nothing [ref])
+  assert "changed-head cleanup deleted published bytes" =<< doesFileExist blobPath
+  second <- publish (Just (key first)) [SetEvidencePayload itemA (EvidenceFingerprint "same") Truncated] >>= right
+  assert "truncating one use deleted shared blob" =<< doesFileExist blobPath
+  _ <- publish (Just (key second)) [SetEvidencePayload itemB (EvidenceFingerprint "same") Truncated] >>= right
+  assert "truncated payload retained bytes" . not =<< doesFileExist blobPath
+  assert "old capture resolved reclaimed bytes" . isLeft =<< resolve [(payload,captured)] (blobValue ref)
+
+noGuestExecution :: Eff (GuestExecution : es) a -> Eff es a
+noGuestExecution = interpret $ \_ _ -> error "Blob resolution invoked a guest"
+
+noBlobs :: Eff (BlobStorage : es) a -> Eff es a
+noBlobs = interpret $ \_ operation -> case operation of
+  CheckBlobsAt _ [] -> pure (Right ())
+  ReclaimBlobsAt _ [] -> pure ()
+  _ -> error "Non-blob fixture requested blob IO"

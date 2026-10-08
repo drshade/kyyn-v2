@@ -41,11 +41,12 @@ toolBrokerTests = do
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")
         (EvidenceProducer (PackageIdentity "package") (contractId contract)) (FetchId "captured")
       captured = CurrentEvidence snapshot [(EvidenceId "one",Evidence (EvidenceFingerprint "old") []
-        (CheckedValue (contractId contract) (string "old contents")))] (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing)
+        (Available (CheckedValue (contractId contract) (string "old contents"))))] (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing)
       recordReads :: Eff (PluginRead : es) a -> Eff es (a,Int)
       recordReads = reinterpret (runState (0 :: Int)) $ \_ operation -> case operation of
         LoadCapturedInput {} -> error "Recipe input was reread from latest instead of its pinned capture"
-        ExecuteCapturedMethod actual _ _ -> do
+        ResolveCapturedBlobs {} -> error "Internal broker resolved surface paths"
+        ExecuteCapturedMethod _ actual _ _ -> do
           unless (actual == captured) (error "Captured evidence changed between reads")
           modify @Int (+ 1)
           pure (Right (Right (CheckedValue (contractId contract) (string "old contents"))))

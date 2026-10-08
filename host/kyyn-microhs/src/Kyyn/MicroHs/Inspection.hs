@@ -187,8 +187,8 @@ lowerPluginSignature table kind signature = do
   (row,answer) <- pair "Kyyn.Types.Program.Program" result
   let evidenceRow = apply "Kyyn.Types.Plugin.EvidenceRead" payload
       acquisitionRow = foldr sumType evidenceRow (map named
-        ["Kyyn.Types.PluginHost.Http","Kyyn.Types.PluginHost.Secrets","Kyyn.Types.PluginHost.Waiting","Kyyn.Types.Plugin.FileRead"])
-      expectedRow = case kind of AcquisitionEntry -> acquisitionRow; CapturedReadEntry -> evidenceRow
+        ["Kyyn.Types.PluginHost.Http","Kyyn.Types.PluginHost.Secrets","Kyyn.Types.PluginHost.Waiting","Kyyn.Types.Plugin.FileRead","Kyyn.Types.Blob.BlobAcquisition"])
+      expectedRow = case kind of AcquisitionEntry -> acquisitionRow; CapturedReadEntry -> sumType evidenceRow (named "Kyyn.Types.Blob.BlobRead")
   unless (eqEType row expectedRow) (Left "unsupported capability row or inconsistent payload")
   (problem,value) <- pair "Data.Either.Either" answer
   unless (eqEType problem (named "Kyyn.Types.Plugin.FetchError")) (Left "expected FetchError failure type")

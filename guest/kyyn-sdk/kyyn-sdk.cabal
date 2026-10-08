@@ -13,7 +13,7 @@ library
   other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1, text
+  build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1, text, bytestring
 
 test-suite evolution-core
   type: exitcode-stdio-1.0

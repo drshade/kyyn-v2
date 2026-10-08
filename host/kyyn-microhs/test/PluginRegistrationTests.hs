@@ -44,6 +44,7 @@ import Kyyn.Porcelain.Capability.EvidenceStore (loadCurrentEvidence)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileAcquisition (runFileAcquisitionIO)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -145,7 +146,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
       compileFirstParty (temporary </> "ghc-read") readAdapter
       mapM_ (\(ConfiguredConnector name _ (PreparedConnector {payloadContract = payload, fetchEntry = entry}) config) -> do
         let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-              (runDocumentPersistenceIO $ runEvidenceStore scope (runGuestExecution toolchain (runPluginRead
+              (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runGuestExecution toolchain (runPluginRead
                 (callCapturedMethod (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer producerIdentity (contractId payload)) payload selected value)))))))) >>= right
             arguments key = toJSON (key :: String)
             hasCode expectedCode result = case result of
@@ -154,15 +155,15 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         absent <- invoke identity method (arguments "one.txt")
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-          (runDocumentPersistenceIO $ runEvidenceStore scope (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ runEvidenceAcquisition
+          (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ runEvidenceAcquisition
             (fetchEvidence (ConnectorInstanceRef plugin (coerce name)) identity payload entry config Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
-        current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope
+        current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope)
           (loadCurrentEvidence (ConnectorInstanceRef plugin (coerce name)) (EvidenceProducer identity (contractId payload)) payload))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of
           Just (CurrentEvidence selected items _) -> selected == snapshot && length items == 1
           Nothing -> False)
         result <- invoke identity method (arguments "one.txt") >>= right
-        assert "Content read returned the wrong payload" (result == CheckedValue (contractId output) (toJSON ("one" :: String)))
+        assert "Content read returned the wrong payload" (result == (CheckedValue (contractId output) (toJSON ("one" :: String)),[]))
         missing <- invoke identity method (arguments "missing.txt")
         assert "Missing evidence was not a typed read failure" (hasCode "plugin.read-failed" missing)
         changed <- invoke (PackageIdentity "changed-producer") method (arguments "one.txt")

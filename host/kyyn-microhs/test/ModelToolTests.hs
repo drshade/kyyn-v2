@@ -129,7 +129,7 @@ main = withSystemTempDirectory "kyyn-model-tool-" $ \temporary -> do
         . runGuestExecution toolchain . noReads . noJudgement . handler . runToolExecution $
           executeTool tool (toJSON ("input" :: String))
   (result,turns) <- invoke selected (recording expected) >>= right
-  CheckedValue _ value <- right result
+  (CheckedValue _ value,[]) <- right result
   assert "Wrong final model value" (value == object ["message" .= ("final 雪" :: String)])
   assert "Nested draft/retry didn't stay in the guest" (turns == 4)
   missing <- invoke (withoutModel selected) (recording expected) >>= right
@@ -164,7 +164,9 @@ refusing :: Eff (ModelTurn : es) a -> Eff es (a,Int)
 refusing = reinterpret (runState (0 :: Int)) $ \_ (TakeModelTurn _ _) -> pure (Left ModelRefused)
 
 noReads :: Eff (PluginRead : es) a -> Eff es a
-noReads = interpret $ \_ _ -> error "Model fixture unexpectedly read evidence"
+noReads = interpret $ \_ operation -> case operation of
+  ResolveCapturedBlobs [] _ _ -> pure (Right [])
+  _ -> error "Model fixture unexpectedly read evidence"
 noJudgement :: Eff (Judgement : es) a -> Eff es a
 noJudgement = interpret $ \_ _ -> error "Model fixture unexpectedly requested Judgement"
 

@@ -55,7 +55,41 @@ right = either (fail . show) pure
 main :: IO ()
 main = do
   args <- getArgs
-  if args == ["--network-only"] then networkTests else folderTests >> networkTests
+  if args == ["--network-only"] then networkTests
+  else if args == ["--blobs-only"] then blobTests
+  else folderTests >> networkTests >> blobTests
+
+blobTests :: IO ()
+blobTests = withSystemTempDirectory "kyyn-plugin-blobs-" $ \temporary -> do
+  repo <- getEnv "KYYN_TEST_ROOT"
+  toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
+  compiler <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe (fail "Matching GHC required") pure
+  let path = either error id . relativePath
+      load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
+  common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
+      name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
+    [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
+    [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
+  let ref = object ["sha256" .= replicate 64 'a',"size" .= ("256" :: String),
+        "mediaType" .= ("application/octet-stream" :: String),"name" .= object ["tag" .= ("None" :: String)]]
+      input value = object ["arguments" .= value,"snapshot" .= ("captured" :: String)]
+      handler raw capability method _ = do
+        assert "blob request had unexpected raw body" (Bytes.null raw)
+        case (capability,method) of
+          ("blobs","store") -> pure (success (object ["status" .= ("200" :: String),"headers" .= ([] :: [Value]),
+            "blob" .= object ["tag" .= ("Some" :: String),"value" .= ref]]),Bytes.empty)
+          ("blobs","read") -> pure (success (object []),Bytes.pack [0..255])
+          _ -> fail "Unexpected blob capability"
+  forM_ [("BlobCapture",input (String "https://fixture.test/blob"),success ref,[("blobs","store")]),
+         ("BlobRead",input ref,success (String "binary, not UTF-8"),replicate 2 ("blobs","read"))] $ \(label,argument,expected,expectedTrace) -> do
+    fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin" </> label ++ ".hs")
+    sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
+    (programs,_) <- compileBoth temporary toolchain compiler label sources
+    forM_ programs $ \program -> do
+      (result,trace,status) <- brokerWith Normal handler program argument
+      assert (label ++ " failed") (result == Just expected && trace == expectedTrace && status == ExitSuccess)
+  putStrLn "Blob acquisition metadata and binary captured reads passed under GHC and MicroHs."
 
 folderTests :: IO ()
 folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
@@ -66,7 +100,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
-      name <- ["Evidence","Program","Plugin","PluginHost"]] ++
+      name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
@@ -307,7 +341,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
   let path = either error id . relativePath
       load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
-      name <- ["Evidence","Program","Plugin","PluginHost"]] ++
+      name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
     [load "guest/kyyn-sdk/src" "Kyyn/Plugin/Host.hs"] ++
     [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])

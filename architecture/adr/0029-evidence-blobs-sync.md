@@ -111,8 +111,8 @@ invalid encoding. These are effectful reads with immutable inputs, not Haskell
 `pure` functions or a claim that filesystem failure is impossible.
 
 An explicit byte read may bring the whole blob into guest memory. Private protocol
-adapters use a maintained binary-to-text codec to carry those bytes in the string
-profile of [ADR 0007](0007-wire.md); authors write no base64 or transport code.
+adapters carry those bytes in the raw body section of
+[ADR 0007](0007-wire.md); authors write no base64 or transport code.
 This does not add arbitrary ByteString fields to public schema contracts. Authors
 return BlobRefs when a caller needs the file rather than its interpreted content.
 

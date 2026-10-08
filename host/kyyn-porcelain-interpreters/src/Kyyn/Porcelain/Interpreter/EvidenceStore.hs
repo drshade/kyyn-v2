@@ -1,20 +1,21 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.ByteString as Bytes
-import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
-import Numeric (showHex)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (contractFingerprint)
+import Kyyn.Domain.Contract (contractFingerprint, rootType)
+import Kyyn.Domain.Blob (blobReferences)
+import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Types.Plugin (FetchError(..))
+import qualified Data.Text as Text
+import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.KnowledgeBase (cacheLocation)
 import qualified Kyyn.Domain.Failure as Failure
 import Kyyn.Domain.Path (DirectoryScope, scopePath, relativeName, directoryScope)
-import Kyyn.Domain.Plugin (pluginNameText)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence, DocumentAccess, DocumentStamp(..), withLockedDocument)
 import qualified Kyyn.Plumbing.Capability.DocumentPersistence as Document
@@ -24,9 +25,17 @@ import Kyyn.Porcelain.Capability.EvidenceStore
 import Kyyn.Porcelain.Protocol.EvidencePersistence
 import System.FilePath ((</>))
 
-runEvidenceStore :: forall es a. (DocumentPersistence :> es, Failure :> es, DhallHandling :> es, FileSystem.FileSystem :> es)
+runEvidenceStore :: forall es a. (Blobs.BlobStorage :> es, DocumentPersistence :> es, Failure :> es, DhallHandling :> es, FileSystem.FileSystem :> es)
   => DirectoryScope -> Eff (EvidenceStore : es) a -> Eff es a
 runEvidenceStore kb = interpret $ \_ -> \case
+  DiscardFetchBlobs instanceRef expected created -> locked instanceRef $ do
+    bytes <- Document.readCurrent
+    header <- traverse decodeHeader bytes
+    let current = case header of
+          Nothing -> Right Nothing
+          Just (Right (EvidenceHeader _ _ key)) -> Right (Just key)
+          Just (Left problem) -> Left problem
+    when (current == Right expected) (Blobs.discardBlobsAt instanceRef created)
   BeginFetch instanceRef producer contract positionContract -> locked instanceRef $ runExceptT $ do
     DocumentStamp _ started <- ExceptT (Right <$> Document.freshStamp)
     bytes <- readCurrent
@@ -61,8 +70,13 @@ runEvidenceStore kb = interpret $ \_ -> \case
           (count [() | UpdatedEvidence _ _ <- changes])
           (count [() | RemovedEvidence _ <- changes]) options) next
     encoded <- ExceptT (encodeStateWithPosition producer contract updated position)
+    refs <- either (throwE . InvalidEvidence) pure (concat <$> traverse (blobReferences (rootType contract))
+      [value | (_,Evidence _ _ (Available (CheckedValue _ value))) <- next])
+    ExceptT (fmap (either (\(FetchError message) -> Left (InvalidEvidence (Text.unpack message))) Right)
+      (Blobs.checkBlobsAt instanceRef refs))
     ExceptT $ Right <$> FileSystem.ensureIgnoredDirectory kb cacheLocation
     ExceptT $ Right <$> Document.replaceCurrent encoded
+    ExceptT $ Right <$> Blobs.reclaimBlobsAt instanceRef refs
     pure (EvidenceSnapshotRef instanceRef producer identity)
   LoadCurrentEvidence instanceRef producer contract -> locked instanceRef $ runExceptT $ do
     bytes <- readCurrent
@@ -95,8 +109,3 @@ matches (EvidenceProducer producer contract) (EvidenceHeader stored fingerprint 
 
 readCurrent :: DocumentAccess :> es => Result es (Maybe Bytes.ByteString)
 readCurrent = ExceptT (Right <$> Document.readCurrent)
-
-instancePath :: ConnectorInstanceRef -> FilePath
-instancePath (ConnectorInstanceRef plugin name) = pluginNameText plugin ++ "-" ++
-  concatMap (\byte -> let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits)
-    (Bytes.unpack (Text.encodeUtf8 (Text.pack name)))
