@@ -9,7 +9,7 @@ import Data.List (groupBy, sort, sortOn)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types
-import MicrosoftGraph.Config (scope, window)
+import MicrosoftGraph.Config (window)
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
@@ -18,7 +18,7 @@ import Text.JSON.Types (JSValue(..), fromJSObject)
 fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Event -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition))
 fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition) snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
   (start,end) <- either throwE pure (window config)
-  token <- ExceptT (Auth.accessToken auth (scope config))
+  token <- ExceptT (Auth.accessToken auth)
   let base = "https://graph.microsoft.com/v1.0/users/" <> Json.escape mailbox
       initial = base <> "/calendarView/delta?startDateTime=" <> Json.escape start <> "&endDateTime=" <> Json.escape end
   roundResult <- pages token [] (maybe initial (\(CalendarPosition link) -> link) priorPosition)

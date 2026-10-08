@@ -323,7 +323,8 @@ scaleProvider duplicate = do
 configuration :: Bool -> Value
 configuration device = object ["auth" .= object ["tag" .= (if device then "DeviceCode" else "ClientSecret" :: String),
   "value" .= object (["tenant" .= ("tenant" :: String),"clientId" .= ("client" :: String)] ++
-    [if device then "tokenKey" .= ("refresh" :: String) else "secretKey" .= ("client-secret" :: String)])],
+    (if device then ["tokenKey" .= ("refresh" :: String), "scopes" .= (["Calendars.Read", "Mail.Read"] :: [String])]
+      else ["secretKey" .= ("client-secret" :: String)]))],
   "mailbox" .= ("user@example.test" :: String),"calendarId" .= none,"sharedCalendar" .= False,
   "windowStart" .= ("2026-01-01T00:00:00Z" :: String),"windowEnd" .= ("2027-01-01T00:00:00Z" :: String)]
 
@@ -356,13 +357,20 @@ provider failPage = do
         ("http","send") -> do
           url <- get "url" arguments
           body <- get "body" arguments
-          if "/devicecode" `isInfixOf` url then pure (http 200 [] (object
-            ["device_code" .= ("device" :: String),"message" .= ("Login now" :: String),"expires_in" .= (30 :: Int),"interval" .= (1 :: Int)]))
+          if "/devicecode" `isInfixOf` url then do
+            assert "login lost shared delegated scopes" ("scope=Calendars.Read%20Mail.Read%20offline_access" `isInfixOf` body)
+            pure (http 200 [] (object
+              ["device_code" .= ("device" :: String),"message" .= ("Login now" :: String),"expires_in" .= (30 :: Int),"interval" .= (1 :: Int)]))
           else if "/token" `isInfixOf` url then do
             let grant | "client_credentials" `isInfixOf` body = "client_credentials"
                       | "refresh_token" `isInfixOf` body = "refresh_token"
                       | otherwise = "device_code"
             record ("token:" ++ grant)
+            if grant == "refresh_token" then
+              assert "refresh narrowed shared delegated scopes" ("scope=Calendars.Read%20Mail.Read%20offline_access" `isInfixOf` body)
+              else if grant == "client_credentials" then
+                assert "application scope changed" ("scope=https%3A%2F%2Fgraph.microsoft.com%2F.default" `isInfixOf` body)
+                else pure ()
             if grant /= "device_code" then do
               assert "UTF-8 form escaped" ("s%C3%ABcret%20%26%2B" `isInfixOf` body)
               pure (http 200 [] token)

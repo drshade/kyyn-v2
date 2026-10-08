@@ -14,18 +14,18 @@ import Text.JSON.Types (JSValue)
 endpoint :: Text -> Text -> Text
 endpoint tenant operation = "https://login.microsoftonline.com/" <> Json.escape tenant <> "/oauth2/v2.0/" <> operation
 
-accessToken :: GraphAuth -> Text -> NetworkHost rest (Either Text Text)
-accessToken auth scope = runExceptT $ case auth of
+accessToken :: GraphAuth -> NetworkHost rest (Either Text Text)
+accessToken auth = runExceptT $ case auth of
   ClientSecret tenant client key -> do
     secret <- readKey key
     response <- ExceptT (Http.postForm (endpoint tenant "token")
       [("client_id",client),("client_secret",secret),("grant_type","client_credentials"),("scope","https://graph.microsoft.com/.default")])
     value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
     either throwE pure (tokenField "access_token" value)
-  DeviceCode tenant client key -> do
+  DeviceCode tenant client key scopes -> do
     refresh <- readKey key
     response <- ExceptT (Http.postForm (endpoint tenant "token")
-      [("client_id",client),("refresh_token",refresh),("grant_type","refresh_token"),("scope",scope <> " offline_access")])
+      [("client_id",client),("refresh_token",refresh),("grant_type","refresh_token"),("scope",delegatedScopes scopes)])
     let HttpResponse _ _ body = response
     case Json.parse body >>= Json.member "error" >>= Json.text of
       Right "invalid_grant" -> throwE "Refresh token was rejected; run connector login again."
@@ -42,11 +42,11 @@ accessToken auth scope = runExceptT $ case auth of
       value <- lift (getSecret key)
       either (const (throwE ("Missing secret " <> key <> "; configure it or run connector login."))) pure value
 
-login :: GraphAuth -> Text -> PluginLogin (Either LoginError ())
-login auth scope = fmap (either (Left . LoginError) Right) $ runExceptT $ case auth of
-  ClientSecret {} -> ExceptT (fmap (fmap (const ())) (accessToken auth scope))
-  DeviceCode tenant client key -> do
-    response <- ExceptT (Http.postForm (endpoint tenant "devicecode") [("client_id",client),("scope",scope <> " offline_access")])
+login :: GraphAuth -> PluginLogin (Either LoginError ())
+login auth = fmap (either (Left . LoginError) Right) $ runExceptT $ case auth of
+  ClientSecret {} -> ExceptT (fmap (fmap (const ())) (accessToken auth))
+  DeviceCode tenant client key scopes -> do
+    response <- ExceptT (Http.postForm (endpoint tenant "devicecode") [("client_id",client),("scope",delegatedScopes scopes)])
     value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
     code <- either throwE pure (Json.member "device_code" value >>= Json.text)
     message <- either throwE pure (Json.member "message" value >>= Json.text)
@@ -73,6 +73,9 @@ login auth scope = fmap (either (Left . LoginError) Right) $ runExceptT $ case a
             Right "authorization_declined" -> throwE "Device login was declined."
             Right "expired_token" -> throwE "Device login expired; run connector login again."
             _ -> either throwE (const (throwE "Device login failed; run connector login again.")) (Http.requireSuccess response)
+
+delegatedScopes :: [Text] -> Text
+delegatedScopes scopes = Text.unwords (scopes <> ["offline_access" | "offline_access" `notElem` scopes])
 
 tokenField :: Text -> JSValue -> Either Text Text
 tokenField key value = do
