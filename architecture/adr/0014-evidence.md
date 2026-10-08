@@ -485,7 +485,8 @@ blobs/<sha256>           captured attachment bytes (ADR 0029)
 ```
 
 The index holds producer/connector identity, the compiler-derived payload contract
-descriptor, latest-fetch summary, optional checked sync position and an entry per
+descriptor, latest-fetch summary, optional checked sync position together with its
+compiler-derived contract descriptor, and an entry per
 evidence ID. Each entry contains fingerprint, external references and either
 Truncated or a payload-file reference. The latter also records that payload's
 referenced BlobRefs, derived by the host using its nominal contract walker when
@@ -528,8 +529,20 @@ capability or evidence versioning scheme.
 
 Keep the optional sync position inside the index. It is publication metadata and
 advances in the same atomic replacement; a separate file/lifetime adds no useful
-boundary. Generic inspection parses the index but does not interpret the position
-with plugin code or render it to callers.
+boundary. Store the position descriptor and value together: both are absent for a
+stateless capture, or both present for a stateful capture. Use the same descriptor
+representation as for payloads. Generic inspection checks the inline position
+against its stored descriptor as part of checking the index, but does not interpret
+it with plugin code or render it to callers. Acquisition additionally requires the
+stored descriptor to agree with the prepared connector's position contract before
+supplying the value as its prior position.
+
+Decode the binary document once. Check the descriptor fields against their fixed
+host-owned representation, reconstruct the expected index contract, and check the
+already-decoded document against it. This bootstrap does not execute plugin code
+or decode the binary bytes again. A malformed descriptor, missing descriptor/value
+partner or mismatched position is a storage diagnostic, not an absent position
+that silently restarts acquisition.
 
 Persist the payload descriptor as part of the capture so generic inspection needs
 no compiler. Its authority is the successful checked fetch that wrote it, bound to
@@ -541,7 +554,7 @@ Self-contained Dhall alone is insufficient here: it proves that a value has some
 type, not that it has the expected connector payload type. Its structural type
 also loses Haskell nominal identity (including recognized SDK BlobRef types) and
 some host wire distinctions. The existing checked-value decoding/presentation path
-requires the expected contract. Retain one generated descriptor per capture,
+requires the expected contract. Retain one generated payload descriptor per capture,
 rather than introducing a separate generic Dhall reader for browsing or invoking
 the compiler merely to recover that contract. Do not duplicate it per payload.
 
