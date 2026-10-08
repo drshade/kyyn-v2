@@ -1,0 +1,72 @@
+name: adr-viewer pages
+
+# Re-render the ADR plan-versus-build history and publish it to GitHub Pages
+# whenever curated lanes, evidence or the renderer change on main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/adr-viewer/curated/**'
+      - 'tools/adr-viewer/evidence/**'
+      - 'tools/adr-viewer/src/**'
+      - 'tools/adr-viewer/app/**'
+      - 'tools/adr-viewer/template/**'
+      - 'tools/adr-viewer/adr-viewer.cabal'
+      - 'tools/adr-viewer/cabal.project'
+      - '.github/workflows/adr-viewer-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a newer render supersedes a queued one.
+concurrency:
+  group: adr-viewer-pages
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: tools/adr-viewer
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: haskell-actions/setup@bda9c527d4136f7759733016190c34a24c84f4f4 # v2
+        id: haskell
+        with:
+          ghc-version: '9.10.3'
+          cabal-version: '3.16.1.0'
+      - name: Resolve build plan
+        run: cabal build all --dry-run
+      - name: Cache compiled dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ steps.haskell.outputs.cabal-store }}
+          key: adr-viewer-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-${{ hashFiles('tools/adr-viewer/cabal.project', 'tools/adr-viewer/adr-viewer.cabal', 'tools/adr-viewer/dist-newstyle/cache/plan.json') }}
+          restore-keys: |
+            adr-viewer-store-v1-${{ runner.os }}-${{ runner.arch }}-ghc-${{ steps.haskell.outputs.ghc-version }}-
+      - name: Test
+        run: cabal test
+      - name: Render
+        # render runs check first and refuses lanes with errors.
+        run: cabal run -v0 adr-viewer -- render --output _site/index.html
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: tools/adr-viewer/_site
+
+  deploy:
+    needs: render
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

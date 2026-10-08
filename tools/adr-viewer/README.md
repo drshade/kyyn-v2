@@ -7,10 +7,16 @@ realises it. When the spec evolves, that is a new node that supersedes the old o
 so history is never painted over. The rendered page lets you drag through time
 and watch the plan and the build converge.
 
+**Live page: <https://drshade.github.io/kyyn-v2/>.** It is rebuilt and published
+by the `adr-viewer pages` workflow (`.github/workflows/adr-viewer-pages.yml`)
+whenever curated lanes, evidence or the renderer change on `main`. It can also
+be run by hand from the Actions tab.
+
 This README is the complete guide for an agent asked to update or render the
 history. Everything the tool needs lives in this directory; nothing under
 `architecture/` is read except through git history, and nothing outside this
-directory is written.
+directory is written. The one exception is the publishing workflow, which must
+live in `.github/workflows/`.
 
 ## Three stages
 
@@ -58,7 +64,9 @@ cabal test                                             # model, checks and ADR r
 `extract` is deterministic: rerunning it on the same history leaves the committed
 evidence files unchanged. `render` runs every `check` first and refuses data with
 errors; warnings are printed but do not block. Open the HTML file directly in a
-browser. It is self-contained and is not committed.
+browser. It is self-contained and is not committed; the published copy comes
+from the workflow. The workflow runs `cabal test` and `render`, so lanes with
+`check` errors are never published.
 
 ## Concepts
 
