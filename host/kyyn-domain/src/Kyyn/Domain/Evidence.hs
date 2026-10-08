@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evidence
   ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
-  , Evidence(..), EvidenceChange(..), EvidenceState(..), CurrentEvidence(..), FetchSummary(..)
+  , EvidencePayload(..), Evidence(..), EvidenceChange(..), EvidenceState(..), CurrentEvidence(..), FetchSummary(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), applyChanges, validateState
   , evidenceProblemDiagnostic, EvidenceCapture(..), captureEvidence, SyncMode(..)
   ) where
@@ -13,7 +13,7 @@ import Kyyn.Domain.Plugin (PluginName, PackageIdentity)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Value (CheckedValue)
-import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
+import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 
 newtype FetchId = FetchId String deriving (Eq, Show)
 data SyncMode = ContinueSync | RestartSync deriving (Eq, Show)
@@ -28,11 +28,11 @@ data EvidenceState a = EvidenceState
 data CurrentEvidence = CurrentEvidence
   { snapshot :: EvidenceSnapshotRef, items :: [(EvidenceId, Evidence CheckedValue)], latest :: FetchSummary
   } deriving (Eq, Show)
-data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint)] deriving (Eq, Show)
+data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint, EvidencePayload ())] deriving (Eq, Show)
 
 captureEvidence :: CurrentEvidence -> EvidenceCapture
 captureEvidence (CurrentEvidence snapshot items latest) = EvidenceCapture snapshot latest
-  [(item,token) | (item,Evidence token _ _) <- items]
+  [(item,token,case payload of Available _ -> Available (); Truncated -> Truncated) | (item,Evidence token _ payload) <- items]
 
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
 data EvidenceProblem = NotFetched | ProducerContractChanged
@@ -64,6 +64,11 @@ applyChanges = foldM step
                                 | otherwise -> validFingerprint value >> pure [(k,if k == key then value else v) | (k,v) <- values]
       RemovedEvidence key | missing key values -> Left (InvalidDelta "Removed evidence ID is missing")
                           | otherwise -> pure [(k,v) | (k,v) <- values, k /= key]
+      SetEvidencePayload key expected payload -> case lookup key values of
+        Nothing -> Left (InvalidDelta "Payload evidence ID is missing")
+        Just (Evidence token refs _)
+          | token /= expected -> Left (InvalidDelta "Payload evidence fingerprint does not match")
+          | otherwise -> pure [(k,if k == key then Evidence token refs payload else v) | (k,v) <- values]
     missing key = not . any ((== key) . fst)
     valid (EvidenceId key) | Text.null key = Left (InvalidDelta "Evidence ID must not be empty")
                           | otherwise = Right ()

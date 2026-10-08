@@ -77,7 +77,7 @@ statefulTests temporary toolchain configType payloadType program = do
     case updated of Just (CheckedValue _ value) -> length (filter (== 'Z') (show value)) == 2; _ -> False)
   savedPosition <- maybe (fail "Missing prior position") pure updated
   let preserved = Evidence (EvidenceFingerprint "preserved") []
-        (CheckedValue (contractId payload) (object ["item" .= ("keep me" :: String)]))
+        (Available (CheckedValue (contractId payload) (object ["item" .= ("keep me" :: String)])))
   _ <- runStore kb (publishFetchWithPosition instanceRef producer payload next Nothing
     [NewEvidence (EvidenceId "preserved") preserved] (Just (position,savedPosition))) >>= right
   _ <- fetch RestartSync >>= right
@@ -114,7 +114,7 @@ nativeTests temporary toolchain configType payloadType program = do
   let firstIds = map fst firstItems
       firstOld = lookup (EvidenceId "changed.txt") firstItems
   assert "first capture lost content or fingerprint" (case firstOld of
-    Just (Evidence (EvidenceFingerprint token) refs (CheckedValue _ value)) ->
+    Just (Evidence (EvidenceFingerprint token) refs (Available (CheckedValue _ value))) ->
       not (Text.null token) && refs == [Text.pack (directory </> "changed.txt")] && value == object ["text" .= ("old" :: String)]
     _ -> False)
   assert "first real acquisition did not publish all files"
@@ -161,7 +161,7 @@ nativeTests temporary toolchain configType payloadType program = do
         Right _ -> fail "Malformed or out-of-row guest request was answered"
   saved <- maybe (fail "Missing changed evidence") pure (lookup (EvidenceId "changed.txt") thirdItems)
   let key = EvidenceId "changed.txt"
-      changed = Evidence (EvidenceFingerprint "later") [] (CheckedValue (contractId payload) (object ["text" .= ("later" :: String)]))
+      changed = Evidence (EvidenceFingerprint "later") [] (Available (CheckedValue (contractId payload) (object ["text" .= ("later" :: String)])))
       requests =
         [ object ["snapshot" .= ("selected" :: String)]
         , object ["snapshot" .= ("selected" :: String),"id" .= ("changed.txt" :: String)]

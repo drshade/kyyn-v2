@@ -40,7 +40,7 @@ function decode(v) {
     default: throw new Error(`Unexpected fixture value ${v.tag}`);
   }
 }
-const citation = { producer: 'fixture', connector: 'files', source: 'folder', references: ['file:///e-1'] };
+const citation = { producer: 'fixture', connector: 'files', source: 'folder', externalReferences: ['file:///e-1'] };
 const plans = [
   { reason: 'Update and retire old evidence', citations: [citation], edits: [
     { tag: 'Todos', edit: { tag: 'Replace', id: 'old', value: 'updated 雪' } },

@@ -190,15 +190,15 @@ parseStoredRecipe contracts = withObject "Stored recipe" $ \fields -> do
     pure (StoredRecipe method name contract (CheckedValue (contractId contract) value)))
 
 evidenceShape :: Shape
-evidenceShape = Record [("producer",text), ("connector",text), ("source",text), ("references",List text)]
+evidenceShape = Record [("producer",text), ("connector",text), ("source",text), ("externalReferences",List text)]
 
 evidenceValue :: EvidenceRef -> Value
 evidenceValue (EvidenceRef producer connector source references) = object
-  ["producer" .= producer, "connector" .= connector, "source" .= source, "references" .= references]
+  ["producer" .= producer, "connector" .= connector, "source" .= source, "externalReferences" .= references]
 
 evidenceRef :: Value -> Parser EvidenceRef
 evidenceRef = withObject "Evidence" $ \record -> EvidenceRef
-  <$> record .: "producer" <*> record .: "connector" <*> record .: "source" <*> record .: "references"
+  <$> record .: "producer" <*> record .: "connector" <*> record .: "source" <*> record .: "externalReferences"
 
 tagged :: String -> Maybe Value -> Value
 tagged tag value = object (["tag" .= tag] ++ maybe [] (\v -> ["value" .= v]) value)

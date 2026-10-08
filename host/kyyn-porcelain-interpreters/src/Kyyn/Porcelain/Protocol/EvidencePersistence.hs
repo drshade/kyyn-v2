@@ -22,7 +22,7 @@ headerShape = Record [("producer",text),("contract",text),("current",text)]
 stateShape :: Shape -> Shape
 stateShape payload = Record [("header",headerShape),("values",members),("latest",fetchShape)]
   where
-    evidence = Record [("fingerprint",text),("references",List text),("payload",payload)]
+    evidence = Record [("fingerprint",text),("externalReferences",List text),("payload",Union [("Available",Just payload),("Truncated",Nothing)])]
     members = List (Record [("id",text),("evidence",evidence)])
 
 fetchShape :: Shape
@@ -30,6 +30,18 @@ fetchShape = Record [("fetchedAt",text),("added",Scalar IntegerScalar),("updated
 
 text :: Shape
 text = Scalar TextScalar
+
+payloadValue :: EvidencePayload CheckedValue -> Value
+payloadValue (Available (CheckedValue _ value)) = object ["tag" .= ("Available" :: String),"value" .= value]
+payloadValue Truncated = object ["tag" .= ("Truncated" :: String)]
+
+parsePayload :: CheckedContract -> Value -> Parser (EvidencePayload CheckedValue)
+parsePayload contract = withObject "payload availability" $ \fields -> do
+  tag <- fields .: "tag"
+  case tag :: String of
+    "Available" -> Available . CheckedValue (contractId contract) <$> fields .: "value"
+    "Truncated" -> pure Truncated
+    _ -> fail "Unknown payload availability"
 
 optional :: Maybe String -> Value
 optional Nothing = object ["tag" .= ("None" :: String)]
@@ -82,9 +94,11 @@ encodeStateWithPosition (EvidenceProducer (PackageIdentity producer) identity) c
       pure (object ["header" .= object ["producer" .= producer,
         "contract" .= contractFingerprint identity,"current" .= currentKey],
         "values" .= currentValues,"latest" .= summary latest,"position" .= positionValue])
-    evidence (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue actual value))
-      | actual == identity = Right (object ["fingerprint" .= fingerprint,"references" .= refs,"payload" .= value])
-      | otherwise = Left ProducerContractChanged
+    evidence (Evidence (EvidenceFingerprint fingerprint) refs payload) = do
+      case payload of
+        Available (CheckedValue actual _) | actual /= identity -> Left ProducerContractChanged
+        _ -> Right ()
+      Right (object ["fingerprint" .= fingerprint,"externalReferences" .= refs,"payload" .= payloadValue payload])
     member (EvidenceId key,value) = (\e -> object ["id" .= key,"evidence" .= e]) <$> evidence value
     summary (FetchSummary _ at added updated removed options) = object
       ["fetchedAt" .= at,"added" .= show added,"updated" .= show updated,"removed" .= show removed,"options" .= optional options]
@@ -105,7 +119,7 @@ decodeState (EvidenceProducer producer identity) contract bytes
             ("(" <> source <> "\n).{header,values,latest}")
   where
     evidence = withObject "evidence" $ \fields -> Evidence <$> (EvidenceFingerprint <$> fields .: "fingerprint")
-      <*> fields .: "references" <*> (CheckedValue identity <$> fields .: "payload")
+      <*> fields .: "externalReferences" <*> (fields .: "payload" >>= parsePayload contract)
     member = withObject "evidence member" $ \fields -> (,)
       <$> (EvidenceId <$> fields .: "id") <*> (fields .: "evidence" >>= evidence)
     parseState = withObject "evidence state" $ \fields -> do

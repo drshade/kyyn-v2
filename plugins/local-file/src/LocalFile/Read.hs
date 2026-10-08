@@ -10,4 +10,5 @@ content key snapshot = do
   pure $ case found of
     Left problem -> Left problem
     Right Nothing -> Left (FetchError ("No fetched file with evidence ID " <> key))
-    Right (Just (Evidence _ _ (Document text))) -> Right text
+    Right (Just (Evidence _ _ (Available (Document text)))) -> Right text
+    Right (Just (Evidence _ _ Truncated)) -> Left (FetchError "File payload has been truncated; fetch it again.")

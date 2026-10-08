@@ -192,7 +192,7 @@ responseTests program = do
       payloadOf result = do
         changes <- maybe (fail "missing response result") (\value -> get "value" value >>= get "changes") result
         case changes :: [Value] of
-          [change] -> get "value" change >>= get "evidence" >>= get "payload"
+          [change] -> get "value" change >>= get "evidence" >>= get "payload" >>= get "value"
           _ -> fail "expected one response update"
   result <- trial fixture
   assert "response-only version update was lost" (tags result == Right ["Updated"])
@@ -317,8 +317,11 @@ scaleProvider duplicate = do
       let n = read (drop 140 key) :: Int
       pure (success (if n > 1000 then none else some (object
         ["fingerprint" .= (if n <= 100 then "old" else "current" :: String),
-         "references" .= ([] :: [String]), "payload" .= captured])))
+         "externalReferences" .= ([] :: [String]), "payload" .= available captured])))
     _ -> fail "unexpected scale fixture request"
+
+available :: Value -> Value
+available value = object ["tag" .= ("Available" :: String),"value" .= value]
 
 configuration :: Bool -> Value
 configuration device = object ["auth" .= object ["tag" .= (if device then "DeviceCode" else "ClientSecret" :: String),
@@ -390,7 +393,7 @@ provider failPage = do
         ("evidence","read") -> do
           key <- get "id" arguments
           pure (success (if key == ("new" :: String) then none else some (object
-            ["fingerprint" .= (if key == "same" then "same-key" else "old-key" :: String),"references" .= ([] :: [String]),"payload" .= captured])))
+            ["fingerprint" .= (if key == "same" then "same-key" else "old-key" :: String),"externalReferences" .= ([] :: [String]),"payload" .= available captured])))
         _ -> fail "Unexpected Graph request"
   pure (respond,readIORef trace)
   where

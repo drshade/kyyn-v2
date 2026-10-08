@@ -193,7 +193,7 @@ protocolTests = do
   result <- right (decode (success output))
   assert (result == Right (EvolutionObservation empty [])) "Success decoding changed value"
   let citation = object ["producer" .= ("graph" :: String),"connector" .= ("work" :: String),
-        "source" .= ("email-λ" :: String),"references" .= (["https://example.test/λ","/tmp/email"] :: [String])]
+        "source" .= ("email-λ" :: String),"externalReferences" .= (["https://example.test/λ","/tmp/email"] :: [String])]
       boundary = object ["contract" .= ("contract-id" :: String),"value" .= wire]
       step evidence = object ["before" .= boundary,"after" .= boundary,
         "rationale" .= object ["explanation" .= ("Explain λ" :: String),"evidence" .= [evidence]]]

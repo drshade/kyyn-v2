@@ -64,7 +64,7 @@ import Kyyn.Agentic (Step, Flow, liftTool, interpret)
 import Kyyn.Recipe
 import Kyyn.Schema (Fact(..), FactId(..))
 import Kyyn.Evolution (Rationale(..), EvidenceRef(..))
-import Kyyn.Plugin (FetchError(..), Evidence(..), EvidenceId(..))
+import Kyyn.Plugin (FetchError(..), Evidence(..), EvidencePayload(..), EvidenceId(..))
 import Kyyn.Workspace.FactEdits
 import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_local_file.Folder.Evidence as Evidence
@@ -88,7 +88,7 @@ reconcileStep (RecipeInput (RootV2.Root facts) mode runs) = do
   captured <- mapM (\\key -> liftTool (Evidence.readEvidence Connectors.documents key) >>= either throwE pure) ids
   missing <- liftTool (Evidence.readEvidence Connectors.documents (EvidenceId "absent.txt")) >>= either throwE pure
   case missing of Just _ -> throwE (FetchError "Missing ID resolved"); Nothing -> pure ()
-  let texts = [Text.unpack text | Just (Evidence _ _ (Local.Document text)) <- captured]
+  let texts = [Text.unpack text | Just (Evidence _ _ (Available (Local.Document text))) <- captured]
       citations = [EvidenceRef "local-file" "documents" key refs |
         (EvidenceId key, Just (Evidence _ refs _)) <- zip ids captured]
       edits = case texts of
@@ -124,9 +124,9 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   assert.match(JSON.stringify(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt'], 1)), /evidence.not-fetched/);
   for (const instance of ['documents', 'prices']) cli(['evidence', 'fetch', 'local-file', instance]);
   const item = cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result;
-  assert.deepEqual(item.payload, { text: 'Captured task' });
+  assert.deepEqual(item.payload, { tag: 'Available', value: { text: 'Captured task' } });
   assert(item.fingerprint.length > 0);
-  assert.deepEqual(item.references, [path.join(folder, 'todo.txt')]);
+  assert.deepEqual(item.externalReferences, [path.join(folder, 'todo.txt')]);
   assert.match(JSON.stringify(cli(['evidence', 'show', 'local-file', 'documents', 'absent.txt'], 1)), /evidence.not-found/);
   const before = countDrafts();
   assert.match(JSON.stringify(run('open', [], 1)), /recipe.open-agent/);
@@ -146,7 +146,7 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   assert.match(JSON.stringify(cli(['guest', 'module', 'show', 'KyynFrozenProposal', '--evolution', proposal.id])), /RecipeEvolution/);
   fs.writeFileSync(path.join(folder, 'todo.txt'), 'Newer source text');
   cli(['evidence', 'fetch', 'local-file', 'documents']);
-  assert.equal(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result.payload.text, 'Newer source text');
+  assert.equal(cli(['evidence', 'show', 'local-file', 'documents', 'todo.txt']).result.payload.value.text, 'Newer source text');
   cli(['evolution', 'check', proposal.id]);
   cli(['evolution', 'check', proposal.id]);
   assert.equal(fs.readFileSync(path.join(proposal.path, 'change/proposal.dhall'), 'utf8'), frozen);

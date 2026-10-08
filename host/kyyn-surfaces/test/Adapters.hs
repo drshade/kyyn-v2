@@ -60,18 +60,23 @@ main = do
       latestValue = object ["id" .= ("latest" :: String), "fetchedAt" .= ("2026-10-07T00:00:00Z" :: String),
         "added" .= (1 :: Integer), "updated" .= (0 :: Integer), "removed" .= (0 :: Integer), "options" .= (Nothing :: Maybe String)]
       latestLine = "Latest fetch: latest  2026-10-07T00:00:00Z  1 added, 0 updated, 0 removed"
-  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc")]) of
+  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc",Available ())]) of
     Response _ payload messages _ -> unless
       (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
-        "items" .= [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String)]]]
-        && messages == [latestLine,"notes.txt  abc"]) (fail "Current listing output lost summary or IDs/fingerprints")
+        "items" .= [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"availability" .= ("Available" :: String)]]]
+        && messages == [latestLine,"notes.txt  abc  Available"]) (fail "Current listing output lost summary or IDs/fingerprints")
+  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc",Truncated)]) of
+    Response _ (Object fields) messages _ -> unless
+      (KeyMap.lookup "items" fields == Just (toJSON [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"availability" .= ("Truncated" :: String)]])
+        && messages == [latestLine,"notes.txt  abc  Truncated"]) (fail "Listing omitted truncation")
+    _ -> fail "Expected structured listing"
   case evidenceListResult (EvidenceCapture snapshot latest []) of
     Response _ _ messages _ -> unless (messages == [latestLine,"No current evidence."]) (fail "Empty listing output")
   case evidenceItemResult snapshot latest (EvidenceId "notes.txt")
-    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (CheckedValue (contractId evidenceContract) (String "hello"))) "\"hello\"\n" of
+    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (Available (CheckedValue (contractId evidenceContract) (String "hello")))) "\"hello\"\n" of
     Response _ payload messages _ -> unless
       (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
-        "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"references" .= ["file:///notes.txt" :: String],"payload" .= ("hello" :: String)]
+        "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"externalReferences" .= ["file:///notes.txt" :: String],"payload" .= object ["tag" .= ("Available" :: String),"value" .= ("hello" :: String)]]
         && messages == [latestLine,"Evidence: notes.txt","Fingerprint: abc","Source: file:///notes.txt","\"hello\""])
       (fail "Current evidence inspection lost payload or source metadata")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []

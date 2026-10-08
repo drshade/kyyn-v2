@@ -261,8 +261,15 @@ text, not the current file on disk. Human method results are Dhall; `--json`
 returns structured JSON.
 
 `evidence show` displays the current typed payload as Dhall, its fingerprint and
-source references. A missing item is different from an unfetched connector;
-neither retrieves historical contents.
+external source references (`externalReferences`). The payload is `Available a`
+or `Truncated`: truncation retains the item's ID and fingerprint but not its
+content. It is distinct from removal, an absent item or an unfetched connector.
+`evidence list` shows availability beside each ID and fingerprint. Authored tools
+pattern-match `Available value` or `Truncated` when reading evidence.
+JSON inspection exposes that tagged payload; human inspection says when content
+is truncated. Neither retrieves historical contents. Connectors may restore the
+same version with `SetEvidencePayload`; truncation/restoration does not count as
+an upstream update or deletion and does not depend on recipe processing.
 
 Some connectors accept `evidence fetch PLUGIN INSTANCE --options 'DHALL'`.
 Inspect the optional type with `plugin connector show PLUGIN INSTANCE`;

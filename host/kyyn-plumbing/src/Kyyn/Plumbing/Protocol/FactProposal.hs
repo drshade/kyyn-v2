@@ -29,7 +29,7 @@ proposalShape contract state = do
   where
     text = Scalar TextScalar
     rationale = Record [("explanation",text),("evidence",List (Record
-      [("producer",text),("connector",text),("source",text),("references",List text)]))]
+      [("producer",text),("connector",text),("source",text),("externalReferences",List text)]))]
 
 proposalValue :: FactProposal -> Value
 proposalValue (FactProposal steps (CheckedValue _ state)) = object
@@ -38,7 +38,7 @@ proposalValue (FactProposal steps (CheckedValue _ state)) = object
     step (FactProposalStep (Rationale explanation evidence) edits) = object
       ["rationale" .= object ["explanation" .= explanation,"evidence" .= map citation evidence],"edits" .= edits]
     citation (EvidenceRef producer connector source references) = object
-      ["producer" .= producer,"connector" .= connector,"source" .= source,"references" .= references]
+      ["producer" .= producer,"connector" .= connector,"source" .= source,"externalReferences" .= references]
 
 parseProposal :: CheckedContract -> Value -> Parser FactProposal
 parseProposal state = withObject "Fact proposal" $ \fields -> do
@@ -46,7 +46,7 @@ parseProposal state = withObject "Fact proposal" $ \fields -> do
     why <- step .: "rationale" >>= withObject "Rationale" (\rationale ->
       Rationale <$> rationale .: "explanation" <*> (rationale .: "evidence" >>= traverse
         (withObject "Evidence reference" $ \evidence -> EvidenceRef
-          <$> evidence .: "producer" <*> evidence .: "connector" <*> evidence .: "source" <*> evidence .: "references")))
+          <$> evidence .: "producer" <*> evidence .: "connector" <*> evidence .: "source" <*> evidence .: "externalReferences")))
     FactProposalStep why <$> step .: "edits")
   FactProposal steps . CheckedValue (contractId state) <$> fields .: "state"
 

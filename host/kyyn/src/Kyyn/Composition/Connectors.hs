@@ -12,7 +12,7 @@ import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Value (CheckedValue(..))
-import Kyyn.Domain.Evidence (Evidence(..))
+import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..))
 import Kyyn.Porcelain.Capability.EvidenceInspection (readCurrentEvidence)
 import qualified Data.Text as Text
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
@@ -110,7 +110,8 @@ dispatchEvidence host command (SelectedKb kb revision _) = case command of
     (snapshot,latest,found) <- ExceptT (readCurrentEvidence instanceRef producer payload key)
     case found of
       Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
-      Just item@(Evidence _ _ (CheckedValue _ value)) -> do
+      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item "Payload: truncated")
+      Just item@(Evidence _ _ (Available (CheckedValue _ value))) -> do
         rendered <- ExceptT (encodeValue (contractShape payload) value)
         pure (evidenceItemResult snapshot latest key item rendered)
   where

@@ -88,4 +88,4 @@ evolutionReplyValue codec result = do
       [("explanation",text explanation),("evidence",JSArray (map encodeEvidence evidence))]
     encodeEvidence (EvidenceRef producer connector source references) = record
       [("producer",text producer),("connector",text connector),("source",text source),
-       ("references",encodeWith (listCodec textCodec) references)]
+       ("externalReferences",encodeWith (listCodec textCodec) references)]

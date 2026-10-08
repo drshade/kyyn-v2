@@ -37,9 +37,11 @@ fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition
       Just (version,event) ->
         let Event { webLink = link } = event
             evidence = Evidence (EvidenceFingerprint version)
-              (if Text.null link then [base <> "/events/" <> Json.escape key] else [link]) event
+              (if Text.null link then [base <> "/events/" <> Json.escape key] else [link]) (Available event)
         in case old of
           Nothing -> [NewEvidence (EvidenceId key) evidence]
+          Just (Evidence fingerprint _ Truncated) | fingerprint == EvidenceFingerprint version ->
+            [SetEvidencePayload (EvidenceId key) fingerprint (Available event)]
           Just (Evidence fingerprint _ _) | fingerprint == EvidenceFingerprint version -> []
           Just _ -> [UpdatedEvidence (EvidenceId key) evidence]
   removed <- if baseline then do
