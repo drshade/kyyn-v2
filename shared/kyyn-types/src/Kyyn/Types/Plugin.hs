@@ -35,12 +35,14 @@ data Connector = SourceConnector
     login :: Maybe Text
   }
   | SinkConnector
-  { name :: Text
-  , validateConfig :: Text
-  -- | Qualified Config -> Options -> Input -> Sink (Either SinkError Result).
-  , publish :: Text
-  -- | Qualified pure Options value used when invocation options are omitted.
-  , defaultOptions :: Text
+  { -- | Unique connector type name within this plugin.
+    name :: Text
+  , -- | Qualified pure Config -> ValidationReport validator.
+    validateConfig :: Text
+  , -- | Qualified Config -> Options -> Input -> Sink (Either SinkError Result).
+    publish :: Text
+  , -- | Qualified pure Options value used when invocation options are omitted.
+    defaultOptions :: Text
   } deriving (Eq, Show)
 
 -- | Advertise a captured-evidence reader using qualified Haskell export names.

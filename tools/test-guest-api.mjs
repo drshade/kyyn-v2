@@ -33,7 +33,7 @@ try {
   assert.deepEqual(modules, ['Agentic', 'Agentic.Contract', 'Agentic.Core', 'Agentic.Describe',
     'Agentic.Interpret', 'Agentic.Questions', 'Agentic.Runtime', 'Agentic.Schema', 'Agentic.Scripted',
     'Agentic.Settings', 'Agentic.Value', 'Agentic.ViaLLM', 'Kyyn.Edit', 'Kyyn.Evolution',
-    'Kyyn.Evolution.Proposal', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Plugin.Host', 'Kyyn.Query',
+    'Kyyn.Evolution.Proposal', 'Kyyn.Optics', 'Kyyn.Plugin', 'Kyyn.Plugin.Host', 'Kyyn.Plugin.Sink', 'Kyyn.Query',
     'Kyyn.Recipe', 'Kyyn.Schema', 'Kyyn.Validation']);
   assert(modules.every(name => listing.origins[name] === 'sdk'));
   const kyynModules = modules.filter(name => name.startsWith('Kyyn.'));
