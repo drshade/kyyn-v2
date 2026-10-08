@@ -8,6 +8,7 @@ module Main (main) where
 import AdrViewer.Adr
 import AdrViewer.Check
 import AdrViewer.Model
+import AdrViewer.Pending
 import AdrViewer.Types
 import Control.Monad (unless)
 import Data.Aeson (decode, encode)
@@ -60,6 +61,22 @@ main = do
   assert "replace without ended not warned" (any (T.isInfixOf "which has no ended") (warnings unended))
   assert "realised beyond last step not warned" (any (T.isInfixOf "beyond the last step") (warnings future))
   assert "consistent lane warned" (null (warnings lane { laneNodes = [a { nodeEnded = Just (Ended 5 Replaced (Just "0001.02")) }, b, c] }))
+
+  -- Pending: a lane at cursor 3 of 6 has one step to curate (5), two code-only
+  -- steps (4, 6), and its open decision; an uncurated ADR lists its founding steps.
+  let behind = lane { laneCursor = 3, laneNodes = [a, c], laneEditorial = [Editorial 2 Nothing "wording"] }
+      inputs = Inputs (Repo "r" Nothing) steps (adrs <> [Adr "0002" Nothing 2 Nothing])
+                 [("0001.json", behind)]
+      work = pending inputs
+  assert "pending lanes wrong" (map lpAdr work == ["0001", "0002"])
+  case work of
+    (p1 : p2 : _) -> do
+      assert "steps to curate wrong" (map stepSeq (lpCurate p1) == [5])
+      assert "code-only steps wrong" (map stepSeq (lpCheck p1) == [4, 6])
+      assert "open decisions wrong" (map nodeId (lpOpen p1) == ["0001.03"])
+      assert "uncurated ADR has a cursor" (lpCursor p2 == Nothing)
+    _ -> fail "pending returned too few lanes"
+  assert "current lane reported pending" (notElem "0001" (map lpAdr (pending inputs { inLanes = [("0001.json", lane)] })))
 
   let props = stdArgs { maxSuccess = 300, chatty = False }
       prop name p = quickCheckWithResult props p >>= \r -> case r of

@@ -24,6 +24,7 @@ git + GitHub ──extract──▶ evidence/ ──curate (agent)──▶ cura
 | `extract` | the tool | first-parent git history, merged PRs via `gh` | `evidence/` only |
 | curate | an agent, following this README | `evidence/` (including worklists) | `curated/lanes/<ADR>.json` only |
 | `check` | the tool | `evidence/`, `curated/` | nothing; prints diagnostics |
+| `pending` | the tool | `evidence/`, `curated/` | nothing; prints the curator's work list |
 | `render` | the tool | `evidence/`, `curated/` | one HTML file |
 
 ```
@@ -51,6 +52,7 @@ the root build. `extract` needs an authenticated `gh` for PR titles and bodies.
 ```sh
 cabal run -v0 adr-viewer -- extract --repo ../.. --output evidence
 cabal run -v0 adr-viewer -- check                      # defaults: --evidence evidence --curated curated
+cabal run -v0 adr-viewer -- pending                    # add --json for machine-readable output
 cabal run -v0 adr-viewer -- render --output /tmp/adr-history.html
 cabal test                                             # model, checks and ADR readings
 ```
@@ -79,27 +81,35 @@ browser. It is self-contained and is not committed.
 
 When asked to bring the history up to date:
 
-1. Run `extract`. Note the last seq in `evidence/steps.json`.
-2. Run `check`. Lanes reported as "N steps behind" are your work list. These are
-   warnings, not failures. A lane file is missing for an ADR that has never been
-   curated; create it, starting at the ADR's founding step. To see which lanes
-   have spec changes rather than only realisation checks, read each new step's
-   `adrs` list in `evidence/steps.json`.
-3. For each behind lane, work through the steps after its cursor, in order:
-   - Steps that changed this ADR are in `evidence/worklists/<ADR>.jsonl` (each
-     entry has `diff`, `body`, `code_files`, `spec_added`, `spec_removed`,
-     `code_added`). Apply the rules below to each one.
-   - For every step after the cursor, including code-only steps, check whether it
-     realises a live node that is still `unrealised`. Use `code_added` in
-     `evidence/worklists/anchors.json` and the PR bodies in
+1. Run `extract`. It always rewalks the whole history, so there is no extraction
+   cursor. New merges simply appear as new steps at the end of `steps.json`.
+2. Run `pending`. This is your work list. For every lane that is behind (its
+   `cursor` is below the last step) or missing, it lists:
+   - **curate**: steps after the cursor that changed this ADR. Apply the rules
+     below to each one, reading its entry in `evidence/worklists/<ADR>.jsonl`
+     (`diff`, `body`, `code_files`, `spec_added`, `spec_removed`, `code_added`).
+   - **realisation checks**: steps after the cursor that did not change the ADR,
+     which matter only because they might realise an open decision.
+   - **open decisions**: live nodes still `unrealised` or `unknown`, which are
+     the only nodes a step can newly realise.
+   - **advance the cursor**: lanes with nothing to curate and no open decisions.
+     Just set `cursor` to the last step.
+   - **no lane file**: an ADR never curated. Create its lane from the founding
+     step, curating every listed step.
+3. For each lane with work, in order of seq:
+   - Curate the "curate" steps.
+   - For each open decision, check whether any listed step realises it. Use
+     `code_added` in `evidence/worklists/anchors.json` and the PR bodies in
      `evidence/worklists/steps.jsonl` (grep by seq or PR number; the file is
-     large). If it does, set that node's `realised` to `later_step` with the
+     large). If one does, set that node's `realised` to `later_step` with that
      step's seq. Never change a node's history otherwise: earlier nodes keep
      their meaning, and new understanding becomes new nodes.
-   - Set `cursor` to the last seq.
    - When a step changed several ADRs, read how already-current sibling lanes
-     treated that step (read-only) and stay consistent with them.
-4. Run `check` until it reports no errors, and read the warnings.
+     treated it (read-only) and stay consistent with them.
+   - Set `cursor` to the last step.
+4. Run `check` until it reports no errors, and read the warnings. "Behind"
+   warnings are expected until every cursor is advanced. Run `pending` again;
+   it should report that all lanes are current.
 5. `render` and open the page if asked to show the result.
 
 Keep lane files formatted as two-space-indented JSON with a trailing newline,
