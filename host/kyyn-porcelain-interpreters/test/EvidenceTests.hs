@@ -17,7 +17,7 @@ import Effectful (Eff, IOE, runEff, runPureEff, (:>), UnliftStrategy(..))
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
 import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract
-import Kyyn.Domain.Blob (BlobRef(..), blobValue, sdkBlobRefType)
+import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue, sdkBlobRefType)
 import Kyyn.Domain.DataType (DataType(..), Shape(..))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.Path (DirectoryScope, directoryScope)
@@ -34,6 +34,9 @@ import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence(..), DocumentAccess(..), DocumentStamp(..))
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
+import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
+import Kyyn.Porcelain.Capability.PluginRead (resolveCapturedBlobs)
+import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -367,12 +370,21 @@ blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \direc
   createDirectoryIfMissing True blobDirectory
   Bytes.writeFile blobPath ""
   first <- publish Nothing [NewEvidence itemA item,NewEvidence itemB item] >>= right
+  captured <- execute scope (loadCurrentEvidence instanceA owner payload) >>= right >>= maybe (fail "No blob capture") pure
+  let resolve contexts output = execute scope (noGuestExecution (runPluginRead (resolveCapturedBlobs contexts payload output)))
+  resolved <- resolve [(payload,captured)] (blobValue ref) >>= right
+  assert "blob surface lost originating path" (resolved == [ResolvedBlob ref blobPath])
+  assert "forged result resolved without capture" . isLeft =<< resolve [] (blobValue ref)
   execute scope (discardFetchBlobs instanceA Nothing [ref])
   assert "changed-head cleanup deleted published bytes" =<< doesFileExist blobPath
   second <- publish (Just (key first)) [SetEvidencePayload itemA (EvidenceFingerprint "same") Truncated] >>= right
   assert "truncating one use deleted shared blob" =<< doesFileExist blobPath
   _ <- publish (Just (key second)) [SetEvidencePayload itemB (EvidenceFingerprint "same") Truncated] >>= right
   assert "truncated payload retained bytes" . not =<< doesFileExist blobPath
+  assert "old capture resolved reclaimed bytes" . isLeft =<< resolve [(payload,captured)] (blobValue ref)
+
+noGuestExecution :: Eff (GuestExecution : es) a -> Eff es a
+noGuestExecution = interpret $ \_ _ -> error "Blob resolution invoked a guest"
 
 noBlobs :: Eff (BlobStorage : es) a -> Eff es a
 noBlobs = interpret $ \_ operation -> case operation of
