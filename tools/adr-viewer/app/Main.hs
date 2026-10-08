@@ -7,7 +7,9 @@ import AdrViewer.Render (renderPage)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text.IO as TIO
 import Options.Applicative
+import System.Directory (createDirectoryIfMissing)
 import System.Exit (exitFailure)
+import System.FilePath (takeDirectory)
 import System.IO (hPutStrLn, stderr)
 
 data Command
@@ -42,6 +44,7 @@ run (Check evidence curated) = do
 run (Render evidence curated output) = do
   inputs <- load evidence curated
   report inputs
+  createDirectoryIfMissing True (takeDirectory output)
   BL.writeFile output (renderPage inputs)
   putStrLn ("wrote " <> output)
 
