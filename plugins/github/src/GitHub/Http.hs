@@ -10,7 +10,8 @@ import Text.JSON.Types (JSValue(..))
 
 get :: Text -> Maybe Text -> Text -> Acquisition payload (Either Text (JSValue, Maybe Text))
 get base token url
-  | not (base `Text.isPrefixOf` url) = pure (Left "GitHub pagination left the selected repository")
+  -- GitHub can use /repositories/ID in Link headers instead of /repos/OWNER/NAME.
+  | not ("https://api.github.com/" `Text.isPrefixOf` url) = pure (Left "GitHub pagination left the GitHub API origin")
   | otherwise = do
       result <- sendHttp (HttpRequest "GET" url
         ([("Accept","application/vnd.github+json"),("X-GitHub-Api-Version","2022-11-28"),("User-Agent","kyyn")]

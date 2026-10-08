@@ -176,7 +176,7 @@ provider prior changed problem authenticated = do
             ,"base" .= object ["ref" .= text "main","sha" .= text "base"],"head" .= object ["ref" .= text "feature","sha" .= text "head"]])
           else if "/commits?" `Text.isInfixOf` url then
             if "page=2" `Text.isSuffixOf` url then ok (toJSON [object ["sha" .= text "def"]])
-            else response "200" (next "commits?page=2") (toJSON [object ["sha" .= text "abc"]])
+            else response "200" "<https://api.github.com/repositories/123/commits?page=2>; rel=\"next\"" (toJSON [object ["sha" .= text "abc"]])
           else if "/commits/abc?" `Text.isInfixOf` url then
             if "page=2" `Text.isSuffixOf` url then ok (commit "abc" [renamed])
             else response "200" (next "commits/abc?page=2") (commit "abc" [added])

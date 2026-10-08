@@ -48,9 +48,13 @@ is false at GitHub's 3,000-file response ceiling (conservatively including exact
 3,000). Patch fields returned by the API are discarded, not stored as evidence.
 
 Fetch refreshes mutable discussions and emits only changed evidence. Known commit
-SHAs do not refetch commit details. Mutable discussions are deliberately reread so
+SHAs do not refetch commit details. The commit listing still traverses the selected
+branch's history within `since` on each fetch (all history when omitted).
+Mutable discussions, including captured closed items within the configured scope, are deliberately reread so
 comment/review edits are not lost through reliance on a parent timestamp. Large
-repositories may require many API requests; use a token and a suitable initial
+repositories may require many API requests on every fetch, not just the first:
+roughly two per issue and four per PR, plus listing/comment/review pagination and
+new commit details. Use a token and a suitable initial
 date. A failed or rate-limited fetch publishes nothing; retry after correcting the
 problem. Rate-limit diagnostics include available retry/reset headers; the connector
 does not block waiting for an hourly quota reset. Pagination is followed, including
