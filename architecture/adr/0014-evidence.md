@@ -21,8 +21,9 @@ investigation, and let recipes explicitly own any processing state they need.
 Each configured connector instance has one latest captured evidence state, stored
 as Dhall in an ignored checkout-local store. A successful fetch replaces changed
 items, adds new items and removes deleted items. Persistent payload storage contains
-only the resulting current values. Binary and large-text payloads use typed
+only the resulting current values. Captured files and attachments use typed
 BlobRefs under [ADR 0029](0029-evidence-blobs-sync.md), not embedded file contents.
+Mail's readable text body is an ordinary field of its payload.
 That ADR owns atomic connector sync positions and blob lifetime.
 
 All new evidence-read invocations use the latest successful fetch. Latest means latest successfully
@@ -43,7 +44,7 @@ data EvidencePayload a = Available a | Truncated
 
 data Evidence a = Evidence
   { fingerprint :: EvidenceFingerprint
-  , references :: [Text]
+  , externalReferences :: [Text]
   , payload :: EvidencePayload a
   }
 
@@ -205,16 +206,13 @@ data MailConfig = MailConfig
   { auth :: GraphAuth, mailbox :: Text
   , folders :: [MailFolder], retentionDays :: Integer }
 data MailFolder = WellKnownFolder Text | FolderPath Text
-data MailFetch = MailFetch
-  { since :: Maybe Text
-  , maxAttachmentBytes :: Maybe Integer
-  , attachmentMediaTypes :: [Text] }
+data MailFetch = MailFetch { since :: Maybe Text }
 data MailPosition = MailPosition
   { folders :: [FolderPosition] }
 data FolderPosition = FolderPosition
   { folderId :: Text, deltaLink :: Text }
 
-data AttachmentContent = Stored BlobRef | Link Text | Skipped Text
+data AttachmentContent = Stored BlobRef | Link Text
 data Attachment = Attachment
   { name :: Text, mediaType :: Text, size :: Integer
   , inline :: Bool, content :: AttachmentContent }
@@ -222,6 +220,9 @@ data Attachment = Attachment
 
 The payload is one message: subject, from/to/cc addresses, sent/received instants,
 conversationId, internetMessageId, first-seen folder, text body and attachments.
+The body and attachments belong to this one plugin-defined payload, not separate
+evidence items. External references identify the source message; nested BlobRefs
+identify captured attachment bytes.
 Resolve configured well-known names (such as inbox/sentitems) or custom folder
 paths to provider folder IDs. Keep one delta continuation per folder and publish
 all folder results/positions together. Configure one mailbox per instance.
@@ -238,6 +239,8 @@ This connector captures newly encountered mail, not a mirror of read flags or
 folder membership. Ignore provider deletions/moves and changes to already captured
 messages; fingerprint the captured payload, not `changeKey`. No owner-address
 direction inference. Message-to-fact interpretation belongs to curation.
+This also applies to drafts: their first captured contents stand even if the
+draft is edited or sent later. The connector does not maintain a live draft mirror.
 
 Initial backfill uses `since`, defaulting to 30 days before the invocation's
 captured start time; later fetches follow saved folder continuations. Do not
@@ -248,16 +251,25 @@ that folder's enumeration, deduplicate against retained IDs and publish only on
 success. `retentionDays` truncates older message payloads based on received time,
 preserving their IDs/fingerprints/references; it does not remove evidence. A retained
 truncated ID still participates in deduplication. Retention is not a historical-read promise.
+`retentionDays` is explicit instance configuration, independent of recipe state
+or whether an agent has read the evidence. It may truncate content before any
+recipe uses it; acquisition does not wait for processing or acknowledgements.
 The [message delta contract](https://learn.microsoft.com/en-us/graph/api/message-delta)
 owns available filters and continuation semantics; do not infer a general query
 language from it.
 
 Request text bodies; do not dump HTML as the agent's normal reading surface.
-Capture inline attachment metadata too. Download policy uses declared size/media
-type and the streaming byte limit; an intentionally omitted attachment records a
-Skipped reason, not an empty successful file. Missing metadata must not silently
-claim a download passed a policy check. Transient transport/throttling failures
-fail/retry acquisition rather than becoming permanent Skipped results.
+Store the readable text directly in the email payload without a second raw
+HTML/MIME archive of the source message. Format conversion preserves content;
+it does not summarize the message or discard quoted correspondence. Recipes
+decide what the content means.
+
+Capture inline attachment metadata too. Download byte-backed attachments; there
+is no size/media-type exclusion policy or skipped-attachment constructor.
+A failed attachment download fails the whole fetch after applicable retries.
+Publish neither partial messages nor a new sync position; the prior evidence
+and position remain unchanged. Linked attachments represent external content,
+not a failed or deliberately omitted byte download.
 
 File attachments use raw bytes. Attached messages use MIME `.eml`; attached contacts
 and events retain their actual `.vcf`/`.ics` representations. Reference attachments
@@ -317,12 +329,11 @@ data FilesScope
 data FilesConfig = FilesConfig
   { auth :: GraphAuth, scope :: FilesScope
   , folderPath :: Text, includeGlobs :: [Text] }
-data FileContent = StoredFile BlobRef | SkippedFile Text
 data FilePayload = FilePayload
   { name :: Text, path :: Text, webUrl :: Text
   , mediaType :: Text, size :: Integer
   , modified :: Text, modifiedBy :: Text
-  , cTag :: Maybe Text, content :: FileContent }
+  , cTag :: Maybe Text, content :: BlobRef }
 ```
 
 Resolve the configured site/library, user drive or pasted URL to drive/item IDs
@@ -337,8 +348,9 @@ subtree and globs in plugin code. Evidence ID is an unambiguous driveId/itemId p
 not a path. Retain the folder hierarchy in the connector-owned position so folder
 renames/moves update descendants' paths and scope even when the provider omits
 those descendants. Coalesce repeated item entries before deriving one consistent
-delta against the prior capture. A failed page/hydration leaves the capture and
-position unchanged. A provider-invalidated cursor triggers complete reconciliation,
+delta against the prior capture. A failed page, hydration or content download
+fails the whole fetch after applicable retries, leaving the capture and position
+unchanged. A provider-invalidated cursor triggers complete reconciliation,
 not blind deletion from a partial response.
 
 Hydrate metadata absent from delta before content decisions. Compare `cTag` to the
@@ -362,8 +374,9 @@ A plugin invocation reads one immutable in-memory view of the latest captured
 evidence. The host owns its lifetime and releases the store lock before running
 guest code or external acquisition. Refresh does not change an already-loaded
 invocation's input; the next invocation uses the latest capture. That in-memory
-view lasts only for its invocation. Referenced blobs share that scoped lifetime
-under ADR 0029; refresh must not reclaim bytes an active reader still needs.
+view lasts only for its invocation. Blob reads use that captured context, but
+references do not pin bytes against concurrent refresh or clearing. ADR 0029
+owns blob lifetime.
 
 ```haskell
 -- Host-side materialization of current captured evidence.
@@ -650,7 +663,7 @@ data EvidenceRef = EvidenceRef
   { producer :: Text
   , instanceName :: Text
   , source :: Text
-  , references :: [Text]
+  , externalReferences :: [Text]
   }
 ```
 
