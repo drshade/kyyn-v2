@@ -160,8 +160,8 @@ decodeEvolutionReplyWith parseRoot bytes = eitherDecodeStrict bytes >>= parseEit
     root = exact "ObservedRoot" ["contract","value"] $ \o -> ObservedRoot <$> o .: "contract" <*> (o .: "value" >>= parseRoot)
     rationale = exact "Rationale" ["explanation","evidence"] $ \o ->
       Rationale <$> o .: "explanation" <*> (o .: "evidence" >>= array evidence)
-    evidence = exact "EvidenceRef" ["producer","connector","source","references"] $ \o ->
-      EvidenceRef <$> o .: "producer" <*> o .: "connector" <*> o .: "source" <*> o .: "references"
+    evidence = exact "EvidenceRef" ["producer","connector","source","externalReferences"] $ \o ->
+      EvidenceRef <$> o .: "producer" <*> o .: "connector" <*> o .: "source" <*> o .: "externalReferences"
     array parse = withArray "List" (traverse parse . toList)
 
 exact :: String -> [Key] -> (Object -> Parser a) -> Value -> Parser a

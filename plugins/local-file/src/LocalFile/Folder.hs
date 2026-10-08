@@ -22,7 +22,7 @@ fetch (Schema.FolderConfig directory recursive) prior =
               texts <- sequence contents
               let old = [(key,value) | (key,Just value) <- zip previousIds previous]
                   current = [(EvidenceId (Text.pack path),Evidence token
-                    [Text.pack (fullPath path)] (Schema.Document text)) | (path,CapturedText text token) <- zip paths texts]
+                    [Text.pack (fullPath path)] (Available (Schema.Document text))) | (path,CapturedText text token) <- zip paths texts]
                   changes = concatMap (changed old) current
                   removed = [RemovedEvidence key | key <- previousIds, key `notElem` map fst current]
               pure (changes ++ removed)
@@ -30,6 +30,8 @@ fetch (Schema.FolderConfig directory recursive) prior =
     fullPath path = directory ++ "/" ++ path
     changed old (key,value) = case lookup key old of
       Nothing -> [NewEvidence key value]
+      Just (Evidence token _ Truncated) | token == fingerprint value ->
+        [SetEvidencePayload key token payload | Evidence _ _ payload <- [value]]
       Just previous | fingerprint previous == fingerprint value -> []
                     | otherwise -> [UpdatedEvidence key value]
     fingerprint (Evidence token _ _) = token

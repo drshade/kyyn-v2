@@ -34,8 +34,8 @@ rationaleCodec = Codec encode decode
     evidenceCodec = Codec encodeEvidence decodeEvidence
     encodeEvidence (EvidenceRef producer connector source references) = record
       [("producer",encodeWith textCodec producer),("connector",encodeWith textCodec connector),
-       ("source",encodeWith textCodec source),("references",encodeWith (listCodec textCodec) references)]
+       ("source",encodeWith textCodec source),("externalReferences",encodeWith (listCodec textCodec) references)]
     decodeEvidence value = do
-      values <- fields ["producer","connector","source","references"] value
+      values <- fields ["producer","connector","source","externalReferences"] value
       EvidenceRef <$> field "producer" textCodec values <*> field "connector" textCodec values
-        <*> field "source" textCodec values <*> field "references" (listCodec textCodec) values
+        <*> field "source" textCodec values <*> field "externalReferences" (listCodec textCodec) values

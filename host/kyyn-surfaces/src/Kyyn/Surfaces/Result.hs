@@ -224,7 +224,7 @@ reportJson (EvolutionReport plugins steps) = object
     methodJson (ClosedAgent (FlowEntryRef entry)) = object ["kind" .= ("ClosedAgent" :: String),"flow" .= entry]
     recorded (RecordedFact contract value) = object ["schema" .= describeRootContract contract, "value" .= value]
     evidenceJson (EvidenceRef producer connector source references) = object
-      ["producer" .= producer, "instance" .= connector, "source" .= source, "references" .= references]
+      ["producer" .= producer, "instance" .= connector, "source" .= source, "externalReferences" .= references]
 
 reportText :: EvolutionReport -> [String]
 reportText (EvolutionReport plugins steps) = concatMap pluginLines plugins ++ concatMap step steps

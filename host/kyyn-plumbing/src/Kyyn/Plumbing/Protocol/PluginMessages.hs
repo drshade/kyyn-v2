@@ -75,14 +75,30 @@ parseResult = parseEither (exact ["tag","value"] $ \o -> do
     _ -> fail "Expected typed Left or Right result")
 
 evidenceValue :: Evidence CheckedValue -> Value
-evidenceValue (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue _ payload)) =
-  object ["fingerprint" .= fingerprint,"references" .= refs,"payload" .= payload]
+evidenceValue (Evidence (EvidenceFingerprint fingerprint) refs payload) =
+  object ["fingerprint" .= fingerprint,"externalReferences" .= refs,"payload" .= payloadValue payload]
+
+payloadShape :: Shape -> Shape
+payloadShape payload = Union [("Available",Just payload),("Truncated",Nothing)]
+
+payloadValue :: EvidencePayload CheckedValue -> Value
+payloadValue (Available (CheckedValue _ value)) = object ["tag" .= ("Available" :: String),"value" .= value]
+payloadValue Truncated = object ["tag" .= ("Truncated" :: String)]
+
+parsePayload :: CheckedContract -> Value -> Parser (EvidencePayload CheckedValue)
+parsePayload contract = withObject "evidence payload" $ \o -> do
+  tag <- o .: "tag"
+  case tag :: String of
+    "Available" -> exactFields ["tag","value"] o >> Available . CheckedValue (contractId contract) <$> o .: "value"
+    "Truncated" -> exactFields ["tag"] o >> pure Truncated
+    _ -> fail "Unknown evidence payload state"
 
 changesShape :: Shape -> Shape
-changesShape payload = List (Union [("New",Just entry),("Updated",Just entry),("Removed",Just text)])
+changesShape payload = List (Union [("New",Just entry),("Updated",Just entry),("Removed",Just text),
+  ("SetPayload",Just (Record [("id",text),("fingerprint",text),("payload",payloadShape payload)]))])
   where
     text = Scalar TextScalar
-    entry = Record [("id",text),("evidence",Record [("fingerprint",text),("references",List text),("payload",payload)])]
+    entry = Record [("id",text),("evidence",Record [("fingerprint",text),("externalReferences",List text),("payload",payloadShape payload)])]
 
 parseChanges :: CheckedContract -> Value -> Either String [EvidenceChange CheckedValue]
 parseChanges contract = parseEither (withArray "evidence changes" (traverse change . toList))
@@ -94,10 +110,13 @@ parseChanges contract = parseEither (withArray "evidence changes" (traverse chan
         "New" -> entry NewEvidence value
         "Updated" -> entry UpdatedEvidence value
         "Removed" -> RemovedEvidence . EvidenceId <$> parseJSON value
+        "SetPayload" -> exact ["id","fingerprint","payload"] (\e -> SetEvidencePayload
+          <$> (EvidenceId <$> e .: "id") <*> (EvidenceFingerprint <$> e .: "fingerprint")
+          <*> (e .: "payload" >>= parsePayload contract)) value
         _ -> fail "Unknown evidence change"
     entry constructor = exact ["id","evidence"] $ \o -> do
       key <- EvidenceId <$> o .: "id"
-      payload <- o .: "evidence" >>= exact ["fingerprint","references","payload"] (\e ->
-        Evidence <$> (EvidenceFingerprint <$> e .: "fingerprint") <*> e .: "references"
-          <*> (CheckedValue (contractId contract) <$> e .: "payload"))
+      payload <- o .: "evidence" >>= exact ["fingerprint","externalReferences","payload"] (\e ->
+        Evidence <$> (EvidenceFingerprint <$> e .: "fingerprint") <*> e .: "externalReferences"
+          <*> (e .: "payload" >>= parsePayload contract))
       pure (constructor key payload)

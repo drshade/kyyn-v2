@@ -61,7 +61,7 @@ itemA = EvidenceId "a.txt"
 itemB = EvidenceId "b.txt"
 
 value :: String -> Evidence CheckedValue
-value name = Evidence (EvidenceFingerprint (Text.pack name)) [Text.pack ("/source/" ++ name)] (CheckedValue (contractId contract) (String (Text.pack ("payload-only-" ++ name))))
+value name = Evidence (EvidenceFingerprint (Text.pack name)) [Text.pack ("/source/" ++ name)] (Available (CheckedValue (contractId contract) (String (Text.pack ("payload-only-" ++ name)))))
 
 execute :: DirectoryScope -> Eff '[EvidenceStore, DocumentPersistence, DhallHandling, FileSystem, Failure, IOE] a -> IO a
 execute scope action = runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ runEvidenceStore scope action)))) >>= right
@@ -72,10 +72,26 @@ key (EvidenceSnapshotRef _ _ identity) = identity
 captureContents :: Maybe CurrentEvidence -> Maybe (EvidenceSnapshotRef, [(EvidenceId, Evidence CheckedValue)])
 captureContents = fmap (\(CurrentEvidence snapshot values _) -> (snapshot,values))
 
+availabilityProof :: IO ()
+availabilityProof = withSystemTempDirectory "kyyn-payload-" $ \directory -> do
+  scope <- right (directoryScope directory)
+  let publish prior changes = execute scope (publishFetch instanceA producer contract prior Nothing changes) >>= right
+      load = execute scope (loadCurrentEvidence instanceA producer contract) >>= right >>= maybe (fail "Missing capture") pure
+  first <- publish Nothing [NewEvidence itemA (value "first")]
+  second <- publish (Just (key first)) [SetEvidencePayload itemA (EvidenceFingerprint "first") Truncated]
+  CurrentEvidence _ items (FetchSummary _ _ added updated removed _) <- load
+  assert "truncation counted as upstream change" ((added,updated,removed) == (0,0,0))
+  assert "publication lost truncated item" (items == [(itemA,Evidence (EvidenceFingerprint "first") ["/source/first"] Truncated)])
+  let Evidence _ _ payload = value "first"
+  _ <- publish (Just (key second)) [SetEvidencePayload itemA (EvidenceFingerprint "first") payload]
+  CurrentEvidence _ restored _ <- load
+  assert "publication failed to restore payload" (restored == [(itemA,value "first")])
+
 main :: IO ()
 main = do
   recordingProof
   positionProof
+  availabilityProof
   let first = [NewEvidence itemA (value "old"),NewEvidence itemB (value "removed")]
       second = [UpdatedEvidence itemA (value "new"),RemovedEvidence itemB]
       summary = FetchSummary (FetchId "one") "2026-09-11T00:00:00Z" 2 0 0 Nothing
@@ -88,9 +104,23 @@ main = do
   assert "same-fingerprint update accepted" (case applyChanges initial [UpdatedEvidence itemA (value "old")] of
     Left (InvalidDelta _) -> True; _ -> False)
   let sameTokenDifferentPayload = Evidence (EvidenceFingerprint "old") []
-        (CheckedValue (contractId contract) (String "different"))
+        (Available (CheckedValue (contractId contract) (String "different")))
   assert "same-fingerprint update accepted because payload differed"
     (isLeft (applyChanges initial [UpdatedEvidence itemA sameTokenDifferentPayload]))
+  truncated <- right (applyChanges initial [SetEvidencePayload itemA (EvidenceFingerprint "old") Truncated])
+  assert "truncation lost metadata" (lookup itemA truncated == Just (Evidence (EvidenceFingerprint "old") ["/source/old"] Truncated))
+  let Evidence _ _ originalPayload = value "old"
+  restoredPayload <- right (applyChanges truncated [SetEvidencePayload itemA (EvidenceFingerprint "old") originalPayload])
+  assert "restoration changed evidence" (restoredPayload == initial)
+  assert "missing payload target accepted" (isLeft (applyChanges [] [SetEvidencePayload itemA (EvidenceFingerprint "old") Truncated]))
+  assert "stale payload fingerprint accepted" (isLeft (applyChanges initial [SetEvidencePayload itemA (EvidenceFingerprint "wrong") Truncated]))
+  newTruncated <- right (applyChanges [] [NewEvidence itemA (Evidence (EvidenceFingerprint "first") [] Truncated)])
+  removedTruncated <- right (applyChanges newTruncated [RemovedEvidence itemA])
+  assert "truncated evidence cannot be removed" (null removedTruncated)
+  truncatedBytes <- right (runPureEff (runDhallHandling (encodeState producer contract (EvidenceState summary truncated))))
+  truncatedState <- right (runPureEff (runDhallHandling (decodeState producer contract truncatedBytes)))
+  assert "Dhall lost truncation" (truncatedState == EvidenceState summary truncated)
+  assert "truncation retained payload" (not (Bytes.isInfixOf "payload-only-old" truncatedBytes))
   sequential <- right (applyChanges [] [NewEvidence itemA (value "a"),UpdatedEvidence itemA (value "b"),RemovedEvidence itemA])
   assert "changes not applied in order" (null sequential)
   let state = EvidenceState summary initial
@@ -173,7 +203,7 @@ main = do
     wrong <- run (publishFetch instanceA producer contract (Just (key f2)) Nothing [NewEvidence itemA (value "bad")])
     assert "invalid batch accepted" (isLeft wrong)
     invalidPayload <- run (publishFetch instanceA producer contract (Just (key f2)) Nothing
-      [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (CheckedValue (contractId contract) (Bool True)))])
+      [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (Available (CheckedValue (contractId contract) (Bool True))))])
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
     let boolContract = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
     wrongContract <- run (loadCurrentEvidence instanceA producer boolContract)

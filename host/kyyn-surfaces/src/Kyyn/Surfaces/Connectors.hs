@@ -54,11 +54,15 @@ evidenceListResult (EvidenceCapture snapshot latest items) = success
     [Text.unpack key ++ "  " ++ Text.unpack fingerprint | (EvidenceId key,EvidenceFingerprint fingerprint) <- items])
 
 evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> Text.Text -> Response
-evidenceItemResult snapshot latest (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs (CheckedValue _ payload)) rendered = success
+evidenceItemResult snapshot latest (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) rendered = success
   (object ["selection" .= context snapshot, "latest" .= summaryValue latest, "id" .= key, "fingerprint" .= fingerprint,
-    "references" .= refs, "payload" .= payload])
+    "externalReferences" .= refs, "payload" .= encodedPayload])
   (summaryLines latest ++ ["Evidence: " ++ Text.unpack key, "Fingerprint: " ++ Text.unpack fingerprint] ++
     ["Source: " ++ Text.unpack ref | ref <- refs] ++ [Text.unpack (Text.stripEnd rendered)])
+  where
+    encodedPayload = case payload of
+      Available (CheckedValue _ value) -> object ["tag" .= ("Available" :: String),"value" .= value]
+      Truncated -> object ["tag" .= ("Truncated" :: String)]
 
 summaryValue :: FetchSummary -> Value
 summaryValue (FetchSummary identity at added updated removed options) = object

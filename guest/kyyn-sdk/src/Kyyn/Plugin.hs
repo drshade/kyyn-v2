@@ -1,13 +1,13 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, TypeOperators #-}
 module Kyyn.Plugin
   ( SourceConnector(..), CapturedMethod(..), Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
-  , Evidence(..), EvidenceChange(..), CapturedText(..), FetchContext(..), FetchResult(..), CapturedRead, ReadsEvidence, listEvidenceIds, readEvidence ) where
+  , EvidencePayload(..), Evidence(..), EvidenceChange(..), CapturedText(..), FetchContext(..), FetchResult(..), CapturedRead, ReadsEvidence, listEvidenceIds, readEvidence ) where
 
 import Kyyn.Types.Program (Program, (:+:)(..), request)
 import Kyyn.Types.PluginHost (Http, Secrets, Waiting)
 import Kyyn.Types.Plugin (EvidenceRead(..), FileRead)
 import Kyyn.Types.Plugin (SourceConnector(..), CapturedMethod(..), EvidenceSnapshot, FetchError(..), CapturedText(..), FetchContext(..), FetchResult(..))
-import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), Evidence(..), EvidenceChange(..))
+import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 
 -- | A plugin method that reads captured evidence without acquiring new source data.
 type CapturedRead payload = Program (EvidenceRead payload)

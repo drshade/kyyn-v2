@@ -8,4 +8,5 @@ event key snapshot = do
   pure $ case result of
     Left problem -> Left problem
     Right Nothing -> Left (FetchError ("No fetched event with ID " <> key))
-    Right (Just (Evidence _ _ value)) -> Right value
+    Right (Just (Evidence _ _ (Available value))) -> Right value
+    Right (Just (Evidence _ _ Truncated)) -> Left (FetchError "Event payload has been truncated.")

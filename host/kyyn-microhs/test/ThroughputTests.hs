@@ -89,7 +89,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     let CurrentEvidence _ items _ = current
     unless (length items == pages * 100) (fail "Published evidence count differs")
     unless (sort [key | (EvidenceId key,_) <- items] == sort [itemId n | n <- [1 .. pages*100]]) (fail "Published IDs differ")
-    forM_ items $ \(_,Evidence fingerprint _ (CheckedValue _ value)) ->
+    forM_ items $ \(_,Evidence fingerprint _ (Available (CheckedValue _ value))) ->
       unless (fingerprint == EvidenceFingerprint "version" && value == captured)
         (fail "Published Dhall payload differs from provider evidence")
     verified <- getMonotonicTimeNSec

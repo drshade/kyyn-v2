@@ -68,10 +68,10 @@ main = do
   case evidenceListResult (EvidenceCapture snapshot latest []) of
     Response _ _ messages _ -> unless (messages == [latestLine,"No current evidence."]) (fail "Empty listing output")
   case evidenceItemResult snapshot latest (EvidenceId "notes.txt")
-    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (CheckedValue (contractId evidenceContract) (String "hello"))) "\"hello\"\n" of
+    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (Available (CheckedValue (contractId evidenceContract) (String "hello")))) "\"hello\"\n" of
     Response _ payload messages _ -> unless
       (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
-        "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"references" .= ["file:///notes.txt" :: String],"payload" .= ("hello" :: String)]
+        "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"externalReferences" .= ["file:///notes.txt" :: String],"payload" .= object ["tag" .= ("Available" :: String),"value" .= ("hello" :: String)]]
         && messages == [latestLine,"Evidence: notes.txt","Fingerprint: abc","Source: file:///notes.txt","\"hello\""])
       (fail "Current evidence inspection lost payload or source metadata")
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []

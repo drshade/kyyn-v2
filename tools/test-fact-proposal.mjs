@@ -68,7 +68,7 @@ evolution = evolve (Rationale "Start tracking tasks" [])
                  | Remove : Text >
 let RootEdit = < Edit_todos : Edit >
 in { steps = [ { rationale = { explanation = "Record useful work", evidence =
-       [ { producer = "notes", connector = "inbox", source = "file:///tasks", references = [ "todo-1" ] } ] }
+       [ { producer = "notes", connector = "inbox", source = "file:///tasks", externalReferences = [ "todo-1" ] } ] }
      , edits = [ RootEdit.Edit_todos (Edit.Append { id = "todo-1", value = { title = "Do this" } }) ] } ]
    , state = {=} }
 `;

@@ -12,4 +12,5 @@ view identity snapshot = do
   pure $ case result of
     Left problem -> Left problem
     Right Nothing -> Left (FetchError "Document not found")
-    Right (Just (Evidence _ _ (Schema.Document text))) -> Right text
+    Right (Just (Evidence _ _ (Available (Schema.Document text)))) -> Right text
+    Right (Just (Evidence _ _ Truncated)) -> Left (FetchError "Payload truncated")

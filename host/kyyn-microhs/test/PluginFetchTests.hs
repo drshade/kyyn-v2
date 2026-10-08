@@ -141,6 +141,13 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
     assert "acquisition delta differs between compilers" (result == Just expected && status == ExitSuccess)
     assert "acquisition did not suspend for typed evidence reads"
       (length [() | ("evidence","read") <- trace] == 3 && ("files","list") `elem` trace)
+    (restored,_,restoredStatus) <- broker TruncatedPayload program (input (configValue "/folder"))
+    let restoration = object ["tag" .= ("SetPayload" :: String),"value" .= object
+          ["id" .= ("same.txt" :: String),"fingerprint" .= ("recorded-same" :: String),
+           "payload" .= object ["tag" .= ("Available" :: String),"value" .= object ["text" .= ("same" :: String)]]]]
+    assert "same-version truncated content was not restored" (restoredStatus == ExitSuccess && restored == Just (success (toJSON
+      [change "Updated" "changed.txt" "changed 🦋\nline two",restoration,change "New" "new.txt" "new",
+       object ["tag" .= ("Removed" :: String),"value" .= ("gone.txt" :: String)]])))
     (relative,relativeTrace,relativeStatus) <- broker Normal program (input (configValue "relative"))
     assert "relative directory caused host effects" (relative == Just (failure "Folder directory must be absolute") && null relativeTrace && relativeStatus == ExitSuccess)
     (unreadable,unreadableTrace,unreadableStatus) <- broker DirectoryFailure program (input (configValue "/folder"))
@@ -155,6 +162,8 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
     (result,trace,status) <- broker Normal program (input (String "changed.txt"))
     assert "captured read requested acquisition or lost payload" (result == Just (success (String "old")) &&
       trace == [("evidence","read")] && status == ExitSuccess)
+    (truncated,_,truncatedStatus) <- broker TruncatedPayload program (input (String "changed.txt"))
+    assert "truncated read silently returned content" (truncated == Just (failure "Payload truncated") && truncatedStatus == ExitSuccess)
   let forbidden = Text.encodeUtf8 (Text.unlines ["module ReadDocument where","import Kyyn.Plugin","import Kyyn.Plugin.Host",
         "import qualified FolderSchema as Schema",
         "view :: String -> EvidenceSnapshot Schema.Document -> CapturedRead Schema.Document (Either FetchError String)",
@@ -201,7 +210,7 @@ rejectBoth temporary toolchain ghc sources = do
   rejected <- compileMicroHs temporary toolchain sources
   assert "MicroHs granted a capability outside the declared row" (case rejected of Left _ -> True; Right _ -> False)
 
-data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload deriving (Eq)
+data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload | TruncatedPayload deriving (Eq)
 
 broker :: Scenario -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
 broker scenario = brokerWith scenario (\body capability method args -> do
@@ -270,7 +279,10 @@ respond scenario capability method arguments = case (capability,method) of
     key <- right (parseEither (withObject "read evidence" (.: "id")) arguments)
     contents <- maybe (fail "Unexpected evidence ID") pure (lookup key
       [("gone.txt","gone"),("changed.txt","old"),("same.txt","same")])
-    pure (success (object ["tag" .= ("Some" :: String),"value" .= evidence key contents]))
+    let captured = if scenario == TruncatedPayload then object
+          ["fingerprint" .= ("recorded-" <> contents),"externalReferences" .= ["/folder/" ++ key],
+           "payload" .= object ["tag" .= ("Truncated" :: String)]] else evidence key contents
+    pure (success (object ["tag" .= ("Some" :: String),"value" .= captured]))
   _ -> fail "Guest requested a capability outside the fixture's row"
   where
     checkSnapshot value = do
@@ -283,7 +295,7 @@ failure :: String -> Value
 failure message = object ["tag" .= ("Left" :: String),"value" .= message]
 evidence :: String -> Text.Text -> Value
 evidence key contents = object ["fingerprint" .= ("recorded-" <> contents),
-  "references" .= ["/folder/" ++ key],"payload" .= object ["text" .= contents]]
+  "externalReferences" .= ["/folder/" ++ key],"payload" .= object ["tag" .= ("Available" :: String),"value" .= object ["text" .= contents]]]
 change :: String -> String -> Text.Text -> Value
 change kind key contents = object ["tag" .= kind,"value" .= object ["id" .= key,"evidence" .= evidence key contents]]
 
