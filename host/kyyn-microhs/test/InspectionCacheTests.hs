@@ -1,6 +1,6 @@
 -- Real Dhall/filesystem cache round trips, hits, source/settings/build invalidation,
 -- disabled mode and corrupt-entry refusal. Recording handlers verify metadata still
--- executes on a type-inspection hit. Recipe exports (including empty modules) hit
+-- executes on a type-inspection hit. Distinct recipe signatures hit
 -- without compilation and reject uncaptured closure paths; no guest compiler required.
 
 {-# LANGUAGE OverloadedStrings, GADTs, LambdaCase, DataKinds #-}
@@ -106,11 +106,11 @@ main = withSystemTempDirectory "kyyn-inspection-cache" $ \temporary -> do
   apiSecond <- apiInspect (Left [])
   assert "API namespace separate, declarations and docs preserved" (apiFirst == Right (Right api) && apiSecond == apiFirst)
   metadataOnHit temporary
-  recipeExportsOnHit temporary
+  recipeSignaturesOnHit temporary
   putStrLn "Inspection cache roundtrips, hits, invalidation, disabled mode, refusals and corruption checks passed."
 
-recipeExportsOnHit :: FilePath -> IO ()
-recipeExportsOnHit temporary = do
+recipeSignaturesOnHit :: FilePath -> IO ()
+recipeSignaturesOnHit temporary = do
   let path = either error id . relativePath
       scope = either error id . directoryScope
       compiler = scope (temporary </> "absent-recipe-compiler")
@@ -118,19 +118,18 @@ recipeExportsOnHit temporary = do
       sources = [(path "Flows.hs","captured flows"),(path "State.hs","captured state")]
       tree = either error id (fileTree sources)
       closure = map fst sources
-      expected = [("flow",RecipeSignature StringType UnitType (OptionalType IntegerType)),
-        ("other",RecipeSignature BoolType StringType UnitType)]
+      expected = RecipeSignature StringType UnitType (OptionalType IntegerType)
       run :: Eff CacheEffects a -> IO (Either OperationalFailure a)
       run action = runEff . runFailure . runFileSystemIO (scope temporary) . runDhallHandling $ action
-      seed name value = run $ cachedInspection cache "recipe-exports" name
-        (inspectionSettings (scopePath compiler) name) sources encodeRecipeExports decodeRecipeExports (pure (Right value))
+      seed name value = run $ cachedInspection cache "recipe-signature" name
+        (inspectionSettings (scopePath compiler) name) sources encodeRecipeSignature decodeRecipeSignature (pure (Right value))
       check name = run . metadataExecution (error "Recipe discovery must not execute guest code") ""
-        . metadataCompiler . runSchemaInspectionIO (GuestToolchain compiler) cache $ inspectRecipeExports tree name
-  forM_ [("Flows",expected),("Empty",[])] $ \(name,exports) -> do
-    seeded <- seed name (exports,closure)
-    unless (seeded == Right (Right (exports,closure))) (fail "recipe exports cache roundtrip")
+        . metadataCompiler . runSchemaInspectionIO (GuestToolchain compiler) cache $ inspectRecipeFunction tree name
+  forM_ [("Flows.flow",expected),("Flows.other",RecipeSignature BoolType StringType UnitType)] $ \(name,signature) -> do
+    seeded <- seed name (signature,closure)
+    unless (seeded == Right (Right (signature,closure))) (fail "recipe signature cache roundtrip")
     result <- check name
-    unless (result == Right (Right exports)) (fail ("recipe exports did not hit without compiler: " ++ show result))
+    unless (result == Right (Right signature)) (fail ("recipe signature did not hit without compiler: " ++ show result))
   _ <- seed "InvalidClosure" (expected,[path "Uncaptured.hs"])
   invalid <- check "InvalidClosure"
   unless (case invalid of Right (Left (_:_)) -> True; _ -> False)

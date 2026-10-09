@@ -1,6 +1,6 @@
 module Kyyn.Plumbing.Protocol.Inspection
   ( encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature
-  , encodeRecipeExports, decodeRecipeExports ) where
+  , encodeRecipeSignature, decodeRecipeSignature ) where
 
 import Data.Aeson (object, (.=), (.:), withObject)
 import Data.Aeson.Types (parseEither)
@@ -18,30 +18,28 @@ import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataT
 inspectionShape :: Shape
 inspectionShape = Record [("type",dataTypeShape),("closure",List (Scalar TextScalar))]
 
-recipeExportsShape :: Shape
-recipeExportsShape = Record
-  [("exports",List (Record [("name",Scalar TextScalar),("root",dataTypeShape),
-    ("input",dataTypeShape),("state",dataTypeShape)])),("closure",List (Scalar TextScalar))]
+recipeSignatureShape :: Shape
+recipeSignatureShape = Record
+  [("root",dataTypeShape),("input",dataTypeShape),("state",dataTypeShape),
+    ("closure",List (Scalar TextScalar))]
 
-encodeRecipeExports :: DhallHandling :> es => ([(String,RecipeSignature)],[RelativePath])
+encodeRecipeSignature :: DhallHandling :> es => (RecipeSignature,[RelativePath])
   -> Eff es (Either [Diagnostic] ByteString)
-encodeRecipeExports (signatures,closure) = fmap (fmap Text.encodeUtf8) $ encodeValue recipeExportsShape
-  (object ["exports" .= [object ["name" .= name,"root" .= dataTypeValue root,
-    "input" .= dataTypeValue input,"state" .= dataTypeValue state]
-    | (name,RecipeSignature root input state) <- signatures],"closure" .= map relativeName closure])
+encodeRecipeSignature (RecipeSignature root input state,closure) = fmap (fmap Text.encodeUtf8) $ encodeValue recipeSignatureShape
+  (object ["root" .= dataTypeValue root,"input" .= dataTypeValue input,
+    "state" .= dataTypeValue state,"closure" .= map relativeName closure])
 
-decodeRecipeExports :: DhallHandling :> es => ByteString
-  -> Eff es (Either [Diagnostic] ([(String,RecipeSignature)],[RelativePath]))
-decodeRecipeExports bytes = case Text.decodeUtf8' bytes of
+decodeRecipeSignature :: DhallHandling :> es => ByteString
+  -> Eff es (Either [Diagnostic] (RecipeSignature,[RelativePath]))
+decodeRecipeSignature bytes = case Text.decodeUtf8' bytes of
   Left problem -> pure (bad (show problem))
   Right source -> do
-    decoded <- decodeValue recipeExportsShape source
-    pure (decoded >>= either bad Right . parseEither (withObject "recipe exports" $ \record ->
-      (,) <$> (record .: "exports" >>= traverse (withObject "recipe export" $ \entry ->
-        (,) <$> entry .: "name" <*> (RecipeSignature
-          <$> (entry .: "root" >>= parseDataType)
-          <*> (entry .: "input" >>= parseDataType)
-          <*> (entry .: "state" >>= parseDataType))))
+    decoded <- decodeValue recipeSignatureShape source
+    pure (decoded >>= either bad Right . parseEither (withObject "recipe signature" $ \record ->
+      (,) <$> (RecipeSignature
+          <$> (record .: "root" >>= parseDataType)
+          <*> (record .: "input" >>= parseDataType)
+          <*> (record .: "state" >>= parseDataType))
         <*> (record .: "closure" >>= traverse (either fail pure . relativePath))))
   where bad = Left . pure . errorDiagnostic "inspection.cache-invalid"
 
