@@ -304,14 +304,6 @@ main = do
     removeDirectory statePath
     reopened <- run (evidenceHead instanceA) >>= right
     assert "operational failure left store locked" (reopened == Nothing)
-    Bytes.writeFile (storePath </> "state.dhall") "legacy capture"
-    legacy <- run (openCurrentEvidence (selectionFor instanceA producer))
-    assert "legacy capture silently became unfetched" (case legacy of
-      Left problem@(InvalidEvidence _) -> "clear" `Text.isInfixOf` Text.toLower (Text.pack (show (evidenceProblemDiagnostic problem)))
-      _ -> False)
-    _ <- run (clearEvidence instanceA)
-    legacyGone <- doesDirectoryExist storePath
-    assert "clear retained legacy capture" (not legacyGone)
   putStrLn "Evidence store: current payloads, latest summary, Dhall, producer reset, clear and concurrent publication passed."
 
 positionProof :: IO ()

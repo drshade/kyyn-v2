@@ -1,12 +1,10 @@
 module Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord) where
 
 import Data.ByteString (ByteString)
-import Data.Aeson (Value(String))
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Contract (RootContract)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.DataType (Shape(Scalar), ScalarKind(IntegerScalar))
+import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evolution (EvolutionId)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
@@ -22,16 +20,10 @@ decodeEvolutionRecord :: DhallHandling :> es => ByteString
   -> Eff es (Either String (Either [Diagnostic] (EvolutionId, RootContract, RootContract, EvolutionReport)))
 decodeEvolutionRecord bytes = case Text.decodeUtf8' bytes of
   Left problem -> pure (Left (show problem))
-  Right contents -> do
-    version <- decodeValue (Scalar IntegerScalar) ("(" <> contents <> "\n).version")
-    case version of
-      Left diagnostics -> pure (Left (show diagnostics))
-      Right (String "7") -> decodeContents contents
-      Right _ -> pure (Right (Left [errorDiagnostic "evolution.record-format"
-        "Stored evolution record format is not supported by this kernel"]))
+  Right contents -> decodeContents contents
   where
     decodeContents contents = do
-      decoded <- decodeValue headerShape ("(" <> contents <> "\n).{version, identity, before, after, recipeContracts}")
+      decoded <- decodeValue headerShape ("(" <> contents <> "\n).{identity, before, after, recipeContracts}")
       case decoded of
         Left diagnostics -> pure (Left (show diagnostics))
         Right value -> case decodeHeader value of

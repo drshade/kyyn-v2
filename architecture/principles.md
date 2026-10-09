@@ -18,6 +18,15 @@ it could be useful. Let measured workloads and human/agent experience establish
 the problem first. If a simpler implementation supports the required journey,
 use it. Correctness requirements still apply to whatever we do implement.
 
+## Persist one current format
+
+Kyyn-owned persisted data has one current format, with no format-version fields,
+version dispatch, compatibility readers, legacy detectors or migration hints.
+Decode against the current structure and report ordinary parse/type errors.
+Do not invent missing fields to make an older representation readable. Integrity
+checks for identities, contracts and required data still apply. External API
+versions and dependency versions are separate concerns.
+
 ## Exercise judgment; challenge guidance that defeats its purpose
 
 Principles and ADRs guide judgment, not replace it. When guidance appears

@@ -35,8 +35,8 @@ main = do
   assert "unknown symbol" (refused (readApi (Just bytes) (Api.findSymbol "make")))
   assert "missing catalogue" (refused (readApi Nothing Api.readCatalogue))
   assert "malformed catalogue" (refused (readApi (Just "not dhall") Api.readCatalogue))
-  assert "wrong catalogue shape" (refused (readApi (Just "{ version = +1, modules = [1] }") Api.readCatalogue))
-  assert "unsupported version" (refused (readApi (Just "{ version = +3, modules = [] : List { name : Text, instances : List Text, symbols : List { name : Text, namespace : < Type | Value >, definedAs : Text, checkedSignature : Text, declaration : Optional Text, documentation : Optional Text } } }") Api.readCatalogue))
+  assert "wrong catalogue shape" (refused (readApi (Just "{ modules = [1] }") Api.readCatalogue))
+  assert "catalogue has no format version" (not ("version =" `Bytes.isInfixOf` bytes))
   putStrLn "Guest catalogue Dhall round trips, read-only discovery and refusal tests passed."
 
 onlyCatalogue :: DirectoryScope -> Maybe Bytes.ByteString -> Eff (FileSystem : es) a -> Eff es a

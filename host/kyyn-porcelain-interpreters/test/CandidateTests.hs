@@ -17,7 +17,6 @@ import qualified Data.ByteString.Char8 as Char8
 import Data.Text (pack)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import Data.List (isInfixOf)
 import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Contract
@@ -117,42 +116,31 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let latestPath = candidateDir </> Char8.unpack first
       metadataPath = latestPath </> "candidate.dhall"
   metadata <- Bytes.readFile metadataPath
-  let expectStale = execute (loadCandidate location) >>= \case
-        Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
-        other -> fail ("Unrecognised candidate layout was not stale: " ++ show other)
-      extraFile = latestPath </> "extra"
-  Bytes.writeFile extraFile "unrecognised layout"
-  expectStale
+  unless (not ("version =" `Char8.isInfixOf` metadata)) (fail "Candidate contains a format version")
+  let extraFile = latestPath </> "extra"
+  Bytes.writeFile extraFile "unrelated file"
+  unchanged <- execute (loadCandidate location) >>= right >>= right
+  unless (unchanged == Just candidate) (fail "Unrelated file changed candidate")
   removeFile extraFile
   removeFile metadataPath
-  expectStale
+  execute (loadCandidate location) >>= storageRejected
   Bytes.writeFile metadataPath metadata
   let capturedManifest = latestPath </> "capture/manifest.dhall"
   currentManifest <- Bytes.readFile capturedManifest
-  Bytes.writeFile capturedManifest ("(" <> currentManifest <> ") // { extra = [] : List Text }")
+  Bytes.writeFile capturedManifest "True"
   execute (loadCandidate location) >>= \case
-    Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
-    other -> fail ("Outdated captured workspace was not classified as stale: " ++ show other)
+    Right (Left (_:_)) -> pure ()
+    other -> fail ("Malformed captured manifest lost its decode diagnostic: " ++ show other)
   Bytes.writeFile capturedManifest currentManifest
-  let futureRecord = "(" <> metadata <> ") // { version = +6 }"
-  case runPureEff (runDhallHandling (decodeEvolutionRecord futureRecord)) of
-    Right (Left [Diagnostic Error "evolution.record-format" message _])
-      | not ("apply" `isInfixOf` Text.unpack message) -> pure ()
-    other -> fail ("Unsupported archive format was corruption or requested replay: " ++ show other)
-  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ version = +6, content = True }")) of
-    Right (Left [Diagnostic Error "evolution.record-format" _ _]) -> pure ()
-    other -> fail ("Unsupported version required the current schema: " ++ show other)
-  Bytes.writeFile metadataPath futureRecord
-  execute (loadCandidate location) >>= \case
-    Right (Left [Diagnostic Error "candidate.stale" _ _]) -> pure ()
-    other -> fail ("Unsupported private result did not request reapplication: " ++ show other)
-  Bytes.writeFile metadataPath metadata
+  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ content = True }")) of
+    Left _ -> pure ()
+    other -> fail ("Malformed archive did not return its decode error: " ++ show other)
   let fingerprint = pack (contractFingerprint (contractId (rootSchema schema)))
       replace from to = Text.encodeUtf8 (Text.replace from to (Text.decodeUtf8 metadata))
   Bytes.writeFile metadataPath (replace fingerprint "different-contract")
   execute (loadCandidate location) >>= \case
-    Right (Left (Diagnostic Error "candidate.stale" _ _ : _)) -> pure ()
-    other -> fail ("Changed contract did not report staleness: " ++ show other)
+    Right (Left (_:_)) -> pure ()
+    other -> fail ("Changed contract did not report integrity failure: " ++ show other)
   Bytes.writeFile metadataPath "{"
   execute (loadCandidate location) >>= storageRejected
   Bytes.writeFile metadataPath (replace "\"one\"" "True")

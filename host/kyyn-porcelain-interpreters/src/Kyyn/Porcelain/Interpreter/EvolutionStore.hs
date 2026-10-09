@@ -125,12 +125,8 @@ runEvolutionStore = interpret $ \_ -> \case
         path <- stored ReadFile "latest" (relativePath (evolutionIdName key))
         location <- stored ReadFile "candidate" (directoryScope (scopedPath parent path))
         tree <- FileSystem.readTree location
-        let knownLayout = all (\(p,_) -> let n = relativeName p in n `elem` ["candidate.dhall","recipe-contracts.dhall"] ||
-              "capture/" `isPrefixOf` n || "root/" `isPrefixOf` n) (files tree)
-            stale = pure (Left [errorDiagnostic "candidate.stale"
-              "Saved result no longer matches this kernel; check the evolution again"])
         case lookup "candidate.dhall" [(relativeName p,b) | (p,b) <- files tree] of
-          Just metadata | knownLayout -> do
+          Just metadata -> do
             decoded <- decodeEvolutionRecord metadata >>= stored ReadFile "candidate.dhall"
             capture <- stored ReadFile "capture" (subtree "capture/" tree)
             captured <- WorkspaceStore.readWorkspaceSnapshot capture
@@ -155,8 +151,9 @@ runEvolutionStore = interpret $ \_ -> \case
                 _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
                 checkSavedReport ReadFile report
                 pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
-              _ -> stale
-          _ -> stale
+              (Left diagnostics, _) -> pure (Left diagnostics)
+              (_, Left diagnostics) -> pure (Left diagnostics)
+          Nothing -> storageFailure ReadFile "candidate.dhall" "Missing candidate record"
 
 workspaceSummary :: (WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
   => KnowledgeBase -> EvolutionId -> ExceptT [Diagnostic] (Eff es) (Maybe EvolutionSummary)
