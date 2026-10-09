@@ -1,4 +1,6 @@
-module Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature) where
+module Kyyn.Plumbing.Protocol.Inspection
+  ( encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature
+  , encodeRecipeSignature, decodeRecipeSignature ) where
 
 import Data.Aeson (object, (.=), (.:), withObject)
 import Data.Aeson.Types (parseEither)
@@ -9,11 +11,37 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Path (RelativePath, relativeName, relativePath)
 import Kyyn.Domain.Plugin (PluginSignature(..))
+import Kyyn.Domain.Recipe (RecipeSignature(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataType)
 
 inspectionShape :: Shape
 inspectionShape = Record [("type",dataTypeShape),("closure",List (Scalar TextScalar))]
+
+recipeSignatureShape :: Shape
+recipeSignatureShape = Record
+  [("root",dataTypeShape),("input",dataTypeShape),("state",dataTypeShape),
+    ("closure",List (Scalar TextScalar))]
+
+encodeRecipeSignature :: DhallHandling :> es => (RecipeSignature,[RelativePath])
+  -> Eff es (Either [Diagnostic] ByteString)
+encodeRecipeSignature (RecipeSignature root input state,closure) = fmap (fmap Text.encodeUtf8) $ encodeValue recipeSignatureShape
+  (object ["root" .= dataTypeValue root,"input" .= dataTypeValue input,
+    "state" .= dataTypeValue state,"closure" .= map relativeName closure])
+
+decodeRecipeSignature :: DhallHandling :> es => ByteString
+  -> Eff es (Either [Diagnostic] (RecipeSignature,[RelativePath]))
+decodeRecipeSignature bytes = case Text.decodeUtf8' bytes of
+  Left problem -> pure (bad (show problem))
+  Right source -> do
+    decoded <- decodeValue recipeSignatureShape source
+    pure (decoded >>= either bad Right . parseEither (withObject "recipe signature" $ \record ->
+      (,) <$> (RecipeSignature
+          <$> (record .: "root" >>= parseDataType)
+          <*> (record .: "input" >>= parseDataType)
+          <*> (record .: "state" >>= parseDataType))
+        <*> (record .: "closure" >>= traverse (either fail pure . relativePath))))
+  where bad = Left . pure . errorDiagnostic "inspection.cache-invalid"
 
 signatureShape :: Shape
 signatureShape = Record [("kind",Scalar TextScalar),("types",List dataTypeShape),("closure",List (Scalar TextScalar))]
