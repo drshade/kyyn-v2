@@ -107,7 +107,6 @@ kyyn
     ready <id>
     draft <id>
     accept <id>
-    recover <id>
   tap
     add <name> --from <url>
     remove <name>
@@ -478,8 +477,9 @@ Use consistent verbs: `list` returns a collection, `show` inspects one item,
 and `check` validates. `evolution check` captures and evaluates the current
 workspace, saves its candidate, then runs candidate validation and required
 examples. There is no separate public `evaluate` command. `accept` freshly checks
-and publishes the saved candidate without rerunning the evolution. `recover` repairs the checkout
-after acceptance as specified by ADR 0012. Inspection never implicitly fetches
+and publishes the saved candidate without rerunning the evolution. Incomplete
+checkout synchronization supplies Git repair instructions under ADR 0012.
+Inspection never implicitly fetches
 evidence, accepts a candidate or invokes a sink. Connector `fetch` is for source
 connectors; sink invocation belongs to explicit output publication under ADR 0017.
 
@@ -502,7 +502,7 @@ compiler stages. Add commands for demonstrated user tasks, not merely because
 another kernel function exists.
 
 For the first CLI, selection uses the checkout's HEAD, with the current local
-branch passed explicitly to acceptance/recovery. There is no branch override.
+branch passed explicitly to acceptance. There is no branch override.
 Detached HEAD is a branch-selection refusal (`git.detached-head`) for these
 operations: there is no local branch to pass to publication. This is not a
 `CheckoutMismatch` with an invented branch. The kernel still checks for a branch
@@ -527,8 +527,9 @@ objects for refusals/failures. Human mode writes results to stdout and diagnosti
 to stderr. Parser help/usage retains optparse-applicative's standard presentation.
 Diagnostics preserve severity, code, message and structured location. Exit codes
 are 0 for success, 1 for domain refusal, 2 for invalid CLI usage, 3 for operational
-failure, 4 for acceptance requiring checkout inspection/recovery (including an
-already-accepted retry), and 130 for user interruption. Code 4 must retain the
+failure, 4 for a successful acceptance requiring checkout repair, and 130 for user
+interruption. An already-Accepted local manifest is a domain refusal (exit 1).
+Code 4 must retain the
 accepting revision; it is not an invitation to reapply the evolution. These exits
 render [ADR 0019](0019-failures.md)'s outcomes rather than adding domain states.
 
@@ -538,7 +539,7 @@ configuration; the host supplies its HOME/XDG configuration locations explicitly
 Both author and committer use that configured identity, with the host's current
 clock time in explicit commit metadata. There is no CLI or author/committer
 environment override path. Missing/blank identity is an actionable refusal before
-compilation or mutation; already-accepted diagnosis precedes identity lookup.
+compilation or mutation; local readiness diagnosis precedes identity lookup.
 Malformed configuration is an operational failure. The plumbing operation is:
 
 ```haskell
@@ -555,7 +556,7 @@ kernel's operations: `commit.gpgsign=false` for commit construction,
 `--no-filters` when writing blobs, and `-z` for path records. Checkout restoration
 follows the user's conversion settings. Configured hooks, including a global
 `core.hooksPath`, remain enabled and receive the same explicit process environment
-(empty PATH); their failures follow the existing Git publication/recovery outcomes.
+(empty PATH); their failures follow the Git publication/checkout outcomes.
 
 Runtime paths come from the
 installed layout, with `--runtime` and `--git` development overrides.
@@ -564,7 +565,7 @@ unpatched compiler's `MHSCPPHS` environment variable once from the resolved runt
 Kyyn's declaration reader uses that toolchain's preprocessor path directly.
 KB-scoped guest discovery loads the SDK and compiler integration; discovery
 outside a KB reads only the installed catalogue. Evolution listing,
-state changes, archived inspection, recovery, plugin installation and already-accepted diagnosis do
+state changes, archived inspection, plugin installation and local readiness diagnosis do
 not load the SDK. Host configuration/path resolution and interpretation live in
 `kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
 workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
