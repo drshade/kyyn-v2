@@ -333,3 +333,5 @@ repository; [build prerequisites](PROJECT-PRACTICES.md#development-setup) apply.
 It installs `~/.local/bin/kyyn-v2` and its runtime bundle. Installed users need
 Git, not the Haskell/Node/C toolchains. Plain `cabal install` does not install
 the runtime assets. Rerun the installer to update; KBs are left untouched.
+An executable update can make a KB's vendored plugin source incompatible with the
+new SDK; updating the executable does not update those plugins.
