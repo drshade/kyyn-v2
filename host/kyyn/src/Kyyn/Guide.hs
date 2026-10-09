@@ -15,7 +15,7 @@ guideResponse = success (object ["markdown" .= markdown]) (lines markdown)
 markdown :: String
 markdown = $(do
   source <- loc_filename <$> location
-  let path = takeDirectory source </> "../../../../docs/guide.md"
+  let path = takeDirectory source </> "../../guide.md"
   addDependentFile path
   bytes <- runIO (Bytes.readFile path)
   case Text.decodeUtf8' bytes of
