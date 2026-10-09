@@ -147,6 +147,12 @@
         "seq": 131,
         "evidence": "PR #168: root recipe run captures Before and selected pending evidence, runs the closed flow and saves the typed proposal with curation declaration"
       },
+      "deliveries": [
+        {
+          "seq": 124,
+          "evidence": "PR #161 adds public ProposedCuration types declaring acknowledgements; closed-run capture and execution still missing"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -222,6 +228,16 @@
         "seq": 140,
         "evidence": "Recording-provider tests landed with PRs #164/#165; the description projection shipped as root recipe describe in PR #181"
       },
+      "deliveries": [
+        {
+          "seq": 127,
+          "evidence": "PR #164 tests model-turn providers through a recording factory without provider calls; flow description projection still missing"
+        },
+        {
+          "seq": 128,
+          "evidence": "PR #165 tests flows deterministically with recorded model turns; the description projection follows in #181"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -529,6 +545,12 @@
         "seq": 162,
         "evidence": "PR #210 closes #205: closed flows accept typed invocation input plus current root/state and return fact-edit/state proposals; curation machinery removed (SDK foundation in PR #208)"
       },
+      "deliveries": [
+        {
+          "seq": 160,
+          "evidence": "PR #208 adds SDK RecipeEdit over domain facts and one typed recipe state; typed request input, persistence and curation removal follow in #210"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -576,6 +598,12 @@
         "seq": 162,
         "evidence": "PR #210: explicit RecipeBased workspaces edit facts and selected recipe state; frozen proposals check and accept without replay (RecipeEvolution code_added at 160)"
       },
+      "deliveries": [
+        {
+          "seq": 160,
+          "evidence": "PR #208 adds RecipeEvolution applying edits and returning recipe state; frozen Dhall persistence and generated entry follow in #210"
+        }
+      ],
       "confidence": "high"
     }
   ],

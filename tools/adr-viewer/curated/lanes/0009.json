@@ -23,6 +23,12 @@
         "seq": 78,
         "evidence": "PR #96 gives acquisition and captured readers distinct typed rows (Acquisition vs CapturedRead) with compile-time rejection of out-of-row calls; KnowledgeBaseHost never became a code record"
       },
+      "deliveries": [
+        {
+          "seq": 26,
+          "evidence": "PR #27 runs queries as Program over the typed SnapshotRead row; plugin acquisition and captured-read rows follow in #96"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -44,6 +50,12 @@
         "seq": 26,
         "evidence": "PR #27 implements snapshot-only typed queries with no wire values or IO; validators pure; no guest publication capability. Output renderers themselves are still absent from code"
       },
+      "deliveries": [
+        {
+          "seq": 24,
+          "evidence": "PR #25 runs validators as pure functions with no capability row; snapshot-only queries follow in #27"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -330,6 +342,12 @@
         "seq": 87,
         "evidence": "PR #107 generates phantom-typed instance handles and resolves the named instance's latest captured input"
       },
+      "deliveries": [
+        {
+          "seq": 86,
+          "evidence": "PR #106 invokes captured methods by named accepted instance, resolving that instance's latest capture for the plugin's own reads; generated instance-typed proxies follow in #107"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -584,6 +602,12 @@
         "seq": 113,
         "evidence": "Transport proved with native HTTP/wait interpreters in PR #146 (seq 112); installed network connectors receive them in PR #147"
       },
+      "deliveries": [
+        {
+          "seq": 112,
+          "evidence": "PR #146 adds typed Http, Secrets and Waiting algebras with native interpreters, proved with recording handlers; installed connectors receive them in #147"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -634,6 +658,12 @@
         "seq": 113,
         "evidence": "PR #147 adds registration-checked login signatures and CLI login writing instructions to stderr"
       },
+      "deliveries": [
+        {
+          "seq": 112,
+          "evidence": "PR #146 adds the separate login row and stderr instruction display; registration-checked login and CLI login follow in #147"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -655,6 +685,12 @@
         "seq": 113,
         "evidence": "PR #146 transport has no automatic retries; MicrosoftGraph/Http.hs (PR #147) handles 429/503 Retry-After"
       },
+      "deliveries": [
+        {
+          "seq": 112,
+          "evidence": "PR #146 HTTP transport performs no automatic retries and offers WaitSeconds; Graph Retry-After handling follows in #147"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -849,5 +885,5 @@
       "note": "Desired-state reconciliation: drops status/basis lines, turns 'illustrative' into contract wording, 'proposes' to 'defines', adds model turns to the tool table row (covered by 0009.31) and HttpTransport/SecretStore/Waiting to the executeAcquisition signature to match code already shipped in seq 113."
     }
   ],
-  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04 never implemented). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row. Seq 167 (PR #215) realised the blob rows of 0009.32."
+  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04 never implemented). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row. Seq 167 (PR #215) realised the blob rows of 0009.32. The network algebras and login row were proved at seq 112 before installed connectors received them at 113."
 }

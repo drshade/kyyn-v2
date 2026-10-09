@@ -50,6 +50,12 @@
         "seq": 24,
         "evidence": "PR 25 compiles the manifest-selected Root -> ValidationReport validator and runs it on the captured root"
       },
+      "deliveries": [
+        {
+          "seq": 23,
+          "evidence": "PR #24 adds the shared ValidationReport and guest encoder; compiling and running the authored validator follows in #25"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -75,6 +81,12 @@
         "seq": 26,
         "evidence": "ValidateRoot in PR 25, ExecuteQuery in PR 27"
       },
+      "deliveries": [
+        {
+          "seq": 24,
+          "evidence": "PR #25 adds RootExecution ValidateRoot on a selected snapshot; ExecuteQuery follows in #27"
+        }
+      ],
       "confidence": "high"
     },
     {

@@ -28,6 +28,12 @@
         "seq": 12,
         "evidence": "PR 13 builds CheckedContract with contractId/metadataOf over the Shape projection introduced in PR 6"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 introduces the Shape structural projection feeding codec generation; no CheckedContract or ContractId"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -76,6 +82,12 @@
         "seq": 12,
         "evidence": "SDK metadata types land in PR 12; PR 13 checkContract enforces role coherence (Timeline still rejected for lack of a date codec)"
       },
+      "deliveries": [
+        {
+          "seq": 11,
+          "evidence": "PR #12 evaluates a named pure Haskell SchemaMetadata export with role declarations; coherence checking follows in #13"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -100,6 +112,12 @@
         "seq": 12,
         "evidence": "PR 13 checks SDK Fact/FactId envelopes by resolved identity, collection declarations and reference targets"
       },
+      "deliveries": [
+        {
+          "seq": 11,
+          "evidence": "PR #12 adds collection and reference declarations to the metadata vocabulary; checking [Fact payload] fields and targets follows in #13"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -126,6 +144,12 @@
         "seq": 18,
         "evidence": "PR 19 implements SchemaInspection/inspectSchema/runSchemaInspectionIO over captured module bytes"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 inspects checked types with the linked MicroHs frontend in kyyn-microhs; the SchemaInspection effect over captured SchemaSource follows in #19"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -174,6 +198,12 @@
         "seq": 16,
         "evidence": "CheckedValue arrives in PR 17 via shape-directed DhallHandling/RootStore rather than a standalone checkValue"
       },
+      "deliveries": [
+        {
+          "seq": 14,
+          "evidence": "PR #15 structurally checks supplied Dhall against a checked contract into CheckedDhallValue carrying its identity; RootStore-owned CheckedValue follows in #17"
+        }
+      ],
       "confidence": "medium",
       "ended": {
         "seq": 143,
@@ -205,6 +235,12 @@
         "seq": 14,
         "evidence": "Codec generation from PR 6/13 and Dhall projection from PR 15; no KB-contract JSON Schema discovery projection exists in the repo"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 generates codecs purely from inspected types; Dhall type projection follows in #15"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -275,6 +311,12 @@
         "seq": 18,
         "evidence": "PR 19's runSchemaInspectionIO materializes captures through FileSystem"
       },
+      "deliveries": [
+        {
+          "seq": 11,
+          "evidence": "PR #12 evaluates metadata through GuestCompilation, FileSystem and ProcessExecution; the runSchemaInspectionIO interpreter follows in #19"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -614,6 +656,12 @@
         "how": "unrealised",
         "evidence": "Docs-only PR 197; Shape in Kyyn.Domain.DataType has no BlobReference constructor"
       },
+      "deliveries": [
+        {
+          "seq": 167,
+          "evidence": "PR #215 recognises the nominal SDK BlobRef by resolved DataType identity, not field names, when walking payloads; Shape still has no BlobReference constructor"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -662,5 +710,5 @@
       "note": "Metadata declaration fields switch String to Text as part of packed transport; representation detail, same commitments"
     }
   ],
-  "notes": "The founding text was unusually code-ahead: interface sketches (checkValue/UncheckedValue, TypeBindings, InspectedSchema.bindings, projectJsonSchema) mostly did not survive contact with implementation. TypeBindings was quietly dissolved into the retained DataType at seq 18 and formally replaced by loadedSources at seq 34; checkValue was never built and the seq 143 reconciliation rewrote the ADR to the DhallHandling/RootStore checking the code had used since seq 16. The longest-running gap is scalar support: Decimal/Date/Instant/Natural kinds and the Timeline affordance have been in the ADR since seq 1 and are still absent from code (issue #188); seq 143 removed the Data.Fixed guidance rather than resolving it, and Probability (seq 149) is the only library-backed scalar delivered. A JSON Schema discovery projection of KB contracts is also still unbuilt. BlobReference (seq 151) is design-only. Judgement calls: seq 8's FileSystem effect-row addition and seq 143's GuestExecution/DhallHandling row are treated as refines (effect rows are contracts per PR 186), and seq 155's String->Text change as editorial. PR #215 (seq 167) implemented BlobRef by walking the nominal DataType rather than adding a BlobReference shape to the algebra, so 0005.25 stays unrealised."
+  "notes": "The founding text was unusually code-ahead: interface sketches (checkValue/UncheckedValue, TypeBindings, InspectedSchema.bindings, projectJsonSchema) mostly did not survive contact with implementation. TypeBindings was quietly dissolved into the retained DataType at seq 18 and formally replaced by loadedSources at seq 34; checkValue was never built and the seq 143 reconciliation rewrote the ADR to the DhallHandling/RootStore checking the code had used since seq 16. The longest-running gap is scalar support: Decimal/Date/Instant/Natural kinds and the Timeline affordance have been in the ADR since seq 1 and are still absent from code (issue #188); seq 143 removed the Data.Fixed guidance rather than resolving it, and Probability (seq 149) is the only library-backed scalar delivered. A JSON Schema discovery projection of KB contracts is also still unbuilt. BlobReference (seq 151) is design-only. Judgement calls: seq 8's FileSystem effect-row addition and seq 143's GuestExecution/DhallHandling row are treated as refines (effect rows are contracts per PR 186), and seq 155's String->Text change as editorial. PR #215 (seq 167) implemented BlobRef by walking the nominal DataType rather than adding a BlobReference shape to the algebra, so 0005.25 stays unrealised. The contract algebra was built bottom-up: Shape and frontend inspection in #6, metadata vocabulary in #12, CheckedContract in #13."
 }

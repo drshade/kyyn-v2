@@ -68,6 +68,12 @@
         "seq": 43,
         "evidence": "kyyn-microhs from PR #6; kyyn-surfaces and host/kyyn composition first appear in PR #44 with import-boundary checks. Composition module is Kyyn.Composition, not the sketched Kyyn/Application/Compose.hs"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 creates kyyn-microhs as the isolated owner of compiler-specific interpreters with import checks; surfaces and composition packages still missing"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -109,6 +115,12 @@
         "seq": 32,
         "evidence": "guest/kyyn-runtime from PR #6; guest/kyyn-sdk first appears in PR #33"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 creates the private guest/kyyn-runtime without kernel imports; the public kyyn-sdk follows in #33"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -149,6 +161,12 @@
         "seq": 43,
         "evidence": "tools/test-guest.sh and tests/integration from PR #6; examples/todos template with installed journey in PR #44. build-web.sh/package.sh never created (no web yet)"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 adds package-local tests, real-boundary tests/integration and test-guest.sh; disposable example KB templates follow in #44"
+        }
+      ],
       "confidence": "medium"
     },
     {

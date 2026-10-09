@@ -20,6 +20,24 @@
         "seq": 87,
         "evidence": "Typed acquisition proven in #96 (seq 78) and run natively in #99/#100; KB-side interpretation via typed tools composing captured plugin reads arrives in #107"
       },
+      "deliveries": [
+        {
+          "seq": 78,
+          "evidence": "PR #96 proves typed plugin acquisition across GHC and MicroHs"
+        },
+        {
+          "seq": 80,
+          "evidence": "PR #99 runs acquisition natively through host capabilities"
+        },
+        {
+          "seq": 81,
+          "evidence": "PR #100 registers source connectors with root-owned configuration"
+        },
+        {
+          "seq": 86,
+          "evidence": "PR #106 adds typed local-file content discovery; KB-side composition still missing"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -214,6 +232,12 @@
         "seq": 77,
         "evidence": "PR #95 assembles EvidenceRef citations host-side from plugin-supplied references, without fingerprints"
       },
+      "deliveries": [
+        {
+          "seq": 32,
+          "evidence": "PR #33 introduces EvidenceRef as a citation value; host assembly from plugin references follows in #95"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -287,6 +311,12 @@
         "seq": 80,
         "evidence": "Store consistency in #95 (seq 77); native acquisition publishing complete batches in #99"
       },
+      "deliveries": [
+        {
+          "seq": 77,
+          "evidence": "PR #95 checks delta consistency in the store; native publishing of complete batches follows in #99"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -372,6 +402,12 @@
         "seq": 80,
         "evidence": "PR #99 broker binds guest evidence reads to the selected snapshot"
       },
+      "deliveries": [
+        {
+          "seq": 77,
+          "evidence": "PR #95 adds snapshot references; per-invocation binding of guest reads follows in #99"
+        }
+      ],
       "ended": {
         "seq": 84,
         "how": "replaced",
@@ -396,6 +432,12 @@
         "seq": 87,
         "evidence": "PR #107 composes captured plugin reads in typed KB tools (after #106 local-file content methods)"
       },
+      "deliveries": [
+        {
+          "seq": 86,
+          "evidence": "PR #106 adds typed local-file content methods; composition in KB tools follows in #107"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -476,6 +518,12 @@
         "seq": 81,
         "evidence": "Folder fixture in #96 (seq 78); FolderConfig in the first-party local-file package in #100"
       },
+      "deliveries": [
+        {
+          "seq": 78,
+          "evidence": "PR #96 adds a folder fixture; the configured local-file connector follows in #100"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -715,6 +763,12 @@
         "seq": 91,
         "evidence": "Pure types in #111 (seq 90); persisted declarations in #112"
       },
+      "deliveries": [
+        {
+          "seq": 90,
+          "evidence": "PR #111 adds pure recipe types; persisted declarations follow in #112"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -743,6 +797,12 @@
         "seq": 92,
         "evidence": "PR #113 implements withCuration and preparation-time resolution"
       },
+      "deliveries": [
+        {
+          "seq": 90,
+          "evidence": "PR #111 models acknowledgement scopes purely; withCuration and preparation follow in #113"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -772,6 +832,12 @@
         "seq": 91,
         "evidence": "PR #112 persists host-owned curation progress"
       },
+      "deliveries": [
+        {
+          "seq": 90,
+          "evidence": "PR #111 models the register purely; host-owned persistence follows in #112"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -799,6 +865,12 @@
         "seq": 93,
         "evidence": "Pure comparison in #111 (seq 90); CLI pending discovery in #114"
       },
+      "deliveries": [
+        {
+          "seq": 90,
+          "evidence": "PR #111 computes net pending evidence purely; CLI discovery follows in #114"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -937,6 +1009,12 @@
         "seq": 96,
         "evidence": "SDK values in #117 (seq 95); full integration in #118"
       },
+      "deliveries": [
+        {
+          "seq": 95,
+          "evidence": "PR #117 adds KnowledgeBase and recipe editing values to the SDK; recipes become KB facts in #118"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -1464,6 +1542,16 @@
         "seq": 162,
         "evidence": "State edits in #208/#209 (seqs 160-161); complete typed creation/migration in #210"
       },
+      "deliveries": [
+        {
+          "seq": 160,
+          "evidence": "PR #208 adds typed recipe state edits"
+        },
+        {
+          "seq": 161,
+          "evidence": "PR #209 supports unit contracts for stateless recipes; creation and migration follow in #210"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -1485,6 +1573,12 @@
         "seq": 162,
         "evidence": "PR #210 adds explicit AdHoc/RecipeBased workspaces with state in candidates and review archives"
       },
+      "deliveries": [
+        {
+          "seq": 160,
+          "evidence": "PR #208 routes recipe state edits through the existing evolution core; reviewed RecipeBased workspaces follow in #210"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -1529,6 +1623,12 @@
         "seq": 168,
         "evidence": "PR #217: Graph Mail stores attachments as BlobRefs (AttachmentContent = Stored BlobRef | Link) with the plain text body inline; no Files connector yet"
       },
+      "deliveries": [
+        {
+          "seq": 167,
+          "evidence": "PR #215 streams captured blobs through host capabilities; Mail stores attachments as BlobRefs in #217"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -1760,5 +1860,5 @@
       "note": "Reconciles the invocation view to include the latest FetchSummary while implementing the seq-158 design (realisation evidence for 0014.55-0014.59)."
     }
   ],
-  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Payload availability (0014.47) was realised by PR #214 at seq 166, and the sync-position slice (0014.49) by PR #203. Seq 168 (PR #217) built Graph Mail with attachment BlobRefs, realising 0014.60, 0014.62 and 0014.64 (the latter two-connector nodes at medium confidence because the Files connector is still missing), and its spec edits are two refinements built in the same step: per-folder stored since reused on cursor reset (0014.65 refines 0014.62) and reference attachments as Graph v1.0 resource links with no beta call (0014.66 refines 0014.64). Spec ahead of code: the Teams meeting-artifact connector (0014.51) and the SharePoint/OneDrive Files connector (part of 0014.60/0014.63/0014.66) are unbuilt. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch)."
+  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Payload availability (0014.47) was realised by PR #214 at seq 166, and the sync-position slice (0014.49) by PR #203. Seq 168 (PR #217) built Graph Mail with attachment BlobRefs, realising 0014.60, 0014.62 and 0014.64 (the latter two-connector nodes at medium confidence because the Files connector is still missing), and its spec edits are two refinements built in the same step: per-folder stored since reused on cursor reset (0014.65 refines 0014.62) and reference attachments as Graph v1.0 resource links with no beta call (0014.66 refines 0014.64). Spec ahead of code: the Teams meeting-artifact connector (0014.51) and the SharePoint/OneDrive Files connector (part of 0014.60/0014.63/0014.66) are unbuilt. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch). Deliveries record the steps that built part of a decision before it was complete; 0014.01's acquisition and 0014.57's recipe state are the longest builds. Blob infrastructure (#215) is not a delivery for 0014.63: no Files connector uses it yet."
 }

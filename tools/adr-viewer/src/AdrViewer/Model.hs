@@ -1,17 +1,18 @@
 -- | What the viewer shows at each step, derived purely from curated lanes.
 --
--- A node is born at its step and never changes colour backwards. It is live until
+-- A node is born at its step and never changes colour backwards: specified, then
+-- in progress once a step delivers part of it, then realised. It is live until
 -- it ends or a later node supersedes it (a refinement continues the decision; a
--- replacement ends it). It counts as realised from 'realisedAt', but only if that
--- happens while it is still live. The browser only compares these numbers with the
--- step being shown; every rule lives here.
+-- replacement ends it). Deliveries and realisation count only while it is still
+-- live. The browser only compares these numbers with the step being shown; every
+-- rule lives here.
 module AdrViewer.Model
-  ( NodeView(..), LaneView(..), State(..)
-  , realisedAt, liveUntil, assignTracks, laneView, stateAt, convergence
+  ( NodeView(..), LaneView(..), State(..), Counts(..), Share(..)
+  , realisedAt, deliveredAt, liveUntil, assignTracks, laneView, stateAt, convergence
   ) where
 
 import AdrViewer.Types
-import Data.List (sortOn)
+import Data.List (nub, sort, sortOn)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
@@ -20,15 +21,29 @@ data NodeView = NodeView
   { nvNode :: Node
   , nvUntil :: Maybe Int       -- ^ step at which it stops being live; Nothing while current
   , nvRealisedAt :: Maybe Int  -- ^ step from which the code realises it; Nothing if never
+  , nvDeliveredAt :: [Int]     -- ^ steps that delivered part of it, before 'nvRealisedAt'
   , nvTrack :: Int }           -- ^ row within the lane; successors inherit their predecessor's
   deriving (Eq, Show)
 
 data LaneView = LaneView
   { lvLane :: Lane, lvNodes :: [NodeView], lvDepth :: Int
-  , lvCounts :: [(Int, Int)] } -- ^ per step 0..max: live decisions (realised, still ahead of code)
+  , lvCounts :: [Counts] }     -- ^ live decisions per step 0..max
   deriving (Eq, Show)
 
-data State = Hidden | Planned | Done | PlannedEnded | DoneEnded deriving (Eq, Show)
+-- | Live decisions at one step, by how far the code has got.
+data Counts = Counts { cDone :: Int, cPartial :: Int, cPlanned :: Int } deriving (Eq, Show)
+
+instance Semigroup Counts where
+  Counts a b c <> Counts d e f = Counts (a + d) (b + e) (c + f)
+
+instance Monoid Counts where
+  mempty = Counts 0 0 0
+
+-- | Shares of the live decisions across all lanes at one step.
+data Share = Share { shareDone :: Double, sharePartial :: Double } deriving (Eq, Show)
+
+data State = Hidden | Planned | Partial | Done | PlannedEnded | PartialEnded | DoneEnded
+  deriving (Eq, Show)
 
 realisedAt :: Node -> Maybe Int
 realisedAt n = case realisedHow (nodeRealised n) of
@@ -37,6 +52,12 @@ realisedAt n = case realisedHow (nodeRealised n) of
   CodeFirst -> max (nodeSeq n) <$> realisedSeq (nodeRealised n)
   Unrealised -> Nothing
   Unknown -> Nothing
+
+-- | Steps delivering part of it, never earlier than its birth (code that predates
+-- the decision shows as progress when it is written down) and only those before
+-- it is realised.
+deliveredAt :: Node -> [Int]
+deliveredAt n = nub (sort [d | Delivery s _ <- deliveries n, let d = max (nodeSeq n) s, maybe True (d <) (realisedAt n)])
 
 -- | The earliest of its own end and any later node that supersedes it.
 liveUntil :: [Node] -> Node -> Maybe Int
@@ -70,30 +91,34 @@ laneView maxSeq lane = LaneView lane views depth counts
   where
     nodes = laneNodes lane
     tracks = assignTracks nodes
-    views = [NodeView n (liveUntil nodes n) (realisedAt n) (Map.findWithDefault 0 (nodeId n) tracks) | n <- nodes]
+    views = [ NodeView n (liveUntil nodes n) (realisedAt n) (deliveredAt n) (Map.findWithDefault 0 (nodeId n) tracks)
+            | n <- nodes ]
     depth = max 1 (1 + maximum (0 : map nvTrack views))
-    counts = [count s | s <- [0 .. maxSeq]]
-    count s = foldl' (\(d, p) v -> case stateAt s v of
-                        Done -> (d + 1, p)
-                        Planned -> (d, p + 1)
-                        _ -> (d, p)) (0, 0) views
+    counts = [foldMap (count . stateAt s) views | s <- [0 .. maxSeq]]
+    count Done = Counts 1 0 0
+    count Partial = Counts 0 1 0
+    count Planned = Counts 0 0 1
+    count _ = mempty
 
 stateAt :: Int -> NodeView -> State
 stateAt t v
   | nodeSeq (nvNode v) > t = Hidden
-  | ended = if built then DoneEnded else PlannedEnded
-  | otherwise = if built then Done else Planned
+  | built = if ended then DoneEnded else Done
+  | started = if ended then PartialEnded else Partial
+  | otherwise = if ended then PlannedEnded else Planned
   where
     ended = maybe False (<= t) (nvUntil v)
     horizon = maybe t (min t) (nvUntil v)
     built = maybe False (<= horizon) (nvRealisedAt v)
+    started = any (<= horizon) (nvDeliveredAt v)
 
--- | Per step, the share of live curated decisions the code realises.
-convergence :: [LaneView] -> [Maybe Double]
+-- | Per step, the shares of live curated decisions the code realises and has
+-- started on.
+convergence :: [LaneView] -> [Maybe Share]
 convergence [] = []
-convergence lanes = map share (foldr1 (zipWith add) (map lvCounts lanes))
+convergence lanes = map share (foldr1 (zipWith (<>)) (map lvCounts lanes))
   where
-    add (a, b) (c, d) = (a + c, b + d)
-    share (done, planned)
-      | done + planned == 0 = Nothing
-      | otherwise = Just (fromIntegral done / fromIntegral (done + planned))
+    share (Counts done partial planned)
+      | total == 0 = Nothing
+      | otherwise = Just (Share (fromIntegral done / fromIntegral total) (fromIntegral partial / fromIntegral total))
+      where total = done + partial + planned

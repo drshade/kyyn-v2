@@ -66,6 +66,12 @@
         "seq": 74,
         "evidence": "PR #90 installs plugin source through the CLI, compiled locally with the bundled toolchain"
       },
+      "deliveries": [
+        {
+          "seq": 73,
+          "evidence": "PR #89 vendors plugin source and origin into the KB through porcelain without executables; the CLI install route follows in #90"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -145,6 +151,20 @@
         "seq": 104,
         "evidence": "BuildIdentity from PR #8; per-KB disposable compiled-artifact cache keyed by build identity in PR #132; checkout-local secrets at seq 98"
       },
+      "deliveries": [
+        {
+          "seq": 8,
+          "evidence": "PR #8 adds BuildIdentity over captured source, entry and pinned toolchain, with compiled artifacts held only in temporary scope; vendored packages, local secrets and the per-KB cache were still missing"
+        },
+        {
+          "seq": 73,
+          "evidence": "PR #89 vendors plugin source with its origin into the KB's Git tree, with no executables"
+        },
+        {
+          "seq": 98,
+          "evidence": "PR #122 keeps secrets checkout-local under ignored .kyyn/secrets; the disposable per-KB compiled-artifact cache keyed by build identity follows in #132"
+        }
+      ],
       "confidence": "medium"
     },
     {

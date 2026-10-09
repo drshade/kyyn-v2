@@ -26,6 +26,12 @@
         "seq": 34,
         "evidence": "PR 35 evaluates captured workspaces into an EvaluatedEvolution, but only via Program NoRequests; the effectful capability half was never built and was dropped at seq 52/97"
       },
+      "deliveries": [
+        {
+          "seq": 32,
+          "evidence": "PR #33 adds the SDK Evolution/EvolutionOutput values an entry returns; host evaluation into a candidate follows in #35"
+        }
+      ],
       "confidence": "medium",
       "ended": {
         "seq": 52,
@@ -108,6 +114,12 @@
         "seq": 30,
         "evidence": "PR 31 captures Before via LoadSourceAt at the manifest revision; capture tests re-capture against a second revision and publication tests reject stale bases"
       },
+      "deliveries": [
+        {
+          "seq": 29,
+          "evidence": "PR #30 workspace manifest pins Before to a full Git revision; loading and verifying Before at that revision follows in #31"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -130,6 +142,12 @@
         "seq": 31,
         "evidence": "PR 32 creates workspaces copying src/ to before/ and the non-fact root to target/; PR 30 projection rejects target/facts"
       },
+      "deliveries": [
+        {
+          "seq": 29,
+          "evidence": "PR #30 projects the before/target/change layout and rejects target/facts; creation copying full target contents follows in #32"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -231,6 +249,12 @@
         "seq": 36,
         "evidence": "PR 35 implements EvaluateEvolution with MicroHs; PR 37 adds applyEvolution materialize-and-save"
       },
+      "deliveries": [
+        {
+          "seq": 34,
+          "evidence": "PR #35 compiles and evaluates the evolution against a structurally readable Before; applyEvolution materialize-and-save follows in #37"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -252,6 +276,12 @@
         "seq": 34,
         "evidence": "PR 35's generated adapter compiles and runs change/Evolution.hs's evolution binding"
       },
+      "deliveries": [
+        {
+          "seq": 32,
+          "evidence": "PR #33 workspace creation emits a single conventional `evolution` binding; the generated adapter runs it in #35"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -424,6 +454,12 @@
         "seq": 39,
         "evidence": "PR 40 implements ExportAcceptedWorkspace returning a prefixed FileTree"
       },
+      "deliveries": [
+        {
+          "seq": 29,
+          "evidence": "PR #30 adds the notes/ directory excluded from captured inputs; prefixed subtree export follows in #40"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -501,6 +537,12 @@
         "seq": 38,
         "evidence": "PR 39 returns evolution.unverified-acceptance for local-only Accepted labels"
       },
+      "deliveries": [
+        {
+          "seq": 37,
+          "evidence": "PR #38 FindAcceptance establishes acceptance only from the committed archive and its introducing commit; listings flag local-only Accepted labels in #39"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -1178,6 +1220,16 @@
         "seq": 92,
         "evidence": "PR 113 implements withCuration attachment, resolution at candidate preparation and persistence in saved/archived records (record v2)."
       },
+      "deliveries": [
+        {
+          "seq": 90,
+          "evidence": "PR #111 adds the pure core resolving batch/individual acknowledgements into a register; persistence and evolution attachment still missing"
+        },
+        {
+          "seq": 91,
+          "evidence": "PR #112 persists the host-owned register with roots and candidates; attaching declarations to evolution output follows in #113"
+        }
+      ],
       "confidence": "high",
       "ended": {
         "seq": 158,
@@ -1208,6 +1260,12 @@
         "seq": 96,
         "evidence": "PR 118 implements KnowledgeBase evolution values (SDK groundwork in PR 117)"
       },
+      "deliveries": [
+        {
+          "seq": 95,
+          "evidence": "PR #117 adds the KnowledgeBase wrapper, recipe handles and onFacts lift in the SDK; evolution entries use them in #118"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -1330,6 +1388,12 @@
         "seq": 162,
         "evidence": "PR 208 adds SDK RecipeEdit; PR 210 integrates persistence, entrypoints and removes curation"
       },
+      "deliveries": [
+        {
+          "seq": 160,
+          "evidence": "PR #208 adds SDK RecipeEdit/RecipeEvolution lowered to ordinary Evolution; persistence, entrypoints and curation removal follow in #210"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -1406,5 +1470,5 @@
       "note": "CollectionEdit reader String→Text to match the packed-Text transport implementation."
     }
   ],
-  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment into 13 nodes: entry kind, composition, chain check, Before/After revisions (absorbing the 'Updating the base' section's author-directed rebase), workspace layout, module naming, capture/store, candidate storage, execution, binding convention, reports, record history and lifecycle. The Composition section's mechanics are merged into 0010.02. Alternatives and verification produce no nodes. The large founding spec was then implemented almost line by line over PRs 30-44 (seq 29-43). Each PR tightened the signatures it built, so most refinements are same_step and spec and code moved in lockstep. Reversals: (1) the founding effectful entry (Program MicrosoftCalls, evidence acquired during evaluation) was never built; execution was only ever Program NoRequests (seq 34). Seq 52 replaced it with a pure Evolution value, seq 97 declared pure execution (0010.50, code_first) and seq 122 deleted the leftover text. (2) Explicit intermediate schema bindings were specified and built at seq 34, then removed at seq 52 in favour of exactly two endpoint contracts. (3) Curation (seq 89, built at 92) was replaced by typed recipe state at seq 158, built by seq 162. Persistence moved from JSON (seq 39) to typed Dhall (seq 54), and the record version climbed v2 to v5. Under the format-bump rule, v2 (seq 92) and v5 (seq 130) are editorial because they only carry what other nodes or ADR 0014 already require. v4 (seq 121, 0010.51) stays a refine because it newly requires reports to carry the host-derived plugin package comparison, so plugin-only upgrades are reviewable. Seq 143 is wholly editorial under the reconciliation rule: every change restates an existing node. Still unrealised at cursor 166: per-record history (0010.12) and the explicit 'remove unaccepted workspace' operation folded into 0010.13. Rebasing exists only as editing the manifest revision and re-capturing. Seq 4 and seq 30 each bundle several small store/lifecycle mechanics, split into separate refines. Seq 4's front-matter change is editorial within a step that also makes nodes."
+  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment into 13 nodes: entry kind, composition, chain check, Before/After revisions (absorbing the 'Updating the base' section's author-directed rebase), workspace layout, module naming, capture/store, candidate storage, execution, binding convention, reports, record history and lifecycle. The Composition section's mechanics are merged into 0010.02. Alternatives and verification produce no nodes. The large founding spec was then implemented almost line by line over PRs 30-44 (seq 29-43). Each PR tightened the signatures it built, so most refinements are same_step and spec and code moved in lockstep. Reversals: (1) the founding effectful entry (Program MicrosoftCalls, evidence acquired during evaluation) was never built; execution was only ever Program NoRequests (seq 34). Seq 52 replaced it with a pure Evolution value, seq 97 declared pure execution (0010.50, code_first) and seq 122 deleted the leftover text. (2) Explicit intermediate schema bindings were specified and built at seq 34, then removed at seq 52 in favour of exactly two endpoint contracts. (3) Curation (seq 89, built at 92) was replaced by typed recipe state at seq 158, built by seq 162. Persistence moved from JSON (seq 39) to typed Dhall (seq 54), and the record version climbed v2 to v5. Under the format-bump rule, v2 (seq 92) and v5 (seq 130) are editorial because they only carry what other nodes or ADR 0014 already require. v4 (seq 121, 0010.51) stays a refine because it newly requires reports to carry the host-derived plugin package comparison, so plugin-only upgrades are reviewable. Seq 143 is wholly editorial under the reconciliation rule: every change restates an existing node. Still unrealised at cursor 166: per-record history (0010.12) and the explicit 'remove unaccepted workspace' operation folded into 0010.13. Rebasing exists only as editing the manifest revision and re-capturing. Seq 4 and seq 30 each bundle several small store/lifecycle mechanics, split into separate refines. Seq 4's front-matter change is editorial within a step that also makes nodes. Recipe curation was built pure core first (90), then persistence (91), then evolution attachment (92)."
 }

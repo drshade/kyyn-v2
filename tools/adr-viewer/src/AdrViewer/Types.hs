@@ -7,8 +7,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 module AdrViewer.Types
   ( Step(..), Adr(..), Repo(..)
-  , Lane(..), Node(..), Kind(..), Realised(..), How(..), Ended(..), EndedHow(..)
-  , Confidence(..), Editorial(..)
+  , Lane(..), Node(..), Kind(..), Realised(..), How(..), Delivery(..), Ended(..), EndedHow(..)
+  , Confidence(..), Editorial(..), deliveries
   ) where
 
 import Data.Aeson
@@ -38,8 +38,13 @@ data Node = Node
   { nodeId :: Text, nodeSeq :: Int, nodePr :: Maybe Int, nodeSummary :: Text
   , nodeDetail :: Text, nodeKind :: Kind, nodeSupersedes :: [Text]
   , nodeSections :: [Text], nodeAnchors :: [Text], nodeRealised :: Realised
-  , nodeEnded :: Maybe Ended, nodeConfidence :: Confidence }
+  , nodeDeliveries :: Maybe [Delivery], nodeEnded :: Maybe Ended, nodeConfidence :: Confidence }
   deriving (Eq, Show, Generic)
+
+-- | Steps that delivered part of a node before 'nodeRealised' completed it.
+-- Omitted when the decision was delivered in one step.
+deliveries :: Node -> [Delivery]
+deliveries = maybe [] id . nodeDeliveries
 
 data Kind = New | Refine | Replace deriving (Eq, Show, Generic, Enum, Bounded)
 
@@ -48,6 +53,10 @@ data Realised = Realised { realisedHow :: How, realisedSeq :: Maybe Int, realise
 
 data How = SameStep | LaterStep | CodeFirst | Unrealised | Unknown
   deriving (Eq, Show, Generic, Enum, Bounded)
+
+-- | A step whose code delivered part of a decision, without completing it.
+data Delivery = Delivery { deliverySeq :: Int, deliveryEvidence :: Text }
+  deriving (Eq, Show, Generic)
 
 data Ended = Ended { endedSeq :: Int, endedHow :: EndedHow, endedBy :: Maybe Text }
   deriving (Eq, Show, Generic)
@@ -82,6 +91,8 @@ instance FromJSON Node where parseJSON = genericParseJSON (fields 4)
 instance ToJSON Node where toJSON = genericToJSON (fields 4)
 instance FromJSON Realised where parseJSON = genericParseJSON (fields 8)
 instance ToJSON Realised where toJSON = genericToJSON (fields 8)
+instance FromJSON Delivery where parseJSON = genericParseJSON (fields 8)
+instance ToJSON Delivery where toJSON = genericToJSON (fields 8)
 instance FromJSON Ended where parseJSON = genericParseJSON (fields 5)
 instance ToJSON Ended where toJSON = genericToJSON (fields 5)
 instance FromJSON Editorial where parseJSON = genericParseJSON (fields 9)

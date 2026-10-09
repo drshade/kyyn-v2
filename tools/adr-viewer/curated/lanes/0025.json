@@ -19,6 +19,16 @@
         "how": "unrealised",
         "evidence": "Only a developer install script (tools/install-cli.sh, PR #49) and kb init (PR #54) exist; no readiness check command or Web interface to launch"
       },
+      "deliveries": [
+        {
+          "seq": 46,
+          "evidence": "PR #49 adds a local install script for the complete CLI; readiness check and Web launch still missing"
+        },
+        {
+          "seq": 50,
+          "evidence": "PR #54 adds kb init to create a KB; readiness check and Web launch still missing"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -114,6 +124,12 @@
         "seq": 43,
         "evidence": "PR #43 (seq 42) made EvolutionStore compiler-free; PR #44 ensures metadata-only commands neither read the SDK nor start MicroHs"
       },
+      "deliveries": [
+        {
+          "seq": 42,
+          "evidence": "PR #43 makes EvolutionStore metadata operations compiler-free; CLI metadata commands that never start MicroHs follow in #44"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -133,6 +149,12 @@
         "seq": 43,
         "evidence": "Draft workspaces are ordinary files and the CLI reports publication/interruption outcomes honestly (PRs #42/#44); server shutdown is moot as no servers exist"
       },
+      "deliveries": [
+        {
+          "seq": 41,
+          "evidence": "PR #42 reports actual acceptance and checkout outcomes rather than rolling back; surfaced to the one-shot CLI in #44"
+        }
+      ],
       "confidence": "low"
     },
     {
@@ -152,6 +174,12 @@
         "seq": 43,
         "evidence": "PR #44 provides evolution new/ready/accept with distinct outcome exits; acceptStoredEvolution refuses NotReady without changing the workspace"
       },
+      "deliveries": [
+        {
+          "seq": 41,
+          "evidence": "PR #42 refuses acceptance unless Ready, checked and on a matching base, keeping the workspace; non-zero CLI exits follow in #44"
+        }
+      ],
       "confidence": "high"
     },
     {

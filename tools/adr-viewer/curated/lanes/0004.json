@@ -75,6 +75,16 @@
         "seq": 36,
         "evidence": "Workspace capture against Before in #31, Candidate persistence/checking in #37; CheckedEvolution name itself never appears in code"
       },
+      "deliveries": [
+        {
+          "seq": 30,
+          "evidence": "PR #31 adds EvolutionWorkspace/EvolutionContext and captures workspaces verified against their Before revision; no evaluation or Candidate"
+        },
+        {
+          "seq": 34,
+          "evidence": "PR #35 evaluates captured workspaces into a checked After value and EvolutionReport; Candidate persistence and checking follow in #37"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -99,6 +109,12 @@
         "seq": 36,
         "evidence": "PR #37: Candidate is ordinary Functor data preserving context and report; checkCandidate composes checkRoot"
       },
+      "deliveries": [
+        {
+          "seq": 27,
+          "evidence": "PR #28 makes Validated a private wrapper with no Functor instance; the Candidate Functor follows in #37"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -319,6 +335,12 @@
         "seq": 96,
         "evidence": "PR #118 'Evolve recipes as first-class knowledge-base data' implements #116 design"
       },
+      "deliveries": [
+        {
+          "seq": 95,
+          "evidence": "PR #117 gives guests the typed KnowledgeBase wrapper and recipe values in the SDK; Root does not yet hold recipes as facts"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",
@@ -373,5 +395,5 @@
       "note": "Desired-state reconciliation: removes status/date/basis metadata and 'implemented'/'unimplemented' status prose, rewords query/output declarations as authored functions and registrations; all covered by existing nodes"
     }
   ],
-  "notes": "Lane is mostly stable at the KB/Root/Candidate/Validated level; nearly all change is to the shape of the host Root record. The biggest detour is the recipe/curation arc: a host-owned CurationRegister was added (seq 91), recipes moved into the root as facts (seq 94, built 96), and the whole register was then removed in favour of typed per-recipe state (seq 158, built 162) within two weeks. CheckedEvolution, FactSnapshot and CodeSnapshot never became code names (Root uses FileTree; acceptance composes AcceptEvolution), so 0004.03's realisation is judged by behaviour not identifiers. The Boundaries and consequences section (fact reads need Validated Root, accepted-root loading re-checks) was folded into 0004.05 rather than given nodes; seq 143 quietly dropped 'Accepted-load composition remains unimplemented' without evidence it had been built."
+  "notes": "Lane is mostly stable at the KB/Root/Candidate/Validated level; nearly all change is to the shape of the host Root record. The biggest detour is the recipe/curation arc: a host-owned CurationRegister was added (seq 91), recipes moved into the root as facts (seq 94, built 96), and the whole register was then removed in favour of typed per-recipe state (seq 158, built 162) within two weeks. CheckedEvolution, FactSnapshot and CodeSnapshot never became code names (Root uses FileTree; acceptance composes AcceptEvolution), so 0004.03's realisation is judged by behaviour not identifiers. The Boundaries and consequences section (fact reads need Validated Root, accepted-root loading re-checks) was folded into 0004.05 rather than given nodes; seq 143 quietly dropped 'Accepted-load composition remains unimplemented' without evidence it had been built. The workspace/Candidate model was built over several PRs (#28, #31, #35, #37)."
 }

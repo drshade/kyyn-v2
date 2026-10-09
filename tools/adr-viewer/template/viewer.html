@@ -9,14 +9,14 @@
     --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #74746f; --faint: #d9d9d4;
     --lane: #c9c9c3; --planned-fill: #ffffff; --planned-stroke: #55554f;
     --done: #2f9e5b; --done-stroke: #1f7a43; --ended: #b9b9b3; --accent: #3b6fd8;
-    --cursor: #d8613b; --tick: #8f8f88;
+    --cursor: #d8613b; --tick: #8f8f88; --partial: #e3b230; --partial-stroke: #b58a16;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #151514; --panel: #1e1e1c; --ink: #ececea; --muted: #9a9a94; --faint: #34342f;
       --lane: #45453f; --planned-fill: #f4f4f0; --planned-stroke: #f4f4f0;
       --done: #3fbf74; --done-stroke: #2f9e5b; --ended: #55554f; --accent: #7aa2f7;
-      --cursor: #f08a5d; --tick: #6c6c66;
+      --cursor: #f08a5d; --tick: #6c6c66; --partial: #f0c443; --partial-stroke: #c99b22;
     }
   }
   * { box-sizing: border-box; }
@@ -54,6 +54,7 @@
   .node { cursor: pointer; }
   .node.planned { fill: var(--planned-fill); stroke: var(--planned-stroke); stroke-width: 1.5; }
   .node.done { fill: var(--done); stroke: var(--done-stroke); stroke-width: 1.5; }
+  .node.partial { fill: var(--partial); stroke: var(--partial-stroke); stroke-width: 1; }
   .node.ended { opacity: .35; }
   .thread { stroke: var(--lane); stroke-width: 1; }
   .node.sel { stroke: var(--accent); stroke-width: 3; }
@@ -65,10 +66,12 @@
   .gridline { stroke: var(--faint); stroke-width: 1; }
   .head { font-size: 11px; fill: var(--muted); }
   .bar.done { fill: var(--done); opacity: .85; }
+  .bar.partial { fill: var(--partial); opacity: .85; }
   .bar.planned { fill: var(--planned-fill); stroke: var(--planned-stroke); stroke-width: .5; }
   .lane-label { user-select: none; }
   .conv { fill: none; stroke: var(--done); stroke-width: 1.5; }
   .conv-area { fill: var(--done); opacity: .12; }
+  .conv-partial { fill: var(--partial); opacity: .3; }
 </style>
 </head>
 <body>
@@ -81,9 +84,9 @@
   </div>
   <div class="legend">
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned"/></svg> specified</span>
+    <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" class="node partial"/></svg> partly delivered</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done"/></svg> realised</span>
-    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done ended"/></svg> delivered, then superseded</span>
-    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned ended"/></svg> superseded unbuilt</span>
+    <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned ended"/></svg> superseded</span>
   </div>
 </header>
 <main>
@@ -107,7 +110,9 @@ const setT = v => { T = Math.max(0, Math.min(maxSeq, Math.round(v))); render(); 
 document.getElementById("title").textContent = "ADR history · " + D.name;
 
 let STEP_W = 8;
-const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - 140) / maxSeq); };
+// Room right of the last step for the lane labels ("12 of 13 built · 1 partial").
+const RIGHT_W = 190;
+const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - RIGHT_W - 10) / maxSeq); };
 fitWidth();
 const x = seq => LABEL_W + seq * STEP_W;
 const el = (tag, attrs = {}, parent = svg) => {
@@ -120,15 +125,19 @@ const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&
 
 // State at step t from the model's precomputed steps (null means never).
 const never = v => v == null ? Infinity : v;
+function progress(n, t) {
+  const horizon = Math.min(t, never(n.until));
+  if (never(n.realisedAt) <= horizon) return "done";
+  return n.deliveredAt.some(d => d <= horizon) ? "partial" : "planned";
+}
 function state(n, t) {
   if (n.seq > t) return null;
-  const until = never(n.until);
-  const built = never(n.realisedAt) <= Math.min(t, until) ? "done" : "planned";
-  return until <= t ? built + " ended" : built;
+  const p = progress(n, t);
+  return never(n.until) <= t ? p + " ended" : p;
 }
 
 // Lanes are collapsed to a one-row summary until their label is clicked.
-const COLLAPSED = 26, BAR_H = 16;
+const COLLAPSED = 26, BAR_H = 16, LABEL_CHARS = 32, LABEL_LINE = 14;
 const inferred = Object.keys(D.lanes).sort();
 const order = [...inferred, ...D.adrs.map(a => a.id).filter(id => !D.lanes[id])];
 let expanded = new Set();
@@ -138,8 +147,8 @@ const saveExpanded = () => { try { localStorage.setItem("adr-viewer.expanded", J
 for (const id of inferred) {
   const lane = D.lanes[id];
   lane._byId = Object.fromEntries(lane.nodes.map(n => [n.id, n]));
-  lane._counts = lane.counts.map(([done, planned]) => ({ done, planned }));
-  lane._max = Math.max(1, ...lane.counts.map(([d, p]) => d + p));
+  lane._counts = lane.counts.map(([done, partial, planned]) => ({ done, partial, planned }));
+  lane._max = Math.max(1, ...lane.counts.map(([d, pa, p]) => d + pa + p));
   lane._depth = lane.depth;
   for (const n of lane.nodes) { n._until = never(n.until); n._track = n.track; }
 }
@@ -150,7 +159,7 @@ function relayout() {
   for (const id of order) {
     const lane = D.lanes[id];
     if (lane && expanded.has(id)) {
-      const h = lane._depth * ROW + LANE_PAD * 2;
+      const h = Math.max(lane._depth * ROW, labelLines(id).length * LABEL_LINE) + LANE_PAD * 2;
       layout[id] = { y, h, mid: y + LANE_PAD + ROW / 2 };
     } else {
       const h = lane ? COLLAPSED : THIN;
@@ -173,14 +182,31 @@ expandBtn.onclick = () => {
 };
 const nodeY = (id, n) => layout[id].y + LANE_PAD + n._track * ROW + ROW / 2;
 
+// Progress among the live decisions: built out of live, then any partly built.
+function headline(c) {
+  const live = c.done + c.partial + c.planned;
+  return `${c.done} of ${live} built` + (c.partial ? ` · ${c.partial} partial` : "");
+}
+
+// Expanded lanes show the whole title, wrapped to the label column by words.
+function labelLines(id) {
+  const lines = [];
+  let line = "▾ " + id;
+  for (const word of adrTitle(id).split(/\s+/).filter(Boolean)) {
+    if ((line + " " + word).length > LABEL_CHARS) { lines.push(line); line = word; }
+    else line += " " + word;
+  }
+  return [...lines, line];
+}
+
 function adrTitle(id) { return (D.adrs.find(a => a.id === id) || {}).title || ""; }
 
 function render() {
   const t = T;
   syncExpandBtn();
   svg.replaceChildren(); topSvg.replaceChildren();
-  svg.setAttribute("width", x(maxSeq) + 100);
-  topSvg.setAttribute("width", x(maxSeq) + 100); topSvg.setAttribute("height", TOP_H);
+  svg.setAttribute("width", x(maxSeq) + RIGHT_W);
+  topSvg.setAttribute("width", x(maxSeq) + RIGHT_W); topSvg.setAttribute("height", TOP_H);
   const step = D.steps.find(s => s.seq === t) || D.steps[D.steps.length - 1];
   nowEl.textContent = `step ${t} · ${step.date.slice(0, 10)} · ${step.pr ? "PR #" + step.pr : "direct"}`;
 
@@ -203,7 +229,9 @@ function render() {
     if (meta.born > t) continue;
     const open = lane && expanded.has(id);
     const label = el("text", { x: 8, y: L.mid + 4, class: "lane-label" + (lane ? "" : " dim") });
-    label.textContent = (lane ? (open ? "▾ " : "▸ ") : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
+    if (open) labelLines(id).forEach((line, i) =>
+      el("tspan", { x: i ? 20 : 8, dy: i ? LABEL_LINE : 0 }, label).textContent = line);
+    else label.textContent = (lane ? "▸ " : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
     label.onclick = () => {
       if (lane) { expanded.has(id) ? expanded.delete(id) : expanded.add(id); saveExpanded(); relayout(); render(); }
       showLane(id);
@@ -212,16 +240,18 @@ function render() {
     el("line", { x1: x(meta.born), x2: x(end), y1: open ? L.mid : L.y + L.h - 4, y2: open ? L.mid : L.y + L.h - 4, class: "lane-line" });
 
     if (lane && !open) {
-      // Summary: per step, live decisions realised (green) and still ahead of code (white).
+      // Summary: per step, live decisions realised (green), partly delivered
+      // (yellow) and still ahead of code (white), stacked in that order.
       const base = L.y + L.h - 4, unit = BAR_H / lane._max, w = Math.max(1, STEP_W - 1);
       for (let s = meta.born; s <= t; s++) {
-        const c = lane._counts[s]; if (!c.done && !c.planned) continue;
-        el("rect", { x: x(s) - w / 2, y: base - c.done * unit, width: w, height: c.done * unit, class: "bar done" });
-        if (c.planned) el("rect", { x: x(s) - w / 2, y: base - (c.done + c.planned) * unit, width: w, height: c.planned * unit, class: "bar planned" });
+        const c = lane._counts[s]; let y = base;
+        for (const k of ["done", "partial", "planned"]) {
+          if (!c[k]) continue;
+          y -= c[k] * unit;
+          el("rect", { x: x(s) - w / 2, y, width: w, height: c[k] * unit, class: "bar " + k });
+        }
       }
-      const c = lane._counts[t];
-      el("text", { x: x(t) + 10, y: L.mid + 4, class: "head" }).textContent =
-        c.planned ? `${c.planned} ahead · ${c.done + c.planned} live` : `${c.done} live, in sync`;
+      el("text", { x: x(t) + 10, y: L.mid + 4, class: "head" }).textContent = headline(lane._counts[t]);
       continue;
     }
 
@@ -247,17 +277,24 @@ function render() {
         el("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, class: "edge " + (n.kind || "") });
       }
     }
-    let live = 0, planned = 0;
+    // Each decision reads left to right: a white dot where the ADR states it, a
+    // yellow pip for each step that delivers part of it, and a green dot where
+    // the code completes it. A decision delivered in one step is one green dot.
     for (const n of lane.nodes) {
       const st = state(n, t); if (!st) continue;
-      if (!st.includes("ended")) { live++; if (st === "planned") planned++; }
-      const c = el("circle", { cx: x(n.seq), cy: nodeY(id, n), r: NODE_R,
-        class: `node ${st}${selected === n ? " sel" : ""}` });
-      el("title", {}, c).textContent = n.summary;
-      c.onclick = () => { selected = n; showNode(id, n); render(); };
+      const ended = st.includes("ended") ? " ended" : "", sel = selected === n ? " sel" : "";
+      const horizon = Math.min(t, n._until), y = nodeY(id, n);
+      const dot = (seq, r, cls, tip) => {
+        const c = el("circle", { cx: x(seq), cy: y, r, class: `node ${cls}${ended}${sel}` });
+        el("title", {}, c).textContent = tip;
+        c.onclick = () => { selected = n; showNode(id, n); render(); };
+      };
+      const done = never(n.realisedAt) <= horizon;
+      if (!(done && n.realisedAt === n.seq)) dot(n.seq, NODE_R, "planned", n.summary);
+      for (const d of n.deliveredAt) if (d <= horizon) dot(d, NODE_R * 0.6, "partial", `${n.summary} · partly delivered at step ${d}`);
+      if (done) dot(n.realisedAt, NODE_R, "done", n.realisedAt === n.seq ? n.summary : `${n.summary} · realised at step ${n.realisedAt}`);
     }
-    el("text", { x: x(t) + 10, y: L.mid + 4, class: "head" }).textContent =
-      planned ? `${planned} ahead · ${live} live` : `${live} live, in sync`;
+    el("text", { x: x(t) + 10, y: L.mid + 4, class: "head" }).textContent = headline(lane._counts[t]);
   }
 
   // Interchange: the lanes the current step touched.
@@ -273,18 +310,19 @@ function render() {
   el("text", { x: x(t), y: AXIS_Y + 4, "text-anchor": "middle", class: "handle-label" }, topSvg).textContent = label;
 }
 
-// Share of live inferred decisions that the code realises, step by step.
+// Share of live inferred decisions that the code realises (green) and has
+// started on (yellow, stacked above), step by step.
 function drawConvergence(t) {
   const all = inferred.flatMap(id => D.lanes[id].nodes);
   if (!all.length) return;
   const base = CONV_TOP + CONV_H;
   el("text", { x: 8, y: CONV_TOP + 14, class: "lane-label" }, topSvg).textContent = "convergence";
-  el("text", { x: 8, y: CONV_TOP + 30, class: "head" }, topSvg).textContent = "live decisions realised";
+  el("text", { x: 8, y: CONV_TOP + 30, class: "head" }, topSvg).textContent = "live decisions realised · partial";
   el("line", { x1: LABEL_W, x2: x(maxSeq), y1: base, y2: base, class: "gridline" }, topSvg);
   const pts = [];
   for (let s = 0; s <= maxSeq; s++) {
     const share = D.convergence[s];
-    pts.push(share == null ? null : [x(s), base - CONV_H * share, share]);
+    pts.push(share == null ? null : [x(s), base - CONV_H * share[0], share[0], base - CONV_H * (share[0] + share[1]), share[1]]);
   }
   const path = upto => {
     const ps = pts.slice(0, upto + 1).filter(Boolean);
@@ -294,10 +332,14 @@ function drawConvergence(t) {
   el("path", { d: path(maxSeq), class: "conv", opacity: .25 }, topSvg);
   const past = pts.slice(0, t + 1).filter(Boolean);
   if (past.length > 1) {
+    const top = past.map((p, i) => (i ? "L" : "M") + p[0] + "," + p[3]).join(" ");
+    const under = past.slice().reverse().map(p => "L" + p[0] + "," + p[1]).join(" ");
+    el("path", { d: `${top} ${under} Z`, class: "conv-partial" }, topSvg);
     el("path", { d: `${path(t)} L${past.at(-1)[0]},${base} L${past[0][0]},${base} Z`, class: "conv-area" }, topSvg);
     el("path", { d: path(t), class: "conv" }, topSvg);
     const last = past.at(-1);
-    el("text", { x: last[0] + 6, y: last[1] + 4, class: "head" }, topSvg).textContent = Math.round(100 * last[2]) + "%";
+    el("text", { x: last[0] + 6, y: last[1] + 4, class: "head" }, topSvg).textContent =
+      Math.round(100 * last[2]) + "%" + (Math.round(100 * last[4]) ? ` +${Math.round(100 * last[4])}% partial` : "");
   }
 }
 
@@ -309,6 +351,7 @@ function showNode(id, n) {
     <h2>${esc(n.summary)}</h2>
     <div class="meta">${n.id} · ${esc(n.kind)} · step ${n.seq} · ${prLink(n.pr)} · confidence ${esc(n.confidence)}</div>
     <p>${esc(n.detail)}</p>
+    ${(n.deliveries || []).map(d => `<p><b>Partly delivered:</b> step ${d.seq}<br><span class="meta">${esc(d.evidence)}</span></p>`).join("")}
     <p><b>Realised:</b> ${esc(r.how)} ${when}<br><span class="meta">${esc(r.evidence)}</span></p>
     ${n.supersedes?.length ? `<p><b>Supersedes:</b> ${n.supersedes.join(", ")}</p>` : ""}
     ${n.ended ? `<p><b>Ended:</b> ${esc(n.ended.how)} at step ${n.ended.seq}${n.ended.by ? " by " + n.ended.by : ""}</p>` : ""}

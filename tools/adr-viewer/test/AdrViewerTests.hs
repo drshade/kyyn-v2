@@ -50,7 +50,15 @@ main = do
   assert "states at step 2" (states 2 == [Planned, Hidden, Planned])
   assert "states at step 5" (states 5 == [DoneEnded, Done, Planned])
   assert "successor inherits track" (nvTrack (lvNodes view !! 1) == nvTrack (lvNodes view !! 0))
-  assert "counts at step 4" (lvCounts view !! 4 == (1, 1))
+  assert "counts at step 4" (lvCounts view !! 4 == Counts 1 0 1)
+  -- A decision delivered in part at step 3 and completed at step 5.
+  let partly = (node "0001.04" 2 New [] (Realised LaterStep (Just 5) "") Nothing)
+            { nodeDeliveries = Just [Delivery 3 "", Delivery 1 "", Delivery 5 ""] }
+      pv = head' (lvNodes (laneView 6 lane { laneNodes = [partly] }))
+  assert "deliveries before birth or at realisation kept" (deliveredAt partly == [2, 3])
+  assert "partial progress states wrong" (map (`stateAt` pv) [1, 2, 4, 5] == [Hidden, Partial, Partial, Done])
+  assert "delivery at realisation not warned"
+    (any (T.isInfixOf "is not before its realisation") [dMessage d | d <- checkLane steps adrs "0001.json" lane { laneNodes = [a, b, c, partly] }])
   assert "valid lane has errors" (null [d | d <- checkLane steps adrs "0001.json" lane, dSeverity d == Error])
   let broken = lane { laneNodes = [b { nodeSupersedes = ["0001.99"] }], laneEditorial = [] }
       errors = [d | d <- checkLane steps adrs "0001.json" broken, dSeverity d == Error]
@@ -86,11 +94,15 @@ main = do
         _ -> fail (name <> ": " <> output r)
   prop "two nodes share a track while both live" (forAll genLane tracksExclusive)
   prop "counts disagree with states" (forAll genLane countsMatch)
-  prop "a node turns back from realised" (forAll genLane neverUnrealises)
+  prop "a node's progress turns back" (forAll genLane neverUnrealises)
   putStrLn "ADR readings, lane checks and model properties passed."
 
+head' :: [a] -> a
+head' (x : _) = x
+head' [] = error "empty"
+
 node :: T.Text -> Int -> Kind -> [T.Text] -> Realised -> Maybe Ended -> Node
-node i s k sup r e = Node i s Nothing "" "" k sup [] [] r e High
+node i s k sup r e = Node i s Nothing "" "" k sup [] [] r Nothing e High
 
 -- | Lanes whose nodes supersede only earlier nodes, as check requires.
 genLane :: Gen Lane
@@ -108,7 +120,9 @@ genLane = do
       rs <- chooseInt (0, 25)
       let i = "0009." <> T.pack (show (length acc + 1))
           kind = if null sup then New else Refine
-      go (k - 1 :: Int) (node i s kind sup (Realised how (Just rs) "") Nothing : acc)
+      ds <- listOf (chooseInt (0, 25))
+      let delivered = if null ds then Nothing else Just [Delivery d "" | d <- take 3 ds]
+      go (k - 1 :: Int) ((node i s kind sup (Realised how (Just rs) "") Nothing) { nodeDeliveries = delivered } : acc)
     headMaybe (x : _) = Just x
     headMaybe [] = Nothing
 
@@ -121,11 +135,20 @@ tracksExclusive lane = and
     overlap v w = let (a, b) = span' v; (c, d) = span' w in a < d && c < b && a < b && c < d
 
 countsMatch :: Lane -> Bool
-countsMatch lane = and [ lvCounts view !! t == (count Done t, count Planned t) | t <- [0 .. 25] ]
+countsMatch lane = and [ lvCounts view !! t == Counts (count Done t) (count Partial t) (count Planned t) | t <- [0 .. 25] ]
   where
     view = laneView 25 lane
     count st t = length [v | v <- lvNodes view, stateAt t v == st]
 
+-- | Progress only moves forward: specified, then in progress, then realised.
 neverUnrealises :: Lane -> Bool
-neverUnrealises lane = and [ not (built (stateAt t v) && not (built (stateAt (t + 1) v))) | v <- lvNodes (laneView 25 lane), t <- [0 .. 24] ]
-  where built st = st `elem` [Done, DoneEnded]
+neverUnrealises lane = and [ rank (stateAt t v) <= rank (stateAt (t + 1) v) | v <- lvNodes (laneView 25 lane), t <- [0 .. 24] ]
+  where
+    rank st = case st of
+      Hidden -> 0 :: Int
+      Planned -> 1
+      PlannedEnded -> 1
+      Partial -> 2
+      PartialEnded -> 2
+      Done -> 3
+      DoneEnded -> 3

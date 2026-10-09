@@ -25,6 +25,12 @@
         "seq": 7,
         "evidence": "Domain/plumbing packages and check-imports.mjs from PR #6; first plumbing-interpreters package with IO-confined ProcessExecution in PR #7"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 splits kyyn-domain/kyyn-plumbing packages with check-imports enforcing the dependency DAG; no effectful capability or IO-confined native interpreter yet"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -47,6 +53,12 @@
         "seq": 8,
         "evidence": "Kyyn.Plumbing.Capability.FileSystem / Kyyn.Plumbing.Interpreter.FileSystem pair added in PR #8"
       },
+      "deliveries": [
+        {
+          "seq": 7,
+          "evidence": "PR #7 adds the first Kyyn.Plumbing.Capability/Interpreter pair (ProcessExecution, Failure); FileSystem pair and further capabilities follow in #8"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -70,6 +82,16 @@
         "seq": 43,
         "evidence": "run… interpreters from PR #7/#8; execute… command composition first appears with host/kyyn Composition in PR #44"
       },
+      "deliveries": [
+        {
+          "seq": 7,
+          "evidence": "PR #7 names effect interpretation run… (runProcessExecutionIO); no execute… application composition yet"
+        },
+        {
+          "seq": 21,
+          "evidence": "PR #22 root operations take an explicitly selected revision or fixed bytes with no ambient head lookup; execute… composition follows in #44"
+        }
+      ],
       "confidence": "medium"
     },
     {
