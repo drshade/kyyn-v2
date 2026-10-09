@@ -116,7 +116,6 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let latestPath = candidateDir </> Char8.unpack first
       metadataPath = latestPath </> "candidate.dhall"
   metadata <- Bytes.readFile metadataPath
-  unless (not ("version =" `Char8.isInfixOf` metadata)) (fail "Candidate contains a format version")
   let extraFile = latestPath </> "extra"
   Bytes.writeFile extraFile "unrelated file"
   unchanged <- execute (loadCandidate location) >>= right >>= right

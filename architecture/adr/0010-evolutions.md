@@ -709,7 +709,8 @@ write files or advance Git; publication owns its separate checks and writes.
 
 `result.dhall` stores the evolution ID, Before/After contract descriptions and fixed
 report using the same host-owned EvolutionRecord codec as private candidate storage.
-Both records are self-contained Dhall. A fixed header contains the evolution identity and endpoint contract descriptions. Each description holds metadata,
+Both records are self-contained Dhall. A fixed header contains the evolution
+identity and endpoint contract descriptions. Each description holds metadata,
 the whole-contract fingerprint and an ordered table of type declarations. Child
 indices reference only earlier declarations, with the root type last; decoding
 reconstructs and checks the contract and its fingerprint. This represents the
