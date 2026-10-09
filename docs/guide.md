@@ -4,6 +4,10 @@ Kyyn stores a knowledge base's facts and executable meaning together. Work in an
 evolution, check its proposed result, review it, and accept it into Git. The
 development executable is `kyyn-v2`; it does not replace kyyn-v1's `kyyn`.
 
+Read this guide from any directory with `kyyn-v2 guide` (or `kyyn-v2 guide | less`).
+It is embedded in the executable; no KB, Git or runtime bundle is required.
+`kyyn-v2 --json guide` returns the Markdown in `result.markdown`.
+
 - [Install](#install) and [create a KB](#select-or-create-a-kb)
 - [Evolve, check and accept](#create-check-and-accept-an-evolution)
 - [Secrets](#secrets), [plugins and taps](#plugins-and-taps), [evidence](#fetch-and-inspect-evidence)

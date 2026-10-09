@@ -33,7 +33,7 @@ data Selection = Selection
 
 data OutputMode = Human | Json deriving (Eq, Show)
 
-data Command = Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand deriving (Eq, Show)
+data Command = Guide | Kb KbCommand | Root RootCommand | Evolution EvolutionCommand | Guest (Maybe EvolutionId) GuestCommand | Plugin PluginCommand | Tap TapCommand | Evidence EvidenceCommand | Secret SecretCommand deriving (Eq, Show)
 data SecretCommand = SetSecret SecretName (Maybe SecretArgument) | ListSecrets | ShowSecret SecretName | RemoveSecret SecretName deriving (Eq, Show)
 newtype SecretArgument = SecretArgument String deriving Eq
 instance Show SecretArgument where show _ = "<secret>"
@@ -115,7 +115,8 @@ invocation :: Parser Invocation
 invocation = Invocation <$> selectionParser
   <*> flag Human Json (long "json" <> help "Write structured JSON results")
   <*> hsubparser
-    (group "kb" "Create a knowledge base" (hsubparser
+    (group "guide" "Read the bundled authoring guide (no KB required)" (pure Guide)
+    <> group "kb" "Create a knowledge base" (hsubparser
       (group "init" "Initialize an empty knowledge base and commit its validated root" (pure (Kb InitKb))))
     <> group "root" "Inspect and check the accepted root" (Root <$> rootParser)
     <> group "tap" "Manage KB-local plugin catalogues" (Tap <$> tapParser)
