@@ -20,6 +20,7 @@ import qualified Kyyn.Porcelain.Capability.PluginDocumentation as Documentation
 import Kyyn.Porcelain.Interpreter.PluginDocumentation (runPluginDocumentation)
 import Kyyn.Surfaces.Plugins (pluginListResult, pluginDescriptionResult, pluginGuideResult)
 import Kyyn.Configuration
+import Kyyn.Guide (guideResponse)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
 import Kyyn.Domain.Failure (OperationalFailure)
@@ -114,6 +115,7 @@ runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Eithe
 runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
+execute (Cli.Invocation _ _ Cli.Guide) = pure guideResponse
 execute (Cli.Invocation (Cli.Selection path _ _) _ (Cli.Secret request)) = executeSecrets path request
 execute (Cli.Invocation selection _ (Cli.Guest workspace request)) = executeGuest selection workspace request
 execute (Cli.Invocation selection _ command) = do

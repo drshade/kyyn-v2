@@ -34,6 +34,9 @@ main = do
         Failure failure -> let (_,status) = renderFailure failure "kyyn"
                            in assert ("Expected usage exit 2: " ++ show args) (status == ExitFailure 2)
         _ -> fail ("Unexpectedly accepted: " ++ show args)
+  succeeds ["guide"] (Invocation selected Human Guide)
+  succeeds ["guide","--json"] (Invocation selected Json Guide)
+  refuses ["guide","unexpected"]
   succeeds ["root","show"] (Invocation selected Human (Root ShowRoot))
   succeeds ["root","query","list"] (Invocation selected Human (Root (RootQuery ListQueries)))
   succeeds ["root","output","list"] (Invocation selected Human (Root (RootOutput ListOutputs)))

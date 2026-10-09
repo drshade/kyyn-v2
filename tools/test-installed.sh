@@ -9,6 +9,7 @@ node tools/test-local-install.mjs
 journey_stage=$(mktemp -d /tmp/kyyn-installed-stage.XXXXXXXX)
 trap 'rm -rf -- "$journey_stage"' EXIT
 bash tools/install-cli.sh "$journey_stage/install"
+node tools/test-guide.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-secrets.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-judgement.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-guest-api.mjs "$journey_stage/install/bin/kyyn-v2"
