@@ -51,7 +51,7 @@ workspaceTests = do
     ") // { kind = < AdHoc | RecipeBased : Text >.RecipeBased \"../mail\" }")) >>= rejected . readSnapshot
   compareWith (filter ((/= "notes/review.md") . fst) entries) True
   compareWith (("notes/new.md", "another note") : entries) True
-  forM_ ["archived record", "malformed or unsupported archived record"] $ \record ->
+  forM_ ["archived record", "malformed archived record"] $ \record ->
     compareWith (("result.dhall", record) : entries) True
   forM_ [ manifest "b" "Draft" "September" "Import sales"
         , manifest "a" "Draft" "October" "Import sales"

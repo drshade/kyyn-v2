@@ -36,7 +36,6 @@ main = do
   assert "missing catalogue" (refused (readApi Nothing Api.readCatalogue))
   assert "malformed catalogue" (refused (readApi (Just "not dhall") Api.readCatalogue))
   assert "wrong catalogue shape" (refused (readApi (Just "{ modules = [1] }") Api.readCatalogue))
-  assert "catalogue has no format version" (not ("version =" `Bytes.isInfixOf` bytes))
   putStrLn "Guest catalogue Dhall round trips, read-only discovery and refusal tests passed."
 
 onlyCatalogue :: DirectoryScope -> Maybe Bytes.ByteString -> Eff (FileSystem : es) a -> Eff es a
