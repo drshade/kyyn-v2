@@ -18,7 +18,7 @@ data ApiModule = ApiModule String [ApiSymbol] [String]
 
 data ApiSelection = ListApiModules | InspectApiModule String | InspectApiSymbol String
   deriving (Eq, Show)
-data ApiOrigin = SdkOrigin | GeneratedOrigin | KbOrigin deriving (Eq, Show)
+data ApiOrigin = SdkOrigin | GeneratedOrigin | KbOrigin | PluginOrigin deriving (Eq, Show)
 data ApiEntry = ApiEntry ApiOrigin ApiModule deriving (Eq, Show)
 
 data Namespace = TypeNamespace | ValueNamespace

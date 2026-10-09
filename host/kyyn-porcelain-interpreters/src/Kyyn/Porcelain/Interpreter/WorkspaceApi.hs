@@ -20,6 +20,7 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection, inspectApiModules)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
+import Kyyn.Plumbing.Protocol.Query (queryBindings)
 import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, mergeEvolutionSources)
 import Kyyn.Plumbing.Protocol.RecipeEvolution (recipeEvolutionBindings)
 import Kyyn.Plumbing.Protocol.FactProposal (lowerProposal)
@@ -38,17 +39,23 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
   InspectRootApi (SourceRoot contract code _ _) selection -> runExceptT $ do
     plugins <- ExceptT (preparePlugins code)
     (toolSources,toolNames) <- ExceptT (prepareToolBindings code plugins)
-    let names = toolNames ++ ["Kyyn.Workspace.FactEdits"]
+    let names = toolNames ++ ["Kyyn.Workspace.FactEdits", "KyynQueryBindings"]
     recipeBindings <- checked (evolutionBindings contract contract)
-    sources <- checked (mergeEvolutionSources [toolSources,recipeBindings])
-    let authored = sortOn id [map (\c -> if c == '/' then '.' else c) name |
-          (path,_) <- files code, Just local <- [stripPrefix "src/" (relativeName path)],
-          Just name <- [reverse <$> stripPrefix "sh." (reverse local)]]
+    query <- checked (queryBindings contract >>= fileTree . pure)
+    sources <- checked (mergeEvolutionSources [toolSources,recipeBindings,query])
+    let moduleName local = reverse <$> stripPrefix "sh." (reverse local)
+        dotted = map (\c -> if c == '/' then '.' else c)
+        authored = sortOn id [dotted name | (path,_) <- files code,
+          Just local <- [stripPrefix "src/" (relativeName path)], Just name <- [moduleName local]]
+        pluginModules = sortOn id [dotted name | (path,_) <- files code,
+          Just package <- [stripPrefix "plugins/packages/" (relativeName path)],
+          Just local <- [stripPrefix "/source/src/" (dropWhile (/= '/') package)], Just name <- [moduleName local]]
+        public = authored ++ pluginModules
         selected = case selection of
           ListApiModules -> []
-          InspectApiModule name -> [name | name `elem` authored]
+          InspectApiModule name -> [name | name `elem` public]
           InspectApiSymbol symbol -> take 1 (sortOn (negate . length)
-            [name | name <- authored, (name ++ ".") `isPrefixOf` symbol])
+            [name | name <- public, (name ++ ".") `isPrefixOf` symbol])
         requested = case selection of
           ListApiModules -> names
           InspectApiModule name -> [name | name `elem` names] ++ selected
@@ -58,7 +65,7 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
     let entry origin name = ApiEntry origin (case [m | m@(ApiModule actual _ _) <- inspected, actual == name] of
           [m] -> m
           _ -> ApiModule name [] [])
-    pure (map (entry GeneratedOrigin) names ++ map (entry KbOrigin) authored)
+    pure (map (entry GeneratedOrigin) names ++ map (entry KbOrigin) authored ++ map (entry PluginOrigin) pluginModules)
   InspectWorkspaceApi workspace -> runExceptT $ do
     PreparedEvolution (EvolutionContext kb@(KB.KnowledgeBase repository _) _ (Before revision _)
       (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) _ _ change _))
