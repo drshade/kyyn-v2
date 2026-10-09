@@ -225,7 +225,6 @@ gitMock captured = interpret $ \_ -> \case
     | Right revision == gitRevision (replicate 40 'a') && relativeName path == "root/recipes.dhall" ->
         pure (Right (lookup recipesLocation (files captured)))
   Git.ReadFileAt {} -> error "RootOpening read unexpected material"
-  Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
   Git.ReadDirectoryAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root/facts" -> pure (Right (Just []))
   Git.ReadDirectoryAt _ _ (Subtree prefix) | relativeName prefix == "root/recipes" -> pure (Right Nothing)

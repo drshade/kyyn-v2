@@ -59,7 +59,7 @@ syncOutcome (Repository scope) revision paths = either incomplete (const Working
       [errorDiagnostic "acceptance.checkout-incomplete"
         ("Accepted at " ++ revisionName revision ++ ". Inspect git status first; this restores current HEAD " ++
          "and overwrites local edits to the root and this workspace. Inspect untracked files separately.\n" ++
-         "git -C " ++ quote (scopePath scope) ++ " restore --source=HEAD --staged --worktree -- " ++
+         "git --literal-pathspecs -C " ++ quote (scopePath scope) ++ " restore --source=HEAD --staged --worktree -- " ++
          unwords (map (quote . relativeName) paths))])
     quote value = "'" ++ concatMap (\c -> if c == '\'' then "'\\''" else [c]) value ++ "'"
 

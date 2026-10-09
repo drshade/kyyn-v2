@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.Git
-  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, fetchRevision, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt, readCommitParents
+  ( Git(..), readUserIdentity, discoverRepository, initializeRepository, cloneRepository, fetchRevision, resolveRevision, readTreeAt, readTreeExcluding, readFileAt, readDirectoryAt
   , createCommit, compareAndSwapRef, checkedOutBranch, checkoutChanges, sourceChanges, synchronizeCheckout, indexPaths
   ) where
 
@@ -21,7 +21,6 @@ data Git :: Effect where
   ResolveRevision :: Repository -> String -> Git m (Either [Diagnostic] GitRevision)
   ReadTreeAt :: Repository -> GitRevision -> TreePath -> [RelativePath] -> Git m (Either [Diagnostic] FileTree)
   ReadFileAt :: Repository -> GitRevision -> RelativePath -> Git m (Either [Diagnostic] (Maybe ByteString))
-  ReadCommitParents :: Repository -> GitRevision -> Git m (Either [Diagnostic] [GitRevision])
   ReadDirectoryAt :: Repository -> GitRevision -> TreePath -> Git m (Either [Diagnostic] (Maybe [RelativePath]))
   CreateCommit :: Repository -> GitTree -> Maybe GitRevision -> CommitMetadata -> Git m GitRevision
   CompareAndSwapRef :: Repository -> LocalBranch -> Maybe GitRevision -> GitRevision -> Git m RefUpdate
@@ -62,9 +61,6 @@ readTreeExcluding repo revision location = send . ReadTreeAt repo revision locat
 
 readFileAt :: Git :> es => Repository -> GitRevision -> RelativePath -> Eff es (Either [Diagnostic] (Maybe ByteString))
 readFileAt repo revision = send . ReadFileAt repo revision
-
-readCommitParents :: Git :> es => Repository -> GitRevision -> Eff es (Either [Diagnostic] [GitRevision])
-readCommitParents repo = send . ReadCommitParents repo
 
 readDirectoryAt :: Git :> es => Repository -> GitRevision -> TreePath -> Eff es (Either [Diagnostic] (Maybe [RelativePath]))
 readDirectoryAt repo revision = send . ReadDirectoryAt repo revision

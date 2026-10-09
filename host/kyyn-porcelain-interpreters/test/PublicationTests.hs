@@ -16,6 +16,7 @@ import Data.Aeson (Value, object, (.=))
 import Data.Coerce (coerce)
 import Data.IORef (newIORef, atomicModifyIORef')
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, IOE, (:>), runEff, runPureEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -80,7 +81,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     let repo = Repository scope
         path = either error id . relativePath
         tree = either error id . fileTree
-        prefix = if interrupt then Subtree (path "nested/kb's files") else WholeTree
+        prefix = Subtree (path "nested/kb's [files]")
         kb = KnowledgeBase repo prefix
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
@@ -97,7 +98,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
         writeTreeAt location entries = forM_ (files entries) $ \(p,b) -> write (location ++ "/" ++ relativeName p) b
         inspect args = do
           result <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
-            (Process.ProcessSpec executable args directory [("PATH",""),("LC_ALL","C")]) $ do
+            (Process.ProcessSpec executable ("--literal-pathspecs" : args) directory [("PATH",""),("LC_ALL","C")]) $ do
               Process.closeStdin
               bytes <- Process.collectStdout
               status <- Process.awaitExit
@@ -218,8 +219,9 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     result <- try @AsyncException (run False Nothing hook (acceptEvolution branch metadata checked))
     accepted <- headRevision
     assert "Acceptance did not advance HEAD" (accepted /= base)
-    parents <- publication (Git.readCommitParents repo accepted)
-    assert "Acceptance did not preserve Before as its single parent" (parents == Right [base])
+    parents <- inspect ["rev-list","--parents","-n","1",revisionName accepted]
+    assert "Acceptance did not preserve Before as its single parent"
+      (Text.words (Text.decodeUtf8 parents) == map (Text.pack . revisionName) [accepted,base])
     repair <- if interrupt then pure Nothing else case result of
       Right (AcceptedCommit _ (WorkingTreeUpdateIncomplete diagnostics)) ->
         case [instruction | Diagnostic _ "acceptance.checkout-incomplete" message _ <- diagnostics,

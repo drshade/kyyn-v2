@@ -77,11 +77,13 @@ main = do
 
     (first,workspace) <- create "simplify-todos"
     assert "First evolution did not use a numbered slug" (first == "000001-simplify-todos")
+    void (ok ["evolution","ready",first])
     void (git ["config","user.name",""])
     missingIdentity <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
     assert "Missing identity did not refuse before runtime loading"
       (any (\diagnostic -> at ["code"] diagnostic == String "git.identity") (array (at ["diagnostics"] missingIdentity)))
     void (git ["config","user.name","Configured fixture λ"])
+    void (ok ["evolution","draft",first])
     let target = workspace </> "target"
     removeFile (target </> "src/TodoSchemaV1.hs")
     copyFile (fixture </> "TodoSchemaV2.hs") (target </> "src/TodoSchemaV2.hs")

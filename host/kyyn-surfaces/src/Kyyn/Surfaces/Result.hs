@@ -181,13 +181,13 @@ acceptanceResult result = case result of
     OverlappingEdits paths -> [errorDiagnostic "acceptance.overlapping-edits"
       ("Resolve local edits before accepting: " ++ unwords (map relativeName paths))]
     InvalidMaterial diagnostics -> diagnostics)
-  AcceptedCommit revision outcome -> checkoutResult "Accepted" revision revision outcome
-checkoutResult :: String -> GitRevision -> GitRevision -> WorkingTreeOutcome -> Response
-checkoutResult label accepted current outcome = Response
+  AcceptedCommit revision outcome -> checkoutResult revision outcome
+checkoutResult :: GitRevision -> WorkingTreeOutcome -> Response
+checkoutResult accepted outcome = Response
   (case outcome of WorkingTreeUpdated -> Succeeded; WorkingTreeUpdateIncomplete _ -> Incomplete)
-  (object ["accepted" .= True, "acceptingCommit" .= revisionName accepted, "checkoutRevision" .= revisionName current,
+  (object ["accepted" .= True, "acceptingCommit" .= revisionName accepted,
     "checkoutUpdated" .= (outcome == WorkingTreeUpdated)])
-  [label ++ " at " ++ revisionName accepted ++ case outcome of
+  ["Accepted at " ++ revisionName accepted ++ case outcome of
     WorkingTreeUpdated -> "; checkout synchronized."
     WorkingTreeUpdateIncomplete _ -> "; checkout incomplete. Follow the Git restore instructions below."]
   (case outcome of WorkingTreeUpdated -> []; WorkingTreeUpdateIncomplete diagnostics -> diagnostics)

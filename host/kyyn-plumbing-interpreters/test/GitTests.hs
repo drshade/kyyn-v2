@@ -55,8 +55,8 @@ initialCommitTests = withSystemTempDirectory "kyyn-git-initial" $ \directory -> 
   Bytes.writeFile (directory </> "unrelated") "working"
   indexBefore <- Bytes.readFile (directory </> ".git/index")
   first <- perform (createCommit repo (GitTree [(Subtree (path "nested/root"),tree)]) Nothing metadata)
-  parents <- perform (readCommitParents repo first)
-  assert "Initial commit has parents" (parents == Right [])
+  parents <- command ["rev-list","--parents","-n","1",revisionName first]
+  assert "Initial commit has parents" (words (Char8.unpack parents) == [revisionName first])
   captured <- perform (readTreeAt repo first WholeTree)
   assert "Initial commit captured live index files"
     (captured == Right (either error id (fileTree [(path "nested/root/kb.dhall", "empty root")])))
