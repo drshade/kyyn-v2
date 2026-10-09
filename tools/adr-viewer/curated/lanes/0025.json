@@ -1,7 +1,7 @@
 {
   "adr": "0025",
   "title": "Agent-driven setup and per-KB execution",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0025.01",
@@ -195,10 +195,11 @@
       ],
       "anchors": [],
       "realised": {
-        "how": "unrealised",
-        "evidence": "No output command group or sink invocation exists in the CLI at end of history"
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 adds root output publish NAME with typed --input/options, needing no preview; it renders via the prepared output and explicitly invokes the sink, mapping Uncertain to an Incomplete exit, so it composes after a scripted evolution accept that exits non-zero on failure"
       },
-      "confidence": "high"
+      "confidence": "medium"
     }
   ],
   "editorial": [

@@ -1,7 +1,7 @@
 {
   "adr": "0012",
   "title": "Acceptance is one conditional step from local head",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0012.01",
@@ -459,7 +459,12 @@
         "how": "same_step",
         "evidence": "PR #41 adds the repeat-CAS regression and ref-result classification correction"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0012.28"
+      }
     },
     {
       "id": "0012.19",
@@ -509,7 +514,12 @@
         "how": "same_step",
         "evidence": "PR #42 implements acceptStoredEvolution (code_added at 41)"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0012.27"
+      }
     },
     {
       "id": "0012.21",
@@ -530,7 +540,12 @@
         "how": "same_step",
         "evidence": "PR #42 implements explicit recovery with separate accepting/current checkout revisions"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0012.29"
+      }
     },
     {
       "id": "0012.22",
@@ -603,7 +618,12 @@
         "how": "same_step",
         "evidence": "PR #58 keeps archive metadata reads projected while active manifests remain strict"
       },
-      "confidence": "medium"
+      "confidence": "medium",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0012.27"
+      }
     },
     {
       "id": "0012.25",
@@ -655,6 +675,104 @@
         "evidence": "PR #210 adds checked Dhall persistence for accepted recipe state and removes the curation register"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0012.27",
+      "seq": 183,
+      "pr": 234,
+      "summary": "Acceptance trusts the local manifest's lifecycle; no Git-history acceptance lookup",
+      "detail": "acceptStoredEvolution reads the workspace manifest on disk first and refuses non-Ready workspaces, a locally Accepted one as NotReady Accepted, before candidate loading, compiler setup or commit-identity lookup; otherwise it loads and checks the saved candidate and publishes only a passing result (failures are NotAccepted InvalidMaterial). The application keeps no Git or filesystem dependency; publication owns branch resolution and the Before/head check. FindAcceptance, the history walk, FindAcceptanceOnBranch and AlreadyAccepted are withdrawn.",
+      "kind": "replace",
+      "supersedes": [
+        "0012.20",
+        "0012.24"
+      ],
+      "sections": [
+        "Decision",
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "acceptStoredEvolution",
+        "NotReady",
+        "Accepted",
+        "InvalidMaterial"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 184,
+        "evidence": "PR #235 removes historical acceptance lookup and readCommitParents plumbing (FindAcceptance, FindAcceptanceOnBranch, AlreadyAccepted code_removed at 184); locally Accepted refuses before runtime, identity or candidate access, covered by the installed journey"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.28",
+      "seq": 183,
+      "pr": 234,
+      "summary": "Interruption gives no outcome; a stale retry is refused as BaseMismatch",
+      "detail": "A ref observed at the desired revision counts as published, and checkout synchronization failure is reported alongside AcceptedCommit. Asynchronous interruption yields no normal outcome and is not evidence of non-acceptance; a retry of a still-Ready workspace against the advanced head is refused as BaseMismatch with expected and actual revisions and a hint to inspect git status and restore from Git, rather than being resolved by a history lookup.",
+      "kind": "replace",
+      "supersedes": [
+        "0012.18"
+      ],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [
+        "AcceptedCommit",
+        "BaseMismatch",
+        "RefUpdated"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 184,
+        "evidence": "PR #235 base-mismatch diagnostic points to git status and Git restore; regressions cover interrupted publication and CAS races without a second commit"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.29",
+      "seq": 183,
+      "pr": 234,
+      "summary": "Incomplete checkout sync repaired by a scoped Git restore from HEAD",
+      "detail": "For AcceptedCommit with WorkingTreeUpdateIncomplete, the diagnostic names the accepting commit and supplies an exact shell-quoted git restore command over only the root and this workspace, sourced from current HEAD so later accepted work is not rolled back, warning that it overwrites local edits in those paths and does not remove untracked files. There is no Kyyn recovery command (RecoverAcceptedEvolution, CheckoutRecovery) or recovery registry.",
+      "kind": "replace",
+      "supersedes": [
+        "0012.21"
+      ],
+      "sections": [
+        "Concurrent instances and upstream",
+        "Working tree, index and other drafts"
+      ],
+      "anchors": [
+        "WorkingTreeOutcome"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 184,
+        "evidence": "PR #235 removes evolution recover (RecoverAcceptedEvolution, CheckoutRecovery code_removed at 184) and RootPublication emits the quoted restore command against HEAD, tested on quoted and bracket paths"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0012.30",
+      "seq": 184,
+      "pr": 235,
+      "summary": "Restore command treats repository paths as literal pathspecs",
+      "detail": "The supplied repair command passes --literal-pathspecs, so root and workspace paths containing glob characters such as brackets restore exactly those paths.",
+      "kind": "refine",
+      "supersedes": [
+        "0012.29"
+      ],
+      "sections": [
+        "Concurrent instances and upstream"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 184,
+        "evidence": "PR #235 RootPublication builds 'git --literal-pathspecs -C ... restore --source=HEAD' and tests bracket paths"
+      },
+      "confidence": "medium"
     }
   ],
   "editorial": [
@@ -669,5 +787,5 @@
       "note": "Desired-state reconciliation: drops status/date/basis and the implementation-status section, removes 'proposed/not implemented' qualifiers from the curation paragraph, and corrects the archive record format to Dhall to match code; no change in what acceptance requires"
     }
   ],
-  "notes": "0012 is a founding ADR with no ### subsections; it was split into 10 commitments along its prose (base equality, readiness, publication purity, report-in-commit, fresh-process recheck, commit+CAS, local-only concurrency, typed result, ordinary branch, scoped tree/checkout). The spec ran well ahead of code for a day: everything was specified at seq 1 and then built bottom-up by PRs #23-#42 (seq 22-41), with the ADR carrying a running 'implemented so far / not yet AcceptEvolution' status paragraph that grew each step until #42 composed the whole sequence; most founding nodes therefore realise at seq 41. The biggest design addition was crash recovery (seq 4): authoritative Git-history FindAcceptance + AlreadyAccepted, later hardened with merge/ambiguity semantics (37), an 'observed ref = published' rule for non-zero update exits (40) and explicit RecoverAcceptedEvolution that syncs to current head rather than the original commit (41). Initialization was carved out as a separate first-commit path (22 -> 48 -> 50). The lane was barely touched after seq 52 except as a downstream of ADR 0014's curation churn: progress-register publication (89, realised 92) was replaced by recipe-state publication (158, realised 162) without touching the core acceptance rules. Judgement calls: 0012.12 and 0012.24 are small refinements that could be read as editorial; seq 40's added CommitMetadata parameter on AcceptEvolution was folded into 0012.18/0012.19 rather than given its own node."
+  "notes": "0012 is a founding ADR with no ### subsections; it was split into 10 commitments along its prose (base equality, readiness, publication purity, report-in-commit, fresh-process recheck, commit+CAS, local-only concurrency, typed result, ordinary branch, scoped tree/checkout). The spec ran well ahead of code for a day: everything was specified at seq 1 and then built bottom-up by PRs #23-#42 (seq 22-41), with the ADR carrying a running 'implemented so far / not yet AcceptEvolution' status paragraph that grew each step until #42 composed the whole sequence; most founding nodes therefore realise at seq 41. The biggest design addition was crash recovery (seq 4): authoritative Git-history FindAcceptance + AlreadyAccepted, later hardened with merge/ambiguity semantics (37), an 'observed ref = published' rule for non-zero update exits (40) and explicit RecoverAcceptedEvolution that syncs to current head rather than the original commit (41). Initialization was carved out as a separate first-commit path (22 -> 48 -> 50). The lane was barely touched after seq 52 except as a downstream of ADR 0014's curation churn: progress-register publication (89, realised 92) was replaced by recipe-state publication (158, realised 162) without touching the core acceptance rules. Judgement calls: 0012.12 and 0012.24 are small refinements that could be read as editorial; seq 40's added CommitMetadata parameter on AcceptEvolution was folded into 0012.18/0012.19 rather than given its own node. Seq 183 (PR #234, docs only, 'no implementation claim') reversed the crash-recovery design: lifecycle metadata is now read from the on-disk manifest, and FindAcceptance, AlreadyAccepted and RecoverAcceptedEvolution were withdrawn. Because guarantees were withdrawn, these are replaces: 0012.27 replaces both live successors of the lookup (0012.20 lookup-before-load and 0012.24 archived projection, the end of the 0012.11 chain), 0012.28 replaces 0012.18 (interruption no longer resolved by lookup; stale retry is BaseMismatch with a Git hint), and 0012.29 replaces explicit recovery 0012.21 with a quoted, scoped git restore command. Before/head equality and the atomic CAS (0012.01, 0012.06, 0012.07) are unchanged. PR #235 (seq 184) implemented all three, so they are later_step 184; its one ADR edit, adding --literal-pathspecs, is treated as a small refine (0012.30) rather than editorial, a call a reviewer may reasonably reverse."
 }

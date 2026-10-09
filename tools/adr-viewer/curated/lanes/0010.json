@@ -1,7 +1,7 @@
 {
   "adr": "0010",
   "title": "One evolution mechanism for facts, schema and meaning",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0010.01",
@@ -855,7 +855,12 @@
         "seq": 38,
         "evidence": "PR 39 implements lifecycle operations"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0010.55"
+      }
     },
     {
       "id": "0010.33",
@@ -951,7 +956,12 @@
         "seq": 43,
         "evidence": "PR 44 implements the store operations and CLI inspection"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0010.56"
+      }
     },
     {
       "id": "0010.37",
@@ -995,7 +1005,12 @@
         "seq": 50,
         "evidence": "PR 54 code writes .kyyn/.gitignore (readOptionalBytes/replaceBytes)"
       },
-      "confidence": "medium"
+      "confidence": "medium",
+      "ended": {
+        "seq": 185,
+        "how": "replaced",
+        "by": "0010.58"
+      }
     },
     {
       "id": "0010.39",
@@ -1337,7 +1352,12 @@
         "seq": 121,
         "evidence": "PR 157 persists plugin comparisons in v4"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 185,
+        "how": "replaced",
+        "by": "0010.57"
+      }
     },
     {
       "id": "0010.52",
@@ -1421,6 +1441,106 @@
         "evidence": "StoredRecipe and recipe state archives appear with PR 210"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0010.55",
+      "seq": 183,
+      "pr": 234,
+      "summary": "Local manifests own lifecycle metadata; listings do no Git acceptance lookup",
+      "detail": "ListEvolutions, ResolveEvolution and ReadEvolutionState read local manifests under the local evolutions/ directory; summaries carry workspace, name and state but no accepting commit, and ExcludeDrafts stays a pure filter. Authors may repair old manifests and reports on disk without rewriting history, malformed files remain diagnostics, MarkReady/MarkDraft refuse locally Accepted workspaces, and after interrupted synchronization the ADR 0012 Before/head check, not Git precedence, prevents reacceptance. The unverified-acceptance diagnostic and ReadDirectoryAt listing are withdrawn.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.32"
+      ],
+      "sections": [
+        "Decision / Pure evolution execution"
+      ],
+      "anchors": [
+        "ListEvolutions",
+        "ResolveEvolution",
+        "ReadEvolutionState",
+        "EvolutionSummary",
+        "ExcludeDrafts",
+        "MarkReady",
+        "MarkDraft"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 184,
+        "evidence": "PR #235 reads lifecycle manifests from disk and drops original-acceptance summary data; regressions cover an old committed manifest repaired only on disk and playground listing of 42 evolutions"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.56",
+      "seq": 183,
+      "pr": 234,
+      "summary": "Inspection reads the workspace manifest and report from disk",
+      "detail": "ReadEvolutionSummary and ReadArchivedReport take only the workspace: the summary trusts the decoded manifest's state and the report is the local result.dhall, checked for matching workspace identity. Accepted inspection needs a readable manifest but no candidate cache, and EvolutionStore's handler no longer depends on Git; the confirmed-acceptance requirement and evolution.unverified-report are withdrawn.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.36"
+      ],
+      "sections": [
+        "Decision / Pure evolution execution"
+      ],
+      "anchors": [
+        "ReadEvolutionSummary",
+        "ReadArchivedReport",
+        "inspectEvolution"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 184,
+        "evidence": "PR #235 drops the GitRevision argument from ReadEvolutionSummary/ReadArchivedReport and the CLI inspection revision; journey covers archived inspection without cache or runtime"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.57",
+      "seq": 185,
+      "pr": 236,
+      "summary": "One current evolution record format; no version field or compatibility readers",
+      "detail": "candidate.dhall and result.dhall headers carry the evolution identity and endpoint contracts but no format version, following the sealed-tool/KB principle: older formats are not read, and plugin package comparisons and recipe changes are required fields. Invalid documents return their parse or type diagnostics; reading a report decodes stored content and never manufactures missing changes or suggests replaying archived code.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.51"
+      ],
+      "sections": [
+        "Decision / Pure evolution execution"
+      ],
+      "anchors": [
+        "EvolutionRecord"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 185,
+        "evidence": "PR #236 removes the record version header and dispatch and the optional defaults for plugin/recipe-change report fields"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0010.58",
+      "seq": 185,
+      "pr": 236,
+      "summary": "LoadCandidate reports specific failures instead of candidate.stale",
+      "detail": "Candidates stay in fresh .kyyn/candidates directories behind an atomic latest pointer with their own .kyyn/.gitignore, and restore still requires fingerprint equality. LoadCandidate returns Nothing only when the latest pointer is absent; missing required files, invalid documents and inconsistent contracts return their specific diagnostics and read failures remain Failure. The candidate.stale classification for unrecognised layouts is withdrawn.",
+      "kind": "replace",
+      "supersedes": [
+        "0010.38"
+      ],
+      "sections": [
+        "Decision / Pure evolution execution"
+      ],
+      "anchors": [
+        "LoadCandidate"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 185,
+        "evidence": "PR #236 removes the candidate.stale fallback so parse, missing-file, identity and fingerprint failures surface as themselves"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -1470,5 +1590,5 @@
       "note": "CollectionEdit reader String→Text to match the packed-Text transport implementation."
     }
   ],
-  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment into 13 nodes: entry kind, composition, chain check, Before/After revisions (absorbing the 'Updating the base' section's author-directed rebase), workspace layout, module naming, capture/store, candidate storage, execution, binding convention, reports, record history and lifecycle. The Composition section's mechanics are merged into 0010.02. Alternatives and verification produce no nodes. The large founding spec was then implemented almost line by line over PRs 30-44 (seq 29-43). Each PR tightened the signatures it built, so most refinements are same_step and spec and code moved in lockstep. Reversals: (1) the founding effectful entry (Program MicrosoftCalls, evidence acquired during evaluation) was never built; execution was only ever Program NoRequests (seq 34). Seq 52 replaced it with a pure Evolution value, seq 97 declared pure execution (0010.50, code_first) and seq 122 deleted the leftover text. (2) Explicit intermediate schema bindings were specified and built at seq 34, then removed at seq 52 in favour of exactly two endpoint contracts. (3) Curation (seq 89, built at 92) was replaced by typed recipe state at seq 158, built by seq 162. Persistence moved from JSON (seq 39) to typed Dhall (seq 54), and the record version climbed v2 to v5. Under the format-bump rule, v2 (seq 92) and v5 (seq 130) are editorial because they only carry what other nodes or ADR 0014 already require. v4 (seq 121, 0010.51) stays a refine because it newly requires reports to carry the host-derived plugin package comparison, so plugin-only upgrades are reviewable. Seq 143 is wholly editorial under the reconciliation rule: every change restates an existing node. Still unrealised at cursor 166: per-record history (0010.12) and the explicit 'remove unaccepted workspace' operation folded into 0010.13. Rebasing exists only as editing the manifest revision and re-capturing. Seq 4 and seq 30 each bundle several small store/lifecycle mechanics, split into separate refines. Seq 4's front-matter change is editorial within a step that also makes nodes. Recipe curation was built pure core first (90), then persistence (91), then evolution attachment (92)."
+  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment into 13 nodes: entry kind, composition, chain check, Before/After revisions (absorbing the 'Updating the base' section's author-directed rebase), workspace layout, module naming, capture/store, candidate storage, execution, binding convention, reports, record history and lifecycle. The Composition section's mechanics are merged into 0010.02. Alternatives and verification produce no nodes. The large founding spec was then implemented almost line by line over PRs 30-44 (seq 29-43). Each PR tightened the signatures it built, so most refinements are same_step and spec and code moved in lockstep. Reversals: (1) the founding effectful entry (Program MicrosoftCalls, evidence acquired during evaluation) was never built; execution was only ever Program NoRequests (seq 34). Seq 52 replaced it with a pure Evolution value, seq 97 declared pure execution (0010.50, code_first) and seq 122 deleted the leftover text. (2) Explicit intermediate schema bindings were specified and built at seq 34, then removed at seq 52 in favour of exactly two endpoint contracts. (3) Curation (seq 89, built at 92) was replaced by typed recipe state at seq 158, built by seq 162. Persistence moved from JSON (seq 39) to typed Dhall (seq 54), and the record version climbed v2 to v5. Under the format-bump rule, v2 (seq 92) and v5 (seq 130) are editorial because they only carry what other nodes or ADR 0014 already require. v4 (seq 121, 0010.51) stays a refine because it newly requires reports to carry the host-derived plugin package comparison, so plugin-only upgrades are reviewable. Seq 143 is wholly editorial under the reconciliation rule: every change restates an existing node. Still unrealised at cursor 166: per-record history (0010.12) and the explicit 'remove unaccepted workspace' operation folded into 0010.13. Rebasing exists only as editing the manifest revision and re-capturing. Seq 4 and seq 30 each bundle several small store/lifecycle mechanics, split into separate refines. Seq 4's front-matter change is editorial within a step that also makes nodes. Recipe curation was built pure core first (90), then persistence (91), then evolution attachment (92). Seq 183 (PR #234, docs only) made the on-disk manifest the owner of lifecycle metadata: listings no longer consult ADR 0012's Git-history lookup (0010.55 replaces 0010.32, the live successor of 0010.16/0010.20) and archived inspection no longer requires confirmed acceptance (0010.56 replaces 0010.36). Both were withdrawn guarantees, hence replaces; PR #235 (seq 184) built them. Seq 185 (PR #236) adopted one current persisted format: the record version and v1-v4 readers are gone (0010.57 replaces 0010.51) and candidate.stale gave way to specific diagnostics (0010.58 replaces 0010.38, the live successor of the store-layout node 0010.31). Per-record history (0010.12) is still unrealised at cursor 187."
 }

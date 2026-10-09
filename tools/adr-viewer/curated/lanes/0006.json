@@ -1,7 +1,7 @@
 {
   "adr": "0006",
   "title": "Materialized facts and runtime data loading",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0006.01",
@@ -1112,8 +1112,9 @@
       ],
       "anchors": [],
       "realised": {
-        "how": "unrealised",
-        "evidence": "No outputs field in the manifest decoder or example KBs"
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 adds the outputs list to kb.dhall (RootStore decodes name, description, query and sink reference; kb init scaffolds an empty list)"
       },
       "confidence": "medium"
     },

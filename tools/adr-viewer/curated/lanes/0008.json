@@ -1,7 +1,7 @@
 {
   "adr": "0008",
   "title": "Domain authors write typed functions, not adapters",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0008.01",
@@ -70,8 +70,9 @@
       ],
       "anchors": [],
       "realised": {
-        "how": "unrealised",
-        "evidence": "No renderer/output/sink code exists in kyyn-v2 at end of history"
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 binds a registered query (the renderer role, per seq 177) to a typed plugin sink: root preparation compiles a generated adapter checking the query result against the sink input, rendering runs as an ordinary snapshot query, and a separate Delivery capability invokes the sink only on `root output publish`"
       },
       "confidence": "high"
     },
@@ -624,7 +625,12 @@
       "seq": 155,
       "pr": 202,
       "note": "Example tool types switch String to Text to match the packed-Text SDK; illustration only"
+    },
+    {
+      "seq": 177,
+      "pr": 226,
+      "note": "Restates ADR 0017's output registration: an output names a registered query and renderer is that query's role. The decision is recorded in the 0017 lane (0017.12); 0008.03's commitment still holds."
     }
   ],
-  "notes": "Two founding guest APIs were never built yet are still in the ADR: the generated Method handle with registerMethod/RegisteredMethod (0008.07) and the host MethodDescriptor/MethodIdentity (half of 0008.08). Tools ended up registered in kb.dhall (seq 87) and plugins through signature-derived registration (seq 116), so the ADR text describes a registration API the code never used. The output/renderer commitment (0008.03) is also entirely unrealised. The plugin-authoring route went round in a circle: seq 78 introduced generated per-entry KyynPluginBindings, seq 83 tightened them, then code moved to a hand-written Kyyn.Plugin.Host with signature-derived contracts (seq 112-116) and the ADR caught up only in the seq 143 reconcile. The KB-tool entry kind (seq 76) contradicts the founding 'three entry kinds, no fourth model' wording; I recorded it as a refine of 0008.02 instead of a replace because the other three kinds remain. Seq 97 (pure evolution) is treated as code_first because evolution execution was never effectful. Several decisions arrived in parts: entry kinds one by one (validation 24, queries 26, evolutions 34)."
+  "notes": "Two founding guest APIs were never built yet are still in the ADR: the generated Method handle with registerMethod/RegisteredMethod (0008.07) and the host MethodDescriptor/MethodIdentity (half of 0008.08). Tools ended up registered in kb.dhall (seq 87) and plugins through signature-derived registration (seq 116), so the ADR text describes a registration API the code never used. The output/renderer commitment (0008.03) stayed unbuilt until seq 180 (PR #229), after seq 177 had made the renderer a registered query rather than a separate export; that seq 177 rewording is editorial here because ADR 0017 owns output registration. The plugin-authoring route went round in a circle: seq 78 introduced generated per-entry KyynPluginBindings, seq 83 tightened them, then code moved to a hand-written Kyyn.Plugin.Host with signature-derived contracts (seq 112-116) and the ADR caught up only in the seq 143 reconcile. The KB-tool entry kind (seq 76) contradicts the founding 'three entry kinds, no fourth model' wording; I recorded it as a refine of 0008.02 instead of a replace because the other three kinds remain. Seq 97 (pure evolution) is treated as code_first because evolution execution was never effectful. Several decisions arrived in parts: entry kinds one by one (validation 24, queries 26, evolutions 34)."
 }

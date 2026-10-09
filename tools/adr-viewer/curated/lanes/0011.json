@@ -1,7 +1,7 @@
 {
   "adr": "0011",
   "title": "Validation checks a complete candidate, not reality",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0011.01",
@@ -153,10 +153,11 @@
         "PreparedOutput"
       ],
       "realised": {
-        "how": "unrealised",
-        "evidence": "No PrepareOutput/OutputDescriptor exists in the code; RootExecution has only PrepareRoot/ValidateRoot/ExecuteQuery"
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 type-checks output bindings during root preparation (compile gate) and renders a registered output's query result as the sink's typed input; root output preview recomputes it without invoking the sink. Built as a composition over ExecuteQuery, not a RootExecution PrepareOutput constructor, and preview reads the selected accepted snapshot rather than demanding Validated Root"
       },
-      "confidence": "high"
+      "confidence": "medium"
     },
     {
       "id": "0011.07",
