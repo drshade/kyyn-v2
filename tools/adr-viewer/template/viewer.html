@@ -110,7 +110,7 @@ const setT = v => { T = Math.max(0, Math.min(maxSeq, Math.round(v))); render(); 
 document.getElementById("title").textContent = "ADR history · " + D.name;
 
 let STEP_W = 8;
-const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - 170) / maxSeq); };
+const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - 200) / maxSeq); };
 fitWidth();
 const x = seq => LABEL_W + seq * STEP_W;
 const el = (tag, attrs = {}, parent = svg) => {
@@ -135,7 +135,7 @@ function state(n, t) {
 }
 
 // Lanes are collapsed to a one-row summary until their label is clicked.
-const COLLAPSED = 26, BAR_H = 16;
+const COLLAPSED = 26, BAR_H = 16, LABEL_CHARS = 32, LABEL_LINE = 14;
 const inferred = Object.keys(D.lanes).sort();
 const order = [...inferred, ...D.adrs.map(a => a.id).filter(id => !D.lanes[id])];
 let expanded = new Set();
@@ -157,7 +157,7 @@ function relayout() {
   for (const id of order) {
     const lane = D.lanes[id];
     if (lane && expanded.has(id)) {
-      const h = lane._depth * ROW + LANE_PAD * 2;
+      const h = Math.max(lane._depth * ROW, labelLines(id).length * LABEL_LINE) + LANE_PAD * 2;
       layout[id] = { y, h, mid: y + LANE_PAD + ROW / 2 };
     } else {
       const h = lane ? COLLAPSED : THIN;
@@ -180,10 +180,21 @@ expandBtn.onclick = () => {
 };
 const nodeY = (id, n) => layout[id].y + LANE_PAD + n._track * ROW + ROW / 2;
 
+// Progress among the live decisions: built out of live, then any partly built.
 function headline(c) {
   const live = c.done + c.partial + c.planned;
-  const parts = [c.partial && `${c.partial} partial`, c.planned && `${c.planned} ahead`].filter(Boolean);
-  return parts.length ? `${parts.join(" · ")} · ${live} live` : `${live} live, in sync`;
+  return `${c.done} of ${live} built` + (c.partial ? ` · ${c.partial} partial` : "");
+}
+
+// Expanded lanes show the whole title, wrapped to the label column by words.
+function labelLines(id) {
+  const lines = [];
+  let line = "▾ " + id;
+  for (const word of adrTitle(id).split(/\s+/).filter(Boolean)) {
+    if ((line + " " + word).length > LABEL_CHARS) { lines.push(line); line = word; }
+    else line += " " + word;
+  }
+  return [...lines, line];
 }
 
 function adrTitle(id) { return (D.adrs.find(a => a.id === id) || {}).title || ""; }
@@ -216,7 +227,9 @@ function render() {
     if (meta.born > t) continue;
     const open = lane && expanded.has(id);
     const label = el("text", { x: 8, y: L.mid + 4, class: "lane-label" + (lane ? "" : " dim") });
-    label.textContent = (lane ? (open ? "▾ " : "▸ ") : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
+    if (open) labelLines(id).forEach((line, i) =>
+      el("tspan", { x: i ? 20 : 8, dy: i ? LABEL_LINE : 0 }, label).textContent = line);
+    else label.textContent = (lane ? "▸ " : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
     label.onclick = () => {
       if (lane) { expanded.has(id) ? expanded.delete(id) : expanded.add(id); saveExpanded(); relayout(); render(); }
       showLane(id);
