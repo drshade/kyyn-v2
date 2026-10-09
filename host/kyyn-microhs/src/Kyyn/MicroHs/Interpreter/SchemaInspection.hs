@@ -17,12 +17,14 @@ import Kyyn.Domain.Path (scopePath, scopedPath, RelativePath, relativeName)
 import Data.List (isSuffixOf)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Plugin (QualifiedTypeName(..), PluginEntryKind, PluginSignature)
+import Kyyn.Domain.Recipe (RecipeSignature)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectRecipeSignature, inspectionSettings)
 import qualified Kyyn.MicroHs.Inspection as Inspection
 import Kyyn.MicroHs.Interpreter.InspectionCache (InspectionCache, cachedInspection)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
-import Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature)
+import Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature,
+  encodeRecipeExports, decodeRecipeExports)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem, withTemporaryScope, writeBytes)
@@ -68,15 +70,27 @@ runSchemaInspectionIO toolchain cache = interpret $ \_ -> \case
       Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.compiler-rejected" message])
       Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "recipe.signature-invalid" message])
       Right (signature,_) -> pure (Right signature)
-  InspectRecipeExports source selected -> withTemporaryScope $ \scope -> do
-    forM_ (files source) $ \(path,bytes) -> writeBytes scope path bytes
-    let GuestToolchain compiler = toolchain
+  InspectRecipeExports source selected -> fmap (fmap fst) (inspectRecipes toolchain cache (files source) selected)
+
+inspectRecipes :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :> es)
+  => GuestToolchain -> Maybe InspectionCache -> [(RelativePath,Bytes.ByteString)] -> String
+  -> Eff es (Either [Diagnostic] ([(String,RecipeSignature)],[RelativePath]))
+inspectRecipes (GuestToolchain compiler) cache sources selected =
+  cachedInspection cache "recipe-exports" selected (inspectionSettings (scopePath compiler) selected) sources
+    encodeRecipeExports decode $
+  withTemporaryScope $ \scope -> do
+    forM_ sources $ \(path,bytes) -> writeBytes scope path bytes
     result <- liftIO (Inspection.inspectRecipeExports (scopePath compiler) [scopePath scope] selected)
     case result of
       Left (NativeError message) -> raiseFailure (CompilerUnavailable message)
       Left (CompilerError message) -> pure (Left [errorDiagnostic "guest.compiler-rejected" message])
       Left (TypeNotSupported message) -> pure (Left [errorDiagnostic "recipe.signature-invalid" message])
-      Right (signatures,_) -> pure (Right signatures)
+      Right (signatures,loaded) -> pure (Right (signatures,[path | (path,_) <- sources, scopedPath scope path `elem` loaded]))
+  where
+    decode bytes = do
+      result <- decodeRecipeExports bytes
+      pure (result >>= \value@(_,closure) -> if all (`elem` map fst sources) closure
+        then Right value else Left [errorDiagnostic "inspection.cache-invalid" "Closure is outside captured sources"])
 
 inspectFunction :: (IOE :> es, DhallHandling :> es, FileSystem :> es, Failure :> es)
   => GuestToolchain -> Maybe InspectionCache -> [(RelativePath,Bytes.ByteString)] -> PluginEntryKind -> String

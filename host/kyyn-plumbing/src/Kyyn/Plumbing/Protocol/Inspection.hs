@@ -1,4 +1,6 @@
-module Kyyn.Plumbing.Protocol.Inspection (encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature) where
+module Kyyn.Plumbing.Protocol.Inspection
+  ( encodeInspection, decodeInspection, encodePluginSignature, decodePluginSignature
+  , encodeRecipeExports, decodeRecipeExports ) where
 
 import Data.Aeson (object, (.=), (.:), withObject)
 import Data.Aeson.Types (parseEither)
@@ -9,11 +11,39 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Path (RelativePath, relativeName, relativePath)
 import Kyyn.Domain.Plugin (PluginSignature(..))
+import Kyyn.Domain.Recipe (RecipeSignature(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
 import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataType)
 
 inspectionShape :: Shape
 inspectionShape = Record [("type",dataTypeShape),("closure",List (Scalar TextScalar))]
+
+recipeExportsShape :: Shape
+recipeExportsShape = Record
+  [("exports",List (Record [("name",Scalar TextScalar),("root",dataTypeShape),
+    ("input",dataTypeShape),("state",dataTypeShape)])),("closure",List (Scalar TextScalar))]
+
+encodeRecipeExports :: DhallHandling :> es => ([(String,RecipeSignature)],[RelativePath])
+  -> Eff es (Either [Diagnostic] ByteString)
+encodeRecipeExports (signatures,closure) = fmap (fmap Text.encodeUtf8) $ encodeValue recipeExportsShape
+  (object ["exports" .= [object ["name" .= name,"root" .= dataTypeValue root,
+    "input" .= dataTypeValue input,"state" .= dataTypeValue state]
+    | (name,RecipeSignature root input state) <- signatures],"closure" .= map relativeName closure])
+
+decodeRecipeExports :: DhallHandling :> es => ByteString
+  -> Eff es (Either [Diagnostic] ([(String,RecipeSignature)],[RelativePath]))
+decodeRecipeExports bytes = case Text.decodeUtf8' bytes of
+  Left problem -> pure (bad (show problem))
+  Right source -> do
+    decoded <- decodeValue recipeExportsShape source
+    pure (decoded >>= either bad Right . parseEither (withObject "recipe exports" $ \record ->
+      (,) <$> (record .: "exports" >>= traverse (withObject "recipe export" $ \entry ->
+        (,) <$> entry .: "name" <*> (RecipeSignature
+          <$> (entry .: "root" >>= parseDataType)
+          <*> (entry .: "input" >>= parseDataType)
+          <*> (entry .: "state" >>= parseDataType))))
+        <*> (record .: "closure" >>= traverse (either fail pure . relativePath))))
+  where bad = Left . pure . errorDiagnostic "inspection.cache-invalid"
 
 signatureShape :: Shape
 signatureShape = Record [("kind",Scalar TextScalar),("types",List dataTypeShape),("closure",List (Scalar TextScalar))]
