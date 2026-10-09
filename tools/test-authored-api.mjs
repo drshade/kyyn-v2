@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 
 assert.equal(process.argv.length, 3, 'Usage: node tools/test-authored-api.mjs INSTALLED_EXECUTABLE');
 const executable = path.resolve(process.argv[2]);
+const repository = process.cwd();
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-authored-api-'));
 const kb = path.join(temporary, 'kb');
 const env = { ...process.env, GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'user.name',
@@ -28,7 +29,13 @@ function git(...args) {
 try {
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'helpers']).result;
+  cli(['plugin', 'install', '--evolution', draft.id, '--from', repository, '--path', 'plugins/local-file']);
   const source = path.join(draft.path, 'target/src');
+  fs.writeFileSync(path.join(source, 'Queries.hs'), `module Queries where
+import KyynQueryBindings
+answer :: Query String
+answer = pure "Hello"
+`);
   fs.mkdirSync(path.join(source, 'Helpers'));
   const helpers = `module Helpers (Greeting(..), Priority(..), greet) where
 data Priority = Low | High
@@ -68,13 +75,24 @@ twice name = [greet name, greet name]
   fs.writeFileSync(path.join(source, 'Broken.hs'), 'module Broken where\nbad :: Bool\nbad = "not a boolean"\n');
   const selection = ['--evolution', draft.id];
   const listing = cli(['guest', 'module', 'list', ...selection]).result;
-  for (const name of ['Helpers', 'Helpers.Nested', 'Broken', 'RootV1', 'Validate']) {
+  for (const name of ['Helpers', 'Helpers.Nested', 'Broken', 'RootV1', 'Validate', 'Queries']) {
     assert(listing.modules.includes(name), name);
     assert.equal(listing.origins[name], 'kb');
   }
   assert.equal(listing.origins['Kyyn.Evolution'], 'sdk');
   assert.equal(listing.origins['Kyyn.Connectors'], 'generated');
   assert.equal(listing.origins['Kyyn.Workspace.After'], 'generated');
+  assert.equal(listing.origins['KyynQueryBindings'], 'generated');
+  assert.equal(listing.origins['LocalFile.Types'], 'plugin');
+  assert(!listing.modules.includes('KyynToolCalls'));
+  const queryBindings = cli(['guest', 'module', 'show', 'KyynQueryBindings', ...selection]).result;
+  assert(queryBindings.symbols.some(s => s.name === 'Query'));
+  assert(cli(['guest', 'module', 'show', 'Queries', ...selection]).result.symbols.some(s => s.name === 'answer'));
+  const pluginTypes = cli(['guest', 'module', 'show', 'LocalFile.Types', ...selection]).result;
+  assert.equal(pluginTypes.origin, 'plugin');
+  assert(pluginTypes.symbols.some(s => s.name === 'FolderConfig' && s.namespace === 'type'));
+  const pluginSymbol = cli(['guest', 'symbol', 'show', 'LocalFile.Types.Document', ...selection]).result;
+  assert.equal(pluginSymbol.origin, 'plugin');
   const shown = cli(['guest', 'module', 'show', 'Helpers', ...selection]).result;
   assert.equal(shown.origin, 'kb');
   assert(shown.symbols.some(s => s.name === 'Greeting' && s.namespace === 'type'));
@@ -115,6 +133,8 @@ instance Show Bad where
   cli(['evolution', 'accept', draft.id]);
   const status = git('status', '--porcelain');
   const accepted = cli(['guest', 'module', 'show', 'Helpers']).result;
+  assert.equal(cli(['guest', 'module', 'show', 'LocalFile.Types']).result.origin, 'plugin');
+  assert(cli(['guest', 'module', 'show', 'KyynQueryBindings']).result.symbols.some(s => s.name === 'Query'));
   assert.equal(accepted.context.revision, git('rev-parse', 'HEAD').trim());
   assert.equal(accepted.context.evolution, null);
   assert.equal(accepted.origin, 'kb');
