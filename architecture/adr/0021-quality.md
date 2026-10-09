@@ -37,7 +37,7 @@ ordering belongs in issues, not a permanent roadmap in this decision.
 - Contracts/runtime: generated ADT codecs, exact values, actual MicroHs execution,
   typed host requests and nested-call cancellation (ADRs 0005–0009).
 - Evolutions/acceptance: step reports, saved candidates, repair of invalid heads,
-  inherited examples, deletion, Git races and post-publication recovery
+  inherited examples, deletion, Git races and checkout repair
   (ADRs 0010–0013). Checking/accepting must not rerun acquisition.
 - Integrations: independently vendored source, multiple plugins/instances,
   configuration isolation, local secrets, refresh and curation (ADRs 0014–0016).

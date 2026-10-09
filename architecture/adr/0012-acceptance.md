@@ -109,7 +109,7 @@ database is required.
 Under the [recipe-state model](0014-evidence.md), root export includes each
 recipe's definition and checked state. Facts, state and archive publish through
 the same conditional commit. Publication does not consult the evidence cache.
-Inspection includes state-only changes. Expected-head, readiness and recovery
+Inspection includes state-only changes. Expected-head, readiness and checkout
 rules apply unchanged.
 
 Archive export is defined in ADR 0010. Only its notes subtree is
@@ -119,7 +119,7 @@ version/readability policy are owned there. Root export and archive export retur
 the two replacements for one commit, not two publication steps.
 
 Keep evaluation, validation and diff inspection available before acceptance.
-For a new CLI/Web process, perform the already-accepted lookup described below,
+For a new CLI/Web process, require Ready in the local manifest,
 then use EvolutionStore's `LoadCandidate` and `checkCandidate` on that stored
 result, and only pass a successful checked value
 to `AcceptEvolution`. Missing saved material is an actionable request to evaluate,
@@ -138,12 +138,12 @@ acceptStoredEvolution
   => LocalBranch -> CommitMetadata -> EvolutionWorkspace -> Eff es AcceptanceResult
 ```
 
-It calls `FindAcceptanceOnBranch` first, returning an existing acceptance without
+It reads the local lifecycle state first, refusing non-Ready workspaces without
 candidate access. Otherwise it loads the saved candidate, runs `checkCandidate`,
 and calls `AcceptEvolution` only for a passing result. Missing, stale or rejected
 material is `NotAccepted (InvalidMaterial diagnostics)`. The application has no
-Git or filesystem dependency; publication owns branch resolution and delegates
-the history walk to EvolutionStore.
+Git or filesystem dependency; publication owns branch resolution and the
+Before/head check.
 
 Accept the resulting validated evolution by constructing its complete Git tree,
 including deletions and its retained workspace, and creating a commit whose parent
@@ -230,7 +230,6 @@ whose working-tree update needs attention:
 data AcceptanceResult
   = NotAccepted AcceptanceProblem
   | AcceptedCommit GitRevision WorkingTreeOutcome
-  | AlreadyAccepted GitRevision Diagnostic
 
 data AcceptanceProblem
   = BaseMismatch GitRevision (Maybe GitRevision)
@@ -268,95 +267,29 @@ Asynchronous cancellation or process death can interrupt an invocation after the
 ref update and before returning or synchronizing the workspace. Such an
 interruption yields no normal outcome; it does not guarantee delivery of an
 `AcceptedCommit` result and must not be interpreted as evidence of non-acceptance.
-On the next acceptance request, inspect the selected branch's Git
-history before loading/checking a candidate or diagnosing an old Before as a
-rebase request. The committed Accepted archive is authoritative for this lookup,
-not the possibly still-Ready local manifest:
+Lifecycle metadata comes from the workspace manifest on disk (ADR 0010).
+A locally Accepted workspace is refused as `NotReady Accepted` before candidate
+loading, compiler setup or commit-identity lookup. A still-Ready workspace based
+on an old head is refused as `BaseMismatch`; this includes a retry after publication
+whose checkout synchronization was interrupted. The diagnostic gives expected
+and actual revisions and says: if this evolution was already committed, inspect
+`git status` and restore the checkout from Git.
 
-```haskell
--- EvolutionStore operation; reads Git, not a second acceptance registry.
-FindAcceptance
-  :: KnowledgeBase -> EvolutionId -> GitRevision
-  -> EvolutionStore m (Either [Diagnostic] (Maybe GitRevision))
+For a normal `AcceptedCommit revision (WorkingTreeUpdateIncomplete diagnostics)`
+result, the diagnostic names the known accepting commit and supplies an exact,
+shell-quoted Git command restoring only the root and this evolution's workspace:
+
+```sh
+git -C '<repository>' restore --source=HEAD --staged --worktree -- '<root>' '<workspace>'
 ```
 
-Archived manifests are read by projecting the metadata needed for history
-(Before revision, name, explanation and state); active workspace manifests are
-read strictly as current execution inputs. Extra historical fields do not require
-rewriting accepted archives.
-
-Start by reading this workspace's archive in the input revision's tree. If absent
-or not Accepted, return `Nothing`: a Git revert can remove an acceptance. Otherwise
-take its recorded Before B and walk the input revision's ancestors through all
-parents, finding the commit with parent B that introduced that Accepted archive.
-Return that introducing commit, not a later head that merely carries the archive.
-An ambiguous or malformed history is a diagnostic, not a guess. A subsequent
-re-acceptance uses the current archive's Before and resolves to its new commit.
-The implementing walk visits each reachable commit once, follows every parent,
-and examines the selected archive manifest at potential introductions and their
-parents. An introduction has B as a parent, declares Accepted with Before B, and
-does not inherit that Accepted/Before pair from any parent. A merge carrying an
-acceptance from its second parent therefore resolves to the original acceptance,
-not the merge. Multiple reachable introductions for the selected Before are
-ambiguous. Later note edits do not require byte-identical archive trees.
-
-This is a history walk, not a lookup index: Git reads grow with the reachable
-ancestor count, and the initial list-based visited set can require quadratic local
-membership work. There is no history cap or cache. Missing history needed to prove
-the introduction returns diagnostics; it is not silently treated as a root commit.
-The implementation reads raw commit parent headers and only `manifest.dhall`, not
-archived Haskell, reports or evidence. It does not read the live checkout or private
-candidate storage and never invokes the compiler. Its plumbing inputs are explicit:
-
-```haskell
-readFileAt
-  :: Git :> es => Repository -> GitRevision -> RelativePath
-  -> Eff es (Either [Diagnostic] (Maybe ByteString))
-
-readCommitParents
-  :: Git :> es => Repository -> GitRevision
-  -> Eff es (Either [Diagnostic] [GitRevision])
-```
-
-An absent path is `Right Nothing`; a directory or unsupported entry is a diagnostic.
-An unknown revision is a diagnostic, not an absent file or a parentless commit.
-Git infrastructure failures remain Failure.
-The application returns `AlreadyAccepted` with that revision and guidance to
-inspect/repair local files through Git. Publication repeats this lookup before
-base/readiness checks so a concurrent completed acceptance is diagnosed honestly.
-If conditional ref update loses a race, repeat the lookup once at the returned
-actual revision before reporting `BaseMismatch`; the competing operation may
-have accepted this very workspace. This is diagnosis, not a retry of publication.
-It does not automatically overwrite a live workspace, replay the evolution or
-publish a replacement acceptance. Missing disposable candidate files do not hide
-an acceptance already recorded in Git. No durable recovery coordinator is needed.
-
-Branch-aware lookup and explicit recovery are also RootPublication operations:
-
-```haskell
-FindAcceptanceOnBranch
-  :: LocalBranch -> EvolutionWorkspace
-  -> RootPublication m (Either [Diagnostic] (Maybe GitRevision))
-
-RecoverAcceptedEvolution
-  :: LocalBranch -> EvolutionWorkspace
-  -> RootPublication m (Either [Diagnostic] (Maybe CheckoutRecovery))
-
-data CheckoutRecovery = CheckoutRecovery
-  { acceptingCommit :: GitRevision
-  , checkoutRevision :: GitRevision
-  , outcome :: WorkingTreeOutcome
-  }
-```
-
-Lookup resolves the branch and delegates to `FindAcceptance`; it does not maintain
-another history reader. Recovery first requires that branch to be checked out,
-resolves HEAD and finds this workspace's acceptance at that revision. If none is
-present, it returns `Right Nothing`. Otherwise it inspects the root and this
-archive's checkout paths: no differences means already synchronized; differences
-invoke scoped synchronization. It targets the current head, **not** the original
-accepting commit, so later accepted work is not rolled back. The result names both
-revisions. Other evolutions' archives are outside this explicit repair selection.
+The actual command uses the selected repository and exported repository-relative
+paths, not these placeholders. Restore from current HEAD so later accepted work
+is not rolled back to the earlier commit. Explain that this overwrites local edits
+within those paths and ask the operator to inspect `git status` first. Other
+workspaces and unrelated paths are outside the selection. Untracked files need
+separate inspection; the command is not a promise to remove them. There is no
+Kyyn recovery command or recovery registry.
 
 The guarantee is local to the selected accepted branch. It does not reserve a
 remote branch. Push rejection and upstream conflicts belong to the user/agent's
@@ -400,10 +333,9 @@ revision. It uses path-limited `git restore --staged --worktree --no-overlay`, t
 checks the selected paths for remaining differences. It does not advance any ref
 or include other paths. Untracked files absent from the commit are retained and
 reported as incomplete synchronization, not deleted. Operational failures on this
-path become synchronization diagnostics; asynchronous interruption is governed by
-the recovery rule above. Normal acceptance can compose this operation after CAS;
-recovery can inspect Git and synchronize the current accepted checkout separately,
-without reevaluating an evolution or constructing another accepting commit.
+path become synchronization diagnostics. Normal acceptance composes this operation
+after CAS; interrupted or incomplete synchronization is repaired through ordinary
+Git as described above, without reevaluating or republishing the evolution.
 
 Draft workspaces are ordinary local files, not automatically committed or hidden
 in an ignored cache. Creating a draft does not move head. Users/agents can commit
@@ -462,12 +394,12 @@ the other's local files, rebase it and accept it. Include unrelated staged and
 unstaged files, a previously committed draft, overlapping edits, detached HEAD
 and changed branch selection. Assert both the committed tree and remaining
 index/worktree contents; a passing ref-update test alone does not prove this seam.
-Kill the process after successful ref update but before local synchronization,
-then retry with disposable candidates removed. It must identify the actual
-accepting commit without evaluating or creating another commit. Repeat after a
-later unrelated commit: inherited archive presence must not misidentify that
-later head as the accepting commit.
-Revert the acceptance so its archive is absent/not Accepted at head: lookup returns
-`Nothing`. Re-accept from the new base and verify lookup identifies the new commit.
-After interrupted synchronization, listing reports the committed Accepted state
-and accepting revision even when the local workspace still says Ready.
+Interrupt after successful ref update but before local synchronization. A retry
+must not publish another commit; a stale-base refusal points the operator to Git.
+Test the scoped restore command, including repository paths containing spaces and
+quotes, unrelated local work, and restoration from HEAD after another commit.
+After restoration, the local Accepted state refuses acceptance without candidate
+or runtime access. Listing before restoration honestly reports the local state.
+Commit an old accepted manifest missing a currently required field, then repair
+only its on-disk manifest: listing and archived report inspection must work
+without running archived guest code.

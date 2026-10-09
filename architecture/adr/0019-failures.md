@@ -87,16 +87,17 @@ After a commit or possible external write, preserve the meaningful outcome in
 normal returned results rather than replacing it with a generic failure. Local
 publication follows [ADR 0012](0012-acceptance.md): asynchronous cancellation or
 process death may yield no normal result at all. Neither means acceptance failed
-or was rolled back. The next invocation inspects Git to establish the outcome.
+or was rolled back. The operator may need to inspect Git status and history to
+establish the outcome and repair the checkout. A retry against an advanced head
+is refused with `BaseMismatch` and this Git inspection hint (ADR 0012).
 
 Cancellation is operation-scoped. The composition root releases process pipes,
 workers, temporary files and locks. Cancelling a pure computation prevents later
 publication; cancelling after a remote write may leave `Uncertain`. Cancelling
-after the local Git ref update may require that explicit recovery lookup. A CLI
-handling interruption reports that acceptance status may need inspection and
-identifies the recovery command for the selected evolution; it must not claim
+after the local Git ref update may leave checkout synchronization incomplete. A CLI
+handling interruption identifies the selected evolution and directs the operator
+to inspect `git status` and repair the checkout through Git; it must not claim
 non-acceptance. Its interruption exit status is distinct from an ordinary refusal.
-This does not require a dedicated projection/recovery service.
 Do not promise that killing a guest rolls back host actions it already requested.
 
 Report progress and results to the owning caller. Do not add a generic persisted

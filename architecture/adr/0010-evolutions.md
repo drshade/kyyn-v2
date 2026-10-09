@@ -511,9 +511,9 @@ independent of root compilation:
 ```haskell
 data EvolutionStore :: Effect where
   ReadEvolutionSummary
-    :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] EvolutionSummary)
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] EvolutionSummary)
   ReadArchivedReport
-    :: EvolutionWorkspace -> GitRevision -> EvolutionStore m (Either [Diagnostic] (Maybe EvolutionReport))
+    :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe EvolutionReport))
   ListEvolutions
     :: KnowledgeBase -> EvolutionFilter -> EvolutionStore m (Either [Diagnostic] [EvolutionSummary])
   ResolveEvolution
@@ -538,7 +538,7 @@ data EvolutionStore :: Effect where
 
 runEvolutionStore
   :: (RootStore :> es, WorkspaceStore :> es,
-      FileSystem :> es, Git :> es, DhallHandling :> es, Failure :> es)
+      FileSystem :> es, DhallHandling :> es, Failure :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
 
 data EvolutionAuthoring :: Effect where
@@ -558,18 +558,14 @@ These are selected constructors; review-note persistence is defined in
 [interaction](0023-interaction.md). Creation and capture belong to EvolutionAuthoring
 because they need source inspection; EvolutionStore's metadata, candidate and archive
 operations remain installable without RootOpening, the compiler or SDK.
-Inspection receives a resolved revision explicitly. `ReadEvolutionSummary` uses
-the same `summaryAt` derivation as listing, at that revision. `ReadArchivedReport`
-reads `result.dhall` from Git at that revision, requires acceptance confirmed by
-the same history lookup as `FindAcceptance`, then decodes the report and checks
-the workspace identity. A report file without confirmed acceptance returns
-`evolution.unverified-report`; hand-committing a result or reverting only its
-manifest cannot make a report outrank the history rule.
+Inspection reads the workspace on disk. `ReadEvolutionSummary` decodes its
+manifest and trusts its declared state. `ReadArchivedReport` decodes the local
+`result.dhall` and checks that its workspace identity matches the selection.
 The effectful capability helper `inspectEvolution` combines them for an accepted
 workspace, or reads the saved candidate's report for an unaccepted workspace.
 It returns `(EvolutionSummary, Maybe EvolutionReport)` rather than printing or
-executing code. Accepted inspection needs neither a candidate cache nor a valid
-live manifest. Missing reports are distinguishable from malformed reports;
+executing code. Accepted inspection needs a readable manifest but no candidate
+cache. Missing reports are distinguishable from malformed reports;
 unsupported durable encodings return diagnostics rather than being rerun.
 `ReadWorkspace` captures and decodes the local workspace without interpreting its
 Haskell; capture delegates this read to the store before checking the Before copy.
@@ -584,8 +580,7 @@ without semantic validation or executing a transformation. Operation-specific co
 the semantic handlers needed by the command.
 Do not use partial handlers that fail on the store's other operations.
 
-EvolutionStore's handler dependencies are listed above; Git supplies its
-FindAcceptance lookup from ADR 0012. EvolutionAuthoring adds the source-opening
+EvolutionStore's handler dependencies are listed above. EvolutionAuthoring adds the source-opening
 dependencies for capture. Capture reads the workspace at the derived location,
 decodes its manifest, and calls `LoadSourceAt` for that manifest's Before revision
 and the owning KB's root subtree. The projected `before/` tree must equal that
@@ -616,16 +611,12 @@ derived from its owning KB and ID, not stored as another path that can disagree.
 This also resolves a saved candidate's context to its owning workspace without
 publication reconstructing a private directory convention.
 
-`ListEvolutions` and `ReadEvolutionState` resolve the checkout's current HEAD once
-per operation and use the [acceptance lookup](0012-acceptance.md) for that revision.
-An Accepted archive there takes precedence over a stale local Ready manifest;
-the summary includes the accepting commit. Otherwise they report local manifest
-state. This reads Git metadata, not guest code, and neither repairs local files
-nor advances a ref. Listing after interrupted synchronization must not invite
-accepting the same change again.
-The manifest's state field never establishes acceptance: the committed archive
-and its introducing commit do (ADR 0012). A local `Accepted` label alone is not
-a successful acceptance lookup.
+`ListEvolutions`, `ResolveEvolution` and `ReadEvolutionState` read local manifests.
+The manifest owns lifecycle metadata. Authors may repair old manifests and reports on disk without
+rewriting historical commits. Malformed current files still return diagnostics.
+After interrupted checkout synchronization a local manifest may still say Ready;
+the Before/head check prevents reaccepting that old candidate. The operator repairs
+the checkout through Git as described in [acceptance](0012-acceptance.md).
 
 The lifecycle operations return diagnostics for unknown or malformed
 workspaces. Their summaries and filter are ordinary data:
@@ -635,41 +626,25 @@ data EvolutionSummary = EvolutionSummary
   { workspace :: EvolutionWorkspace
   , name :: EvolutionName
   , state :: EvolutionState
-  , acceptingCommit :: Maybe GitRevision
   }
 
 data EvolutionFilter = AllEvolutions | ExcludeDrafts
 ```
 
-Listing enumerates immediate names under the live and selected Git `evolutions/`
-directories, considers valid evolution IDs, then derives each summary once.
-Git's `ReadDirectoryAt Repository GitRevision TreePath` returns
-`Either [Diagnostic] (Maybe [RelativePath])`: immediate entry names, `Nothing`
-for an absent directory, and diagnostics for an invalid revision or non-directory
-selection. It never reads child blobs. The filesystem counterpart is defined in
-[effects](0003-effects.md).
+Listing enumerates immediate names under the local `evolutions/` directory,
+considers valid evolution IDs, then derives each summary once.
 It sorts by ID and applies ExcludeDrafts as a pure filter over those same summaries.
 It reads manifests, not source/evidence/candidate files, and does not compile even
-unfinished drafts. Malformed manifests/history are diagnostics rather than silently
+unfinished drafts. Malformed manifests are diagnostics rather than silently
 omitted workspaces. The filter is not a way to suppress malformed metadata.
-The history lookup cost in ADR 0012 is incurred per selected evolution; no listing
-index or cache is introduced.
-
-For each summary, committed acceptance is checked before reading the local manifest.
-Its name and accepting revision come from the selected Git history, so a missing or
-malformed local manifest cannot hide acceptance. Without committed acceptance, a
-local manifest is required: absent unaccepted drafts are not resurrected from Git.
-A local Accepted label without authoritative acceptance returns an
-`evolution.unverified-acceptance` diagnostic, not Accepted or an implicit downgrade.
 Resolve uses this same existence/state derivation and never creates a workspace.
 
-MarkReady and MarkDraft pin HEAD once, refuse already-accepted and unknown workspaces,
+MarkReady and MarkDraft refuse locally Accepted and unknown workspaces,
 then atomically replace only the local manifest. They preserve Before, name,
 explanation; source, target, changes and notes are
 untouched. Manifest formatting may normalize through Dhall. Neither transition
 compiles, evaluates, validates or commits anything, and matchesCapturedInputs remains
-true across the transition. An explicit transition can correct an unverified local
-Accepted label when Git confirms no acceptance. Storage failures remain Failure.
+true across the transition. Storage failures remain Failure.
 
 The target code is a pure projection of the captured WorkspaceSnapshot; it needs
 no store effect. `SaveCandidate` persists
