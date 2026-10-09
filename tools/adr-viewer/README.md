@@ -1,10 +1,11 @@
 # adr-viewer
 
 A replayable plan-versus-build history of this repository's ADRs. Each ADR is a
-**lane**; the decisions it has carried are **nodes** on that lane. A node is white
-while the spec asks for something the code does not yet do and green once the code
-realises it. When the spec evolves, that is a new node that supersedes the old one,
-so history is never painted over. The rendered page lets you drag through time
+**lane**; the decisions it has carried are **nodes** on that lane. A node is a
+white dot where the spec first asks for something, a yellow pip at each step that
+delivers part of it, and a green dot where the code completes it. When the spec
+evolves, that is a new node that supersedes the old one, so history is never
+painted over. The rendered page lets you drag through time
 and watch the plan and the build converge.
 
 **Live page: <https://drshade.github.io/kyyn-v2/>.** It is rebuilt and published
@@ -99,7 +100,8 @@ When asked to bring the history up to date:
    - **realisation checks**: steps after the cursor that did not change the ADR,
      which matter only because they might realise an open decision.
    - **open decisions**: live nodes still `unrealised` or `unknown`, which are
-     the only nodes a step can newly realise.
+     the only nodes a step can newly realise or partly deliver. Those already
+     partly delivered say "in progress since step N".
    - **advance the cursor**: lanes with nothing to curate and no open decisions.
      Just set `cursor` to the last step.
    - **no lane file**: an ADR never curated. Create its lane from the founding
@@ -109,8 +111,9 @@ When asked to bring the history up to date:
    - For each open decision, check whether any listed step realises it. Use
      `code_added` in `evidence/worklists/anchors.json` and the PR bodies in
      `evidence/worklists/steps.jsonl` (grep by seq or PR number; the file is
-     large). If one does, set that node's `realised` to `later_step` with that
-     step's seq. Never change a node's history otherwise: earlier nodes keep
+     large). If one completes it, set that node's `realised` to `later_step`
+     with that step's seq. If one builds only part of it, append a delivery
+     (rule 5 below). Never change a node's history otherwise: earlier nodes keep
      their meaning, and new understanding becomes new nodes.
    - When a step changed several ADRs, read how already-current sibling lanes
      treated it (read-only) and stay consistent with them.
@@ -170,6 +173,16 @@ For each step that changed the ADR:
    lower `confidence`, and say what is missing in `evidence`. If an unbuilt part
    is a separable commitment of its own, it should have been its own node; do
    not split history retroactively, but note it in `notes`.
+5. **Was it delivered in parts?** When steps before the realising one built part
+   of the decision (types without behaviour, one of several cases, a pure core
+   before its persistence or CLI), list each in `deliveries` as
+   `{ "seq": <step>, "evidence": "what it built and what was still missing" }`,
+   in seq order. `realised` remains the step that completed it; an unrealised
+   node with deliveries is in progress. A delivery must build something the
+   decision asks for: groundwork that merely makes it possible, or a step that
+   only added an anchor's name, is not one. A decision delivered in one step
+   has no `deliveries`. Code that predates the node's step may be listed: the
+   node is then born partly delivered.
 
 Judging evidence:
 
@@ -233,6 +246,7 @@ Consistency rules (other lanes are curated separately, so apply these exactly):
       "sections": ["Decision / One current captured value per evidence item"],
       "anchors": ["EvidenceRef"],
       "realised": { "how": "later_step", "seq": 78, "evidence": "short reason" },
+      "deliveries": [ { "seq": 77, "evidence": "what this step built, what was still missing" } ],
       "ended": { "seq": 84, "how": "replaced", "by": "0014.12" },
       "confidence": "high"
     }
@@ -250,7 +264,8 @@ Consistency rules (other lanes are curated separately, so apply these exactly):
 | `confidence` | `high`, `medium`, `low` |
 
 Ids are `<ADR>.<two-digit counter>` in creation order, and existing ids never
-change. Omit `ended` while a decision is current. `pr` is the step's PR number,
+change. Omit `ended` while a decision is current, and `deliveries` when there
+were none. `pr` is the step's PR number,
 or null for a direct commit. Keep `notes` current: it is shown when a reader
 clicks the lane.
 
@@ -276,6 +291,8 @@ Warnings:
   different node; an `ended.by` node that does not list the ended node in its
   `supersedes`
 - a `realised.seq` beyond the last step
+- a delivery beyond the last step, not before the node's realisation, after
+  the node stopped being live, or listed twice
 - a node's seq is not a step that changed its ADR
 - a realisation is dated inconsistently with its `how`
 - a replacement is not named
@@ -292,17 +309,25 @@ The browser only compares those values with the step being shown, and draws.
   step at which it stops being live. A decision implemented by the same step
   that supersedes it still counts as delivered. A node never turns back from
   realised to specified.
+- It is **partly delivered** from its first delivery, counted from no earlier
+  than its own seq and no later than the step at which it stops being live,
+  until it is realised. Progress only moves forward: specified, partly
+  delivered, realised.
 - **Tracks:** a successor takes its predecessor's row when that predecessor has
   just stopped being live. Otherwise it takes the free row nearest its
   predecessor. Rows never overlap in time.
-- **Lane counts** per step are live decisions realised and live decisions still
-  ahead of the code. **Convergence** is the realised share across all lanes.
+- **Lane counts** per step are live decisions realised, partly delivered and
+  still ahead of the code. **Convergence** is the realised share across all
+  lanes, with the partly delivered share stacked above it.
 
 Reading the page: drag along the timeline band at the top (the convergence
 chart and the date axis), press ▶ to replay, or use ← and →. Each lane starts
 collapsed as a summary bar. Click its label to expand it into decision tracks
-and read its `notes`, or use **Expand all**. Faded green means delivered and
-then superseded. Faded white means superseded before it was built.
+and read its `notes`, or use **Expand all**. On an expanded lane each decision
+reads left to right on its track: white where the ADR states it, yellow pips
+where steps delivered part of it, green where the code completed it (one green
+dot when that was the same step). Faded marks belong to a decision that has
+since been superseded.
 
 ## Limits
 

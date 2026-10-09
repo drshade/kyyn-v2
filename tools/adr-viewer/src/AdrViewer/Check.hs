@@ -8,6 +8,7 @@ module AdrViewer.Check
   ) where
 
 import AdrViewer.Json (readJson)
+import AdrViewer.Model (liveUntil, realisedAt)
 import AdrViewer.Types
 import Control.Monad (forM)
 import Data.List (group, sort)
@@ -86,6 +87,8 @@ checkLane steps adrs file lane = concat
       , [ nwarn ("ended by " <> b <> ", which does not list it in supersedes") | Just e <- [nodeEnded n], Just b <- [endedBy e]
         , Just o <- [Map.lookup b byId], nodeId n `notElem` nodeSupersedes o ]
       , [ nwarn ("realised.seq " <> tshow s <> " is beyond the last step") | Just s <- [realisedSeq (nodeRealised n)], s > lastSeq ]
+      , concatMap delivery (deliveries n)
+      , [ nwarn ("delivery at step " <> tshow d <> " is listed twice") | (d : _ : _) <- group (sort (map deliverySeq (deliveries n))) ]
       , case nodeEnded n of
           Nothing -> []
           Just e -> concat
@@ -95,6 +98,12 @@ checkLane steps adrs file lane = concat
       where
         nerr = err . ((nodeId n <> ": ") <>)
         nwarn = warn . ((nodeId n <> ": ") <>)
+        delivery (Delivery d _) = concat
+          [ [nwarn ("delivery at step " <> tshow d <> " is beyond the last step") | d > lastSeq]
+          , [ nwarn ("delivery at step " <> tshow d <> " is not before its realisation at step " <> tshow r)
+            | Just r <- [realisedAt n], max (nodeSeq n) d >= r ]
+          , [ nwarn ("delivery at step " <> tshow d <> " is after it stopped being live at step " <> tshow u)
+            | Just u <- [liveUntil nodes n], d > u ] ]
         realisation m = let r = nodeRealised m in case (realisedHow r, realisedSeq r) of
           (LaterStep, Nothing) -> [nerr "later_step needs realised.seq"]
           (CodeFirst, Nothing) -> [nerr "code_first needs realised.seq"]

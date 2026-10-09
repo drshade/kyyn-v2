@@ -35,7 +35,7 @@ renderData inputs = object
                | s <- inSteps inputs ]
   , "adrs" .= inAdrs inputs
   , "lanes" .= object [K.fromText (laneAdr (lvLane v)) .= laneJson v | v <- views]
-  , "convergence" .= convergence views ]
+  , "convergence" .= [fmap (\(Share d p) -> [d, p]) c | c <- convergence views] ]
   where
     maxSeq = if null (inSteps inputs) then 0 else maximum (map stepSeq (inSteps inputs))
     views = [laneView maxSeq lane | (_, lane) <- inLanes inputs]
@@ -44,12 +44,12 @@ laneJson :: LaneView -> Value
 laneJson v = object
   [ "adr" .= laneAdr lane, "title" .= laneTitle lane, "cursor" .= laneCursor lane, "notes" .= laneNotes lane
   , "editorialCount" .= length (laneEditorial lane), "depth" .= lvDepth v
-  , "counts" .= [[d, p] | (d, p) <- lvCounts v]
+  , "counts" .= [[d, pa, p] | Counts d pa p <- lvCounts v]
   , "nodes" .= map nodeJson (lvNodes v) ]
   where lane = lvLane v
 
 nodeJson :: NodeView -> Value
 nodeJson v = case toJSON (nvNode v) of
   Object o -> Object (KM.insert "until" (toJSON (nvUntil v)) (KM.insert "realisedAt" (toJSON (nvRealisedAt v))
-                (KM.insert "track" (toJSON (nvTrack v)) o)))
+                (KM.insert "deliveredAt" (toJSON (nvDeliveredAt v)) (KM.insert "track" (toJSON (nvTrack v)) o))))
   other -> other

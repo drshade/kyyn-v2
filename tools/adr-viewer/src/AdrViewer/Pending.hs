@@ -65,10 +65,11 @@ renderPending lastSeq ps
       Just _ ->
         [ "  curate: " <> steps (lpCurate p) | not (null (lpCurate p)) ]
         <> [ "  realisation checks: " <> steps (lpCheck p) | not (null (lpCheck p)), not (null (lpOpen p)) ]
-        <> [ "  open decisions: " <> T.intercalate ", " [nodeId n <> " " <> nodeSummary n | n <- lpOpen p]
+        <> [ "  open decisions: " <> T.intercalate ", " [nodeId n <> " " <> nodeSummary n <> progress n | n <- lpOpen p]
            | not (null (lpOpen p)), not (null (lpCurate p) && null (lpCheck p)) ]
         <> [ "  nothing to curate and no open decisions: advance the cursor" | null (lpCurate p), null (lpOpen p) ]
         <> [ "  if no listed step realises an open decision: advance the cursor" | null (lpCurate p), not (null (lpOpen p)) ]
+    progress n = if null (deliveries n) then "" else " (in progress since step " <> tshow (minimum (map deliverySeq (deliveries n))) <> ")"
     steps ss = T.intercalate ", " [tshow (stepSeq s) <> maybe "" (\n -> " (#" <> tshow n <> ")") (stepPr s) | s <- ss]
 
 pendingJson :: Int -> [LanePending] -> Value
@@ -77,7 +78,8 @@ pendingJson lastSeq ps = object
   , "lanes" .= [ object
       [ "adr" .= lpAdr p, "title" .= lpTitle p, "cursor" .= lpCursor p
       , "curate" .= map step (lpCurate p), "realisationChecks" .= map step (lpCheck p)
-      , "open" .= [object ["id" .= nodeId n, "summary" .= nodeSummary n] | n <- lpOpen p] ]
+      , "open" .= [ object ["id" .= nodeId n, "summary" .= nodeSummary n, "deliveries" .= map deliverySeq (deliveries n)]
+                  | n <- lpOpen p ] ]
     | p <- ps ] ]
   where step s = object ["seq" .= stepSeq s, "pr" .= stepPr s, "title" .= stepTitle s]
 
