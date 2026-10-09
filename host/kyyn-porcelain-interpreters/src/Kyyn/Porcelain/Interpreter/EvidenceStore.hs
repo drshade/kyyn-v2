@@ -32,7 +32,7 @@ runEvidenceStore :: forall es a. (Blobs.BlobStorage :> es, DocumentPersistence :
 runEvidenceStore kb = interpret $ \_ -> \case
   BeginFetch (EvidenceSelection instanceRef kind package) contract positionContract -> lockedIndex instanceRef $ runExceptT $ do
     DocumentStamp _ started <- ExceptT (Right <$> Document.freshStamp)
-    bytes <- ExceptT (Right <$> readCurrent)
+    bytes <- readCurrent
     document <- traverse (ExceptT . decodeIndex) bytes
     let base = case document of
           Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> Just key
@@ -44,7 +44,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
           pure (FetchBaseline started base (Just (capturedIndex instanceRef selected)) (snd <$> position))
       _ -> pure (FetchBaseline started base Nothing Nothing)
   OpenCurrentEvidence (EvidenceSelection instanceRef kind package) -> lockedIndex instanceRef $ runExceptT $ do
-    bytes <- ExceptT (Right <$> readCurrent)
+    bytes <- readCurrent
     traverse (\contents -> do
       document@(IndexDocument stored selected _ _ _) <- ExceptT (decodeIndex contents)
       unless (stored == package && selected == kind) (throwE ProducerContractChanged)
@@ -60,7 +60,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
   PublishFetch (EvidenceSelection instanceRef kind package) contract expected options changes position ->
     lockedIndex instanceRef $ runExceptT $ do
       scope <- checkedScope instanceRef
-      contents <- ExceptT (Right <$> readCurrent)
+      contents <- readCurrent
       prior <- traverse (ExceptT . decodeIndex) contents
       let current = case prior of
             Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> Just key
@@ -92,12 +92,12 @@ runEvidenceStore kb = interpret $ \_ -> \case
       pure (EvidenceSnapshotRef instanceRef (EvidenceProducer package (contractId contract)) (FetchId key))
   DiscardFetchBlobs instanceRef expected created -> lockedIndex instanceRef $ do
     current <- runExceptT $ do
-      bytes <- ExceptT (Right <$> readCurrent)
+      bytes <- readCurrent
       document <- traverse (ExceptT . decodeIndex) bytes
       pure (fmap (\(IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> key) document)
     when (current == Right expected) (Blobs.discardBlobsAt instanceRef created)
   EvidenceHead instanceRef -> lockedIndex instanceRef $ runExceptT $ do
-    bytes <- ExceptT (Right <$> readCurrent)
+    bytes <- readCurrent
     traverse (fmap (\(IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> key) . ExceptT . decodeIndex) bytes
   ClearEvidence instanceRef -> lockedIndex instanceRef Document.clearCurrent
   where

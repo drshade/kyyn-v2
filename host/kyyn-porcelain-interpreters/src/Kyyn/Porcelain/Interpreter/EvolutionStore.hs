@@ -6,7 +6,7 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Char8 as Bytes
-import Data.List (stripPrefix, isPrefixOf, sort)
+import Data.List (stripPrefix, sort)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
