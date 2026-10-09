@@ -727,7 +727,7 @@ report types they received at save time.
 
 Recipe-based archive records retain the selected recipe identity and state changes,
 with before/after contracts and values. Records follow the
-[one-current-format principle](../principles.md#persist-one-current-format).
+[sealed-tool/KB principle](../principles.md#seal-the-tool-and-the-kb-the-agent-reconciles-them).
 Reading a report decodes its stored content; it does not manufacture missing
 changes or suggest replaying archived code.
 
