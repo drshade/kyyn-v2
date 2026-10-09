@@ -1,6 +1,6 @@
 -- Root/store/application integration using real Dhall/filesystem/Git and recording
 -- schema/compiler/execution handlers. Includes capture, validation, candidate,
--- publication, recovery, recipes and discovery; not a real MicroHs journey.
+-- publication, checkout repair, recipes and discovery; not a real MicroHs journey.
 
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Main (main) where
@@ -25,7 +25,7 @@ import RootExportTests (rootExportTests)
 import WorkspaceTests (workspaceTests)
 import EvolutionCaptureTests (evolutionCaptureTests)
 import CandidateTests (candidateTests)
-import AcceptanceHistoryTests (acceptanceHistoryTests)
+import EvolutionMetadataTests (evolutionMetadataTests)
 import EvolutionExecutionTests (evolutionExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
@@ -125,7 +125,7 @@ main = do
   queryExecutionTests contract snapshot
   validationTests contract snapshot
   candidateTests contract snapshot
-  acceptanceHistoryTests
+  evolutionMetadataTests contract
   rootExportTests root
   publicationTests root
   putStrLn "Root materialization/reopening, identities, membership and corruption checks passed."
@@ -225,7 +225,6 @@ gitMock captured = interpret $ \_ -> \case
     | Right revision == gitRevision (replicate 40 'a') && relativeName path == "root/recipes.dhall" ->
         pure (Right (lookup recipesLocation (files captured)))
   Git.ReadFileAt {} -> error "RootOpening read unexpected material"
-  Git.ReadCommitParents {} -> error "RootOpening must not traverse history"
   Git.ReadDirectoryAt _ revision (Subtree prefix)
     | Right revision == gitRevision (replicate 40 'a') && relativeName prefix == "root/facts" -> pure (Right (Just []))
   Git.ReadDirectoryAt _ _ (Subtree prefix) | relativeName prefix == "root/recipes" -> pure (Right Nothing)

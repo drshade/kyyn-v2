@@ -360,6 +360,7 @@ const interpreterModules = {
     'Kyyn.Plumbing.Capability.FileSystem', 'Kyyn.Plumbing.Capability.Git',
     'Kyyn.Porcelain.Capability.KnowledgeBaseInitialization', 'Kyyn.Porcelain.Capability.RootStore'],
   'Kyyn.Porcelain.Interpreter.RootPublication': ['Control.Monad', 'Control.Monad.Trans.Except',
+    'Kyyn.Domain.Path',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution',
     'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Publication', 'Kyyn.Domain.Workspace',
     'Kyyn.Plumbing.Capability.Git', 'Kyyn.Porcelain.Capability.RootPublication',

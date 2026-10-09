@@ -85,7 +85,6 @@ data EvolutionCommand
   | ReadyEvolution EvolutionId
   | DraftEvolution EvolutionId
   | AcceptEvolution EvolutionId
-  | RecoverEvolution EvolutionId
   deriving (Eq, Show)
 
 cliInfo :: ParserInfo Invocation
@@ -291,8 +290,7 @@ evolutionParser = hsubparser
   <> group "check" "Evaluate the current workspace, save its candidate and validate it" (CheckEvolution <$> identity)
   <> group "ready" "Mark a workspace ready for acceptance" (ReadyEvolution <$> identity)
   <> group "draft" "Return a workspace to draft" (DraftEvolution <$> identity)
-  <> group "accept" "Check and accept the saved candidate against its Before revision" (AcceptEvolution <$> identity)
-  <> group "recover" "Repair the checkout after an accepted evolution" (RecoverEvolution <$> identity))
+  <> group "accept" "Check and accept the saved candidate against its Before revision" (AcceptEvolution <$> identity))
 
 identity :: Parser EvolutionId
 identity = argument (eitherReader evolutionId) (metavar "ID")

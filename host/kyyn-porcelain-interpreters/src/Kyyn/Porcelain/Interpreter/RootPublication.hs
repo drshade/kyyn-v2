@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
 module Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication) where
 
-import Control.Monad (unless, when)
+import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -9,10 +9,11 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
+import Kyyn.Domain.Path (RelativePath, scopePath, relativeName)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Workspace (EvolutionState(..))
 import qualified Kyyn.Plumbing.Capability.Git as Git
-import Kyyn.Porcelain.Capability.RootPublication (RootPublication(..), alreadyAccepted)
+import Kyyn.Porcelain.Capability.RootPublication (RootPublication(..))
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as EvolutionStore
 import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
 
@@ -20,44 +21,16 @@ runRootPublication
   :: (RootStore.RootStore :> es, EvolutionStore.EvolutionStore :> es, Git.Git :> es)
   => Eff (RootPublication : es) a -> Eff es a
 runRootPublication = interpret $ \_ -> \case
-  FindAcceptanceOnBranch branch (EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
-    headRevision <- ExceptT (branchHead repository branch)
-    ExceptT (EvolutionStore.findAcceptance kb identity headRevision)
-  RecoverAcceptedEvolution branch location@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) -> runExceptT $ do
-    branchNow <- liftEff (Git.checkedOutBranch repository)
-    unless (branchNow == Just branch) (throwE [errorDiagnostic "acceptance.checkout-mismatch"
-      "Check out the selected branch before synchronizing accepted files"])
-    headRevision <- ExceptT (Git.resolveRevision repository "HEAD")
-    accepted <- ExceptT (EvolutionStore.findAcceptance kb identity headRevision)
-    traverse (\revision -> do
-      root <- pathResult (RootStore.rootLocation kb)
-      archive <- pathResult (EvolutionStore.workspaceLocation location)
-      let paths = [root, archive]
-      changes <- liftEff (Git.checkoutChanges repository headRevision paths)
-      result <- if null changes then pure WorkingTreeUpdated
-        else syncOutcome <$> liftEff (Git.synchronizeCheckout repository branch headRevision paths)
-      pure (CheckoutRecovery revision headRevision result)) accepted
   AcceptEvolution branch metadata candidate@(Candidate context@(EvolutionContext kb@(KnowledgeBase repository _)
       identity (Before expected _) _) _ root) -> fmap (either id id) . runExceptT $ do
-    selected <- material (branchHead repository branch)
-    accepted <- material (EvolutionStore.findAcceptance kb identity selected)
-    case accepted of
-      Just revision -> throwE (alreadyAccepted revision)
-      Nothing -> pure ()
+    state <- material (EvolutionStore.readEvolutionState (EvolutionWorkspace kb identity))
+    unless (state == Ready) (refuse (NotReady state))
     requireBranch repository branch
     observed <- material (Git.resolveRevision repository "HEAD")
-    unless (observed == expected) $ do
-      acceptedNow <- material (EvolutionStore.findAcceptance kb identity observed)
-      throwE (maybe (NotAccepted (BaseMismatch expected (Just observed))) alreadyAccepted acceptedNow)
+    unless (observed == expected) (refuse (BaseMismatch expected (Just observed)))
     rootPath <- material (pure (mapPath (RootStore.rootLocation kb)))
     overlaps <- liftEff (Git.checkoutChanges repository expected [rootPath])
     unless (null overlaps) (refuse (OverlappingEdits overlaps))
-    state <- material (EvolutionStore.readEvolutionState (EvolutionWorkspace kb identity))
-    when (state == Accepted) $ do
-      current <- material (branchHead repository branch)
-      acceptedNow <- material (EvolutionStore.findAcceptance kb identity current)
-      case acceptedNow of Just revision -> throwE (alreadyAccepted revision); Nothing -> pure ()
-    unless (state == Ready) (refuse (NotReady state))
     matches <- material (EvolutionStore.matchesCapturedInputs context)
     unless matches (refuse (WorkspaceChanged identity))
     rootFiles <- material (RootStore.exportRootFiles root)
@@ -71,23 +44,24 @@ runRootPublication = interpret $ \_ -> \case
     case update of
       RefUpdated -> do
         result <- liftEff (Git.synchronizeCheckout repository branch revision [rootPath, archivePath])
-        pure (AcceptedCommit revision (syncOutcome result))
-      RefNotUpdated actual -> do
-        acceptedNow <- case actual of
-          Nothing -> pure Nothing
-          Just current -> material (EvolutionStore.findAcceptance kb identity current)
-        pure $ maybe (NotAccepted (BaseMismatch expected actual)) alreadyAccepted acceptedNow
-
-branchHead :: Git.Git :> es => Repository -> LocalBranch -> Eff es (Either [Diagnostic] GitRevision)
-branchHead repository (LocalBranch branch) = Git.resolveRevision repository ("refs/heads/" ++ branch)
+        pure (AcceptedCommit revision (syncOutcome repository revision [rootPath, archivePath] result))
+      RefNotUpdated actual -> pure (NotAccepted (BaseMismatch expected actual))
 
 requireBranch :: Git.Git :> es => Repository -> LocalBranch -> ExceptT AcceptanceResult (Eff es) ()
 requireBranch repository selected = do
   actual <- liftEff (Git.checkedOutBranch repository)
   unless (actual == Just selected) (refuse (CheckoutMismatch selected actual))
 
-syncOutcome :: Either [Diagnostic] () -> WorkingTreeOutcome
-syncOutcome = either WorkingTreeUpdateIncomplete (const WorkingTreeUpdated)
+syncOutcome :: Repository -> GitRevision -> [RelativePath] -> Either [Diagnostic] () -> WorkingTreeOutcome
+syncOutcome (Repository scope) revision paths = either incomplete (const WorkingTreeUpdated)
+  where
+    incomplete diagnostics = WorkingTreeUpdateIncomplete (diagnostics ++
+      [errorDiagnostic "acceptance.checkout-incomplete"
+        ("Accepted at " ++ revisionName revision ++ ". Inspect git status first; this restores current HEAD " ++
+         "and overwrites local edits to the root and this workspace. Inspect untracked files separately.\n" ++
+         "git --literal-pathspecs -C " ++ quote (scopePath scope) ++ " restore --source=HEAD --staged --worktree -- " ++
+         unwords (map (quote . relativeName) paths))])
+    quote value = "'" ++ concatMap (\c -> if c == '\'' then "'\\''" else [c]) value ++ "'"
 
 refuse :: AcceptanceProblem -> ExceptT AcceptanceResult (Eff es) a
 refuse = throwE . NotAccepted
@@ -97,9 +71,6 @@ material action = ExceptT (either (Left . NotAccepted . InvalidMaterial) Right <
 
 mapPath :: Either String a -> Either [Diagnostic] a
 mapPath = either (Left . pure . errorDiagnostic "acceptance.path") Right
-
-pathResult :: Either String a -> ExceptT [Diagnostic] (Eff es) a
-pathResult = ExceptT . pure . mapPath
 
 liftEff :: Eff es a -> ExceptT e (Eff es) a
 liftEff action = ExceptT (Right <$> action)

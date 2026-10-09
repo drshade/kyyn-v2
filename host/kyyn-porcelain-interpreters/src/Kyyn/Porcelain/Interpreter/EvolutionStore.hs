@@ -6,7 +6,7 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (parseEither)
 import qualified Data.ByteString.Char8 as Bytes
-import Data.List (stripPrefix, isPrefixOf, nub, sort)
+import Data.List (stripPrefix, isPrefixOf, sort)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -17,7 +17,7 @@ import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), Change(..), RecordedFact(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(..))
-import Kyyn.Domain.Git (Repository(..), TreePath(..), GitRevision)
+import Kyyn.Domain.Git (Repository(..), TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBasePath, cacheLocation)
 import Kyyn.Domain.Path (DirectoryScope, RelativePath, relativePath, relativeName, scopedPath, directoryScope)
 import Kyyn.Domain.Root (Root(..), factsLocation, isFactPath, isRootMaterial)
@@ -26,7 +26,6 @@ import Kyyn.Domain.Recipe (recipeId)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
-import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as DhallHandling
@@ -38,42 +37,33 @@ import Kyyn.Porcelain.Validated (validatedValue)
 
 runEvolutionStore
   :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es,
-      RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Git.Git :> es, Failure :> es)
+      RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es)
   => Eff (EvolutionStore : es) a -> Eff es a
 runEvolutionStore = interpret $ \_ -> \case
-  ReadEvolutionSummary (EvolutionWorkspace kb identity) revision ->
-    runExceptT (summaryAt kb revision identity >>= requireWorkspace)
-  ReadArchivedReport workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) identity) revision -> runExceptT $ do
+  ReadEvolutionSummary (EvolutionWorkspace kb identity) ->
+    runExceptT (workspaceSummary kb identity >>= requireWorkspace)
+  ReadArchivedReport workspace@(EvolutionWorkspace (KnowledgeBase (Repository scope) _) identity) -> runExceptT $ do
     path <- checked (workspaceLocation workspace >>= \p -> relativePath (relativeName p ++ "/result.dhall"))
-    bytes <- ExceptT (Git.readFileAt repository revision path)
+    bytes <- ExceptT (Right <$> FileSystem.readOptionalBytes scope path)
     traverse (\source -> do
-      accepted <- lookupAcceptance kb identity revision
-      unless (accepted /= Nothing) (throwE [errorDiagnostic "evolution.unverified-report"
-        "An archived report exists but this evolution has no confirmed acceptance at the selected revision"])
       decoded <- ExceptT (decodeEvolutionRecord source >>= pure . either
         (Left . pure . errorDiagnostic "evolution.invalid-report") Right)
       (owner,_,_,report) <- either throwE pure decoded
       unless (owner == identity) (throwE [errorDiagnostic "evolution.invalid-report" "Archived report belongs to another evolution"])
       pure report) bytes
-  FindAcceptance kb identity revision -> runExceptT (lookupAcceptance kb identity revision)
-  ListEvolutions kb@(KnowledgeBase repo@(Repository scope) _) selection -> runExceptT $ do
-    revision <- ExceptT (Git.resolveRevision repo "HEAD")
+  ListEvolutions kb@(KnowledgeBase (Repository scope) _) selection -> runExceptT $ do
     path <- checked (relativePath "evolutions" >>= knowledgeBasePath kb)
     location <- checked (directoryScope (scopedPath scope path))
     local <- ExceptT (Right <$> FileSystem.listDirectory location)
-    committed <- ExceptT (Git.readDirectoryAt repo revision (Subtree path))
-    let names = sort (nub [relativeName p | paths <- [local,committed], p <- maybe [] id paths])
+    let names = sort [relativeName p | p <- maybe [] id local]
         identities = [identity | name <- names, Right identity <- [evolutionId name]]
-    summaries <- traverse (summaryAt kb revision) identities
-    pure [summary | Just summary@(EvolutionSummary _ _ state _) <- summaries, selection == AllEvolutions || state /= Draft]
-  ResolveEvolution kb@(KnowledgeBase repo _) identity -> runExceptT $ do
-    revision <- ExceptT (Git.resolveRevision repo "HEAD")
-    summary <- summaryAt kb revision identity >>= requireWorkspace
-    let EvolutionSummary workspace _ _ _ = summary
+    summaries <- traverse (\identity -> workspaceSummary kb identity >>= requireWorkspace) identities
+    pure [summary | summary@(EvolutionSummary _ _ state) <- summaries, selection == AllEvolutions || state /= Draft]
+  ResolveEvolution kb identity -> runExceptT $ do
+    EvolutionSummary workspace _ _ <- workspaceSummary kb identity >>= requireWorkspace
     pure workspace
-  ReadEvolutionState (EvolutionWorkspace kb@(KnowledgeBase repo _) identity) -> runExceptT $ do
-    revision <- ExceptT (Git.resolveRevision repo "HEAD")
-    EvolutionSummary _ _ state _ <- summaryAt kb revision identity >>= requireWorkspace
+  ReadEvolutionState (EvolutionWorkspace kb identity) -> runExceptT $ do
+    EvolutionSummary _ _ state <- workspaceSummary kb identity >>= requireWorkspace
     pure state
   MarkReady workspace -> runExceptT (setState workspace Ready)
   MarkDraft workspace -> runExceptT (setState workspace Draft)
@@ -168,46 +158,18 @@ runEvolutionStore = interpret $ \_ -> \case
               _ -> stale
           _ -> stale
 
-lookupAcceptance :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
-  => KnowledgeBase -> EvolutionId -> GitRevision -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)
-lookupAcceptance kb identity revision = do
-  current <- archiveBefore kb identity revision
-  case current of
-    Nothing -> pure Nothing
-    Just before -> do
-      introductions <- introducingCommits kb identity before [] [revision]
-      case introductions of
-        [accepted] -> pure (Just accepted)
-        [] -> throwE [errorDiagnostic "evolution.acceptance-history" "Accepted archive has no introducing commit with its recorded Before as a parent"]
-        _ -> throwE [errorDiagnostic "evolution.acceptance-history" "Accepted archive has multiple introducing commits; inspect the Git history"]
-
-summaryAt :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
-  => KnowledgeBase -> GitRevision -> EvolutionId -> ExceptT [Diagnostic] (Eff es) (Maybe EvolutionSummary)
-summaryAt kb@(KnowledgeBase repository _) revision identity = do
-  acceptance <- lookupAcceptance kb identity revision
+workspaceSummary :: (WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
+  => KnowledgeBase -> EvolutionId -> ExceptT [Diagnostic] (Eff es) (Maybe EvolutionSummary)
+workspaceSummary kb identity = do
   let workspace = EvolutionWorkspace kb identity
-  case acceptance of
-    Just accepted -> do
-      path <- manifestPath workspace
-      bytes <- ExceptT (Git.readFileAt repository revision path) >>= requireWorkspace
-      WorkspaceManifest _ name _ _ _ <- decodeArchivedManifest bytes
-      pure (Just (EvolutionSummary workspace (EvolutionName name) Accepted (Just accepted)))
-    Nothing -> do
-      manifest <- localManifest workspace
-      case manifest of
-        Nothing -> pure Nothing
-        Just (WorkspaceManifest _ name _ state _) -> do
-          unless (state /= Accepted) (throwE [errorDiagnostic "evolution.unverified-acceptance"
-            "Local manifest says Accepted but Git does not; explicitly mark it Draft or Ready to correct it"])
-          pure (Just (EvolutionSummary workspace (EvolutionName name) state Nothing))
+  manifest <- localManifest workspace
+  pure (fmap (\(WorkspaceManifest _ name _ state _) -> EvolutionSummary workspace (EvolutionName name) state) manifest)
 
-setState :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
+setState :: (WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es)
   => EvolutionWorkspace -> Workspace.EvolutionState -> ExceptT [Diagnostic] (Eff es) ()
-setState workspace@(EvolutionWorkspace kb@(KnowledgeBase repository@(Repository scope) _) identity) state = do
-  revision <- ExceptT (Git.resolveRevision repository "HEAD")
-  accepted <- lookupAcceptance kb identity revision
-  unless (accepted == Nothing) (throwE [errorDiagnostic "evolution.already-accepted" "This evolution is already accepted in Git"])
-  WorkspaceManifest before name explanation _ kind <- localManifest workspace >>= requireWorkspace
+setState workspace@(EvolutionWorkspace (KnowledgeBase (Repository scope) _) _) state = do
+  WorkspaceManifest before name explanation current kind <- localManifest workspace >>= requireWorkspace
+  unless (current /= Accepted) (throwE [errorDiagnostic "evolution.already-accepted" "This evolution is already Accepted"])
   empty <- checked (fileTree [])
   encoded <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
     (WorkspaceSnapshot (WorkspaceManifest before name explanation state kind) empty empty empty empty))
@@ -235,41 +197,8 @@ decodeManifest bytes = do
   WorkspaceSnapshot manifest _ _ _ _ <- ExceptT (WorkspaceStore.readWorkspaceSnapshot tree)
   pure manifest
 
-decodeArchivedManifest :: WorkspaceStore.WorkspaceStore :> es
-  => Bytes.ByteString -> ExceptT [Diagnostic] (Eff es) WorkspaceManifest
-decodeArchivedManifest bytes = decodeManifest
-  (Bytes.concat ["(", bytes, "\n).{before, name, explanation, state, kind}"])
-
 requireWorkspace :: Maybe a -> ExceptT [Diagnostic] (Eff es) a
 requireWorkspace = maybe (throwE [errorDiagnostic "evolution.unknown" "No evolution workspace manifest was found"]) pure
-
-archiveBefore :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
-  => KnowledgeBase -> EvolutionId -> GitRevision -> ExceptT [Diagnostic] (Eff es) (Maybe GitRevision)
-archiveBefore kb@(KnowledgeBase repository _) identity revision = do
-  path <- manifestPath (EvolutionWorkspace kb identity)
-  bytes <- ExceptT (Git.readFileAt repository revision path)
-  case bytes of
-    Nothing -> pure Nothing
-    Just source -> do
-      WorkspaceManifest before _ _ state _ <- decodeArchivedManifest source
-      pure (if state == Accepted then Just before else Nothing)
-
-introducingCommits :: (Git.Git :> es, WorkspaceStore.WorkspaceStore :> es)
-  => KnowledgeBase -> EvolutionId -> GitRevision -> [GitRevision] -> [GitRevision]
-  -> ExceptT [Diagnostic] (Eff es) [GitRevision]
-introducingCommits _ _ _ _ [] = pure []
-introducingCommits kb@(KnowledgeBase repository _) identity before visited (revision:remaining)
-  | revision `elem` visited = introducingCommits kb identity before visited remaining
-  | otherwise = do
-      parents <- ExceptT (Git.readCommitParents repository revision)
-      introduced <- if before `elem` parents then do
-        selected <- archiveBefore kb identity revision
-        if selected /= Just before then pure False else do
-          inherited <- traverse (archiveBefore kb identity) parents
-          pure (Just before `notElem` inherited)
-        else pure False
-      rest <- introducingCommits kb identity before (revision:visited) (parents ++ remaining)
-      pure (if introduced then revision:rest else rest)
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
 checkSavedReport operation (EvolutionReport _ steps) = forM_ steps $ \(StepReport _ changes) ->

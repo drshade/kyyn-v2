@@ -187,7 +187,8 @@ commits the new root and retained workspace; it does not push remotely. Accepted
 evolutions are history, not programs replayed on every read.
 
 If a diagnostic says a commit succeeded but checkout synchronization failed,
-follow its recovery instructions rather than blindly repeating acceptance.
+inspect `git status` and follow the supplied Git restore instructions rather than
+blindly repeating acceptance.
 
 ## Use plugins and evidence
 

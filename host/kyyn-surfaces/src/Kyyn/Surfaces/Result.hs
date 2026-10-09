@@ -3,7 +3,7 @@ module Kyyn.Surfaces.Result
   ( Response(..), Outcome(..), exitStatus, responseJson, diagnosticText
   , success, refusal, operationalFailure, interruption, previewRefusal, evolutionCheckResult
   , rootResult, workspaceResult, summariesResult, inspectionResult, candidateResult
-  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, recoveryResult, stateResult, initializationResult, pluginResult
+  , validationResult, checkResult, inspectionCheckResult, acceptanceResult, stateResult, initializationResult, pluginResult
   ) where
 
 import Data.Aeson (Value(..), object, (.=), encode)
@@ -22,7 +22,7 @@ import Kyyn.Domain.Path (relativeName, scopePath, scopedPath)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root (Root(..), CheckedValue(..))
 import Kyyn.Domain.Recipe (StoredRecipe(..))
-import Kyyn.Domain.Workspace (EvolutionState)
+import Kyyn.Domain.Workspace (EvolutionState(..))
 import Kyyn.Porcelain.Validated (Validated, validatedValue)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
@@ -95,7 +95,7 @@ interruption :: Maybe EvolutionId -> Response
 interruption identity = Response Interrupted Null [] [errorDiagnostic "execution.interrupted"
   ("Operation interrupted." ++ maybe "" (\value ->
     " Acceptance may already have occurred. Inspect evolution " ++ evolutionIdName value ++
-    "; use kyyn-v2 --kb PATH evolution recover " ++ evolutionIdName value ++ " if accepted.") identity)]
+    "; inspect git status and restore the checkout from Git if acceptance already committed.") identity)]
 
 previewRefusal :: PreviewRejection -> Response
 previewRefusal (ProposedCodeRejected diagnostics) = refusal diagnostics
@@ -132,10 +132,10 @@ summariesResult :: [EvolutionSummary] -> Response
 summariesResult summaries = success (object ["evolutions" .= map summaryJson summaries])
   (if null summaries then ["No evolutions."] else map summaryText summaries)
 
-inspectionResult :: GitRevision -> (EvolutionSummary, Maybe EvolutionReport) -> Response
-inspectionResult revision (summary, report) = success
-  (object ["revision" .= revisionName revision, "evolution" .= summaryJson summary, "report" .= fmap reportJson report])
-  ([summaryText summary, "Inspected at " ++ revisionName revision] ++ maybe ["No saved report."] reportText report)
+inspectionResult :: (EvolutionSummary, Maybe EvolutionReport) -> Response
+inspectionResult (summary, report) = success
+  (object ["evolution" .= summaryJson summary, "report" .= fmap reportJson report])
+  ([summaryText summary] ++ maybe ["No saved report."] reportText report)
 
 candidateResult :: Candidate Root -> Response
 candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _)) = success
@@ -170,7 +170,9 @@ acceptanceResult result = case result of
   NotAccepted problem -> refusal (case problem of
     BaseMismatch expected actual -> [errorDiagnostic "acceptance.base-mismatch"
       ("Before is " ++ revisionName expected ++ "; current head is " ++ maybe "absent" revisionName actual ++
-       ". Update Before and check the evolution again.")]
+       ". If this evolution was already committed, inspect git status and restore the checkout from Git. " ++
+       "Otherwise update Before and check the evolution again.")]
+    NotReady Accepted -> [errorDiagnostic "acceptance.not-ready" "Evolution is already Accepted."]
     NotReady state -> [errorDiagnostic "acceptance.not-ready" ("Evolution is " ++ show state ++ "; mark it ready before accepting.")]
     CheckoutMismatch (LocalBranch selected) actual -> [errorDiagnostic "acceptance.checkout-mismatch"
       ("Expected checked-out branch " ++ selected ++ "; found " ++ maybe "detached HEAD" (\(LocalBranch name) -> name) actual)]
@@ -179,31 +181,23 @@ acceptanceResult result = case result of
     OverlappingEdits paths -> [errorDiagnostic "acceptance.overlapping-edits"
       ("Resolve local edits before accepting: " ++ unwords (map relativeName paths))]
     InvalidMaterial diagnostics -> diagnostics)
-  AcceptedCommit revision outcome -> checkoutResult "Accepted" revision revision outcome
-  AlreadyAccepted revision diagnostic -> Response Incomplete
-    (object ["accepted" .= True, "revision" .= revisionName revision, "checkoutVerified" .= False])
-    ["Already accepted at " ++ revisionName revision ++ "; inspect the checkout or use evolution recover."] [diagnostic]
-
-recoveryResult :: Maybe CheckoutRecovery -> Response
-recoveryResult Nothing = refusal [errorDiagnostic "evolution.not-accepted" "No confirmed acceptance was found; there is no checkout to recover for this evolution."]
-recoveryResult (Just (CheckoutRecovery accepted current outcome)) = checkoutResult "Recovered" accepted current outcome
-
-checkoutResult :: String -> GitRevision -> GitRevision -> WorkingTreeOutcome -> Response
-checkoutResult label accepted current outcome = Response
+  AcceptedCommit revision outcome -> checkoutResult revision outcome
+checkoutResult :: GitRevision -> WorkingTreeOutcome -> Response
+checkoutResult accepted outcome = Response
   (case outcome of WorkingTreeUpdated -> Succeeded; WorkingTreeUpdateIncomplete _ -> Incomplete)
-  (object ["accepted" .= True, "acceptingCommit" .= revisionName accepted, "checkoutRevision" .= revisionName current,
+  (object ["accepted" .= True, "acceptingCommit" .= revisionName accepted,
     "checkoutUpdated" .= (outcome == WorkingTreeUpdated)])
-  [label ++ " at " ++ revisionName accepted ++ case outcome of
+  ["Accepted at " ++ revisionName accepted ++ case outcome of
     WorkingTreeUpdated -> "; checkout synchronized."
-    WorkingTreeUpdateIncomplete _ -> "; checkout incomplete. Use evolution recover after resolving the reported problem."]
+    WorkingTreeUpdateIncomplete _ -> "; checkout incomplete. Follow the Git restore instructions below."]
   (case outcome of WorkingTreeUpdated -> []; WorkingTreeUpdateIncomplete diagnostics -> diagnostics)
 
 summaryJson :: EvolutionSummary -> Value
-summaryJson (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName name) state accepted) = object
-  ["id" .= evolutionIdName identity, "name" .= name, "state" .= show state, "acceptingCommit" .= fmap revisionName accepted]
+summaryJson (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName name) state) = object
+  ["id" .= evolutionIdName identity, "name" .= name, "state" .= show state]
 
 summaryText :: EvolutionSummary -> String
-summaryText (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName name) state _) =
+summaryText (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName name) state) =
   evolutionIdName identity ++ "  " ++ show state ++ "  " ++ name
 
 reportJson :: EvolutionReport -> Value

@@ -207,10 +207,9 @@ main = do
   assert "Accepted-complete exit" (exitStatus (acceptanceResult (AcceptedCommit revision WorkingTreeUpdated)) == 0)
   let incomplete = acceptanceResult (AcceptedCommit revision (WorkingTreeUpdateIncomplete [errorDiagnostic "sync" "locked"]))
   assert "Accepted-but-incomplete was hidden" (exitStatus incomplete == 4)
-  assert "Already accepted implies no checked checkout"
-    (exitStatus (acceptanceResult (AlreadyAccepted revision (errorDiagnostic "already" "recover"))) == 4)
+  assert "Already accepted is a lifecycle refusal"
+    (exitStatus (acceptanceResult (NotAccepted (NotReady Accepted))) == 1)
   assert "Interruption exit" (exitStatus (interruption (Just identity)) == 130)
-  assert "Recovery without acceptance exit" (exitStatus (recoveryResult Nothing) == 1)
   let failure = refusal [errorDiagnostic "bad" "Invalid"]
   assert "Stable diagnostic envelope" (responseJson failure == object
     ["outcome" .= ("Refused" :: String), "result" .= Null, "diagnostics" .=

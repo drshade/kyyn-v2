@@ -37,7 +37,7 @@ import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath, relativePath)
 import Kyyn.Domain.Plugin (PluginSource(..), pluginSource)
-import Kyyn.Domain.Publication (InitializationTarget(..))
+import Kyyn.Domain.Publication (InitializationTarget(..), AcceptanceResult(..), AcceptanceProblem(..))
 import qualified Kyyn.Domain.Workspace as Workspace
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
 import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
@@ -71,7 +71,6 @@ import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
-import qualified Kyyn.Porcelain.Capability.RootPublication as Publication
 import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
 import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
@@ -301,7 +300,7 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
     Cli.ListEvolutions selection -> finish $ runMetadata host $
       either refusal summariesResult <$> Store.listEvolutions kb selection
     Cli.ShowEvolution identity -> finish $ runMetadata host $
-      either refusal (inspectionResult revision) <$> Store.inspectEvolution (workspace identity) revision
+      either refusal inspectionResult <$> Store.inspectEvolution (workspace identity)
     Cli.ReadyEvolution identity -> finish $ runMetadata host $
       either refusal (const (stateResult identity Workspace.Ready)) <$> Store.markReady (workspace identity)
     Cli.DraftEvolution identity -> finish $ runMetadata host $
@@ -321,28 +320,19 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached
       Just selected -> do
-        accepted <- runMetadata host . runRootPublication $
-          Publication.findAcceptanceOnBranch selected (workspace identity)
-        case accepted of
+        summary <- runMetadata host (Store.readEvolutionSummary (workspace identity))
+        case summary of
           Left failure -> pure (operationalFailure failure)
           Right (Left diagnostics) -> pure (refusal diagnostics)
-          Right (Right (Just acceptedRevision)) -> pure (acceptanceResult (Publication.alreadyAccepted acceptedRevision))
-          Right (Right Nothing) -> do
-            summary <- runMetadata host (Store.readEvolutionSummary (workspace identity) revision)
-            case summary of
-              Left failure -> pure (operationalFailure failure)
-              Right (Left diagnostics) -> pure (refusal diagnostics)
-              Right (Right (EvolutionSummary _ (EvolutionName name) _ _)) -> do
+          Right (Right (EvolutionSummary _ (EvolutionName name) state))
+            | state /= Workspace.Ready -> pure (acceptanceResult (NotAccepted (NotReady state)))
+            | otherwise -> do
                 metadata <- commitMetadata host (Repository scope) ("Accept evolution " ++ name ++ " (" ++ evolutionIdName identity ++ ")\n")
                 case metadata of
                   Left response -> pure response
                   Right commit -> withRuntime host $ \toolchain sdk -> finish $
                     runChecking host toolchain sdk . runRootPublication $
                       acceptanceResult <$> acceptStoredEvolution selected commit (workspace identity)
-    Cli.RecoverEvolution identity -> case branch of
-      Nothing -> pure detached
-      Just selected -> finish $ runMetadata host . runRootPublication $
-        either refusal recoveryResult <$> Publication.recoverAcceptedEvolution selected (workspace identity)
   where
     workspace = EvolutionWorkspace kb
-    detached = refusal [errorDiagnostic "git.detached-head" "Check out a local branch before accepting or recovering an evolution."]
+    detached = refusal [errorDiagnostic "git.detached-head" "Check out a local branch before accepting an evolution."]

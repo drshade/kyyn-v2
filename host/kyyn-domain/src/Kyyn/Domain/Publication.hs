@@ -1,5 +1,5 @@
 module Kyyn.Domain.Publication
-  ( AcceptanceResult(..), AcceptanceProblem(..), WorkingTreeOutcome(..), CheckoutRecovery(..)
+  ( AcceptanceResult(..), AcceptanceProblem(..), WorkingTreeOutcome(..)
   , InitializationTarget(..), InitializationResult(..) ) where
 
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -19,7 +19,6 @@ data InitializationResult = InitializedRoot GitRevision LocalBranch KnowledgeBas
 data AcceptanceResult
   = NotAccepted AcceptanceProblem
   | AcceptedCommit GitRevision WorkingTreeOutcome
-  | AlreadyAccepted GitRevision Diagnostic
   deriving (Eq, Show)
 
 data AcceptanceProblem
@@ -36,6 +35,3 @@ data WorkingTreeOutcome
   | WorkingTreeUpdateIncomplete [Diagnostic]
   deriving (Eq, Show)
 
-data CheckoutRecovery = CheckoutRecovery
-  { acceptingCommit :: GitRevision, checkoutRevision :: GitRevision, outcome :: WorkingTreeOutcome }
-  deriving (Eq, Show)

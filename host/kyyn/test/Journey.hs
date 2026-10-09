@@ -77,11 +77,13 @@ main = do
 
     (first,workspace) <- create "simplify-todos"
     assert "First evolution did not use a numbered slug" (first == "000001-simplify-todos")
+    void (ok ["evolution","ready",first])
     void (git ["config","user.name",""])
     missingIdentity <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
     assert "Missing identity did not refuse before runtime loading"
       (any (\diagnostic -> at ["code"] diagnostic == String "git.identity") (array (at ["diagnostics"] missingIdentity)))
     void (git ["config","user.name","Configured fixture λ"])
+    void (ok ["evolution","draft",first])
     let target = workspace </> "target"
     removeFile (target </> "src/TodoSchemaV1.hs")
     copyFile (fixture </> "TodoSchemaV2.hs") (target </> "src/TodoSchemaV2.hs")
@@ -107,9 +109,9 @@ main = do
     assert "Acceptance ignored configured Git identity or used environment overrides"
       (actualIdentity == "Configured fixture λ <fixture@example.invalid>|Configured fixture λ <fixture@example.invalid>")
     void (git ["config","user.name",""])
-    retried <- cli (ExitFailure 4) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
-    retryRevision <- textAt ["result","revision"] retried
-    assert "Accepted retry lost its original revision" (retryRevision == after)
+    retried <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    assert "Accepted retry did not refuse before identity/runtime access"
+      (any (\diagnostic -> at ["code"] diagnostic == String "acceptance.not-ready") (array (at ["diagnostics"] retried)))
     void (git ["config","user.name","Configured fixture λ"])
     commitMessage <- git ["log","-1","--format=%s"]
     assert "Commit omitted the evolution name" ("simplify-todos" `isInfixOf` commitMessage)

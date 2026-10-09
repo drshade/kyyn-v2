@@ -99,12 +99,6 @@ runGit executable configurationEnvironment = interpret $ \_ -> \case
         [mode, "blob", objectId] | mode `elem` ["100644", "100755"] ->
           Just <$> successful repo ["cat-file", "blob", Char8.unpack objectId]
         _ -> rejected "git.unsupported-entry" "Expected a regular file"
-  ReadCommitParents repo revision -> runExceptT $ do
-    _ <- ExceptT (resolve repo (revisionName revision))
-    commit <- successful repo ["cat-file", "commit", revisionName revision]
-    let headers = takeWhile (not . Bytes.null) (Char8.lines commit)
-    traverse (either (rejected "git.invalid-commit") pure . gitRevision . Char8.unpack . Bytes.drop 7)
-      (filter ("parent " `Bytes.isPrefixOf`) headers)
   CreateCommit repo selected parent (CommitMetadata author committer message) -> do
     let (replacements,fileUpdates) = case selected of GitTree trees -> (trees,[]); GitTreeWithFiles trees updates -> (trees,updates)
         components WholeTree = []

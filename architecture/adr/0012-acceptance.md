@@ -280,7 +280,7 @@ result, the diagnostic names the known accepting commit and supplies an exact,
 shell-quoted Git command restoring only the root and this evolution's workspace:
 
 ```sh
-git -C '<repository>' restore --source=HEAD --staged --worktree -- '<root>' '<workspace>'
+git --literal-pathspecs -C '<repository>' restore --source=HEAD --staged --worktree -- '<root>' '<workspace>'
 ```
 
 The actual command uses the selected repository and exported repository-relative

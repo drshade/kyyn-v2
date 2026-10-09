@@ -199,7 +199,7 @@ main = do
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing (Just (RecipeId "mail")))))
   refuses ["evolution","new","September","--recipe","../mail"]
   forM_ [("show",ShowEvolution),("check",CheckEvolution),
-    ("ready",ReadyEvolution),("draft",DraftEvolution),("accept",AcceptEvolution),("recover",RecoverEvolution)] $
+    ("ready",ReadyEvolution),("draft",DraftEvolution),("accept",AcceptEvolution)] $
     \(verb,constructor) -> do
       succeeds ["evolution",verb,"abc123"] (Invocation selected Human (Evolution (constructor identity)))
       let numbered = either error id (evolutionId "000001-add-review-status")
