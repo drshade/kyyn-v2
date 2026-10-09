@@ -39,6 +39,12 @@
         "seq": 41,
         "evidence": "PR #23 adds expected-head CompareAndSwapRef; PR #42 composes acceptance as commit + local CAS; guide states acceptance 'does not push to a remote'"
       },
+      "deliveries": [
+        {
+          "seq": 22,
+          "evidence": "PR #23 adds index-free commit construction and the local conditional branch update; composing acceptance from them follows in #42"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -98,6 +104,16 @@
         "seq": 43,
         "evidence": "Porcelain operations carry an explicit KnowledgeBase(Repository) value and acceptance CASes the repo branch head; PR #44 CLI adds --kb PATH with Git repo discovery (though --kb defaults to '.')"
       },
+      "deliveries": [
+        {
+          "seq": 30,
+          "evidence": "PR #31 introduces explicit KnowledgeBase values (repository plus KB prefix) carried by porcelain operations; whole-repository CAS and CLI --kb selection were still missing"
+        },
+        {
+          "seq": 41,
+          "evidence": "PR #42 acceptance CASes the repository branch head, so KBs sharing a repository conflict conservatively; CLI --kb with repository discovery follows in #44"
+        }
+      ],
       "confidence": "medium"
     }
   ],

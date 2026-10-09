@@ -41,6 +41,20 @@
         "evidence": "Workspace creation (seq 31), candidate checking (seq 36) and Ready/accept lifecycle (PR #42) exist through the CLI, not yet through Web/MCP",
         "seq": 41
       },
+      "deliveries": [
+        {
+          "seq": 31,
+          "evidence": "PR #32 creates draft evolution workspaces; trial, Ready and acceptance still missing"
+        },
+        {
+          "seq": 36,
+          "evidence": "PR #37 persists and checks evaluated candidates; Ready lifecycle and acceptance still missing"
+        },
+        {
+          "seq": 38,
+          "evidence": "PR #39 adds Ready/Draft lifecycle operations; acceptance follows in #42"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -150,6 +164,20 @@
         "how": "unrealised",
         "evidence": "CLI `evolution show` presents step reports (seq 33/54) and plugin changes (seq 121), but there is no review surface with view-output or source/check comparisons"
       },
+      "deliveries": [
+        {
+          "seq": 33,
+          "evidence": "PR #34 derives ordered per-fact step reports with rationale and evidence; no review presentation yet"
+        },
+        {
+          "seq": 43,
+          "evidence": "PR #44 shows a workspace's evolution report through the CLI; view-output, source and check comparisons still missing"
+        },
+        {
+          "seq": 121,
+          "evidence": "PR #157 shows plugin source changes in saved evolution reports; view-output and check comparisons still missing"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -198,6 +226,12 @@
         "evidence": "Persisted candidates (PR #37) and acceptance checked against Before (PR #42) exist via CLI",
         "seq": 41
       },
+      "deliveries": [
+        {
+          "seq": 36,
+          "evidence": "PR #37 pins persisted candidates to their captured base and evaluated result; revision-checked acceptance follows in #42"
+        }
+      ],
       "confidence": "medium"
     }
   ],

@@ -40,6 +40,16 @@
         "seq": 43,
         "evidence": "Real Git/process tests from seq 7 and 22; PR #44 adds the installed CLI journey with compiler-rejection and repair cases"
       },
+      "deliveries": [
+        {
+          "seq": 7,
+          "evidence": "PR #7 adds real process tests for guest crash, early return and cancellation; Git faults and the installed CLI journey still missing"
+        },
+        {
+          "seq": 22,
+          "evidence": "PR #23 adds real Git tests for commit construction and refused compare-and-swap ref updates; installed CLI journey with compiler rejection follows in #44"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -78,6 +88,28 @@
         "seq": 78,
         "evidence": "ADT codecs (#6), metadata (#12), structural checks (#13), query reads (#27); a live multi-request host continuation arrives only with PR #96. No browser leg exists"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 carries compiler-inspected ADT codecs into production with canonical MicroHs round trips; metadata, root binding and multi-request host still missing"
+        },
+        {
+          "seq": 11,
+          "evidence": "PR #12 evaluates schema metadata through the guest without facts; root binding and host program still missing"
+        },
+        {
+          "seq": 12,
+          "evidence": "PR #13 checks structure and metadata as one contract; runtime facts and multi-request host still missing"
+        },
+        {
+          "seq": 16,
+          "evidence": "PR #17 materializes and reopens runtime fact snapshots through RootStore; no query or host program yet"
+        },
+        {
+          "seq": 26,
+          "evidence": "PR #27 runs typed queries over a loaded root with a single-pass interpreter; a live multi-request host continuation follows in #96"
+        }
+      ],
       "ended": {
         "seq": 142,
         "how": "replaced",
@@ -104,6 +136,16 @@
         "how": "unrealised",
         "evidence": "Chain rejection and candidates landed for the CLI (seq 33-36), but no reporting KB, Web or MCP surface was ever built and evolutions became pure"
       },
+      "deliveries": [
+        {
+          "seq": 33,
+          "evidence": "PR #34 rejects malformed observation chains with structured failures and derives per-fact reports; no reporting KB, Web or MCP surface"
+        },
+        {
+          "seq": 34,
+          "evidence": "PR #35 evaluates captured evolution workspaces with EvolutionRejected outcomes; no reporting KB, Web or MCP surface"
+        }
+      ],
       "ended": {
         "seq": 142,
         "how": "replaced",
@@ -128,6 +170,16 @@
         "seq": 41,
         "evidence": "PR #42 composes evolution acceptance with explicit checkout recovery; archives from #40. Per-record history reopening was not built"
       },
+      "deliveries": [
+        {
+          "seq": 37,
+          "evidence": "PR #38 finds the authoritative accepting commit in Git history, including merge and ambiguous-sibling cases; acceptance itself still missing"
+        },
+        {
+          "seq": 39,
+          "evidence": "PR #40 archives the fixed evaluated report rather than live workspace files; composed acceptance and recovery follow in #42"
+        }
+      ],
       "ended": {
         "seq": 142,
         "how": "replaced",
@@ -152,6 +204,24 @@
         "seq": 113,
         "evidence": "Plugin source install (#87-#90), two-instance configuration (#100/#101), curation (#111), local secrets (#122) and paged Graph calendar acquisition (#147)"
       },
+      "deliveries": [
+        {
+          "seq": 74,
+          "evidence": "PR #90 installs locally compiled plugin source through the CLI; named instances, secrets and paged evidence still missing"
+        },
+        {
+          "seq": 81,
+          "evidence": "PR #100 registers named connector instances with root-owned configuration; secrets, curation and paging still missing"
+        },
+        {
+          "seq": 90,
+          "evidence": "PR #111 adds recipe curation with net pending evidence so repeats add no duplicate knowledge; secrets and paged acquisition still missing"
+        },
+        {
+          "seq": 98,
+          "evidence": "PR #122 adds checkout-local secrets; paged evidence acquisition follows in #147"
+        }
+      ],
       "ended": {
         "seq": 142,
         "how": "replaced",
@@ -199,6 +269,24 @@
         "seq": 43,
         "evidence": "PR #44 exposes the first evolution journey through the CLI and closes #3"
       },
+      "deliveries": [
+        {
+          "seq": 24,
+          "evidence": "PR #25 executes captured root validation through MicroHs (load-compile-validate kernel); no evolution or CLI yet"
+        },
+        {
+          "seq": 34,
+          "evidence": "PR #35 evaluates captured evolution workspaces in the kernel; candidates, acceptance and CLI still missing"
+        },
+        {
+          "seq": 36,
+          "evidence": "PR #37 persists and checks saved candidates; acceptance and CLI still missing"
+        },
+        {
+          "seq": 41,
+          "evidence": "PR #42 composes local acceptance and checkout recovery; the CLI journey follows in #44"
+        }
+      ],
       "ended": {
         "seq": 142,
         "how": "replaced",
@@ -297,5 +385,5 @@
       "note": "Desired-state reconcile: drops status/date/basis and rewords the paging caveat in Alternatives and consequences; no change in requirements"
     }
   ],
-  "notes": "This lane was mostly a roadmap: about two-thirds of the founding text was six ordered implementation slices. The real project departed from that order at seq 4 (a CLI todo journey replaced the reporting-first, Web/MCP-first slice 3), and seq 142 deleted the whole roadmap, saying ordering belongs in issues. I gave each slice a node because the section is neither Context, Consequences nor Verification, and the slices show clearly what was skipped. Slice 3 (reporting KB through Web and MCP) and slice 6 (renderer to file sink) were never built, and nothing in the new End-to-end verification list is tracked as a node, because Verification sections produce none. Slices 2, 4 and 5 were reached piecemeal and out of order (plugins and secrets well before outputs). I was unsure whether the slice nodes should count as decisions at all; if they should not, the lane comes down to 0021.01-03, 0021.10 and 0021.12."
+  "notes": "This lane was mostly a roadmap: about two-thirds of the founding text was six ordered implementation slices. The real project departed from that order at seq 4 (a CLI todo journey replaced the reporting-first, Web/MCP-first slice 3), and seq 142 deleted the whole roadmap, saying ordering belongs in issues. I gave each slice a node because the section is neither Context, Consequences nor Verification, and the slices show clearly what was skipped. Slice 3 (reporting KB through Web and MCP) and slice 6 (renderer to file sink) were never built, and nothing in the new End-to-end verification list is tracked as a node, because Verification sections produce none. Slices 2, 4 and 5 were reached piecemeal and out of order (plugins and secrets well before outputs). I was unsure whether the slice nodes should count as decisions at all; if they should not, the lane comes down to 0021.01-03, 0021.10 and 0021.12. Slices 2, 4, 5 and the CLI journey were each built over several kernel PRs before the step that completed them; deliveries record those parts."
 }

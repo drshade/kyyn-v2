@@ -23,6 +23,16 @@
         "seq": 43,
         "evidence": "Guest code runs on pinned MicroHs from seq 6-8; PR #44 stages the bundled runtime and proves the installed journey; plugin source install follows at seq 72-74"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 vendors pinned upstream MicroHs/cpphs sources and runs generated guest codecs on them in tests; no shipped compilation workflow"
+        },
+        {
+          "seq": 8,
+          "evidence": "PR #8 compiles captured guest and SDK sources locally to bytecode run by the pinned evaluator; bundled installed runtime follows in #44"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -42,6 +52,12 @@
         "seq": 78,
         "evidence": "One-shot child execution from seq 7-8; PR #96 adds the private guest adapter owning request IDs and live continuation resumption for host calls"
       },
+      "deliveries": [
+        {
+          "seq": 7,
+          "evidence": "PR #7 runs guests as scoped managed child processes with cleanup on failure and cancellation; one-shot only, no request protocol or live continuation"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -464,5 +480,5 @@
       "note": "Desired-state reconcile: drops status/date/basis, removes measurement prose, delegates pin identity to vendor/README; no architectural change"
     }
   ],
-  "notes": "This lane tracked its code closely: almost every refinement (seq 7, 8, 45, 83, 104) was written by the PR that implemented it, so the spec rarely ran ahead. The compiled-artifact shape was rewritten twice: CompiledEntry with a launch description and withCompiledEntry (seq 8) became a pure domain CompiledProgram plus ExecuteCompiled (seq 45), and execution then moved out into its own GuestExecution effect (seq 83) once plugins needed conversational host calls. The founding speculative BuildOptions type was dropped at seq 8 ('no options type before a second mode'), and the founding 'no persistent cache' line was later reversed by the per-KB bytecode cache (seq 104), which I treated as a refine of build identity because the identity rule is unchanged. The seq 142 'Development diagnostics' section is not Context/Consequences, so I recorded two code_first nodes for it. Pin bumps (seq 88, 117) sit in Consequences and are editorial. The founding production release gates (cancellation, clean-install, heterogeneous-root tests) live in Consequences and produce no nodes."
+  "notes": "This lane tracked its code closely: almost every refinement (seq 7, 8, 45, 83, 104) was written by the PR that implemented it, so the spec rarely ran ahead. The compiled-artifact shape was rewritten twice: CompiledEntry with a launch description and withCompiledEntry (seq 8) became a pure domain CompiledProgram plus ExecuteCompiled (seq 45), and execution then moved out into its own GuestExecution effect (seq 83) once plugins needed conversational host calls. The founding speculative BuildOptions type was dropped at seq 8 ('no options type before a second mode'), and the founding 'no persistent cache' line was later reversed by the per-KB bytecode cache (seq 104), which I treated as a refine of build identity because the identity rule is unchanged. The seq 142 'Development diagnostics' section is not Context/Consequences, so I recorded two code_first nodes for it. Pin bumps (seq 88, 117) sit in Consequences and are editorial. The founding production release gates (cancellation, clean-install, heterogeneous-root tests) live in Consequences and produce no nodes. Guest execution on pinned MicroHs and its managed child process were built in parts (seqs 6-8) before the bundled runtime (seq 43) and conversational protocol (seq 78)."
 }

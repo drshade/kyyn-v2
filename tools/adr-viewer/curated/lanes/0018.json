@@ -28,6 +28,12 @@
         "seq": 43,
         "evidence": "PR 44's CLI routes through porcelain capabilities with command-specific composition and pure adapters in kyyn-surfaces (after PR 43 made listing compiler-free); the illustrated MCP codec identifiers never appear because only the CLI adapter exists."
       },
+      "deliveries": [
+        {
+          "seq": 38,
+          "evidence": "PR #39 adds ListEvolutions/EvolutionFilter as a typed, compiler-free porcelain operation; transport adapters routing through such operations follow with the CLI in #44"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -487,6 +493,12 @@
         "seq": 68,
         "evidence": "WorkspaceApi lands at seq 67 and PR 83 (seq 68) wires the CLI and marks the design implemented."
       },
+      "deliveries": [
+        {
+          "seq": 65,
+          "evidence": "PR #79 adds the ApiInspection plumbing (InspectApiModules) over captured source trees; WorkspaceApi porcelain and the --evolution CLI follow in #82/#83"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -558,6 +570,12 @@
         "seq": 87,
         "evidence": "CLI pieces land at PRs 101/106/107 (seq 82-87); no MCP surface exists."
       },
+      "deliveries": [
+        {
+          "seq": 82,
+          "evidence": "PR #101 exposes configured instances, fetch history and the payload-free change index through the CLI; plugin read methods and KB helpers follow in #106/#107"
+        }
+      ],
       "confidence": "low",
       "ended": {
         "seq": 158,
@@ -762,6 +780,16 @@
         "seq": 93,
         "evidence": "PR 114 (seq 93) implements recipe list/show and pending list after PRs 111-113."
       },
+      "deliveries": [
+        {
+          "seq": 90,
+          "evidence": "PR #111 implements the pure recipe model and net pending evidence computation; persistence and the CLI surface were still missing"
+        },
+        {
+          "seq": 91,
+          "evidence": "PR #112 persists root-owned recipe declarations; recipe list/show and pending list commands follow in #114"
+        }
+      ],
       "confidence": "high",
       "ended": {
         "seq": 158,
@@ -844,6 +872,12 @@
         "seq": 119,
         "evidence": "PRs 154/155 (seq 118-119) add plugin list/show/guide, taps, search and qualified install."
       },
+      "deliveries": [
+        {
+          "seq": 118,
+          "evidence": "PR #154 adds plugin list/show and `plugin guide`; taps, search and pre-install guides follow in #155"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -1047,6 +1081,12 @@
         "seq": 162,
         "evidence": "`evidence list` existed since seq 107; PR 210 (seq 162) removes historical APIs and adds current payload inspection."
       },
+      "deliveries": [
+        {
+          "seq": 107,
+          "evidence": "PR #138 had already added `evidence list` current enumeration; removing history commands and adding payload inspection follows in #210"
+        }
+      ],
       "confidence": "high"
     }
   ],

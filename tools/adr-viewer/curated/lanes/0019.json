@@ -83,6 +83,12 @@
         "seq": 34,
         "evidence": "PR #35 returns ProposedCodeRejected from evolution evaluation (code_added at 34); Rejected/CheckResult from seq 23"
       },
+      "deliveries": [
+        {
+          "seq": 23,
+          "evidence": "PR #24 adds CheckResult with Rejected ValidationReport for checking failures; ProposedCodeRejected from evaluation follows in #35"
+        }
+      ],
       "ended": {
         "seq": 143,
         "how": "replaced",
@@ -126,6 +132,12 @@
         "seq": 41,
         "evidence": "PR #42 retains AcceptedCommit after ref update and tests injected asynchronous interruption after a completed ref update"
       },
+      "deliveries": [
+        {
+          "seq": 40,
+          "evidence": "PR #41 counts a ref already at the desired revision as published despite a failing update exit; retaining AcceptedCommit across later failures follows in #42"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -188,6 +200,12 @@
         "seq": 43,
         "evidence": "PR #44 exposes the evolution journey through the CLI including publication/interruption outcomes (recovery lookup itself from PR #42)"
       },
+      "deliveries": [
+        {
+          "seq": 41,
+          "evidence": "PR #42 (predating this node) makes the next acceptance or explicit recovery establish the outcome from Git history; CLI interruption reporting and its distinct exit follow in #44"
+        }
+      ],
       "confidence": "medium"
     },
     {

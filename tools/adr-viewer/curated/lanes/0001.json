@@ -39,6 +39,24 @@
         "seq": 41,
         "evidence": "KB-authored typed queries/validation run by Kyyn from PR #27-#28; Kyyn-composed evolution acceptance lands in PR #42 (seq 41)"
       },
+      "deliveries": [
+        {
+          "seq": 21,
+          "evidence": "PR #22 opens roots from KB-authored manifests, schemas and facts through Kyyn's RootOpening; no KB-authored validation, queries or acceptance yet"
+        },
+        {
+          "seq": 24,
+          "evidence": "PR #25 executes the KB's own validator through Kyyn's MicroHs runtime; queries and acceptance still missing"
+        },
+        {
+          "seq": 26,
+          "evidence": "PR #27 runs KB-authored typed queries with generated bindings; example checking and Kyyn-owned acceptance follow"
+        },
+        {
+          "seq": 27,
+          "evidence": "PR #28 checks roots against KB-saved query examples to mint Validated; Kyyn-composed acceptance follows in #42"
+        }
+      ],
       "confidence": "medium"
     },
     {

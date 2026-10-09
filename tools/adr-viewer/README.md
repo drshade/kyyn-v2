@@ -182,7 +182,11 @@ For each step that changed the ADR:
    decision asks for: groundwork that merely makes it possible, or a step that
    only added an anchor's name, is not one. A decision delivered in one step
    has no `deliveries`. Code that predates the node's step may be listed: the
-   node is then born partly delivered.
+   node is then born partly delivered. The step that supersedes a node may be
+   one of its deliveries when its code built part of the old node's own
+   commitment, just as a realisation in that step counts; code that only
+   builds what the successor adds belongs to the successor. A `code_first`
+   node is realised at birth and takes no deliveries.
 
 Judging evidence:
 

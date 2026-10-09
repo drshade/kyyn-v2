@@ -144,6 +144,12 @@
         "evidence": "PR #101 exposes configured per-instance fetching through the CLI; PR #107 adds per-instance handles for KB tools",
         "seq": 82
       },
+      "deliveries": [
+        {
+          "seq": 81,
+          "evidence": "PR #100 generated adapters pass each configured instance's typed config into fetch, proven with two independent instances; user-facing per-instance invocation follows in #101"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -336,6 +342,12 @@
         "evidence": "PR #87 (seq 72) adds Git-backed acquisition and revision-bearing PluginOrigin; PR #89 (seq 73) installs; PR #90 (seq 74) CLI",
         "seq": 73
       },
+      "deliveries": [
+        {
+          "seq": 72,
+          "evidence": "PR #87 adds Git-backed package acquisition and the revision-bearing PluginOrigin contract; installation through porcelain follows in #89"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -606,6 +618,12 @@
         "evidence": "PR #154 (seq 118) reads installed guides; PR #155 (seq 119) adds pre-installation guide access",
         "seq": 119
       },
+      "deliveries": [
+        {
+          "seq": 118,
+          "evidence": "PR #154 reads installed plugins' README guides host-side; pre-installation guide access for tap packages follows in #155"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -749,6 +767,16 @@
         "how": "unrealised",
         "evidence": "plugins/microsoft-graph in kyyn-v2 only contains the Calendar source (Calendar.hs); no Mail, Meetings or Files connectors yet"
       },
+      "deliveries": [
+        {
+          "seq": 113,
+          "evidence": "PR #147 creates the microsoft-graph package with the Calendar source (typed sync positions added at seq 156-157); Mail, Meetings and Files were still missing"
+        },
+        {
+          "seq": 168,
+          "evidence": "PR #217 adds the Mail source with streamed attachment blobs to the package; Meetings and Files are still missing"
+        }
+      ],
       "confidence": "high"
     }
   ],

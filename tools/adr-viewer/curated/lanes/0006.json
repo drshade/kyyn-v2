@@ -22,6 +22,12 @@
         "evidence": "Checked Dhall decoding lands at seq 14 (PR #15); RootStore materializes and reopens fact snapshots at seq 16 (PR #17)",
         "seq": 16
       },
+      "deliveries": [
+        {
+          "seq": 14,
+          "evidence": "PR #15 host-decodes and structurally checks self-contained Dhall fact text; no materialized fact tree until #17"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -43,6 +49,12 @@
         "evidence": "PR #17 RootStore membership lists reject duplicate IDs and missing/unlisted files; unordered-collection metadata was never implemented (membership preserves guest order)",
         "seq": 16
       },
+      "deliveries": [
+        {
+          "seq": 12,
+          "evidence": "PR #13 adds the SDK Fact/FactId envelope recognised by resolved identity; store-owned routing follows in #17"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -191,6 +203,16 @@
         "evidence": "Export of complete validated roots at seq 28 (PR #29); acceptance publishes the complete root subtree at seq 41 (PR #42); examples/todos uses the layout",
         "seq": 41
       },
+      "deliveries": [
+        {
+          "seq": 28,
+          "evidence": "PR #29 exports the complete validated root/ subtree for publication; archives and Git publication still missing"
+        },
+        {
+          "seq": 39,
+          "evidence": "PR #40 exports evolution archives as a separate subtree alongside the root; Git publication follows in #42"
+        }
+      ],
       "confidence": "high"
     },
     {

@@ -41,6 +41,16 @@
         "seq": 26,
         "evidence": "Generated codecs at PR #6, and generated query adapters at PR #27 keep wire values out of authored queries"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 generates JSON codecs from authored ADTs so authored types never handle the wire; validator and query adapters still missing"
+        },
+        {
+          "seq": 24,
+          "evidence": "PR #25 generates a typed Root -> ValidationReport adapter exchanging JSON; query adapters follow in #27"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -90,6 +100,12 @@
         "seq": 80,
         "evidence": "PR #99's protocol broker rejects unknown handles, methods and request IDs and out-of-row requests before effects"
       },
+      "deliveries": [
+        {
+          "seq": 78,
+          "evidence": "PR #96's guest adapter decodes replies strictly into the suspended call's type; host-side method availability and contract checks follow in #99"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -486,5 +502,5 @@
       "note": "Desired-state reconciliation: removes status/basis, rewords context and decimal-mapping gate as firm rules covered by 0007.07, and restates broker dispatch by selected row (covered by 0007.04 and ADR 0009)."
     }
   ],
-  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane."
+  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane. Generated adapters grew case by case: ADT codecs (#6), validator (#25), queries (#27)."
 }

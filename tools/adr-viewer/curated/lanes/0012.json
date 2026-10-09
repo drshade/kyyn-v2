@@ -49,6 +49,16 @@
         "seq": 41,
         "evidence": "PR #42 publication performs readiness/captured-input checks (NotReady, WorkspaceChanged code_added at 41)"
       },
+      "deliveries": [
+        {
+          "seq": 29,
+          "evidence": "PR #30 adds pure captured-input matching against Before selection and source bytes; Ready intent and the acceptance gate were still missing"
+        },
+        {
+          "seq": 38,
+          "evidence": "PR #39 adds explicit Ready/Draft lifecycle transitions; acceptance refusing non-Ready or changed workspaces follows in #42"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -97,6 +107,12 @@
         "seq": 41,
         "evidence": "Archive export in PR #40 (seq 39) composed with root export into one commit by PR #42"
       },
+      "deliveries": [
+        {
+          "seq": 39,
+          "evidence": "PR #40 exports the retained archive with the candidate's exact report and captured source as a subtree replacement beside the root export; committing both in one acceptance commit follows in #42"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -119,6 +135,12 @@
         "seq": 41,
         "evidence": "PR #42 acceptStoredEvolution loads and freshly checks the saved candidate before publication"
       },
+      "deliveries": [
+        {
+          "seq": 36,
+          "evidence": "PR #37 adds LoadCandidate and checkCandidate, reloading and freshly checking a saved candidate without rerunning it; handing the checked value to acceptance follows in #42"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -167,6 +189,12 @@
         "seq": 41,
         "evidence": "CAS refusal tested in PR #23; publication reports BaseMismatch with revisions in PR #42; no coordinator exists"
       },
+      "deliveries": [
+        {
+          "seq": 22,
+          "evidence": "PR #23 conditional ref update refuses a losing writer and reports the observed revision, tested with concurrent writers; BaseMismatch in acceptance follows in #42"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -262,6 +290,12 @@
         "seq": 41,
         "evidence": "FindAcceptance implemented in PR #38 (seq 37); AlreadyAccepted and pre-load lookup composed in PR #42"
       },
+      "deliveries": [
+        {
+          "seq": 37,
+          "evidence": "PR #38 implements FindAcceptance, establishing acceptance from Git history; AlreadyAccepted and the pre-load lookup in acceptance follow in #42"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -283,6 +317,12 @@
         "seq": 41,
         "evidence": "PR #41 synchronizeCheckout restores staged and worktree paths incl. deletions; PR #42 uses pure store location helpers"
       },
+      "deliveries": [
+        {
+          "seq": 40,
+          "evidence": "PR #41 adds path-limited synchronization covering worktree, index and deletions; publication using store-owned prefixes follows in #42"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -582,6 +622,12 @@
         "seq": 92,
         "evidence": "PR #112 carries the register in Root and root export; PR #113 resolves it at preparation so acceptance needs no evidence store"
       },
+      "deliveries": [
+        {
+          "seq": 91,
+          "evidence": "PR #112 carries the host-owned progress register in Root and root export; resolving it at preparation so acceptance needs no evidence store follows in #113"
+        }
+      ],
       "ended": {
         "seq": 158,
         "how": "replaced",

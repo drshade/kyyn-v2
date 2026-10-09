@@ -20,6 +20,12 @@
         "seq": 11,
         "evidence": "PR #12 evaluates named schema metadata through a generated guest entry; validation (#25) and query (#27) entries follow the same pattern"
       },
+      "deliveries": [
+        {
+          "seq": 6,
+          "evidence": "PR #6 generates JSON codecs from compiler-inspected authored ADTs; generated entry adapters follow in #12"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -39,6 +45,16 @@
         "seq": 34,
         "evidence": "Validation executed at seq 24, queries at seq 26, evolution workspaces evaluated into candidates at seq 34 (PR #35)"
       },
+      "deliveries": [
+        {
+          "seq": 24,
+          "evidence": "PR #25 executes Validation entries; Query (#27) and Evolution (#35) entries still missing"
+        },
+        {
+          "seq": 26,
+          "evidence": "PR #27 adds Query entries; Evolution workspaces are evaluated into candidates only in #35"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -76,6 +92,12 @@
         "seq": 34,
         "evidence": "Conventional evolution binding prepared and evaluated in PR #35 (cf. 0010.10)"
       },
+      "deliveries": [
+        {
+          "seq": 32,
+          "evidence": "PR #33 workspace creation emits a typechecked conventional `evolution` binding; preparing and evaluating it follows in #35"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -118,6 +140,12 @@
         "seq": 81,
         "evidence": "PR #100 registers source connectors and validates root-owned instance configuration; plugin packages installed from source at seq 72-74"
       },
+      "deliveries": [
+        {
+          "seq": 74,
+          "evidence": "PRs #87/#89/#90 make plugin packages source-distributed and installable; connector registration with checked contracts and named instances follows in #100"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -183,6 +211,12 @@
         "seq": 87,
         "evidence": "PR #107 generates phantom-typed instance handles and concrete read proxies importing real plugin types"
       },
+      "deliveries": [
+        {
+          "seq": 86,
+          "evidence": "PR #106 adds typed plugin-side captured-read methods that own payload interpretation, invoked through the host; generated KB-side proxies follow in #107"
+        }
+      ],
       "confidence": "high"
     },
     {
@@ -202,6 +236,12 @@
         "seq": 55,
         "evidence": "Optics code_added at seq 55 with generated collection handles and field optics (cf. 0010.45)"
       },
+      "deliveries": [
+        {
+          "seq": 32,
+          "evidence": "PR #33 adds the small SDK's evolution composition; generated record field optics follow in #64"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -446,6 +486,12 @@
         "seq": 96,
         "evidence": "First-class recipes in typed evolutions implemented at seq 96 (cf. 0010.49)"
       },
+      "deliveries": [
+        {
+          "seq": 95,
+          "evidence": "PR #117 reexports KnowledgeBase and Recipe editing values through Kyyn.Evolution; host integration and generated handles follow in #118"
+        }
+      ],
       "confidence": "medium"
     },
     {
@@ -559,6 +605,12 @@
         "seq": 162,
         "evidence": "PR #210 implements typed per-recipe state creation and migration (cf. 0014.57)"
       },
+      "deliveries": [
+        {
+          "seq": 160,
+          "evidence": "PR #208 adds SDK RecipeEdit/RecipeEvolution over facts plus one typed state; persistence and generated state bindings follow in #210"
+        }
+      ],
       "confidence": "medium"
     }
   ],
@@ -574,5 +626,5 @@
       "note": "Example tool types switch String to Text to match the packed-Text SDK; illustration only"
     }
   ],
-  "notes": "Two founding guest APIs were never built yet are still in the ADR: the generated Method handle with registerMethod/RegisteredMethod (0008.07) and the host MethodDescriptor/MethodIdentity (half of 0008.08). Tools ended up registered in kb.dhall (seq 87) and plugins through signature-derived registration (seq 116), so the ADR text describes a registration API the code never used. The output/renderer commitment (0008.03) is also entirely unrealised. The plugin-authoring route went round in a circle: seq 78 introduced generated per-entry KyynPluginBindings, seq 83 tightened them, then code moved to a hand-written Kyyn.Plugin.Host with signature-derived contracts (seq 112-116) and the ADR caught up only in the seq 143 reconcile. The KB-tool entry kind (seq 76) contradicts the founding 'three entry kinds, no fourth model' wording; I recorded it as a refine of 0008.02 instead of a replace because the other three kinds remain. Seq 97 (pure evolution) is treated as code_first because evolution execution was never effectful."
+  "notes": "Two founding guest APIs were never built yet are still in the ADR: the generated Method handle with registerMethod/RegisteredMethod (0008.07) and the host MethodDescriptor/MethodIdentity (half of 0008.08). Tools ended up registered in kb.dhall (seq 87) and plugins through signature-derived registration (seq 116), so the ADR text describes a registration API the code never used. The output/renderer commitment (0008.03) is also entirely unrealised. The plugin-authoring route went round in a circle: seq 78 introduced generated per-entry KyynPluginBindings, seq 83 tightened them, then code moved to a hand-written Kyyn.Plugin.Host with signature-derived contracts (seq 112-116) and the ADR caught up only in the seq 143 reconcile. The KB-tool entry kind (seq 76) contradicts the founding 'three entry kinds, no fourth model' wording; I recorded it as a refine of 0008.02 instead of a replace because the other three kinds remain. Seq 97 (pure evolution) is treated as code_first because evolution execution was never effectful. Several decisions arrived in parts: entry kinds one by one (validation 24, queries 26, evolutions 34)."
 }

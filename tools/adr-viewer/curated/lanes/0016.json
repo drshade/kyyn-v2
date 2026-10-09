@@ -159,6 +159,12 @@
         "evidence": "Binding validation lands in PR #100; PR #107 generates instance handles and proxies for KB tools",
         "seq": 87
       },
+      "deliveries": [
+        {
+          "seq": 81,
+          "evidence": "PR #100 adds per-instance BindingName with uniqueness checks; the generated Connectors handles for KB code follow in #107"
+        }
+      ],
       "confidence": "high"
     },
     {
