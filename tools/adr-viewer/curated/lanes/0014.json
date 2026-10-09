@@ -1,7 +1,7 @@
 {
   "adr": "0014",
   "title": "Current evidence and recipe-owned state",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0014.01",
@@ -588,7 +588,12 @@
         "seq": 83,
         "evidence": "PR #102 introduces semantic EvidenceStore over DocumentPersistence preserving the lock"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 172,
+        "how": "replaced",
+        "by": "0014.67"
+      }
     },
     {
       "id": "0014.23",
@@ -1650,7 +1655,12 @@
         "seq": 85,
         "evidence": "The immutable per-invocation view has existed since PR #104 (seq 85); the blob part is a negative constraint over blob storage that is not built yet"
       },
-      "confidence": "medium"
+      "confidence": "medium",
+      "ended": {
+        "seq": 172,
+        "how": "replaced",
+        "by": "0014.69"
+      }
     },
     {
       "id": "0014.62",
@@ -1771,6 +1781,151 @@
         "evidence": "PR #217 implements v1.0 linked-attachment resource references for Mail; the Files connector's share of the no-skip rule is not built"
       },
       "confidence": "medium"
+    },
+    {
+      "id": "0014.67",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Binary Dhall index plus content-addressed payload files per instance",
+      "detail": "Each instance directory holds index.dhallb (standard binary Dhall, the authoritative metadata index with per-item fingerprint, references and either Truncated or a payload reference with its host-derived BlobRefs), payloads/<sha256>.dhall text files keyed by their serialized bytes, and blobs/. DocumentPersistence locks and replaces the index, FileSystem owns payload IO and DhallHandling gains binary encode/decode that still type-checks; old monolithic state.dhall captures are refused with a clear/refetch diagnostic.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.22"
+      ],
+      "sections": [
+        "Decision / Indexed Dhall storage and selective reads",
+        "Decision / Current evidence, not a processing log"
+      ],
+      "anchors": [
+        "EvidenceIndex",
+        "PayloadLocation",
+        "DhallHandling",
+        "decodeBinaryValue",
+        "encodeBinaryValue",
+        "EvidenceStore",
+        "DocumentPersistence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 implements the binary Dhall index, content-addressed payload files, binary DhallHandling and legacy-capture refusal"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.68",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Sync position and its contract descriptor live inside the index",
+      "detail": "The optional sync position stays inside the index, advancing in the same atomic replacement, stored together with its compiler-derived descriptor (both absent or both present). Generic inspection checks but never interprets it; acquisition also requires the descriptor to match the prepared connector, and a malformed or mismatched position is a storage diagnostic, not a silent restart.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.49"
+      ],
+      "sections": [
+        "Decision / Indexed Dhall storage and selective reads"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 stores position and descriptor in the index, with position/state atomicity tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.69",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Invocations capture the index; payloads load selectively and unpinned",
+      "detail": "A plugin invocation captures the latest evidence index rather than materialising every payload; enumeration uses it, reads load only the selected payload, and repeated reads never switch to a newer index. Payload-file references, like blobs, do not pin files against a concurrent refresh or clear; a missing file is a storage failure, and there is no snapshot isolation across overlapping read and reclamation.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.61"
+      ],
+      "sections": [
+        "Decision / Atomic refresh and invocation-local reads",
+        "Decision / Investigation reads the current evidence"
+      ],
+      "anchors": [
+        "EvidenceIndex",
+        "openCurrentEvidence",
+        "readCapturedEvidence"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 removes the eager capture; guest broker and typed methods reuse one keyed index and load requested payloads only"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.70",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Compiler-free generic list/show; costs bounded by index and selected payload",
+      "detail": "Generic CLI/MCP evidence list/show select the accepted instance through a narrow EvidenceSelection operation, without preparing plugins or compiling, decoding payloads via a payload contract descriptor persisted once per capture. List opens no payload or blob files (O(index)); show reads only the selected payload, and a bad unrelated payload never blocks other reads. No daemon, database, cache or pagination framework.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.56"
+      ],
+      "sections": [
+        "Decision / Indexed Dhall storage and selective reads",
+        "Decision / Atomic refresh and invocation-local reads"
+      ],
+      "anchors": [
+        "EvidenceSelection",
+        "selectEvidence",
+        "listCapturedEvidence",
+        "readCapturedEvidence",
+        "EvidenceCapture"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 adds compiler-free list/show selection and stored descriptors, with instrumented selective-IO tests and sub-second list/show on a real 1,422-item capture"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.71",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Publish by staging payloads, atomically replacing the index, then reclaiming",
+      "detail": "Publication checks changed payloads and position, stages new payload files without re-encoding unchanged ones, compares the expected fetch and checks referenced files/blobs complete from index metadata under the instance lock, atomically replaces index.dhallb, then reclaims unreferenced payloads and blobs. Failed staging may leave unreferenced files but never a published pointer to incomplete data, and cleanup failure after replacement is not reported as a rollback.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Publishing an indexed capture"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 implements staged per-item publication, expected-fetch check, atomic index replacement and reclamation with cleanup-failure reporting"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.72",
+      "seq": 174,
+      "pr": 222,
+      "summary": "Compare the expected fetch under the lock before staging payloads",
+      "detail": "Refines 0014.71's order: the expected-fetch comparison happens first under the instance lock, and payload staging and index update follow while that lock is held, so a stale batch stages nothing.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.71"
+      ],
+      "sections": [
+        "Decision / Publishing an indexed capture"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "same_step",
+        "seq": 174,
+        "evidence": "PR #222 review follow-up: compare/stage under the instance lock, with a stale-CAS-without-staging test"
+      },
+      "confidence": "medium"
     }
   ],
   "editorial": [
@@ -1858,7 +2013,12 @@
       "seq": 162,
       "pr": 210,
       "note": "Reconciles the invocation view to include the latest FetchSummary while implementing the seq-158 design (realisation evidence for 0014.55-0014.59)."
+    },
+    {
+      "seq": 177,
+      "pr": 226,
+      "note": "Folder connector text now says relative directories resolve against the KB directory; that path rule is ADR 0009's shared file path contract (0009.35), so it is editorial here."
     }
   ],
-  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Payload availability (0014.47) was realised by PR #214 at seq 166, and the sync-position slice (0014.49) by PR #203. Seq 168 (PR #217) built Graph Mail with attachment BlobRefs, realising 0014.60, 0014.62 and 0014.64 (the latter two-connector nodes at medium confidence because the Files connector is still missing), and its spec edits are two refinements built in the same step: per-folder stored since reused on cursor reset (0014.65 refines 0014.62) and reference attachments as Graph v1.0 resource links with no beta call (0014.66 refines 0014.64). Spec ahead of code: the Teams meeting-artifact connector (0014.51) and the SharePoint/OneDrive Files connector (part of 0014.60/0014.63/0014.66) are unbuilt. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch). Deliveries record the steps that built part of a decision before it was complete; 0014.01's acquisition and 0014.57's recipe state are the longest builds. Blob infrastructure (#215) is not a delivery for 0014.63: no Files connector uses it yet."
+  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Payload availability (0014.47) was realised by PR #214 at seq 166, and the sync-position slice (0014.49) by PR #203. Seq 168 (PR #217) built Graph Mail with attachment BlobRefs, realising 0014.60, 0014.62 and 0014.64 (the latter two-connector nodes at medium confidence because the Files connector is still missing), and its spec edits are two refinements built in the same step: per-folder stored since reused on cursor reset (0014.65 refines 0014.62) and reference attachments as Graph v1.0 resource links with no beta call (0014.66 refines 0014.64). Spec ahead of code: the Teams meeting-artifact connector (0014.51) and the SharePoint/OneDrive Files connector (part of 0014.60/0014.63/0014.66) are unbuilt. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch). Deliveries record the steps that built part of a decision before it was complete; 0014.01's acquisition and 0014.57's recipe state are the longest builds. Blob infrastructure (#215) is not a delivery for 0014.63: no Files connector uses it yet. Seq 172 (PR #220, docs-only, prompted by slow evidence list/show on a real Mail capture) replaced the single state.dhall document with a binary Dhall index plus content-addressed payload files (0014.67 replaces 0014.22), kept the sync position in the index with its descriptor (0014.68 refines 0014.49), narrowed the per-invocation view to a captured index with unpinned selective payload reads (0014.69 replaces 0014.61), made generic list/show compiler-free and selective (0014.70 refines 0014.56), and specified staged publication with reclamation (0014.71). PR #222 at seq 174 built all of it and moved the expected-fetch comparison ahead of staging under the lock (0014.72, medium: arguably a code-alignment edit, but it tightens what publication requires). Seq 177's KB-relative folder path is ADR 0009's rule and editorial here. No step through 187 builds the Teams meeting-artifact or Files connectors (0014.51, 0014.63)."
 }

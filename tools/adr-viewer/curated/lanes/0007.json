@@ -1,7 +1,7 @@
 {
   "adr": "0007",
   "title": "Library-backed JSON hidden behind typed adapters",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0007.01",
@@ -500,7 +500,12 @@
       "seq": 143,
       "pr": 186,
       "note": "Desired-state reconciliation: removes status/basis, rewords context and decimal-mapping gate as firm rules covered by 0007.07, and restates broker dispatch by selected row (covered by 0007.04 and ADR 0009)."
+    },
+    {
+      "seq": 185,
+      "pr": 236,
+      "note": "Context now points Dhall storage at the sealed-tool/KB principle (one current persisted format, no compatibility paths); Context produces no nodes, and the persisted-record versioning it concerns is owned by ADR 0010. The guest catalogue version check removed in the same PR was never a 0007 commitment (0007.09 already rules out version negotiation)."
     }
   ],
-  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane. Generated adapters grew case by case: ADT codecs (#6), validator (#25), queries (#27)."
+  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane. Generated adapters grew case by case: ADT codecs (#6), validator (#25), queries (#27). Seq 185 (PR #236) only re-pointed the Context paragraph at the new sealed-tool/KB principle; editorial here, with the format-versioning removal recorded in ADR 0010's lane."
 }

@@ -1872,5 +1872,182 @@
     "pr": 216,
     "title": "Add adr-viewer: replayable plan-versus-build history of the ADRs",
     "adrs": []
+  },
+  {
+    "seq": 170,
+    "sha": "386986d2b65365276809ee6f8969d0cb0080704d",
+    "date": "2026-10-08T17:42:41+02:00",
+    "pr": 218,
+    "title": "adr-viewer: pending work list, and curate #215–#217",
+    "adrs": []
+  },
+  {
+    "seq": 171,
+    "sha": "7261f2b2573b940ea9de495d29e34d0c6d8b9010",
+    "date": "2026-10-08T17:42:59+02:00",
+    "pr": 219,
+    "title": "adr-viewer: publish the rendered history to GitHub Pages",
+    "adrs": []
+  },
+  {
+    "seq": 172,
+    "sha": "ae7de651be1b391d6c5d179ab759242ea76505d6",
+    "date": "2026-10-08T17:56:19+02:00",
+    "pr": 220,
+    "title": "Specify selective evidence reads and indexed Dhall storage",
+    "adrs": [
+      "0003",
+      "0009",
+      "0014",
+      "0015",
+      "0029"
+    ]
+  },
+  {
+    "seq": 173,
+    "sha": "0995f488365f820d868f9dad691abb66bc08e496",
+    "date": "2026-10-08T17:59:47+02:00",
+    "pr": 221,
+    "title": "README: link the published ADR history",
+    "adrs": []
+  },
+  {
+    "seq": 174,
+    "sha": "a6b5fcc2911a910fe816326958c7a2d961a449fb",
+    "date": "2026-10-08T19:10:31+02:00",
+    "pr": 222,
+    "title": "Implement indexed evidence storage and selective reads",
+    "adrs": [
+      "0014",
+      "0015"
+    ]
+  },
+  {
+    "seq": 175,
+    "sha": "ed481df09319a014e9b2e465e20a092b703b28d6",
+    "date": "2026-10-08T20:52:06+02:00",
+    "pr": 223,
+    "title": "Add GitHub repository evidence connector",
+    "adrs": []
+  },
+  {
+    "seq": 176,
+    "sha": "607a7bd759a8f14c677e99292a8d4fa453d74128",
+    "date": "2026-10-08T22:37:10+02:00",
+    "pr": 224,
+    "title": "Fix global CLI flag placement and Graph catalogue description",
+    "adrs": []
+  },
+  {
+    "seq": 177,
+    "sha": "bdf9a5e1f9e45cbcb1dd3846e258750ddef3a010",
+    "date": "2026-10-08T23:02:28+02:00",
+    "pr": 226,
+    "title": "Define typed output publishing and the local-file sink",
+    "adrs": [
+      "0008",
+      "0009",
+      "0014",
+      "0015",
+      "0017",
+      "0018"
+    ]
+  },
+  {
+    "seq": 178,
+    "sha": "1a20fdf15709a77a0771885d35320f6ac9ef4dda",
+    "date": "2026-10-08T23:12:33+02:00",
+    "pr": 227,
+    "title": "Resolve local-file source paths relative to the KB",
+    "adrs": [
+      "0009"
+    ]
+  },
+  {
+    "seq": 179,
+    "sha": "e0c9aa1c310a88536a740ebe9c02e7d333725e13",
+    "date": "2026-10-08T23:37:06+02:00",
+    "pr": 228,
+    "title": "Expose snapshot query discovery and execution",
+    "adrs": []
+  },
+  {
+    "seq": 180,
+    "sha": "87b20ca78b3f8fbeb13b3bd8d7cf379db8810172",
+    "date": "2026-10-09T00:10:12+02:00",
+    "pr": 229,
+    "title": "Add typed query outputs and local-file sink",
+    "adrs": [
+      "0015"
+    ]
+  },
+  {
+    "seq": 181,
+    "sha": "2b99c8a646b0539a0bd762a7e81a63cab2a6f8b7",
+    "date": "2026-10-09T08:11:22+02:00",
+    "pr": 231,
+    "title": "Expose embedded authoring guide through CLI",
+    "adrs": []
+  },
+  {
+    "seq": 182,
+    "sha": "f20091071c16632a92eafc6e542049e4818d343e",
+    "date": "2026-10-09T08:29:26+02:00",
+    "pr": 232,
+    "title": "Make authoring guide concise and discovery-first",
+    "adrs": []
+  },
+  {
+    "seq": 183,
+    "sha": "37abd35be4badbd6df643ddc22ce4642b7d4e2e7",
+    "date": "2026-10-09T08:46:14+02:00",
+    "pr": 234,
+    "title": "docs: simplify evolution lifecycle and checkout repair",
+    "adrs": [
+      "0010",
+      "0012",
+      "0018",
+      "0019",
+      "0021"
+    ]
+  },
+  {
+    "seq": 184,
+    "sha": "0606ff4e5ad082ba160b445fc8221dd4975095b4",
+    "date": "2026-10-09T08:56:44+02:00",
+    "pr": 235,
+    "title": "Read evolution metadata from disk and simplify checkout repair",
+    "adrs": [
+      "0012"
+    ]
+  },
+  {
+    "seq": 185,
+    "sha": "0267ac1183b0e35b61a229f953830213c7c4a2d1",
+    "date": "2026-10-09T09:50:46+02:00",
+    "pr": 236,
+    "title": "Remove persisted format versioning and compatibility paths",
+    "adrs": [
+      "0007",
+      "0010"
+    ]
+  },
+  {
+    "seq": 186,
+    "sha": "22bd58684a3a93074e3c1de199bc5abf7bf803ec",
+    "date": "2026-10-09T09:51:12+02:00",
+    "pr": 237,
+    "title": "Expose query bindings and vendored plugin APIs in discovery",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 187,
+    "sha": "fdad34ca9e87737e366048972ea10c317d22ed85",
+    "date": "2026-10-09T15:41:33+02:00",
+    "pr": 239,
+    "title": "adr-viewer: partial deliveries between specification and realisation",
+    "adrs": []
   }
 ]
