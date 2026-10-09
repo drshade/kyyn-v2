@@ -27,7 +27,7 @@ newtype EvolutionName = EvolutionName String deriving (Eq, Show)
 data EvolutionFilter = AllEvolutions | ExcludeDrafts deriving (Eq, Show)
 data EvolutionSummary = EvolutionSummary
   { workspace :: EvolutionWorkspace, name :: EvolutionName
-  , state :: EvolutionState, acceptingCommit :: Maybe GitRevision }
+  , state :: EvolutionState }
   deriving (Eq, Show)
 
 evolutionId :: String -> Either String EvolutionId

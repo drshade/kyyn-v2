@@ -1,6 +1,6 @@
 -- Native application/store/Git publication with recording guest results: readiness,
 -- input/head races, separate drafts, staged/untracked preservation, post-ref-update
--- interruption and recovery. Does not execute MicroHs or a CLI.
+-- interruption and manual Git repair. Does not execute MicroHs or a CLI.
 
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, TypeApplications #-}
 module PublicationTests (publicationTests) where
@@ -15,6 +15,7 @@ import Control.Monad (unless, when, forM_)
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (coerce)
 import Data.IORef (newIORef, atomicModifyIORef')
+import qualified Data.Text as Text
 import qualified Data.ByteString as Bytes
 import Effectful (Eff, IOE, (:>), runEff, runPureEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret, send)
@@ -73,13 +74,13 @@ type Effects = '[EvidenceStore, RootPublication, RootExecution, EvolutionExecuti
 
 publicationTests :: Root -> IO ()
 publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
-  withSystemTempDirectory "kyyn-publication" $ \directory -> do
+  withSystemTempDirectory "kyyn publication's" $ \directory -> do
     executable <- findExecutable "git" >>= maybe (fail "Git required") pure
     scope <- either fail pure (directoryScope directory)
     let repo = Repository scope
         path = either error id . relativePath
         tree = either error id . fileTree
-        prefix = if interrupt then Subtree (path "nested/kb") else WholeTree
+        prefix = if interrupt then Subtree (path "nested/kb's files") else WholeTree
         kb = KnowledgeBase repo prefix
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
@@ -141,12 +142,14 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
           current <- headRevision
           assert "Refusal advanced HEAD" (current == base)
     absent <- publication accept
-    case absent of NotAccepted (InvalidMaterial _) -> pure (); _ -> fail "Missing candidate accepted"
-    noRecovery <- publication (recoverAcceptedEvolution branch workspace)
-    assert "Unaccepted draft has a recovery" (noRecovery == Right Nothing)
+    assert "Draft preflight loaded candidate or runtime" (absent == NotAccepted (NotReady Draft))
+    normal (markReady workspace) >>= right
+    missing <- publication accept
+    case missing of NotAccepted (InvalidMaterial _) -> pure (); _ -> fail "Missing candidate accepted"
+    normal (markDraft workspace) >>= right
     captured <- normal (captureEvolution workspace) >>= right
     candidate@(Candidate context report candidateRoot) <- normal (applyEvolution captured) >>= right
-    draftInspection <- normal (inspectEvolution workspace base) >>= right
+    draftInspection <- normal (inspectEvolution workspace) >>= right
     assert "Draft inspection lost saved report" (snd draftInspection == Just report)
     checked <- normal (checkCandidate candidate) >>= \case
       Passed value _ -> pure value
@@ -166,8 +169,6 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     command ["update-ref", "--no-deref", "HEAD", revisionName base]
     detached <- publication (acceptEvolution branch metadata checked)
     unchanged detached (CheckoutMismatch branch Nothing)
-    recoveryDetached <- publication (recoverAcceptedEvolution branch workspace)
-    case recoveryDetached of Left _ -> pure (); _ -> fail "Recovery ignored detached HEAD"
     command ["symbolic-ref", "HEAD", "refs/heads/main"]
     rejectedValidation <- run False (Just False) (const (pure ())) accept
     case rejectedValidation of NotAccepted (InvalidMaterial _) -> pure (); _ -> fail "Invalid candidate accepted"
@@ -193,8 +194,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     command ["update-ref", "refs/heads/main", revisionName base, revisionName unrelatedCommit]
     sameWorkspaceCommit <- competing "Another writer accepted this workspace" [(Subtree rootPath,exported),archived]
     sameRace <- run False Nothing (winAtCreation sameWorkspaceCommit) (acceptEvolution branch metadata checked)
-    case sameRace of AlreadyAccepted revision _ -> assert "Same-workspace CAS race lost accepting revision" (revision == sameWorkspaceCommit)
-                     _ -> fail ("Same-workspace CAS race misdiagnosed: " ++ show sameRace)
+    assert "Same-workspace CAS race bypassed expected head" (sameRace == NotAccepted (BaseMismatch base (Just sameWorkspaceCommit)))
     command ["update-ref", "refs/heads/main", revisionName base, revisionName sameWorkspaceCommit]
     forM_ ["head-reading", "head-observed"] $ \event -> do
       fired <- newIORef False
@@ -202,8 +202,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
             first <- atomicModifyIORef' fired (\old -> (True, not old))
             when first (winAtCreation sameWorkspaceCommit "created")
       earlyRace <- run False Nothing concurrentAcceptance (acceptEvolution branch metadata checked)
-      case earlyRace of AlreadyAccepted revision _ -> assert "Early race lost acceptance" (revision == sameWorkspaceCommit)
-                        _ -> fail ("Concurrent acceptance misdiagnosed at " ++ event ++ ": " ++ show earlyRace)
+      assert "Concurrent acceptance bypassed expected head" (earlyRace == NotAccepted (BaseMismatch base (Just sameWorkspaceCommit)))
       command ["update-ref", "refs/heads/main", revisionName base, revisionName sameWorkspaceCommit]
     command ["branch", "other", revisionName base]
     let switchBranch "created" = command ["symbolic-ref", "HEAD", "refs/heads/other"]
@@ -221,23 +220,38 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     assert "Acceptance did not advance HEAD" (accepted /= base)
     parents <- publication (Git.readCommitParents repo accepted)
     assert "Acceptance did not preserve Before as its single parent" (parents == Right [base])
+    repair <- if interrupt then pure Nothing else case result of
+      Right (AcceptedCommit _ (WorkingTreeUpdateIncomplete diagnostics)) ->
+        case [instruction | Diagnostic _ "acceptance.checkout-incomplete" message _ <- diagnostics,
+              [_,instruction] <- [lines (Text.unpack message)]] of
+          [instruction] -> pure (Just instruction)
+          _ -> fail "Missing scoped Git repair instruction"
+      _ -> fail "Expected incomplete checkout"
     if interrupt then assert "Expected interrupted result" (result == Left UserInterrupt)
       else do
         case result of
           Right (AcceptedCommit revision (WorkingTreeUpdateIncomplete _)) -> assert "Lost accepting revision" (revision == accepted)
           _ -> fail ("Sync failure hid acceptance: " ++ show result)
         removeFile (directory </> ".git/index.lock")
-    write (workspacePath ++ "/manifest.dhall") "malformed live manifest"
-    already <- publication accept
-    acceptedInspection <- publication (inspectEvolution workspace accepted) >>= right
-    assert "Accepted inspection required cache or live manifest" (snd acceptedInspection == Just report)
-    case already of AlreadyAccepted revision _ -> assert "Wrong accepting revision" (revision == accepted); _ -> fail (show already)
+    localState <- publication (readEvolutionState workspace) >>= right
+    assert "Interrupted publication did not preserve disk state" (localState == Ready)
     retried <- publication (acceptEvolution branch metadata checked)
-    case retried of AlreadyAccepted revision _ -> assert "Direct retry lost acceptance" (revision == accepted); _ -> fail (show retried)
-    recovery <- publication (recoverAcceptedEvolution branch workspace) >>= right
-    assert "Recovery did not preserve original acceptance/current HEAD" (recovery == Just (CheckoutRecovery accepted accepted WorkingTreeUpdated))
-    repeated <- publication (recoverAcceptedEvolution branch workspace) >>= right
-    assert "Recovery is not idempotent" (repeated == recovery)
+    assert "Direct retry republished an accepted candidate" (retried == NotAccepted (BaseMismatch base (Just accepted)))
+    let restore = case repair of
+          Nothing -> command ["restore","--source=HEAD","--staged","--worktree","--",relativeName rootPath,workspacePath]
+          Just instruction -> do
+            shell <- findExecutable "sh" >>= maybe (fail "sh required") pure
+            result' <- runEff . runFailure . runProcessExecutionIO $ Process.withProcess
+              (Process.ProcessSpec shell ["-c",instruction] directory [("PATH",takeDirectory executable),("LC_ALL","C")]) $ do
+                Process.closeStdin
+                _ <- Process.collectStdout
+                Process.awaitExit
+            case result' of Right (Process.ProcessExit 0 _) -> pure (); _ -> fail (show result')
+    restore
+    already <- publication accept
+    assert "Accepted retry accessed absent cache/runtime" (already == NotAccepted (NotReady Accepted))
+    acceptedInspection <- publication (inspectEvolution workspace) >>= right
+    assert "Accepted inspection required candidate cache" (snd acceptedInspection == Just report)
     reopened <- normal (loadRootAt repo accepted (Subtree rootPath)) >>= right
     preservedPlugin <- Bytes.readFile (directory </> relativeName rootPath </> pluginFile)
     assert "Acceptance removed inherited plugin source" (preservedPlugin == pluginBytes)
@@ -253,7 +267,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     outside <- Bytes.readFile (directory </> "outside")
     untracked <- Bytes.readFile (directory </> "untracked-outside")
     otherState <- publication (readEvolutionState other) >>= right
-    assert "Acceptance/recovery overwrote unrelated local work"
+    assert "Acceptance/repair overwrote unrelated local work"
       (stagedAfter == staged && outside == "unstaged outside" && untracked == "keep me" && otherState == Ready)
     otherChecked <- normal (checkCandidate otherCandidate) >>= \case Passed value _ -> pure value; x -> fail (show x)
     rebaseHead <- if interrupt then do
@@ -279,34 +293,17 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     later <- case next of AcceptedCommit revision WorkingTreeUpdated -> pure revision; _ -> fail (show next)
     laterArchive <- Bytes.readFile (directory </> otherPath </> "manifest.dhall")
     write (relativeName rootPath ++ "/facts/root.dhall") "broken local root"
-    laterRecovery <- publication (recoverAcceptedEvolution branch workspace) >>= right
-    assert "Recovery targeted old accepting revision" (laterRecovery == Just (CheckoutRecovery accepted later WorkingTreeUpdated))
+    restore
+    restored <- Bytes.readFile (directory </> relativeName rootPath </> "facts/root.dhall")
+    expectedBytes <- inspect ["show","HEAD:" ++ relativeName rootPath ++ "/facts/root.dhall"]
+    assert "Manual repair restored an old root" (restored == expectedBytes)
     laterArchiveAfter <- Bytes.readFile (directory </> otherPath </> "manifest.dhall")
-    assert "Recovery touched another accepted archive" (laterArchive == laterArchiveAfter)
+    assert "Repair touched another accepted archive" (laterArchive == laterArchiveAfter)
     finalHead <- headRevision
-    assert "Recovery moved HEAD" (finalHead == later)
-    reverted <- publication (Git.createCommit repo (GitTree [(Subtree (path workspacePath),tree [])]) (Just later) metadata)
-    revertedUpdate <- publication (Git.compareAndSwapRef repo branch (Just later) reverted)
-    assert "Fixture could not remove acceptance" (revertedUpdate == RefUpdated)
-    removedRecovery <- publication (recoverAcceptedEvolution branch workspace)
-    assert "Removed archive was still treated as accepted" (removedRecovery == Right Nothing)
-    removedAcceptance <- publication accept
-    case removedAcceptance of NotAccepted (InvalidMaterial _) -> pure (); _ -> fail "Removed acceptance bypassed absent candidate"
-    let WorkspaceSnapshot (WorkspaceManifest _ originalName originalExplanation _ _)
-          originalBefore originalTarget originalChange originalNotes = case context of EvolutionContext _ _ _ snapshot -> snapshot
-    reacceptFiles <- publication (encodeWorkspaceSnapshot (WorkspaceSnapshot
-      (WorkspaceManifest reverted originalName originalExplanation Ready AdHoc)
-      originalBefore originalTarget originalChange originalNotes)) >>= right
-    writeTreeAt workspacePath reacceptFiles
-    reacceptCapture <- normal (captureEvolution workspace) >>= right
-    _ <- normal (applyEvolution reacceptCapture) >>= right
-    reaccepted <- normal accept
-    reacceptedRevision <- case reaccepted of AcceptedCommit revision WorkingTreeUpdated -> pure revision; _ -> fail (show reaccepted)
-    foundAgain <- publication (findAcceptanceOnBranch branch workspace)
-    assert "Reacceptance resolved to the old introduction" (foundAgain == Right (Just reacceptedRevision) && reacceptedRevision /= accepted)
+    assert "Repair moved HEAD" (finalHead == later)
     assert "Fixture initial root unexpectedly equals output" (initialRoot /= candidateRoot)
     assert "Candidate context was substituted" (case context of EvolutionContext _ _ (Before revision _) _ -> revision == base)
-    putStrLn ("Full acceptance, rebase and recovery passed (interruption: " ++ show interrupt ++ ").")
+    putStrLn ("Full acceptance, rebase and manual repair passed (interruption: " ++ show interrupt ++ ").")
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
@@ -316,17 +313,17 @@ validatedValueRoot (Candidate _ _ value) = validatedValue value
 
 validationMock :: Maybe Bool -> Eff (RootExecution : es) a -> Eff es a
 validationMock mode = interpret $ \_ operation -> case mode of
-  Nothing -> error "Publication/recovery invoked validation"
+  Nothing -> error "Publication invoked validation"
   Just valid -> case operation of
     PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] [] []))
     ValidateRoot _ -> pure (Right (ValidationReport (if valid then [] else [errorDiagnostic "test.invalid" "Invalid candidate"])))
     ExecuteQuery {} -> error "Unexpected query"
 
 noOpening :: Eff (RootOpening : es) a -> Eff es a
-noOpening = interpret $ \_ _ -> error "Publication/recovery reopened source"
+noOpening = interpret $ \_ _ -> error "Publication reopened source"
 
 noEvidence :: Eff (EvidenceStore : es) a -> Eff es a
-noEvidence = interpret $ \_ _ -> error "Publication/recovery read evidence"
+noEvidence = interpret $ \_ _ -> error "Publication read evidence"
 
 schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case

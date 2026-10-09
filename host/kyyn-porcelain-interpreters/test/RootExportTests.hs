@@ -34,7 +34,7 @@ import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.RootExecution
 import Kyyn.Porcelain.RootExecution.Types (PreparedRoot(..))
 import Kyyn.Porcelain.Capability.RootOpening (openCapturedRoot)
-import Kyyn.Porcelain.Capability.EvolutionStore (exportAcceptedWorkspace, findAcceptance)
+import Kyyn.Porcelain.Capability.EvolutionStore (exportAcceptedWorkspace)
 import Kyyn.Porcelain.Interpreter.EvolutionStore (runEvolutionStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
 import Kyyn.Porcelain.Capability.RootStore
@@ -122,10 +122,6 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
   recordBytes <- maybe (fail "Committed archive lacks result.dhall") pure (lookup (path "result.dhall") (files reopenedArchive))
   decodedRecord <- either fail pure (runPureEff (runDhallHandling (decodeEvolutionRecord recordBytes))) >>= either (fail . show) pure
   unless (decodedRecord == (workspaceId,contract,contract,report)) (fail "Committed record changed contracts/report")
-  accepted <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . runFileSystemIO scope
-    . runDhallHandling . runRootStore . runWorkspaceStore . runEvolutionStore $
-      findAcceptance kb workspaceId revision
-  unless (accepted == Right (Right (Just revision))) (fail "Combined commit did not introduce its Accepted archive")
   opened <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . schemaMock (rootSchema contract)
     . runDhallHandling . runRootStore . noRecipePreparation . runRootOpening (tree []) $ openCapturedRoot reopened
   unless (opened == Right (Right (validatedValue checked))) (fail "Reopened Root differs from the validated input")

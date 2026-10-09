@@ -107,9 +107,9 @@ main = do
     assert "Acceptance ignored configured Git identity or used environment overrides"
       (actualIdentity == "Configured fixture λ <fixture@example.invalid>|Configured fixture λ <fixture@example.invalid>")
     void (git ["config","user.name",""])
-    retried <- cli (ExitFailure 4) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
-    retryRevision <- textAt ["result","revision"] retried
-    assert "Accepted retry lost its original revision" (retryRevision == after)
+    retried <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    assert "Accepted retry did not refuse before identity/runtime access"
+      (any (\diagnostic -> at ["code"] diagnostic == String "acceptance.not-ready") (array (at ["diagnostics"] retried)))
     void (git ["config","user.name","Configured fixture λ"])
     commitMessage <- git ["log","-1","--format=%s"]
     assert "Commit omitted the evolution name" ("simplify-todos" `isInfixOf` commitMessage)

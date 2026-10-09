@@ -103,7 +103,7 @@ test-suite evolution-reports
 test-suite roots
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: GuestFixture DeliveryTests ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests AcceptanceHistoryTests PublicationTests InitializationTests WorkspaceApiTests RecipeTests RecipeInspectionTests ToolBrokerTests
+  other-modules: GuestFixture DeliveryTests ExecutionTests QueryExecutionTests ValidationTests RootExportTests WorkspaceTests EvolutionCaptureTests EvolutionExecutionTests CandidateTests EvolutionMetadataTests PublicationTests InitializationTests WorkspaceApiTests RecipeTests RecipeInspectionTests ToolBrokerTests
   hs-source-dirs: test
   default-language: GHC2021
   default-extensions: OverloadedStrings

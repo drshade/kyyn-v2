@@ -6,11 +6,11 @@ import Kyyn.Domain.Git (LocalBranch, CommitMetadata)
 import Kyyn.Domain.Diagnostic (CheckResult(..), ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Publication (AcceptanceResult(..), AcceptanceProblem(..))
 import Kyyn.Domain.Root (Root(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), EvolutionState(..))
 import Kyyn.Porcelain.Capability.EvolutionExecution (EvolutionExecution, evaluateEvolution)
-import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, loadCandidate)
+import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, saveCandidate, loadCandidate, readEvolutionState)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring, captureEvolution)
-import Kyyn.Porcelain.Capability.RootPublication (RootPublication, findAcceptanceOnBranch, acceptEvolution, alreadyAccepted)
+import Kyyn.Porcelain.Capability.RootPublication (RootPublication, acceptEvolution)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.Validation (checkCandidate)
 import Kyyn.Porcelain.Capability.RootStore (RootStore, materializeRoot)
@@ -59,11 +59,11 @@ applyEvolution captured = do
 acceptStoredEvolution :: (RootPublication :> es, EvolutionStore :> es, RootExecution :> es, RootStore :> es)
   => LocalBranch -> CommitMetadata -> EvolutionWorkspace -> Eff es AcceptanceResult
 acceptStoredEvolution branch metadata workspace = do
-  accepted <- findAcceptanceOnBranch branch workspace
-  case accepted of
+  state <- readEvolutionState workspace
+  case state of
     Left diagnostics -> pure (NotAccepted (InvalidMaterial diagnostics))
-    Right (Just revision) -> pure (alreadyAccepted revision)
-    Right Nothing -> do
+    Right observed | observed /= Ready -> pure (NotAccepted (NotReady observed))
+    Right _ -> do
       checked <- checkSavedCandidate workspace
       case checked of
         Rejected (ValidationReport diagnostics) -> pure (NotAccepted (InvalidMaterial diagnostics))

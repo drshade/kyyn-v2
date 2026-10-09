@@ -1,5 +1,5 @@
 // Executable KB selection in disposable Git repositories: root/nested/multiple KBs,
-// cwd default, symlinks, missing paths and detached recovery; no guest compilation.
+// cwd default, symlinks, missing paths and detached acceptance; no guest compilation.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -45,7 +45,7 @@ try {
   }
   const head = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { env, encoding: 'utf8' }).stdout.trim();
   git(['checkout', '--detach', '-q', head]);
-  assert.equal(cli(['--kb', kb, ...unavailableRuntime, '--json', 'evolution', 'recover', 'abc'], 1).diagnostics[0].code, 'git.detached-head');
+  assert.equal(cli(['--kb', kb, ...unavailableRuntime, '--json', 'evolution', 'accept', 'abc'], 1).diagnostics[0].code, 'git.detached-head');
   const help = spawnSync(executable, ['--help'], { cwd: temporary, env, encoding: 'utf8' });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--kb PATH/);
@@ -60,7 +60,7 @@ try {
     assert.match(result.stderr, /Available commands:/);
     for (const command of commands) assert.match(result.stderr, new RegExp(`^  ${command} +`, 'm'));
   }
-  console.log('CLI selection passed: nested/multiple KBs, cwd default, symlink, missing runtime, selection diagnostics and detached recovery.');
+  console.log('CLI selection passed: nested/multiple KBs, cwd default, symlink, missing runtime, selection diagnostics and detached acceptance.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }
