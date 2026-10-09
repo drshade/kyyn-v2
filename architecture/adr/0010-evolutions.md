@@ -612,8 +612,7 @@ This also resolves a saved candidate's context to its owning workspace without
 publication reconstructing a private directory convention.
 
 `ListEvolutions`, `ResolveEvolution` and `ReadEvolutionState` read local manifests.
-The manifest owns lifecycle metadata; these operations do not prove acceptance
-through Git history. Authors may repair old manifests and reports on disk without
+The manifest owns lifecycle metadata. Authors may repair old manifests and reports on disk without
 rewriting historical commits. Malformed current files still return diagnostics.
 After interrupted checkout synchronization a local manifest may still say Ready;
 the Before/head check prevents reaccepting that old candidate. The operator repairs
@@ -639,8 +638,6 @@ It reads manifests, not source/evidence/candidate files, and does not compile ev
 unfinished drafts. Malformed manifests are diagnostics rather than silently
 omitted workspaces. The filter is not a way to suppress malformed metadata.
 Resolve uses this same existence/state derivation and never creates a workspace.
-Summaries do not reconstruct the original accepting commit; ordinary Git history
-is available when the author wants to inspect it.
 
 MarkReady and MarkDraft refuse locally Accepted and unknown workspaces,
 then atomically replace only the local manifest. They preserve Before, name,

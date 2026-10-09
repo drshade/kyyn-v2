@@ -273,8 +273,7 @@ loading, compiler setup or commit-identity lookup. A still-Ready workspace based
 on an old head is refused as `BaseMismatch`; this includes a retry after publication
 whose checkout synchronization was interrupted. The diagnostic gives expected
 and actual revisions and says: if this evolution was already committed, inspect
-`git status` and restore the checkout from Git. Kyyn does not infer the original
-accepting commit or repair the checkout during a retry.
+`git status` and restore the checkout from Git.
 
 For a normal `AcceptedCommit revision (WorkingTreeUpdateIncomplete diagnostics)`
 result, the diagnostic names the known accepting commit and supplies an exact,
@@ -403,4 +402,4 @@ After restoration, the local Accepted state refuses acceptance without candidate
 or runtime access. Listing before restoration honestly reports the local state.
 Commit an old accepted manifest missing a currently required field, then repair
 only its on-disk manifest: listing and archived report inspection must work
-without decoding historical versions or running archived guest code.
+without running archived guest code.
