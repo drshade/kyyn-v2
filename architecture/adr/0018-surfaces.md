@@ -286,9 +286,16 @@ KB-authored modules under the selected root's source tree participate in the sam
 `guest module list/show` and `guest symbol show` commands. List names without
 type-checking every authored helper; showing a module or symbol checks that
 module and its dependencies. Show exported declarations and documentation, not
-private definitions or function execution. Distinguish `sdk`, `generated` and
-`kb` origins in human and structured output. Accepted discovery reads a fixed Git
-revision; `--evolution ID` selects that workspace's target source.
+private definitions or function execution. Vendored plugin source modules
+participate in the same discovery surface, including their exported payload and
+argument types. Distinguish `sdk`, `generated`, `kb` and `plugin` origins in human
+and structured output. Accepted discovery reads a fixed Git revision;
+`--evolution ID` selects that workspace's target source.
+
+`KyynQueryBindings` exposes the selected root's `Query` alias and collection
+bindings. Include the same generated source used by query execution when inspecting
+an authored module that imports it. Private generated codecs and execution wrappers
+are not catalogue entries.
 
 Recipe-flow modules receive the same root-specific fact-edit bindings used to
 check and execute closed recipes. Expose `Kyyn.Workspace.FactEdits` when the

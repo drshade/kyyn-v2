@@ -23,6 +23,7 @@ withOrigins entries (Response outcome (Object fields) messages diagnostics)
     label SdkOrigin = "sdk" :: String
     label GeneratedOrigin = "generated"
     label KbOrigin = "kb"
+    label PluginOrigin = "plugin"
     listing = KeyMap.member "modules" fields
     selected = case KeyMap.lookup "module" fields of Just (String name) -> lookup (Text.unpack name) origins; _ -> Nothing
     enriched | listing = KeyMap.insert "origins" (object [Key.fromString name .= origin | (name,origin) <- origins]) fields

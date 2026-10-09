@@ -29,13 +29,13 @@ queryBindings selected = do
   pure (path, utf8 (unlines
     (["{-# LANGUAGE OverloadedStrings #-}", "module KyynQueryBindings (Query" ++ concatMap ((", " ++) . bindingName) (collectionContracts contract) ++ ") where",
       "import qualified Kyyn.Types.Query as SDK"] ++ imports [root] ++
-      ["type Query a = SDK.Query " ++ haskellType root ++ " a"] ++ concat bindings)))
+      ["-- | A query over the selected KB root.", "type Query a = SDK.Query " ++ haskellType root ++ " a"] ++ concat bindings)))
   where
     bindingName (CollectionContract _ field _ _) = field
     binding root constructor fields (CollectionContract name field payload _) = do
       unless (Just field `elem` map fst fields) (Left ("Missing collection field " ++ field))
       let patternFields = [if label == Just field then "values" else "_" | (label,_) <- fields]
-      pure [field ++ " :: SDK.CollectionBinding " ++ haskellType root ++ " " ++ haskellType payload,
+      pure ["-- | Read the " ++ name ++ " fact collection.", field ++ " :: SDK.CollectionBinding " ++ haskellType root ++ " " ++ haskellType payload,
         field ++ " = SDK.CollectionBinding " ++ show name ++ " (\\(" ++ constructor ++ " " ++
           unwords patternFields ++ ") -> values)"]
 
