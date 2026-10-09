@@ -34,7 +34,6 @@ fetch config@(RepositoryConfig url branch since secret) snapshot = fmap (either 
                     | otherwise -> pure (Just value)
   let base = "https://api.github.com/repos/" <> owner <> "/" <> repo <> "/"
       prefix = Text.toLower owner <> "/" <> Text.toLower repo <> "/"
-      get path = ExceptT (Http.get base token (base <> path))
       pages path = ExceptT (Http.pages base token (base <> path))
       date = maybe "" (\value -> "&since=" <> Json.escape value) since
   oldIds <- ExceptT (fmap (either (\(FetchError message) -> Left message) Right) (listEvidenceIds snapshot))
@@ -46,14 +45,26 @@ fetch config@(RepositoryConfig url branch since secret) snapshot = fmap (either 
       closed <- pages ("issues?state=closed&sort=updated&direction=asc&per_page=100" <> date)
       pure (open ++ closed)
   numbered <- mapM (\value -> do n <- checked (Decode.numberField "number" value); pure (n,value)) issues
-  discussions <- forM (unique numbered) $ \(number,value) -> do
+  let selected = unique numbered
+  comments <- if null selected then pure [] else
+    pages "issues/comments?sort=created&direction=asc&per_page=100" >>= checked . mapM (\value ->
+      (,) <$> Decode.textField "issue_url" value <*> Decode.comment value)
+  byUrl <- checked (mapM (\(number,value) -> (,) <$> Decode.textField "url" value <*> pure (number,value)) selected)
+  let withComments = [(number,(value,items)) | ((number,value),items) <- joinBy byUrl comments]
+  pulls <- if any (Json.has "pull_request" . snd) selected then
+    pages "pulls?state=all&sort=created&direction=asc&per_page=100" >>= checked . mapM (\value ->
+      (,) <$> Decode.numberField "number" value <*> pure value)
+    else pure []
+  discussions <- forM (joinBy withComments pulls) $ \((value,comments),details) -> do
+    number <- checked (Decode.numberField "number" value)
     let suffix = Text.pack (show number)
-    comments <- pages ("issues/" <> suffix <> "/comments?per_page=100") >>= checked . mapM Decode.comment
     issue <- checked (Decode.issue comments value)
     item <- if Json.has "pull_request" value then do
-      (details,_) <- get ("pulls/" <> suffix)
+      detail <- case details of
+        [one] -> pure one
+        _ -> throwE "GitHub PR listing is missing or repeats a selected pull request"
       reviews <- pages ("pulls/" <> suffix <> "/reviews?per_page=100") >>= checked . mapM Decode.review
-      PullRequestItem <$> checked (Decode.pullRequest issue reviews details)
+      PullRequestItem <$> checked (Decode.pullRequest issue reviews detail)
       else pure (IssueItem issue)
     let key = prefix <> (if Json.has "pull_request" value then "pulls/" else "issues/") <> suffix
     ref <- checked (Decode.textField "html_url" value)
@@ -106,6 +117,15 @@ commitFiles base token seen url = runExceptT $ do
 
 unique :: Ord a => [(a,b)] -> [(a,b)]
 unique values = [last group | group <- groupBy (\a b -> fst a == fst b) (sortOn fst values), not (null group)]
+
+-- Stable sorting retains the provider's order within each discussion.
+joinBy :: Ord key => [(key,a)] -> [(key,b)] -> [(a,[b])]
+joinBy left right = go (sortOn fst left) (sortOn fst right)
+  where
+    go [] _ = []
+    go ((key,value):rest) candidates =
+      let (matching,later) = span ((== key) . fst) (dropWhile ((< key) . fst) candidates)
+      in (value,map snd matching) : go rest later
 
 without :: Ord a => [a] -> [(a,b)] -> [(a,b)]
 without _ [] = []

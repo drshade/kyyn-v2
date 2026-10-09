@@ -30,11 +30,13 @@ issue comments value = Issue <$> numberField "number" value <*> textField "title
   <*> J.optional "milestone" (textField "title") value <*> textField "created_at" value
   <*> textField "updated_at" value <*> J.optional "closed_at" J.text value <*> textField "html_url" value <*> pure comments
 pullRequest :: Issue -> [Review] -> JSValue -> Either Text PullRequest
-pullRequest discussion reviews value = PullRequest discussion <$> (J.field "draft" value >>= J.boolean)
-  <*> (J.field "merged" value >>= J.boolean) <*> J.optional "merged_at" J.text value
-  <*> (J.field "base" value >>= textField "ref") <*> (J.field "head" value >>= textField "ref")
-  <*> (J.field "base" value >>= textField "sha") <*> (J.field "head" value >>= textField "sha")
-  <*> J.optional "merge_commit_sha" J.text value <*> pure reviews
+pullRequest discussion reviews value = do
+  mergedAt <- J.field "merged_at" value >>= J.nullable J.text
+  PullRequest discussion <$> (J.field "draft" value >>= J.boolean)
+    <*> pure (maybe False (const True) mergedAt) <*> pure mergedAt
+    <*> (J.field "base" value >>= textField "ref") <*> (J.field "head" value >>= textField "ref")
+    <*> (J.field "base" value >>= textField "sha") <*> (J.field "head" value >>= textField "sha")
+    <*> J.optional "merge_commit_sha" J.text value <*> pure reviews
 fileChange :: JSValue -> Either Text FileChange
 fileChange value = FileChange <$> textField "filename" value <*> textField "status" value
   <*> (if J.has "previous_filename" value then J.optional "previous_filename" J.text value else Right Nothing)
