@@ -18,6 +18,24 @@ it could be useful. Let measured workloads and human/agent experience establish
 the problem first. If a simpler implementation supports the required journey,
 use it. Correctness requirements still apply to whatever we do implement.
 
+## Seal the tool and the KB; the agent reconciles them
+
+A KB is a hermetically sealed unit: its facts, code, configuration, vendored plugin
+source and evolution records describe themselves in the current types. Kyyn is
+likewise sealed: one SDK, one set of types, one current format for everything it
+reads and writes. Neither carries knowledge of the other's past: no version
+numbers, compatibility readers, defaults for missing fields, legacy detectors or
+migration hints.
+
+Kyyn's types and derived contracts are the integrity check. When a KB no longer
+matches the installed Kyyn, Kyyn fails with the precise decode, type or compile
+error. Reconciling the two is the KB agent's job: it repairs the KB on disk, and
+Kyyn honours that repair. Kyyn does not adapt to old KBs, and KBs do not anticipate
+future Kyyns.
+
+Identity, contract and required-data checks remain. External API and dependency
+versions are separate concerns.
+
 ## Exercise judgment; challenge guidance that defeats its purpose
 
 Principles and ADRs guide judgment, not replace it. When guidance appears

@@ -215,8 +215,6 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
     replaceFile "Config.hs" "module LocalFile.Config where\nimport Kyyn.Validation\nvalidate :: String -> ValidationReport\nvalidate _ = ValidationReport []\n"
   expectProblem "captured Payload mismatch accepted" ["LocalFile.Read.content","Payload differs"] $
     replaceFile "Read.hs" "module LocalFile.Read where\nimport Kyyn.Plugin\ncontent :: String -> EvidenceSnapshot String -> CapturedRead String (Either FetchError String)\ncontent _ _ = pure (Right \"x\")\n"
-  expectProblem "legacy bindings import lacks repair hint" ["Kyyn.Plugin / Kyyn.Plugin.Host"] $
-    replaceFile "Folder.hs" "module LocalFile.Folder where\nimport KyynPluginBindings\nfetch = undefined\n"
   loginPath <- right (relativePath (packagePath "Login.hs"))
   let withLogin = map (\(path,bytes) -> (path,if relativeName path == packagePath "Plugin.hs"
         then Text.encodeUtf8 (Text.replace "login = Nothing" "login = Just \"LocalFile.Login.login\"" (Text.decodeUtf8 bytes)) else bytes)) installed

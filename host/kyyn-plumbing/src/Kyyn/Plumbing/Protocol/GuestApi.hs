@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Protocol.GuestApi (encodeCatalogue, decodeCatalogue) where
 
-import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), (.:))
 import Data.Aeson.Types (Parser, parseEither, withObject)
 import Data.ByteString (ByteString)
@@ -14,7 +13,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decod
 
 encodeCatalogue :: DhallHandling :> es => [ApiModule] -> Eff es (Either [Diagnostic] ByteString)
 encodeCatalogue modules = fmap (fmap Text.encodeUtf8) $ encodeValue catalogueShape
-  (object ["version" .= ("2" :: String), "modules" .= map moduleValue modules])
+  (object ["modules" .= map moduleValue modules])
 
 decodeCatalogue :: DhallHandling :> es => ByteString -> Eff es (Either [Diagnostic] [ApiModule])
 decodeCatalogue bytes = case Text.decodeUtf8' bytes of
@@ -25,7 +24,7 @@ decodeCatalogue bytes = case Text.decodeUtf8' bytes of
   where bad = Left . pure . errorDiagnostic "guest.catalogue"
 
 catalogueShape :: Shape
-catalogueShape = Record [("version",Scalar IntegerScalar), ("modules",List (Record
+catalogueShape = Record [("modules",List (Record
   [("name",text), ("instances",List text), ("symbols",List (Record
     [("name",text), ("namespace",Union [("Type",Nothing),("Value",Nothing)]), ("definedAs",text), ("checkedSignature",text),
      ("declaration",Optional text), ("documentation",Optional text)]))]))]
@@ -51,8 +50,6 @@ namespaceName ValueNamespace = "Value"
 
 parseCatalogue :: Value -> Parser [ApiModule]
 parseCatalogue = withObject "guest catalogue" $ \fields -> do
-  version <- fields .: "version"
-  unless (version == ("2" :: String)) (fail "Unsupported guest catalogue format; reinstall Kyyn")
   fields .: "modules" >>= mapM (withObject "module" $ \entry ->
     ApiModule <$> entry .: "name" <*> (entry .: "symbols" >>= mapM parseSymbol) <*> entry .: "instances")
 

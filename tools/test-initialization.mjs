@@ -129,8 +129,9 @@ evolution =
   const capturedManifest = fs.readFileSync(captureManifestPath, 'utf8');
   const extraField = text => `(${text}) // { extra = [] : List Text }`;
   fs.writeFileSync(captureManifestPath, extraField(capturedManifest));
-  const staleCandidate = cli(kb, ['evolution', 'show', created.id], 1);
-  assert(staleCandidate.diagnostics.some(d => d.code === 'candidate.stale' && d.message.includes('check')));
+  const malformedCandidate = cli(kb, ['evolution', 'show', created.id], 1);
+  assert(malformedCandidate.diagnostics.some(d => d.code === 'workspace.manifest'), JSON.stringify(malformedCandidate));
+  assert(malformedCandidate.diagnostics.some(d => d.message.includes('extra')), JSON.stringify(malformedCandidate));
   fs.writeFileSync(captureManifestPath, capturedManifest);
   fs.writeFileSync(manifestPath, extraField(currentManifest));
   const invalidManifest = cli(kb, ['evolution', 'check', created.id], 1);

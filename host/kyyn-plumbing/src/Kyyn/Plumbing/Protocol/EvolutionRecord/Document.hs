@@ -2,7 +2,7 @@ module Kyyn.Plumbing.Protocol.EvolutionRecord.Document
   ( recordDocument, recordShape, headerShape, decodeHeader, decodeRecord ) where
 
 import Control.Monad (unless)
-import Data.Aeson (Value, object, (.=), withObject, (.:), (.:?), (.!=))
+import Data.Aeson (Value, object, (.=), withObject, (.:))
 import Data.Aeson.Types (Parser, parseEither, parseJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Keys
@@ -30,7 +30,7 @@ recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
 recordDocument identity before after (EvolutionReport plugins steps) = do
   encoded <- traverse step steps
   pure (recordShape stateContracts before after,
-    object ["version" .= ("7" :: String), "identity" .= evolutionIdName identity, "before" .= snapshotValue before,
+    object ["identity" .= evolutionIdName identity, "before" .= snapshotValue before,
       "after" .= snapshotValue after, "steps" .= encoded,
       "recipeContracts" .= map checkedSnapshotValue stateContracts,
       "plugins" .= [object ["name" .= pluginNameText name, "before" .= optional originValue old,
@@ -67,7 +67,7 @@ recordDocument identity before after (EvolutionReport plugins steps) = do
       [] -> invalid "Report contains a fact from outside its endpoint schemas"
 
 headerFields :: [(String,Shape)]
-headerFields = [("version",Scalar IntegerScalar),("identity",text),("before",snapshotShape),("after",snapshotShape),
+headerFields = [("identity",text),("before",snapshotShape),("after",snapshotShape),
   ("recipeContracts",List snapshotShape)]
 
 headerShape :: Shape
@@ -102,20 +102,16 @@ decodeHeader = parseEither header
 
 header :: Value -> Parser (Either [Diagnostic] (EvolutionId,RootContract,RootContract,[CheckedContract]))
 header = withObject "Evolution record" $ \record -> do
-  version <- record .: "version" :: Parser String
   identity <- record .: "identity" >>= either fail pure . evolutionId
-  if version /= "7" then pure (Left [errorDiagnostic "evolution.record-format"
-    "Stored evolution record format is not supported by this kernel"])
-  else do
-    before <- record .: "before" >>= restoreSnapshot
-    after <- record .: "after" >>= restoreSnapshot
-    states <- record .: "recipeContracts" >>= traverse restoreCheckedSnapshot
-    pure ((identity,,,) <$> before <*> after <*> sequence states)
+  before <- record .: "before" >>= restoreSnapshot
+  after <- record .: "after" >>= restoreSnapshot
+  states <- record .: "recipeContracts" >>= traverse restoreCheckedSnapshot
+  pure ((identity,,,) <$> before <*> after <*> sequence states)
 
 decodeRecord :: [CheckedContract] -> RootContract -> RootContract -> Value -> Either String EvolutionReport
 decodeRecord states before after = parseEither $ withObject "Evolution record" $ \record -> do
   steps <- record .: "steps" >>= traverse (step [("Before",before),("After",after)])
-  plugins <- record .:? "plugins" .!= [] >>= traverse (withObject "Plugin change" $ \fields -> do
+  plugins <- record .: "plugins" >>= traverse (withObject "Plugin change" $ \fields -> do
     name <- fields .: "name" >>= either fail pure . pluginName
     old <- fields .: "before" >>= parseOptional parseOrigin
     new <- fields .: "after" >>= parseOptional parseOrigin
@@ -131,7 +127,7 @@ decodeRecord states before after = parseEither $ withObject "Evolution record" $
       changes <- record .: "changes" >>= withObject "Changes" (\groups ->
         concat <$> traverse (\(collection,values) ->
           parseChanges endpoints (Key.toString collection) values) (sortOn fst (Keys.toList groups)))
-      recipes <- record .:? "recipeChanges" .!= [] >>= traverse
+      recipes <- record .: "recipeChanges" >>= traverse
         (withObject "RecipeChange" $ \fields -> do
           name <- fields .: "id"
           _ <- either fail pure (recipeId name)
