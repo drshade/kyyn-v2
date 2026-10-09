@@ -81,7 +81,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     let repo = Repository scope
         path = either error id . relativePath
         tree = either error id . fileTree
-        prefix = Subtree (path "nested/kb's [files]")
+        prefix = if interrupt then WholeTree else Subtree (path "nested/kb's [files]")
         kb = KnowledgeBase repo prefix
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
