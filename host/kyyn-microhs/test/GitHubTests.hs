@@ -1,6 +1,6 @@
 -- Real GHC/MicroHs GitHub adapters against synthetic HTTP/secrets/evidence.
--- Covers pagination, optional auth/branch/date, always-open scope, discussion-only
--- updates, immutable commit reuse, typed reads, and failure without partial output.
+-- Covers bulk discussion joins/pagination, optional auth/branch/date, always-open
+-- scope, discussion edits/removals, immutable commit reuse, and atomic refusal.
 -- No live GitHub requests or credentials; installed catalogue covered separately.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
@@ -90,6 +90,14 @@ main = withSystemTempDirectory "kyyn-github-" $ \temporary -> do
     assert "small file list marked incomplete" =<< get "filesComplete" capturedCommit
     assert "branch override or initial date missing" (any (Text.isInfixOf "sha=develop") trace && any (Text.isInfixOf "since=2026-01") trace)
     assert "old open items excluded by since" ((base <> "issues?state=open&sort=updated&direction=asc&per_page=100") `elem` trace)
+    assert "per-item comments or PR details fetched" (not (any (\url ->
+      "/issues/1/comments" `Text.isInfixOf` url || "/issues/2/comments" `Text.isInfixOf` url ||
+      "/pulls/2" `Text.isSuffixOf` url) trace))
+    assert "bulk pagination not followed" (any (Text.isInfixOf "issues/comments?page=2") trace &&
+      any (Text.isInfixOf "pulls?page=2") trace)
+    pull <- maybe (fail "Missing PR") pure (Map.lookup "acme/project/pulls/2" prior)
+      >>= get "payload" >>= get "value" >>= get "value"
+    assert "merged flag not derived from listing timestamp" =<< get "merged" pull
     (second,secondTrace) <- invoke prior False "" True
     assert "unchanged fetch emitted changes" . null =<< (get "value" second :: IO [Value])
     assert "known commit details refetched" (not (any (Text.isInfixOf "/commits/") secondTrace))
@@ -97,7 +105,10 @@ main = withSystemTempDirectory "kyyn-github-" $ \temporary -> do
     updated <- get "value" third :: IO [Value]
     assert "comment/review-only changes missed" (length updated == 2)
     forM_ updated $ \change -> assert "discussion update classified as new" . (== ("Updated" :: Text.Text)) =<< get "tag" change
-    forM_ ["rate","cycle","foreign"] $ \problem -> do
+    (removed,_) <- invoke prior False "removed-comment" False
+    removedChanges <- get "value" removed :: IO [Value]
+    assert "removed comment not reflected" (length removedChanges == 1)
+    forM_ ["rate","cycle","foreign","missing-pr","duplicate-pr","comment-page-failure"] $ \problem -> do
       (failed,_) <- invoke Map.empty False problem False
       assert "failed acquisition exposed partial batch" . (== ("Left" :: Text.Text)) =<< get "tag" failed
       if problem == "rate" then assert "retry details lost" . Text.isInfixOf "Retry-After: 60" =<< (get "value" failed :: IO Text.Text) else pure ()
@@ -162,18 +173,23 @@ provider prior changed problem authenticated = do
                 [object ["name" .= text "Link","value" .= text links] | not (Text.null links)]]), Lazy.toStrict (encode body))
               ok = response "200" ""
               next path = "<" <> base <> path <> ">; rel=\"next\""
-          if problem == "rate" && "issues/2/comments" `Text.isInfixOf` url then pure
+          if problem == "rate" && "issues/comments" `Text.isInfixOf` url then pure
             (tag "Right" (object ["status" .= text "403","headers" .= [object ["name" .= text "Retry-After","value" .= text "60"]]]), "{}")
           else if problem == "empty" && "/issues?" `Text.isInfixOf` url then ok (toJSON ([] :: [Value]))
           else if problem == "empty" && "/commits?" `Text.isInfixOf` url then response "409" "" (object ["message" .= text "Git Repository is empty."])
           else if "/issues?state=open" `Text.isInfixOf` url || "/issues?state=all" `Text.isInfixOf` url then
             response "200" (case problem of "cycle" -> "<" <> url <> ">; rel=\"next\""; "foreign" -> "<https://example.invalid/steal>; rel=\"next\""; _ -> "") (toJSON [issue 1 False,issue 2 True])
           else if "/issues?state=closed" `Text.isInfixOf` url then ok (toJSON ([] :: [Value]))
-          else if "/comments" `Text.isInfixOf` url then ok (toJSON [comment changed])
+          else if "/issues/comments" `Text.isInfixOf` url then
+            if "page=2" `Text.isSuffixOf` url then
+              if problem == "comment-page-failure" then response "500" "" (object [])
+              else ok (toJSON ([comment 2 changed | problem /= "removed-comment"] ++ [comment 999 False]))
+            else response "200" (next "issues/comments?page=2") (toJSON [comment 1 changed])
           else if "/reviews" `Text.isInfixOf` url then ok (toJSON [review changed])
-          else if "/pulls/2" `Text.isSuffixOf` url then ok (object
-            ["draft" .= False,"merged" .= False,"merged_at" .= Null,"merge_commit_sha" .= Null
-            ,"base" .= object ["ref" .= text "main","sha" .= text "base"],"head" .= object ["ref" .= text "feature","sha" .= text "head"]])
+          else if "/pulls?" `Text.isInfixOf` url then
+            if "page=2" `Text.isSuffixOf` url then ok (toJSON
+              (case problem of "missing-pr" -> []; "duplicate-pr" -> [pullDetails,pullDetails]; _ -> [pullDetails]))
+            else response "200" (next "pulls?page=2") (toJSON ([] :: [Value]))
           else if "/commits?" `Text.isInfixOf` url then
             if "page=2" `Text.isSuffixOf` url then ok (toJSON [object ["sha" .= text "def"]])
             else response "200" "<https://api.github.com/repositories/123/commits?page=2>; rel=\"next\"" (toJSON [object ["sha" .= text "abc"]])
@@ -189,16 +205,22 @@ provider prior changed problem authenticated = do
 issue :: Integer -> Bool -> Value
 issue number pull = object $
   ["number" .= number,"title" .= text "Plan 雪","body" .= Null,"state" .= text "open","user" .= Null
+  ,"url" .= (base <> "issues/" <> Text.pack (show number))
   ,"assignees" .= [account],"labels" .= [object ["name" .= text "feature"]],"milestone" .= Null
   ,"created_at" .= text "2020-01-01T00:00:00Z","updated_at" .= text "2020-01-01T00:00:00Z","closed_at" .= Null
   ,"html_url" .= ("https://github.com/acme/project/" <> (if pull then "pull/" else "issues/") <> Text.pack (show number))]
   ++ ["pull_request" .= object [] | pull]
-comment :: Bool -> Value
-comment changed = object ["id" .= (12 :: Integer),"user" .= account,"body" .= text (if changed then "Edited discussion" else "Discussion 雪")
+comment :: Integer -> Bool -> Value
+comment number changed = object ["id" .= (number + 10),"issue_url" .= (base <> "issues/" <> Text.pack (show number))
+  ,"user" .= account,"body" .= text (if changed then "Edited discussion" else "Discussion 雪")
   ,"created_at" .= text "2020-01-01T00:00:00Z","updated_at" .= text "2020-01-01T00:00:00Z","html_url" .= text "https://github.com/comment"]
 review :: Bool -> Value
 review changed = object ["id" .= (34 :: Integer),"user" .= Null,"body" .= text (if changed then "Edited review" else "LGTM")
   ,"state" .= text "APPROVED","submitted_at" .= text "2020-01-01T00:00:00Z","commit_id" .= text "head","html_url" .= text "https://github.com/review"]
+pullDetails :: Value
+pullDetails = object
+  ["number" .= (2 :: Integer),"draft" .= False,"merged_at" .= text "2026-02-01T00:00:00Z","merge_commit_sha" .= text "merge"
+  ,"base" .= object ["ref" .= text "main","sha" .= text "base"],"head" .= object ["ref" .= text "feature","sha" .= text "head"]]
 commit :: Text.Text -> [Value] -> Value
 commit sha changedFiles = object ["sha" .= sha,"html_url" .= ("https://github.com/acme/project/commit/" <> sha)
   ,"commit" .= object ["message" .= text "Implement feature\n\nBecause reasons.","author" .= Null,"committer" .= object

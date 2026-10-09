@@ -50,12 +50,13 @@ is false at GitHub's 3,000-file response ceiling (conservatively including exact
 Fetch refreshes mutable discussions and emits only changed evidence. Known commit
 SHAs do not refetch commit details. The commit listing still traverses the selected
 branch's history within `since` on each fetch (all history when omitted).
-Mutable discussions, including captured closed items within the configured scope, are deliberately reread so
-comment/review edits are not lost through reliance on a parent timestamp. Large
-repositories may require many API requests on every fetch, not just the first:
-roughly two per issue and four per PR, plus listing/comment/review pagination and
-new commit details. Use a token and a suitable initial
-date. A failed or rate-limited fetch publishes nothing; retry after correcting the
+Mutable discussions are reread so comment/review edits and removals are not lost
+through reliance on a parent timestamp. Comments and PR details are fetched in
+repository-wide pages and joined to the selected issues/PRs. Reviews still require
+one paged request per selected PR; new commit details require one or more requests
+per commit. A narrow `since` limits captured items, but does not limit the bulk
+comment/PR listings. Use a token for repositories with substantial history.
+A failed or rate-limited fetch publishes nothing; retry after correcting the
 problem. Rate-limit diagnostics include available retry/reset headers; the connector
 does not block waiting for an hourly quota reset. Pagination is followed, including
 commit file-list pagination.
