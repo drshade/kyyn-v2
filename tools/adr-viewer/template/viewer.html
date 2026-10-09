@@ -110,7 +110,9 @@ const setT = v => { T = Math.max(0, Math.min(maxSeq, Math.round(v))); render(); 
 document.getElementById("title").textContent = "ADR history · " + D.name;
 
 let STEP_W = 8;
-const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - 200) / maxSeq); };
+// Room right of the last step for the lane labels ("12 of 13 built · 1 partial").
+const RIGHT_W = 190;
+const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - RIGHT_W - 10) / maxSeq); };
 fitWidth();
 const x = seq => LABEL_W + seq * STEP_W;
 const el = (tag, attrs = {}, parent = svg) => {
@@ -203,8 +205,8 @@ function render() {
   const t = T;
   syncExpandBtn();
   svg.replaceChildren(); topSvg.replaceChildren();
-  svg.setAttribute("width", x(maxSeq) + 100);
-  topSvg.setAttribute("width", x(maxSeq) + 100); topSvg.setAttribute("height", TOP_H);
+  svg.setAttribute("width", x(maxSeq) + RIGHT_W);
+  topSvg.setAttribute("width", x(maxSeq) + RIGHT_W); topSvg.setAttribute("height", TOP_H);
   const step = D.steps.find(s => s.seq === t) || D.steps[D.steps.length - 1];
   nowEl.textContent = `step ${t} · ${step.date.slice(0, 10)} · ${step.pr ? "PR #" + step.pr : "direct"}`;
 
