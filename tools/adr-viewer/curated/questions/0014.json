@@ -3,142 +3,186 @@
   "step": 187,
   "date": "2026-10-13",
   "runs": 5,
-  "summary": "The storage layout, publication protocol, payload-availability model and recipe-state design are specified in enough detail to build, but the evidence store's compatibility key is not: all five lists asked what producer identity is made of, what a fetch does when it no longer matches (refuse or rebaseline), and what happens to saved positions when instance configuration changes, Mail folder edits included. Several lists also flagged gaps that affect persisted or fingerprinted data: the folder connector's item ID, hashed path and payload type, how Mail and Teams items already past retention are fingerprinted and whether they can be restored, the meaning of EvidenceRef.producer, and edge values for retentionDays. These need answers before implementation, so the ADR is close but not yet implementable as written.",
+  "summary": "Close but not implementable as written: the biggest gap is undefined producer identity and what happens when it changes.",
   "questions": [
     {
-      "text": "What exactly makes up a capture's stored producer identity: package/plugin source identity, the payload and position contracts, and/or the instance configuration?",
+      "text": "What exactly makes up a capture's stored producer identity?",
       "asked": 5,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Decides when captures become unreadable and what the index persists; the ADR only says evidence is 'bound to producing plugin source and payload contract' and Files config changes 'start a new producer', while a folder directory change updates items in place.",
-      "nodes": ["0014.02", "0014.59", "0014.67"]
+      "nodes": [
+        "0014.02",
+        "0014.59",
+        "0014.67"
+      ]
     },
     {
-      "text": "When a fetch runs against a stored capture whose producer or position contract no longer matches, does acquisition start from an empty snapshot and replace the capture, or refuse until an explicit clear?",
+      "text": "On a producer or position mismatch, does fetch rebaseline automatically or refuse until cleared?",
       "asked": 5,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Shapes the fetch path and expected-base publication; the ADR says both 'successful refetch replaces the capture and position' and that a mismatched position is a storage diagnostic, not a silent restart.",
-      "nodes": ["0014.59", "0014.68", "0014.72"]
+      "nodes": [
+        "0014.59",
+        "0014.68",
+        "0014.72"
+      ]
     },
     {
-      "text": "When an instance's configuration changes while a capture and sync position exist (Calendar window, mailbox, Files scope/folder/globs), who detects it, the host or the connector, and is the result a new producer, a rebaseline, a refusal, or continuing on the old cursor?",
+      "text": "When instance configuration changes after a position exists, who detects it and what happens?",
       "asked": 5,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Sets host/connector ownership of config drift detection; the ADR covers only Files ('a changed source configuration starts a new producer'), and Calendar follows the saved delta link 'verbatim, including its encoded window'.",
-      "nodes": ["0014.54", "0014.59", "0014.63"]
+      "nodes": [
+        "0014.54",
+        "0014.59",
+        "0014.63"
+      ]
     },
     {
-      "text": "How does the Mail connector handle folders added to or removed from `folders` after positions exist: which `since` a new folder backfills from, whether the 'reject supplied since' rule is per folder or per instance, and what happens to a removed folder's position and messages?",
+      "text": "How does Mail handle folders added or removed after positions exist?",
       "asked": 5,
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Changes position-merge code and option validation; the ADR only says to reject a supplied initial boundary 'once a position exists' and store each folder's effective since.",
-      "nodes": ["0014.65"]
+      "nodes": [
+        "0014.65"
+      ]
     },
     {
-      "text": "For a Mail message or Teams artifact already past retention when first discovered, what is fingerprinted, and must its body, attachments or VTT still be downloaded just to compute that fingerprint?",
+      "text": "How are items already past retention at first discovery fingerprinted, and must content be downloaded?",
       "asked": 4,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Fingerprint function and download cost/failure depend on it; the ADR requires 'a provider token or a stable observed projection' for new Truncated items but Mail must 'fingerprint the captured payload, not changeKey'.",
-      "nodes": ["0014.47"]
+      "nodes": [
+        "0014.47"
+      ]
     },
     {
-      "text": "For the first-party folder connector, what is the evidence item ID, and which form of source path (absolute, KB-relative, directory-relative, as configured) goes into the SHA-256 fingerprint?",
+      "text": "What are the folder connector's item ID and fingerprinted path form?",
       "asked": 4,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Determines fingerprint stability across checkout moves and which items 'match' on a directory change; the ADR fixes the hash framing over 'the UTF-8 source path' but not the path form or item ID.",
-      "nodes": ["0014.19", "0014.40"]
+      "nodes": [
+        "0014.19",
+        "0014.40"
+      ]
     },
     {
-      "text": "Do the Mail and Teams connectors ever restore a truncated payload to Available (e.g. after retentionDays is raised), and if so on what trigger?",
+      "text": "Do Mail and Teams ever restore truncated payloads, and on what trigger?",
       "asked": 4,
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Restoration needs a re-download path that conflicts with 'ignore changes to already captured messages'; the ADR allows restoration via SetEvidencePayload but never says when connectors emit it.",
-      "nodes": ["0014.47"]
+      "nodes": [
+        "0014.47"
+      ]
     },
     {
-      "text": "What is the folder connector's payload type (inline text or BlobRef), and how are binary, non-UTF-8 files and symlinks handled?",
+      "text": "What is the folder connector's payload type, and how are binary files handled?",
       "asked": 3,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Sets the persisted payload contract and failure semantics; the ADR says captured files use BlobRefs yet also that host acquisition supplies 'the hash alongside the text', and never defines the folder payload.",
-      "nodes": ["0014.19", "0014.60"]
+      "nodes": [
+        "0014.19",
+        "0014.60"
+      ]
     },
     {
-      "text": "What value does EvidenceRef.producer hold (plugin name, connector type, or the store's producer identity), and are citations checked against configured instances at acceptance?",
+      "text": "What value does EvidenceRef.producer hold, and are citations checked at acceptance?",
       "asked": 3,
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Fixes the persisted citation codec and whether citations survive plugin changes; the ADR only says producer and instanceName 'identify the integration and instance'.",
-      "nodes": ["0014.08", "0014.42"]
+      "nodes": [
+        "0014.08",
+        "0014.42"
+      ]
     },
     {
-      "text": "What are the valid range and reference clock for retentionDays: is 0 or a negative value allowed, is there a 'never truncate' setting, and is age measured from the invocation's captured start time?",
+      "text": "What are retentionDays' valid values, opt-out and reference clock?",
       "asked": 3,
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Changes config validation and the truncation cutoff; the ADR gives the age basis (received/ended time) and a required Integer, but no cutoff clock, bounds or opt-out."
     },
     {
-      "text": "Is SetEvidencePayload with an Available value allowed when the entry is already Available with the same fingerprint, and if so is it a no-op, a replacement, or refused?",
+      "text": "Is SetEvidencePayload Available allowed on an already Available entry?",
       "asked": 2,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Allowing it would bypass the same-fingerprint UpdatedEvidence rejection; the ADR covers Available-to-Truncated, restoration and repeated Truncated only.",
-      "nodes": ["0014.12", "0014.47"]
+      "nodes": [
+        "0014.12",
+        "0014.47"
+      ]
     },
     {
-      "text": "For the Files connector's OneDrive and SharedUrl scopes, which delta source applies, what is folderPath relative to, and what happens when a SharedUrl resolves to a single file?",
+      "text": "How do OneDrive and SharedUrl Files scopes resolve their delta source and folderPath?",
       "asked": 2,
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Changes resolution, validation and possibly position shape; the ADR specifies drive-root delta only 'for the business-drive path' and roots the folder by ID after resolution.",
-      "nodes": ["0014.63"]
+      "nodes": [
+        "0014.63"
+      ]
     },
     {
-      "text": "Is an existing root without root/recipes.dhall, or with recipes that lack typed state, treated as an empty or unit-state set, or refused until migrated by an ad hoc evolution?",
+      "text": "Do existing roots without recipe definitions or typed state load, or need migration?",
       "asked": 2,
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Decides whether existing KBs still load; the ADR says missing state 'fails loading/checking' and is never silently initialized, but has no upgrade policy for recipes.",
-      "nodes": ["0014.57"]
+      "nodes": [
+        "0014.57"
+      ]
     },
     {
-      "text": "Which guest fetch signature is canonical, the generic list-of-changes one or the Calendar FetchContext/FetchResult one, and what do FetchContext and FetchResult contain?",
+      "text": "Which guest fetch signature is canonical, and what do FetchContext and FetchResult contain?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "SDK types, generated bindings and options/position passing depend on it; the ADR shows two incompatible fetch signatures and never defines FetchContext or FetchResult.",
-      "nodes": ["0014.12", "0014.43"]
+      "nodes": [
+        "0014.12",
+        "0014.43"
+      ]
     },
     {
-      "text": "Do SetEvidencePayload operations count toward FetchSummary's added/updated/removed, or does the summary need separate payload-change counts?",
+      "text": "Do payload-only operations count in FetchSummary, or need separate counters?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Affects the persisted FetchSummary type; the ADR says payload-only operations are not additions, updates or removals, but the summary has only those three counters.",
-      "nodes": ["0014.47", "0014.55"]
+      "nodes": [
+        "0014.47",
+        "0014.55"
+      ]
     },
     {
-      "text": "What happens to an instance's evidence directory when the connector instance is renamed or removed from accepted configuration, and can clear target an unconfigured instance?",
+      "text": "What happens to evidence directories of renamed or removed instances?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Orphaned directories and clear-by-name need their own selection path; the ADR keys directories by plugin and hex instance name and defines only explicit clear.",
-      "nodes": ["0014.67"]
+      "nodes": [
+        "0014.67"
+      ]
     },
     {
-      "text": "Is updateRecipe's check of the existing state type nominal (same TypeRef) or structural (equal contracts)?",
+      "text": "Is updateRecipe's existing state type check nominal or structural?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Decides whether renaming a state type's module forces a migration; the ADR says updating 'checks the selected existing state type' without saying how.",
-      "nodes": ["0014.57"]
+      "nodes": [
+        "0014.57"
+      ]
     }
   ]
 }

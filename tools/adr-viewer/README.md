@@ -348,7 +348,7 @@ Snapshot format (`curated/questions/<ADR>.json`):
   "step": 187,
   "date": "2026-10-13",
   "runs": 5,
-  "summary": "2-3 sentences: how close the ADR is to implementable as written",
+  "summary": "one sentence: how close the ADR is to implementable, and its biggest gap",
   "questions": [
     { "text": "the merged question", "asked": 5, "verdict": "unanswered",
       "importance": "high", "reason": "why it matters; closest ADR text",

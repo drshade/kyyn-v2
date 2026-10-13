@@ -14,7 +14,7 @@ Steps:
    - `medium`: behaviour visible to users or operators: defaults, limits, validation, configuration changes.
    - `low`: local detail an implementer could reasonably choose and change later.
 4. **Map to decisions.** List the ids from {DECISIONS_FILE} that each question is about, or none.
-5. **Summarise** in two or three sentences how close the ADR is to implementable as written, citing the questions raised by at least {RECURRING} lists.
+5. **Summarise** in one short sentence how close the ADR is to implementable as written, naming its biggest gap.
 
 Write {OUT_FILE} as JSON with exactly this shape, questions sorted by count (descending) then importance (high first):
 
@@ -27,7 +27,7 @@ Write {OUT_FILE} as JSON with exactly this shape, questions sorted by count (des
   "summary": "…",
   "questions": [
     {
-      "text": "the merged question, in one sentence",
+      "text": "the merged question, one short sentence",
       "asked": 5,
       "verdict": "unanswered",
       "importance": "high",
