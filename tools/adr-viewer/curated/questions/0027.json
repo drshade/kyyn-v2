@@ -1,0 +1,65 @@
+{
+  "adr": "0027",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "Close to implementable: the authoring surface, provider and codec are well pinned, but the biggest gap is when JEV_TOKEN is resolved and refused (at flow start or at the first Judge) and where that failure lands.",
+  "questions": [
+    {
+      "text": "Is JEV_TOKEN resolved and the missing/empty refusal applied eagerly at flow start, or lazily on the first Judge request?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides whether non-judging flows need the secret and whether refusal lands before side effects or partway through; the ADR only says keys refuse 'before constructing the provider'.",
+      "nodes": ["0027.20"]
+    },
+    {
+      "text": "Which side validates that the returned [Answer] matches the JudgeRequest (count, kinds, index and probability ranges), and which failure does a mismatch become?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Ownership of the check and the error type (host ModelFailure vs guest FetchError) are open; the ADR says failure terminates with no partial batch and that the guest retains typed assembly.",
+      "nodes": ["0027.21", "0027.22"]
+    },
+    {
+      "text": "Are judgement requests and answers recorded anywhere (proposal evidence, run log, replay cache), or are they ephemeral?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Recording would need storage and a persisted format bound to closed-recipe proposals; the ADR only says the codec does not change persisted fact formats.",
+      "nodes": ["0027.18"]
+    },
+    {
+      "text": "How are non-finite scores (NaN, infinity) handled: rejected as malformed, rejected by the codec, or encoded specially?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Both compilers must agree on the rule and its failure path; the ADR only specifies decimal strings for finite scores.",
+      "nodes": ["0027.22"]
+    },
+    {
+      "text": "Are existing tools and closed recipes written against the old judgement API migrated in this change, or left to fail root checking?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Determines whether a migration of accepted KB sources or just a compile diagnostic is needed; the ADR rejects a compatibility facade and removes old modules from discovery but says nothing about existing callers.",
+      "nodes": ["0027.16"]
+    },
+    {
+      "text": "Which existing typed guest request carries Judge: the old judgement request reshaped to upstream types, or a new variant beside the SystemTwo request?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Changes the guest/host frame definitions on both GHC and MicroHs; the ADR says only 'an existing typed guest request' over the existing continuation protocol.",
+      "nodes": ["0027.18", "0027.22"]
+    },
+    {
+      "text": "Does the host retry or time out failed Jev requests, or does any provider exception end the flow immediately?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Retry or timeout policy adds constants and interacts with cancellation; the ADR says to translate exceptions per the SystemTwo pattern and forbids a configuration registry, but is silent on retries.",
+      "nodes": ["0027.21"]
+    }
+  ]
+}

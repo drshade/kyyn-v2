@@ -1,0 +1,124 @@
+{
+  "adr": "0009",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The capability model and request rows are specified closely enough to build, but the host-boundary failure semantics are not; the biggest gap is undefined error types and failure handling (HttpError, SecretError, FetchError, invalid UTF-8, bad stored evidence).",
+  "questions": [
+    {
+      "text": "What does ListFiles' Bool mean, and does a listing include directories, follow symlinks or hidden files, and come back in a defined order?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides host enumeration code and whether re-acquiring an unchanged folder yields identical evidence; the ADR only says paths are relative to the selected directory and enumeration failure is a typed error."
+    },
+    {
+      "text": "What happens when ReadTextFile content or an HTTP response body is not valid UTF-8: typed Left, lossy decode, or invocation failure?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Lossy decoding would make text disagree with the fingerprint over the same bytes; the ADR says text acquisition decodes UTF-8 and defines a UTF-8 HTTP boundary but not decode failure.",
+      "nodes": ["0009.33"]
+    },
+    {
+      "text": "Which GetSecret conditions (not found, invalid name) return Left SecretError, and which abort the invocation?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Fixes SecretError's constructors and whether a plugin can fall back to 'run login'; the ADR says storage failures and cancellation are invocation failures and names are validated by ADR 0016's rule, nothing more."
+    },
+    {
+      "text": "Are secret names scoped by the host per plugin or connection instance, or is GetSecret/PutSecret one global namespace?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides whether one connector can read or overwrite another's credentials and how login and acquisition share them; the ADR covers name validation only."
+    },
+    {
+      "text": "What are HttpError's constructors, and can retryable transport failures (timeout, reset) be told apart from permanent ones (DNS, TLS)?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Plugin-owned retry logic branches on it and the codec needs a fixed shape; the ADR says only that transport failures have sanitized diagnostics and statuses remain values.",
+      "nodes": ["0009.27"]
+    },
+    {
+      "text": "Does native HTTP follow redirects, decompress content, and enforce a default or per-request timeout?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Changes HttpRequest fields, Graph download code and whether Authorization is forwarded cross-host; the ADR says transport handles TLS/UTF-8 and does not hide retries, silent on redirects and timeouts."
+    },
+    {
+      "text": "Does a captured-read method's ReadEvidence/ListEvidenceIds return Left FetchError or stop the invocation when stored evidence is undecodable or the store faults, including acquisition's prior-evidence reads?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "The EvidenceRead handlers need one rule; the ADR says invalid stored evidence stops the invocation only for the KB-tool caller path while the read types permit Left FetchError.",
+      "nodes": ["0009.22", "0009.34"]
+    },
+    {
+      "text": "Is CapturedText's resolved absolute path (and WriteTextFile's returned path) canonicalised through symlinks, or only lexically joined?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "The path is used in evidence references, so it decides evidence identity; the ADR says only 'resolved absolute source path, suitable for evidence references'.",
+      "nodes": ["0009.37"]
+    },
+    {
+      "text": "What makes a Retry-After delay valid (seconds vs HTTP-date), and is there a cap on single delay, retry count or total wait?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Determines worst-case headless acquisition time; the ADR says valid delays on 429/503 are honoured via WaitSeconds and absent ones yield a retry-later error.",
+      "nodes": ["0009.27"]
+    },
+    {
+      "text": "Does the host fail the invocation or clamp to zero when WaitSeconds receives a negative duration?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "WaitSeconds returns () so there is no error channel; the ADR says waits require nonnegative durations but not how violations are handled."
+    },
+    {
+      "text": "Where do DisplayInstructions go when login runs outside the CLI (MCP, server, headless), or is login refused there?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether the LoginInteraction handler is pluggable per surface; the ADR only specifies CLI stderr output.",
+      "nodes": ["0009.26"]
+    },
+    {
+      "text": "Is FetchError one fixed SDK type with defined constructors, or a per-method declared type?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides whether adapters need one codec or one per method; host rows use FetchError concretely while the KB-tool section speaks of 'a method's declared FetchError'.",
+      "nodes": ["0009.22"]
+    },
+    {
+      "text": "What happens when a KB tool names an unknown instance or one with the wrong connector type: compile error, invocation stop, or catchable error?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether generated bindings depend on configuration and the dispatch error shape; the ADR says the host resolves and checks the named instance but not what a failed check does.",
+      "nodes": ["0009.14"]
+    },
+    {
+      "text": "What does the snapshot-query adapter return when the query fails or times out: error with partial read trace, error alone, or process failure?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Changes the adapter's stdout contract and host result type; the ADR says it returns the result and ordered read trace, with no failure case.",
+      "nodes": ["0009.11"]
+    },
+    {
+      "text": "Who consumes the ReadAccess trace, and is it persisted or only returned to the caller?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "A persisted or UI-facing trace needs a stable format and place in the result envelope; the ADR says what the trace is not (evidence, cache key) but not its use.",
+      "nodes": ["0009.11"]
+    }
+  ]
+}

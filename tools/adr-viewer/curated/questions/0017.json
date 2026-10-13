@@ -1,0 +1,121 @@
+{
+  "adr": "0017",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "Mostly implementable: types, ownership and the file sink are well specified, but the biggest gap is when output/sink compatibility is checked (at evolution acceptance or only at prepare time), closely followed by which pre-dispatch failures return FailedBeforeDispatch rather than raising Failure.",
+  "questions": [
+    {
+      "text": "Are output registrations (unknown query or sink, type mismatch, source used as sink) rejected during root/evolution validation, or only when an output is prepared?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides whether accepted roots can hold broken outputs and which component owns adapter generation; the ADR lists the rejections and says output changes follow the evolution route, but not at which stage they are rejected.",
+      "nodes": ["0017.12", "0017.01"]
+    },
+    {
+      "text": "Which pre-dispatch failures (invalid options or arguments, binding re-verification, plugin load, unresolvable artifacts) come back as FailedBeforeDispatch, and which are raised through the Failure effect?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Sets the failure channel and result shape for CLI/MCP/automation; the ADR defines FailedBeforeDispatch and says invalid options cause no invocation, but no text says what produces it, and InvokeSink already takes checked options.",
+      "nodes": ["0017.16", "0017.18", "0017.15"]
+    },
+    {
+      "text": "Which SinkError variant does the file sink return for each host write failure (before the rename versus a failed or ambiguous rename)?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides RejectedByDestination versus Uncertain for file writes; the ADR says failed writes propagate as SinkError and never as success, and maps the variants to outcomes, but not which variant a write failure uses.",
+      "nodes": ["0017.17", "0017.18"]
+    },
+    {
+      "text": "May an explicit candidate export invoke the real configured sink, and if so how is the candidate identified in the result or the delivered output?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether publish accepts candidate roots and whether unaccepted content can overwrite the accepted destination; the ADR allows candidate export clearly identified as such, but not whether it dispatches or where the marker lives.",
+      "nodes": ["0017.01", "0017.16"]
+    },
+    {
+      "text": "Does the generated adapter require exact structural equality between renderer result and sink Input, or allow looser matching such as extra fields, aliases or newtypes?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether the adapter is a type assertion or conversion code; the ADR says it type-checks structural descriptors and that matching names alone is not enough, but gives no compatibility rule.",
+      "nodes": ["0017.09", "0017.12"]
+    },
+    {
+      "text": "Must the file sink remove its temporary file when a write fails?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Failed publishes could leave stray temp files beside the destination; the ADR specifies temp-file-plus-rename, permissions and symlink behaviour but says nothing about cleanup.",
+      "nodes": ["0017.17"]
+    },
+    {
+      "text": "Is a connector's source or sink role decided per method or per configured instance, and can one local-file instance serve both with shared config?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Shapes the persisted plugin configuration and the source-as-sink check; SinkReference names a method and local-file supplies a sink alongside its source with FileConfig, but sharing of instances and config is unstated.",
+      "nodes": ["0017.12", "0017.17"]
+    },
+    {
+      "text": "Must the file sink fsync the temporary file and directory, and how are failures after the rename classified?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Determines the durability guarantee and which failures can occur after replacement; the ADR requires atomic rename but says nothing about durability.",
+      "nodes": ["0017.17", "0017.18"]
+    },
+    {
+      "text": "Does a sink declare idempotency in its registered signature, and does the host act on it?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Would add a field to the sink registration and inspection output; the ADR says to distinguish idempotent actions, that behaviour belongs to the sink and not to infer from names, but not whether it is declared metadata.",
+      "nodes": ["0017.18"]
+    },
+    {
+      "text": "Who resolves artifact references in a prepared input, the host before dispatch or the plugin during publish, and can a renderer create new artifacts?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether a bad artifact is a pre-dispatch failure or a post-dispatch error; the ADR says references must resolve fixed bytes or fail and defines loadArtifact semantics, but not who calls it or when.",
+      "nodes": ["0017.06", "0017.18"]
+    },
+    {
+      "text": "Can publish target any historical accepted root, or always the current accepted head?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether preview/publish take a root selector on CLI/MCP/Web; the ADR says publish selects the accepted root once and need not compare with a newer head, but not whether older roots are selectable.",
+      "nodes": ["0017.01"]
+    },
+    {
+      "text": "What is the shape of the publish result that identifies the selected root and sink, given DeliveryOutcome carries neither?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Changes what CLI/MCP serialize and possibly the Delivery effect's type; the ADR requires results to identify root and sink without a persistent receipt, but defines no wrapper.",
+      "nodes": ["0017.16"]
+    },
+    {
+      "text": "Must preview redact secret-bearing sink configuration fields when showing the checked configuration?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "A generic preview would print credentials verbatim unless the config contract marks secrets; the ADR says preview shows checked configuration and forbids plugin-specific logic in the handler.",
+      "nodes": ["0017.14"]
+    },
+    {
+      "text": "Which surfaces (Web, CLI, MCP) expose publish, and may an MCP agent invoke an external sink without a human?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides which endpoints and tools to build and whether agent publishing is gated; the ADR says automation may compose prepare and invoke without human interaction but never names the publish surfaces.",
+      "nodes": ["0017.16"]
+    }
+  ]
+}

@@ -285,12 +285,13 @@ handed the ADR as it stands. It reads only the ADR text, never the code, so it
 scores the spec on its own. Agreement between the spec and the code is what the
 lanes show.
 
-**Method.** Five agents each read the ADR blind and list the questions they would
+**Method.** Three agents each read the ADR blind and list the questions they would
 need answered before implementing it, asking only what the ADR does not already
-settle. A sixth agent, the judge, merges the five lists, drops anything the ADR
+settle. A fourth agent, the judge, merges the three lists, drops anything the ADR
 answers, rates each question's importance on a fixed scale and maps it to the
 lane's decisions. No single agent picks the questions that count. A question
-counts when **at least 3 of the 5** raised it independently; the rest are mostly
+counts when **at least 2 of the 3** raised it independently (at least 60% of the
+runs, so 3 of 5 if more runs are used); the rest are mostly
 one agent's quirks and are kept only for reference.
 
 **Score:** the recurring questions by importance, **high · medium · low**.
@@ -309,7 +310,7 @@ split, so compare raw counts for one ADR and use the ratio only across ADRs of
 very different size.
 
 **Cadence.** Snapshots are taken when asked for, or at most monthly, for the
-ADRs someone wants scored. Never per change: each snapshot of one ADR is six
+ADRs someone wants scored. Never per change: each snapshot of one ADR is four
 agents. One file holds an ADR's latest snapshot, so taking a new one replaces
 it and git keeps the history.
 
@@ -323,11 +324,11 @@ it and git keeps the history.
    `git show <sha>:architecture/adr/<file> > adr.md` and
    `cabal run -v0 adr-viewer -- questions --decisions <ADR> > decisions.txt`.
    Lanes should be current through `S`, so the decisions match the text.
-3. Start five agents in parallel with `prompts/ask.md`, `{ADR_FILE}` set to the
-   scratch `adr.md` and `{OUT_FILE}` to `run-A.md` … `run-E.md` beside it. They
+3. Start three agents in parallel with `prompts/ask.md`, `{ADR_FILE}` set to the
+   scratch `adr.md` and `{OUT_FILE}` to `run-A.md` … `run-C.md` beside it. They
    must not see the repository, the code or the lanes. Never edit their lists.
 4. Start one judge with `prompts/judge.md`. Fill in the scratch files,
-   `{OUT_FILE}` as `curated/questions/<ADR>.json`, `{RUNS}` 5, `{RECURRING}` 3,
+   `{OUT_FILE}` as `curated/questions/<ADR>.json`, `{RUNS}` 3, `{RECURRING}` 2,
    `{ADR}`, `{STEP}` `S` and `{DATE}` today. The judge sees the decision list,
    never the lane's realisation evidence.
 5. Run `check`, read the snapshot, and commit it. Do not edit questions by hand:
@@ -336,7 +337,7 @@ it and git keeps the history.
 
 **Limits.** Agents ask how to build, not what the product should do, so gaps of
 intent (what should happen to drafts, say) are under-counted. When the ADR is
-silent but there is an obvious default, all five may assume it and the gap does
+silent but there is an obvious default, every agent may assume it and the gap does
 not appear. Every question is visible with its reasons, so review the snapshot
 as you would a lane.
 

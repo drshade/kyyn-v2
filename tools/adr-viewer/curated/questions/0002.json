@@ -1,0 +1,121 @@
+{
+  "adr": "0002",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "Compilation, caching and process ownership are specified closely enough to build, but the conversational ExecuteGuest contract (callback semantics, termination, returned bytes) is undefined and is the biggest gap.",
+  "questions": [
+    {
+      "text": "What does the ExecuteGuest callback receive (raw chunks or de-framed requests), and what does a Nothing result mean for ending the conversation?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Determines the conversation loop, its termination and abort semantics; the ADR gives only the type and defers framing to ADR 0007, defining Nothing only for ReadStdout (EOF).",
+      "nodes": ["0002.16", "0002.02"]
+    },
+    {
+      "text": "What is the String argument of executeCompiledEntry, given the entry is already fixed in the CompiledProgram?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides whether one artifact holds several runtime-selected entries (changing bytecode and launch configuration) or the string is only diagnostic context; the ADR says only that the helper maps nonzero exit to RuntimeUnavailable.",
+      "nodes": ["0002.16"]
+    },
+    {
+      "text": "Which channel reports GuestSources validation failures (duplicate paths, collisions, missing entry): smart-constructor error, Left [Diagnostic], or Failure?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Places the check in the domain package or the interpreter and classifies it as authoring diagnostic or operational fault; the ADR lists the checks but only classifies compiler exit statuses.",
+      "nodes": ["0002.10", "0002.13"]
+    },
+    {
+      "text": "What environment, locale and working directory does the mhseval process get at execution time?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "ProcessSpec needs a complete environment and guest text I/O depends on locale; the ADR fixes the compiler environment (MHSDIR, MHSCPPHS, empty PATH, C.UTF-8) but says only that execution's launch configuration comes from the toolchain.",
+      "nodes": ["0002.16", "0002.09"]
+    },
+    {
+      "text": "Where does the checkout-local Dhall inspection cache live, and is the checkout the KB repository or the Kyyn source tree?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides directory plumbing, gitignore handling and whether release builds cache inspection; the ADR says only 'checkout-local' and lists the key inputs.",
+      "nodes": ["0002.19"]
+    },
+    {
+      "text": "Where does toolchainRevision come from, and is the compiled-artifact cache disabled when it is unknown (e.g. plain Cabal builds)?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "It is part of the fingerprint and cache key, so its source decides stale-artifact reuse; the ADR says it identifies the pinned MicroHs source and disables only inspection caching for unidentified builds.",
+      "nodes": ["0002.17"]
+    },
+    {
+      "text": "Does 'equivalent bytecode' between gmhs and self-hosted mhs mean byte-identical .comb output or behavioural equivalence?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Defines the parity guarantee and whether the cache key can ignore which compiler build produced an artifact; the ADR only says full integration checks this parity.",
+      "nodes": ["0002.14"]
+    },
+    {
+      "text": "What path validation or normalization does GuestSources apply (absolute paths, '..', '.', empty segments, non-UTF-8 names)?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Unnormalized paths give one tree two digests and could escape the build scope; the ADR defines the digest over sorted length-delimited paths and case-sensitive collision checks only.",
+      "nodes": ["0002.10"]
+    },
+    {
+      "text": "How does application composition locate the installed toolchain to build GuestToolchain (relative to the executable, embedded prefix, env override)?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Sets resolution code, missing-toolchain failure and dev/test overrides; the ADR rules out ambient PATH and names the bin/mhs install path but not how it is resolved.",
+      "nodes": ["0002.14"]
+    },
+    {
+      "text": "Is a corrupt inspection cache entry a hard failure or a reported miss that is recomputed?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Changes control flow and user experience; the ADR says corrupt cache diagnostics identify the entry to remove, implying but not stating a failure.",
+      "nodes": ["0002.19"]
+    },
+    {
+      "text": "Does toolchainRevision cover only the MicroHs compiler source or also cpphs, mhseval and the base/SDK libraries?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "A preprocessor-only bump could reuse stale artifacts; the ADR says the revision identifies the MicroHs source yet treats library/preprocessor as part of the pinned toolchain.",
+      "nodes": ["0002.17", "0002.10"]
+    },
+    {
+      "text": "Which fixed CPP defines are passed to the compiler?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "They select SDK/dependency code paths and are part of the cache key; the ADR mentions 'fixed CPP defines' without naming them.",
+      "nodes": ["0002.10", "0002.17"]
+    },
+    {
+      "text": "Are there size limits on guest stdout, stderr and compiler output, and what happens when one is exceeded?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Unbounded buffering lets a runaway guest exhaust host memory; the ADR says output is drained and returned as bytes with no limit.",
+      "nodes": ["0002.08", "0002.16"]
+    },
+    {
+      "text": "What are the returned Bytes of ExecuteGuest in conversational mode: the final framed result, leftover stdout, or all stdout?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides what callers receive and how results are mapped; the ADR gives only the (Bytes, ProcessExit) result type.",
+      "nodes": ["0002.16"]
+    }
+  ]
+}

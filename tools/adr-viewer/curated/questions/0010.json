@@ -1,0 +1,103 @@
+{
+  "adr": "0010",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The ad hoc path is close to implementable as written, but the recipe-based path is underspecified; its biggest gap is where the recipe constraints are enforced and what a violation returns, followed by kind's place in captured-input equality and the recipe scaffold.",
+  "questions": [
+    {
+      "text": "Is the manifest's kind part of captured-input equality, and do MarkReady/MarkDraft preserve it?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether a kind switch makes acceptance refuse the stale candidate; the ADR says kind is 'captured with its evaluation inputs' and changing it 'invalidates the saved candidate', yet the equality rule lists only revision, name, explanation and before/target/change bytes.",
+      "nodes": ["0010.52", "0010.55"]
+    },
+    {
+      "text": "Which component enforces the recipe-based constraints (recipe exists, schema/definitions/source/config preserved, state present), against what baseline, and what does a violation return?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Sets the failure semantics and which handler owns the check; the ADR only says to 'compare captured source/configuration as well' and 'Missing state is an error', with no phase, baseline or rejection variant.",
+      "nodes": ["0010.52", "0010.53"]
+    },
+    {
+      "text": "What does removing an unaccepted workspace delete (candidate dirs, latest pointer), and how is a stale candidate kept from loading under a reused ID?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Allocating max+1 over live directories frees the highest number for reuse, so an old latest/<id> could load against a new workspace; the ADR only says 'Remove only unaccepted workspaces through an explicit operation' and gives no constructor.",
+      "nodes": ["0010.22", "0010.43", "0010.58"]
+    },
+    {
+      "text": "Is the .kyyn/ candidate store per repository or per KB, and how are latest/<evolution-id> pointers namespaced across KBs?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "IDs are unique only per KB, so a repository-root store collides; the ADR says the 'repository and KB prefix come from the explicit load location' but never says where .kyyn/ is rooted."
+    },
+    {
+      "text": "Who computes the Before source validation report shown in preview, and is it stored with the candidate?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Changes EvaluatedEvolution/candidate.dhall shapes and handler rows; the ADR requires that 'Preview surfaces the source validation report separately' but no type or operation carries it.",
+      "nodes": ["0010.40"]
+    },
+    {
+      "text": "How does CreateEvolution receive the EvolutionKind and RecipeId, and what does the recipe-based scaffold write to change/Evolution.hs?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Shapes the CLI/MCP creation surface and the first draft; the ADR says creation 'selects an ad hoc or recipe-based scaffold from EvolutionKind', but the signature has no kind and only the ad hoc identityEvolution scaffold is shown.",
+      "nodes": ["0010.22", "0010.52"]
+    },
+    {
+      "text": "Is rebase a Kyyn operation that rewrites the revision and refreshes before/ (and marks Draft), or a manual author edit?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether an EvolutionAuthoring constructor exists and whether target/ is touched; the ADR says 'rebasing refreshes them' and describes the agent updating Before.revision, but lists no operation.",
+      "nodes": ["0010.19"]
+    },
+    {
+      "text": "Does RecipeChange's StoredRecipe carry recipe state and its before/after contracts, as RecordedFact carries a RootContract?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Fixes the archived record shape and whether history can be read without recompiling; the ADR says recipe archive records 'retain ... state changes, with before/after contracts and values' but RecipeChange has no contract field.",
+      "nodes": ["0010.53", "0010.54"]
+    },
+    {
+      "text": "How are RecipeChange entries derived and ordered relative to FactChanges, and do the no-change, whole-contract and duplicate-ID rules apply to them?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Determines report bytes and associativity tests; the ADR gives ordering ('collection identity and FactId') and duplicate rules for facts only.",
+      "nodes": ["0010.54"]
+    },
+    {
+      "text": "Which PreviewRejection does a host boundary failure that is not a chain mismatch produce, such as duplicate intermediate IDs or a malformed observation value?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Changes how outcomes surface and what tests expect; the ADR maps only chain mismatches to ProposedCodeRejected while saying duplicates are 'rejected at every boundary'.",
+      "nodes": ["0010.30"]
+    },
+    {
+      "text": "Is the generated evolution ID slug length-limited, and is an over-long name truncated or refused?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "An unbounded slug turns into an operational filesystem failure instead of a refusal; the ADR defines the slug alphabet and refuses an empty slug but sets no length.",
+      "nodes": ["0010.43"]
+    },
+    {
+      "text": "What is the per-save <id> in .kyyn/candidates/<id>/, and how is it generated uniquely?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "A fresh directory per save cannot be keyed by evolution ID alone; the ADR says 'writes a fresh .kyyn/candidates/<id>/' and never defines <id>, though any unique private name would do."
+    }
+  ]
+}

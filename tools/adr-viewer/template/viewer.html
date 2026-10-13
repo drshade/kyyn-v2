@@ -97,7 +97,7 @@
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" class="node partial"/></svg> partly delivered</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done"/></svg> realised</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned ended"/></svg> superseded</span>
-    <span title="Questions at least 3 of 5 blind agents would need answered to implement the ADR, by importance"><span class="gap high">2·1·0</span> spec gaps (high·medium·low)</span>
+    <span title="Questions most blind agents would need answered to implement the ADR, by importance"><span class="gap high">2·1·0</span> spec gaps (high·medium·low)</span>
   </div>
 </header>
 <main>
@@ -215,8 +215,9 @@ function labelLines(id) {
 const snapshot = (id, t) => { const q = D.questions[id]; return q && q.step <= t ? q : null; };
 const gapClass = q => q.tally[0] ? "high" : q.tally[1] ? "medium" : "";
 const gapText = q => q.tally.join("·");
+const need = q => Math.ceil(q.runs * 3 / 5);  // recurring: at least 60% of runs, as in Questions.hs
 const gapTip = q => `Specification gaps at step ${q.step}: ${q.tally[0]} high, ${q.tally[1]} medium, ${q.tally[2]} low ` +
-  `questions raised by at least 3 of ${q.runs} blind agents`;
+  `questions raised by at least ${need(q)} of ${q.runs} blind agents`;
 function gapBadge(q, attrs) {
   const g = el("text", { ...attrs, class: "gap " + gapClass(q) });
   g.textContent = attrs["text-anchor"] ? gapText(q) : `spec gaps ${gapText(q)}`;
@@ -409,7 +410,7 @@ function laneQuestions(id) {
     <div class="meta" title="${gapTip(snap)}">step ${snap.step} · ${esc(snap.date)}${changed}</div>
     <p>${esc(snap.summary)}</p>
     <ul class="questions">${rec.map(q => questionItem(q, snap.runs)).join("")}</ul>
-    ${rest.length ? `<details><summary>${rest.length} raised by fewer than 3 runs</summary><ul class="questions">${rest.map(q => questionItem(q, snap.runs)).join("")}</ul></details>` : ""}`;
+    ${rest.length ? `<details><summary>${rest.length} raised by fewer than ${need(snap)} runs</summary><ul class="questions">${rest.map(q => questionItem(q, snap.runs)).join("")}</ul></details>` : ""}`;
 }
 function showLane(id) {
   const lane = D.lanes[id];

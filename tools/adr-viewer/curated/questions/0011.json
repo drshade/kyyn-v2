@@ -1,0 +1,105 @@
+{
+  "adr": "0011",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The checking pipeline, effects and example semantics are specified in detail, but the shared diagnostic wire types are not: DiagnosticCode's shape and namespace and the location coordinate semantics are undefined, and those are the biggest gap.",
+  "questions": [
+    {
+      "text": "What is DiagnosticCode's representation, and how are host-emitted codes allocated and kept apart from KB-authored ones?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Fixes the shared SDK type, the JSON codec and a stable host code catalogue; the ADR only says diagnostics have a \"stable code\".",
+      "nodes": ["0011.13"]
+    },
+    {
+      "text": "Where is the declared as-of value for time-dependent checks declared, and how does it reach a validator typed Root -> ValidationReport, including on checkRootAt?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "May change the validator adapter, stdin payload and check signatures; the ADR says only \"take a declared as-of value; no hidden now\".",
+      "nodes": ["0011.10", "0011.02"]
+    },
+    {
+      "text": "What does a plugin's pure validateConfig return, which checking step runs it, and how are its diagnostics located and merged?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides which RootExecution constructor owns the call and which Left/Rejected path a failure takes; the ADR says it is pure, called via generated code, as part of checking config files.",
+      "nodes": ["0011.11"]
+    },
+    {
+      "text": "Must example names be unique within a root, and is a duplicate a checking error?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "ExampleLocation name is ambiguous without uniqueness; the ADR defines the name field but says nothing about duplicates.",
+      "nodes": ["0011.07", "0011.17"]
+    },
+    {
+      "text": "What file layout does encodeExample produce under root/examples/, and where is the example name stored?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Persisted format; the ADR gives the directory and metadata fields (query name, requirement, explanation, ContractIds) but omits the name and the file split.",
+      "nodes": ["0011.17", "0011.07"]
+    },
+    {
+      "text": "What is SourceLocation's file path relative to, and what unit does its column count?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Shared wire type and compiler-span mapping; the ADR says only one-based positions encoded as canonical integer strings.",
+      "nodes": ["0011.13"]
+    },
+    {
+      "text": "Is FactLocation's field a single top-level name or a nested path, and what types are collection and factId?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Fixes the shared SDK type and codec renderers resolve; the ADR names the three components and says field is optional.",
+      "nodes": ["0011.13"]
+    },
+    {
+      "text": "Are compiler warnings from a successful preparation surfaced in Passed, and is a Left holding only warnings always a rejection?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "PrepareRoot's Either type cannot carry warnings on success and checkReport classifies by severity; the ADR says Left means rejection and compiler diagnostics go in Rejected.",
+      "nodes": ["0011.23"]
+    },
+    {
+      "text": "Does PreparedRoot retain the compiled plugin methods, tools, closed recipes and output renderers from the compile gate, or are they discarded and recompiled later?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Changes PreparedRoot's contents and whether PrepareOutput takes PreparedRoot; the ADR lists only validator and queries in PreparedRoot but puts the others in the gate.",
+      "nodes": ["0011.23", "0011.06", "0011.24"]
+    },
+    {
+      "text": "Does checkRootAt on an unknown Git revision return Rejected with a diagnostic or raise an operational Failure?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Failure semantics for callers and surfaces; the ADR says only that checkRootAt \"admits failure of an unknown ordinary Git commit\".",
+      "nodes": ["0011.20", "0011.22"]
+    },
+    {
+      "text": "How does a flat ValidationReport keep structural, semantic and example results distinguishable?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "May need a category field or separate lists in the persisted/wire shape; the ADR demands three distinct results yet defines one flat diagnostic list.",
+      "nodes": ["0011.13"]
+    },
+    {
+      "text": "What does the host do with a well-formed diagnostic whose location points at a nonexistent fact, field or example?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides decoder behaviour and what surfaces can rely on; the ADR covers only malformed protocol data as a decoding failure.",
+      "nodes": ["0011.13"]
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "adr": "0004",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The wrapper conventions are close to implementable, but the ADR never says which Git ref or revision is the accepted root or how a loaded Root records its identity.",
+  "questions": [
+    {
+      "text": "Which Git ref or revision is the accepted root, and how does a KnowledgeBase holding only repository and prefix locate it?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Sets the store signature and failure cases (missing ref, working tree vs commit); the ADR only says a KB 'has one accepted root' and that an accepted revision does not confer Validated.",
+      "nodes": ["0004.11"]
+    },
+    {
+      "text": "Does the host Root record the revision, content identity and dependency identities it was loaded from, given the record has no field for them?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides Root's shape and what comparing two snapshots means; the ADR calls Root a descriptor of 'executable meaning/dependency identities' but its record is only schema, facts, code, recipes."
+    },
+    {
+      "text": "What metadata does a workspace persist for compile-free draft listing and archives, where is it stored, and what moves a workspace into archived?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Persisted on-disk shape and lifecycle transitions; the ADR only says an archive 'can retain metadata without loading either typed root' and tests 'draft listing without compilation'.",
+      "nodes": ["0004.03"]
+    },
+    {
+      "text": "Which modules inside kyyn-porcelain may import the Validated constructor, and what mechanism enforces it?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "The construction guarantee depends on it and may need a new lint or CI check; the ADR puts it in a non-public validation-owned module governed by unnamed 'package/import checks'.",
+      "nodes": ["0004.10"]
+    },
+    {
+      "text": "What is the shape of the evolution id in evolutions/<id>/, and who allocates and validates it?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "The id is part of the persisted path layout and listing; the ADR only says stores derive evolutions/<id>/ beneath the prefix.",
+      "nodes": ["0004.11"]
+    },
+    {
+      "text": "Is CheckedEvolution its own record with a Before field, or a name for Candidate (Validated Root) paired with workspace material?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Sets the type and acceptance signature; the ADR says it groups Before, the validated result and workspace material yet must not duplicate base or captured material.",
+      "nodes": ["0004.03"]
+    },
+    {
+      "text": "What does 'compatible' mean in explicit compatible loading, and what happens when a workspace or archive is incompatible?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Determines the check performed and the load result/error type; the ADR says only 'Only explicit compatible loading invokes the runtime.'",
+      "nodes": ["0004.03"]
+    },
+    {
+      "text": "Does opening a KnowledgeBase check that root/ exists under the prefix, or are layout failures deferred to the first root load?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides the open API's error type and which operations can fail; the ADR only says opening must not eagerly load all workspaces.",
+      "nodes": ["0004.11"]
+    },
+    {
+      "text": "What validation rules apply to a Subtree prefix beyond nonempty, including normalisation and nested or overlapping KBs in one repository?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Shapes the smart constructor and whether overlap checks are needed; the ADR says only that Subtree 'supplies a nonempty relative directory'.",
+      "nodes": ["0004.11"]
+    },
+    {
+      "text": "Must checking reject a candidate whose payload was changed by fmap after evaluation, e.g. via a root digest in the report?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Enforcement would add a digest to the persisted report and a new checking failure; the ADR says publication checks the evaluated root, not an unrecorded mapping, but names no mechanism.",
+      "nodes": ["0004.04"]
+    },
+    {
+      "text": "What happens when an accepted root fails its fresh check on validated load, and can workspaces still be created from it to repair it?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Failure semantics for open, list and read; the ADR allows diagnostic inspection and lets evaluation admit a structurally readable Root, but never covers a failing accepted root."
+    },
+    {
+      "text": "What rule decides which config files count as non-secret supporting files in CodeSnapshot, and what happens to secret files?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "A wrong loader rule leaks secrets or drops needed config; the ADR names root/plugins/config/*.dhall and root/examples/ as included but gives no exclusion rule."
+    }
+  ]
+}

@@ -17,7 +17,7 @@ import qualified Data.Text as T
 -- | Recurring questions by importance.
 data Tally = Tally { tHigh, tMedium, tLow :: Int } deriving (Eq, Show)
 
--- | Raised by at least three in five of the independent runs. Questions fewer
+-- | Raised by at least 60% of the independent runs (2 of 3, 3 of 5). Questions fewer
 -- runs raised are mostly one agent's quirks and stay out of the score.
 recurring :: Snapshot -> Question -> Bool
 recurring s q = questionAsked q * 5 >= snapshotRuns s * 3
