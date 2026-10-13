@@ -27,11 +27,25 @@ reads and writes. Neither carries knowledge of the other's past: no version
 numbers, compatibility readers, defaults for missing fields, legacy detectors or
 migration hints.
 
-Kyyn's types and derived contracts are the integrity check. When a KB no longer
-matches the installed Kyyn, Kyyn fails with the precise decode, type or compile
-error. Reconciling the two is the KB agent's job: it repairs the KB on disk, and
-Kyyn honours that repair. Kyyn does not adapt to old KBs, and KBs do not anticipate
-future Kyyns.
+Prefer repairability over backwards compatibility. Kyyn's types and derived
+contracts are the integrity check. When a KB no longer matches the installed
+Kyyn, report the precise decode, type or compile error, identifying the affected
+artifact and location where available. Reconciling the two is the author's or
+KB agent's job: it repairs code and data on disk, and Kyyn honours that repair.
+Kyyn neither repairs KBs automatically nor executes historical contracts. KBs do
+not anticipate future Kyyns.
+
+Kyyn must not make a KB unrepairable by requiring obsolete, unrelated code to
+execute before accepting an explicit repair. This does not promise that every
+repair can be expressed as an evolution against an unreadable old root. Authors
+may repair and commit source or data directly, rebase a draft, or rework and rerun
+historical evolutions under current contracts where needed. Keeping history does
+not require keeping historical code executable.
+
+Before adding recovery machinery, establish whether an agent can reasonably
+repair the KB using existing tools and useful diagnostics. Remove demonstrated
+obstacles to explicit repair; do not make repair unnecessary through compatibility
+layers, automatic migrations or special legacy execution paths.
 
 Identity, contract and required-data checks remain. External API and dependency
 versions are separate concerns.
