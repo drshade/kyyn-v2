@@ -1,7 +1,7 @@
 {
   "adr": "0018",
   "title": "CLI, MCP and web share application operations",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0018.01",
@@ -1088,6 +1088,71 @@
         }
       ],
       "confidence": "high"
+    },
+    {
+      "id": "0018.46",
+      "seq": 177,
+      "pr": 226,
+      "summary": "`root output list/show/preview/publish` with separate `--input` and `--options`",
+      "detail": "Output commands move under `root`: inspection shows query argument/result and sink options/default/result contracts; preview takes `--input` and performs no writes; publish adds separate Dhall `--options` checked against the sink's contract, defaulting when omitted. There is no generic `--path`, MCP/Web keep the same separation, and browsing still never invokes a sink.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.06"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 adds `root output list/show/preview/publish`, with --input decoded against the query contract and --options against the sink options contract (default when omitted); preview never dispatches. CLI only: MCP and Web do not exist"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0018.47",
+      "seq": 177,
+      "pr": 226,
+      "summary": "`root query list/show/execute` with typed `--input` arguments",
+      "detail": "The root query group (listed since seq 143) executes a registered query with a Dhall `--input` checked against its argument contract; a unit argument may be omitted.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / CLI navigation and KB selection",
+        "Decision / MCP and Web"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "later_step",
+        "seq": 179,
+        "evidence": "PR #228 adds `root query list/show/execute`: show renders contracts without running the query, execute checks --input (omittable for unit) against the selected validated root"
+      },
+      "confidence": "medium"
+    },
+    {
+      "id": "0018.48",
+      "seq": 186,
+      "pr": 237,
+      "summary": "Discovery adds KyynQueryBindings and vendored plugin modules with a plugin origin",
+      "detail": "Guest discovery includes the selected root's generated KyynQueryBindings (Query alias and collection bindings), using the same generator as query execution. Vendored plugin source modules join with a `plugin` origin alongside sdk/generated/kb. Private codecs and execution wrappers stay out of the catalogue.",
+      "kind": "refine",
+      "supersedes": [
+        "0018.39"
+      ],
+      "sections": [
+        "Decision / CLI navigation and KB selection"
+      ],
+      "anchors": [
+        "KyynQueryBindings"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 186,
+        "evidence": "PR #237 adds PluginOrigin and lists vendored plugin modules and KyynQueryBindings in WorkspaceApi discovery"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -1110,7 +1175,12 @@
       "seq": 159,
       "pr": 207,
       "note": "Removes residual wording about the retired fetch-history/pending-work selector after PR 206; no change in requirement."
+    },
+    {
+      "seq": 183,
+      "pr": 234,
+      "note": "Drops `evolution recover` and reassigns already-accepted retries from exit 4 to a domain refusal (exit 1): acceptance and checkout repair are owned by ADR 0012. Exit 4 still means a successful acceptance needing checkout repair, as 0018.11 records."
     }
   ],
-  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment: six Decision nodes. The transport-codec paragraph is an example elaborating the shared-operations commitment and is merged into 0018.01, as is the metadata-only listing point; the founding Alternatives (local single-owner, bind locally, guard foreign origins) and Verification (listing never starts MicroHs, same result across surfaces) produce no nodes. The founding MCP/Web half (0018.03, .04, .06, and the codec part of .01) is still unrealised at cursor 166: every journey shipped is CLI-only, though the founding Verification demanded that Web and MCP be designed and tested in each slice rather than added after the CLI. The title still promises three shared surfaces. The 'CLI navigation and KB selection' subsection (seq 43) became the de facto CLI spec and absorbed decisions that are not about surface sharing (Git identity, hooks, MHSCPPHS, SDK catalogue presentation); it may deserve its own ADR. The evidence/curation surface churned hard: fetch history with --at (seq 82), then latest-only with cursors (84), then recipe-scoped pending/acknowledgement (89/93), then typed recipe state with current-only evidence (158). Each was implemented before being replaced, and nodes .25, .27-.30 and .33-.34 have all ended by seq 158. At seq 89 the 'plugin methods read latest evidence' rule was delegated to ADR 0014 rather than reversed, so .29 is recorded as removed, not replaced. Seq 143 (desired-state reconciliation): metadata removal, the RootStore-to-Git-discovery wording, root schema/collection/fact argument changes (covered by root browsing .38), tap/plugin-install forms (.36/.26), the InspectRootApi/ApiOrigin/ApiSelection contract (restating .39's sdk/generated/kb origins) and dropping `plugin update` are editorial. Two nodes come from it: .42, already-built commands no node covered (code_first), and .43, which relaxes seq 63's no-durable-cache rule to allow ADR 0005's inspection cache. That is a partial reversal, modelled as a refine so the discovery node stays current. Seq 158 also rewrites the 143 hierarchy's `recipe run <plugin> <instance>...` to `run --input`; that is covered by .44 and not modelled as ending .42. The hierarchy still lists root query, output, web/mcp serve, doctor and kb show, none implemented. Seq 65 (MHSCPPHS configuration) is a borderline low-level refine. .05 is marked realised by CLI root browsing (seq 137), though the founding text pictured a web workbench and named guest queries are still absent."
+  "notes": "Founding (seq 1) has no ### subsections, so it is split per distinct commitment: six Decision nodes. The transport-codec paragraph is an example elaborating the shared-operations commitment and is merged into 0018.01, as is the metadata-only listing point; the founding Alternatives (local single-owner, bind locally, guard foreign origins) and Verification (listing never starts MicroHs, same result across surfaces) produce no nodes. The founding MCP/Web half (0018.03, .04, .06, and the codec part of .01) is still unrealised at cursor 187: every journey shipped is CLI-only, though the founding Verification demanded that Web and MCP be designed and tested in each slice rather than added after the CLI. The title still promises three shared surfaces. The 'CLI navigation and KB selection' subsection (seq 43) became the de facto CLI spec and absorbed decisions that are not about surface sharing (Git identity, hooks, MHSCPPHS, SDK catalogue presentation); it may deserve its own ADR. The evidence/curation surface churned hard: fetch history with --at (seq 82), then latest-only with cursors (84), then recipe-scoped pending/acknowledgement (89/93), then typed recipe state with current-only evidence (158). Each was implemented before being replaced, and nodes .25, .27-.30 and .33-.34 have all ended by seq 158. At seq 89 the 'plugin methods read latest evidence' rule was delegated to ADR 0014 rather than reversed, so .29 is recorded as removed, not replaced. Seq 143 (desired-state reconciliation): metadata removal, the RootStore-to-Git-discovery wording, root schema/collection/fact argument changes (covered by root browsing .38), tap/plugin-install forms (.36/.26), the InspectRootApi/ApiOrigin/ApiSelection contract (restating .39's sdk/generated/kb origins) and dropping `plugin update` are editorial. Two nodes come from it: .42, already-built commands no node covered (code_first), and .43, which relaxes seq 63's no-durable-cache rule to allow ADR 0005's inspection cache. That is a partial reversal, modelled as a refine so the discovery node stays current. Seq 158 also rewrites the 143 hierarchy's `recipe run <plugin> <instance>...` to `run --input`; that is covered by .44 and not modelled as ending .42. The hierarchy still lists web/mcp serve, doctor and kb show, none implemented. Seq 177 (PR #226) moved `output` under `root` with preview/publish and separate `--input`/`--options`. I recorded that as a refine of the founding browsing-never-publishes node (.46 refines .06), plus .47 for the root query group's typed `--input`. Seq 179 (PR #228) realises .47 and seq 180 (PR #229) realises .46, CLI only. Seq 183's removal of `recover` and the exit-code reassignment are editorial here because ADR 0012 owns acceptance repair (reviewer: check the exit-code part against .11). Seq 186 adds plugin-origin and query-binding discovery (.48 refines .39). Seq 65 (MHSCPPHS configuration) is a borderline low-level refine. .05 is marked realised by CLI root browsing (seq 137), though the founding text pictured a web workbench and named guest queries are still absent."
 }

@@ -1,7 +1,7 @@
 {
   "adr": "0019",
   "title": "Typed failures, explicit cancellation and modest operational state",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0019.01",
@@ -206,7 +206,12 @@
           "evidence": "PR #42 (predating this node) makes the next acceptance or explicit recovery establish the outcome from Git history; CLI interruption reporting and its distinct exit follow in #44"
         }
       ],
-      "confidence": "medium"
+      "confidence": "medium",
+      "ended": {
+        "seq": 183,
+        "how": "replaced",
+        "by": "0019.12"
+      }
     },
     {
       "id": "0019.09",
@@ -284,8 +289,31 @@
         "evidence": "PR #186 reconciles to existing behaviour; candidates persisted and checked post-materialization since PR #37 (seq 36), when ADR 0011 also dropped ProposedCodeRejected from checking"
       },
       "confidence": "medium"
+    },
+    {
+      "id": "0019.12",
+      "seq": 183,
+      "pr": 234,
+      "summary": "Interrupted acceptance: operator repairs via Git; stale retry is BaseMismatch",
+      "detail": "Process death or cancellation after the ref update may yield no normal result and never implies non-acceptance, but Kyyn no longer establishes the outcome itself: the operator inspects git status and history and repairs the checkout through Git, and a retry against the advanced head is refused as BaseMismatch with that hint. A CLI handling interruption names the selected evolution, directs the operator to git status and Git repair, never claims non-acceptance, and exits distinctly from an ordinary refusal.",
+      "kind": "replace",
+      "supersedes": [
+        "0019.08"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "BaseMismatch"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 184,
+        "evidence": "PR #235 removes the recover command; the CLI interruption and base-mismatch diagnostics now say to inspect git status and restore the checkout from Git (Kyyn.Surfaces.Result)"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [],
-  "notes": "Founding ADR with no ### subsections; split into 7 commitments (typed boundary failures, Failure vocabulary, compile-error classification, compiler-text policy, post-effect outcome honesty, scoped cancellation, no operation registry). The lane changed only three times. The most notable thing is how far the founding Failure vocabulary was from what got built: PR #7 deliberately implemented only the constructors in use, and five of the seven founding constructors (CodeRejected, ProtocolBroken, ContractMismatch, InvalidRequest, OperationCancelled) never existed in code. The ADR only caught up at the seq 143 desired-state reconciliation, which I treated as replacing 0019.02 and 0019.03 (code_first) rather than as editorial because it reverses concrete commitments: cancellation stops being a Failure constructor and checking-code compile errors move from ProposedCodeRejected to post-materialization Rejected. Seq 42 reworded the post-commit cancellation promise ('cancelling after ref update reports acceptance') into the weaker, more honest 'may yield no result; inspect Git', aligning with ADR 0012's crash-recovery design. Realisation seqs for the broad founding principles (.01, .04, .06) are judgement calls with medium/low confidence."
+  "notes": "Founding ADR with no ### subsections; split into 7 commitments (typed boundary failures, Failure vocabulary, compile-error classification, compiler-text policy, post-effect outcome honesty, scoped cancellation, no operation registry). The lane changed only four times. The most notable thing is how far the founding Failure vocabulary was from what got built: PR #7 deliberately implemented only the constructors in use, and five of the seven founding constructors (CodeRejected, ProtocolBroken, ContractMismatch, InvalidRequest, OperationCancelled) never existed in code. The ADR only caught up at the seq 143 desired-state reconciliation, which I treated as replacing 0019.02 and 0019.03 (code_first) rather than as editorial because it reverses concrete commitments: cancellation stops being a Failure constructor and checking-code compile errors move from ProposedCodeRejected to post-materialization Rejected. Seq 42 reworded the post-commit cancellation promise ('cancelling after ref update reports acceptance') into the weaker, more honest 'may yield no result; inspect Git', aligning with ADR 0012's crash-recovery design. Realisation seqs for the broad founding principles (.01, .04, .06) are judgement calls with medium/low confidence. Seq 183 (PR #234) withdrew the automatic Git-history outcome lookup and the recovery command named by 0019.08, so it is a replace (0019.12): the operator now establishes the outcome and repairs the checkout through Git, and a stale retry is refused as BaseMismatch. This follows ADR 0012's simplification; PR #235 (seq 184) built it the next step. The removed 'no dedicated projection/recovery service' sentence still holds through 0019.07."
 }

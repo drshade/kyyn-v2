@@ -1,7 +1,7 @@
 {
   "adr": "0015",
   "title": "Locally built plugins group source and sink connectors",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0015.01",
@@ -778,6 +778,57 @@
         }
       ],
       "confidence": "high"
+    },
+    {
+      "id": "0015.32",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Captured-read input is a reusable index; generic inspection skips preparation",
+      "detail": "PluginRead's LoadCapturedInput yields an EvidenceIndex that ExecuteCapturedMethod and composed tools reuse for one invocation, reading payloads selectively through EvidenceStore (ADR 0014). Generic evidence list/show use the lighter selection operation, not PluginPreparation.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.29"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "PluginRead",
+        "LoadCapturedInput",
+        "ExecuteCapturedMethod",
+        "EvidenceIndex"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 changes PluginRead to load and reuse an EvidenceIndex, checks the method's expected payload contract, and adds compiler-free selection for list/show"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0015.33",
+      "seq": 180,
+      "pr": 229,
+      "summary": "Connector registration list holds both SourceConnector and SinkConnector",
+      "detail": "Plugins export connectors :: [Connector], whose SourceConnector and SinkConnector constructors come from Kyyn.Plugin; sink connectors register alongside sources, with config, input, options and result contracts derived from checked signatures.",
+      "kind": "refine",
+      "supersedes": [
+        "0015.26"
+      ],
+      "sections": [
+        "Decision / One plugin, several connectors"
+      ],
+      "anchors": [
+        "Connector",
+        "SourceConnector",
+        "SinkConnector"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 180,
+        "evidence": "PR #229 adds the Connector type with source/sink registration and compiler-derived sink contracts, migrating first-party plugins"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -810,7 +861,17 @@
       "seq": 119,
       "pr": 155,
       "note": "Status wording and naming the repository-root kyyn-tap.dhall catalogue file; realises tap discovery and pre-install guides"
+    },
+    {
+      "seq": 174,
+      "pr": 222,
+      "note": "LoadCapturedInput's signature now takes EvidenceSelection, matching the selection operation built in this step; no change in commitment beyond 0015.32."
+    },
+    {
+      "seq": 177,
+      "pr": 226,
+      "note": "Sink operations gain separately typed invocation options with plugin-declared defaults and discoverable contracts; this is the output-publishing model owned by ADR 0017, restated here."
     }
   ],
-  "notes": "The founding text is ambitious (taps with library/template packages, sinks, a generic callPlugin host API, a dedicated update command), and most of it was either narrowed or replaced by what got built: tap kinds collapsed to plugin-only catalogues (seq 114), callPlugin became PluginPreparation/PluginRead (reconciled at seq 143, code-first), and `plugin update` became repeat install (seq 120). The install slice flip-flopped quickly: seq 70 specified installing local working-tree contents, then seq 71 (same day, before implementation shipped) made it Git-only with revision-bearing origins; seq 79 then moved the install target from root/ into an evolution. Registration went through two shapes: named type strings (seq 81) then signature-derived contracts (seq 115/116), absorbing the short-lived fetchOptionsType field; AcquisitionContext (seq 110) never shipped and was replaced by a unified row at seq 113. Spec ahead of code at end of history: sink connectors, source-dependency vendoring, and the Graph Mail/Meetings/Files family (seq 151) remain unrealised. Split judgement: the founding 'One plugin, several connectors' subsection was split into hierarchy (04), typed method boundary (05) and instance-selected dispatch (06); 'Explicit updates' was split into the update operation (07), the no-versioning constraint (08) and evolution adoption (09). Seq 143 also removed the ConnectorKind Source|Sink type from the code block while keeping kind as 'intended use' text; treated as editorial within 0015.29. PR #217 (seq 168) added the Mail source to the microsoft-graph package; Meetings and Files are still missing, so 0015.31 stays unrealised."
+  "notes": "The founding text is ambitious (taps with library/template packages, sinks, a generic callPlugin host API, a dedicated update command), and most of it was either narrowed or replaced by what got built: tap kinds collapsed to plugin-only catalogues (seq 114), callPlugin became PluginPreparation/PluginRead (reconciled at seq 143, code-first), and `plugin update` became repeat install (seq 120). The install slice flip-flopped quickly: seq 70 specified installing local working-tree contents, then seq 71 (same day, before implementation shipped) made it Git-only with revision-bearing origins; seq 79 then moved the install target from root/ into an evolution. Registration went through two shapes: named type strings (seq 81) then signature-derived contracts (seq 115/116), absorbing the short-lived fetchOptionsType field; AcquisitionContext (seq 110) never shipped and was replaced by a unified row at seq 113. Spec ahead of code at seq 169: sink connectors (built at seq 180), source-dependency vendoring, and the Graph Mail/Meetings/Files family (seq 151) remain unrealised. Split judgement: the founding 'One plugin, several connectors' subsection was split into hierarchy (04), typed method boundary (05) and instance-selected dispatch (06); 'Explicit updates' was split into the update operation (07), the no-versioning constraint (08) and evolution adoption (09). Seq 143 also removed the ConnectorKind Source|Sink type from the code block while keeping kind as 'intended use' text; treated as editorial within 0015.29. PR #217 (seq 168) added the Mail source to the microsoft-graph package; Meetings and Files are still missing, so 0015.31 stays unrealised. Seq 172 (PR #220) made the captured-read input an evidence index reused per invocation, with generic inspection bypassing preparation (0015.32, built by PR #222 at seq 174, whose signature tweak is editorial). Seq 177's sink-options text is ADR 0017's and editorial here. Seq 180 (PR #229) built the first sink connector and changed registration to a Connector list with Source and Sink constructors (0015.33, same step); this also supplies the sink half that 0015.04 noted as missing. The Graph family (0015.31) still lacks Meetings and Files."
 }

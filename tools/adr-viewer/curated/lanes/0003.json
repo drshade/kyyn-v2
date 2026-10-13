@@ -1,7 +1,7 @@
 {
   "adr": "0003",
   "title": "Effects express architectural dependencies",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0003.01",
@@ -158,10 +158,11 @@
         "writeRequestedFile"
       ],
       "realised": {
-        "how": "unrealised",
-        "evidence": "writeRequestedFile never appears in code; file sinks remain unbuilt per seq 143 PR body"
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229's runDelivery resolves sink file-write path text against the composition-supplied KB directory (absolute paths kept) into DirectoryScope/RelativePath and writes through FileSystem publishBytes with no IOE; the lowering is inline in the Delivery interpreter rather than a helper named writeRequestedFile, and rejections are sink values rather than Failure"
       },
-      "confidence": "high"
+      "confidence": "medium"
     },
     {
       "id": "0003.07",
@@ -384,6 +385,31 @@
         "evidence": "PR #104: stable lock identity across clear; clear returns whether a cache existed"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0003.16",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Caller names the locked scope's single current document file",
+      "detail": "WithLockedDocument takes the current document's filename (state.dhall, or the evidence store's index.dhallb) instead of a fixed state.dhall; replacement is still temp-file-and-rename within the scope, which owns one current document, not a multi-document transaction.",
+      "kind": "refine",
+      "supersedes": [
+        "0003.15"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "DocumentPersistence",
+        "WithLockedDocument",
+        "RelativePath"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 adds the RelativePath filename argument to WithLockedDocument and uses it for the evidence index"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -398,5 +424,5 @@
       "note": "Desired-state reconciliation: removes status/date/basis, renames the table example to checkEvolution/executeCheckEvolution, and moves the runSchemaInspectionIO row to ADR 0005 (ownership move, not a change in requirement)"
     }
   ],
-  "notes": "Most of the lane is the FileSystem plumbing API growing one primitive per implementation PR (seqs 8-38), each written and built in the same step, so the spec tracked code tightly. The founding API itself was revised before any code: ListEntries/WriteBytesAtomically were dropped at seq 8 and atomic replacement only came back as ReplaceBytes at seq 35. Two founding commitments are still unrealised: Kyyn.Application.Compose (code uses Kyyn.Composition and the ADR was never corrected, even in the seq 143 reconciliation) and writeRequestedFile for guest/file-sink writes. The DocumentPersistence archive capability lived for a single step (83->84) before the latest-only evidence reversal removed it. I treated the five-layer list, package DAG and IOE confinement as one founding node, because they form one commitment."
+  "notes": "Most of the lane is the FileSystem plumbing API growing one primitive per implementation PR (seqs 8-38), each written and built in the same step, so the spec tracked code tightly. The founding API itself was revised before any code: ListEntries/WriteBytesAtomically were dropped at seq 8 and atomic replacement only came back as ReplaceBytes at seq 35. Two founding commitments stayed unrealised for most of the history: Kyyn.Application.Compose (code uses Kyyn.Composition and the ADR was never corrected, even in the seq 143 reconciliation) and writeRequestedFile for guest/file-sink writes (built at seq 180). The DocumentPersistence archive capability lived for a single step (83->84) before the latest-only evidence reversal removed it. I treated the five-layer list, package DAG and IOE confinement as one founding node, because they form one commitment. Seq 172 (PR #220) generalised DocumentPersistence to a caller-named current document so the evidence store can lock index.dhallb (0003.16, built by PR #222 at seq 174). Seq 180 (PR #229) built the first file sink: its Delivery interpreter resolves guest write paths against the KB directory and writes through scoped FileSystem, realising 0003.06 at medium confidence because the helper is not called writeRequestedFile. Kyyn.Application.Compose (0003.04) is still unbuilt."
 }

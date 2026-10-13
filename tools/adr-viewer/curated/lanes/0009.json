@@ -1,7 +1,7 @@
 {
   "adr": "0009",
   "title": "Typed capability rows describe program effects",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0009.01",
@@ -99,8 +99,9 @@
       ],
       "anchors": [],
       "realised": {
-        "how": "unrealised",
-        "evidence": "No sink connector, renderer or delivery operation exists in the kyyn-v2 source at end of history"
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 adds the Delivery capability (InvokeSink/runDelivery): the output operation prepares a checked query result and explicitly invokes the configured sink with config, options and input; queries never invoke sinks. Renderers became snapshot queries under ADR 0017, and only the local-file text sink exists"
       },
       "confidence": "medium"
     },
@@ -426,7 +427,12 @@
         "seq": 85,
         "evidence": "PR #104 adds fingerprinted Evidence and native CapturedText with a known SHA-256 test vector"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 177,
+        "how": "replaced",
+        "by": "0009.35"
+      }
     },
     {
       "id": "0009.18",
@@ -714,7 +720,12 @@
         "seq": 111,
         "evidence": "PR #145 implements fetchOptionsType and checks --options before acquisition"
       },
-      "confidence": "medium"
+      "confidence": "medium",
+      "ended": {
+        "seq": 172,
+        "how": "replaced",
+        "by": "0009.34"
+      }
     },
     {
       "id": "0009.29",
@@ -846,6 +857,107 @@
         "evidence": "PR #202 implements packed guest Text and raw HTTP bodies bypassing nested JSON strings"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0009.34",
+      "seq": 172,
+      "pr": 220,
+      "summary": "Acquisition broker enumerates a captured index; selected payloads via EvidenceStore",
+      "detail": "The acquisition workflow opens the current evidence index (not a fully loaded capture) before entering the broker; guest enumeration uses that index and individual reads decode only the selected payload through EvidenceStore, so executeAcquisition's row regains EvidenceStore (plus ContentDigest). The broker never reopens a newer index mid-invocation; the argument is still a wire value from checked config and typed fetch options, and publication uses the captured fetch as its expected base.",
+      "kind": "replace",
+      "supersedes": [
+        "0009.28"
+      ],
+      "sections": [
+        "Decision / Typed dispatch"
+      ],
+      "anchors": [
+        "executeAcquisition",
+        "EvidenceIndex",
+        "EvidenceStore",
+        "ContentDigest"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 174,
+        "evidence": "PR #222 passes an EvidenceIndex into acquisition and the broker, reading selected payloads through EvidenceStore"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.35",
+      "seq": 177,
+      "pr": 226,
+      "summary": "FileRead and FileWrite resolve relative paths against the invocation's KB",
+      "detail": "File requests share one host path resolution: relative paths resolve against the invocation's KB directory, never the shell or guest temporary directory, and absolute paths remain supported, so the folder connector accepts KB-relative directories (withdrawing 0009.17's absolute-only rule). ReadTextFile still returns UTF-8 text with a SHA-256 fingerprint of the same bytes, and enumeration failure is still a typed error.",
+      "kind": "replace",
+      "supersedes": [
+        "0009.17"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FileRead",
+        "ReadTextFile",
+        "ListFiles",
+        "CapturedText"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 178,
+        "evidence": "PR #227 passes explicit KB scope through acquisition to resolve relative file requests, keeping absolute support, and updates local-file validation"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.36",
+      "seq": 177,
+      "pr": 226,
+      "summary": "Sinks get their own FileWrite request row with WriteTextFile",
+      "detail": "Sink execution has a separate request row (SinkCalls = FileWrite) that acquisition and captured reads never grant. WriteTextFile sends files/write {path, content}; the host writes UTF-8, creates parents, atomically replaces the target and returns Either SinkError FilePath, with SinkRejected only when failure is known to precede replacement and SinkUncertain otherwise.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "FileWrite",
+        "WriteTextFile",
+        "SinkCalls",
+        "SinkError",
+        "SinkRejected",
+        "SinkUncertain"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 180,
+        "evidence": "PR #229 adds the FileWrite/WriteTextFile SDK row and a host Delivery interpreter decoding files/write frames, publishing bytes atomically and mapping Rejected/Uncertain results"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.37",
+      "seq": 178,
+      "pr": 227,
+      "summary": "CapturedText carries the resolved absolute source path",
+      "detail": "ReadTextFile's CapturedText gains the resolved absolute FilePath alongside text and fingerprint, so evidence references stay absolute when the configured directory is KB-relative.",
+      "kind": "refine",
+      "supersedes": [
+        "0009.35"
+      ],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [
+        "CapturedText"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 178,
+        "evidence": "PR #227: 'CapturedText now carries the resolved source path so evidence references remain absolute'"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -885,5 +997,5 @@
       "note": "Desired-state reconciliation: drops status/basis lines, turns 'illustrative' into contract wording, 'proposes' to 'defines', adds model turns to the tool table row (covered by 0009.31) and HttpTransport/SecretStore/Waiting to the executeAcquisition signature to match code already shipped in seq 113."
     }
   ],
-  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04 never implemented). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row. Seq 167 (PR #215) realised the blob rows of 0009.32. The network algebras and login row were proved at seq 112 before installed connectors received them at 113."
+  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04, built only at seq 180). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row. Seq 167 (PR #215) realised the blob rows of 0009.32. The network algebras and login row were proved at seq 112 before installed connectors received them at 113. Seq 172 (PR #220) reversed 0009.18's 'no EvidenceStore dependency': the broker now enumerates a captured index and reads selected payloads through EvidenceStore (0009.34 replaces 0009.28, built at seq 174). Seq 177 (PR #226) added the sink request row (0009.36) and shared KB-relative path resolution for FileRead and FileWrite (0009.35 replaces 0009.17, withdrawing the absolute-directory rule); its sink-options wording in the capability table belongs to ADR 0017. Seq 178 (PR #227) built relative source paths and refined CapturedText with the resolved path (0009.37). Seq 180 (PR #229) built the FileWrite sink and explicit delivery, realising 0009.36 and the founding 0009.04 (medium: one sink, renderers are now queries)."
 }

@@ -1,7 +1,7 @@
 {
   "adr": "0023",
   "title": "Two first-class interfaces with a shared design and review loop",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0023.01",

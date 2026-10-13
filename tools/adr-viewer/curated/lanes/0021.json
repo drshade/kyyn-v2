@@ -1,7 +1,7 @@
 {
   "adr": "0021",
   "title": "Architecture is a tested deliverable before feature volume",
-  "cursor": 169,
+  "cursor": 187,
   "nodes": [
     {
       "id": "0021.01",
@@ -383,7 +383,12 @@
       "seq": 143,
       "pr": 186,
       "note": "Desired-state reconcile: drops status/date/basis and rewords the paging caveat in Alternatives and consequences; no change in requirements"
+    },
+    {
+      "seq": 183,
+      "pr": 234,
+      "note": "End-to-end verification list renames 'post-publication recovery' to 'checkout repair', following ADR 0012's removal of the recovery command; Verification sections produce no nodes and the decision is recorded in 0012's lane."
     }
   ],
-  "notes": "This lane was mostly a roadmap: about two-thirds of the founding text was six ordered implementation slices. The real project departed from that order at seq 4 (a CLI todo journey replaced the reporting-first, Web/MCP-first slice 3), and seq 142 deleted the whole roadmap, saying ordering belongs in issues. I gave each slice a node because the section is neither Context, Consequences nor Verification, and the slices show clearly what was skipped. Slice 3 (reporting KB through Web and MCP) and slice 6 (renderer to file sink) were never built, and nothing in the new End-to-end verification list is tracked as a node, because Verification sections produce none. Slices 2, 4 and 5 were reached piecemeal and out of order (plugins and secrets well before outputs). I was unsure whether the slice nodes should count as decisions at all; if they should not, the lane comes down to 0021.01-03, 0021.10 and 0021.12. Slices 2, 4, 5 and the CLI journey were each built over several kernel PRs before the step that completed them; deliveries record those parts."
+  "notes": "This lane was mostly a roadmap: about two-thirds of the founding text was six ordered implementation slices. The real project departed from that order at seq 4 (a CLI todo journey replaced the reporting-first, Web/MCP-first slice 3), and seq 142 deleted the whole roadmap, saying ordering belongs in issues. I gave each slice a node because the section is neither Context, Consequences nor Verification, and the slices show clearly what was skipped. Slice 3 (reporting KB through Web and MCP) and slice 6 (renderer to file sink) were never built, and nothing in the new End-to-end verification list is tracked as a node, because Verification sections produce none. Slices 2, 4 and 5 were reached piecemeal and out of order (plugins and secrets well before outputs). I was unsure whether the slice nodes should count as decisions at all; if they should not, the lane comes down to 0021.01-03, 0021.10 and 0021.12. Slices 2, 4, 5 and the CLI journey were each built over several kernel PRs before the step that completed them; deliveries record those parts. Seq 183 (PR #234) reworded the verification list to match ADR 0012's simplified checkout repair; editorial."
 }
