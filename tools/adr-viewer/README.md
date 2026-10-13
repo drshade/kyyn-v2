@@ -32,6 +32,8 @@ git + GitHub ──extract──▶ evidence/ ──curate (agent)──▶ cura
 | curate | an agent, following this README | `evidence/` (including worklists) | `curated/lanes/<ADR>.json` only |
 | `check` | the tool | `evidence/`, `curated/` | nothing; prints diagnostics |
 | `pending` | the tool | `evidence/`, `curated/` | nothing; prints the curator's work list |
+| spec gaps (on demand) | agents, following [Specification gaps](#specification-gaps-on-demand) | one ADR's text | `curated/questions/<ADR>.json` only |
+| `questions` | the tool | `evidence/`, `curated/` | nothing; prints each ADR's snapshot status |
 | `render` | the tool | `evidence/`, `curated/` | one HTML file |
 
 ```
@@ -44,8 +46,10 @@ tools/adr-viewer/
 │       ├── <ADR>.jsonl       every step that changed that ADR, with its diff
 │       ├── anchors.json      every anchor's spec/code history
 │       └── steps.jsonl       every step with PR body and changed code files
-└── curated/                  written only by the curating agent
-    └── lanes/<ADR>.json      decisions for one ADR, current through its cursor
+├── curated/                  written only by agents
+│   ├── lanes/<ADR>.json      decisions for one ADR, current through its cursor
+│   └── questions/<ADR>.json  the ADR's latest specification-gap snapshot
+└── prompts/                  the fixed prompts for a specification-gap snapshot
 ```
 
 Never edit `evidence/` by hand; rerun `extract`. Never let the tool write
@@ -60,6 +64,7 @@ the root build. `extract` needs an authenticated `gh` for PR titles and bodies.
 cabal run -v0 adr-viewer -- extract --repo ../.. --output evidence
 cabal run -v0 adr-viewer -- check                      # defaults: --evidence evidence --curated curated
 cabal run -v0 adr-viewer -- pending                    # add --json for machine-readable output
+cabal run -v0 adr-viewer -- questions                  # add --decisions <ADR> for a judge's decision list
 cabal run -v0 adr-viewer -- render --output /tmp/adr-history.html
 cabal test                                             # model, checks and ADR readings
 ```
@@ -273,6 +278,88 @@ were none. `pr` is the step's PR number,
 or null for a direct commit. Keep `notes` current: it is shown when a reader
 clicks the lane.
 
+## Specification gaps (on demand)
+
+A second, independent measure: how much an implementer would have to guess if
+handed the ADR as it stands. It reads only the ADR text, never the code, so it
+scores the spec on its own. Agreement between the spec and the code is what the
+lanes show.
+
+**Method.** Five agents each read the ADR blind and list the questions they would
+need answered before implementing it, asking only what the ADR does not already
+settle. A sixth agent, the judge, merges the five lists, drops anything the ADR
+answers, rates each question's importance on a fixed scale and maps it to the
+lane's decisions. No single agent picks the questions that count. A question
+counts when **at least 3 of the 5** raised it independently; the rest are mostly
+one agent's quirks and are kept only for reference.
+
+**Score:** the recurring questions by importance, **high · medium · low**.
+
+- `high`: persisted or fingerprinted data shapes, failure and atomicity
+  semantics, guarantees, ownership between components
+- `medium`: behaviour users or operators see: defaults, limits, validation,
+  configuration changes
+- `low`: local detail an implementer could choose and change later
+
+Read the score as "decisions an implementer would have to make that the ADR
+leaves open". Settling questions does not drive it to zero, because answering
+one level exposes the next. The side panel also gives the number of live
+decisions, but questions per decision depends on how finely the lane was
+split, so compare raw counts for one ADR and use the ratio only across ADRs of
+very different size.
+
+**Cadence.** Snapshots are taken when asked for, or at most monthly, for the
+ADRs someone wants scored. Never per change: each snapshot of one ADR is six
+agents. One file holds an ADR's latest snapshot, so taking a new one replaces
+it and git keeps the history.
+
+**Procedure** for each ADR to score, from this directory:
+
+1. Run `extract` if the evidence is behind `main`, then `questions` to see each
+   snapshot's status. Use the last evidence step `S` and its sha (printed by
+   `questions`).
+2. In a scratch directory outside the repository, write the ADR as of `S` and
+   its decisions:
+   `git show <sha>:architecture/adr/<file> > adr.md` and
+   `cabal run -v0 adr-viewer -- questions --decisions <ADR> > decisions.txt`.
+   Lanes should be current through `S`, so the decisions match the text.
+3. Start five agents in parallel with `prompts/ask.md`, `{ADR_FILE}` set to the
+   scratch `adr.md` and `{OUT_FILE}` to `run-A.md` … `run-E.md` beside it. They
+   must not see the repository, the code or the lanes. Never edit their lists.
+4. Start one judge with `prompts/judge.md`. Fill in the scratch files,
+   `{OUT_FILE}` as `curated/questions/<ADR>.json`, `{RUNS}` 5, `{RECURRING}` 3,
+   `{ADR}`, `{STEP}` `S` and `{DATE}` today. The judge sees the decision list,
+   never the lane's realisation evidence.
+5. Run `check`, read the snapshot, and commit it. Do not edit questions by hand:
+   rerun the whole snapshot instead. Change the prompts only deliberately, and
+   then expect scores taken before and after not to be comparable.
+
+**Limits.** Agents ask how to build, not what the product should do, so gaps of
+intent (what should happen to drafts, say) are under-counted. When the ADR is
+silent but there is an obvious default, all five may assume it and the gap does
+not appear. Every question is visible with its reasons, so review the snapshot
+as you would a lane.
+
+Snapshot format (`curated/questions/<ADR>.json`):
+
+```json
+{
+  "adr": "0014",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 5,
+  "summary": "2-3 sentences: how close the ADR is to implementable as written",
+  "questions": [
+    { "text": "the merged question", "asked": 5, "verdict": "unanswered",
+      "importance": "high", "reason": "why it matters; closest ADR text",
+      "nodes": ["0014.65"] }
+  ]
+}
+```
+
+`verdict` is `unanswered` or `partly_answered`; `importance` is `high`,
+`medium` or `low`; omit `nodes` when a question maps to no decision.
+
 ## What `check` enforces
 
 Errors (render refuses):
@@ -287,6 +374,9 @@ Errors (render refuses):
 - nothing ends before it is born, and no node or editorial seq is beyond the cursor
 - **coverage:** every step up to the cursor that changed the ADR is a node's
   `seq` or an editorial entry
+- a snapshot's file name matches its `adr`, which exists; its step is between
+  the ADR's birth and the last step; `runs` is at least 1; every question has
+  text, an `asked` between 1 and `runs`, and `nodes` that exist in the lane
 
 Warnings:
 
@@ -300,6 +390,7 @@ Warnings:
 - a node's seq is not a step that changed its ADR
 - a realisation is dated inconsistently with its `how`
 - a replacement is not named
+- a snapshot question names a decision that was not live at the snapshot's step
 
 ## How the page is derived
 
@@ -331,7 +422,10 @@ and read its `notes`, or use **Expand all**. On an expanded lane each decision
 reads left to right on its track: white where the ADR states it, yellow pips
 where steps delivered part of it, green where the code completed it (one green
 dot when that was the same step). Faded marks belong to a decision that has
-since been superseded.
+since been superseded. A lane with a specification-gap snapshot shows its score
+(high·medium·low) beside the label once the shown step reaches the snapshot;
+the lane's side panel lists the questions, and a decision's lists those mapped
+to it.
 
 ## Limits
 

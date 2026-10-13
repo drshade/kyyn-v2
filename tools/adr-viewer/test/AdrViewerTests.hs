@@ -9,6 +9,7 @@ import AdrViewer.Adr
 import AdrViewer.Check
 import AdrViewer.Model
 import AdrViewer.Pending
+import AdrViewer.Questions
 import AdrViewer.Types
 import Control.Monad (unless)
 import Data.Aeson (decode, encode)
@@ -76,7 +77,7 @@ main = do
   -- steps (4, 6), and its open decision; an uncurated ADR lists its founding steps.
   let behind = lane { laneCursor = 3, laneNodes = [a, c], laneEditorial = [Editorial 2 Nothing "wording"] }
       inputs = Inputs (Repo "r" Nothing) steps (adrs <> [Adr "0002" Nothing 2 Nothing])
-                 [("0001.json", behind)]
+                 [("0001.json", behind)] []
       work = pending inputs
   assert "pending lanes wrong" (map lpAdr work == ["0001", "0002"])
   case work of
@@ -87,6 +88,23 @@ main = do
       assert "uncurated ADR has a cursor" (lpCursor p2 == Nothing)
     _ -> fail "pending returned too few lanes"
   assert "current lane reported pending" (notElem "0001" (map lpAdr (pending inputs { inLanes = [("0001.json", lane)] })))
+
+  -- Specification gaps: only questions at least 3 of 5 runs raised count, and a
+  -- snapshot's questions must name real decisions and plausible run counts.
+  let q t asked imp ns = Question t asked Unanswered imp "" (if null ns then Nothing else Just ns)
+      snap = Snapshot "0001" 6 "2026-10-13" 5 ""
+        [q "a" 5 HighImpact ["0001.03"], q "b" 3 MediumImpact [], q "c" 2 HighImpact [], q "d" 4 LowImpact []]
+      snapDiags s' = checkSnapshot steps adrs [lane] "0001.json" s'
+  assert "tally counts the wrong questions" (tally snap == Tally 1 1 1)
+  assert "valid snapshot has errors" (null [d | d <- snapDiags snap, dSeverity d == Error])
+  let bad = snap { snapshotQuestions = [q "x" 6 HighImpact [], q "y" 1 LowImpact ["0001.99"]] }
+      badErrors = [dMessage d | d <- snapDiags bad, dSeverity d == Error]
+  assert "asked beyond runs accepted" (any (T.isInfixOf "asked by 6 of 5") badErrors)
+  assert "unknown decision accepted" (any (T.isInfixOf "unknown decision 0001.99") badErrors)
+  assert "snapshot beyond the evidence accepted"
+    (any ((== Error) . dSeverity) (snapDiags snap { snapshotStep = 99 }))
+  assert "snapshot JSON does not round-trip" (decode (encode snap) == Just snap)
+  assert "importance not encoded as a word" (encode HighImpact == "\"high\"" && encode PartlyAnswered == "\"partly_answered\"")
 
   let props = stdArgs { maxSuccess = 300, chatty = False }
       prop name p = quickCheckWithResult props p >>= \r -> case r of

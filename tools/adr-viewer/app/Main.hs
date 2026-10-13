@@ -5,10 +5,13 @@ import AdrViewer.Check
 import AdrViewer.Extract
 import AdrViewer.Json (encodeCompact)
 import AdrViewer.Pending
+import AdrViewer.Questions (renderDecisions, renderStatus)
 import AdrViewer.Types (stepSeq)
 import qualified Data.ByteString.Lazy.Char8 as BLC
 import AdrViewer.Render (renderPage)
 import qualified Data.ByteString.Lazy as BL
+import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import Options.Applicative
 import System.Directory (createDirectoryIfMissing)
@@ -21,6 +24,7 @@ data Command
   | Check FilePath FilePath
   | Pending FilePath FilePath Bool
   | Render FilePath FilePath FilePath
+  | Questions FilePath FilePath (Maybe Text)
 
 main :: IO ()
 main = execParser (info (commands <**> helper) (fullDesc <> progDesc "Plan-versus-build history of a repository's ADRs")) >>= run
@@ -32,6 +36,9 @@ commands = hsubparser $ mconcat
   , command "pending" (info (Pending <$> evidenceOpt <*> curatedOpt
         <*> switch (long "json" <> help "Machine-readable output"))
       (progDesc "List, per lane, the steps after its cursor and the open decisions they could realise"))
+  , command "questions" (info (Questions <$> evidenceOpt <*> curatedOpt
+        <*> optional (strOption (long "decisions" <> metavar "ADR" <> help "Print the ADR's live decisions for a judge instead")))
+      (progDesc "Show each ADR's specification-gap snapshot and whether the ADR changed since"))
   , command "render" (info (Render <$> evidenceOpt <*> curatedOpt <*> outputOpt "HTML file to write")
       (progDesc "Check, then write the self-contained time-travel page")) ]
   where
@@ -55,6 +62,11 @@ run (Pending evidence curated asJson) = do
       work = pending inputs
   if asJson then BLC.putStrLn (encodeCompact (pendingJson lastSeq work))
             else TIO.putStr (renderPending lastSeq work)
+run (Questions evidence curated decisions) = do
+  inputs <- load evidence curated
+  case decisions of
+    Nothing -> TIO.putStr (renderStatus inputs)
+    Just adr -> either (\e -> TIO.hPutStrLn stderr (T.pack "error: " <> e) >> exitFailure) TIO.putStr (renderDecisions inputs adr)
 run (Render evidence curated output) = do
   inputs <- load evidence curated
   report inputs
