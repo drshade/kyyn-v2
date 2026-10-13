@@ -1,0 +1,114 @@
+{
+  "adr": "0028",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "Mostly implementable: the flow, turn, contract and frozen-evolution paths are well specified, but the biggest gap is how a closed recipe's stored state is validated and kept decodable when its flow's state type changes.",
+  "questions": [
+    {
+      "text": "When is a closed recipe's stored state checked against the flow-derived state type, and what happens when an evolution changes that type?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides whether root checking must compile flows and require same-evolution state migration, or whether stale state only fails at run; ADR says only that the contract is derived from the signature and creation supplies the state.",
+      "nodes": [
+        "0028.21",
+        "0028.05"
+      ]
+    },
+    {
+      "text": "Which type carries model-turn, persistent decode and Judgement failures in Flow's ExceptT FetchError channel, and can flows catch and recover from them?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Either changes the public FetchError type, widens Flow/liftTool, or makes failures terminal host diagnostics; ADR says failures are typed and sanitized and provider errors keep existing behavior, but not where they surface or whether retries happen.",
+      "nodes": [
+        "0028.01",
+        "0028.10"
+      ]
+    },
+    {
+      "text": "How is a flow-backed KB tool declared so the host runs it through interpret with model and evidence handlers instead of as an ordinary function?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Shapes the tool declaration schema, discovery and preparation (model.dhall capture); ADR says registering one exposes the same checked contract, and rules out a second registry only for recipes.",
+      "nodes": [
+        "0028.01",
+        "0028.11"
+      ]
+    },
+    {
+      "text": "Does a recipe's ADR 0014 lifecycle status (active/paused/retired) gate root recipe run or proposeFromRecipe?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Adds or removes a pre-run gate and diagnostic visible to operators; ADR only says a closed run selects exactly one recipe and empty evidence does not prohibit a run.",
+      "nodes": [
+        "0028.21"
+      ]
+    },
+    {
+      "text": "Are closed recipes enrolled in ADR 0014's per-revision pending-item queue, and if so how does a run record verdicts for items it consumed?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Ownership between the source queue and authored flow selection; ADR says source selection belongs to authored code and reads do not update state, but says nothing on queue membership or verdicts.",
+      "nodes": [
+        "0028.21",
+        "0028.23"
+      ]
+    },
+    {
+      "text": "For Append (Fact a), does the flow (possibly the model) choose the new fact's ID, or does the host/SDK assign it deterministically at application?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Determines the persisted frozen Dhall shape, the model-facing schema and whether later edits can reference appended facts; ADR reuses duplicate-append failures, implying caller IDs, but never states it.",
+      "nodes": [
+        "0028.23"
+      ]
+    },
+    {
+      "text": "Must the host verify a model-produced Rationale's evidence citations against evidence actually captured in the invocation?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "A guarantee about provenance in persisted proposals needing a capture log and validation; ADR says only that Rationale carries citations and diffs come from observation checks, not model claims.",
+      "nodes": [
+        "0028.23"
+      ]
+    },
+    {
+      "text": "How does the ADR 0014 recipe definition represent open versus closed recipes, and can one recipe be both?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Persisted recipe-definition shape and show/describe/run dispatch depend on it; ADR says closed recipes store a flow name, while Context says recipes support both modes.",
+      "nodes": [
+        "0028.05"
+      ]
+    },
+    {
+      "text": "Are a closed recipe's flow reference, signature and generated contracts checked during accepted-root checking, or only lazily at run/describe?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether an unrunnable recipe can be accepted and whether root checking needs the compiler pipeline; ADR says only that unsupported projections fail before model calls.",
+      "nodes": [
+        "0028.05",
+        "0028.16"
+      ]
+    },
+    {
+      "text": "Is ModelConfiguration built solely from root/model.dhall, or can flows set per-draft parameters like temperature, max tokens or system prompt?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Determines whether guests need a configuration surface through TakeModelTurn and whether root tool show fully describes model use; ADR says model.dhall selects one provider/model captured per turn.",
+      "nodes": [
+        "0028.11"
+      ]
+    }
+  ]
+}

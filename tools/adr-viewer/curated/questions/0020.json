@@ -1,0 +1,147 @@
+{
+  "adr": "0020",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The ADR sets the toolchain bundle, layout and report vocabulary clearly, but it is not yet implementable as written: the biggest gap is the install contract, meaning how the SetupReport reaches an agent (wire format and exit status) and what a failed or rerun install leaves on disk.",
+  "questions": [
+    {
+      "text": "If installation fails partway, does it roll back to the previous good state or keep the components that did install?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "It is the core atomicity rule for the installer; the ADR requires reporting partial setup and safe reruns but says nothing about the on-disk state.",
+      "nodes": [
+        "0020.02",
+        "0020.10"
+      ]
+    },
+    {
+      "text": "What is the trust root for verifying downloaded pinned release artifacts?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "It sets the security guarantee and what 'verified version' means; the ADR says 'download and verify pinned release artifacts' but not what to verify against.",
+      "nodes": [
+        "0020.02",
+        "0020.03"
+      ]
+    },
+    {
+      "text": "How is the SetupReport serialized and delivered to the agent, and what exit status goes with it?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "The agent-facing contract and failure signalling depend on it; the ADR fixes only the Haskell shape and says a nonempty outstanding list is not success.",
+      "nodes": [
+        "0020.02"
+      ]
+    },
+    {
+      "text": "What does a rerun do when it finds a component, or the whole install, already present at a different version or location?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "It decides the idempotence logic and whether a rerun works as upgrade or repair; the ADR says only 'safe to rerun' and 'report repair rather than silently fetching different code'.",
+      "nodes": [
+        "0020.02",
+        "0020.10"
+      ]
+    },
+    {
+      "text": "Where do disposable compiled caches live: per KB, per user keyed by build identity, or under the install prefix?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "It sets the persisted layout, cache keying and invalidation; the ADR requires the categories to be kept separate but does not place any of them.",
+      "nodes": [
+        "0020.07"
+      ]
+    },
+    {
+      "text": "Should the first implementation bundle Git or locate a system Git, and what counts as compatible?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "It decides the probe code, the version floor and whether Git is a bundle component; the ADR leaves bundling open on purpose and makes a missing Git an actionable requirement.",
+      "nodes": [
+        "0020.08"
+      ]
+    },
+    {
+      "text": "Is ComponentName a closed enumeration of the bundled parts, and what does InstalledComponent hold beyond version and location?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "It sets the stable vocabulary agents act on; the ADR lists the bundle's parts and says InstalledComponent records a verified version and resolved location.",
+      "nodes": [
+        "0020.02"
+      ]
+    },
+    {
+      "text": "What is the default install prefix, and how is it chosen when none is given?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "It decides whether a default install ever hits PermissionRequired or a PATH next action; the ADR fixes the layout under 'the selected prefix' and defers the commands to the user guide.",
+      "nodes": [
+        "0020.10"
+      ]
+    },
+    {
+      "text": "How is a corrupted, wrong-version or failed-verification component represented in the report, given only MissingComponent exists?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "It may change the closed SetupRequirement type and lets agents tell a reinstall from a first install; Verification asks to report repair of corrupted packages, but the type has no variant for it.",
+      "nodes": [
+        "0020.02"
+      ]
+    },
+    {
+      "text": "Where do the 'next actions' live in the report, given that SetupRequirement carries only a name or free Text?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "It decides whether agents can automate the fixes; the ADR asks for next actions and actionable needs-input results, but the type has no action field.",
+      "nodes": [
+        "0020.02"
+      ]
+    },
+    {
+      "text": "Are native libraries bundled with Kyyn or required from the system, and how are system ones reported?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "It changes the staging build, the notices and the platform detection; the ADR lists 'necessary native libraries' in the bundle but defers how they are packaged."
+    },
+    {
+      "text": "Which guest codecs count as 'chosen' for the bundle?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "It decides what gets built, licence-reviewed and checked by readiness; the ADR says only 'chosen guest codecs'."
+    },
+    {
+      "text": "What should runtime asset discovery do when bin/kyyn-v2 is not a symlink into a staged bundle?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "It decides what users see from a copied or cabal-installed binary; the ADR says discovery resolves the link and that cabal install alone does not provision assets.",
+      "nodes": [
+        "0020.10"
+      ]
+    },
+    {
+      "text": "May the readiness probe write to the real compiled cache, or must it use a throwaway directory?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "It decides cache isolation for doctor runs; the ADR says readiness does a small offline compile 'without making unrelated changes'.",
+      "nodes": [
+        "0020.02",
+        "0020.07"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "adr": "0021",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The testing and review intent is clear, but the ADR is not yet implementable as tooling: its biggest gap is where measurement and field-run records live, what shape they take, and who produces them.",
+  "questions": [
+    {
+      "text": "What shape do recorded measurements take, and where are they stored (committed structured data, CI artifacts, or notes)?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Baseline comparison across scales and cold/warm caches needs a stable persisted record; the ADR lists what to measure but gives no format or location."
+    },
+    {
+      "text": "Where are field-run records kept, failed attempts included, what does one record contain, and does ADR 0024 or this ADR own that format?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Preserving unsuccessful runs needs a durable store and run/attempt identity; the ADR says to pair MCP telemetry with an experience report via ADR 0024 scenarios and to keep failed runs, but not where or how."
+    },
+    {
+      "text": "Is MCP/agent telemetry part of the shipped runtime or only instrumentation in a test/field harness?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "A shipped feature needs a data model, default, storage and privacy boundary behind a host effect; the ADR only says to 'pair MCP telemetry with an experience report'."
+    },
+    {
+      "text": "Must routine test entry points actively refuse provider access (an enforcing handler), or is not wiring providers by convention enough?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "An enforcing guard is a runtime component with its own failure semantics; the ADR says only 'No direct provider access in routine tests'."
+    },
+    {
+      "text": "How are opt-in provider integration runs selected (env flag, separate target, CI job), and do they use the product's local secret store or a separate test credential source?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Changes test tagging and configuration; the ADR requires 'explicit opt-in integration runs' but names no mechanism or credential source.",
+      "nodes": [
+        "0021.02"
+      ]
+    },
+    {
+      "text": "Is the pre-implementation boundary review packet a persisted, checked artifact, and if so where does it live and must its authored example be an executable test?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Decides whether to build a per-boundary layout and presence check or nothing; the ADR lists the packet's contents and says 'no mandatory contributor governance beyond normal tests and review', leaning review-only without saying so.",
+      "nodes": [
+        "0021.01"
+      ]
+    },
+    {
+      "text": "May production code carry test-only fault-injection seams for the process/Git fault tests, or must faults be injected purely from outside?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Seams change public effect signatures and handler composition of storage/acceptance boundaries; the ADR requires 'real process/Git fault tests' but also removal of 'unused interfaces'.",
+      "nodes": [
+        "0021.01",
+        "0021.02"
+      ]
+    },
+    {
+      "text": "Must every effect boundary have a deterministic in-memory interpreter alongside its native handler, or only where a test needs one?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Determines whether each boundary carries two handlers plus conformance tests; the ADR lists 'deterministic semantic interpreters' among checks while requiring a current obligation for each mechanism and removal of alternate implementations.",
+      "nodes": [
+        "0021.01",
+        "0021.02"
+      ]
+    }
+  ]
+}

@@ -10,6 +10,7 @@
     --lane: #c9c9c3; --planned-fill: #ffffff; --planned-stroke: #55554f;
     --done: #2f9e5b; --done-stroke: #1f7a43; --ended: #b9b9b3; --accent: #3b6fd8;
     --cursor: #d8613b; --tick: #8f8f88; --partial: #e3b230; --partial-stroke: #b58a16;
+    --gap-high: #c2412d; --gap-medium: #a07a12;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -17,6 +18,7 @@
       --lane: #45453f; --planned-fill: #f4f4f0; --planned-stroke: #f4f4f0;
       --done: #3fbf74; --done-stroke: #2f9e5b; --ended: #55554f; --accent: #7aa2f7;
       --cursor: #f08a5d; --tick: #6c6c66; --partial: #f0c443; --partial-stroke: #c99b22;
+      --gap-high: #f0806a; --gap-medium: #e0b84a;
     }
   }
   * { box-sizing: border-box; }
@@ -72,6 +74,14 @@
   .conv { fill: none; stroke: var(--done); stroke-width: 1.5; }
   .conv-area { fill: var(--done); opacity: .12; }
   .conv-partial { fill: var(--partial); opacity: .3; }
+  .gap { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; }
+  svg text.gap, .gap { fill: var(--muted); color: var(--muted); }
+  svg text.gap.high, .gap.high { fill: var(--gap-high); color: var(--gap-high); }
+  svg text.gap.medium, .gap.medium { fill: var(--gap-medium); color: var(--gap-medium); }
+  aside h3 { font-size: 12px; margin: 14px 0 4px; }
+  aside ul.questions { margin: 4px 0; padding-left: 16px; }
+  aside ul.questions li { margin: 4px 0; }
+  aside details { margin: 6px 0; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -87,6 +97,7 @@
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" class="node partial"/></svg> partly delivered</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done"/></svg> realised</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned ended"/></svg> superseded</span>
+    <span title="Questions most blind agents would need answered to implement the ADR, by importance"><span class="gap high">2·1·0</span> spec gaps (high·medium·low)</span>
   </div>
 </header>
 <main>
@@ -112,7 +123,7 @@ document.getElementById("title").textContent = "ADR history · " + D.name;
 let STEP_W = 8;
 // Room right of the last step for the lane labels ("12 of 13 built · 1 partial").
 const RIGHT_W = 190;
-const fitWidth = () => { STEP_W = Math.max(5, (document.getElementById("canvas").clientWidth - LABEL_W - RIGHT_W - 10) / maxSeq); };
+const fitWidth = () => { STEP_W = Math.max(4, (document.getElementById("canvas").clientWidth - LABEL_W - RIGHT_W - 10) / maxSeq); };
 fitWidth();
 const x = seq => LABEL_W + seq * STEP_W;
 const el = (tag, attrs = {}, parent = svg) => {
@@ -159,7 +170,8 @@ function relayout() {
   for (const id of order) {
     const lane = D.lanes[id];
     if (lane && expanded.has(id)) {
-      const h = Math.max(lane._depth * ROW, labelLines(id).length * LABEL_LINE) + LANE_PAD * 2;
+      const lines = labelLines(id).length + (D.questions[id] ? 1 : 0);
+      const h = Math.max(lane._depth * ROW, lines * LABEL_LINE) + LANE_PAD * 2;
       layout[id] = { y, h, mid: y + LANE_PAD + ROW / 2 };
     } else {
       const h = lane ? COLLAPSED : THIN;
@@ -199,6 +211,20 @@ function labelLines(id) {
   return [...lines, line];
 }
 
+// Specification gaps: the ADR's snapshot, once the shown step has reached it.
+const snapshot = (id, t) => { const q = D.questions[id]; return q && q.step <= t ? q : null; };
+const gapClass = q => q.tally[0] ? "high" : q.tally[1] ? "medium" : "";
+const gapText = q => q.tally.join("·");
+const need = q => Math.ceil(q.runs * 3 / 5);  // recurring: at least 60% of runs, as in Questions.hs
+const gapTip = q => `Specification gaps at step ${q.step}: ${q.tally[0]} high, ${q.tally[1]} medium, ${q.tally[2]} low ` +
+  `questions raised by at least ${need(q)} of ${q.runs} blind agents`;
+function gapBadge(q, attrs) {
+  const g = el("text", { ...attrs, class: "gap " + gapClass(q) });
+  g.textContent = attrs["text-anchor"] ? gapText(q) : `spec gaps ${gapText(q)}`;
+  el("title", {}, g).textContent = gapTip(q);
+  return g;
+}
+
 function adrTitle(id) { return (D.adrs.find(a => a.id === id) || {}).title || ""; }
 
 function render() {
@@ -229,13 +255,20 @@ function render() {
     if (meta.born > t) continue;
     const open = lane && expanded.has(id);
     const label = el("text", { x: 8, y: L.mid + 4, class: "lane-label" + (lane ? "" : " dim") });
+    const snap = snapshot(id, t);
     if (open) labelLines(id).forEach((line, i) =>
       el("tspan", { x: i ? 20 : 8, dy: i ? LABEL_LINE : 0 }, label).textContent = line);
-    else label.textContent = (lane ? "▸ " : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
-    label.onclick = () => {
+    else label.textContent = (lane ? "▸ " : "  ") + `${id} ${adrTitle(id)}`.slice(0, snap ? 28 : 32);
+    const toggle = () => {
       if (lane) { expanded.has(id) ? expanded.delete(id) : expanded.add(id); saveExpanded(); relayout(); render(); }
       showLane(id);
     };
+    label.onclick = toggle;
+    if (snap) {
+      const badge = open ? gapBadge(snap, { x: 20, y: L.mid + 4 + labelLines(id).length * LABEL_LINE })
+                         : gapBadge(snap, { x: LABEL_W - 8, y: L.mid + 4, "text-anchor": "end" });
+      badge.onclick = () => showLane(id);
+    }
     const end = meta.deleted != null && meta.deleted <= t ? meta.deleted : t;
     el("line", { x1: x(meta.born), x2: x(end), y1: open ? L.mid : L.y + L.h - 4, y2: open ? L.mid : L.y + L.h - 4, class: "lane-line" });
 
@@ -356,14 +389,36 @@ function showNode(id, n) {
     ${n.supersedes?.length ? `<p><b>Supersedes:</b> ${n.supersedes.join(", ")}</p>` : ""}
     ${n.ended ? `<p><b>Ended:</b> ${esc(n.ended.how)} at step ${n.ended.seq}${n.ended.by ? " by " + n.ended.by : ""}</p>` : ""}
     ${n.anchors?.length ? `<p class="meta">Anchors: ${n.anchors.map(esc).join(", ")}</p>` : ""}
-    ${n.sections?.length ? `<p class="meta">Sections: ${n.sections.map(esc).join("; ")}</p>` : ""}`;
+    ${n.sections?.length ? `<p class="meta">Sections: ${n.sections.map(esc).join("; ")}</p>` : ""}
+    ${nodeQuestions(id, n)}`;
+}
+function questionItem(q, runs) {
+  return `<li title="${esc(q.reason)}"><span class="gap ${q.importance === "low" ? "" : q.importance}">${q.importance[0].toUpperCase()}</span> ${esc(q.text)} <span class="meta">${q.asked}/${runs}</span></li>`;
+}
+const byImportance = qs => ["high", "medium", "low"].flatMap(i => qs.filter(q => q.importance === i));
+function nodeQuestions(id, n) {
+  const snap = snapshot(id, T);
+  const qs = snap ? byImportance(snap.questions.filter(q => q.nodes.includes(n.id))) : [];
+  return qs.length ? `<h3>Open questions</h3><ul class="questions">${qs.map(q => questionItem(q, snap.runs)).join("")}</ul>` : "";
+}
+function laneQuestions(id) {
+  const snap = D.questions[id];
+  if (!snap) return "";
+  const rec = byImportance(snap.questions.filter(q => q.recurring)), rest = byImportance(snap.questions.filter(q => !q.recurring));
+  const changed = snap.lastChange != null && snap.lastChange > snap.step ? ` · ADR changed since` : "";
+  return `<h3>Spec gaps <span class="gap ${gapClass(snap)}">${gapText(snap)}</span></h3>
+    <div class="meta" title="${gapTip(snap)}">step ${snap.step} · ${esc(snap.date)}${changed}</div>
+    <p>${esc(snap.summary)}</p>
+    <ul class="questions">${rec.map(q => questionItem(q, snap.runs)).join("")}</ul>
+    ${rest.length ? `<details><summary>${rest.length} raised by fewer than ${need(snap)} runs</summary><ul class="questions">${rest.map(q => questionItem(q, snap.runs)).join("")}</ul></details>` : ""}`;
 }
 function showLane(id) {
   const lane = D.lanes[id];
   const steps = D.steps.filter(s => s.adrs.includes(id));
   side.innerHTML = `<h2>${id} ${esc(adrTitle(id))}</h2>
-    <div class="meta">${steps.length} steps touched this ADR${lane ? ` · ${lane.nodes.length} decisions · ${lane.editorial.length} editorial` : " · not yet inferred"}</div>
-    ${lane ? `<div class="notes">${esc(lane.notes)}</div>` : ""}`;
+    <div class="meta">${steps.length} steps touched this ADR${lane ? ` · ${lane.nodes.length} decisions · ${lane.editorialCount} editorial` : " · not yet inferred"}</div>
+    ${laneQuestions(id)}
+    ${lane ? `<h3>Curation notes</h3><div class="notes">${esc(lane.notes)}</div>` : ""}`;
 }
 
 let dragging = false;

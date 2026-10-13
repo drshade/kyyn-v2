@@ -9,10 +9,11 @@ module AdrViewer.Types
   ( Step(..), Adr(..), Repo(..)
   , Lane(..), Node(..), Kind(..), Realised(..), How(..), Delivery(..), Ended(..), EndedHow(..)
   , Confidence(..), Editorial(..), deliveries
+  , Snapshot(..), Question(..), Verdict(..), Importance(..), questionNodeIds
   ) where
 
 import Data.Aeson
-import Data.Char (isUpper, toLower)
+import Data.Char (isLower, isUpper, toLower)
 import Data.Text (Text)
 import GHC.Generics (Generic)
 
@@ -68,6 +69,30 @@ data Confidence = High | Medium | Low deriving (Eq, Show, Generic, Enum, Bounded
 data Editorial = Editorial { editorialSeq :: Int, editorialPr :: Maybe Int, editorialNote :: Text }
   deriving (Eq, Show, Generic)
 
+-- | One on-demand specification-gap snapshot of an ADR as of 'snapshotStep':
+-- the questions blind agents would need answered before implementing it, merged
+-- and rated by a judge. Questions the ADR already answers are dropped.
+data Snapshot = Snapshot
+  { snapshotAdr :: Text, snapshotStep :: Int, snapshotDate :: Text, snapshotRuns :: Int
+  , snapshotSummary :: Text, snapshotQuestions :: [Question] }
+  deriving (Eq, Show, Generic)
+
+data Question = Question
+  { questionText :: Text, questionAsked :: Int, questionVerdict :: Verdict
+  , questionImportance :: Importance, questionReason :: Text, questionNodes :: Maybe [Text] }
+  deriving (Eq, Show, Generic)
+
+-- | Decisions the question is about; omitted when it maps to none.
+questionNodeIds :: Question -> [Text]
+questionNodeIds = maybe [] id . questionNodes
+
+data Verdict = Unanswered | PartlyAnswered deriving (Eq, Show, Generic, Enum, Bounded)
+
+-- | What changes with the answer: persisted shapes, failure semantics and
+-- ownership (high); visible defaults, limits and validation (medium); local
+-- detail an implementer can choose and change later (low).
+data Importance = HighImpact | MediumImpact | LowImpact deriving (Eq, Ord, Show, Generic, Enum, Bounded)
+
 -- Records drop their type prefix (@nodeSeq@ is @seq@); enums are snake_case.
 fields :: Int -> Options
 fields n = defaultOptions
@@ -78,6 +103,12 @@ fields n = defaultOptions
 enums :: Options
 enums = defaultOptions { constructorTagModifier = snake, allNullaryToStringTag = True }
   where snake = drop 1 . concatMap (\c -> if isUpper c then ['_', toLower c] else [c])
+
+-- | @HighImpact@ is @high@.
+impact :: Options
+impact = defaultOptions { constructorTagModifier = word, allNullaryToStringTag = True }
+  where word (c:cs) = toLower c : takeWhile isLower cs
+        word [] = []
 
 instance FromJSON Step where parseJSON = genericParseJSON (fields 4)
 instance ToJSON Step where toJSON = genericToJSON (fields 4)
@@ -97,6 +128,14 @@ instance FromJSON Ended where parseJSON = genericParseJSON (fields 5)
 instance ToJSON Ended where toJSON = genericToJSON (fields 5)
 instance FromJSON Editorial where parseJSON = genericParseJSON (fields 9)
 instance ToJSON Editorial where toJSON = genericToJSON (fields 9)
+instance FromJSON Snapshot where parseJSON = genericParseJSON (fields 8)
+instance ToJSON Snapshot where toJSON = genericToJSON (fields 8)
+instance FromJSON Question where parseJSON = genericParseJSON (fields 8)
+instance ToJSON Question where toJSON = genericToJSON (fields 8)
+instance FromJSON Verdict where parseJSON = genericParseJSON enums
+instance ToJSON Verdict where toJSON = genericToJSON enums
+instance FromJSON Importance where parseJSON = genericParseJSON impact
+instance ToJSON Importance where toJSON = genericToJSON impact
 instance FromJSON Kind where parseJSON = genericParseJSON enums
 instance ToJSON Kind where toJSON = genericToJSON enums
 instance FromJSON How where parseJSON = genericParseJSON enums

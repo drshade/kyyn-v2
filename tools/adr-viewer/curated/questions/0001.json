@@ -1,0 +1,163 @@
+{
+  "adr": "0001",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "A sound statement of direction but far from implementable as written: its biggest gap is that candidates and acceptance are owned by Kyyn yet never defined (unit of change, what is validated, atomicity, and which writes need them).",
+  "questions": [
+    {
+      "text": "What is a candidate (its unit of change), what does acceptance validate, and is acceptance atomic across several changes?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides the staging store, validation scope and rollback; the ADR only lists 'candidates, acceptance' among what Kyyn owns.",
+      "nodes": [
+        "0001.02"
+      ]
+    },
+    {
+      "text": "Which writes must go through candidate/acceptance and which ordinary actions apply directly?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Sets the gated vs direct write paths; the ADR only says v1 wrapped 'too many ordinary actions in governance' and rejects a governance engine.",
+      "nodes": [
+        "0001.02",
+        "0001.05"
+      ]
+    },
+    {
+      "text": "In what form does a KB express its types, validation, calculations, tools and views, and how does Kyyn load and execute them?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Determines the whole loader/executor design; the ADR rejects a standalone-code requirement and lets KBs depend on Kyyn, but picks no format.",
+      "nodes": [
+        "0001.02",
+        "0001.05"
+      ]
+    },
+    {
+      "text": "Are unknown and disputed values a kernel-level state on every field, or modelled by each KB in its own types, and what shape does a disputed value take?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Affects persisted shapes, validation, calculations and views across all KBs; the ADR only requires that such values be preserved.",
+      "nodes": [
+        "0001.03"
+      ]
+    },
+    {
+      "text": "What is the persistence substrate and on-disk layout of a KB and its candidates?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides history, diff, candidate isolation and atomic accept; the ADR says 'local-first' and that the runtime removes persistence work, nothing more.",
+      "nodes": [
+        "0001.01"
+      ]
+    },
+    {
+      "text": "Through which interface(s) do external agents and schedulers call ordinary Kyyn operations, and is one canonical?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Shapes packaging, process lifetime and whether KB tools are exposed dynamically; the ADR only says external callers invoke 'ordinary Kyyn operations'.",
+      "nodes": [
+        "0001.02",
+        "0001.06"
+      ]
+    },
+    {
+      "text": "Must KB tools declare their effects, and does Kyyn enforce, preview or only report them?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides the tool-execution protocol; the ADR wants 'explicit effects and visible consequences' but only rules out hostile-code containment.",
+      "nodes": [
+        "0001.05"
+      ]
+    },
+    {
+      "text": "Who may accept a candidate: only the human, or also the agent or a scheduler under policy?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether accept is an ordinary harness operation and the audit trail; the ADR says the human must be able to inspect and challenge, not who accepts.",
+      "nodes": [
+        "0001.02"
+      ]
+    },
+    {
+      "text": "Is sharing or sync of a KB between machines or people in scope?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Multi-writer use needs conflict handling and concurrency control for candidates; 'local-first' implies a local source of truth but does not exclude sync.",
+      "nodes": [
+        "0001.01"
+      ]
+    },
+    {
+      "text": "How does a KB declare the Kyyn version or API it depends on, and what happens on a mismatch?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Sets the compatibility guarantee and loader refusal/migration path; the ADR only says 'KBs may depend on Kyyn to execute'.",
+      "nodes": [
+        "0001.02"
+      ]
+    },
+    {
+      "text": "Does one runtime discover and serve several KBs at once, and can KBs refer to each other?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides KB-scoped routing, registry/config and per-KB failure handling; the ADR names 'discovery' without saying of what.",
+      "nodes": [
+        "0001.02"
+      ]
+    },
+    {
+      "text": "Are KB calculation results stored as facts or recomputed on read?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Stored results need invalidation and must join acceptance and validation; the ADR only says the KB owns calculations.",
+      "nodes": [
+        "0001.02"
+      ]
+    },
+    {
+      "text": "What do KB-owned views render to, and does Kyyn host the surface they render into?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether Kyyn ships a web server/UI shell or only structured output; the ADR says 'workbench' and that the KB owns views.",
+      "nodes": [
+        "0001.01",
+        "0001.02"
+      ]
+    },
+    {
+      "text": "What does it mean in practice for the human to challenge a fact's meaning?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "A challenge could be a comment, a disputed state, a revert or a new candidate, each with different data; the ADR requires the ability but not its form.",
+      "nodes": [
+        "0001.03"
+      ]
+    },
+    {
+      "text": "What form do KB instructions take and how does Kyyn deliver them to the agent?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Decides whether instructions are passive files, a served resource or tool/kind metadata; the ADR only lists instructions among KB-owned things.",
+      "nodes": [
+        "0001.02"
+      ]
+    }
+  ]
+}

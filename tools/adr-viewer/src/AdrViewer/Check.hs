@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module AdrViewer.Check
   ( Inputs(..), Severity(..), Diagnostic(..)
-  , loadInputs, checkInputs, checkLane, renderDiagnostic
+  , loadInputs, checkInputs, checkLane, checkSnapshot, renderDiagnostic
   ) where
 
 import AdrViewer.Json (readJson)
@@ -20,7 +20,9 @@ import qualified Data.Text as T
 import System.Directory (doesDirectoryExist, listDirectory)
 import System.FilePath (takeBaseName, takeExtension, (</>))
 
-data Inputs = Inputs { inRepo :: Repo, inSteps :: [Step], inAdrs :: [Adr], inLanes :: [(FilePath, Lane)] }
+data Inputs = Inputs
+  { inRepo :: Repo, inSteps :: [Step], inAdrs :: [Adr], inLanes :: [(FilePath, Lane)]
+  , inSnapshots :: [(FilePath, Snapshot)] }
 
 data Severity = Warning | Error deriving (Eq, Ord, Show)
 
@@ -31,17 +33,56 @@ loadInputs evidence curated = do
   repo <- readJson (evidence </> "repo.json")
   steps <- readJson (evidence </> "steps.json")
   adrs <- readJson (evidence </> "adrs.json")
-  let laneDir = curated </> "lanes"
-  exists <- doesDirectoryExist laneDir
-  files <- if exists then filter ((== ".json") . takeExtension) <$> listDirectory laneDir else pure []
-  lanes <- forM (sort files) $ \f -> fmap ((,) f) <$> readJson (laneDir </> f)
-  pure $ case (repo, steps, adrs, sequence lanes) of
-    (Right r, Right s, Right a, Right l) -> Right (Inputs r s a l)
-    (r, s, a, l) -> Left (lefts' r <> lefts' s <> lefts' a <> lefts' l)
-  where lefts' = either pure (const [])
+  lanes <- readDir (curated </> "lanes")
+  snapshots <- readDir (curated </> "questions")
+  pure $ case (repo, steps, adrs, lanes, snapshots) of
+    (Right r, Right s, Right a, Right l, Right q) -> Right (Inputs r s a l q)
+    (r, s, a, l, q) -> Left (lefts' r <> lefts' s <> lefts' a <> lefts' l <> lefts' q)
+  where
+    lefts' = either pure (const [])
+    readDir dir = do
+      exists <- doesDirectoryExist dir
+      files <- if exists then filter ((== ".json") . takeExtension) <$> listDirectory dir else pure []
+      sequence <$> forM (sort files) (\f -> fmap ((,) f) <$> readJson (dir </> f))
 
 checkInputs :: Inputs -> [Diagnostic]
 checkInputs i = concatMap (uncurry (checkLane (inSteps i) (inAdrs i))) (inLanes i)
+  <> concatMap (uncurry (checkSnapshot (inSteps i) (inAdrs i) (map snd (inLanes i)))) (inSnapshots i)
+
+-- | A specification-gap snapshot must name a real ADR at a real step, and its
+-- questions must map to decisions of that ADR's lane.
+checkSnapshot :: [Step] -> [Adr] -> [Lane] -> FilePath -> Snapshot -> [Diagnostic]
+checkSnapshot steps adrs lanes file snap = concat
+  [ [err "file name does not match its adr" | takeBaseName file /= T.unpack adr]
+  , case filter ((== adr) . adrId) adrs of
+      [] -> [err ("ADR " <> adr <> " is not in evidence/adrs.json")]
+      a : _ -> [err ("step " <> tshow step <> " is before the ADR was born") | step < adrBorn a]
+  , [err ("step " <> tshow step <> " is beyond the last step " <> tshow lastSeq) | step > lastSeq]
+  , [err "runs must be at least 1" | snapshotRuns snap < 1]
+  , concat [ question i q | (i, q) <- zip [1 :: Int ..] (snapshotQuestions snap) ] ]
+  where
+    adr = snapshotAdr snap
+    step = snapshotStep snap
+    lastSeq = if null steps then 0 else maximum (map stepSeq steps)
+    lane = case filter ((== adr) . laneAdr) lanes of
+      l : _ -> Just l
+      [] -> Nothing
+    loc = "questions/" <> T.pack file
+    err = Diagnostic Error loc
+    warn = Diagnostic Warning loc
+    question i q =
+      let at = "question " <> tshow i <> ": " in concat
+        [ [err (at <> "empty text") | T.null (T.strip (questionText q))]
+        , [ err (at <> "asked by " <> tshow (questionAsked q) <> " of " <> tshow (snapshotRuns snap) <> " runs")
+          | questionAsked q < 1 || questionAsked q > snapshotRuns snap ]
+        , case lane of
+            Nothing -> [warn (at <> "names decisions but the ADR has no lane") | not (null (questionNodeIds q))]
+            Just l -> concat
+              [ case filter ((== n) . nodeId) (laneNodes l) of
+                  [] -> [err (at <> "unknown decision " <> n)]
+                  d : _ -> [ warn (at <> n <> " is not live at step " <> tshow step)
+                           | nodeSeq d > step || maybe False (<= step) (liveUntil (laneNodes l) d) ]
+              | n <- questionNodeIds q ] ]
 
 checkLane :: [Step] -> [Adr] -> FilePath -> Lane -> [Diagnostic]
 checkLane steps adrs file lane = concat

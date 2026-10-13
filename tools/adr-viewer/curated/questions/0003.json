@@ -1,0 +1,104 @@
+{
+  "adr": "0003",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The layering and naming are ready to implement, but the plumbing contracts are not; the biggest gap is ReadTree, which is missing from the FileSystem effect and has no defined FileTree shape.",
+  "questions": [
+    {
+      "text": "Is the WithLockedDocument lock an OS-level cross-process lock or an in-process one, does a held lock block, time out or fail at once, and what happens on re-entrant locking of the same scope?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides the concurrency guarantee and whether concurrent commands hang, error or deadlock; the ADR says only that the interpreter holds an exclusive lock for the whole callback, through a sibling lock file.",
+      "nodes": [
+        "0003.16"
+      ]
+    },
+    {
+      "text": "How does writeRequestedFile split a guest path into DirectoryScope plus RelativePath, and are requests with '.', '..', empty components or trailing separators rejected or normalised?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides which file is written and what errors guests see; the ADR says relative requests resolve against the base and absolute ones are 'used as given', while RelativePath forbids '.' and '..'.",
+      "nodes": [
+        "0003.06"
+      ]
+    },
+    {
+      "text": "Is ReadTree a constructor of the FileSystem effect or a separate capability, and what is the exact shape of FileTree (flat map or nested tree)?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides which effect and interpreters own the operation and the result type every consumer sees; the ADR describes ReadTree in prose only and leaves it out of the GADT, which it calls 'representative operations'."
+    },
+    {
+      "text": "When ReadTree finds a symlink, an unreadable regular file or a special file beneath the selected directory, does it skip it, record it, or fail the capture?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Failure semantics and FileTree contents depend on it; the ADR says only that it 'does not follow symlinks' and that missing or unreadable directories fail."
+    },
+    {
+      "text": "Does WriteBytes overwrite or fail on an existing file, and does it create missing parent directories?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Changes the native calls and failure cases for populating artifact scopes; the ADR says only that WriteBytes 'is not atomic replacement', and states parent creation for ReplaceBytes alone."
+    },
+    {
+      "text": "What does building a DirectoryScope check (absolute only, existence, canonicalisation), and which layer may build one?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "A pure check can live in the capability module, but an effectful one must sit in plumbing or composition, which sets package ownership; the ADR says only that scopes are 'opaque resolved/checked values' holding absolute paths.",
+      "nodes": [
+        "0003.01"
+      ]
+    },
+    {
+      "text": "What is the exact name and location of the sibling lock file for a locked document scope?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "An on-disk contract that every process and ignore rule must agree on; the ADR says only that the lock file 'is a sibling of that directory'.",
+      "nodes": [
+        "0003.16"
+      ]
+    },
+    {
+      "text": "What uniqueness guarantee must DocumentStamp.identity provide, and how is it generated?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Semantic interpreters that compare stamps need a known guarantee, and random generation needs a deterministic test substitute; the ADR says only that it is 'an opaque identity' plus an ISO 8601 UTC time."
+    },
+    {
+      "text": "Does ListDirectory include subdirectory names, tag each entry's kind, and what sort order does it use?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Changes the result type and whether the interpreter must stat each entry; the ADR says 'sorted immediate entry names' that 'include files and links' and does not mention directories or collation.",
+      "nodes": [
+        "0003.11"
+      ]
+    },
+    {
+      "text": "Does acquiring WithLockedDocument create a missing parent directory for the sibling lock file, or fail?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Decides first-use behaviour on a fresh store; the ADR says replacement recreates a cleared directory, but says nothing about the lock file's parent.",
+      "nodes": [
+        "0003.16"
+      ]
+    },
+    {
+      "text": "Is Bytes a distinct newtype or an alias for strict ByteString, given that DocumentAccess uses ByteString?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Affects conversions between the two effects and strict versus lazy reads; the ADR says only that Bytes 'means encoded file contents, not a semantic fact'."
+    }
+  ]
+}

@@ -6,6 +6,7 @@ module AdrViewer.Render (renderPage, renderData) where
 import AdrViewer.Check (Inputs(..))
 import AdrViewer.Json (encodeCompact)
 import AdrViewer.Model
+import AdrViewer.Questions (snapshotJson)
 import AdrViewer.Template (viewerTemplate)
 import AdrViewer.Types
 import Data.Aeson (Value(..), object, toJSON, (.=))
@@ -35,7 +36,8 @@ renderData inputs = object
                | s <- inSteps inputs ]
   , "adrs" .= inAdrs inputs
   , "lanes" .= object [K.fromText (laneAdr (lvLane v)) .= laneJson v | v <- views]
-  , "convergence" .= [fmap (\(Share d p) -> [d, p]) c | c <- convergence views] ]
+  , "convergence" .= [fmap (\(Share d p) -> [d, p]) c | c <- convergence views]
+  , "questions" .= object [K.fromText (snapshotAdr s) .= snapshotJson inputs s | (_, s) <- inSnapshots inputs] ]
   where
     maxSeq = if null (inSteps inputs) then 0 else maximum (map stepSeq (inSteps inputs))
     views = [laneView maxSeq lane | (_, lane) <- inLanes inputs]

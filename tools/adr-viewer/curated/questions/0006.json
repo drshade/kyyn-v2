@@ -1,0 +1,150 @@
+{
+  "adr": "0006",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "Close to implementable: layout, effects and failure classes are specified, but collection membership canonicalisation (where orderedness is declared, how unsorted indexes are treated and which collation 'sorted by ID' uses) is undefined.",
+  "questions": [
+    {
+      "text": "What comparator defines 'sorted by ID' (code point, UTF-8 bytes, Text Ord or encoded filename)?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Fixes committed index.dhall bytes and reopen stability; ADR only says 'deterministic ID order' and that file trees 'canonicalize entry order'."
+    },
+    {
+      "text": "Where is a collection declared ordered or unordered?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "RootStore must read the membership policy from the contract; the ADR only says ordered collections preserve order and unordered ones use deterministic ID order."
+    },
+    {
+      "text": "For an unordered collection, does materialization sort the guest list, and does reading reject an unsorted index.dhall?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides whether materialization changes the value and whether hand-edited indexes load; ADR says both 'Membership preserves the guest list order' and 'For unordered collections the list is sorted by ID'."
+    },
+    {
+      "text": "What happens when an ID's ~hex-escaped filename exceeds filesystem or Git component length limits?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Escaping doubles length, so long non-ASCII IDs can break checkout; ADR defines the escape but no limit, rejection or fallback.",
+      "nodes": [
+        "0006.21"
+      ]
+    },
+    {
+      "text": "Where do recipe definitions and state come from when MaterializeRoot builds a Root?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Changes the effect signature and candidate round-trip; the input is 'KnowledgeBase CheckedValue' and code may not overlap recipe material, but the ADR never says the KnowledgeBase wrapper carries recipes.",
+      "nodes": [
+        "0006.40",
+        "0006.47"
+      ]
+    },
+    {
+      "text": "On ordinary loading, is an absent facts/ directory or a missing root.dhall or collection index.dhall a diagnostic or an empty value?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Sets the loader's failure rules and what scaffolding must emit; ADR rejects 'missing/unlisted files' and distinguishes empty from missing, but LoadRootMaterialAt treats an absent facts directory as empty.",
+      "nodes": [
+        "0006.35"
+      ]
+    },
+    {
+      "text": "Is an empty FactId, collection name or example name valid?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Affects validation and the path codec; pass-through is defined only for nonempty names, so an empty name would encode as a bare '~', but its validity is never stated.",
+      "nodes": [
+        "0006.21",
+        "0006.15"
+      ]
+    },
+    {
+      "text": "What happens to entries under facts/ that belong to no declared collection (dropped collections, nested directories, non-.dhall files)?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Decides reader strictness and whether removing a collection must delete its directory; ADR rejects unlisted files only within a collection.",
+      "nodes": [
+        "0006.21"
+      ]
+    },
+    {
+      "text": "Does the ~hex escape also apply to collection directory names, so camelCase field names become hex directories?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Determines persisted directory paths and routing collision checks; the escape rule speaks of 'names' and IDs without saying whether collection names are covered or case-mapped.",
+      "nodes": [
+        "0006.21"
+      ]
+    },
+    {
+      "text": "What marks a root field as a collection rather than a field stored in facts/root.dhall?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Drives the split of the root value into files; ADR says routing belongs to the root contract/store but not what the contract must carry to mark a collection."
+    },
+    {
+      "text": "What is the exact Dhall shape of facts/<collection>/index.dhall?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Persisted kernel-owned structure passed to DhallHandling as a Shape; ADR says only 'an explicit ordered ID list per collection'.",
+      "nodes": [
+        "0006.21"
+      ]
+    },
+    {
+      "text": "Does RootStore check root/plugins/config/<plugin>.dhall against connector contracts at materialization, or carry it as raw bytes until PrepareRoot?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Ownership of config checking; ADR says RootStore persists config 'checked against' connector schemas, yet MaterializeRoot receives no connector contracts and opening carries config as bytes.",
+      "nodes": [
+        "0006.36"
+      ]
+    },
+    {
+      "text": "How does ReadExamples represent an example whose fingerprint no longer matches or whose query no longer exists?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Shapes the Example type and checker interface; ADR says it must not decode mismatches and that checking reports incompatibility, but not what is returned.",
+      "nodes": [
+        "0006.28"
+      ]
+    },
+    {
+      "text": "What fields does example.dhall hold beyond the original name?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Persisted metadata format; ADR says it retains the original name and recorded fingerprints are compared, without a full schema.",
+      "nodes": [
+        "0006.28"
+      ]
+    },
+    {
+      "text": "Must a 'data-only' fact file be a normal-form literal, or may it be any import-free expression that normalizes to data?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Changes what DhallHandling accepts and the parse cost measured; ADR says 'data-only' and rejects imports 'before normalization', implying normalization but not what is allowed.",
+      "nodes": [
+        "0006.18",
+        "0006.33"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "adr": "0023",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The workflow and boundaries are clear, but the review-note half of EvolutionStore is not yet implementable: notes have no read operation, no defined record shape and no lifecycle after acceptance.",
+  "questions": [
+    {
+      "text": "What happens to a workspace's review notes on acceptance, rebase or discard: archived with the evolution, kept in the workspace, or dropped?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Decides where notes are persisted and whether CapturedWork must stay resolvable; the ADR gives an acceptance lifecycle for examples only, not for notes.",
+      "nodes": [
+        "0023.05"
+      ]
+    },
+    {
+      "text": "What makes a client 'explicitly authorized' to accept, where is that configured, and what is the default for Web and MCP?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether the shared accept operation needs an authorization check and config; the ADR says only that delegation is an explicit owner choice, not inferred from transport.",
+      "nodes": [
+        "0023.09",
+        "0023.02"
+      ]
+    },
+    {
+      "text": "How are review notes read back, and are they keyed by workspace across captures and candidates, by exact subject, or by target?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Agents must see human notes through MCP and the key decides the store's index layout; the ADR defines only addReviewNote, with no list or query operation.",
+      "nodes": [
+        "0023.05"
+      ]
+    },
+    {
+      "text": "What does a stored review note contain besides subject, target and text: actor, timestamp, threading, open/resolved state?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Sets the persisted note shape and whether an actor argument or resolve operation is needed; the ADR gives only subject, target, text and ties the note to the version seen.",
+      "nodes": [
+        "0023.05"
+      ]
+    },
+    {
+      "text": "Is saveExample create-only or an upsert, how is ExampleId assigned, and how are examples edited or removed?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides file naming under target/examples/ and how 'changed or removed checks/examples' is computed; the ADR says only that saving writes target/examples/ and marks the workspace Draft.",
+      "nodes": [
+        "0023.06"
+      ]
+    },
+    {
+      "text": "How does recordHistory represent a gap where record correspondence cannot be established?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "The ADR requires stating the gap, but HistoricalChange has only RecordedChange and UnannotatedChange, so a new constructor or a completeness wrapper is needed.",
+      "nodes": [
+        "0023.08"
+      ]
+    },
+    {
+      "text": "How are Git merge parent links carried in recordHistory's flat list, and are all parents traversed or first-parent only?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "The ADR requires preserving parent links rather than a linear chain, but RecordHistoryEntry has no parent field and no traversal rule is given.",
+      "nodes": [
+        "0023.08"
+      ]
+    },
+    {
+      "text": "Which ReviewSubject and ReviewTarget combinations are valid, how deeply are targets resolved, and can a FactTarget name a fact that exists only in the base?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Decides when addReviewNote fails and whether reviewers can comment on deletions; the ADR says only that targets must be meaningful and capture does not invent facts or artifacts.",
+      "nodes": [
+        "0023.05"
+      ]
+    },
+    {
+      "text": "Do saveExample and addReviewNote take an expected workspace revision and fail on concurrent change, or does the last write win?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Changes signatures and conflict error types; the ADR promises multiple clients 'with revision checks', but neither signature carries a revision.",
+      "nodes": [
+        "0023.09",
+        "0023.06",
+        "0023.05"
+      ]
+    },
+    {
+      "text": "Does adding a review note or requesting revisions change workspace status, such as Ready back to Draft?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides whether addReviewNote mutates the workspace state machine atomically with the note write; the ADR says saving an example marks Draft but is silent for notes.",
+      "nodes": [
+        "0023.05",
+        "0023.02"
+      ]
+    },
+    {
+      "text": "Which unannotated commits does recordHistory include for a fact, and is their GitDiff the whole commit, the collection file, or a record-scoped hunk?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Controls traversal, result size and whether record-level parsing is needed; the ADR says only 'expose the available diff', not a claim of typed decoding.",
+      "nodes": [
+        "0023.08"
+      ]
+    },
+    {
+      "text": "Does acceptance require the workspace to be Ready, or only a checked candidate whose Before.revision matches head?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Sets the accept operation's preconditions; the ADR requires a checked evolution and matching Before.revision but never says whether Ready is required.",
+      "nodes": [
+        "0023.02",
+        "0023.09"
+      ]
+    },
+    {
+      "text": "How is evidence content marked explicitly unavailable in the returned Rationale when the evidence cache entry is missing?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "May require extending the shared Rationale/evidence type also used by step reports; the ADR requires the reference to stay visible but gives no shape.",
+      "nodes": [
+        "0023.08"
+      ]
+    },
+    {
+      "text": "Where does a human's counterexample go before any evolution workspace exists, given that saveExample requires a workspace?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether Web needs a create-workspace path or a current-root save path; the ADR routes new-work requests to the agent, yet Verification starts with a Web counterexample.",
+      "nodes": [
+        "0023.04",
+        "0023.06"
+      ]
+    },
+    {
+      "text": "What does recordHistory return for a FactId absent at the given revision: a Failure, an empty list, or history up to its deletion?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Changes the API contract and how both surfaces render missing records; the ADR does not address absent facts.",
+      "nodes": [
+        "0023.08"
+      ]
+    }
+  ]
+}

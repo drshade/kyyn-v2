@@ -1,0 +1,104 @@
+{
+  "adr": "0013",
+  "step": 187,
+  "date": "2026-10-13",
+  "runs": 3,
+  "summary": "The stance is clear (ordinary Git, no adoption protocol), but it is not implementable as written: the ADR never says whether Kyyn itself pushes or what the separate 'remote publication' report is.",
+  "questions": [
+    {
+      "text": "Does Kyyn itself push (or fetch) after local acceptance, automatically or via a separate command, or is publication entirely the user's own Git step?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether accept gets transport, remote and credential handling; the ADR says the user/agent pushes yet also asks Kyyn to 'report local acceptance and remote publication separately'.",
+      "nodes": [
+        "0013.01",
+        "0013.02"
+      ]
+    },
+    {
+      "text": "Is rebasing an unaccepted evolution one atomic Kyyn operation or a manual sequence, and what happens to partial failures and the old results/diff?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Atomicity of a half-rebased evolution (new revision, old schema) is open; the ADR lists the steps and says old attempts need not be retained.",
+      "nodes": [
+        "0013.03"
+      ]
+    },
+    {
+      "text": "What states and target remote/branch does the remote-publication report have, and is it stored, returned once, or derived from refs?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether anything is persisted per acceptance; the ADR only rules out an 'adoption state machine' and defines no fields or target.",
+      "nodes": [
+        "0013.02"
+      ]
+    },
+    {
+      "text": "What makes a root 'unknown' (marker, validation cache, or always revalidate), and what happens when its validation fails?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Changes the loader, any stored marker/cache and failure behaviour of every validated operation; the ADR says only that unknown roots are validated on load.",
+      "nodes": [
+        "0013.01"
+      ]
+    },
+    {
+      "text": "How are the explicit repository and KB path supplied and validated, and which operations count as 'semantic'?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Per-call argument vs session/config binding changes every tool signature and error case; the ADR only requires explicit paths and no ambient cwd.",
+      "nodes": [
+        "0013.05"
+      ]
+    },
+    {
+      "text": "May a user-made merge commit that fails validation serve as the base for the next local acceptance?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides whether accept's precondition includes a valid base; the ADR says the user 'checks the resulting KB' and Kyyn validates unknown roots, which pull in different directions.",
+      "nodes": [
+        "0013.01"
+      ]
+    },
+    {
+      "text": "Does Kyyn show a derived 'behind local head' indicator for unaccepted evolutions, or is staleness only discovered when accept's CAS fails?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "User-visible status on listing/validation; the ADR forbids a permanent Stale lifecycle but says nothing about a computed indicator.",
+      "nodes": [
+        "0013.03"
+      ]
+    },
+    {
+      "text": "May conflict resolution rebase commits already accepted locally, or must it merge so accepted commit ids stay stable?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides what accepted workspace records can safely reference; the ADR allows 'merge/rebase' and says accepted workspaces remain historical records.",
+      "nodes": [
+        "0013.01"
+      ]
+    },
+    {
+      "text": "Do outbound plugin side effects fire at local acceptance or only after publication, and what happens to them if the push is rejected and the acceptance is rewritten?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Effects without matching published history may need compensation or a pending queue; the ADR says only that Git transport gains no authority to call plugins."
+    },
+    {
+      "text": "When validating a root that arrived through Git, may checks call outbound plugins, or only pure local checks?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Sets the validator's trust boundary and whether a transport-originated mode is needed; closest text is 'Git transport does not gain authority to call outbound plugins'."
+    }
+  ]
+}
