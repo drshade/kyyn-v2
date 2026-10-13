@@ -11,23 +11,9 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Decides the largest scope and ownership split (per-harness launchers vs checklists); the ADR only says to start a fresh agent and points to external method docs.",
-      "nodes": ["0024.01"]
-    },
-    {
-      "text": "What is the on-disk format and manifest schema of a scenario package?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Fixes the loader and validator; the ADR lists the package parts but defers shape to the external README.",
-      "nodes": ["0024.01"]
-    },
-    {
-      "text": "What identifies a scenario revision: a manifest version field, a content hash, or the git commit?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Run records must pin it and comparability depends on it; the ADR says packages are versioned and revisions recorded, not how.",
-      "nodes": ["0024.01", "0024.04"]
+      "nodes": [
+        "0024.01"
+      ]
     },
     {
       "text": "Are observable outcome checks executable predicates over the resulting KB/artifacts, a reviewer rubric, or both?",
@@ -35,7 +21,10 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Executable checks need a check language, runner and pass/fail records; the ADR only says to independently inspect results against task outcomes.",
-      "nodes": ["0024.01", "0024.03"]
+      "nodes": [
+        "0024.01",
+        "0024.03"
+      ]
     },
     {
       "text": "Does the observer attach as an external proxy or as a config-gated hook inside the MCP adapter, and which component owns it?",
@@ -43,15 +32,9 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Determines code ownership and whether internal state is visible; the ADR places it at the adapter boundary and rules out a per-function effect or production ledger.",
-      "nodes": ["0024.02"]
-    },
-    {
-      "text": "What is the trace event schema: what operation ID refers to, the unit of response volume, where selected snapshot/candidate comes from, and the sink format?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Fixes the persisted event struct and whether the product must expose IDs; the ADR names the fields but not their definitions or encoding.",
-      "nodes": ["0024.02"]
+      "nodes": [
+        "0024.02"
+      ]
     },
     {
       "text": "Is sanitization of committed reports automated with defined redaction rules or a manual review gate, and what counts as payload?",
@@ -59,23 +42,60 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "It is the guarantee that private payloads never get committed; the ADR only says sanitized reports may be committed.",
-      "nodes": ["0024.03"]
+      "nodes": [
+        "0024.03"
+      ]
+    },
+    {
+      "text": "What is the on-disk format and manifest schema of a scenario package?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Fixes the loader and validator; the ADR lists the package parts but defers shape to the external README.",
+      "nodes": [
+        "0024.01"
+      ]
+    },
+    {
+      "text": "What identifies a scenario revision: a manifest version field, a content hash, or the git commit?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Run records must pin it and comparability depends on it; the ADR says packages are versioned and revisions recorded, not how.",
+      "nodes": [
+        "0024.01",
+        "0024.04"
+      ]
+    },
+    {
+      "text": "What is the trace event schema: what operation ID refers to, the unit of response volume, where selected snapshot/candidate comes from, and the sink format?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Fixes the persisted event struct and whether the product must expose IDs; the ADR names the fields but not their definitions or encoding.",
+      "nodes": [
+        "0024.02"
+      ]
     },
     {
       "text": "How are corrections appended to a run record: entries in the report, separate linked files, or git history, and is immutability enforced?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Decides run IDs, amendment schema and enforcement; the ADR sets the append-not-rewrite rule but no mechanism.",
-      "nodes": ["0024.04"]
+      "nodes": [
+        "0024.04"
+      ]
     },
     {
       "text": "Is the field report a structured machine-checked record with typed finding links, or a free-form markdown template?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Structured findings need a schema and link validation; the ADR names the report halves and the four links each finding needs, deferring templates to the README.",
-      "nodes": ["0024.03"]
+      "nodes": [
+        "0024.03"
+      ]
     },
     {
       "text": "How are CLI/file-edit fallback and human intervention captured: transcript parsing, harness hooks, operator logging or self-report?",
@@ -83,15 +103,10 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Each source needs different code and yields different observation gaps; the ADR says record them when available and state gaps.",
-      "nodes": ["0024.02", "0024.03"]
-    },
-    {
-      "text": "What does cache condition mean concretely, and must the harness control it or only record it?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides which caches are reset or probed per run; the ADR lists cache condition among recorded fields without defining it.",
-      "nodes": ["0024.04"]
+      "nodes": [
+        "0024.02",
+        "0024.03"
+      ]
     },
     {
       "text": "What are the transcript retention policy's terms (location, duration, deletion) and does tooling enforce them?",
@@ -99,7 +114,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Decides storage paths, gitignore and cleanup tooling; the ADR requires transcripts stay local under an explicit policy it does not state.",
-      "nodes": ["0024.03"]
+      "nodes": [
+        "0024.03"
+      ]
     },
     {
       "text": "Does the harness need first-class repeated-run batching and cross-run comparison, or is comparison left to reviewers?",
@@ -107,31 +124,30 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Batch support needs grouping and aggregate views; the ADR requires repeating important comparisons and forbids call-count scores but says nothing on tooling.",
-      "nodes": ["0024.04"]
+      "nodes": [
+        "0024.04"
+      ]
+    },
+    {
+      "text": "What does cache condition mean concretely, and must the harness control it or only record it?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Decides which caches are reset or probed per run; the ADR lists cache condition among recorded fields without defining it.",
+      "nodes": [
+        "0024.04"
+      ]
     },
     {
       "text": "Is the agent's account a single reflection response or a structured protocol, sent in the same session, with a recorded phase where the evaluator's interpretation is shown back?",
       "asked": 2,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Shapes the agent-experience record and session continuity needs; the ADR orders account before interpretation and names a short reflection prompt.",
-      "nodes": ["0024.01", "0024.03"]
-    },
-    {
-      "text": "Is the seeded KB a committed fixture snapshot or produced by a deterministic seeding script, rebuilt fresh for every run?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides seeding code vs snapshot refresh process; the ADR says only synthetic seeded and disposable KBs.",
-      "nodes": ["0024.01"]
-    },
-    {
-      "text": "What happens to the disposable KB and destinations after a run: kept for inspection, archived into the record, or torn down, and who cleans up?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Independent inspection needs the end state to survive; the ADR says disposable KBs but nothing on lifecycle or cleanup ownership.",
-      "nodes": ["0024.03"]
+      "nodes": [
+        "0024.01",
+        "0024.03"
+      ]
     },
     {
       "text": "How is the restricted MCP-only condition enforced: harness tool allowlist, sandbox, or prompt instruction?",
@@ -139,15 +155,29 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Changes what is built per harness and what tool catalog is recorded; the ADR requires the condition be labelled but not how it is enforced.",
-      "nodes": ["0024.04"]
+      "nodes": [
+        "0024.04"
+      ]
     },
     {
-      "text": "What are the run-record status values and flags (partial/failed/cancelled/assisted, simulated human), and is assisted a status or a separate flag?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Persisted closed value sets drive filtering; the ADR names the outcomes that must stay visible and requires simulated-human labels, not their encoding.",
-      "nodes": ["0024.04", "0024.05"]
+      "text": "Is the seeded KB a committed fixture snapshot or produced by a deterministic seeding script, rebuilt fresh for every run?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Decides seeding code vs snapshot refresh process; the ADR says only synthetic seeded and disposable KBs.",
+      "nodes": [
+        "0024.01"
+      ]
+    },
+    {
+      "text": "What happens to the disposable KB and destinations after a run: kept for inspection, archived into the record, or torn down, and who cleans up?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Independent inspection needs the end state to survive; the ADR says disposable KBs but nothing on lifecycle or cleanup ownership.",
+      "nodes": [
+        "0024.03"
+      ]
     },
     {
       "text": "What baseline environment do installation/readiness scenarios start from, and does the harness provision it?",
@@ -155,7 +185,9 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Moves the harness boundary (VM image vs fresh user); the ADR only says not to assume a developer's prepared machine.",
-      "nodes": ["0024.05"]
+      "nodes": [
+        "0024.05"
+      ]
     },
     {
       "text": "How are web/human-surface interactions observed when instrumentation is defined only at the MCP adapter boundary?",
@@ -163,15 +195,31 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "May need a second observer and cross-surface correlation; the ADR puts web handoffs in scenarios and defers cross-surface evaluation to ADR 0023.",
-      "nodes": ["0024.02", "0024.05"]
+      "nodes": [
+        "0024.02",
+        "0024.05"
+      ]
+    },
+    {
+      "text": "What are the run-record status values and flags (partial/failed/cancelled/assisted, simulated human), and is assisted a status or a separate flag?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Persisted closed value sets drive filtering; the ADR names the outcomes that must stay visible and requires simulated-human labels, not their encoding.",
+      "nodes": [
+        "0024.04",
+        "0024.05"
+      ]
     },
     {
       "text": "What ends a run: agent-declared done, a time/turn/token budget, or operator cancellation?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides termination logic and how partial/failed/cancelled statuses are assigned; the ADR names the statuses but no budgets or criteria.",
-      "nodes": ["0024.04"]
+      "nodes": [
+        "0024.04"
+      ]
     }
   ]
 }

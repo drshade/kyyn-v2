@@ -11,7 +11,9 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Decides whether a fresh clone missing a plugin can be opened at all; the ADR only says malformed config fails the whole root and that installation creates no instances.",
-      "nodes": ["0016.08"]
+      "nodes": [
+        "0016.08"
+      ]
     },
     {
       "text": "May plugin config files use Dhall imports (relative, env, remote), or must they be hermetic?",
@@ -19,15 +21,20 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Sets the decoder's import policy and what RootOpening/EvolutionStore must capture; the ADR requires snapshot files rather than ambient ones, but calls only secret files hermetic.",
-      "nodes": ["0016.08"]
+      "nodes": [
+        "0016.08"
+      ]
     },
     {
       "text": "Who validates that instances sharing a DeviceCode tokenKey declare the same tenant, clientId and scopes, given that validateConfig sees one instance?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "A mismatch silently narrows the scopes of a shared refresh token; the ADR says compatible instances repeat the combined scopes and refresh must not narrow them, but its validator is per instance only.",
-      "nodes": ["0016.16", "0016.05"]
+      "nodes": [
+        "0016.16",
+        "0016.05"
+      ]
     },
     {
       "text": "Are SecretNames case-sensitive, and how are case-only collisions handled on case-insensitive filesystems?",
@@ -47,24 +54,18 @@
       "text": "Is a missing config file for an installed plugin treated as zero instances, or is the file required?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Changes RootStore loading and whether install or scaffold must create the file; the ADR names a well-known file per plugin and says installation creates no instances.",
-      "nodes": ["0016.08"]
+      "nodes": [
+        "0016.08"
+      ]
     },
     {
       "text": "What does secret list do with entries in .kyyn/secrets/ that are not <valid-name>.dhall files?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides whether list can fail and how cancellation leftovers are handled; the ADR says only that list returns sorted names and that corrupt storage is an operational failure."
-    },
-    {
-      "text": "What are the config record shapes for Graph Mail, Meetings and Files, and do they all embed GraphAuth?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "These persisted shapes drive the generated union, the validators and endpoint resolution; the ADR defines only CalendarConfig, and for the other types lists permissions, not fields.",
-      "nodes": ["0016.16"]
     },
     {
       "text": "What are the syntax and uniqueness rules for instance names, and does a duplicate name fail root preparation?",
@@ -72,15 +73,19 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Instance name keys identity and evidence history and is a CLI argument; the ADR gives bindings syntax and uniqueness rules but gives names none.",
-      "nodes": ["0016.08"]
+      "nodes": [
+        "0016.08"
+      ]
     },
     {
-      "text": "Is validateConfig mandatory for every connector type, or optional with an empty report by default?",
+      "text": "What are the config record shapes for Graph Mail, Meetings and Files, and do they all embed GraphAuth?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Changes the registration data shape and the scaffold output; the ADR says PrepareRoot retains the compiled validators and marks only login as optional.",
-      "nodes": ["0016.05"]
+      "reason": "These persisted shapes drive the generated union, the validators and endpoint resolution; the ADR defines only CalendarConfig, and for the other types lists permissions, not fields.",
+      "nodes": [
+        "0016.16"
+      ]
     },
     {
       "text": "Are binding errors (invalid identifier, reserved word, collision) root-validation failures that block acceptance, or only generation-time errors?",
@@ -88,15 +93,30 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Decides whether a colliding config can be accepted; the ADR sets the binding rules and says to report collisions, but not at which stage.",
-      "nodes": ["0016.09"]
+      "nodes": [
+        "0016.09"
+      ]
+    },
+    {
+      "text": "Is validateConfig mandatory for every connector type, or optional with an empty report by default?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Changes the registration data shape and the scaffold output; the ADR says PrepareRoot retains the compiled validators and marks only login as optional.",
+      "nodes": [
+        "0016.05"
+      ]
     },
     {
       "text": "Should the pure validator reject Graph auth-mode/endpoint combinations that Graph does not support, or should they fail only at invocation?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides whether such configs block acceptance; the ADR asks for explicit errors and for the sharedCalendar scope check in the validator, but not where the other checks go.",
-      "nodes": ["0016.05", "0016.16"]
+      "nodes": [
+        "0016.05",
+        "0016.16"
+      ]
     }
   ]
 }

@@ -9,17 +9,11 @@
       "text": "Should a repeat install over a locally edited vendored package refuse or replace it?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides whether the installer needs edit detection and a new refusal code; the Decision says replace with no force flag, but Verification says refuse destructive replacement of local source edits.",
-      "nodes": ["0015.27"]
-    },
-    {
-      "text": "Do the package exclusions (.git, .kyyn, dist-newstyle, .stack-work) apply only at the package root or at any depth?",
-      "asked": 3,
-      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Changes which files are vendored, which block install as uncommitted, and review diffs; the ADR lists the names as 'directories/entries' without a matching scope.",
-      "nodes": ["0015.14"]
+      "reason": "Decides whether the installer needs edit detection and a new refusal code; the Decision says replace with no force flag, but Verification says refuse destructive replacement of local source edits.",
+      "nodes": [
+        "0015.27"
+      ]
     },
     {
       "text": "Should a tap-qualified install refuse when the catalogue entry name differs from the fetched manifest name?",
@@ -27,7 +21,9 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "The manifest name sets the installed name, so a mismatch could replace an unrelated package; the ADR only says the qualified selection resolves to the existing PluginSource.",
-      "nodes": ["0015.24"]
+      "nodes": [
+        "0015.24"
+      ]
     },
     {
       "text": "Is plugin removal in scope, with what command, and what happens to instance configuration referencing the removed plugin?",
@@ -35,31 +31,50 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Decides refuse/cascade/dangle behaviour touching ADR 0016 config; the ADR only says removals follow the evolution-owned route and defines no remove operation.",
-      "nodes": ["0015.17"]
+      "nodes": [
+        "0015.17"
+      ]
+    },
+    {
+      "text": "Do the package exclusions (.git, .kyyn, dist-newstyle, .stack-work) apply only at the package root or at any depth?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Changes which files are vendored, which block install as uncommitted, and review diffs; the ADR lists the names as 'directories/entries' without a matching scope.",
+      "nodes": [
+        "0015.14"
+      ]
     },
     {
       "text": "What stable diagnostic codes apply to tap, search and guide failures?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Scripts and tests will depend on invented codes; the refusal table covers installation only, and guides/unsynced taps just get an unnamed 'actionable diagnostic'.",
-      "nodes": ["0015.24", "0015.25"]
+      "nodes": [
+        "0015.24",
+        "0015.25"
+      ]
     },
     {
       "text": "What are the validation rules for tap names, duplicate taps or catalogue entries, a missing taps.dhall and catalogue source forms?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Tap names become .kyyn/taps/<name>/ paths and qualifiers split on '/'; the ADR shows the file shapes but gives no name grammar, duplicate rule or missing-file behaviour.",
-      "nodes": ["0015.24"]
+      "nodes": [
+        "0015.24"
+      ]
     },
     {
       "text": "What side effects do tap add, tap remove and a partially failing tap update have on the cache?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides sync-on-add, cache deletion on remove, per-tap failure reporting and pruning; the ADR says only that add/remove edit taps.dhall and update shallow-fetches.",
-      "nodes": ["0015.24"]
+      "nodes": [
+        "0015.24"
+      ]
     },
     {
       "text": "Which directory does the staged exchange swap, where does instance configuration live, and what holds after a crash mid-swap?",
@@ -67,15 +82,19 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "source/ and origin.dhall are siblings, so swapping them separately can pair new source with old origin; the ADR says stage before exchanging and promises atomicity only for validation failures, not interruption.",
-      "nodes": ["0015.27"]
+      "nodes": [
+        "0015.27"
+      ]
     },
     {
       "text": "How do plugins register health/description methods and methods not attached to a connector, given only a connectors export?",
       "asked": 2,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Shapes the entry-module contract, PreparedPackage and dispatch; the ADR says they share one registration mechanism but the only registration shown has no field for them.",
-      "nodes": ["0015.33"]
+      "nodes": [
+        "0015.33"
+      ]
     },
     {
       "text": "Should the manifest decoder refuse or ignore fields beyond name and entryModule?",
@@ -83,7 +102,9 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Strict decoding breaks older releases on new fields, lenient decoding hides typos; the ADR gives only the 'initial shape'.",
-      "nodes": ["0015.12"]
+      "nodes": [
+        "0015.12"
+      ]
     },
     {
       "text": "Should an https source containing userinfo, a query or a fragment be refused, normalised or recorded verbatim?",
@@ -91,7 +112,9 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "The URL is persisted in committed origin.dhall, so embedded tokens would leak into KB history; the ADR supports only 'unauthenticated https' without saying how credentials in the URL are handled.",
-      "nodes": ["0015.14"]
+      "nodes": [
+        "0015.14"
+      ]
     },
     {
       "text": "What does PackageIdentity consist of: source byte hash, origin revision, toolchain identity or a combination?",
@@ -104,33 +127,41 @@
       "text": "Does a tap-qualified install use the synced tap revision or a fresh fetch of the source's default HEAD?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Decides offline install, which bytes are installed and whether a previewed guide matches; the synced-revision rule is stated only for guide reads.",
-      "nodes": ["0015.24"]
+      "nodes": [
+        "0015.24"
+      ]
     },
     {
       "text": "Does the saved review comparison count origin-only changes, and what is its persisted shape?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "The comparison is persisted with candidate and accepted reports; the ADR lists its contents (added/removed/changed, origins, changed paths) but no schema or origin-only rule.",
-      "nodes": ["0015.28"]
+      "nodes": [
+        "0015.28"
+      ]
     },
     {
       "text": "For a local source, which code applies when --path is missing on disk versus present on disk but absent from HEAD?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Sets check order and reported code; the table maps an absent local directory to plugin.source-unavailable while the Git paragraph maps an absent --path to git.missing-subtree.",
-      "nodes": ["0015.14"]
+      "nodes": [
+        "0015.14"
+      ]
     },
     {
       "text": "What does plugin search match, and how does it behave when only some taps are synced or valid?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Changes result type and exit status; the ADR says only that search reads downloaded catalogues and unsynced taps report how to sync.",
-      "nodes": ["0015.24"]
+      "nodes": [
+        "0015.24"
+      ]
     }
   ]
 }

@@ -11,7 +11,11 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Decides the index producer field and which edits make captures unreadable; ADR says only 'bound to producing plugin source and payload contract' and 'successful refetch replaces the capture'.",
-      "nodes": ["0014.02", "0014.59", "0014.67"]
+      "nodes": [
+        "0014.02",
+        "0014.59",
+        "0014.67"
+      ]
     },
     {
       "text": "What is the folder connector's evidence ID, and which path form (relative, as configured, or resolved absolute) goes into the host SHA-256 fingerprint?",
@@ -19,23 +23,10 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Fixes fingerprint stability across checkout moves and whether a directory switch updates or removes/adds; ADR defines the framed hash over 'the UTF-8 source path' without its form.",
-      "nodes": ["0014.19", "0014.40"]
-    },
-    {
-      "text": "What is the folder connector's payload type, and how are binary or non-UTF-8 files handled?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Persisted payload contract and whether one binary file blocks every fetch; ADR gives only FolderConfig and 'host file acquisition can supply the hash alongside the text'.",
-      "nodes": ["0014.19", "0014.60"]
-    },
-    {
-      "text": "For mail or Teams items already outside retention at first discovery, must content and attachments still be downloaded, and does the fingerprint cover blob contents or only metadata?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Sets download cost, failure surface and the fingerprint projection; ADR says born-truncated items need 'a stable observed projection' but also 'fingerprint the captured payload'.",
-      "nodes": ["0014.47", "0014.60"]
+      "nodes": [
+        "0014.19",
+        "0014.40"
+      ]
     },
     {
       "text": "Does EvidenceRef.producer hold the plugin name or the storage producer identity (package/contract)?",
@@ -43,7 +34,32 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Persisted citation wire format and whether citations survive plugin edits; ADR says only 'Producer and instanceName identify the integration and instance'.",
-      "nodes": ["0014.08", "0014.42"]
+      "nodes": [
+        "0014.08",
+        "0014.42"
+      ]
+    },
+    {
+      "text": "What is the folder connector's payload type, and how are binary or non-UTF-8 files handled?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Persisted payload contract and whether one binary file blocks every fetch; ADR gives only FolderConfig and 'host file acquisition can supply the hash alongside the text'.",
+      "nodes": [
+        "0014.19",
+        "0014.60"
+      ]
+    },
+    {
+      "text": "For mail or Teams items already outside retention at first discovery, must content and attachments still be downloaded, and does the fingerprint cover blob contents or only metadata?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Sets download cost, failure surface and the fingerprint projection; ADR says born-truncated items need 'a stable observed projection' but also 'fingerprint the captured payload'.",
+      "nodes": [
+        "0014.47",
+        "0014.60"
+      ]
     },
     {
       "text": "When a folder is added to (or removed from) a mail instance with existing positions, what initial since does it use, and may a supplied since apply to it?",
@@ -51,15 +67,19 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Changes option validation and position seeding; ADR rejects a supplied boundary 'once a position exists' though positions are per folder.",
-      "nodes": ["0014.65"]
+      "nodes": [
+        "0014.65"
+      ]
     },
     {
       "text": "Do the mail and Teams connectors ever restore truncated payloads to Available (e.g. after retentionDays increases), re-downloading by ID outside the delta feed?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides whether a per-ID refetch path exists or truncation is one-way; the generic contract allows restoration but the connectors 'ignore changes to already captured messages'.",
-      "nodes": ["0014.47"]
+      "nodes": [
+        "0014.47"
+      ]
     },
     {
       "text": "Does payload/blob reclamation run under the instance lock, and does it delete only old-minus-new references or sweep all unreferenced files?",
@@ -67,15 +87,10 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Outside the lock a reclaim can delete a file a concurrent publication just reused; ADR puts steps 1-2 under the lock but is silent for step 4 and on who cleans staging leftovers.",
-      "nodes": ["0014.67", "0014.72"]
-    },
-    {
-      "text": "Is SetEvidencePayload with Available allowed on an entry that is already Available, replacing content under the same fingerprint?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Allowing it bypasses the same-fingerprint UpdatedEvidence refusal; ADR covers Truncated-to-Available and repeated Truncated only.",
-      "nodes": ["0014.47"]
+      "nodes": [
+        "0014.67",
+        "0014.72"
+      ]
     },
     {
       "text": "When a stateful connector's configuration changes after a position exists (calendar window, mail mailbox/folders, Files globs), who detects it and does it reset, reconcile or start a new producer?",
@@ -83,21 +98,37 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Host-vs-connector ownership of config-change detection; only Files says 'a changed source configuration starts a new producer', while calendar follows the saved delta link verbatim.",
-      "nodes": ["0014.02", "0014.54", "0014.65"]
+      "nodes": [
+        "0014.02",
+        "0014.54",
+        "0014.65"
+      ]
+    },
+    {
+      "text": "Is SetEvidencePayload with Available allowed on an entry that is already Available, replacing content under the same fingerprint?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Allowing it bypasses the same-fingerprint UpdatedEvidence refusal; ADR covers Truncated-to-Available and repeated Truncated only.",
+      "nodes": [
+        "0014.47"
+      ]
     },
     {
       "text": "What fields does the calendar Event payload carry (e.g. join URL, series IDs, attendees, body)?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Persisted payload shape and fingerprint scope, and whether curation can link artifacts to events offline; ADR names only source links and lastModifiedDateTime.",
-      "nodes": ["0014.54"]
+      "nodes": [
+        "0014.54"
+      ]
     },
     {
       "text": "How does Files folderPath combine with each scope (especially a SharedUrl resolving to a file), and how are non-business drives acquired?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides validation and whether a second delta strategy is needed; ADR specifies only 'drive-root delta for the business-drive path'."
     },
     {
@@ -106,39 +137,30 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Sets the SDK type every connector implements and the host dispatch; the two signatures differ and the generic one has no options parameter.",
-      "nodes": ["0014.12", "0014.43"]
+      "nodes": [
+        "0014.12",
+        "0014.43"
+      ]
     },
     {
       "text": "May a batch contain several operations for the same ID, and are delta checks made against the running state or the prior capture?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Determines validator design and which fingerprint the same-fingerprint rule compares; ADR says only 'the host applies changes in order'.",
-      "nodes": ["0014.12"]
+      "nodes": [
+        "0014.12"
+      ]
     },
     {
       "text": "Does the SDK define host-recognised FetchError constructors for truncated, missing-ID and corrupt-storage read failures, or does each plugin author its own?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Shared error type ownership; ADR requires CLI/MCP to expose the distinction but not where the constructors live.",
-      "nodes": ["0014.47"]
-    },
-    {
-      "text": "How are FetchSummary added/updated/removed counted (per operation or net), and do SetEvidencePayload operations count?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Operator-visible summary semantics; ADR says payload-only ops are not additions/updates/removals but gives the summary nowhere to record them.",
-      "nodes": ["0014.55"]
-    },
-    {
-      "text": "What format and validation apply to mail's since option and to retentionDays (zero, negative, future)?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Connector-owned validation rules; calendar windows are specified as timezone-qualified ISO 8601 but since is untyped Text.",
-      "nodes": ["0014.65"]
+      "nodes": [
+        "0014.47"
+      ]
     },
     {
       "text": "What are the Teams connector's configuration and fetch-options types, including the look-back window representation?",
@@ -146,15 +168,40 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Determines what callers pass to --options and how it is validated; ADR describes them only in prose.",
-      "nodes": ["0014.43", "0014.51"]
+      "nodes": [
+        "0014.43",
+        "0014.51"
+      ]
+    },
+    {
+      "text": "How are FetchSummary added/updated/removed counted (per operation or net), and do SetEvidencePayload operations count?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Operator-visible summary semantics; ADR says payload-only ops are not additions/updates/removals but gives the summary nowhere to record them.",
+      "nodes": [
+        "0014.55"
+      ]
+    },
+    {
+      "text": "What format and validation apply to mail's since option and to retentionDays (zero, negative, future)?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Connector-owned validation rules; calendar windows are specified as timezone-qualified ISO 8601 but since is untyped Text.",
+      "nodes": [
+        "0014.65"
+      ]
     },
     {
       "text": "What reference time ('now') does retention truncation use: invocation start time or publish time?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Affects which items are truncated in a given fetch; ADR says retention uses received/ended time but not the comparison instant.",
-      "nodes": ["0014.47"]
+      "nodes": [
+        "0014.47"
+      ]
     }
   ]
 }

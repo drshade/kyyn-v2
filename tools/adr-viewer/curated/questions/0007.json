@@ -6,22 +6,6 @@
   "summary": "Framing, value profile and library choices are specified closely enough to build, but the protocol's own message set is not: the biggest gap is the undefined handshake/entry messages and the wire form of envelope-level HostCallError.",
   "questions": [
     {
-      "text": "How is an envelope-level HostCallError encoded on the wire when the plugin HostResponse result holds only the declared Either FetchError a?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides the guest decoder and how abort is told apart from resuming with Left; the ADR says undeclared errors abort and the result has no second error wrapper, but gives no wire slot for HostCallError.",
-      "nodes": ["0007.16", "0007.02"]
-    },
-    {
-      "text": "What do the handshake and initial-entry messages contain (including snapshot), and where and how are contract identities checked?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Fixes the first frames of the state machine and where the repair instruction is raised; the ADR says identities are checked before a typed entry input and the plugin begins with {arguments, snapshot}, but explicitly leaves these cases unexpanded.",
-      "nodes": ["0007.09", "0007.04"]
-    },
-    {
       "text": "Is a Completed result committed on receipt of the complete frame or only after a clean guest exit, and what happens to trailing bytes or a nonzero exit after it?",
       "asked": 3,
       "verdict": "partly_answered",
@@ -29,34 +13,50 @@
       "reason": "Atomicity of result publication; the ADR only says a partially written frame never publishes a result and tests cover trailing garbage."
     },
     {
+      "text": "How is an envelope-level HostCallError encoded on the wire when the plugin HostResponse result holds only the declared Either FetchError a?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides the guest decoder and how abort is told apart from resuming with Left; the ADR says undeclared errors abort and the result has no second error wrapper, but gives no wire slot for HostCallError.",
+      "nodes": [
+        "0007.16",
+        "0007.02"
+      ]
+    },
+    {
+      "text": "What do the handshake and initial-entry messages contain (including snapshot), and where and how are contract identities checked?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Fixes the first frames of the state machine and where the repair instruction is raised; the ADR says identities are checked before a typed entry input and the plugin begins with {arguments, snapshot}, but explicitly leaves these cases unexpanded.",
+      "nodes": [
+        "0007.09",
+        "0007.04"
+      ]
+    },
+    {
       "text": "How are multi-field positional constructors and record-syntax constructors inside a sum type encoded?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Wire shape generated identically on both peers; the table covers only nullary and single-value cases, and newtype wrappers are tagged or objects.",
-      "nodes": ["0007.15"]
+      "nodes": [
+        "0007.15"
+      ]
     },
     {
       "text": "Which type formers beyond records, sums, lists, Text and Bool (maps, sets, tuples, unit, Char, ByteString fields) are supported, and how is each encoded?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Sets generator coverage and wire shapes; the ADR says only 'supported, compiler-inspected authored ADTs' and that unsupported mappings must be rejected."
     },
     {
       "text": "What exact grammar do canonical numeric (and date/instant) strings follow, and must decoders reject non-canonical spellings?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Both peers must agree on one spelling for encoded values; the ADR mandates canonical decimal strings never via Double but says exact decimal syntax is separate."
-    },
-    {
-      "text": "Who allocates request IDs and what counts as a wrong ID: mismatch with the outstanding request only, or also reuse, gaps or a fixed start?",
-      "asked": 3,
-      "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Changes host validation state and wrong-ID tests; the ADR says IDs are canonical integer strings and wrong IDs abort, with one outstanding request.",
-      "nodes": ["0007.16", "0007.09"]
+      "reason": "Both peers must agree on one spelling for encoded values; the ADR mandates canonical decimal strings never via Double but says exact decimal syntax is separate."
     },
     {
       "text": "Does structural decoding reject or ignore object keys the target constructor does not declare?",
@@ -66,20 +66,35 @@
       "reason": "Changes every generated decoder and conformance expectations; the ADR covers duplicate keys, unknown tags and missing fields but not extra keys."
     },
     {
+      "text": "Who allocates request IDs and what counts as a wrong ID: mismatch with the outstanding request only, or also reuse, gaps or a fixed start?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "low",
+      "reason": "Changes host validation state and wrong-ID tests; the ADR says IDs are canonical integer strings and wrong IDs abort, with one outstanding request.",
+      "nodes": [
+        "0007.16",
+        "0007.09"
+      ]
+    },
+    {
       "text": "How are HTTP headers represented in metadata (object vs ordered pairs), and are names case-normalised?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "An object under first-key-wins would drop repeated headers like Set-Cookie; the ADR only says metadata contains method/URL/headers or status/headers.",
-      "nodes": ["0007.14"]
+      "nodes": [
+        "0007.14"
+      ]
     },
     {
       "text": "What happens when a raw HTTP response body is not valid UTF-8 given the typed HTTP boundary is UTF-8 text?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Failure classification (Left, lossy decode or protocol abort) and whether error pages reach the provider; the ADR says the boundary stays UTF-8 text and non-2xx bodies are retained.",
-      "nodes": ["0007.21"]
+      "nodes": [
+        "0007.21"
+      ]
     },
     {
       "text": "Is there any cap on total section or message size beyond the 64 KiB chunk limit?",
@@ -87,7 +102,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Host assembles sections before decoding, so an unbounded guest can exhaust memory; the ADR says chunk size is not a limit on total message size but names no other limit.",
-      "nodes": ["0007.17"]
+      "nodes": [
+        "0007.17"
+      ]
     },
     {
       "text": "Is there a host-enforced deadline or idle timeout for a guest that never sends its next frame, and who configures it?",
@@ -95,15 +112,9 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Otherwise only outer cancellation stops a hung guest; the ADR only says no orphan guest waits forever for a host response.",
-      "nodes": ["0007.10"]
-    },
-    {
-      "text": "How does the context-free decodeMessage know whether a frame may carry a nonempty body, and where do raw body bytes live in the message types?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Body permission depends on method or outstanding request, which the decoder does not see; the ADR says decodeMessage validates the permitted body section but envelopes have no bytes field.",
-      "nodes": ["0007.21", "0007.17"]
+      "nodes": [
+        "0007.10"
+      ]
     },
     {
       "text": "When a nested child plugin invocation fails fatally, does the parent receive a handleable typed value or does the outer invocation abort?",
@@ -111,22 +122,9 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Fixes result types of the nested-call capability; the ADR says recoverable errors return typed and fatal failures remain distinguishable.",
-      "nodes": ["0007.10"]
-    },
-    {
-      "text": "How is cancellation delivered to a guest: protocol message, closing pipes, or signalling/killing the process with a grace period?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides whether guests need cancel handling or the host needs process-group management; the ADR requires releasing child pipes/processes and defers to ADR 0019.",
-      "nodes": ["0007.10"]
-    },
-    {
-      "text": "How are JSON keys and tag strings derived from Haskell field and constructor names?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Both peers must generate identical names; the ADR only says generated frames have unique field names."
+      "nodes": [
+        "0007.10"
+      ]
     },
     {
       "text": "What is the shape and lifetime of the typed artifact reference for blob downloads, and who owns its storage?",
@@ -134,15 +132,47 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Decides host storage and cleanup and whether references can appear in results or facts; the ADR only says blob downloads return metadata and binaries use a typed artifact reference.",
-      "nodes": ["0007.21"]
+      "nodes": [
+        "0007.21"
+      ]
+    },
+    {
+      "text": "How does the context-free decodeMessage know whether a frame may carry a nonempty body, and where do raw body bytes live in the message types?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Body permission depends on method or outstanding request, which the decoder does not see; the ADR says decodeMessage validates the permitted body section but envelopes have no bytes field.",
+      "nodes": [
+        "0007.21",
+        "0007.17"
+      ]
+    },
+    {
+      "text": "How is cancellation delivered to a guest: protocol message, closing pipes, or signalling/killing the process with a grace period?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether guests need cancel handling or the host needs process-group management; the ADR requires releasing child pipes/processes and defers to ADR 0019.",
+      "nodes": [
+        "0007.10"
+      ]
+    },
+    {
+      "text": "How are JSON keys and tag strings derived from Haskell field and constructor names?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Both peers must generate identical names; the ADR only says generated frames have unique field names."
     },
     {
       "text": "How does an aborting guest signal the host, and how does the host distinguish a guest abort from a crash?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Needed for distinguishable fatal failures; the ADR says broken frames need not be well-formed responses and stderr carries diagnostics, but defines no abort signal.",
-      "nodes": ["0007.02"]
+      "nodes": [
+        "0007.02"
+      ]
     }
   ]
 }

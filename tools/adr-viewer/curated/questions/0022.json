@@ -11,7 +11,10 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Decides which libraries (MicroHs modules, JSON libs, web assets) can ship and how they may be linked; the ADR only says to identify license questions, resolve them explicitly and get legal review when unclear, with no criteria.",
-      "nodes": ["0022.04", "0022.02"]
+      "nodes": [
+        "0022.04",
+        "0022.02"
+      ]
     },
     {
       "text": "What notice and ownership apply to SDK-generated or copied code that ends up in third-party plugin bundles?",
@@ -19,15 +22,21 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Stamping proprietary headers on generated code inside third-party plugins conflicts with the extensibility goal; the ADR only says generated/copied code is in review scope and that the plugin boundary is independent of licensing.",
-      "nodes": ["0022.03", "0022.01"]
+      "nodes": [
+        "0022.03",
+        "0022.01"
+      ]
     },
     {
-      "text": "What is the exact Kyyn-owned notice (wording, copyright holder) and where does it go: per-file headers, repo-level file, embedded in artifacts, or a mix?",
+      "text": "Under what terms do third-party plugin authors receive the proprietary SDK and plugin interfaces today?",
       "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides whether every source file, one repo file, or the build pipeline changes; the ADR refers to 'the intended notice' and an 'all-rights-reserved notice' but never gives text, holder or placement.",
-      "nodes": ["0022.01"]
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Decides whether the SDK ships externally with a EULA/grant or stays internal this phase; the ADR forbids promising public redistribution rights and separates distribution permissions from extensibility, but grants nothing.",
+      "nodes": [
+        "0022.03",
+        "0022.01"
+      ]
     },
     {
       "text": "Should existing permissive LICENSE files or headers on Kyyn-authored prototypes be replaced, left alone, or flagged for an owner decision after provenance review?",
@@ -35,7 +44,10 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Decides whether implementation includes a cross-repo migration or only an inventory; the ADR requires provenance review before changing repo license files and forbids silent rewrites, but not what the review should lead to.",
-      "nodes": ["0022.01", "0022.02"]
+      "nodes": [
+        "0022.01",
+        "0022.02"
+      ]
     },
     {
       "text": "Is the pre-distribution notice and dependency check an automated build/CI gate or a manual release checklist?",
@@ -43,15 +55,19 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "A gate means SBOM/notice tooling with failure behaviour, a checklist means docs only; the ADR rules out only runtime enforcement ('one dependency-selection check').",
-      "nodes": ["0022.02"]
+      "nodes": [
+        "0022.02"
+      ]
     },
     {
-      "text": "Under what terms do third-party plugin authors receive the proprietary SDK and plugin interfaces today?",
+      "text": "What is the exact Kyyn-owned notice (wording, copyright holder) and where does it go: per-file headers, repo-level file, embedded in artifacts, or a mix?",
       "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides whether the SDK ships externally with a EULA/grant or stays internal this phase; the ADR forbids promising public redistribution rights and separates distribution permissions from extensibility, but grants nothing.",
-      "nodes": ["0022.03", "0022.01"]
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Decides whether every source file, one repo file, or the build pipeline changes; the ADR refers to 'the intended notice' and an 'all-rights-reserved notice' but never gives text, holder or placement.",
+      "nodes": [
+        "0022.01"
+      ]
     },
     {
       "text": "How do third-party notices reach recipients inside distributed artifacts: an aggregated notices file, per-bundle notices, an about screen, or only the in-repo inventory?",
@@ -59,7 +75,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Decides packaging work and whether the inventory must be machine-readable; the ADR says to preserve and retain required notices and points to vendor/README.md and dependency-sources.md, but not how notices travel.",
-      "nodes": ["0022.02"]
+      "nodes": [
+        "0022.02"
+      ]
     },
     {
       "text": "What counts as a 'distribution' that triggers the notice check: internal builds, tester builds, SDK releases, published plugins?",
@@ -67,7 +85,9 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Decides which pipelines run the check; the ADR says 'for any distribution' without defining the term.",
-      "nodes": ["0022.02"]
+      "nodes": [
+        "0022.02"
+      ]
     }
   ]
 }

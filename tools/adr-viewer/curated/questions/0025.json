@@ -11,23 +11,20 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "The server can accept changes and dispatch sinks, so this is a security guarantee; the ADR only lists 'local Web binding/origin handling' as something still to test.",
-      "nodes": ["0025.04"]
+      "nodes": [
+        "0025.04"
+      ]
     },
     {
       "text": "Is there a stable exit-code taxonomy distinguishing not-Ready, failed check, base conflict, uncertain sink outcome and similar, or only zero/non-zero?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Scripts are the automation API; the ADR promises 'useful exit codes' and a non-zero exit for unready accept, but does not define distinct codes.",
-      "nodes": ["0025.03", "0025.08"]
-    },
-    {
-      "text": "What address and port does the Web server bind by default, and does a port conflict fail or fall back to another port?",
-      "asked": 3,
-      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "This decides the startup code, error paths and WSL host reachability; the ADR only says to 'exercise port conflicts' and test binding.",
-      "nodes": ["0025.04"]
+      "reason": "Scripts are the automation API; the ADR promises 'useful exit codes' and a non-zero exit for unready accept, but does not define distinct codes.",
+      "nodes": [
+        "0025.03",
+        "0025.08"
+      ]
     },
     {
       "text": "What is the structured CLI output format (e.g. JSON on stdout), is it the default or opt-in, and where do progress and diagnostics go?",
@@ -35,7 +32,10 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "The script must 'extract the returned workspace ID'; the ADR requires 'structured results' but names no format, default or stream split.",
-      "nodes": ["0025.03", "0025.08"]
+      "nodes": [
+        "0025.03",
+        "0025.08"
+      ]
     },
     {
       "text": "What does 'create a KB' produce: an empty skeleton, a copy of a bundled or remote template such as ADR 0021's synthetic KB, or a clone?",
@@ -43,23 +43,29 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Each option is a different command and distribution story; the ADR says 'locate or create a KB' and delegates selection, not creation, to ADR 0018.",
-      "nodes": ["0025.01"]
+      "nodes": [
+        "0025.01"
+      ]
+    },
+    {
+      "text": "What address and port does the Web server bind by default, and does a port conflict fail or fall back to another port?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "This decides the startup code, error paths and WSL host reachability; the ADR only says to 'exercise port conflicts' and test binding.",
+      "nodes": [
+        "0025.04"
+      ]
     },
     {
       "text": "Does Kyyn generate the MCP client configuration example with resolved paths and the WSL wrapper, or is it static documentation?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "This decides whether it is a code or docs deliverable; the ADR requires an 'accurate invocation/configuration example' and correct WSL paths without saying how.",
-      "nodes": ["0025.04"]
-    },
-    {
-      "text": "Is there a per-KB runtime record (address, PID) that later commands use to discover, reuse or stop a running Web server?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "A persisted run file means a format, stale-PID handling and status/stop verbs; the ADR rules out a global registry, allows multiple instances and lists 'endpoint discovery' as open.",
-      "nodes": ["0025.04", "0025.05"]
+      "nodes": [
+        "0025.04"
+      ]
     },
     {
       "text": "Must secret values be entered by the human directly (no-echo prompt), or may the agent supply them non-interactively?",
@@ -67,23 +73,41 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "This decides whether secrets appear in agent transcripts and which commands need a TTY; the ADR only says an agent 'can help populate its required keys'.",
-      "nodes": ["0025.02"]
+      "nodes": [
+        "0025.02"
+      ]
+    },
+    {
+      "text": "Is there a per-KB runtime record (address, PID) that later commands use to discover, reuse or stop a running Web server?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "A persisted run file means a format, stale-PID handling and status/stop verbs; the ADR rules out a global registry, allows multiple instances and lists 'endpoint discovery' as open.",
+      "nodes": [
+        "0025.04",
+        "0025.05"
+      ]
     },
     {
       "text": "Does the Web command run only in the foreground, or can it detach into the background?",
       "asked": 2,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Detaching needs logging, a PID file and a stop path within the no-hidden-daemon rule; the ADR says the process is explicit and leaving it running is 'an explicit process choice'.",
-      "nodes": ["0025.04"]
+      "nodes": [
+        "0025.04"
+      ]
     },
     {
       "text": "Does the readiness check cover only the platform toolchain, or also the selected KB (missing secrets, pending compilation), and does it need a KB?",
       "asked": 2,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "This decides whether readiness needs KB selection and how it avoids eager compilation; the ADR defers platform requirements to ADR 0020 and says nothing about KB-level readiness.",
-      "nodes": ["0025.01", "0025.06"]
+      "nodes": [
+        "0025.01",
+        "0025.06"
+      ]
     },
     {
       "text": "If a server stops while an acceptance or sink dispatch is in flight, where is the actual outcome durably recorded for later readers?",
@@ -91,7 +115,9 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Uncertain sink outcomes could be lost on shutdown; the ADR says to 'report its actual outcome' and delegates cancellation to ADRs 0007 and 0019 without naming a record.",
-      "nodes": ["0025.07"]
+      "nodes": [
+        "0025.07"
+      ]
     },
     {
       "text": "Are a KB's required secret keys declared statically, or discovered only by compiling plugins (and so trigger first-use compilation)?",
@@ -99,7 +125,10 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "This decides whether a missing-secrets check counts as a cheap operation; the ADR forbids eager compilation at startup but does not say where key requirements come from.",
-      "nodes": ["0025.02", "0025.06"]
+      "nodes": [
+        "0025.02",
+        "0025.06"
+      ]
     },
     {
       "text": "Is the readiness check read-only, or may it install or repair dependencies, and what structured result does it return?",
@@ -107,7 +136,9 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Check-and-fix needs idempotent steps and a dry run; the ADR only says to 'explain what was installed and any action still needed'.",
-      "nodes": ["0025.01"]
+      "nodes": [
+        "0025.01"
+      ]
     },
     {
       "text": "How does the Web command report its address machine-readably to the launching agent, and is opening the browser the default or a flag?",
@@ -115,7 +146,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "An agent cannot wait for a long-running process to exit; the ADR says the command 'reports its address and can open' the browser but gives no format or default.",
-      "nodes": ["0025.04"]
+      "nodes": [
+        "0025.04"
+      ]
     },
     {
       "text": "Does non-interactive `evolution accept` need an explicit confirmation flag, or is invoking the command enough acceptance intent?",
@@ -123,7 +156,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "This decides whether there is a prompt or flag path; the example and verification run accept with 'no server or human prompt', but the example is called illustrative.",
-      "nodes": ["0025.08"]
+      "nodes": [
+        "0025.08"
+      ]
     },
     {
       "text": "How does a long-running Web or MCP process notice head or workspace changes from other processes, and must it show that its snapshot is stale?",
@@ -131,7 +166,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "The choice is per-request re-reads, a file watcher or manual refresh; the ADR says 'clients refresh persisted workspace/results' and allows holding a Validated Root.",
-      "nodes": ["0025.05"]
+      "nodes": [
+        "0025.05"
+      ]
     },
     {
       "text": "Does install record a manifest of what it installed, and is uninstall or upgrade part of this decision?",
@@ -139,7 +176,9 @@
       "verdict": "unanswered",
       "importance": "low",
       "reason": "This decides whether 'explain what was installed' is transient output or a durable record; the ADR does not mention uninstall or upgrade.",
-      "nodes": ["0025.01"]
+      "nodes": [
+        "0025.01"
+      ]
     }
   ]
 }

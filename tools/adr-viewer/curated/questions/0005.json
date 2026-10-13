@@ -11,31 +11,10 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Drives the recognizer table, persisted codecs and identity encoding; the ADR requires reviewed adapters selecting type, parameters, encoding and checks together but specifies only Probability (basis points).",
-      "nodes": ["0005.09", "0005.24"]
-    },
-    {
-      "text": "How do non-empty positional constructors and union arms with several fields or record syntax lower into Shape: synthesized names, anonymous record payloads, or rejection?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Record needs FieldNames and a union arm has one Maybe Shape, so this fixes persisted shapes, codecs and FieldRole addressing; the ADR covers only the zero-field case and excludes multi-element tuples.",
-      "nodes": ["0005.08", "0005.09"]
-    },
-    {
-      "text": "Are newtypes transparent in Shape and on the wire, and can a newtype over Text or a date satisfy Title or Timeline?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Changes lowering, codecs, affordance checks and identity input; the ADR says identifiers are ordinary newtypes and roles accept types 'optionally wrapped' without saying whether that includes newtypes.",
-      "nodes": ["0005.09", "0005.13"]
-    },
-    {
-      "text": "What Haskell type must a reference field have, and can CollectionDecl address references nested in records, optionals, lists or union payloads?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Determines the annotation pass, reference checking and projected shapes; the ADR gives flat reference-field/target pairs and says checking verifies 'an ID's representation' without naming it.",
-      "nodes": ["0005.12"]
+      "nodes": [
+        "0005.09",
+        "0005.24"
+      ]
     },
     {
       "text": "Where are type, field and constructor descriptions and examples authored, and do they enter SchemaMetadata, the ContractId and the projections?",
@@ -43,22 +22,59 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Identity hashes 'all metadata, including descriptions', so the source decides what invalidates bindings; the ADR says to colocate descriptions but SchemaMetadata only has RoleDecl descriptions.",
-      "nodes": ["0005.12", "0005.13"]
+      "nodes": [
+        "0005.12",
+        "0005.13"
+      ]
+    },
+    {
+      "text": "How do non-empty positional constructors and union arms with several fields or record syntax lower into Shape: synthesized names, anonymous record payloads, or rejection?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Record needs FieldNames and a union arm has one Maybe Shape, so this fixes persisted shapes, codecs and FieldRole addressing; the ADR covers only the zero-field case and excludes multi-element tuples.",
+      "nodes": [
+        "0005.08",
+        "0005.09"
+      ]
+    },
+    {
+      "text": "Are newtypes transparent in Shape and on the wire, and can a newtype over Text or a date satisfy Title or Timeline?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Changes lowering, codecs, affordance checks and identity input; the ADR says identifiers are ordinary newtypes and roles accept types 'optionally wrapped' without saying whether that includes newtypes.",
+      "nodes": [
+        "0005.09",
+        "0005.13"
+      ]
+    },
+    {
+      "text": "What Haskell type must a reference field have, and can CollectionDecl address references nested in records, optionals, lists or union payloads?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Determines the annotation pass, reference checking and projected shapes; the ADR gives flat reference-field/target pairs and says checking verifies 'an ID's representation' without naming it.",
+      "nodes": [
+        "0005.12"
+      ]
     },
     {
       "text": "In a persistent root, is a [Fact a] that is not a direct root field (nested record, Maybe, inside a payload) rejected, treated as plain data, or a nested collection?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Affects root checking and storage routing; checkRootLayout only covers direct [Fact a] fields while Verification mentions 'nested collections'."
     },
     {
       "text": "Is a metadata export that throws or diverges during evaluation a Diagnostic or a Failure, and is evaluation bounded by a time or resource limit?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Sets exception translation and GuestExecution limits; the ADR classifies ill-typed source as diagnostics and infrastructure as CompilerUnavailable but not runtime failure of authored metadata.",
-      "nodes": ["0005.22"]
+      "nodes": [
+        "0005.22"
+      ]
     },
     {
       "text": "Which encoding does projectJsonSchema describe for codec-specific scalars: guest wire/persistence (\"8500\") or model contract (0.85), or both via a mode?",
@@ -66,46 +82,59 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Discovery clients and validators break on the wrong encoding; the ADR defines both Probability encodings and a single CheckedContract -> JsonSchema signature.",
-      "nodes": ["0005.08", "0005.24"]
+      "nodes": [
+        "0005.08",
+        "0005.24"
+      ]
     },
     {
       "text": "What does projectJsonSchema emit beyond structure: dialect, roles, collection/reference annotations, descriptions, ContractId?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides whether presentation clients read roles from JSON Schema or a separate surface; the ADR only says InspectedSchema.contract is the common source and JsonSchema is a discovery projection.",
-      "nodes": ["0005.08"]
+      "nodes": [
+        "0005.08"
+      ]
     },
     {
       "text": "Are duplicate RoleDecl names, declared-but-unused roles, one role used across several record types, and duplicate collection names or root fields rejected, and what name characters are allowed?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Each is a diagnostic or silent acceptance; the ADR rejects duplicate field/case names and each role once per record, not declaration-level duplicates.",
-      "nodes": ["0005.12", "0005.19"]
+      "nodes": [
+        "0005.12",
+        "0005.19"
+      ]
     },
     {
       "text": "Besides declared collection fields, what else may a persistent root record contain, and may two collections share a payload type?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Non-collection root fields would need storage; the ADR only requires a single record constructor with every direct [Fact a] declared."
     },
     {
       "text": "Are nested optionals (Maybe (Maybe a)) and optionals inside lists supported, and how is inner Nothing distinguished in JSON?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "JSON null cannot distinguish the layers, so this fixes the persisted/wire shape; the ADR only separates nullary union arms from optionals.",
-      "nodes": ["0005.08", "0005.09"]
+      "nodes": [
+        "0005.08",
+        "0005.09"
+      ]
     },
     {
       "text": "Does a FieldRole or CollectionDecl naming an existing but unreachable record type fail validation or get ignored?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Matters for metadata modules shared by roots and queries; the ADR rejects 'missing types' and says roles refer to reachable records, without defining missing as unreachable.",
-      "nodes": ["0005.12"]
+      "nodes": [
+        "0005.12"
+      ]
     }
   ]
 }

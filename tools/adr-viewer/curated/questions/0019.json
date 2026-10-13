@@ -9,9 +9,12 @@
       "text": "What does an unexpected native exception (a host bug, or an IO error that fits no category) become, given that OperationalFailure has only four constructors?",
       "asked": 3,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Decides translation code and whether OperationalFailure gains a catch-all. The ADR only says it must not become an empty success and must be translated once at the plumbing edge.",
-      "nodes": ["0019.01", "0019.10"]
+      "nodes": [
+        "0019.01",
+        "0019.10"
+      ]
     },
     {
       "text": "How do the MCP and Web adapters encode domain rejection, operational Failure and cancellation on the wire?",
@@ -19,7 +22,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Sets adapter response types and what clients can branch on. The ADR says only 'surface both cleanly through every adapter', and gives a rule for the CLI interruption status alone.",
-      "nodes": ["0019.01"]
+      "nodes": [
+        "0019.01"
+      ]
     },
     {
       "text": "Do deadlines or timeouts exist initially, who configures them, and is an expired deadline treated as cancellation, as an operational Failure or as an Uncertain result?",
@@ -29,28 +34,36 @@
       "reason": "Sets timer and configuration code and the outcome class a hung guest or provider produces. The ADR says only that deadline policy is separate from data contracts and should be tuned from measurements."
     },
     {
-      "text": "Is a malformed or truncated guest frame, or a Unicode decoding error, an operational RuntimeUnavailable or a typed domain protocol failure in the result?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Decides where the frame decoder's errors flow and what the Verification tests expect. The ADR lists 'protocol failure' as an expected domain failure, but RuntimeUnavailable plausibly covers it too.",
-      "nodes": ["0019.01", "0019.10"]
-    },
-    {
-      "text": "Is a missing local secret a domain result the caller (and authored programs) can handle, or an operational Failure that stops the operation?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Decides whether provider and delivery result types carry a MissingSecret variant. It is listed among expected failures, but no constructor or result type is assigned to it.",
-      "nodes": ["0019.01", "0019.10"]
-    },
-    {
       "text": "What are the payload shapes of StorageDiagnostic and ProcessDiagnostic, and do they carry raw native causes or only redacted summaries?",
       "asked": 2,
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Every adapter renders these payloads and every injected-failure test asserts on them, and the answer decides what can reach logs under ADR 0016. The ADR names the types without defining them.",
-      "nodes": ["0019.10"]
+      "nodes": [
+        "0019.10"
+      ]
+    },
+    {
+      "text": "Is a malformed or truncated guest frame, or a Unicode decoding error, an operational RuntimeUnavailable or a typed domain protocol failure in the result?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides where the frame decoder's errors flow and what the Verification tests expect. The ADR lists 'protocol failure' as an expected domain failure, but RuntimeUnavailable plausibly covers it too.",
+      "nodes": [
+        "0019.01",
+        "0019.10"
+      ]
+    },
+    {
+      "text": "Is a missing local secret a domain result the caller (and authored programs) can handle, or an operational Failure that stops the operation?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides whether provider and delivery result types carry a MissingSecret variant. It is listed among expected failures, but no constructor or result type is assigned to it.",
+      "nodes": [
+        "0019.01",
+        "0019.10"
+      ]
     },
     {
       "text": "Is the 'useful repair action' free text or a structured, machine-actionable value?",
@@ -58,7 +71,10 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Free text is one string field. A structured value needs a closed sum type rendered by every adapter. The ADR names only the BaseMismatch Git inspection hint as an example.",
-      "nodes": ["0019.01", "0019.12"]
+      "nodes": [
+        "0019.01",
+        "0019.12"
+      ]
     },
     {
       "text": "What are the concrete CLI exit statuses for success, domain refusal, operational failure, interruption and possibly Uncertain?",
@@ -66,7 +82,9 @@
       "verdict": "partly_answered",
       "importance": "medium",
       "reason": "Scripts and tests depend on fixed values. The ADR requires only that the interruption status differ from an ordinary refusal.",
-      "nodes": ["0019.12"]
+      "nodes": [
+        "0019.12"
+      ]
     },
     {
       "text": "Does an MCP cancel notification or a Web client disconnect cancel the in-process operation it owns, or does that work run to completion initially?",
@@ -79,17 +97,11 @@
       "text": "Is there a shared progress-reporting effect and event shape that long operations emit through adapters, or is progress optional and specific to each operation?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides whether a common Progress type and adapter streaming must be built. The ADR rules out a persisted registry but does not define in-memory progress.",
-      "nodes": ["0019.07"]
-    },
-    {
-      "text": "Is a run-time fault in authored code that compiled (guest error, pattern-match failure, self-inflicted crash) operational Failure or a domain rejection?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides whether tool, validator and query results need a guest-execution-failed variant. 'Broken runtime execution remains operational Failure' is ambiguous about faults the authored code causes itself.",
-      "nodes": ["0019.10", "0019.11"]
+      "nodes": [
+        "0019.07"
+      ]
     },
     {
       "text": "Which provider error cases (protocol failure, missing secret, Uncertain, host Failure) do authored guest programs see as typed results, and which abort the invocation?",
@@ -97,7 +109,9 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Defines the guest-facing error type's constructors. The ADR says only that provider errors are typed results authored programs may handle.",
-      "nodes": ["0019.01"]
+      "nodes": [
+        "0019.01"
+      ]
     },
     {
       "text": "How are locks, temporary files and workers recovered after abrupt process death, when no scoped cleanup runs?",
@@ -107,12 +121,25 @@
       "reason": "The lock mechanism decides whether stale-lock detection and startup sweeps must be built. The ADR covers release on cancellation only, though it acknowledges that process death can happen."
     },
     {
+      "text": "Is a run-time fault in authored code that compiled (guest error, pattern-match failure, self-inflicted crash) operational Failure or a domain rejection?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides whether tool, validator and query results need a guest-execution-failed variant. 'Broken runtime execution remains operational Failure' is ambiguous about faults the authored code causes itself.",
+      "nodes": [
+        "0019.10",
+        "0019.11"
+      ]
+    },
+    {
       "text": "Is a generated-source diagnostic with no authored-source mapping marked by a structured field, or only in message text?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "A structured flag changes the shared diagnostic shape that every UI renders. The ADR says only that such diagnostics 'remain honestly identified'.",
-      "nodes": ["0019.09"]
+      "nodes": [
+        "0019.09"
+      ]
     }
   ]
 }

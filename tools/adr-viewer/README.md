@@ -296,11 +296,16 @@ one agent's quirks and are kept only for reference.
 
 **Score:** the recurring questions by importance, **high · medium · low**.
 
-- `high`: persisted or fingerprinted data shapes, failure and atomicity
-  semantics, guarantees, ownership between components
-- `medium`: behaviour users or operators see: defaults, limits, validation,
-  configuration changes
-- `low`: local detail an implementer could choose and change later
+Importance is what a wrong guess would cost, not the topic:
+
+- `high`: expensive to undo or breaks a guarantee: data compatibility or
+  migration, failure and atomicity behaviour, security or secret boundaries,
+  ownership between components, or what the deliverable is
+- `medium`: a visible contract choice that can change later with a migration
+  or a small break: representations, output or error shapes, configuration
+  validation
+- `low`: an edge case or default with an obvious reasonable choice that is
+  cheap to change
 
 Read the score as "decisions an implementer would have to make that the ADR
 leaves open". Settling questions does not drive it to zero, because answering

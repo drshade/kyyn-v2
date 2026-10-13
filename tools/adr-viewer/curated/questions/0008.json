@@ -6,28 +6,26 @@
   "summary": "The authoring surface and query registration are close to implementable, but the KB tool entry point is underspecified; the biggest gap is how a tool's Either FetchError return maps onto its declared resultType and what descriptor and capabilities discovery publishes for it.",
   "questions": [
     {
-      "text": "How does a tool implementation returning Tool (Either FetchError r) map onto a declared resultType of r?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Decides the signature check, the generated entry and the failure shape agents see; the bulkContent example declares Contents but returns Either FetchError Contents, and the ADR only says invocation 'returns the inspected result type'.",
-      "nodes": ["0008.22", "0008.01"]
-    },
-    {
       "text": "Does checkRoot compile every registered query entry against its declared types, or are mismatches found only at invocation?",
       "asked": 3,
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Decides what Validated Root guarantees; tools are compiled during whole-root checking, but for queries the ADR says 'the generated entry type-checks the chosen implementation at invocation'.",
-      "nodes": ["0008.11", "0008.13"]
+      "nodes": [
+        "0008.11",
+        "0008.13"
+      ]
     },
     {
-      "text": "What host-side descriptor does discovery publish for a KB tool, with what identity and capability list?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Changes the discovery wire shape and how invocation resolves a tool; MethodDescriptor and QueryDescriptor are defined, registration has 'declared capability requirements', but the tools manifest has no capabilities field and there is no tool descriptor.",
-      "nodes": ["0008.22"]
+      "text": "How does a tool implementation returning Tool (Either FetchError r) map onto a declared resultType of r?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Decides the signature check, the generated entry and the failure shape agents see; the bulkContent example declares Contents but returns Either FetchError Contents, and the ADR only says invocation 'returns the inspected result type'.",
+      "nodes": [
+        "0008.22",
+        "0008.01"
+      ]
     },
     {
       "text": "Are generated modules (KyynQueryBindings, Kyyn.Workspace.Evolution, connector and plugin bindings) committed to the KB tree or ephemeral build outputs?",
@@ -35,47 +33,71 @@
       "verdict": "unanswered",
       "importance": "high",
       "reason": "Decides whether proposals carry regenerated files and need freshness checks; the ADR says only that the toolchain generates adapters and that source collisions with them are diagnostics.",
-      "nodes": ["0008.01", "0008.11"]
+      "nodes": [
+        "0008.01",
+        "0008.11"
+      ]
+    },
+    {
+      "text": "What host-side descriptor does discovery publish for a KB tool, with what identity and capability list?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Changes the discovery wire shape and how invocation resolves a tool; MethodDescriptor and QueryDescriptor are defined, registration has 'declared capability requirements', but the tools manifest has no capabilities field and there is no tool descriptor.",
+      "nodes": [
+        "0008.22"
+      ]
     },
     {
       "text": "How does a multi-argument function such as emailWithAttachments map onto the single inputType of a tool declaration?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "Changes the manifest schema, signature checker and generated input contract; every declaration has one inputType, yet the ADR's own composition example takes two arguments.",
-      "nodes": ["0008.22"]
+      "nodes": [
+        "0008.22"
+      ]
     },
     {
       "text": "What naming rule and uniqueness check apply to query names?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Sets validation diagnostics for names that outputs and persisted examples bind to; tools get the connector-binding identifier rule and uniqueness, queries only 'a separate namespace'.",
-      "nodes": ["0008.11"]
+      "nodes": [
+        "0008.11"
+      ]
     },
     {
       "text": "How does a query with no external argument declare its inputType, and may its implementation be a bare Query a?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Changes the signature check and how the host builds an empty request; the only example takes ReportingPolicy and the ADR just notes type aliases can name scalar/list/optional contracts.",
-      "nodes": ["0008.11"]
+      "nodes": [
+        "0008.11"
+      ]
     },
     {
       "text": "How does Kyyn locate the schema-level SchemaMetadata export: a fixed name/module convention or a kb.dhall field?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides the manifest shape and the missing/duplicate diagnostic; the ADR says authors export it 'alongside their schema' while query metadata is named explicitly in kb.dhall.",
-      "nodes": ["0008.05"]
+      "nodes": [
+        "0008.05"
+      ]
     },
     {
       "text": "Are module-path conflicts in the source closure and collisions with generated modules blocking errors or warnings?",
       "asked": 2,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides whether checkRoot fails and whether co-installing plugins with shared paths is possible; the ADR says they are 'diagnostics, not silent overwrites' and 'reported, not silently renamed' but gives no severity.",
-      "nodes": ["0008.09", "0008.11"]
+      "nodes": [
+        "0008.09",
+        "0008.11"
+      ]
     },
     {
       "text": "When a query name is re-resolved at execution, what counts as a contract match: exact equality or a compatibility relation?",
@@ -83,7 +105,9 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Decides whether persisted examples survive a type change; the ADR says to 'compare contracts/capabilities' and never authorize 'a same-named incompatible function' without defining compatibility.",
-      "nodes": ["0008.11"]
+      "nodes": [
+        "0008.11"
+      ]
     },
     {
       "text": "Can a KB tool read the selected KB snapshot as well as captured evidence?",
@@ -91,15 +115,20 @@
       "verdict": "partly_answered",
       "importance": "high",
       "reason": "Decides whether the Tool algebra includes Query reads and whether tool invocation needs a selected root; the table lists only captured-evidence reads and judgements, and the ADR forbids only the reverse (queries calling plugins).",
-      "nodes": ["0008.22"]
+      "nodes": [
+        "0008.22"
+      ]
     },
     {
       "text": "Can a connector instance be passed as a tool request argument, or are instances only fixed by generated caller bindings?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "high",
+      "importance": "medium",
       "reason": "A request-supplied instance needs a wire contract for instance selection and host verification; the ADR says generated caller bindings select a named instance, but emailWithAttachments takes a mailbox argument.",
-      "nodes": ["0008.06", "0008.09"]
+      "nodes": [
+        "0008.06",
+        "0008.09"
+      ]
     },
     {
       "text": "Do ADR 0011 human-authored examples apply to KB tools as well as queries?",
@@ -107,7 +136,10 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Tool examples would need pinned evidence and handling of non-deterministic judgements; the ADR ties examples to QueryDescriptor only, while checkRoot runs example checks.",
-      "nodes": ["0008.13", "0008.22"]
+      "nodes": [
+        "0008.13",
+        "0008.22"
+      ]
     },
     {
       "text": "From which module namespace do authors import plugin method bindings, connector instances and the Tool type?",
@@ -115,7 +147,10 @@
       "verdict": "unanswered",
       "importance": "medium",
       "reason": "Determines generation, collision rules and catalogue entries; examples use both Kyyn.Plugins.P_local_file.Folder and Microsoft.Mail, and Kyyn.Connectors is not in the facade list.",
-      "nodes": ["0008.09", "0008.24"]
+      "nodes": [
+        "0008.09",
+        "0008.24"
+      ]
     },
     {
       "text": "How are validation entry points registered and discovered?",
@@ -128,17 +163,21 @@
       "text": "Which authored location should a compile error from a generated entry point at: the kb.dhall declaration, the implementation, or neither?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Decides diagnostic plumbing for the 'break a result type' verification; the ADR says diagnostics should identify authored sources and unlocated compiler prose is shown without a span.",
-      "nodes": ["0008.01"]
+      "nodes": [
+        "0008.01"
+      ]
     },
     {
       "text": "Is the queries field required (as an empty typed list) like tools, or may it be omitted?",
       "asked": 1,
       "verdict": "unanswered",
-      "importance": "medium",
+      "importance": "low",
       "reason": "Affects manifest validation for KBs without queries; the ADR gives the explicit empty-list form only for tools.",
-      "nodes": ["0008.11"]
+      "nodes": [
+        "0008.11"
+      ]
     }
   ]
 }
