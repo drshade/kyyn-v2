@@ -35,6 +35,12 @@ main = do
       public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics", "Kyyn.Plugin"]
       inspect paths names = inspectApi compiler paths names >>= either (fail . show) pure
   modules <- inspect sources public
+  duplicateFields <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DuplicateFields"]
+  assert ("duplicate field export ownership: " ++ show duplicateFields)
+    (case [signature | ApiModule _ symbols _ <- duplicateFields,
+      ApiSymbol "shared" ValueNamespace _ signature _ _ <- symbols] of
+      [signature] -> "Public" `isInfixOf` signature && not ("Private" `isInfixOf` signature)
+      _ -> False)
   qualified <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.QualifiedFixture"]
   let qualifiedDeclarations = [(n,d) | ApiModule _ symbols _ <- qualified, ApiSymbol n _ _ _ (Just d) _ <- symbols]
   forM_ [("before", "before :: Edit Before.Root ()"), ("after", "after :: Edit After.Root ()"),
