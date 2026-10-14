@@ -214,10 +214,11 @@ function labelLines(id) {
 // Specification gaps: the ADR's snapshot, once the shown step has reached it.
 const snapshot = (id, t) => { const q = D.questions[id]; return q && q.step <= t ? q : null; };
 const gapClass = q => q.tally[0] ? "high" : q.tally[1] ? "medium" : "";
-const gapText = q => q.tally.join("·");
+const gapText = q => q.tally.join("·") + (q.contradictions ? ` !${q.contradictions}` : "");
 const need = q => Math.ceil(q.runs * 3 / 5);  // recurring: at least 60% of runs, as in Questions.hs
 const gapTip = q => `Specification gaps at step ${q.step}: ${q.tally[0]} high, ${q.tally[1]} medium, ${q.tally[2]} low ` +
-  `questions raised by at least ${need(q)} of ${q.runs} blind agents`;
+  `questions raised by at least ${need(q)} of ${q.runs} blind agents` +
+  (q.contradictions ? `; ${q.contradictions} contradictions with other ADRs` : "");
 function gapBadge(q, attrs) {
   const g = el("text", { ...attrs, class: "gap " + gapClass(q) });
   g.textContent = attrs["text-anchor"] ? gapText(q) : `spec gaps ${gapText(q)}`;
@@ -393,7 +394,8 @@ function showNode(id, n) {
     ${nodeQuestions(id, n)}`;
 }
 function questionItem(q, runs) {
-  return `<li title="${esc(q.reason)}"><span class="gap ${q.importance === "low" ? "" : q.importance}">${q.importance[0].toUpperCase()}</span> ${esc(q.text)} <span class="meta">${q.asked}/${runs}</span></li>`;
+  const mark = q.kind === "contradiction" ? "!" : q.importance[0].toUpperCase();
+  return `<li title="${esc(q.reason)}"><span class="gap ${q.importance === "low" ? "" : q.importance}">${mark}</span> ${esc(q.text)} <span class="meta">${q.asked}/${runs}</span></li>`;
 }
 const byImportance = qs => ["high", "medium", "low"].flatMap(i => qs.filter(q => q.importance === i));
 function nodeQuestions(id, n) {
@@ -404,11 +406,14 @@ function nodeQuestions(id, n) {
 function laneQuestions(id) {
   const snap = D.questions[id];
   if (!snap) return "";
-  const rec = byImportance(snap.questions.filter(q => q.recurring)), rest = byImportance(snap.questions.filter(q => !q.recurring));
+  const conflicts = snap.questions.filter(q => q.recurring && q.kind === "contradiction");
+  const rec = byImportance(snap.questions.filter(q => q.recurring && q.kind !== "contradiction"));
+  const rest = byImportance(snap.questions.filter(q => !q.recurring));
   const changed = snap.lastChange != null && snap.lastChange > snap.step ? ` · ADR changed since` : "";
   return `<h3>Spec gaps <span class="gap ${gapClass(snap)}">${gapText(snap)}</span></h3>
     <div class="meta" title="${gapTip(snap)}">step ${snap.step} · ${esc(snap.date)}${changed}</div>
     <p>${esc(snap.summary)}</p>
+    ${conflicts.length ? `<h3>Contradictions</h3><ul class="questions">${conflicts.map(q => questionItem(q, snap.runs)).join("")}</ul><h3>Gaps</h3>` : ""}
     <ul class="questions">${rec.map(q => questionItem(q, snap.runs)).join("")}</ul>
     ${rest.length ? `<details><summary>${rest.length} raised by fewer than ${need(snap)} runs</summary><ul class="questions">${rest.map(q => questionItem(q, snap.runs)).join("")}</ul></details>` : ""}`;
 }

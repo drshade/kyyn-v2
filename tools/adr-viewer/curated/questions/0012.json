@@ -1,81 +1,54 @@
 {
   "adr": "0012",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "Close to implementable, with the core CAS, tree construction and result types fully specified; the biggest gap is the exact path selection for the overlap check and post-CAS synchronization, including what happens to workspace files that are not exported.",
+  "summary": "Highly implementable: the CAS publication, the outcome types and the checkout synchronization are specified. Remaining gaps are whether kb init commits taps.dhall (conflicting with ADR 0015) and which refusal a stale saved candidate produces.",
   "questions": [
     {
-      "text": "Do the overlap check and post-CAS synchronization cover the whole replaced subtree prefixes or only the paths whose content actually changed?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides which local edits refuse acceptance or get overwritten; the ADR says 'synchronize the paths written or removed by this acceptance' but its replacements and restore command operate on whole subtrees.",
-      "nodes": [
-        "0012.19",
-        "0012.13"
-      ]
-    },
-    {
-      "text": "How should synchronization treat live workspace files that ExportAcceptedWorkspace does not export, such as saved candidates or evaluation results?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "If they sit inside the synced prefix, every acceptance reports WorkingTreeUpdateIncomplete; the ADR retains untracked files as incomplete but leaves where saved material lives to EvolutionStore/ADR 0010.",
-      "nodes": [
-        "0012.19",
-        "0012.17"
-      ]
-    },
-    {
-      "text": "What counts as 'stale' material for InvalidMaterial, and are edited inputs reported as InvalidMaterial by the application or as WorkspaceChanged by publication?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Fixes which layer checks captured inputs and which refusal and repair advice tests assert; the ADR lists 'missing, stale or rejected' as InvalidMaterial and defines WorkspaceChanged separately without separating them.",
-      "nodes": [
-        "0012.02"
-      ]
-    },
-    {
-      "text": "What CLI exit status does an accepted commit with WorkingTreeUpdateIncomplete (and the matching initialization result) produce?",
-      "asked": 2,
+      "kind": "contradiction",
+      "text": "ADR 0015 says kb init writes the first-party taps.dhall declaration in the initial commit, while ADR 0012's initialization publishes only the RootStore export and synchronizes only root/.",
+      "asked": 3,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Scripts must distinguish accepted-but-needs-repair from success and refusal; the ADR only says NotReady exits non-zero and that sync failure must not hide acceptance."
+      "reason": "Committing it needs a second subtree replacement, wider synchronization and a rule for an existing taps.dhall. ADR 0015 says '`kb init` writes the first-party declaration as part of the initial KB commit', and ADR 0012 says '...exports the validated root through RootStore ... and synchronizes only `root/`'.",
+      "nodes": ["0012.23"]
     },
     {
-      "text": "In what order are the publication refusals (checkout, base, workspace, overlap) checked, and which one is reported when several apply?",
-      "asked": 2,
+      "kind": "gap",
+      "text": "Does a Ready workspace whose inputs no longer match its saved candidate get refused as InvalidMaterial or WorkspaceChanged, and is that cheap check run before checkCandidate?",
+      "asked": 3,
       "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "NotAccepted carries one problem with distinct repair advice; the ADR only fixes that readiness is checked first, in the application layer.",
-      "nodes": [
-        "0012.01",
-        "0012.02"
-      ]
+      "importance": "medium",
+      "reason": "The two constructors carry different repair guidance, and the ordering decides whether every stale accept pays for full compilation. ADR 0012 says 'Missing, stale or rejected material is NotAccepted (InvalidMaterial ...)' but also defines 'WorkspaceChanged means the currently selected workspace no longer matches the captured input material'.",
+      "nodes": ["0012.02"]
     },
     {
-      "text": "Which component resolves CommitMetadata identity and date for acceptance and initialization, from what source, and at what point relative to the readiness check?",
+      "kind": "gap",
+      "text": "What exactly does the pure empty initialization scaffold contain: module names, kb.dhall values, and recipe/example/plugin directories?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Affects signatures and refusal ordering; the ADR says the caller supplies metadata, yet also requires refusal 'before commit-identity lookup' and treats missing identity as an initialization preflight refusal.",
-      "nodes": [
-        "0012.13",
-        "0012.27",
-        "0012.23"
-      ]
+      "reason": "It must pass checkRoot, and its module naming shapes every first evolution's before/ copy and imports. ADR 0005 says 'This gives initialization an empty root without dummy fields', and ADR 0006 lists the manifest fields, but no ADR gives the scaffold files.",
+      "nodes": ["0012.23"]
     },
     {
-      "text": "Where does the LocalBranch come from when the caller names none: always the checked-out branch, or an optional flag or persisted setting?",
+      "kind": "gap",
+      "text": "Should acceptance and initialization refuse while a Git merge, cherry-pick or revert is in progress on the selected branch?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Advancing the ref under MERGE_HEAD leaves the user's merge state inconsistent. ADR 0012 checks only the branch selection ('refuse detached HEAD or a different checked-out branch') and overlapping root paths.",
+      "nodes": ["0012.09", "0012.19"]
+    },
+    {
+      "kind": "gap",
+      "text": "In what order are NotReady, CheckoutMismatch, BaseMismatch, WorkspaceChanged and OverlappingEdits evaluated when several apply?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "low",
-      "reason": "Decides adapter resolution order and whether CheckoutMismatch is a routine refusal; the ADR says the branch is not a mandatory persisted configuration and proposes the checked-out branch.",
-      "nodes": [
-        "0012.09"
-      ]
+      "reason": "AcceptanceProblem reports a single problem, so the order decides the repair users and scripts see. ADR 0012 fixes only that NotReady is checked 'before candidate loading', and leaves the rest unordered.",
+      "nodes": ["0012.01", "0012.02"]
     }
   ]
 }

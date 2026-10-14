@@ -1,257 +1,139 @@
 {
   "adr": "0018",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The CLI half is close to implementable apart from a few internal contradictions (kb init/new, kyyn/kyyn-v2, ApiOrigin), but the MCP/Web half is not: its biggest gap is the undefined MCP contract (tool granularity, JSON value encoding and outcome/error mapping).",
+  "summary": "The CLI hierarchy, discovery and exit table are detailed, but the MCP exposure model, Web security and HTTP contract are open; the biggest gap is how typed operations are exposed as MCP tools.",
   "questions": [
     {
-      "text": "How does secret set receive the value without a mandatory prompt, and does secret show reveal it?",
+      "kind": "gap",
+      "text": "Are queries, KB tools and plugin methods exposed over MCP as individual typed tools or through generic discovery and invoke tools, and how are they named?",
       "asked": 3,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Decides input channel, redaction and result type; ADR only lists the commands, 'checkout-local secrets' and 'no mandatory interactive prompts'.",
-      "nodes": [
-        "0018.42"
-      ]
-    },
-    {
-      "text": "Should ApiOrigin gain a PluginOrigin constructor, or are vendored plugin modules reported under an existing origin?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Fixes the shared data type and JSON origin values; prose demands sdk/generated/kb/plugin origins but the type has only SdkOrigin | GeneratedOrigin | KbOrigin.",
-      "nodes": [
-        "0018.48"
-      ]
-    },
-    {
-      "text": "How does InspectRootApi return the fixed catalogue together with guest.bindings-unavailable diagnostics when its result is Either [Diagnostic] [ApiEntry]?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides the effect signature and where degraded-listing logic lives; the ADR requires the partial list plus diagnostics but the declared Either cannot carry both."
-    },
-    {
-      "text": "Does MCP expose each KB tool/plugin method as its own generated MCP tool, or a fixed set of typed discover/invoke tools?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides a dynamic vs static tool list (listChanged, naming) and how selective discovery works; ADR only says 'named typed methods and selective discovery', not one command-string tool.",
-      "nodes": [
-        "0018.04",
-        "0018.31",
-        "0018.32"
-      ]
-    },
-    {
-      "text": "Is the KB creation command kb init or kb new (one command or two)?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Sets parser name, help and the not-a-KB hint; hierarchy and init paragraph say kb init, KB selection says 'Explicit kb new owns creation'.",
-      "nodes": [
-        "0018.16",
-        "0018.09"
-      ]
-    },
-    {
-      "text": "What canonical JSON encoding maps Dhall/Haskell contract values (unions, optionals, naturals, extra fields) to MCP/Web inputs, schemas and results, and who decodes it?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Needed for 'same request via CLI/MCP/web, same result'; ADR says generated JSON Schema and structural JSON but never defines the mapping.",
-      "nodes": [
-        "0018.04",
-        "0018.31",
-        "0018.32"
-      ]
-    },
-    {
-      "text": "What mechanism protects the local Web/MCP control surface from unrelated origins (Host/Origin checks, per-launch token, socket)?",
-      "asked": 2,
       "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Security guarantee shaping middleware and client launch; ADR only says 'Bind locally and protect the control surface from unrelated web origins'.",
+      "reason": "Decides most of the MCP adapter; 0018 rules out 'one untyped command-string tool' and asks for 'named typed methods and selective discovery' without choosing a model.",
       "nodes": [
         "0018.04"
       ]
     },
     {
-      "text": "Do MCP/Web responses reuse the CLI outcome/result/diagnostics envelope, and is a refusal an isError result, a protocol error or a successful call?",
-      "asked": 2,
+      "kind": "contradiction",
+      "text": "ADR 0018 says 'Explicit kb new owns creation' while ADR 0018's command tree and ADR 0015 name the creation command kb init.",
+      "asked": 3,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Failure semantics and output schemas for agents; the envelope and exit table are defined for the CLI adapter only.",
-      "nodes": [
-        "0018.11",
-        "0018.04"
-      ]
-    },
-    {
-      "text": "Where in the JSON envelope do the response kind and selected revision/evolution go, and is the structured output versioned?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Stable structured output scripts depend on; ADR says responses 'identify their kind and selected revision/evolution' but the only envelope shown has outcome/result/diagnostics.",
-      "nodes": [
-        "0018.11"
-      ]
-    },
-    {
-      "text": "Which commands resolve Git identity and refuse when it is missing: only committing ones, or every KB-scoped mutation?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides which effect rows include readUserIdentity; ADR says missing identity is refused 'before compilation or mutation' without listing commands.",
-      "nodes": [
-        "0018.15"
-      ]
-    },
-    {
-      "text": "What does kb show return, as distinct from root show?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Decides result type and whether it works on a broken root; it appears only in the hierarchy, which forbids placeholder handlers."
-    },
-    {
-      "text": "What does doctor check, does it need a KB, and do report commands (doctor, root check) signal findings as success or refusal?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Decides its interpreters and exit code on findings; ADR only says 'doctor is a standalone readiness command' and root check 'returns the check report'.",
-      "nodes": [
-        "0018.11"
-      ]
-    },
-    {
-      "text": "Is the installed executable named kyyn or kyyn-v2?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "User-facing program name, help and printed recovery commands; the ADR uses both 'kyyn <noun-path> <verb>' and 'kyyn-v2 --kb PATH ...'."
-    },
-    {
-      "text": "What does root recipe run produce, and where does its effect land (new evolution, existing workspace, or recipe state directly)?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Decides whether it needs EvolutionStore/acceptance, identity and the check exit table; ADR says only that closed flows take a request via run and defers state to ADR 0014.",
-      "nodes": [
-        "0018.44"
-      ]
-    },
-    {
-      "text": "What happens when CLI and server requests mutate the same KB or evolution workspace concurrently?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Atomicity of saved candidates and accept; ADR only notes the kernel checks for a branch change between selection and publication."
-    },
-    {
-      "text": "Is a Web/MCP server bound to one KB at start, or does each request carry a KnowledgeBaseRef resolved per call?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides request shapes and server resolution/caching; the example request carries knowledgeBase while ADR 0025 is cited for per-KB lifecycles.",
-      "nodes": [
-        "0018.04",
-        "0018.09"
-      ]
-    },
-    {
-      "text": "In a long-running server, are interpreters composed per request or built once per capability and selected per operation?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Shapes server architecture and start-up cost; ADR forbids a kitchen-sink or lazily initialized global runtime but says nothing about server lifetime.",
-      "nodes": [
-        "0018.07"
-      ]
-    },
-    {
-      "text": "How does plugin connector login obtain interactive credentials given no mandatory prompts (device code, browser loopback)?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides adapter flow and MCP/Web exposure; login appears only in the hierarchy.",
-      "nodes": [
-        "0018.42"
-      ]
-    },
-    {
-      "text": "What does kb init do when PATH is outside any Git repository or already exists, non-empty or already a KB?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Decides whether init runs git init and which refusals exist; ADR says only that PATH may not exist yet and defers ordering to ADR 0012.",
+      "reason": "The parser and missing-KB hints need one verb; 0018 'kb / init / show' and 0015 'kb init writes the first-party declaration' vs 0018 'Explicit kb new owns creation'.",
       "nodes": [
         "0018.16"
       ]
     },
     {
-      "text": "Which evolution states (open, ready, accepted, archived) may --evolution select for discovery and browsing?",
-      "asked": 1,
+      "kind": "gap",
+      "text": "What is the complete set of JSON envelope outcome values, and which accompany exits 4 and 130?",
+      "asked": 3,
       "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Decides whether archived target source is readable and the refusal codes; ADR says only that --evolution selects that workspace's target source.",
+      "importance": "medium",
+      "reason": "Scripts and agents branch on this field; 0018 shows only 'Succeeded' and lists exit codes without the outcome mapping.",
       "nodes": [
-        "0018.38",
-        "0018.48"
+        "0018.11"
       ]
     },
     {
-      "text": "Is an invalid --input/--options Dhall value a domain refusal (exit 1) or invalid CLI usage (exit 2)?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Places decoding in the parser or the adapter; ADR says a type mismatch keeps the normal Dhall diagnostic and decodes against the inspected contract, without naming the exit.",
+      "kind": "gap",
+      "text": "How does the CLI accept --input/--options from a file, given that hermetic Dhall rejects imports?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "0018 promises 'input/output file support' and 0025's script passes an arguments file, but only inline '--input <dhall>' is specified.",
+      "nodes": [
+        "0018.31",
+        "0018.46",
+        "0018.47"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "Which exit codes and outcomes do delivery results (RejectedByDestination, Uncertain, FailedBeforeDispatch) produce?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Stop-on-error scripts must tell 'safe to retry' from 'inspect destination first'; the 0018 exit table covers refusal, failure and acceptance repair only, while 0017 defines four delivery outcomes.",
       "nodes": [
         "0018.11",
-        "0018.31"
-      ]
-    },
-    {
-      "text": "How are root query execute and root output preview results rendered, and do they accept --evolution?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Dhall-default/JSON convention is stated for tools and connector methods only; the hierarchy shows no --evolution for queries or outputs.",
-      "nodes": [
-        "0018.47",
         "0018.46"
       ]
     },
     {
-      "text": "Does guest discovery with a non-KB --kb (explicit or default '.') fall back to catalogue-only or refuse?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Needs a special case in shared KB resolution; 'outside a KB, discovery reads only the catalogue' conflicts with 'not a KB returns an actionable error'.",
+      "kind": "gap",
+      "text": "What mechanism protects the local Web control surface from other origins, and how are HTML previews isolated from the workbench origin?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Security boundary; 0018 says 'protect the control surface from unrelated web origins' and 0017 'keep HTML previews isolated' without choosing tokens, Origin checks or separate origins.",
       "nodes": [
-        "0018.09"
+        "0018.04"
       ]
     },
     {
-      "text": "How is evolution new --before COMMIT validated (full ID only, ancestor of HEAD, contains this KB)?",
+      "kind": "contradiction",
+      "text": "ADR 0018 requires discovery to distinguish sdk, generated, kb and plugin origins, but ADR 0018's ApiOrigin type has only three constructors.",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Fixes the JSON origin field; 0018 'Distinguish sdk, generated, kb and plugin origins' vs 'data ApiOrigin = SdkOrigin | GeneratedOrigin | KbOrigin'.",
+      "nodes": [
+        "0018.48"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "Do CLI --json and MCP use the guest wire value encoding or a separate agent-facing projection, and which does projectJsonSchema describe?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "0006 says CLI/MCP JSON are 'interface projections' and 0014 renames connector to instance for agents, but the value encoding of numbers and optionals is not fixed.",
+      "nodes": [
+        "0018.11"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "What request/response contract does the HTTP adapter expose to the packaged Web client, including update notifications?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "kyyn-surfaces and web/ must agree on endpoints and envelopes; 0018 fixes only the CLI envelope and 0023 allows an unspecified refresh mechanism.",
+      "nodes": [
+        "0018.04",
+        "0018.14"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "Is there an operation that removes an unaccepted evolution workspace, and does it delete saved candidates?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "0010 requires 'an explicit operation' to remove unaccepted workspaces, but 0018's evolution commands have no removal verb."
+    },
+    {
+      "kind": "gap",
+      "text": "Do read-only commands also refuse a detached HEAD, or only operations needing a branch?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "low",
-      "reason": "ADR allows an explicit full commit ID (hierarchy lists containment, not every argument) but gives no validation or refusal rules.",
+      "reason": "0018 says detached HEAD is refused 'for these operations: there is no local branch to pass to publication', leaving reads ambiguous.",
       "nodes": [
         "0018.12"
       ]
     },
     {
-      "text": "With --json, does a usage error (exit 2) also emit a JSON envelope on stdout?",
+      "kind": "gap",
+      "text": "What does kb show return?",
       "asked": 1,
-      "verdict": "partly_answered",
+      "verdict": "unanswered",
       "importance": "low",
-      "reason": "Scripts need to know whether every invocation yields an envelope; ADR keeps optparse's standard help/usage presentation but does not say whether an envelope accompanies it.",
-      "nodes": [
-        "0018.11"
-      ]
+      "reason": "0018 lists 'kb / show' and requires every command to perform its stated operation, but states none for it."
     }
   ]
 }

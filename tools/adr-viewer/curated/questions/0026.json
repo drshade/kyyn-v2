@@ -1,138 +1,45 @@
 {
   "adr": "0026",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The layout and ownership rules are clear enough to start, but the build mechanics are not: the biggest gap is how vendor/MicroHs and the shared/SDK sources actually enter the native and guest builds.",
+  "summary": "The repository and package layout is close to implementable; the biggest gaps are whether kyyn-surfaces or kyyn owns transport IO and which package holds the shared wire profile, plus the plugins/files naming conflict.",
   "questions": [
     {
-      "text": "Does the native build link vendor/MicroHs as a Cabal library or build and run it as a separate compiler binary?",
+      "kind": "contradiction",
+      "text": "ADR 0026 places the first-party file sink in plugins/files/, while ADRs 0015 and 0017 make it part of the local-file plugin alongside the folder source.",
       "asked": 3,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "The plugin name fixes generated modules, config file and SinkReference, and one package versus two; 0026 'files/ First-party file sink' vs 0017 'The local-file plugin supplies the file sink alongside its existing source' and 0015 'plugins/local-file'.",
+      "nodes": ["0026.06"]
+    },
+    {
+      "kind": "gap",
+      "text": "Does kyyn-surfaces perform transport IO (HTTP listener, MCP stdio loop, terminal input), or only pure parsing and rendering with IO in kyyn?",
+      "asked": 2,
       "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Decides cabal.project, kyyn-microhs dependencies and how its interpreters invoke the compiler; the ADR only requires one vendored revision for both native integration and the guest toolchain.",
-      "nodes": [
-        "0026.08"
-      ]
+      "reason": "It decides which package depends on server and stdio libraries and how import checks are written; 0003 'Transport IO belongs in adapters' and 0026 'kyyn-surfaces CLI, MCP and HTTP adapters' vs 0018 'parsing and pure rendering live in kyyn-surfaces'.",
+      "nodes": ["0026.01"]
     },
     {
-      "text": "Are guest/kyyn-sdk and guest/kyyn-runtime Cabal packages built and tested by GHC via cabal.project, or MicroHs-only?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "Fixes package boundaries, which compilers the guest source must support and what GHC tests cover; the ADR says only that not every guest dependency must be a native Cabal package.",
-      "nodes": [
-        "0026.01",
-        "0026.05"
-      ]
-    },
-    {
-      "text": "How does the shared/kyyn-types source physically reach the MicroHs SDK build: package dependency, cross-directory search path, or a staged copy?",
+      "kind": "gap",
+      "text": "Which package holds the shared Kyyn.Types.* wire profile and generated-codec support used by host and guest runtime?",
       "asked": 2,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "Determines the single-source guarantee and SDK build setup; the ADR says host and SDK compile the same source but not how the guest build references it.",
-      "nodes": [
-        "0026.05"
-      ]
+      "reason": "It sets the Cabal graph, MicroHs build inputs and what the SDK catalogue excludes; 0026 'Leave the exact shared wire-type/codec package placement to ADR 0007', and ADR 0007 selects libraries without naming a package.",
+      "nodes": ["0026.01", "0026.05"]
     },
     {
-      "text": "What rule decides whether a pure capability helper (decoders, binding generation, contract projections) lives in kyyn-plumbing or kyyn-porcelain-interpreters?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Ownership decides who may import helpers, e.g. whether kyyn-microhs's catalogue can use binding generation without a porcelain dependency; the ADR places helpers in both packages without a deciding rule.",
-      "nodes": [
-        "0026.01",
-        "0026.11"
-      ]
-    },
-    {
-      "text": "Are package boundaries enforced by Cabal build-depends and exposed modules alone, or by a separate module-level import checker gating CI?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Some rules (no helpers exported from interpreter modules, no native IO in porcelain interpreters) are module-level; the ADR only says package visibility and import checks must enforce ADR 0003.",
-      "nodes": [
-        "0026.01"
-      ]
-    },
-    {
-      "text": "How does the installed MicroHs toolchain find kyyn-types, kyyn-sdk and kyyn-runtime when compiling guest code: precompiled packages, a search path, or source vendored into each KB?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Changes package.sh, test-guest.sh, integration fixtures and the upgrade story; the ADR says only that package.sh bundles the runtime/toolchain.",
-      "nodes": [
-        "0026.05"
-      ]
-    },
-    {
-      "text": "Which step stages the runtime inputs kyyn-api-catalogue reads, and what are its relative paths relative to?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Sets the tool's CLI contract and build step ordering; the ADR says only that it inspects staged inputs from host/kyyn-microhs/app/ using relative paths.",
-      "nodes": [
-        "0026.11"
-      ]
-    },
-    {
-      "text": "Should tools/test.sh fail or skip when a needed toolchain (built MicroHs, Node.js) is missing, and what makes a check applicable?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Determines developer and CI prerequisites and whether incomplete runs are reported; the ADR forbids silently skipping guest/plugin failures but leaves absent toolchains and Web checks undefined.",
-      "nodes": [
-        "0026.07"
-      ]
-    },
-    {
-      "text": "Which libraries beyond base may shared/kyyn-types depend on, and who approves additions?",
+      "kind": "gap",
+      "text": "Are json-0.11, transformers, haskell-agentic and the native provider packages vendored under vendor/ like MicroHs, or resolved as Cabal dependencies?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Fixes the shared vocabulary's data shapes (Text/Map vs String/lists, codec instances); the ADR gives only the rule 'pure libraries supported by both toolchains', checked in CI."
-    },
-    {
-      "text": "Which way does the dependency run between kyyn-microhs and kyyn-plumbing-interpreters, and where does kyyn-microhs get its process and filesystem IO?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Avoids a package cycle and locates shared IO helpers; the ADR allows native plumbing interpreter packages to depend on kyyn-microhs but not the reverse question.",
-      "nodes": [
-        "0026.01"
-      ]
-    },
-    {
-      "text": "Which package owns the type of the execution-function bundle kyyn-surfaces receives from kyyn?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "kyyn depends on surfaces, so the type cannot live in kyyn without a cycle; the ADR says only that surfaces receives execution functions from kyyn.",
-      "nodes": [
-        "0026.01"
-      ]
-    },
-    {
-      "text": "What is the dependency direction between kyyn-sdk and kyyn-runtime, given SDK-private observation constructors?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides whether the SDK needs an internal module MicroHs must keep hidden; the ADR keeps constructors in the SDK and says neither depends on the kernel, nothing about each other.",
-      "nodes": [
-        "0026.05"
-      ]
-    },
-    {
-      "text": "Are generated guest bindings and the API catalogue committed with a freshness check, or produced only at build time?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Changes every build path and test gate; the ADR calls generated bindings derived artifacts but not whether they are committed.",
-      "nodes": [
-        "0026.11"
-      ]
+      "reason": "Guest libraries ship as source and native builds must work from a source archive; 0007, 0020 and 0028 cite sources 'recorded in vendored inputs', but 0026's layout shows only vendor/MicroHs/ and native provider packages are not covered.",
+      "nodes": ["0026.08"]
     }
   ]
 }

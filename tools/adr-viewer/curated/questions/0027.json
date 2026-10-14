@@ -1,81 +1,36 @@
 {
   "adr": "0027",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "Close to implementable: the authoring surface, provider and codec are well pinned, but the biggest gap is when JEV_TOKEN is resolved and refused (at flow start or at the first Judge) and where that failure lands.",
+  "summary": "The SystemOne integration is nearly implementable; the biggest gap is whether a model failure or missing JEV_TOKEN reaches the flow as a catchable FetchError or aborts the invocation.",
   "questions": [
     {
-      "text": "Is JEV_TOKEN resolved and the missing/empty refusal applied eagerly at flow start, or lazily on the first Judge request?",
+      "kind": "gap",
+      "text": "Does a Judge ModelFailure, including a missing or empty JEV_TOKEN, reach the guest flow as a catchable FetchError or abort the invocation as a host failure?",
       "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides whether non-judging flows need the secret and whether refusal lands before side effects or partway through; the ADR only says keys refuse 'before constructing the provider'.",
-      "nodes": [
-        "0027.20"
-      ]
-    },
-    {
-      "text": "Which side validates that the returned [Answer] matches the JudgeRequest (count, kinds, index and probability ranges), and which failure does a mismatch become?",
-      "asked": 2,
       "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Ownership of the check and the error type (host ModelFailure vs guest FetchError) are open; the ADR says failure terminates with no partial batch and that the guest retains typed assembly.",
-      "nodes": [
-        "0027.21",
-        "0027.22"
-      ]
+      "reason": "It fixes the reply's wire mapping, whether flows can fall back, and tool.failed (exit 1) versus operational failure (exit 3); 0027 says both 'sanitized host failures' and 'Failure terminates the flow through its existing error channel', and the flow channel is ExceptT FetchError.",
+      "nodes": ["0027.20", "0027.21"]
     },
     {
-      "text": "Are judgement requests and answers recorded anywhere (proposal evidence, run log, replay cache), or are they ephemeral?",
+      "kind": "gap",
+      "text": "Is JEV_TOKEN resolved lazily on the first Judge request or eagerly when a tool or closed recipe starts?",
       "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Eager resolution makes non-judging tools fail on a fresh clone and puts SecretStore in every tool composition; 0027 says only 'Missing or empty keys refuse before constructing the provider', while 0028's 'absence is valid until a tool requests a model' covers model.dhall, not this secret.",
+      "nodes": ["0027.20"]
+    },
+    {
+      "kind": "contradiction",
+      "text": "ADR 0005 makes Agentic's Probability a supported public ProbabilityScalar with storage and wire codecs, while ADR 0027 says Agentic values do not expand the public KB schema and authors project judgements into types such as integer basis points.",
+      "asked": 1,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "Recording would need storage and a persisted format bound to closed-recipe proposals; the ADR only says the codec does not change persisted fact formats.",
-      "nodes": [
-        "0027.18"
-      ]
-    },
-    {
-      "text": "Are existing tools and closed recipes written against the old judgement API migrated in this change, or left to fail root checking?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Determines whether a migration of accepted KB sources or just a compile diagnostic is needed; the ADR rejects a compatibility facade and removes old modules from discovery but says nothing about existing callers.",
-      "nodes": [
-        "0027.16"
-      ]
-    },
-    {
-      "text": "How are non-finite scores (NaN, infinity) handled: rejected as malformed, rejected by the codec, or encoded specially?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Both compilers must agree on the rule and its failure path; the ADR only specifies decimal strings for finite scores.",
-      "nodes": [
-        "0027.22"
-      ]
-    },
-    {
-      "text": "Which existing typed guest request carries Judge: the old judgement request reshaped to upstream types, or a new variant beside the SystemTwo request?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Changes the guest/host frame definitions on both GHC and MicroHs; the ADR says only 'an existing typed guest request' over the existing continuation protocol.",
-      "nodes": [
-        "0027.18",
-        "0027.22"
-      ]
-    },
-    {
-      "text": "Does the host retry or time out failed Jev requests, or does any provider exception end the flow immediately?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Retry or timeout policy adds constants and interacts with cancellation; the ADR says to translate exceptions per the SystemTwo pattern and forbids a configuration registry, but is silent on retries.",
-      "nodes": [
-        "0027.21"
-      ]
+      "reason": "It decides whether facts, query results and tool outputs may persist Probability fields; 0005 'Recognize upstream Agentic.Questions.Probability as ProbabilityScalar ... Dhall Natural in 0..10000' vs 0027 'This does not expand the public KB schema subset'.",
+      "nodes": ["0027.17"]
     }
   ]
 }

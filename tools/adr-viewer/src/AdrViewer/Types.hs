@@ -9,7 +9,7 @@ module AdrViewer.Types
   ( Step(..), Adr(..), Repo(..)
   , Lane(..), Node(..), Kind(..), Realised(..), How(..), Delivery(..), Ended(..), EndedHow(..)
   , Confidence(..), Editorial(..), deliveries
-  , Snapshot(..), Question(..), Verdict(..), Importance(..), questionNodeIds
+  , Snapshot(..), Question(..), QuestionKind(..), Verdict(..), Importance(..), questionNodeIds, isContradiction
   ) where
 
 import Data.Aeson
@@ -79,8 +79,15 @@ data Snapshot = Snapshot
 
 data Question = Question
   { questionText :: Text, questionAsked :: Int, questionVerdict :: Verdict
-  , questionImportance :: Importance, questionReason :: Text, questionNodes :: Maybe [Text] }
+  , questionImportance :: Importance, questionReason :: Text, questionNodes :: Maybe [Text]
+  , questionKind :: Maybe QuestionKind }
   deriving (Eq, Show, Generic)
+
+-- | A gap the ADRs leave open, or two ADRs that conflict. Omitted means a gap.
+data QuestionKind = Gap | Contradiction deriving (Eq, Show, Generic, Enum, Bounded)
+
+isContradiction :: Question -> Bool
+isContradiction = (== Just Contradiction) . questionKind
 
 -- | Decisions the question is about; omitted when it maps to none.
 questionNodeIds :: Question -> [Text]
@@ -132,6 +139,8 @@ instance FromJSON Snapshot where parseJSON = genericParseJSON (fields 8)
 instance ToJSON Snapshot where toJSON = genericToJSON (fields 8)
 instance FromJSON Question where parseJSON = genericParseJSON (fields 8)
 instance ToJSON Question where toJSON = genericToJSON (fields 8)
+instance FromJSON QuestionKind where parseJSON = genericParseJSON enums
+instance ToJSON QuestionKind where toJSON = genericToJSON enums
 instance FromJSON Verdict where parseJSON = genericParseJSON enums
 instance ToJSON Verdict where toJSON = genericToJSON enums
 instance FromJSON Importance where parseJSON = genericParseJSON impact

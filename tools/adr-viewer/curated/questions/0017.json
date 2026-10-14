@@ -1,157 +1,120 @@
 {
   "adr": "0017",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "Mostly implementable: types, ownership and the file sink are well specified, but the biggest gap is when output/sink compatibility is checked (at evolution acceptance or only at prepare time), closely followed by which pre-dispatch failures return FailedBeforeDispatch rather than raising Failure.",
+  "summary": "The renderer and file-sink model is clear, but sink registration (one publish versus named methods), ArtifactStore and PluginInvocation are undefined; the biggest gap is the sink connector's registration shape.",
   "questions": [
     {
-      "text": "Are output registrations (unknown query or sink, type mismatch, source used as sink) rejected during root/evolution validation, or only when an output is prepared?",
+      "kind": "gap",
+      "text": "Does a sink connector type register a single publish entry or several named methods, each with its own Input, Options, defaultOptions and Result?",
       "asked": 3,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "Decides whether accepted roots can hold broken outputs and which component owns adapter generation; the ADR lists the rejections and says output changes follow the evolution route, but not at which stage they are rejected.",
+      "reason": "Fixes sink registration, OutputDescriptor contracts and kb.dhall output references; 0017's SinkReference names a 'method' but the guest boundary shows one 'publish' and one 'defaultOptions'.",
       "nodes": [
         "0017.12",
-        "0017.01"
-      ]
-    },
-    {
-      "text": "May an explicit candidate export invoke the real configured sink, and if so how is the candidate identified in the result or the delivered output?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides whether publish accepts candidate roots and whether unaccepted content can overwrite the accepted destination; the ADR allows candidate export clearly identified as such, but not whether it dispatches or where the marker lives.",
-      "nodes": [
-        "0017.01",
         "0017.16"
       ]
     },
     {
-      "text": "Which pre-dispatch failures (invalid options or arguments, binding re-verification, plugin load, unresolvable artifacts) come back as FailedBeforeDispatch, and which are raised through the Failure effect?",
+      "kind": "gap",
+      "text": "What is ArtifactStore: who creates artifacts, where are bytes stored, what is an ArtifactId and how long do artifacts live?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Sets the failure channel and result shape for CLI/MCP/automation; the ADR defines FailedBeforeDispatch and says invalid options cause no invocation, but no text says what produces it, and InvokeSink already takes checked options.",
+      "importance": "high",
+      "reason": "Renderers are pure snapshot queries and cannot write bytes, yet 0017 calls artifact references 'existing'; no ADR defines the store or its relation to 0029's BlobRef or 0023's ArtifactTarget.",
       "nodes": [
-        "0017.16",
-        "0017.18",
-        "0017.15"
+        "0017.06"
       ]
     },
     {
-      "text": "Which SinkError variant does the file sink return for each host write failure (before the rename versus a failed or ambiguous rename)?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides RejectedByDestination versus Uncertain for file writes; the ADR says failed writes propagate as SinkError and never as success, and maps the variants to outcomes, but not which variant a write failure uses.",
+      "kind": "gap",
+      "text": "Where is the dispatch boundary between FailedBeforeDispatch and Uncertain: sink guest launch or the first external-effect request?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Determines whether a crashed sink is reported safe to retry; 0017 says 'guest failure ... after dispatch' is Uncertain and 'a known pre-dispatch failure is not Uncertain' without defining dispatch.",
       "nodes": [
-        "0017.17",
         "0017.18"
       ]
     },
     {
-      "text": "Does the generated adapter require exact structural equality between renderer result and sink Input, or allow looser matching such as extra fields, aliases or newtypes?",
+      "kind": "contradiction",
+      "text": "ADR 0011/0017 give PrepareOutput and prepareOutput a bare PreparedOutput result, while ADR 0019 requires expected domain rejections to stay in the result type.",
       "asked": 2,
-      "verdict": "partly_answered",
+      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Decides whether the adapter is a type assertion or conversion code; the ADR says it type-checks structural descriptors and that matching names alone is not enough, but gives no compatibility rule.",
-      "nodes": [
-        "0017.09",
-        "0017.12"
-      ]
-    },
-    {
-      "text": "Must the file sink remove its temporary file when a write fails?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Failed publishes could leave stray temp files beside the destination; the ADR specifies temp-file-plus-rename, permissions and symlink behaviour but says nothing about cleanup.",
-      "nodes": [
-        "0017.17"
-      ]
-    },
-    {
-      "text": "Must preview redact secret-bearing sink configuration fields when showing the checked configuration?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "A generic preview would print credentials verbatim unless the config contract marks secrets; the ADR says preview shows checked configuration and forbids plugin-specific logic in the handler.",
+      "reason": "Invalid arguments, unknown outputs and sink-contract mismatches would have to be operational Failure (exit 3); 0019 'expected domain outcomes remain in its result type' vs 0011 'PrepareOutput :: ... -> RootExecution m PreparedOutput'.",
       "nodes": [
         "0017.14"
       ]
     },
     {
-      "text": "Which surfaces (Web, CLI, MCP) expose publish, and may an MCP agent invoke an external sink without a human?",
-      "asked": 1,
+      "kind": "gap",
+      "text": "What is the exact Dhall shape of the outputs list in kb.dhall, and is it mandatory with an annotated empty list?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "The manifest decoder and kb init scaffold need a fixed type; 0017 only says outputs name a query and a sink, unlike 0008's explicit tools type.",
+      "nodes": [
+        "0017.12"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "What naming and uniqueness rules apply to output names, and do they share a namespace with queries or tools?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Root checking must reject invalid or duplicate declarations and the CLI addresses outputs by name; 0006/0008 give rules for queries and tools only.",
+      "nodes": [
+        "0017.12"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "May a sink be invoked with output prepared from a validated candidate, and how is that selected and marked?",
+      "asked": 2,
       "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides which endpoints and tools to build and whether agent publishing is gated; the ADR says automation may compose prepare and invoke without human interaction but never names the publish surfaces.",
+      "importance": "medium",
+      "reason": "0017 says candidate export 'may use a validated candidate, clearly identified as such', but root output publish has no candidate option and Validated Root cannot tell accepted from candidate.",
+      "nodes": [
+        "0017.01",
+        "0017.14"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "Is the sink request row fixed for all sinks or declared per sink, and which algebras besides FileWrite exist?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Decides sink signature inspection and broker handler installation; 0009 defines 'type SinkCalls = FileWrite' but sinks use 'filesystem/Git/HTTP/Secrets as declared'.",
       "nodes": [
         "0017.16"
       ]
     },
     {
-      "text": "Is a connector's source or sink role decided per method or per configured instance, and can one local-file instance serve both with shared config?",
+      "kind": "gap",
+      "text": "What operations, inputs and handler row does the PluginInvocation capability that Delivery lowers to have?",
       "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Shapes the persisted plugin configuration and the source-as-sink check; SinkReference names a method and local-file supplies a sink alongside its source with FileConfig, but sharing of instances and config is unstated.",
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "0017 calls it 'the existing PluginInvocation boundary', but no ADR defines it or says whether it is shared with acquisition and captured reads.",
       "nodes": [
-        "0017.12",
-        "0017.17"
+        "0017.16"
       ]
     },
     {
-      "text": "Must the file sink fsync the temporary file and directory, and how are failures after the rename classified?",
+      "kind": "gap",
+      "text": "Which pre-dispatch problems yield FailedBeforeDispatch and which raise operational Failure?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Determines the durability guarantee and which failures can occur after replacement; the ADR requires atomic rename but says nothing about durability.",
-      "nodes": [
-        "0017.17",
-        "0017.18"
-      ]
-    },
-    {
-      "text": "Does a sink declare idempotency in its registered signature, and does the host act on it?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Would add a field to the sink registration and inspection output; the ADR says to distinguish idempotent actions, that behaviour belongs to the sink and not to infer from names, but not whether it is declared metadata.",
+      "reason": "The same condition (for example a guest launch error) could exit 1 or 3; 0017 adds FailedBeforeDispatch while 0019 says process failures are Failure.",
       "nodes": [
         "0017.18"
-      ]
-    },
-    {
-      "text": "Who resolves artifact references in a prepared input, the host before dispatch or the plugin during publish, and can a renderer create new artifacts?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides whether a bad artifact is a pre-dispatch failure or a post-dispatch error; the ADR says references must resolve fixed bytes or fail and defines loadArtifact semantics, but not who calls it or when.",
-      "nodes": [
-        "0017.06",
-        "0017.18"
-      ]
-    },
-    {
-      "text": "Can publish target any historical accepted root, or always the current accepted head?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides whether preview/publish take a root selector on CLI/MCP/Web; the ADR says publish selects the accepted root once and need not compare with a newer head, but not whether older roots are selectable.",
-      "nodes": [
-        "0017.01"
-      ]
-    },
-    {
-      "text": "What is the shape of the publish result that identifies the selected root and sink, given DeliveryOutcome carries neither?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Changes what CLI/MCP serialize and possibly the Delivery effect's type; the ADR requires results to identify root and sink without a persistent receipt, but defines no wrapper.",
-      "nodes": [
-        "0017.16"
       ]
     }
   ]

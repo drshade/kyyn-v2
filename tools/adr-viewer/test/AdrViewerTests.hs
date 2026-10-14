@@ -91,11 +91,14 @@ main = do
 
   -- Specification gaps: only questions at least 3 of 5 runs raised count, and a
   -- snapshot's questions must name real decisions and plausible run counts.
-  let q t asked imp ns = Question t asked Unanswered imp "" (if null ns then Nothing else Just ns)
+  let q t asked imp ns = Question t asked Unanswered imp "" (if null ns then Nothing else Just ns) Nothing
       snap = Snapshot "0001" 6 "2026-10-13" 5 ""
         [q "a" 5 HighImpact ["0001.03"], q "b" 3 MediumImpact [], q "c" 2 HighImpact [], q "d" 4 LowImpact []]
       snapDiags s' = checkSnapshot steps adrs [lane] "0001.json" s'
   assert "tally counts the wrong questions" (tally snap == Tally 1 1 1)
+  let conflict = (q "x" 3 HighImpact []) { questionKind = Just Contradiction }
+      withConflict = snap { snapshotQuestions = conflict : snapshotQuestions snap }
+  assert "contradiction counted as a gap" (tally withConflict == Tally 1 1 1 && contradictions withConflict == 1)
   assert "valid snapshot has errors" (null [d | d <- snapDiags snap, dSeverity d == Error])
   let bad = snap { snapshotQuestions = [q "x" 6 HighImpact [], q "y" 1 LowImpact ["0001.99"]] }
       badErrors = [dMessage d | d <- snapDiags bad, dSeverity d == Error]

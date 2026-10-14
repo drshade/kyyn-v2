@@ -1,110 +1,81 @@
 {
   "adr": "0029",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "Close to implementable, but the biggest gap is how a composed KB tool's BlobRefs are traced back to their originating instance, with blob integrity-check depth a close second.",
+  "summary": "Blob storage, streaming and atomic positions are well specified; the biggest gap is exactly which changes make a stored sync position incompatible, followed by how surfaces attach file paths and resolve a BlobRef's originating instance.",
   "questions": [
     {
-      "text": "How does the host determine the originating instance of each BlobRef returned by a composed KB tool, given BlobRef carries no instance field?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Provenance tagging, snapshot search or an explicit instance field need different broker/wire plumbing and differ when two instances hold the same hash; ADR states the requirement ('resolution uses the originating captured instance') but no mechanism.",
-      "nodes": [
-        "0029.05"
-      ]
-    },
-    {
-      "text": "How thorough is blob integrity checking at publication and on read: existence only, size match, or full re-hash against sha256?",
+      "kind": "gap",
+      "text": "What exact text format does FetchContext.startedAt use (ISO 8601 with Z, precision), or should it be a typed instant?",
       "asked": 3,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Decides lock-held cost, corruption error paths and handling of right-hash/wrong-size refs; ADR only says publication checks a 'complete blob' and missing/corrupt bytes give an actionable error.",
-      "nodes": [
-        "0029.10",
-        "0029.03"
-      ]
+      "reason": "Plugins parse it for backfill and retention windows; 0029 calls it 'one host-captured UTC instant' but types it Text, while 0007 says instants are 'Documented strings, checked by corresponding SDK type'.",
+      "nodes": ["0029.08"]
     },
     {
-      "text": "What exact CLI/MCP output shape carries the local file path for each BlobRef, and where do unresolvable-reference diagnostics appear?",
+      "kind": "gap",
+      "text": "How is the local file path attached to each BlobRef in CLI/MCP results (sibling field, side table or wrapper), and do generated MCP output schemas include it?",
       "asked": 3,
-      "verdict": "partly_answered",
+      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Field-in-ref, wrapper or side table is a consumer-visible contract needing different encoders; ADR only says a path is supplied 'alongside each reference' and forged refs are a diagnostic.",
-      "nodes": [
-        "0029.05"
-      ]
+      "reason": "The path is not part of the checked contract that MCP schemas are generated from; 0029 'supplies a read-only local file path alongside each reference' and 0018 'usable blob exports' give no shape.",
+      "nodes": ["0029.05"]
     },
     {
-      "text": "Is snapshot reachability for a BlobRef matched on sha256 alone or on (sha256, size), and is a matching hash with a wrong size treated as forged?",
+      "kind": "gap",
+      "text": "Does 'read-only local file path' mean Kyyn sets blob files read-only, or only that callers must not modify them?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "An edited blob silently stops matching its sha256, but enforcing modes changes storage writes and cleanup; 0029 says only 'read-only', and 0016 notes Kyyn does not manage permissions for secrets.",
+      "nodes": ["0029.05"]
+    },
+    {
+      "kind": "gap",
+      "text": "Which changes make a stored sync position incompatible: its contract, any plugin source change, package identity, or an instance configuration edit?",
       "asked": 2,
       "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Decides what the index stores per Available payload and which forged-reference cases are refused; ADR excludes mediaType and name from byte identity but leaves size unsettled.",
-      "nodes": [
-        "0029.03",
-        "0029.01"
-      ]
+      "reason": "Too broad a rule forces full resyncs on every fix, too narrow reuses cursors under changed behaviour; 0029 'Changed code/contract must never reuse an incompatible position', 0014 'bound to producing plugin source and payload contract' and, for Files only, 'A changed source configuration starts a new producer'.",
+      "nodes": ["0029.08"]
     },
     {
-      "text": "What counts as a 'changed producer' that discards the stored position: any code/build change, or only a change to the Position/payload contract?",
+      "kind": "contradiction",
+      "text": "ADR 0029 adds an acquisition-only digestText request, but ADR 0009's AcquisitionRequests sum has no digest constructor and its ReadsEvidence instance injects at a fixed depth.",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "Generated adapters, injection depths and broker dispatch depend on the exact row; 0029 'digestText :: [Text] -> Acquisition payload [Text]' vs 0009 'AcquisitionRequests payload = Http :+: (BlobAcquisition :+: (Secrets :+: (Waiting :+: (FileRead :+: EvidenceRead payload))))'.",
+      "nodes": ["0029.11"]
+    },
+    {
+      "kind": "gap",
+      "text": "How does the host determine each BlobRef's originating captured instance in a composed KB-tool result, given that BlobRef has no instance field?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "This is the boundary that refuses references outside the captured instance, and the same hash may exist in two instances; 0029 'Resolution uses the originating captured instance ... A forged or unresolvable reference is a diagnostic'.",
+      "nodes": ["0029.03", "0029.05"]
+    },
+    {
+      "kind": "gap",
+      "text": "May BlobRef appear in accepted root facts, query results or recipe state, and if so how are those references resolved or validated?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Code-identity compare forces full resync and re-download on every upgrade, while contract compare needs a stored position-contract fingerprint; ADR says 'changed code/contract must never reuse an incompatible position' without defining the compare."
+      "reason": "A fact citing a blob would point into a disposable per-instance cache; 0005 makes BlobReference a general Shape, while 0029 says the path is 'not a citation, a KB fact' and that 'recipe state do[es] not retain bytes'.",
+      "nodes": ["0029.01"]
     },
     {
-      "text": "On download redirects, what counts as an 'unrelated origin' for credentials, and must redirect targets stay within the plugin's declared ADR 0009 network capability?",
+      "kind": "gap",
+      "text": "Does reclamation sweep every unreferenced file in blobs/ and payloads/, or delete only the files the current publication released?",
       "asked": 1,
       "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Same-origin, registrable-domain or allowlist rules differ in security guarantee and whether pre-authenticated provider redirects work; ADR only says credentials are not forwarded to unrelated origins.",
-      "nodes": [
-        "0029.09"
-      ]
-    },
-    {
-      "text": "If an evidence fetch --restart-sync fails or is cancelled, does the restart request persist until a restart fetch publishes, or does the next fetch reuse the old position?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Persisting needs a restart-pending flag committed atomically in the index; ADR says restart 'passes Nothing once' and failed fetches don't advance the position, but not whether the reset survives failure.",
-      "nodes": [
-        "0029.08"
-      ]
-    },
-    {
-      "text": "Is a response Content-Type stored verbatim or normalized to lowercase bare type/subtype as BlobRef mediaType, and is a request-supplied mediaType validated?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "mediaType is persisted in payloads and feeds connector fingerprints via nested BlobRefs, so header formatting drift could change fingerprints; ADR only gives the application/octet-stream default.",
-      "nodes": [
-        "0029.01",
-        "0029.09",
-        "0029.11"
-      ]
-    },
-    {
-      "text": "Is blob reclamation a diff of previous versus new index references or a sweep of the blobs directory and temp files, and where do temporary downloads live?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "A diff never collects orphans from crashes or lost expected-fetch races, a sweep must distinguish in-flight temp files; ADR says garbage is left 'for a subsequent cleanup' without naming the mechanism.",
-      "nodes": [
-        "0029.10"
-      ]
-    },
-    {
-      "text": "Does the surface hand out the bare extensionless blobs/<sha256> path, or may it create a name/extension alias without violating 'no second archive'?",
-      "asked": 1,
-      "verdict": "unanswered",
       "importance": "low",
-      "reason": "Agents may need an extension to recognise PDFs/images; ADR forbids a second archive of exported files but does not say whether an alias counts as one.",
-      "nodes": [
-        "0029.05"
-      ]
+      "reason": "Garbage left by interrupted cleanup is only collected if some step scans the directory; 0014 step 4 'Reclaim payloads and blobs no longer referenced by the published index' and 0029 'Interrupted cleanup may leave garbage for a subsequent cleanup'.",
+      "nodes": ["0029.10"]
     }
   ]
 }

@@ -1,207 +1,117 @@
 {
   "adr": "0014",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The storage, publication and recipe-state design is close to implementable, but the biggest gap is that 'producer identity' (what it is made of, and whether a mismatch re-baselines or refuses) is never defined, which leaves several connector and citation shapes open too.",
+  "summary": "Evidence storage, publication and the Graph connectors are detailed, but persisted formats remain open: the producer identity, the recipes.dhall shape and recipe-ID paths, EvidenceRef.producer and the guest KnowledgeBase wrapper. The biggest gap is what producer identity binds a capture.",
   "questions": [
     {
-      "text": "What makes up the stored producer identity (plugin, package source, payload contract, instance config), and on a mismatch does fetch start a fresh baseline or refuse until an explicit clear?",
+      "kind": "gap",
+      "text": "What makes up an evidence capture's producer identity (package bytes, origin revision, connector type, payload contract, instance config), and how does a config change start a new producer?",
       "asked": 3,
       "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Decides the index producer field and which edits make captures unreadable; ADR says only 'bound to producing plugin source and payload contract' and 'successful refetch replaces the capture'.",
-      "nodes": [
-        "0014.02",
-        "0014.59",
-        "0014.67"
-      ]
+      "reason": "A mismatch makes captures unreadable and resets sync positions, so the choice decides when evidence is lost. ADR 0014 says 'bound to producing plugin source and payload contract' and 'A changed source configuration starts a new producer', and ADR 0015 never says how PackageIdentity is derived.",
+      "nodes": ["0014.02", "0014.59", "0014.67"]
     },
     {
-      "text": "What is the folder connector's evidence ID, and which path form (relative, as configured, or resolved absolute) goes into the host SHA-256 fingerprint?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Fixes fingerprint stability across checkout moves and whether a directory switch updates or removes/adds; ADR defines the framed hash over 'the UTF-8 source path' without its form.",
-      "nodes": [
-        "0014.19",
-        "0014.40"
-      ]
-    },
-    {
-      "text": "Does EvidenceRef.producer hold the plugin name or the storage producer identity (package/contract)?",
+      "kind": "gap",
+      "text": "How is a recipe ID encoded as the root/recipes/<recipe-id>/ directory, given that binding identifiers allow uppercase letters and apostrophes?",
       "asked": 3,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "Persisted citation wire format and whether citations survive plugin edits; ADR says only 'Producer and instanceName identify the integration and instance'.",
-      "nodes": [
-        "0014.08",
-        "0014.42"
-      ]
+      "reason": "This is committed accepted-root layout, and raw IDs collide on case-insensitive filesystems. ADR 0014 says 'Recipe IDs retain the existing unique binding-identifier rule' ([a-z][A-Za-z0-9_']*, 0015), while ADR 0006 says 'uppercase is escaped to avoid case-folding collisions'.",
+      "nodes": ["0014.57"]
     },
     {
-      "text": "What is the folder connector's payload type, and how are binary or non-UTF-8 files handled?",
+      "kind": "gap",
+      "text": "What value does EvidenceRef.producer hold: the plugin name, the package identity or something else?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Persisted payload contract and whether one binary file blocks every fetch; ADR gives only FolderConfig and 'host file acquisition can supply the hash alongside the text'.",
-      "nodes": [
-        "0014.19",
-        "0014.60"
-      ]
-    },
-    {
-      "text": "For mail or Teams items already outside retention at first discovery, must content and attachments still be downloaded, and does the fingerprint cover blob contents or only metadata?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Sets download cost, failure surface and the fingerprint projection; ADR says born-truncated items need 'a stable observed projection' but also 'fingerprint the captured payload'.",
-      "nodes": [
-        "0014.47",
-        "0014.60"
-      ]
-    },
-    {
-      "text": "When a folder is added to (or removed from) a mail instance with existing positions, what initial since does it use, and may a supplied since apply to it?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Changes option validation and position seeding; ADR rejects a supplied boundary 'once a position exists' though positions are per folder.",
-      "nodes": [
-        "0014.65"
-      ]
-    },
-    {
-      "text": "Do the mail and Teams connectors ever restore truncated payloads to Available (e.g. after retentionDays increases), re-downloading by ID outside the delta feed?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Decides whether a per-ID refetch path exists or truncation is one-way; the generic contract allows restoration but the connectors 'ignore changes to already captured messages'.",
-      "nodes": [
-        "0014.47"
-      ]
-    },
-    {
-      "text": "Does payload/blob reclamation run under the instance lock, and does it delete only old-minus-new references or sweep all unreferenced files?",
-      "asked": 2,
-      "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Outside the lock a reclaim can delete a file a concurrent publication just reused; ADR puts steps 1-2 under the lock but is silent for step 4 and on who cleans staging leftovers.",
-      "nodes": [
-        "0014.67",
-        "0014.72"
-      ]
+      "reason": "Citations persist in archived reports, and using a package identity would orphan them on every plugin update. ADR 0014 says only 'Producer and instanceName identify the integration and instance'.",
+      "nodes": ["0014.08", "0014.42"]
     },
     {
-      "text": "When a stateful connector's configuration changes after a position exists (calendar window, mail mailbox/folders, Files globs), who detects it and does it reset, reconcile or start a new producer?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Host-vs-connector ownership of config-change detection; only Files says 'a changed source configuration starts a new producer', while calendar follows the saved delta link verbatim.",
-      "nodes": [
-        "0014.02",
-        "0014.54",
-        "0014.65"
-      ]
-    },
-    {
-      "text": "Is SetEvidencePayload with Available allowed on an entry that is already Available, replacing content under the same fingerprint?",
+      "kind": "gap",
+      "text": "What are the shape and wire representation of the guest KnowledgeBase root wrapper and its recipe container, and which contract identity covers the recipe part in observations?",
       "asked": 2,
       "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Allowing it bypasses the same-fingerprint UpdatedEvidence refusal; ADR covers Truncated-to-Available and repeated Truncated only.",
-      "nodes": [
-        "0014.47"
-      ]
-    },
-    {
-      "text": "What fields does the calendar Event payload carry (e.g. join URL, series IDs, attendees, body)?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Persisted payload shape and fingerprint scope, and whether curation can link artifacts to events offline; ADR names only source links and lastModifiedDateTime.",
-      "nodes": [
-        "0014.54"
-      ]
-    },
-    {
-      "text": "How does Files folderPath combine with each scope (especially a SharedUrl resolving to a file), and how are non-business drives acquired?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Decides validation and whether a second delta strategy is needed; ADR specifies only 'drive-root delta for the business-drive path'."
-    },
-    {
-      "text": "Which guest fetch signature is normative, the generic list-of-changes one or the FetchContext/FetchResult one, and how do options and prior position reach the connector?",
-      "asked": 1,
-      "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Sets the SDK type every connector implements and the host dispatch; the two signatures differ and the generic one has no options parameter.",
-      "nodes": [
-        "0014.12",
-        "0014.43"
-      ]
+      "reason": "Generated adapters, observation encoding and checkEvolutionReport's contract-identity chain check depend on it. ADR 0010 says 'The guest wrapper and recipe data are defined in ADR 0014', but ADR 0014 says only that the container 'stays behind the guest KnowledgeBase wrapper'.",
+      "nodes": ["0014.57"]
     },
     {
-      "text": "May a batch contain several operations for the same ID, and are delta checks made against the running state or the prior capture?",
+      "kind": "gap",
+      "text": "What is the exact Dhall shape of root/recipes.dhall, and how are the open state type and closed flow names written and resolved?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "It is a persisted accepted-root format decoded without a compiler, so changing it later needs a migration. ADR 0014 says 'the persisted definition includes the selected state type name ... For closed recipes it contains the flow name instead', with no type.",
+      "nodes": ["0014.57"]
+    },
+    {
+      "kind": "gap",
+      "text": "Does evidence fetch require a fully checked Validated Root, or only plugin preparation and config validation for the selected instance?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "A full check lets unrelated semantic errors block acquisition and adds whole-root cost to every fetch. ADR 0014 says 'from the checked accepted root', while ADR 0018 says 'Fetching checks the accepted configured instance'.",
+      "nodes": ["0014.21"]
+    },
+    {
+      "kind": "gap",
+      "text": "Are delta consistency rules checked against the prior capture or against the running state after earlier changes in the same batch?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Determines validator design and which fingerprint the same-fingerprint rule compares; ADR says only 'the host applies changes in order'.",
-      "nodes": [
-        "0014.12"
-      ]
+      "reason": "This decides whether 'Removed X then New X' or two updates to one ID are valid, and connectors and the applier must agree. ADR 0014 says 'new IDs must be absent and updated/removed IDs present ... The host applies changes in order'.",
+      "nodes": ["0014.12"]
     },
     {
-      "text": "Does the SDK define host-recognised FetchError constructors for truncated, missing-ID and corrupt-storage read failures, or does each plugin author its own?",
+      "kind": "gap",
+      "text": "When an accepted config change alters scope already encoded in a saved position (Mail folders, Calendar window), should the connector restart, reconcile or keep the old continuation?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Shared error type ownership; ADR requires CLI/MCP to expose the distinction but not where the constructors live.",
-      "nodes": [
-        "0014.47"
-      ]
+      "reason": "Otherwise a changed Calendar window is silently ignored. ADR 0014 says Calendar follows 'the saved delta link verbatim, including its encoded window', and only Files says 'A changed source configuration starts a new producer'.",
+      "nodes": ["0014.54", "0014.65"]
     },
     {
-      "text": "What are the Teams connector's configuration and fetch-options types, including the look-back window representation?",
+      "kind": "gap",
+      "text": "Can root recipe list/show inspect a closed recipe's flow to obtain the state contract needed to decode its stored state, or must it run without a compiler?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Closed state contracts come only from the flow signature. ADR 0014 says 'Recipe list/show exposes ... stored state', while ADR 0028 says '`root recipe show` reads the stored definition without compiling the flow'.",
+      "nodes": ["0014.57"]
+    },
+    {
+      "kind": "gap",
+      "text": "Can validators, snapshot queries, renderers and KB tools read recipe state, or only recipe-based evolutions and closed flows?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "This decides whether query bindings expose state handles and whether validators can span state and facts. ADR 0011 fixes 'validate :: Root -> ValidationReport'. ADR 0014 suggests 'ordinary Root facts for intentionally shared knowledge' but gives no rule.",
+      "nodes": ["0014.57", "0014.58"]
+    },
+    {
+      "kind": "gap",
+      "text": "What does the folder connector do with a file that is not valid UTF-8: fail the fetch, skip it, or capture it as unavailable?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "With no globs, one binary file could block every folder fetch for good. ADR 0014 says 'file reads must succeed before a complete batch is published', and ADR 0009 says text acquisition 'decodes UTF-8', but neither defines the decode-failure outcome.",
+      "nodes": ["0014.19"]
+    },
+    {
+      "kind": "gap",
+      "text": "How does guest code obtain the producer and instance name to build an EvidenceRef, given that EvidenceSnapshot and instance bindings expose neither?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Determines what callers pass to --options and how it is validated; ADR describes them only in prose.",
-      "nodes": [
-        "0014.43",
-        "0014.51"
-      ]
-    },
-    {
-      "text": "How are FetchSummary added/updated/removed counted (per operation or net), and do SetEvidencePayload operations count?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Operator-visible summary semantics; ADR says payload-only ops are not additions/updates/removals but gives the summary nowhere to record them.",
-      "nodes": [
-        "0014.55"
-      ]
-    },
-    {
-      "text": "What format and validation apply to mail's since option and to retentionDays (zero, negative, future)?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Connector-owned validation rules; calendar windows are specified as timezone-qualified ISO 8601 but since is untyped Text.",
-      "nodes": [
-        "0014.65"
-      ]
-    },
-    {
-      "text": "What reference time ('now') does retention truncation use: invocation start time or publish time?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "Affects which items are truncated in a given fetch; ADR says retention uses received/ended time but not the comparison instant.",
-      "nodes": [
-        "0014.47"
-      ]
+      "reason": "Without an SDK helper or binding fields, authors hand-type citation strings that nothing checks. ADR 0014 defines the EvidenceRef fields but no construction helper.",
+      "nodes": ["0014.08", "0014.42"]
     }
   ]
 }
