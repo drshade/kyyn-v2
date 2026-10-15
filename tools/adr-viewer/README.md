@@ -281,20 +281,24 @@ clicks the lane.
 ## Specification gaps (on demand)
 
 A second, independent measure: how much an implementer would have to guess if
-handed the ADR as it stands. It reads only the ADR text, never the code, so it
-scores the spec on its own. Agreement between the spec and the code is what the
-lanes show.
+handed the architecture as the ADRs state it. It reads only ADR text, never the
+code, so it scores the spec on its own. Agreement between the spec and the code
+is what the lanes show.
 
-**Method.** Three agents each read the ADR blind and list the questions they would
-need answered before implementing it, asking only what the ADR does not already
-settle. A fourth agent, the judge, merges the three lists, drops anything the ADR
-answers, rates each question's importance on a fixed scale and maps it to the
-lane's decisions. No single agent picks the questions that count. A question
-counts when **at least 2 of the 3** raised it independently (at least 60% of the
-runs, so 3 of 5 if more runs are used); the rest are mostly
-one agent's quirks and are kept only for reference.
+**Method.** Every agent reads all the ADRs first, because an answer to a question
+about one ADR is often in another (a founding ADR delegates detail to later
+ones). Three agents then work through the ADRs one at a time, each in a
+different order, and list for each ADR the questions they would need answered
+to build what it decides, asking only what no ADR settles. They also record
+contradictions between ADRs. A judge, also reading all the ADRs, merges the
+three lists per ADR, drops anything any ADR answers, rates importance on a fixed
+scale and maps items to the lane's decisions. No single agent picks the
+questions that count. An item counts when **at least 2 of the 3** raised it
+independently (at least 60% of the runs, so 3 of 5 if more runs are used); the
+rest are mostly one agent's quirks and are kept only for reference.
 
-**Score:** the recurring questions by importance, **high · medium · low**.
+**Score:** the recurring gaps by importance, **high · medium · low**, with
+recurring contradictions shown apart (`!n`).
 
 Importance is what a wrong guess would cost, not the topic:
 
@@ -314,31 +318,34 @@ decisions, but questions per decision depends on how finely the lane was
 split, so compare raw counts for one ADR and use the ratio only across ADRs of
 very different size.
 
-**Cadence.** Snapshots are taken when asked for, or at most monthly, for the
-ADRs someone wants scored. Never per change: each snapshot of one ADR is four
-agents. One file holds an ADR's latest snapshot, so taking a new one replaces
-it and git keeps the history.
+**Cadence.** Snapshots are taken when asked for, or at most monthly. Never per
+change. A run covers every ADR at once: each agent loads the ADRs once and
+works through them, so a full run is a handful of agents, not several per ADR.
+One file holds each ADR's latest snapshot, so a new run replaces it and git
+keeps the history.
 
-**Procedure** for each ADR to score, from this directory:
+**Procedure**, from this directory:
 
-1. Run `extract` if the evidence is behind `main`, then `questions` to see each
-   snapshot's status. Use the last evidence step `S` and its sha (printed by
-   `questions`).
-2. In a scratch directory outside the repository, write the ADR as of `S` and
-   its decisions:
-   `git show <sha>:architecture/adr/<file> > adr.md` and
-   `cabal run -v0 adr-viewer -- questions --decisions <ADR> > decisions.txt`.
-   Lanes should be current through `S`, so the decisions match the text.
-3. Start three agents in parallel with `prompts/ask.md`, `{ADR_FILE}` set to the
-   scratch `adr.md` and `{OUT_FILE}` to `run-A.md` … `run-C.md` beside it. They
-   must not see the repository, the code or the lanes. Never edit their lists.
-4. Start one judge with `prompts/judge.md`. Fill in the scratch files,
-   `{OUT_FILE}` as `curated/questions/<ADR>.json`, `{RUNS}` 3, `{RECURRING}` 2,
-   `{ADR}`, `{STEP}` `S` and `{DATE}` today. The judge sees the decision list,
-   never the lane's realisation evidence.
-5. Run `check`, read the snapshot, and commit it. Do not edit questions by hand:
-   rerun the whole snapshot instead. Change the prompts only deliberately, and
-   then expect scores taken before and after not to be comparable.
+1. Run `extract` if the evidence is behind `main`, and bring the lanes current
+   through the last step `S` (so the decision lists match the text). `questions`
+   prints `S` and its sha.
+2. In a scratch directory outside the repository, write one file with every
+   live ADR as of `S`, each starting with a `===== ADR <id>: <title> =====`
+   header, and each ADR's decisions with
+   `cabal run -v0 adr-viewer -- questions --decisions <ADR> > decisions/<ADR>.txt`.
+3. Start three question agents with `prompts/ask.md`, each with its own output
+   directory (`run-A`, `run-B`, `run-C`) and its own order over the ADRs:
+   forwards, backwards and shuffled, so late-session fatigue lands on different
+   ADRs. If one session's context is too small for every ADR, split each agent's
+   list into halves run as two agents writing to the same directory. They must
+   not see the repository, the code or the lanes. Never edit their lists.
+4. Start judges with `prompts/judge.md`, splitting the ADRs between them as
+   context allows, with `{OUT_DIR}` set to `curated/questions`, `{RUNS}` 3,
+   `{RECURRING}` 2, `{STEP}` `S` and `{DATE}` today. Judges see the decision lists,
+   never the lanes' realisation evidence.
+5. Run `check`, read the snapshots, and commit them. Do not edit items by hand:
+   rerun instead. Change the prompts only deliberately, and then expect scores
+   taken before and after not to be comparable.
 
 **Limits.** Agents ask how to build, not what the product should do, so gaps of
 intent (what should happen to drafts, say) are under-counted. When the ADR is
@@ -356,15 +363,16 @@ Snapshot format (`curated/questions/<ADR>.json`):
   "runs": 5,
   "summary": "one sentence: how close the ADR is to implementable, and its biggest gap",
   "questions": [
-    { "text": "the merged question", "asked": 5, "verdict": "unanswered",
+    { "kind": "gap", "text": "the merged question", "asked": 5, "verdict": "unanswered",
       "importance": "high", "reason": "why it matters; closest ADR text",
       "nodes": ["0014.65"] }
   ]
 }
 ```
 
-`verdict` is `unanswered` or `partly_answered`; `importance` is `high`,
-`medium` or `low`; omit `nodes` when a question maps to no decision.
+`kind` is `gap` (the default when omitted) or `contradiction`; `verdict` is
+`unanswered` or `partly_answered`; `importance` is `high`, `medium` or `low`;
+omit `nodes` when an item maps to no decision.
 
 ## What `check` enforces
 

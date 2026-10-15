@@ -1,129 +1,134 @@
 {
   "adr": "0010",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The ad hoc path is close to implementable as written, but the recipe-based path is underspecified; its biggest gap is where the recipe constraints are enforced and what a violation returns, followed by kind's place in captured-input equality and the recipe scaffold.",
+  "summary": "The ad hoc evolution path is detailed enough to build. Recipe-based workspaces are underspecified (creation kind, scaffold, preservation checks, kind in input equality), and the biggest gap is that the persisted EvolutionReport has no place for the package comparison and producing-flow data other ADRs require.",
   "questions": [
     {
-      "text": "Is the manifest's kind part of captured-input equality, and do MarkReady/MarkDraft preserve it?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides whether a kind switch makes acceptance refuse the stale candidate; the ADR says kind is 'captured with its evaluation inputs' and changing it 'invalidates the saved candidate', yet the equality rule lists only revision, name, explanation and before/target/change bytes.",
-      "nodes": [
-        "0010.52",
-        "0010.55"
-      ]
-    },
-    {
-      "text": "Which component enforces the recipe-based constraints (recipe exists, schema/definitions/source/config preserved, state present), against what baseline, and what does a violation return?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Sets the failure semantics and which handler owns the check; the ADR only says to 'compare captured source/configuration as well' and 'Missing state is an error', with no phase, baseline or rejection variant.",
-      "nodes": [
-        "0010.52",
-        "0010.53"
-      ]
-    },
-    {
-      "text": "What does removing an unaccepted workspace delete (candidate dirs, latest pointer), and how is a stale candidate kept from loading under a reused ID?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Allocating max+1 over live directories frees the highest number for reuse, so an old latest/<id> could load against a new workspace; the ADR only says 'Remove only unaccepted workspaces through an explicit operation' and gives no constructor.",
-      "nodes": [
-        "0010.22",
-        "0010.43",
-        "0010.58"
-      ]
-    },
-    {
-      "text": "Is the .kyyn/ candidate store per repository or per KB, and how are latest/<evolution-id> pointers namespaced across KBs?",
+      "kind": "contradiction",
+      "text": "ADR 0015 requires a plugin-package comparison, and ADR 0028 the producing recipe/flow, to be saved with the candidate and accepted report, but ADR 0010's EvolutionReport and EvolutionRecord hold only the kind and step reports.",
       "asked": 3,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "IDs are unique only per KB, so a repository-root store collides; the ADR says the 'repository and KB prefix come from the explicit load location' but never says where .kyyn/ is rooted."
+      "reason": "This changes the committed result.dhall and candidate.dhall formats and their shape-directed decoding. ADR 0010 has 'data EvolutionReport = EvolutionReport EvolutionKind [StepReport]', and ADR 0015 says 'Save this comparison with the candidate and accepted report so inspection does not consult live package files'.",
+      "nodes": ["0010.54", "0010.57"]
     },
     {
-      "text": "Who computes the Before source validation report shown in preview, and is it stored with the candidate?",
+      "kind": "gap",
+      "text": "Does the manifest's kind take part in captured-input equality, given that changing the kind must invalidate the saved candidate?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Leaving kind out would let acceptance publish a candidate evaluated under the old kind. ADR 0010 says 'Changing it or rebasing invalidates the saved candidate', but input equality lists only 'Before revision, name and explanation, and the exact before/target/change paths and bytes'.",
+      "nodes": ["0010.52"]
+    },
+    {
+      "kind": "gap",
+      "text": "At which stage, against what comparison and with which outcome is a recipe-based workspace refused for changing schema, recipe definitions, source or configuration?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "This enforces the guarantee that recipe runs change only facts and state, and it decides whether a candidate is saved. ADR 0010 says only 'compare captured source/configuration as well', with no stage, file set or diagnostic.",
+      "nodes": ["0010.52", "0010.53"]
+    },
+    {
+      "kind": "gap",
+      "text": "How does CreateEvolution receive the EvolutionKind and selected recipe, and does it check that the recipe exists in Before?",
       "asked": 3,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Changes EvaluatedEvolution/candidate.dhall shapes and handler rows; the ADR requires that 'Preview surfaces the source validation report separately' but no type or operation carries it.",
-      "nodes": [
-        "0010.40"
-      ]
+      "reason": "The capability signature and the 'evolution new --recipe' wiring depend on it. CreateEvolution takes only 'KnowledgeBase -> EvolutionName -> GitRevision', yet 'Creation selects an ad hoc or recipe-based scaffold from EvolutionKind' (0010, 0018).",
+      "nodes": ["0010.22", "0010.52"]
     },
     {
-      "text": "How does CreateEvolution receive the EvolutionKind and RecipeId, and what does the recipe-based scaffold write to change/Evolution.hs?",
+      "kind": "gap",
+      "text": "What does creation write as the initial change/Evolution.hs for a recipe-based workspace, given that no identity RecipeEvolution exists?",
       "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Shapes the CLI/MCP creation surface and the first draft; the ADR says creation 'selects an ad hoc or recipe-based scaffold from EvolutionKind', but the signature has no kind and only the ad hoc identityEvolution scaffold is shown.",
-      "nodes": [
-        "0010.22",
-        "0010.52"
-      ]
-    },
-    {
-      "text": "Is rebase a Kyyn operation that rewrites the revision and refreshes before/ (and marks Draft), or a manual author edit?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides whether an EvolutionAuthoring constructor exists and whether target/ is touched; the ADR says 'rebasing refreshes them' and describes the agent updating Before.revision, but lists no operation.",
-      "nodes": [
-        "0010.19"
-      ]
-    },
-    {
-      "text": "Does RecipeChange's StoredRecipe carry recipe state and its before/after contracts, as RecordedFact carries a RootContract?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Fixes the archived record shape and whether history can be read without recompiling; the ADR says recipe archive records 'retain ... state changes, with before/after contracts and values' but RecipeChange has no contract field.",
-      "nodes": [
-        "0010.53",
-        "0010.54"
-      ]
-    },
-    {
-      "text": "How are RecipeChange entries derived and ordered relative to FactChanges, and do the no-change, whole-contract and duplicate-ID rules apply to them?",
-      "asked": 2,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Determines report bytes and associativity tests; the ADR gives ordering ('collection identity and FactId') and duplicate rules for facts only.",
-      "nodes": [
-        "0010.54"
-      ]
+      "reason": "The scaffold must name the recipe's state type and compile as a no-op, which affects the SDK surface. Only the ad hoc 'evolution = identityEvolution' scaffold is specified, and RecipeEvolution is built only through recipeEdit with a Rationale (0010).",
+      "nodes": ["0010.22", "0010.53"]
     },
     {
-      "text": "Which PreviewRejection does a host boundary failure that is not a chain mismatch produce, such as duplicate intermediate IDs or a malformed observation value?",
+      "kind": "gap",
+      "text": "Is rebasing a Kyyn operation that rewrites before.revision and recopies before/ from the new commit, or a manual edit?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Capture refuses any mismatched before/ copy, so rebasing by hand means recopying all of src/ after every acceptance elsewhere. ADR 0010 says 'rebasing refreshes them', but there is no EvolutionAuthoring constructor or CLI command.",
+      "nodes": ["0010.19"]
+    },
+    {
+      "kind": "gap",
+      "text": "What is the explicit operation that removes an unaccepted workspace, and does it also clear its saved candidates?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "ADR 0010 requires 'an explicit operation, preserving unrelated files', but EvolutionStore and ADR 0018's evolution commands (new/list/show/check/ready/draft/accept) define none.",
+      "nodes": ["0010.35"]
+    },
+    {
+      "kind": "gap",
+      "text": "Which operation computes the Before root's validation report during preview, and where does checkEvolution return it?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "It needs PrepareRoot/ValidateRoot on Before and a result slot. ADR 0010 says 'Preview surfaces the source validation report separately', but checkEvolution returns only 'Either PreviewRejection (CheckResult (Candidate (Validated Root)))'.",
+      "nodes": ["0010.40"]
+    },
+    {
+      "kind": "gap",
+      "text": "Where in the workspace layout is a closed recipe's frozen proposal stored, and is it a captured evaluation input?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Editing it must invalidate the candidate, and projection rejects files outside the layout. ADR 0028 says only 'Persist returned steps and next state through the ordinary Dhall path', and ADR 0010 says 'Projection rejects other files outside the layout'.",
+      "nodes": ["0010.05", "0010.34"]
+    },
+    {
+      "kind": "gap",
+      "text": "Are superseded .kyyn/candidates/<id>/ result directories ever reclaimed, and by whom?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "low",
+      "reason": "Each save writes a full materialized root, so local storage grows without bound. ADR 0010 says only 'older result directories are never modified by a subsequent save'."
+    },
+    {
+      "kind": "gap",
+      "text": "Does the EvolutionRecord carry a format version, and how are committed records read after Kyyn changes the record or report shape?",
+      "asked": 1,
+      "verdict": "partly_answered",
+      "importance": "high",
+      "reason": "Accepted archives are committed history. ADR 0012 defers 'durable version/readability policy' to 0010, and ADR 0010 offers only that 'Authors may repair old manifests and reports on disk', with no version tag or reader policy.",
+      "nodes": ["0010.57"]
+    },
+    {
+      "kind": "contradiction",
+      "text": "ADR 0008 says generated Kyyn.Workspace.Evolution re-exports only Kyyn.Evolution, while ADR 0010 says it re-exports the public evolution, diagnostic and fact vocabulary and its examples use Fact and FactId through it.",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Changes how outcomes surface and what tests expect; the ADR maps only chain mismatches to ProposedCodeRejected while saying duplicates are 'rejected at every boundary'.",
-      "nodes": [
-        "0010.30"
-      ]
+      "reason": "This fixes the generated export list, the --evolution discovery catalogue and whether scaffolds compile with one import. ADR 0008 says 'reexports only Kyyn.Evolution ... not a mixed collection of schema/runtime modules' and 'Authors import Kyyn.Schema separately when constructing facts'.",
+      "nodes": ["0010.45"]
     },
     {
-      "text": "Is the generated evolution ID slug length-limited, and is an over-long name truncated or refused?",
+      "kind": "contradiction",
+      "text": "ADR 0010's creation and ADR 0015 copy 'all non-fact root files' into target/, but ADR 0014 stores recipes in root/recipes.dhall and root/recipes/, and ADR 0010's projection rejects those paths under target/.",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "low",
-      "reason": "An unbounded slug turns into an operational filesystem failure instead of a refusal; the ADR defines the slug alphabet and refuses an empty slug but sets no length.",
-      "nodes": [
-        "0010.43"
-      ]
+      "reason": "Read literally, every new workspace fails its own projection, though ADR 0010 elsewhere says recipes 'are produced by evolution, not edited in a parallel ... target/recipes.dhall'. ADR 0015 says 'New evolutions inherit all accepted non-fact root files'.",
+      "nodes": ["0010.05", "0010.22"]
     },
     {
-      "text": "What is the per-save <id> in .kyyn/candidates/<id>/, and how is it generated uniquely?",
+      "kind": "gap",
+      "text": "Must the manifest explanation be nonempty before MarkReady or acceptance?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "low",
-      "reason": "A fresh directory per save cannot be keyed by evolution ID alone; the ADR says 'writes a fresh .kyyn/candidates/<id>/' and never defines <id>, though any unique private name would do."
+      "reason": "Creation writes 'an initially empty explanation', yet it is the only rationale for source-only changes (0010). Accepted archives could otherwise carry no explanation.",
+      "nodes": ["0010.22"]
     }
   ]
 }

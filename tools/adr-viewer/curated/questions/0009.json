@@ -1,145 +1,79 @@
 {
   "adr": "0009",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The capability model and request rows are specified closely enough to build, but the host-boundary failure semantics are not; the biggest gap is undefined error types and failure handling (HttpError, SecretError, FetchError, invalid UTF-8, bad stored evidence).",
+  "summary": "The request-tree model and acquisition, captured-read and login rows are concrete. The biggest gap is the undefined constructors of the shared SDK error types (FetchError, HttpError, LoginError), and the acquisition row omits ADR 0029's digest request.",
   "questions": [
     {
-      "text": "Are secret names scoped by the host per plugin or connection instance, or is GetSecret/PutSecret one global namespace?",
+      "kind": "gap",
+      "text": "What are the constructors of the guest-visible error types FetchError, HttpError, LoginError and the guest SecretError?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Every plugin, codec and CLI mapping (plugin.read-failed, tool.failed) pattern-matches on these. ADR 0014 requires FetchError to keep truncation 'distinct ... from a missing ID or corrupt/missing blob', and 0016's host SecretError has only SecretNotFound, but no ADR defines the variants.",
+      "nodes": ["0009.06", "0009.27"]
+    },
+    {
+      "kind": "contradiction",
+      "text": "ADR 0009 fixes one AcquisitionRequests sum with no digest algebra, while ADR 0029 adds digestText as an Acquisition request interpreted by ContentDigest.",
       "asked": 3,
       "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "The row type, the ReadsEvidence injection depth and the generated dispatcher all change. ADR 0009 says 'Every source connector uses this one acquisition row' (Http :+: BlobAcquisition :+: Secrets :+: Waiting :+: FileRead :+: EvidenceRead), and ADR 0029 has 'digestText :: [Text] -> Acquisition payload [Text]'.",
+      "nodes": ["0009.05", "0009.32"]
+    },
+    {
+      "kind": "gap",
+      "text": "How are host-side rejections reported for requests without an error channel, such as PutSecret with an invalid name or WaitSeconds with a negative duration?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "The answer is either an invocation abort or typed results that change the wire contracts. ADR 0009 says 'Secret storage failures ... remain invocation failures' and requires host name validation and nonnegative waits, but PutSecret and WaitSeconds return ().",
+      "nodes": ["0009.26"]
+    },
+    {
+      "kind": "gap",
+      "text": "What exactly does ListFiles return: files only or directories too, hidden or special files, symlink handling, ordering and missing-directory behaviour?",
+      "asked": 2,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "The folder connector's evidence IDs and removal detection come straight from this list, and followed symlinks can loop. ADR 0009 states only that paths are relative and that 'Enumeration failure is a typed error, never an empty directory'."
+    },
+    {
+      "kind": "gap",
+      "text": "What happens when an HTTP response (or request) body is not valid UTF-8, given that HttpResponse.body is Text?",
+      "asked": 2,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "The options are a typed HttpError, lossy decoding or an invocation failure, and each is a different plugin-visible contract. ADR 0009 says only 'Native HTTP handles TLS and UTF-8 transport'.",
+      "nodes": ["0009.33"]
+    },
+    {
+      "kind": "gap",
+      "text": "How can a KB tool compare evidence with accepted facts when its Calls row has no snapshot reads?",
+      "asked": 1,
+      "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Decides whether one connector can read or overwrite another's credentials and how login and acquisition share them; the ADR covers name validation only."
+      "reason": "This decides the tool broker row and whether tool invocation selects a validated root. ADR 0009 gives tools 'captured reads, model judgements and agentic model turns' only, but ADR 0014 says 'KB helpers can ... compare them with accepted facts'.",
+      "nodes": ["0009.22"]
     },
     {
-      "text": "Does native HTTP follow redirects, decompress content, and enforce a default or per-request timeout?",
-      "asked": 3,
-      "verdict": "unanswered",
+      "kind": "gap",
+      "text": "Does SendHttp follow redirects, and if so does it strip credentials when crossing origins?",
+      "asked": 1,
+      "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Changes HttpRequest fields, Graph download code and whether Authorization is forwarded cross-host; the ADR says transport handles TLS/UTF-8 and does not hide retries, silent on redirects and timeouts."
+      "reason": "Silently forwarding an Authorization header to another host is a secret-boundary failure. ADR 0029 says 'Redirects use native HTTP handling without forwarding credentials to unrelated origins', but only for blob downloads."
     },
     {
-      "text": "What does ListFiles' Bool mean, and does a listing include directories, follow symlinks or hidden files, and come back in a defined order?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides host enumeration code and whether re-acquiring an unchanged folder yields identical evidence; the ADR only says paths are relative to the selected directory and enumeration failure is a typed error."
-    },
-    {
-      "text": "What happens when ReadTextFile content or an HTTP response body is not valid UTF-8: typed Left, lossy decode, or invocation failure?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Lossy decoding would make text disagree with the fingerprint over the same bytes; the ADR says text acquisition decodes UTF-8 and defines a UTF-8 HTTP boundary but not decode failure.",
-      "nodes": [
-        "0009.33"
-      ]
-    },
-    {
-      "text": "Which GetSecret conditions (not found, invalid name) return Left SecretError, and which abort the invocation?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Fixes SecretError's constructors and whether a plugin can fall back to 'run login'; the ADR says storage failures and cancellation are invocation failures and names are validated by ADR 0016's rule, nothing more."
-    },
-    {
-      "text": "What are HttpError's constructors, and can retryable transport failures (timeout, reset) be told apart from permanent ones (DNS, TLS)?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Plugin-owned retry logic branches on it and the codec needs a fixed shape; the ADR says only that transport failures have sanitized diagnostics and statuses remain values.",
-      "nodes": [
-        "0009.27"
-      ]
-    },
-    {
-      "text": "Is CapturedText's resolved absolute path (and WriteTextFile's returned path) canonicalised through symlinks, or only lexically joined?",
-      "asked": 2,
-      "verdict": "unanswered",
-      "importance": "high",
-      "reason": "The path is used in evidence references, so it decides evidence identity; the ADR says only 'resolved absolute source path, suitable for evidence references'.",
-      "nodes": [
-        "0009.37"
-      ]
-    },
-    {
-      "text": "Does a captured-read method's ReadEvidence/ListEvidenceIds return Left FetchError or stop the invocation when stored evidence is undecodable or the store faults, including acquisition's prior-evidence reads?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "The EvidenceRead handlers need one rule; the ADR says invalid stored evidence stops the invocation only for the KB-tool caller path while the read types permit Left FetchError.",
-      "nodes": [
-        "0009.22",
-        "0009.34"
-      ]
-    },
-    {
-      "text": "Where do DisplayInstructions go when login runs outside the CLI (MCP, server, headless), or is login refused there?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Decides whether the LoginInteraction handler is pluggable per surface; the ADR only specifies CLI stderr output.",
-      "nodes": [
-        "0009.26"
-      ]
-    },
-    {
-      "text": "What makes a Retry-After delay valid (seconds vs HTTP-date), and is there a cap on single delay, retry count or total wait?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Determines worst-case headless acquisition time; the ADR says valid delays on 429/503 are honoured via WaitSeconds and absent ones yield a retry-later error.",
-      "nodes": [
-        "0009.27"
-      ]
-    },
-    {
-      "text": "Does the host fail the invocation or clamp to zero when WaitSeconds receives a negative duration?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "WaitSeconds returns () so there is no error channel; the ADR says waits require nonnegative durations but not how violations are handled."
-    },
-    {
-      "text": "Is FetchError one fixed SDK type with defined constructors, or a per-method declared type?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides whether adapters need one codec or one per method; host rows use FetchError concretely while the KB-tool section speaks of 'a method's declared FetchError'.",
-      "nodes": [
-        "0009.22"
-      ]
-    },
-    {
-      "text": "What happens when a KB tool names an unknown instance or one with the wrong connector type: compile error, invocation stop, or catchable error?",
+      "kind": "gap",
+      "text": "Do sink methods share the single FileWrite row, or can each sink declare HTTP, Git and Secrets requests, and how is that checked?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "Decides whether generated bindings depend on configuration and the dispatch error shape; the ADR says the host resolves and checks the named instance but not what a failed check does.",
-      "nodes": [
-        "0009.14"
-      ]
-    },
-    {
-      "text": "What does the snapshot-query adapter return when the query fails or times out: error with partial read trace, error alone, or process failure?",
-      "asked": 1,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Changes the adapter's stdout contract and host result type; the ADR says it returns the result and ordered read trace, with no failure case.",
-      "nodes": [
-        "0009.11"
-      ]
-    },
-    {
-      "text": "Who consumes the ReadAccess trace, and is it persisted or only returned to the caller?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "A persisted or UI-facing trace needs a stable format and place in the result envelope; the ADR says what the trace is not (evidence, cache key) but not its use.",
-      "nodes": [
-        "0009.11"
-      ]
+      "reason": "This affects registration inspection, generated adapters and the delivery handler set. ADR 0009's table allows 'filesystem/Git/HTTP/Secrets as declared' and ADR 0016 requires sinks to use the KB's secret store, but the only defined row is 'type SinkCalls = FileWrite'.",
+      "nodes": ["0009.36", "0009.04"]
     }
   ]
 }

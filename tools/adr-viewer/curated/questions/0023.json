@@ -1,165 +1,99 @@
 {
   "adr": "0023",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The workflow and boundaries are clear, but the review-note half of EvolutionStore is not yet implementable: notes have no read operation, no defined record shape and no lifecycle after acceptance.",
+  "summary": "The handoff workflow and the store operations are clear, but persisted review notes have no format and no portable subject identity, which is the biggest gap for sharing notes between Web, MCP and the archive.",
   "questions": [
     {
-      "text": "What happens to a workspace's review notes on acceptance, rebase or discard: archived with the evolution, kept in the workspace, or dropped?",
+      "kind": "gap",
+      "text": "How is a note's subject (CapturedWork or EvaluatedResult) identified durably once the note is persisted and archived?",
       "asked": 3,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "Decides where notes are persisted and whether CapturedWork must stay resolvable; the ADR gives an acceptance lifecycle for examples only, not for notes.",
-      "nodes": [
-        "0023.05"
-      ]
+      "reason": "Archived notes keep their subjects, but captures are never saved and candidate directories are local; 0023 'EvaluatedResult retains exact result identity' vs 0010 'Store-local locations are not committed as portable identities in the archive'.",
+      "nodes": ["0023.05"]
     },
     {
-      "text": "What makes a client 'explicitly authorized' to accept, where is that configured, and what is the default for Web and MCP?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Decides whether the shared accept operation needs an authorization check and config; the ADR says only that delegation is an explicit owner choice, not inferred from transport.",
-      "nodes": [
-        "0023.09",
-        "0023.02"
-      ]
-    },
-    {
-      "text": "How are review notes read back, and are they keyed by workspace across captures and candidates, by exact subject, or by target?",
+      "kind": "gap",
+      "text": "What is the on-disk format of a review note under notes/, including file naming, ReviewNoteId generation and how subject and target are encoded?",
       "asked": 3,
       "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Agents must see human notes through MCP and the key decides the store's index layout; the ADR defines only addReviewNote, with no list or query operation.",
-      "nodes": [
-        "0023.05"
-      ]
-    },
-    {
-      "text": "What does a stored review note contain besides subject, target and text: actor, timestamp, threading, open/resolved state?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "Sets the persisted note shape and whether an actor argument or resolve operation is needed; the ADR gives only subject, target, text and ties the note to the version seen.",
-      "nodes": [
-        "0023.05"
-      ]
-    },
-    {
-      "text": "Is saveExample create-only or an upsert, how is ExampleId assigned, and how are examples edited or removed?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "Decides file naming under target/examples/ and how 'changed or removed checks/examples' is computed; the ADR says only that saving writes target/examples/ and marks the workspace Draft.",
-      "nodes": [
-        "0023.06"
-      ]
-    },
-    {
-      "text": "How does recordHistory represent a gap where record correspondence cannot be established?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "The ADR requires stating the gap, but HistoricalChange has only RecordedChange and UnannotatedChange, so a new constructor or a completeness wrapper is needed.",
-      "nodes": [
-        "0023.08"
-      ]
-    },
-    {
-      "text": "How are Git merge parent links carried in recordHistory's flat list, and are all parents traversed or first-parent only?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "The ADR requires preserving parent links rather than a linear chain, but RecordHistoryEntry has no parent field and no traversal rule is given.",
-      "nodes": [
-        "0023.08"
-      ]
-    },
-    {
-      "text": "Which ReviewSubject and ReviewTarget combinations are valid, how deeply are targets resolved, and can a FactTarget name a fact that exists only in the base?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Decides when addReviewNote fails and whether reviewers can comment on deletions; the ADR says only that targets must be meaningful and capture does not invent facts or artifacts.",
-      "nodes": [
-        "0023.05"
-      ]
-    },
-    {
-      "text": "Do saveExample and addReviewNote take an expected workspace revision and fail on concurrent change, or does the last write win?",
-      "asked": 2,
-      "verdict": "partly_answered",
       "importance": "high",
-      "reason": "Changes signatures and conflict error types; the ADR promises multiple clients 'with revision checks', but neither signature carries a revision.",
-      "nodes": [
-        "0023.09",
-        "0023.06",
-        "0023.05"
-      ]
+      "reason": "Notes are committed in the archive and shared by Web and MCP processes, so the format is a data-compatibility choice; 0010 only says '`notes/` review notes, excluded from evaluation inputs'.",
+      "nodes": ["0023.05"]
     },
     {
-      "text": "Does adding a review note or requesting revisions change workspace status, such as Ready back to Draft?",
+      "kind": "gap",
+      "text": "What are ExampleId, ArtifactId and SourceSpan: the example name, a point or a range, and which store owns artifacts?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Examples are keyed by name (0006 'Metadata retains the original name and it must match the directory'), 0011 has 'SourceLocation file line column' as a point, and 0017 names ArtifactId without defining its store.",
+      "nodes": ["0023.05", "0023.06"]
+    },
+    {
+      "kind": "gap",
+      "text": "What 'revision checks' guard concurrent note, example and Ready/Draft writes from separate Web and MCP processes?",
+      "asked": 3,
+      "verdict": "partly_answered",
+      "importance": "medium",
+      "reason": "Whether writes carry an expected capture or candidate identity changes the operation signatures; 0023 'support multiple clients with revision checks' vs 0012 'Simultaneous edits of an uncommitted workspace are also their responsibility'.",
+      "nodes": ["0023.05", "0023.09"]
+    },
+    {
+      "kind": "gap",
+      "text": "How do addReviewNote and saveExample report domain refusals such as a target not meaningful in its subject, when they return no Either?",
       "asked": 2,
       "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Decides whether addReviewNote mutates the workspace state machine atomically with the note write; the ADR says saving an example marks Draft but is silent for notes.",
-      "nodes": [
-        "0023.05",
-        "0023.02"
-      ]
+      "reason": "0023 requires 'Targets must be meaningful within their subject' and 0011's encodeExample returns Either [Diagnostic], but both 0023 signatures only have Failure, which 0019 reserves for operational failures.",
+      "nodes": ["0023.05", "0023.06"]
     },
     {
-      "text": "Which unannotated commits does recordHistory include for a fact, and is their GitDiff the whole commit, the collection file, or a record-scoped hunk?",
+      "kind": "gap",
+      "text": "Which outputs or queries, with which arguments, are evaluated on Before and the candidate to produce 'selected view-output differences', and are the results saved?",
       "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "Controls traversal, result size and whether record-level parsing is needed; the ADR says only 'expose the available diff', not a claim of typed decoding.",
-      "nodes": [
-        "0023.08"
-      ]
-    },
-    {
-      "text": "Does acceptance require the workspace to be Ready, or only a checked candidate whose Before.revision matches head?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "Sets the accept operation's preconditions; the ADR requires a checked evolution and matching Before.revision but never says whether Ready is required.",
-      "nodes": [
-        "0023.02",
-        "0023.09"
-      ]
-    },
-    {
-      "text": "How is evidence content marked explicitly unavailable in the returned Rationale when the evidence cache entry is missing?",
-      "asked": 1,
-      "verdict": "partly_answered",
+      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "May require extending the shared Rationale/evidence type also used by step reports; the ADR requires the reference to stay visible but gives no shape.",
-      "nodes": [
-        "0023.08"
-      ]
+      "reason": "This decides whether review needs RootExecution on both endpoints, stored comparison arguments, and persisted artifacts for ArtifactTarget notes; 0023 only lists 'selected view-output differences' as a dimension.",
+      "nodes": ["0023.07"]
     },
     {
-      "text": "Where does a human's counterexample go before any evolution workspace exists, given that saveExample requires a workspace?",
-      "asked": 1,
-      "verdict": "partly_answered",
+      "kind": "gap",
+      "text": "Can review notes be resolved, edited or deleted, and through which operations; do they record an author and time?",
+      "asked": 2,
+      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "Decides whether Web needs a create-workspace path or a current-root save path; the ADR routes new-work requests to the agent, yet Verification starts with a Web counterexample.",
-      "nodes": [
-        "0023.04",
-        "0023.06"
-      ]
+      "reason": "The handoff loop needs to show which notes are outstanding, but only addReviewNote is defined; 0010 export accepts 'additions and deletions' in notes/ without defining an operation.",
+      "nodes": ["0023.05"]
     },
     {
-      "text": "What does recordHistory return for a FactId absent at the given revision: a Failure, an empty list, or history up to its deletion?",
-      "asked": 1,
+      "kind": "gap",
+      "text": "Does saveExample replace or refuse an existing example with the same name?",
+      "asked": 2,
       "verdict": "unanswered",
       "importance": "low",
-      "reason": "Changes the API contract and how both surfaces render missing records; the ADR does not address absent facts.",
-      "nodes": [
-        "0023.08"
-      ]
+      "reason": "Editing an expectation from a Web form needs replacement, accidental overwrite argues for refusal; 0023 says saving 'writes target/examples/' and marks the workspace Draft, nothing on collisions.",
+      "nodes": ["0023.06"]
+    },
+    {
+      "kind": "contradiction",
+      "text": "ADR 0023 makes recordHistory an EvolutionStore operation that reads Git, but ADR 0010's runEvolutionStore interpreter has no Git dependency.",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Either every EvolutionStore composition gains Git or history needs its own capability; 0023 'The initial implementation reads Git and archived reports directly' vs 0010 'runEvolutionStore :: (RootStore, WorkspaceStore, FileSystem, DhallHandling, Failure)'.",
+      "nodes": ["0023.08"]
+    },
+    {
+      "kind": "gap",
+      "text": "How does recordHistory's flat [RecordHistoryEntry] result represent Git parent links across merges?",
+      "asked": 1,
+      "verdict": "unanswered",
+      "importance": "medium",
+      "reason": "0023 requires 'preserve Git parent links when presenting merges', but RecordHistoryEntry has no parent field, so the return type or traversal must change.",
+      "nodes": ["0023.08"]
     }
   ]
 }

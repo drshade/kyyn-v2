@@ -1,146 +1,75 @@
 {
   "adr": "0020",
   "step": 187,
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "runs": 3,
-  "summary": "The ADR sets the toolchain bundle, layout and report vocabulary clearly, but it is not yet implementable as written: the biggest gap is the install contract, meaning how the SetupReport reaches an agent (wire format and exit status) and what a failed or rerun install leaves on disk.",
+  "summary": "Bundle contents and the build/runtime split are clear, but the release installer is largely unspecified; the biggest gaps are Git bundling versus discovery and how release artifacts are verified.",
   "questions": [
     {
-      "text": "If installation fails partway, does it roll back to the previous good state or keep the components that did install?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "high",
-      "reason": "It is the core atomicity rule for the installer; the ADR requires reporting partial setup and safe reruns but says nothing about the on-disk state.",
-      "nodes": [
-        "0020.02",
-        "0020.10"
-      ]
-    },
-    {
-      "text": "What is the trust root for verifying downloaded pinned release artifacts?",
+      "kind": "gap",
+      "text": "Does the installer bundle Git or locate an installed one, and what minimum Git version counts as compatible?",
       "asked": 3,
       "verdict": "unanswered",
       "importance": "high",
-      "reason": "It sets the security guarantee and what 'verified version' means; the ADR says 'download and verify pinned release artifacts' but not what to verify against.",
+      "reason": "Kernel plumbing relies on specific Git features and packaging differs; 0020 says explicitly 'Bundling is not settled: the installer may provision Git or locate and verify a compatible installation'.",
+      "nodes": [
+        "0020.08"
+      ]
+    },
+    {
+      "kind": "gap",
+      "text": "What is the bootstrap, where are pinned release artifacts published, and how are they verified?",
+      "asked": 3,
+      "verdict": "unanswered",
+      "importance": "high",
+      "reason": "Security boundary of the trusted toolchain; 0020 says installation 'may download and verify pinned release artifacts' without naming checksums, signatures or source.",
       "nodes": [
         "0020.02",
         "0020.03"
       ]
     },
     {
-      "text": "How is the SetupReport serialized and delivered to the agent, and what exit status goes with it?",
+      "kind": "gap",
+      "text": "Is rerunnable installation a kyyn subcommand beside doctor, or does only the bootstrap install?",
       "asked": 3,
-      "verdict": "partly_answered",
+      "verdict": "unanswered",
       "importance": "medium",
-      "reason": "The agent-facing contract and failure signalling depend on it; the ADR fixes only the Haskell shape and says a nonempty outstanding list is not success.",
+      "reason": "0020 requires distinct install and readiness commands 'even if the CLI presents them under one command group', but 0018's tree has only a standalone doctor.",
       "nodes": [
         "0020.02"
       ]
     },
     {
-      "text": "What does a rerun do when it finds a component, or the whole install, already present at a different version or location?",
-      "asked": 3,
+      "kind": "gap",
+      "text": "Must the Kyyn release identity enter the compiled-artifact cache key when a new release keeps the same MicroHs revision and SDK bytes?",
+      "asked": 1,
       "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "It decides the idempotence logic and whether a rerun works as upgrade or repair; the ADR says only 'safe to rerun' and 'report repair rather than silently fetching different code'.",
-      "nodes": [
-        "0020.02",
-        "0020.10"
-      ]
-    },
-    {
-      "text": "Where do disposable compiled caches live: per KB, per user keyed by build identity, or under the install prefix?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "medium",
-      "reason": "It sets the persisted layout, cache keying and invalidation; the ADR requires the categories to be kept separate but does not place any of them.",
+      "importance": "high",
+      "reason": "Risk of reusing stale artifacts; 0020 says 'changing runtime version invalidates binaries', while 0002's key covers the MicroHs revision, captured source and arguments, and 0005's inspection cache keys on the Kyyn commit.",
       "nodes": [
         "0020.07"
       ]
     },
     {
-      "text": "Should the first implementation bundle Git or locate a system Git, and what counts as compatible?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "It decides the probe code, the version floor and whether Git is a bundle component; the ADR leaves bundling open on purpose and makes a missing Git an actionable requirement.",
-      "nodes": [
-        "0020.08"
-      ]
-    },
-    {
-      "text": "Is ComponentName a closed enumeration of the bundled parts, and what does InstalledComponent hold beyond version and location?",
-      "asked": 3,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "It sets the stable vocabulary agents act on; the ADR lists the bundle's parts and says InstalledComponent records a verified version and resolved location.",
-      "nodes": [
-        "0020.02"
-      ]
-    },
-    {
-      "text": "What is the default install prefix, and how is it chosen when none is given?",
-      "asked": 3,
-      "verdict": "unanswered",
-      "importance": "low",
-      "reason": "It decides whether a default install ever hits PermissionRequired or a PATH next action; the ADR fixes the layout under 'the selected prefix' and defers the commands to the user guide.",
-      "nodes": [
-        "0020.10"
-      ]
-    },
-    {
-      "text": "How is a corrupted, wrong-version or failed-verification component represented in the report, given only MissingComponent exists?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "It may change the closed SetupRequirement type and lets agents tell a reinstall from a first install; Verification asks to report repair of corrupted packages, but the type has no variant for it.",
-      "nodes": [
-        "0020.02"
-      ]
-    },
-    {
-      "text": "Where do the 'next actions' live in the report, given that SetupRequirement carries only a name or free Text?",
-      "asked": 2,
-      "verdict": "partly_answered",
-      "importance": "medium",
-      "reason": "It decides whether agents can automate the fixes; the ADR asks for next actions and actionable needs-input results, but the type has no action field.",
-      "nodes": [
-        "0020.02"
-      ]
-    },
-    {
-      "text": "Are native libraries bundled with Kyyn or required from the system, and how are system ones reported?",
+      "kind": "gap",
+      "text": "How does a SetupReport with a nonempty outstanding list map to the CLI outcome and exit code?",
       "asked": 1,
       "verdict": "partly_answered",
       "importance": "medium",
-      "reason": "It changes the staging build, the notices and the platform detection; the ADR lists 'necessary native libraries' in the bundle but defers how they are packaged."
+      "reason": "Agents must tell 'needs human input' from 'broken install'; 0020 says 'A nonempty outstanding list is not success' but 0018's exit table has no mapping.",
+      "nodes": [
+        "0020.02"
+      ]
     },
     {
-      "text": "Which guest codecs count as 'chosen' for the bundle?",
+      "kind": "gap",
+      "text": "What is the default install prefix, and how is bin/kyyn-v2 put on the user's PATH?",
       "asked": 1,
       "verdict": "unanswered",
       "importance": "low",
-      "reason": "It decides what gets built, licence-reviewed and checked by readiness; the ADR says only 'chosen guest codecs'."
-    },
-    {
-      "text": "What should runtime asset discovery do when bin/kyyn-v2 is not a symlink into a staged bundle?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "It decides what users see from a copied or cabal-installed binary; the ADR says discovery resolves the link and that cabal install alone does not provision assets.",
+      "reason": "Affects privilege prompts and the MCP invocation example; 0020 refers only to 'the selected prefix's lib/kyyn-v2'.",
       "nodes": [
         "0020.10"
-      ]
-    },
-    {
-      "text": "May the readiness probe write to the real compiled cache, or must it use a throwaway directory?",
-      "asked": 1,
-      "verdict": "partly_answered",
-      "importance": "low",
-      "reason": "It decides cache isolation for doctor runs; the ADR says readiness does a small offline compile 'without making unrelated changes'.",
-      "nodes": [
-        "0020.02",
-        "0020.07"
       ]
     }
   ]

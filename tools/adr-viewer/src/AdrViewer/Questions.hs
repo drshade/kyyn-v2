@@ -3,7 +3,7 @@
 -- questions onto. Snapshots are taken on demand, not on every change.
 {-# LANGUAGE OverloadedStrings #-}
 module AdrViewer.Questions
-  ( Tally(..), recurring, tally, liveAt, lastChange
+  ( Tally(..), recurring, tally, contradictions, liveAt, lastChange
   , renderStatus, renderDecisions, snapshotJson
   ) where
 
@@ -24,7 +24,12 @@ recurring s q = questionAsked q * 5 >= snapshotRuns s * 3
 
 tally :: Snapshot -> Tally
 tally s = Tally (count HighImpact) (count MediumImpact) (count LowImpact)
-  where count i = length [q | q <- snapshotQuestions s, recurring s q, questionImportance q == i]
+  where count i = length [ q | q <- snapshotQuestions s, recurring s q, not (isContradiction q)
+                             , questionImportance q == i ]
+
+-- | Recurring contradictions between ADRs, counted apart from gaps.
+contradictions :: Snapshot -> Int
+contradictions s = length [q | q <- snapshotQuestions s, recurring s q, isContradiction q]
 
 -- | The lane's decisions live at a step.
 liveAt :: Int -> Lane -> [Node]
@@ -49,7 +54,8 @@ renderStatus i = T.unlines $
       Just s -> let Tally h m l = tally s in
         "step " <> tshow (snapshotStep s) <> " (" <> snapshotDate s <> "): "
           <> tshow h <> " high · " <> tshow m <> " medium · " <> tshow l <> " low recurring, of "
-          <> tshow (length (snapshotQuestions s)) <> " questions" <> stale s
+          <> tshow (length (snapshotQuestions s)) <> " questions"
+          <> (case contradictions s of 0 -> ""; c -> "; " <> tshow c <> " recurring contradictions") <> stale s
     stale s = case lastChange (inSteps i) (snapshotAdr s) of
       Just c | c > snapshotStep s -> "; the ADR changed since, at step " <> tshow c
       _ -> ""
@@ -69,9 +75,10 @@ snapshotJson :: Inputs -> Snapshot -> Value
 snapshotJson i s = object
   [ "step" .= snapshotStep s, "date" .= snapshotDate s, "runs" .= snapshotRuns s
   , "summary" .= snapshotSummary s, "lastChange" .= lastChange (inSteps i) (snapshotAdr s)
-  , "tally" .= [h, m, l], "decisions" .= decisions
+  , "tally" .= [h, m, l], "contradictions" .= contradictions s, "decisions" .= decisions
   , "questions" .= [ object
-      [ "text" .= questionText q, "asked" .= questionAsked q, "recurring" .= recurring s q
+      [ "kind" .= (if isContradiction q then "contradiction" else "gap" :: Text)
+      , "text" .= questionText q, "asked" .= questionAsked q, "recurring" .= recurring s q
       , "verdict" .= questionVerdict q, "importance" .= questionImportance q
       , "reason" .= questionReason q, "nodes" .= questionNodeIds q ]
     | q <- snapshotQuestions s ] ]
