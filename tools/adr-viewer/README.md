@@ -437,9 +437,9 @@ reads left to right on its track: white where the ADR states it, yellow pips
 where steps delivered part of it, green where the code completed it (one green
 dot when that was the same step). Faded marks belong to a decision that has
 since been superseded. A lane with a specification-gap snapshot shows its score
-(high·medium·low) beside the label once the shown step reaches the snapshot;
-the lane's side panel lists the questions, and a decision's lists those mapped
-to it.
+as three counts, high · medium · low in red, yellow and green, beside the
+label once the shown step reaches the snapshot; the lane's side panel lists
+the questions, and a decision's lists those mapped to it.
 
 ## Limits
 

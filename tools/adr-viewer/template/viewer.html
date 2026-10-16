@@ -10,7 +10,7 @@
     --lane: #c9c9c3; --planned-fill: #ffffff; --planned-stroke: #55554f;
     --done: #2f9e5b; --done-stroke: #1f7a43; --ended: #b9b9b3; --accent: #3b6fd8;
     --cursor: #d8613b; --tick: #8f8f88; --partial: #e3b230; --partial-stroke: #b58a16;
-    --gap-high: #c2412d; --gap-medium: #a07a12;
+    --gap-high: #c2412d; --gap-medium: #b58a16; --gap-low: #2f9e5b;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -18,7 +18,7 @@
       --lane: #45453f; --planned-fill: #f4f4f0; --planned-stroke: #f4f4f0;
       --done: #3fbf74; --done-stroke: #2f9e5b; --ended: #55554f; --accent: #7aa2f7;
       --cursor: #f08a5d; --tick: #6c6c66; --partial: #f0c443; --partial-stroke: #c99b22;
-      --gap-high: #f0806a; --gap-medium: #e0b84a;
+      --gap-high: #f0806a; --gap-medium: #e0b84a; --gap-low: #3fbf74;
     }
   }
   * { box-sizing: border-box; }
@@ -78,6 +78,13 @@
   svg text.gap, .gap { fill: var(--muted); color: var(--muted); }
   svg text.gap.high, .gap.high { fill: var(--gap-high); color: var(--gap-high); }
   svg text.gap.medium, .gap.medium { fill: var(--gap-medium); color: var(--gap-medium); }
+  .gaps { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .gaps .high { fill: var(--gap-high); color: var(--gap-high); }
+  .gaps .medium { fill: var(--gap-medium); color: var(--gap-medium); }
+  .gaps .low { fill: var(--gap-low); color: var(--gap-low); }
+  .gaps .zero { opacity: .35; }
+  .gaps .conflict { fill: var(--muted); color: var(--muted); font-size: 12px; }
+  span.gaps > span + span { margin-left: .4em; }
   aside h3 { font-size: 12px; margin: 14px 0 4px; }
   aside ul.questions { margin: 4px 0; padding-left: 16px; }
   aside ul.questions li { margin: 4px 0; }
@@ -97,7 +104,7 @@
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" class="node partial"/></svg> partly delivered</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node done"/></svg> realised</span>
     <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" class="node planned ended"/></svg> superseded</span>
-    <span title="Questions most blind agents would need answered to implement the ADR, by importance"><span class="gap high">2·1·0</span> spec gaps (high·medium·low)</span>
+    <span title="Questions most blind agents would need answered to implement the ADR, by importance"><span class="gaps"><span class="high">2</span><span class="medium">1</span><span class="low zero">0</span></span> high · med · low</span>
   </div>
 </header>
 <main>
@@ -213,15 +220,26 @@ function labelLines(id) {
 
 // Specification gaps: the ADR's snapshot, once the shown step has reached it.
 const snapshot = (id, t) => { const q = D.questions[id]; return q && q.step <= t ? q : null; };
-const gapClass = q => q.tally[0] ? "high" : q.tally[1] ? "medium" : "";
-const gapText = q => q.tally.join("·") + (q.contradictions ? ` !${q.contradictions}` : "");
+const GAP_LEVELS = ["high", "medium", "low"];
+// The badge's parts: one count per importance, then contradictions if any.
+const gapParts = q => [
+  ...q.tally.map((n, i) => ({ text: String(n), cls: GAP_LEVELS[i] + (n ? "" : " zero") })),
+  ...(q.contradictions ? [{ text: `!${q.contradictions}`, cls: "conflict" }] : []),
+];
+const gapHtml = q => `<span class="gaps">${gapParts(q).map(p => `<span class="${p.cls}">${p.text}</span>`).join("")}</span>`;
 const need = q => Math.ceil(q.runs * 3 / 5);  // recurring: at least 60% of runs, as in Questions.hs
 const gapTip = q => `Specification gaps at step ${q.step}: ${q.tally[0]} high, ${q.tally[1]} medium, ${q.tally[2]} low ` +
   `questions raised by at least ${need(q)} of ${q.runs} blind agents` +
   (q.contradictions ? `; ${q.contradictions} contradictions with other ADRs` : "");
+// Shorten a one-line label until its right edge stays clear of `right`.
+function fitLabel(label, right) {
+  const full = label.textContent;
+  for (let n = full.length; n > 0 && label.getComputedTextLength() + Number(label.getAttribute("x")) > right; n--)
+    label.textContent = full.slice(0, n).trimEnd() + "…";
+}
 function gapBadge(q, attrs) {
-  const g = el("text", { ...attrs, class: "gap " + gapClass(q) });
-  g.textContent = attrs["text-anchor"] ? gapText(q) : `spec gaps ${gapText(q)}`;
+  const g = el("text", { ...attrs, class: "gaps" });
+  gapParts(q).forEach((p, i) => el("tspan", { class: p.cls, dx: i ? 6 : 0 }, g).textContent = p.text);
   el("title", {}, g).textContent = gapTip(q);
   return g;
 }
@@ -259,7 +277,7 @@ function render() {
     const snap = snapshot(id, t);
     if (open) labelLines(id).forEach((line, i) =>
       el("tspan", { x: i ? 20 : 8, dy: i ? LABEL_LINE : 0 }, label).textContent = line);
-    else label.textContent = (lane ? "▸ " : "  ") + `${id} ${adrTitle(id)}`.slice(0, snap ? 28 : 32);
+    else label.textContent = (lane ? "▸ " : "  ") + `${id} ${adrTitle(id)}`.slice(0, 32);
     const toggle = () => {
       if (lane) { expanded.has(id) ? expanded.delete(id) : expanded.add(id); saveExpanded(); relayout(); render(); }
       showLane(id);
@@ -269,6 +287,7 @@ function render() {
       const badge = open ? gapBadge(snap, { x: 20, y: L.mid + 4 + labelLines(id).length * LABEL_LINE })
                          : gapBadge(snap, { x: LABEL_W - 8, y: L.mid + 4, "text-anchor": "end" });
       badge.onclick = () => showLane(id);
+      if (!open) fitLabel(label, LABEL_W - 8 - badge.getComputedTextLength() - 8);
     }
     const end = meta.deleted != null && meta.deleted <= t ? meta.deleted : t;
     el("line", { x1: x(meta.born), x2: x(end), y1: open ? L.mid : L.y + L.h - 4, y2: open ? L.mid : L.y + L.h - 4, class: "lane-line" });
@@ -410,7 +429,7 @@ function laneQuestions(id) {
   const rec = byImportance(snap.questions.filter(q => q.recurring && q.kind !== "contradiction"));
   const rest = byImportance(snap.questions.filter(q => !q.recurring));
   const changed = snap.lastChange != null && snap.lastChange > snap.step ? ` · ADR changed since` : "";
-  return `<h3>Spec gaps <span class="gap ${gapClass(snap)}">${gapText(snap)}</span></h3>
+  return `<h3>Spec gaps ${gapHtml(snap)}</h3>
     <div class="meta" title="${gapTip(snap)}">step ${snap.step} · ${esc(snap.date)}${changed}</div>
     <p>${esc(snap.summary)}</p>
     ${conflicts.length ? `<h3>Contradictions</h3><ul class="questions">${conflicts.map(q => questionItem(q, snap.runs)).join("")}</ul><h3>Gaps</h3>` : ""}
