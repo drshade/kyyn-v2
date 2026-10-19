@@ -19,8 +19,6 @@ module System.IO.Base(
   writeFile, readFile, appendFile,
   writeBinaryFile, readBinaryFile,
 
-  cprint, cuprint,
-
   hPutBuf, hGetBuf,
 
   openTmpFile, openTempFile, openBinaryTempFile,
@@ -32,6 +30,9 @@ module System.IO.Base(
   hGetBuffering,
 
   IOException(..),
+
+  hIsTerminalDevice,
+  hFileSize,
   ) where
 import qualified Prelude()              -- do not import Prelude
 import Primitives
@@ -46,6 +47,9 @@ import Data.Eq
 import Data.Function
 import Data.Functor
 import Data.Int.Int
+import Data.Int.Int64
+import Data.Integer_Type
+import Data.Integral
 import Data.List
 import Data.Maybe
 import Data.Num
@@ -62,9 +66,6 @@ import System.IO.Internal
 import System.IO.Open
 import System.IO.Unsafe
 
-primHPrint       :: forall a . Ptr BFILE -> a -> IO ()
-primHPrint        = _primitive "IO.print"
-
 -- BFILE stuff
 foreign import ccall "closeb"       c_closeb       ::                 Ptr BFILE -> IO ()
 foreign import ccall "flushb"       c_flushb       ::                 Ptr BFILE -> IO ()
@@ -73,6 +74,8 @@ foreign import ccall "ungetb"       c_ungetb       :: Int ->          Ptr BFILE 
 foreign import ccall "putb"         c_putb         :: Int ->          Ptr BFILE -> IO ()
 foreign import ccall "writeb"       c_writeb       :: Ptr a -> Int -> Ptr BFILE -> IO Int
 foreign import ccall "readb"        c_readb        :: Ptr a -> Int -> Ptr BFILE -> IO Int
+foreign import ccall "isattyb"      c_isattyb      ::                 Ptr BFILE -> IO Int
+foreign import ccall "filesizeb"    c_filesizeb    ::                 Ptr BFILE -> IO Int64
 
 ----------------------------------------------------------
 
@@ -134,21 +137,6 @@ putChar = hPutChar stdout
 
 getChar :: IO Char
 getChar = hGetChar stdin
-
-cprint :: forall a . a -> IO ()
-cprint a = withHandleWr stdout $ \ p ->
-  let gc = primGC 1 in
-  primRnfNoErr a `seq`
-  gc `primThen`     -- Do GC reductions
-  gc `primThen`
-  gc `primThen`
-  gc `primThen`
-  gc `primThen`
-  gc `primThen`
-  primHPrint p a
-
-cuprint :: forall a . a -> IO ()
-cuprint a = withHandleWr stdout $ \ p -> primHPrint p a
 
 print :: forall a . (Show a) => a -> IO ()
 print a = putStrLn (show a)
@@ -327,3 +315,19 @@ hPutBuf h p n = do withHandleWr h $ c_writeb p n; return ()
 
 hGetBuf :: Handle -> Ptr a -> Int -> IO Int
 hGetBuf h p n = withHandleRd h $ c_readb p n
+
+hIsTerminalDevice :: Handle -> IO Bool
+hIsTerminalDevice h = do
+  i <- withHandleAny h c_isattyb
+  if i < 0 then
+    ioErrH h InvalidArgument "hIsTerminalDevice"
+   else
+    return (i /= 0)
+
+hFileSize :: Handle -> IO Integer
+hFileSize h = do
+  i <- withHandleAny h c_filesizeb
+  if i < 0 then
+    ioErrH h InvalidArgument "hFileSize"
+   else
+    return (toInteger i)

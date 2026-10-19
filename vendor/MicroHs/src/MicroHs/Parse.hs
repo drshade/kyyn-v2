@@ -11,6 +11,7 @@ import Data.List
 import Data.Maybe
 import Text.ParserComb as P
 import MicroHs.Builtin(builtinMdl)
+--import MicroHs.Error(MhsError(MhsSyntaxError))
 import MicroHs.Lex
 import MicroHs.List
 import MicroHs.Expr hiding (getSLoc)
@@ -34,11 +35,11 @@ parseDie :: forall a . -- (Show a) =>
             P a -> FilePath -> String -> a
 parseDie p fn file =
   case parse p fn file of
-    Left msg -> mhsError msg
+    Left err -> throw err
     Right a -> a
 
 parse :: forall a . -- (Show a) =>
-         P a -> FilePath -> String -> Either String a
+         P a -> FilePath -> String -> Either MhsError a
 parse p fn file =
   let { ts = lexTopLS fn file } in
   case runPrsr p ts of
@@ -83,11 +84,19 @@ pModule :: P EModule
 pModule = do
   pKeyword "module"
   mn <- pUQIdentA
-  exps <- (lpar *> sepEndBy pExportItem comma <* rpar)
+  exps <- (lpar *> sepSEBy pExportItem comma <* rpar)
       <|> pure [ExpModule mn]
   pKeyword "where"
   defs <- pBlock pDef
   pure $ EModule mn exps defs
+
+-- Optional leading and trailing
+sepSEBy :: P a -> P b -> P [a]
+sepSEBy p sep = (sep *> sepEndBy1 p sep) <|> sepEndBy p sep
+
+-- Optional leading and trailing, non-empty
+sepSEBy1 :: P a -> P b -> P [a]
+sepSEBy1 p sep = (sep *> sepEndBy1 p sep) <|> sepEndBy1 p sep
 
 pModuleEmpty :: P EModule
 pModuleEmpty = do
@@ -307,6 +316,7 @@ pLit = do
   let
     elit = maybe ELit (flip EQLit) mqual
     is (TString loc s) = Just (elit loc (LStr s))
+    is (TBStr   loc s) = Just (elit loc (LBStr s))
     is (TChar   loc a) = Just (elit loc (LChar a))
     is (TInt    loc i) = Just (elit loc (LInteger i))
     is (TRat    loc d) = Just (elit loc (LRat d))
@@ -391,7 +401,7 @@ pBraces p =
 
 pBlock :: forall a . P a -> P [a]
 pBlock p = pBraces body
-  where body = sepBy p (some semi) <* optional semi
+  where body = optional semi *> sepBy p (some semi) <* optional semi
 
 
 pDef :: P EDef
@@ -407,15 +417,15 @@ pDef =
                         <*> optional pString <*> pFExpr <*> (dcolon *> pType)
   <|> Class        <$> (pKeyword "class"    *> pContext) <*> pLHS <*> pFunDeps     <*> pWhere pClsBind
   <|> Instance <$> (pKeyword "instance" *> pType) <*> pWhere pInstBind <*> (pWhere pInstBind <|> pure [])
-  <|> Default      <$> (pKeyword "default"  *> optional clsSym) <*> pParens (sepBy pType comma)
+  <|> Default      <$> (pKeyword "default"  *> optional clsSym) <*> pParens (sepSEBy pType comma)
   <|> KindSign     <$> (pKeyword "type"     *> pTypeIdentSym) <*> (dcolon *> pKind)
   <|> mkPattern    <$> (pKeyword "pattern"  *> pPatSyn)
-  <|> Sign         <$> (pKeyword "pattern"  *> sepBy1 pUIdentSym comma <* dcolon) <*> pType
+  <|> Sign         <$> (pKeyword "pattern"  *> sepEndBy1 pUIdentSym comma <* dcolon) <*> pType
   <|> StandDeriving<$> (pKeyword "deriving" *> pStrat) <*> pure 0 <*> (pKeyword "instance" *> pType)
   <|> noop         <$  (pKeyword "type"     <* pKeyword "role" <* pTypeIdentSym <*
                                                some (pKeyword "nominal" <|> pKeyword "phantom" <|> pKeyword "representational"))
   where
-    pFunDeps = (bar *> sepBy1 pFunDep comma) <|> pure []
+    pFunDeps = (bar *> sepSEBy1 pFunDep comma) <|> pure []
     pFunDep = (,) <$> some pLIdent <*> (pSRArrow *> some pLIdent)
     pField = guardM pFields ((== 1) . either length length)
 
@@ -516,7 +526,7 @@ pDeriving :: P Deriving
 pDeriving = pKeyword "deriving" *> (    (flip Deriving <$> pDer <*> pVia)
                                     <|> (Deriving <$> pSimpleStrat <*> pDer) )
   where pDer = map ((,) 0) <$>
-                   (    pParens (sepBy pType comma)
+                   (    pParens (sepSEBy pType comma)
                     <|> ((:[]) <$> pAType) )
         pVia = DerVia <$> (pKeyword "via" *> pType)
 
@@ -545,7 +555,7 @@ pConstr = ((\ vs ct t1 c t2 -> Constr vs ct c True (Left [t1, t2])) <$> pForall 
 
 
 pFields :: P (Either [SType] [(Ident, SType)])
-pFields = Right <$> (pSpec '{' *> (concatMap flat <$> sepBy ((,) <$> (sepBy1 pLIdentSym comma <* dcolon) <*> pSType) comma <* pSpec '}'))
+pFields = Right <$> (pSpec '{' *> (concatMap flat <$> sepSEBy ((,) <$> (sepEndBy1 pLIdentSym comma <* dcolon) <*> pSType) comma <* pSpec '}'))
       <|> Left  <$> many pSAType
   where flat (is, t) = [ (i, t) | i <- is ]
 
@@ -580,7 +590,7 @@ pImportSpec =
             <|> ((\ a b -> (b,a)) <$> pUQIdentA <*> (pQualified <|> pure False))
     imp a (b, c) = ImportSpec a b c
   in  imp <$> pSource <*> pQId <*> optional (pKeyword "as" *> pUQIdent) <*>
-              optional ((,) <$> ((True <$ pKeyword "hiding") <|> pure False) <*> pParens (sepEndBy pImportItem comma))
+              optional ((,) <$> ((True <$ pKeyword "hiding") <|> pure False) <*> pParens (sepSEBy pImportItem comma))
 
 pImportItem :: P ImportItem
 pImportItem =
@@ -593,7 +603,7 @@ pImportItem =
         impType i is                     = ImpTypeSome i is
 
 pConList :: P [Ident]
-pConList = sepBy (pDotDot <|> pQIdent <|> pUIdentSpecial <|> pParens pSymOper) comma
+pConList = sepSEBy (pDotDot <|> pQIdent <|> pUIdentSpecial <|> pParens pSymOper) comma
   where pDotDot = dotDotIdent <$ pSymbol ".."
 
 dotDotIdent :: Ident
@@ -732,7 +742,7 @@ pEqns = pEqns' pLIdentSym pLOper (\ _ _ -> True)
 pEqnsU :: Ident -> P (Ident, [Eqn])
 pEqnsU i = pEqns' pUIdentSym pUOper (\ n _ -> i == n)
 
--- pEqns' is used to parse oridinary function definitions as well
+-- pEqns' is used to parse ordinary function definitions as well
 -- as the 'constructor' of pattern synonyms, which has an upper case identifier.
 pEqns' :: P Ident -> P Ident -> (Ident -> Int -> Bool) -> P (Ident, [Eqn])
 pEqns' ident oper test = do
@@ -754,13 +764,11 @@ pEqn ident oper test = do
 
 pEqnLHS :: P Ident -> P Ident -> P (Ident, [EPat])
 pEqnLHS ident oper =
-  pOpLHS
+  ((\ p1 i p2 -> (i, [p1,p2])) <$> pPatApp <*> oper <*> pPatApp)
   <|>
   ((,) <$> ident <*> many pAPat)
   <|>
-  ((\ (i, ps1) ps2 -> (i, ps1 ++ ps2)) <$> pParens pOpLHS <*> many pAPat)
-  where
-    pOpLHS = (\ p1 i p2 -> (i, [p1,p2])) <$> pPatApp <*> oper <*> pPatApp
+  ((\ (i, ps1) ps2 -> (i, ps1 ++ ps2)) <$> pParens (pEqnLHS ident oper) <*> many pAPat)
 
 pAlts :: P () -> P EAlts
 pAlts sep = do
@@ -774,7 +782,7 @@ pAltsL sep =
   <|> ((\ e -> [([], e)]) <$> (sep *> pExpr))
 
 pAlt :: P () -> P EAlt
-pAlt sep = (,) <$> (bar *> sepBy1 pStmt comma) <*> (sep *> pExpr)
+pAlt sep = (,) <$> (bar *> sepSEBy1 pStmt comma) <*> (sep *> pExpr)
 
 pWhere :: P EBind -> P [EBind]
 pWhere pb =
@@ -877,7 +885,7 @@ pAExpr = do
   pure $ sel (foldl EUpdate ee us)
 
 pUpdate :: P [EField]
-pUpdate = pSpec '{' *> sepBy pEField comma <* pSpec '}'
+pUpdate = pSpec '{' *> sepSEBy pEField comma <* pSpec '}'
   where
     pEField = do
       fs <- (:) . unQualIdent <$> pLQIdentSym <*> many pSelect
@@ -911,15 +919,17 @@ pListish = do
   let
     pMore = do
       e2 <- pExpr
-      ((\ es -> LList (e1:e2:es)) <$> some (comma *> pExpr))
+      ((\ es -> LList (e1:e2:es)) <$> (some (comma *> pExpr) <* optional comma) )
        <|> (LFromThenTo e1 e2 <$> (pSymbol ".." *> pExpr))
        <|> (LFromThen e1 e2 <$ pSymbol "..")
        <|> pure (LList [e1,e2])
   (comma *> pMore)
-   <|> (LCompr e1 <$> (bar *> sepBy1 pStmt comma))
+   <|> (LCompr e1 <$> (bar *> sepSEBy1 pStmt comma))
    <|> (LFromTo e1 <$> (pSymbol ".." *> pExpr))
    <|> (LFrom e1 <$ pSymbol "..")
    <|> pure (LList [e1])
+ <|>  -- List with initial comma
+   (comma *> (LList <$> sepEndBy1 pExpr comma))
 
 pExprOp :: P Expr
 pExprOp = pOperators pOper pExprArgNeg
@@ -953,13 +963,19 @@ pBind =
 pBind' :: P EBind
 pBind' =
       uncurry Fcn <$> pEqns
-  <|> Sign        <$> (sepBy1 pLIdentSym comma <* dcolon) <*> pType
-  <|> Infix       <$> ((,) <$> pAssoc <*> pPrec) <*> sepBy1 pTypeOper comma
+  <|> Sign        <$> (sepEndBy1 pLIdentSym comma <* dcolon) <*> (pType <* notEqual)
+  <|> Infix       <$> ((,) <$> pAssoc <*> pPrec) <*> sepEndBy1 pTypeOper comma
   where
     pAssoc = (AssocLeft <$ pKeyword "infixl") <|> (AssocRight <$ pKeyword "infixr") <|> (AssocNone <$ pKeyword "infix")
     dig (TInt _ ii) | 0 <= i && i <= 9 = Just i  where i = fromInteger ii
     dig _ = Nothing
     pPrec = satisfyM "digit" dig <|> pure 9
+    notEqual :: P ()
+    notEqual = do
+      t <- nextToken
+      case t of
+        TSpec _ '=' -> Control.Monad.Fail.fail "notEqual"
+        _           -> return ()
 
 -- Bindings allowed in a class definition
 pClsBind :: P EBind
@@ -971,7 +987,7 @@ pClsBind =
 pInstBind :: P EBind
 pInstBind =
       uncurry Fcn <$> pEqns
-  <|> Sign        <$> (sepBy1 pLIdentSym comma <* dcolon) <*> pType
+  <|> Sign        <$> (sepEndBy1 pLIdentSym comma <* dcolon) <*> pType
 
 -------------
 
@@ -1013,11 +1029,6 @@ qualName loc qs s = mkIdentSLoc loc (intercalate "." (qs ++ [s]))
 
 -------------
 
-formatFailed :: LastFail Token -> String
+formatFailed :: LastFail Token -> MhsError
 formatFailed (LastFail _ ts msgs) =
-  let
-    sloc = tokensLoc ts
-  in
-    showSLoc sloc ++ ":\n"
-      ++ "  found:    " ++ head (map showToken ts ++ ["EOF"]) ++ "\n"
-      ++ "  expected: " ++ unwords (nub msgs)
+  MhsSyntaxError (tokensLoc ts) (head (map showToken ts ++ ["EOF"])) (unwords (nub msgs))

@@ -205,6 +205,14 @@ void GETCPUTIME(long *sec, long *nsec) { *sec = 0; *nsec = 0; }
 #define INLINE inline
 #endif  /* !define(INLINE) */
 
+#if !defined(NOINLINE)
+#if defined(__GNUC__) || defined(__clang__)
+#define NOINLINE __attribute__((noinline))
+#else
+#define NOINLINE
+#endif
+#endif  /* !defined(NOINLINE) */
+
 #if !defined(NORETURN)
 /*#define NORETURN [[noreturn]]*/
 #define NORETURN _Noreturn
@@ -212,7 +220,8 @@ void GETCPUTIME(long *sec, long *nsec) { *sec = 0; *nsec = 0; }
 
 #if !defined(PACKED)
 #if WORD_SIZE == 32
-#define PACKED __attribute__((packed))
+/* Avoid 64 bit alignment to keep nodes to 12 bytes */
+#define PACKED __attribute__((packed, aligned(4)))
 #else
 #define PACKED
 #endif  /* WORD_SIZE == 32 */
@@ -1159,10 +1168,6 @@ gc_check(size_t k)
 {
   if (k < num_free)
     return;
-#if WANT_STDIO
-  if (verbose > 1)
-    PRINT("gc_check: %d\n", (int)k);
-#endif
   gc();
 }
 
@@ -4100,10 +4105,13 @@ parse(struct parse_ctx *pc, BFILE *f)
     default:
       buf[0] = c;
       /* A primitive, keep getting char's until end */
-      for (j = 1; (buf[j] = getNT(f)); j++)
-        ;
+      for (j = 1; (buf[j] = getNT(f)); j++) {
+        if (j >= sizeof buf) {
+          DESER_ERR("bad input");
+        }
+      }
 
-        // Look up the primop (O(1) hash lookup) and use the preallocated node.
+      /* Look up the primop (O(1) hash lookup) and use the preallocated node. */
       {
         int t = lookup_primop(buf);
         if (t < 0)
@@ -4143,7 +4151,7 @@ parse_top(BFILE *f, struct ffe_entry *ffe)
     /* exception */
     if (pc->shared_table)
       FREE(pc->shared_table);
-    raise_rts(exn_deserialize);
+    return NIL;
   } else {
     checkversion(pc, f);
     numLabels = parse_int(f);
@@ -4859,32 +4867,40 @@ headutf8(struct bytestring bs, void **ret)
       *ret = p;
     return c1;
   }
-  if (bs.bs_size == 1)
-    ERR("headUTF8 1");
-  int c2 = *p++;
-  if ((c1 & 0xe0) == 0xc0) {
-    if (ret)
-      *ret = p;
-    return ((c1 & 0x1f) << 6) | (c2 & 0x3f);
+  if ((c1 & 0xe0) == 0xc0 && bs.bs_size >= 2) {
+    int c2 = p[0];
+    if ((c2 & 0xc0) == 0x80) {
+      int c = ((c1 & 0x1f) << 6) | (c2 & 0x3f);
+      if (c == 0 || c >= 0x80) {
+        if (ret)
+          *ret = p + 1;
+        return c;
+      }
+    }
+  } else if ((c1 & 0xf0) == 0xe0 && bs.bs_size >= 3) {
+    int c2 = p[0], c3 = p[1];
+    if ((c2 & 0xc0) == 0x80 && (c3 & 0xc0) == 0x80) {
+      int c = ((c1 & 0x0f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f);
+      if (c >= 0x800 && (c < 0xd800 || c > 0xdfff)) {
+        if (ret)
+          *ret = p + 2;
+        return c;
+      }
+    }
+  } else if ((c1 & 0xf8) == 0xf0 && bs.bs_size >= 4) {
+    int c2 = p[0], c3 = p[1], c4 = p[2];
+    if ((c2 & 0xc0) == 0x80 && (c3 & 0xc0) == 0x80 && (c4 & 0xc0) == 0x80) {
+      int c = ((c1 & 0x07) << 18) | ((c2 & 0x3f) << 12) | ((c3 & 0x3f) << 6) | (c4 & 0x3f);
+      if (c >= 0x10000 && c < 0x110000) {
+        if (ret)
+          *ret = p + 3;
+        return c;
+      }
+    }
   }
-  if (bs.bs_size == 2)
-    ERR("headUTF8 2");
-  int c3 = *p++;
-  if ((c1 & 0xf0) == 0xe0) {
-    if (ret)
-      *ret = p;
-    return ((c1 & 0x0f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f);
-  }
-  if (bs.bs_size == 3)
-    ERR("headUTF8 3");
-  int c4 = *p++;
-  if ((c1 & 0xf8) == 0xf0) {
-    if (ret)
-      *ret = p;
-    return ((c1 & 0x07) << 18) | ((c2 & 0x3f) << 12) | ((c3 & 0x3f) << 6) | (c4 & 0x3f);
-  }
-  ERR("headUTF8 4");
-  NOTREACHED;
+  if (ret)
+    *ret = p;
+  return 0xdc00 | c1;
 #endif  /* WANT_UTF8 */
 }
 
@@ -5971,6 +5987,10 @@ evali(NODEPTR an)
     CHKARG3NP;
     xfp = evalbstr(x);
     xi = evalint(y);
+    if (0xdc80 <= xi && xi <= 0xdcff) {
+      /* Using dc80-dcff to roundtrip bad bytes */
+      xi &= 0xff;
+    }
     if ((xi & 0x1ff800) == 0xd800) {
       /* xi is a surrogate */
       xi = 0xfffd; /* replacement character */
@@ -6154,6 +6174,8 @@ evali(NODEPTR an)
     bfile = (struct BFILE*)evalptr(x);
     gc();                     /* make sure we have room.  GC during parse is dodgy. */
     x = parse_top(bfile, 0);
+    if (x == NIL)
+      raise_rts(exn_deserialize);
     POP(2);
     GOPAIR(x);                /* allocates a cell, but we did a GC above */
 #endif
@@ -6682,8 +6704,10 @@ evali(NODEPTR an)
       case T_SUBR:  SUB_OVERFLOW(value_t, ru, yu, xu); break;
       case T_QUOT:  if (yu == 0)
                       raise_rts(exn_dividebyzero);
+#if WANT_OVERFLOW
                     else if ((value_t)xu == VALUE_MIN && (value_t)yu == -1)
                       raise_rts(exn_overflow);
+#endif
                     else
                       ru = (uvalue_t)((value_t)xu / (value_t)yu);
                     break;
@@ -6746,7 +6770,11 @@ evali(NODEPTR an)
     unint:
       switch (GETTAG(p)) {
       case T_IND:      p = GETINDIR(p); goto unint;
-      case T_NEG:      if ((value_t)xu == VALUE_MIN) raise_rts(exn_overflow); ru = -xu; break;
+      case T_NEG:
+#if WANT_OVERFLOW
+                       if ((value_t)xu == VALUE_MIN) raise_rts(exn_overflow);
+#endif
+                       ru = -xu; break;
       case T_UNEG:     ru = -xu; break;
       case T_INV:      ru = ~xu; break;
       case T_POPCOUNT: ru = POPCOUNT(xu); break;
@@ -7118,6 +7146,8 @@ die_exn(NODEPTR exn)
   /* A horrible hack until we get proper exceptions */
   if (strcmp(msg, "ExitSuccess") == 0) {
     EXIT(0);
+  } else if (strncmp(msg, "ExitFailure ", 12) == 0) {
+    EXIT(atoi(msg + 12));
   } else {
     fprintf(stderr, "\n%s: uncaught exception: %s\n", progname, msg);
     EXIT(1);
@@ -7325,6 +7355,8 @@ MHS_INIT_ARGS(
       ungetb(c, bf);
     }
     prog = parse_top(bf, xffe_table);
+    if (prog == NIL)
+      ERR("deser failed");
     closeb(bf);
   }
 
@@ -7726,6 +7758,10 @@ from_t mhs_openrdmem(int s) { return mhs_from_Ptr(s, 2, openb_rd_mem(mhs_to_Ptr(
 from_t mhs_getmem(int s) { get_mem(mhs_to_Ptr(s, 0), mhs_to_Ptr(s, 1), mhs_to_Ptr(s, 2));  return mhs_from_Unit(s, 3); }
 from_t mhs_readb(int s) { return mhs_from_Int(s, 3, readb(mhs_to_Ptr(s, 0), mhs_to_Int(s, 1), mhs_to_Ptr(s, 2))); }
 from_t mhs_writeb(int s) { return mhs_from_Int(s, 3, writeb(mhs_to_Ptr(s, 0), mhs_to_Int(s, 1), mhs_to_Ptr(s, 2))); }
+from_t mhs_isattyb(int s) { return mhs_from_Int(s, 1, isattyb(mhs_to_Ptr(s, 0))); }
+#if WANT_INT64
+from_t mhs_filesizeb(int s) { return mhs_from_Int64(s, 1, filesizeb(mhs_to_Ptr(s, 0))); }
+#endif  /* WANT_INT64 */
 
 #if WANT_MD5
 from_t mhs_md5Array(int s) { md5Array(mhs_to_Ptr(s, 0), mhs_to_Ptr(s, 1), mhs_to_Int(s, 2)); return mhs_from_Unit(s, 3); }
@@ -7840,6 +7876,7 @@ from_t mhs_mkdir(int s) { return mhs_from_Int(s, 2, MKDIR(mhs_to_Ptr(s, 0), mhs_
 from_t mhs_getcwd(int s) { return mhs_from_Ptr(s, 2, getcwd(mhs_to_Ptr(s, 0), mhs_to_Int(s, 1))); }
 from_t mhs_get_permissions(int s) { return mhs_from_Int(s, 1, get_permissions(mhs_to_Ptr(s, 0))); }
 from_t mhs_set_permissions(int s) { return mhs_from_Int(s, 2, set_permissions(mhs_to_Ptr(s, 0), mhs_to_Int(s, 1))); }
+from_t mhs_get_file_size(int s) { return mhs_from_Int64(s, 1, get_file_size(mhs_to_Ptr(s, 0))); }
 #endif  /* WANT_DIR */
 from_t mhs_getcpu(int s) { GETCPUTIME(mhs_to_Ptr(s, 0), mhs_to_Ptr(s, 1)); return mhs_from_Unit(s, 2); }
 #if WANT_ENV
@@ -8108,6 +8145,10 @@ const struct ffi_entry ffi_table[] = {
   { "get_mem", 3, mhs_getmem},
   { "readb", 3, mhs_readb},
   { "writeb", 3, mhs_writeb},
+  { "isattyb", 1, mhs_isattyb},
+#if WANT_INT64
+  { "filesizeb", 1, mhs_filesizeb},
+#endif  /* WANT_INT64 */
 
 #if WANT_MD5
   { "md5Array", 3, mhs_md5Array},
@@ -8204,6 +8245,7 @@ const struct ffi_entry ffi_table[] = {
   { "getcwd", 2, mhs_getcwd},
   { "set_permissions", 2, mhs_set_permissions},
   { "get_permissions", 1, mhs_get_permissions},
+  { "get_file_size", 1, mhs_get_file_size},
 #endif  /* WANT_DIR */
   { "getcpu", 2, mhs_getcpu},
   { "want_gmp", 0, mhs_want_gmp},

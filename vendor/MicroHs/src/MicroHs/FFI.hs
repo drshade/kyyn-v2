@@ -3,6 +3,7 @@ import qualified Prelude(); import MHSPrelude
 import Data.Char
 import Data.List
 import MicroHs.Desugar(LDef)
+import MicroHs.Error(mhsError)
 import MicroHs.Exp
 import MicroHs.Expr
 import MicroHs.Flags
@@ -271,7 +272,7 @@ runtimeFFI :: [String]
 runtimeFFI = [
   "GETRAW", "GETTIMEMICRO", "GETBOOTTIMEMICRO", "acos", "add_FILE", "add_fd", "open", "add_utf8", "add_buf", "add_crlf",
   "asin", "atan", "atan2", "calloc", "closeb",
-  "cos", "exp", "flushb", "fopen", "free", "getb", "getenv", "islinux", "ismacos", "iswindows", "log", "malloc",
+  "cos", "exp", "flushb", "fopen", "free", "getb", "getenv", "isattyb", "filesizeb", "islinux", "ismacos", "iswindows", "log", "malloc",
   "md5Array", "md5BFILE", "md5String", "memcpy", "memmove", "realloc", "strlen", "strcpy",
   "putb", "sin", "sqrt", "system", "tan", "tmpname", "ungetb", "remove",
   "acosf", "asinf", "atanf", "atan2f", "cosf", "expf", "logf", "sinf", "sqrtf", "tanf",
@@ -327,7 +328,7 @@ runtimeFFI = [
   "environ",
   "get_executable_path",
   "setenv", "unsetenv",
-  "set_permissions", "get_permissions",
+  "set_permissions", "get_permissions", "get_file_size",
   "F_SETFL", "O_NONBLOCK", "SOL_SOCKET", "SO_DEBUG", "SO_ERROR", "SO_REUSEADDR", "SO_TYPE",
   "accept", "bind", "close", "connect", "fcntl", "getsockopt", "listen", "recv", "send", "setsockopt", "socket"
   ]

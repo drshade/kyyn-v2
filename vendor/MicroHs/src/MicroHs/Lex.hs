@@ -7,17 +7,19 @@ module MicroHs.Lex(
   interpSkip,
   ) where
 import qualified Prelude(); import MHSPrelude hiding(lex)
+import Data.ByteString.Char8(ByteString, pack)
 import Data.Char
 import Data.List
 import Data.Maybe (fromJust, fromMaybe)
+import MicroHs.Error(mhsError, mhsErrorLoc)
 import MicroHs.Ident
 import Text.ParserComb(TokenMachine(..))
-import Text.PrettyPrint.HughesPJLiteClass(prettyShow)
 --import Debug.Trace
 
 data Token
   = TIdent  SLoc [String] String  -- identifier
   | TString SLoc String           -- String literal
+  | TBStr   SLoc ByteString       -- ByteString literal ("xxx"#)
   | TQual   SLoc [String]         -- qualified literal
   | TChar   SLoc Char             -- Char literal
   | TInt    SLoc Integer          -- Integer literal
@@ -47,6 +49,7 @@ instance Show Token where
 showToken :: Token -> String
 showToken (TIdent _ ss s) = intercalate "." (ss ++ [s])
 showToken (TString _ s) = show s
+showToken (TBStr _ s) = show s
 showToken (TQual _ ss) = concatMap (++ ".") ss
 showToken (TChar _ c) = show c
 showToken (TInt _ i) = show i
@@ -101,18 +104,18 @@ lex loc ('-':'-':cs) | isComm rs = skipLine (addCol loc $ 2+length ds) cs
     (ds, rs) = span (== '-') cs
     isComm [] = True
     isComm (d:_) = not (isOperChar d)
-lex loc ('s':'"':'"':'"':cs) = lexLitStr loc (addCol loc 4) (mkInterp loc) isTrip   multiLine interpSkip cs
-lex loc ('s':'"':        cs) = lexLitStr loc (addCol loc 2) (mkInterp loc) isDQuote id        interpSkip cs
+lex loc ('s':'"':'"':'"':cs) = lexLitStr (lexInterpCont loc) loc (addCol loc 4) isTrip   multiLine interpSkip cs
+lex loc ('s':'"':        cs) = lexLitStr (lexInterpCont loc) loc (addCol loc 2) isDQuote id        interpSkip cs
 lex loc (d:cs) | isLower_ d =
   case spanIdent cs of
     (ds, rs) -> tIdent loc [] (d:ds) (lex (addCol loc $ 1 + length ds) rs)
 lex loc cs@(d:_) | isUpper d = upperIdent loc loc [] cs
 lex loc ('0':x:cs)
-  | toLower x == 'x' = readNum isHexDigit 16 2 loc cs
-  | toLower x == 'o' = readNum isOctDigit 8 2 loc cs
-  | toLower x == 'b' = readNum isBinDigit 2 2 loc cs
+  | toLower x == 'x' = readNum isHexDigit 16 2 loc x cs
+  | toLower x == 'o' = readNum isOctDigit 8  2 loc x cs
+  | toLower x == 'b' = readNum isBinDigit 2  2 loc x cs
   where isBinDigit c = c == '0' || c == '1'
-lex loc cs@(d:_) | isDigit d = readNum isDigit 10 0 loc cs
+lex loc cs@(d:_) | isDigit d = readNum isDigit 10 0 loc '0' cs
 lex loc ('.':cs@(d:_)) | isLower_ d =
   TSpec loc '.' : lex (addCol loc 1) cs
 -- '(#' starts an unboxed tuple when its bracket is closed by '#)', as in
@@ -159,16 +162,20 @@ lex loc (c:cs@(d:_)) | isSpecSing c && not (isOperChar d) = -- handle reserved
 lex loc dcs@(d:_) | isOperChar d = lexOper loc dcs
 lex loc (d:cs) | isSpec d =
   TSpec loc d : lex (addCol loc 1) cs
-lex loc ('"':'"':'"':cs) = lexLitStr loc (addCol loc 3) (\ _ s -> [TString loc s]) isTrip   multiLine (\ _ _ -> Nothing) cs
-lex loc ('"':cs)         = lexLitStr loc (addCol loc 1) (\ _ s -> [TString loc s]) isDQuote id        (\ _ _ -> Nothing) cs
-lex loc ('\'':cs)        = lexLitStr loc (addCol loc 1) tchar                      isSQuote id        (\ _ _ -> Nothing) cs
+lex loc ('"':'"':'"':cs) = lexLitStr (lexStringCont loc) loc (addCol loc 3) isTrip   multiLine (\ _ _ -> Nothing) cs
+lex loc ('"':cs)         = lexLitStr (lexStringCont loc) loc (addCol loc 1) isDQuote id        (\ _ _ -> Nothing) cs
+lex loc ('\'':cs)        = lexLitStr lexCharCont         loc (addCol loc 1) isSQuote id        (\ _ _ -> Nothing) cs
   where isSQuote ('\'':_) = Just 1
         isSQuote _ = Nothing
-        tchar _ [c] = [TChar loc c]
-        tchar _ _   = [TError loc "Illegal Char literal"]
+        lexCharCont _ [c] loc' cs' = TChar loc c : lexSkipHash loc' cs'
+        lexCharCont _ _   _    _   = [TError loc "Illegal Char literal"]
 
 lex loc (d:_) = [TError loc $ "Unrecognized input: " ++ show d]
 lex loc [] = [TEnd loc]
+
+lexStringCont :: SLoc -> [[Token]] -> String -> SLoc -> String -> [Token]
+lexStringCont loc _ s loc' ('#':cs) = TBStr   loc (pack s) : lex (addCol loc' 1) cs
+lexStringCont loc _ s loc'      cs  = TString loc s        : lex loc' cs
 
 isTrip, isDQuote :: String -> Maybe Int
 isTrip ('"':'"':'"':_) = Just 3
@@ -200,8 +207,8 @@ readIntBase base isDig ds =
 
     addDigit x d = x * base + toInteger (digitToInt d)
 
-readNum :: (Char -> Bool) -> Integer -> Int -> SLoc -> String -> [Token]
-readNum isBaseDigit base prefixLen loc cs =
+readNum :: (Char -> Bool) -> Integer -> Int -> SLoc -> Char -> String -> [Token]
+readNum isBaseDigit base prefixLen loc x cs =
   case readIntB cs of
     Just (n, nLen, rest) ->
       case rest of
@@ -217,7 +224,8 @@ readNum isBaseDigit base prefixLen loc cs =
           case expo rest of
             Just (ebase, e, eLen, rest') ->  TRat loc (toRational n * fromInteger ebase ^^ e) : lexSkipHash (addCol loc (prefixLen + nLen + eLen)) rest'
             Nothing -> TInt loc n : lexSkipHash (addCol loc (prefixLen + nLen)) rest
-    Nothing -> [TError loc "No digits in number"]
+    Nothing -> -- we have something like 0x with no digits.  So this is not a number
+               TInt loc 0 : lex (addCol loc 1) (x:cs)
   where
     readIntDec = readIntBase 10 isDigit
     readIntB = readIntBase base isBaseDigit
@@ -273,12 +281,13 @@ tIndent :: [Token] -> [Token]
 tIndent ts@(TIndent _ : _) = ts
 tIndent ts = TIndent (tokensLoc ts) : ts
 
-lexLitStr :: SLoc -> SLoc -> ([[Token]] -> String -> [Token]) -> (String -> Maybe Int) ->
+lexLitStr :: ([[Token]] -> String -> SLoc -> String -> [Token]) ->
+             SLoc -> SLoc -> (String -> Maybe Int) ->
              (String -> String) -> (SLoc -> String -> Maybe ([Token], String, SLoc)) -> String -> [Token]
-lexLitStr oloc loc mk end post interp acs = loop loc [] [] acs
+lexLitStr cont oloc loc end post interp acs = loop loc [] [] acs
   where
         loop :: SLoc -> String -> [[Token]] -> String -> [Token]
-        loop l rs tss cs | Just k <- end cs   = mk (reverse tss) (decodeEscs $ post $ reverse rs) ++ lex (addCol l k) (drop k cs)
+        loop l rs tss cs | Just k <- end cs   = cont (reverse tss) (decodeEscs $ post $ reverse rs) (addCol l k) (drop k cs)
                          | Just (ts, cs', l') <- interp l cs = loop l' (chMark : rs) (ts : tss) cs'
         loop l rs tss ('\\':c:cs) | isSpace c = remGap l rs tss cs
         loop l rs tss ('\\':'^':'\\':cs)      = loop (addCol l 3) ('\\':'^':'\\':rs) tss cs  -- special hack for unescaped \
@@ -299,7 +308,7 @@ lexLitStr oloc loc mk end post interp acs = loop loc [] [] acs
         remGap l rs tss ('\r':cs) = remGap           l        rs  tss cs
         remGap l rs tss (' ' :cs) = remGap (addCol l 1)       rs  tss cs
         remGap l _  _          _  = --errorMessage oloc "bad string gap"
-                                    mhsError (prettyShow l ++ ": bad string gap")
+                                    mhsErrorLoc l ": bad string gap"
 
 chMark :: Char
 chMark = '\xffff'     -- reserved, and will not occur in text
@@ -456,6 +465,7 @@ tBrace ts = TBrace (tokensLoc ts) : ts
 tokensLoc :: [Token] -> SLoc
 tokensLoc (TIdent  loc _ _:_) = loc
 tokensLoc (TString loc _  :_) = loc
+tokensLoc (TBStr   loc _  :_) = loc
 tokensLoc (TQual   loc _  :_) = loc
 tokensLoc (TChar   loc _  :_) = loc
 tokensLoc (TInt    loc _  :_) = loc
@@ -641,6 +651,9 @@ interpSkip aloc ('$':'{':acs) =
                 ll = tokensLoc [last ls]
 
 interpSkip _ _ = Nothing
+
+lexInterpCont :: SLoc -> [[Token]] -> String -> SLoc -> String -> [Token]
+lexInterpCont loc atss s loc' cs = mkInterp loc atss s ++ lex loc' cs
 
 -- Splice in the interpolated tokens into the string
 mkInterp :: SLoc -> [[Token]] -> String -> [Token]

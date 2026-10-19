@@ -19,12 +19,10 @@ module MicroHs.Compile(
   loadEmbedded,
   ) where
 import qualified Prelude(); import MHSPrelude
-import Control.Exception
 import qualified Data.ByteString as BS
 import Data.Char
 import Data.List
 import Data.Maybe
-import Data.Version
 import System.Directory
 import System.Environment
 import System.FilePath
@@ -38,6 +36,7 @@ import MicroHs.Builtin
 import MicroHs.CompileCache
 import MicroHs.Desugar
 import qualified MicroHs.Embed as Embed
+import MicroHs.Error(mhsError, mhsErrorLoc)
 import MicroHs.Exp
 import MicroHs.Expr
 import MicroHs.Flags
@@ -56,7 +55,7 @@ import Text.PrettyPrint.HughesPJLiteClass(prettyShow)
 mhsVersion :: String
 mhsVersion = showVersion version
 
-type Time = Int
+type Time = Word
 
 type CM a = StateIO Cache a
 
@@ -216,7 +215,7 @@ compileModule flags impt mn pathfn file = do
   dumpIf flags Dparse $
     liftIO $ putStrLn $ "parsed:\n" ++ prettyShow pmdl
   when (isNothing (getFileName mn) && mn /= mnn) $
-    mhsError $ "module name does not agree with file name: " ++ showIdent mn ++ " " ++ showIdent mnn
+    mhsErrorLoc (getSLoc mnn) $ "module name does not agree with file name: " ++ showIdent mn ++ " " ++ showIdent mnn
   ((dmdl, syms, imported, tTCDesug, tImp), _) <- compileModuleP flags impt (addPreludeImport pmdl)
 
   t4 <- liftIO getTimeMilli
@@ -472,7 +471,7 @@ runCPP flags infile outfile = do
   let datadir = mhsdir flags
       cpphs = fromMaybe "cpphs" mcpphs
       mhsIncludes = ["-I" ++ datadir </> "src/runtime"]
-      args = mhsDefines ++ mhsIncludes ++ cppArgs flags
+      args = mhsDefines ++ cppArgs flags ++ mhsIncludes
       cmd = unwords $ map quote $ [cpphs, "--strip"] ++ args ++ [infile, "-O" ++ outfile]
   when (verbosityGT flags 1) $
     putStrLn $ "Run cpphs: " ++ show cmd
@@ -586,7 +585,7 @@ unlit fn = unlines . un 1 True . lines
     un :: Int -> Bool -> [String] -> [String]
     un _ _ [] = []
     un n _ (l:ls) | all isSpace l = un (n+1) True ls
-    un n _ ("\\begin{code}":ls) = "" : code (n+1) ls
+                  | Just r <- stripPrefix "\\begin{code}" l, all isSpace r = "" : code (n+1) ls
     un n spc (l@('#':_) : ls) = l : un (n+1) spc ls
     un n spc (('>':l):ls) | spc = (' ':l) : un (n+1) True ls
                           | otherwise = err n "missing blank before >"
@@ -597,7 +596,7 @@ unlit fn = unlines . un 1 True . lines
     code n (l : ls) = l : code (n+1) ls
     code n [] = err n "unlit: missing \\end{code}"
     err :: Int -> String -> a
-    err n s = error $ "unlit: " ++ fn ++ ":" ++ show n ++ ": " ++ s
+    err n s = mhsErrorLoc (SLoc fn n 1) $ "unlit: " ++ s
 
 ---------------
 
@@ -619,7 +618,6 @@ getPaths = do
                      | otherwise                  = []
         return (upDir, srcs ++ nogmpDir ++ [libDir], Nothing)
        else do
-        let vers = "mhs-" ++ mhsVersion
-            pkgDir = upDir </> vers                                   -- ~/.mcabal/bin/../mhs-VERSION
-            mhsDir = pkgDir </> "packages" </> vers </> "data"
+        let pkgDir = upDir </> "mhs-" ++ mhsVersion                                   -- ~/.mcabal/bin/../mhs-VERSION
+            mhsDir = pkgDir </> "packages" </> "MicroHs-" ++ mhsVersion </> "data"    -- ~/.mcabal/bin/../mhs-VERSION/packages/MicroHs-VERSION/data
         return (mhsDir, srcs, Just pkgDir)

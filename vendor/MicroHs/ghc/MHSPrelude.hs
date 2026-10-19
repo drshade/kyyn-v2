@@ -1,6 +1,17 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE CPP #-}
-module MHSPrelude(module Prelude, module Control.DeepSeq, module Control.Arrow, module MHSPrelude, Type, Int64, HasCallStack) where
+module MHSPrelude(
+  module Prelude,
+  module Control.Arrow,
+  module Control.DeepSeq,
+  module Control.Exception,
+  module Data.Version,
+  module Text.Read,
+  module MHSPrelude,
+  Type,
+  Int64,
+  HasCallStack
+  ) where
 import Prelude
 import Control.Arrow(first, second)
 import Control.DeepSeq
@@ -9,10 +20,12 @@ import Data.Int
 import Data.Maybe
 import Data.List
 import Data.Text(Text, append, pack)
+import Data.Version
 import GHC.Stack
 import Data.Kind
 import System.Environment
 import System.IO
+import Text.Read(readMaybe)
 
 #include "MachDeps.h"
 
@@ -62,10 +75,6 @@ openTmpFile tmplt = do
 
 ------- Read --------
 
-mhsError :: HasCallStack => String -> a
-mhsError = error
-           -- errorWithoutStackTrace
-
 _usingMhs :: Bool
 _usingMhs = False
 
@@ -86,3 +95,14 @@ wantImath = False
 
 compiledWithMhs :: Bool
 compiledWithMhs = False
+
+---
+-- This belongs in MicroHs.Error, but Hugs cannot derive Tyoeable
+-- and GHC doesn't allow explicit Typeable instances.
+data MhsError
+  = MhsSyntaxError SLoc String String
+  | MhsTypeError   SLoc String String String  -- header, expected, actual
+  | MhsOtherError  SLoc String
+  | MhsError            String                -- no location
+data SLoc = SLoc FilePath Int Int
+  deriving (Show, Eq)

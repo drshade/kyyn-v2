@@ -8,7 +8,6 @@ import Control.Applicative
 import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Data.List
-import Data.Version
 import Data.Maybe
 import System.Environment
 import MicroHs.Compile
@@ -16,6 +15,7 @@ import MicroHs.CompileCache
 import MicroHs.Config
 import MicroHs.Desugar(LDef)
 import MicroHs.EncodeData(encList)
+import MicroHs.Error
 import MicroHs.Exp(Exp(Var, Lit))
 import MicroHs.Expr(Lit(LInt, LForImp, LBStr))
 import MicroHs.ExpPrint
@@ -67,7 +67,7 @@ main = do
         putStrLn $ "flags = " ++ show flags
       preload' <- mapM (findAPackage flags) (preload flags)
       let flags' = flags { preload = preload' }
-      withArgs rargs $
+      withArgs rargs $ reportErrors $
         case () of
           _ | Just p <- listPkg flags'        -> mainListPkg flags' p
           _ | Just p <- buildPkg flags'       -> mainBuildPkg flags' p mdls
@@ -226,14 +226,14 @@ readConfig flags = do
         return []
       Right cfs -> do
         when (verbosityGT flags 1) $
-          putStrLn $ "Read targets file. Possible targets: " ++ show (map fst cfs)
+          putStrLn $ "Read config file " ++ show cfFilePath ++ ". Possible targets: " ++ show (map fst cfs)
         return cfs
 
 findSection :: Flags -> IO [(Key, Value)]
 findSection flags = do
   case lookup (target flags) (config flags) of
     Nothing ->
-      error $ "Cannot find config section: " ++ target flags ++ ", available=" ++ unwords (map fst (config flags))
+      mhsError $ "Cannot find config section: " ++ target flags ++ ", available=" ++ unwords (map fst (config flags))
     Just cs -> do
       when (verbosityGT flags 0) $
         putStrLn $ "Found target: " ++ show (target flags, cs)
@@ -381,7 +381,7 @@ mainCompile flags mn = do
 
     when (speed flags) $ do
       let fns = filter (isSuffixOf ".hs") $ map (slocFile . slocIdent) $ cachedNonPkgModuleNames cash
-      locs <- sum . map (length . lines) <$> mapM readFile fns
+      locs <- fromIntegral . sum . map (length . lines) <$> mapM readFile fns
       putStrLn $ show (locs * 1000 `div` (t2 - t0)) ++ " lines/s"
 
     -- embedPkg are the packages we are embedding in the binary.
@@ -564,25 +564,22 @@ addEmbedPkgs flags ds | null (embedPkgs flags) = return ds
   return $ map rep ds
 
 expandPath :: Maybe FilePath -> FilePath -> IO FilePath
-expandPath (Just s) f = do
-  m <- lookupEnv mHSPKG
-  when (isNothing m) $
-    setEnv mHSPKG s
-  setEnv "VERSION" mhsVersion
-  expandEnv f
-expandPath Nothing  f = do
-  setEnv "VERSION" mhsVersion
-  expandEnv f
+expandPath = expandEnv . expandEnvLookup
 
-expandEnv :: String -> IO String
-expandEnv "" = return ""
-expandEnv ('$':cs) = do
+expandEnvLookup :: Maybe FilePath -> String -> IO String
+expandEnvLookup (Just s) mpkg = fromMaybe s <$> lookupEnv mpkg
+expandEnvLookup _ "VERSION" = return mhsVersion
+expandEnvLookup _ name = fromMaybe "" <$> lookupEnv name
+
+expandEnv :: (String -> IO String) -> String -> IO String
+expandEnv _ "" = return ""
+expandEnv f ('$':cs) = do
   let (name, rest) = span isMacroName cs
       isMacroName c = isAlphaNum c || c == '_'
-  repl <- fromMaybe "" <$> lookupEnv name
-  (repl ++) <$> expandEnv rest
-expandEnv (c:cs) =
-  (c :) <$> expandEnv cs
+  repl <- f name
+  (repl ++) <$> expandEnv f rest
+expandEnv f (c:cs) =
+  (c :) <$> expandEnv f cs
 
 copyFileBS :: FilePath -> FilePath -> IO ()
 copyFileBS src dst = BS.readFile src >>= BS.writeFile dst

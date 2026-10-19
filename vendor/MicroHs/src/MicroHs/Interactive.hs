@@ -3,15 +3,14 @@ import qualified Prelude(); import MHSPrelude
 import Data.Char
 import Data.List
 import Data.Maybe
-import Data.Version
-import Control.Exception
 import MicroHs.Compile
 import MicroHs.CompileCache
 import MicroHs.Desugar(LDef)
+import MicroHs.Error(mhsError, errLoc, formatMhsError)
 import MicroHs.Exp(Exp(Var))
 import MicroHs.Expr(showEType, EModule(..), EDef(..), Expr(EVar))
 import MicroHs.Flags
-import MicroHs.Ident(mkIdent, Ident, unIdent, isIdentChar, SLoc(..), slocIdent, isNoSLoc)
+import MicroHs.Ident(mkIdent, Ident, unIdent, isIdentChar, {-SLoc(..),-} slocIdent, isNoSLoc)
 import MicroHs.List
 import MicroHs.Parse
 import MicroHs.StateIO
@@ -28,7 +27,6 @@ import System.FilePath
 import System.IO
 import System.IO.TimeMilli
 import Text.Printf
-import Text.Read(readMaybe)
 --import System.IO.TimeMilli
 
 defaultEditor :: String
@@ -279,12 +277,12 @@ setOptions "+color" = do
   modify $ \ is -> is{ isColor = True }
 setOptions "-color" = do
   modify $ \ is -> is{ isColor = False }
-setOptions s | Just p <- stripPrefix "path=" s =
+setOptions ('p':'a':'t':'h':'=':p) =
   modify $ \ is -> is{ isFlags = (isFlags is){ srcPaths = splitColonPath p } }
-setOptions s | Just p <- stripPrefix "prompt=" s =
+setOptions ('p':'r':'o':'m':'p':'t':'=':p) =
   modify $ \ is -> is{ isPrompt = p }
 setOptions _ =
-  putStrLnI "Unknown flag.  Known flags: +s, -s, +c, -c, path=PATH, prompt=STR"
+  putStrLnI "Unknown flag.  Known flags: +s, -s, +c, -c, +color, -color, path=PATH, prompt=STR"
 
 reload :: I ()
 reload = do
@@ -337,27 +335,18 @@ mkTypeIt l =
   "type " ++ itTypeName ++ " = " ++ l ++ "\n"
 
 err :: SomeException -> I ()
-err e = do
-  let msg = displayException e
-  case parseError msg of
-    Just (f, l) -> modify $ \ is -> is{ isErrFile = f, isErrLine = l }
-    Nothing -> return ()
-  err' msg
-
--- Try to find a file and line number
--- XXX We should have a special exception instead of parsing the message string.
-parseError :: String -> Maybe (FilePath, Int)
-parseError s =
-  case words s of
-    "error:" : ('"' : sfile) : "line" : sline : _ |
-      Just file <- stripSuffix "\":" sfile,
-      Just line <- stripSuffix "," sline >>= readMaybe -> Just (file, line)
-    _ -> Nothing
+err e =
+  case fromException e of
+    Just e' -> do
+      case errLoc e' of
+        Just loc@(SLoc f l _) | not (isNoSLoc loc) -> modify $ \ is -> is{ isErrFile = f, isErrLine = l }
+        _ -> return ()
+      color <- gets isColor
+      err' $ formatMhsError color e'
+    _  -> err' =<< wrapColor 91 ("*** Exception: " ++ displayException e)
 
 err' :: String -> I ()
-err' s = do
-  s' <- wrapColor 91 ("*** Exception: " ++ s)
-  liftIO $ putStrLn s'
+err' s = liftIO $ putStrLn s
 
 wrapColor :: Int -> String -> I String
 wrapColor c s = do
@@ -393,7 +382,7 @@ oneline aline = do
   -- building up multiple imports.
   if take 1 (words line) == ["import"] && line `elem` lines ls then
     reload
-   else 
+   else
     -- First try to parse as a definition,
     tryParse pTopModule (ls ++ line ++ "\n") def $ \ _ ->
       -- if that fails, parse as an expression.
@@ -409,7 +398,7 @@ tryParse :: forall a . -- Show a =>
 tryParse p s ok bad =
   case parse p "" s of
     Right _ -> ok s
-    Left  e -> bad e
+    Left  e -> bad (show e)
 
 tryCompile :: String -> I (Either SomeException ([LDef], TCState))
 tryCompile file = trySIO $ compile file
