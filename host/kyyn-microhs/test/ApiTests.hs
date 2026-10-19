@@ -172,15 +172,26 @@ main = do
     createDirectoryIfMissing True (temporary </> "Kyyn")
     let symbols = nubBy (\(_,a) (_,b) -> sameOrigin a b)
           [(m,s) | m <- public, s <- symbolsIn m]
-        signatures = [(m,n,d) | (m,ApiSymbol n ValueNamespace origin _ (Just d) _) <- symbols,
+        signatures = [(m,n,origin,d) | (m,ApiSymbol n ValueNamespace origin _ (Just d) _) <- symbols,
           not (authoredFunction n origin)]
         valueName n@(c:_) | isAlpha c || c == '_' = n
         valueName n = "(" ++ n ++ ")"
-        witness (i,(m,n,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
+        -- Records exported together may share a field name, so a field is
+        -- witnessed by selection on the record its signature names.
+        witness (i,(m,n,origin,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
           "proof" ++ show i ++ " = " ++
-            (if valueName n == n then m ++ "." ++ n else "(" ++ m ++ "." ++ n ++ ")")]
+            (if "get$." `isInfixOf` origin then "\\record -> record." ++ n
+             else if valueName n == n then m ++ "." ++ n else "(" ++ m ++ "." ++ n ++ ")")]
+        owner origin = takeWhile (/= '.') (drop 5 (snd (breakOn "get$." origin)))
+        breakOn p s@(c:rest) | p `isPrefixOf` s = ([], s)
+                             | otherwise = let (a, b) = breakOn p rest in (c:a, b)
+        breakOn _ [] = ([], [])
+        recordArgument d = take 1 (words (drop 3 (dropWhile (/= ':') d)))
+    forM_ [(n,origin,d) | (_,n,origin,d) <- signatures, "get$." `isInfixOf` origin] $ \(n,origin,d) ->
+      assert ("field signature names its owning record: " ++ n ++ " " ++ origin ++ " " ++ d)
+        (recordArgument d == [owner origin])
     writeFile (temporary </> "Kyyn/ValueProof.hs") (unlines
-      (["{-# LANGUAGE GADTs, RankNTypes #-}", "module Kyyn.ValueProof where",
+      (["{-# LANGUAGE GADTs, RankNTypes, OverloadedRecordDot #-}", "module Kyyn.ValueProof where",
         "import Control.Monad.Trans.State.Strict (StateT)", "import Data.Text (Text)"]
       ++ map ("import " ++) public ++ concatMap witness (zip [1 :: Int ..] signatures)))
     _ <- inspect (temporary:sources) ["Kyyn.ValueProof"]
