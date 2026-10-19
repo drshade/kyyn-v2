@@ -23,7 +23,7 @@ library
   other-modules:
     Kyyn.MicroHs.Source
     MicroHs.Abstract MicroHs.Builtin MicroHs.Compile MicroHs.CompileCache MicroHs.Config
-    MicroHs.Deriving MicroHs.Desugar MicroHs.EncodeData MicroHs.Embed MicroHs.Exp
+    MicroHs.Deriving MicroHs.Desugar MicroHs.EncodeData MicroHs.Embed MicroHs.Error MicroHs.Exp
     MicroHs.Expr MicroHs.Flags MicroHs.Fixity MicroHs.Graph MicroHs.Ident
     MicroHs.IdentMap MicroHs.IntMap MicroHs.IntSet MicroHs.Lex MicroHs.List MicroHs.Names
     MicroHs.Package MicroHs.Parse MicroHs.State MicroHs.StateIO MicroHs.SymTab

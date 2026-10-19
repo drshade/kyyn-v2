@@ -1,5 +1,6 @@
 module Kyyn.MicroHs.Source (readParsedSource) where
 
+import MicroHs.Error (formatMhsError)
 import MicroHs.Expr (EModule)
 import MicroHs.Flags (Flags(..))
 import MicroHs.Parse (parse, pTop)
@@ -14,7 +15,7 @@ readParsedSource flags path = do
       (["--strip", "--noline", "-D__MHS__", "-I" ++ (mhsdir flags </> "src/runtime")]
         ++ cppArgs flags ++ [path]) ""
     else pure original
-  pure ((\parsed -> (parsed,source)) <$> parse pTop path source)
+  pure (either (Left . formatMhsError False) (\parsed -> Right (parsed,source)) (parse pTop path source))
 
 hasCpp :: String -> Bool
 hasCpp [] = False
