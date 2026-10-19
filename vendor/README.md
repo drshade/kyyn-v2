@@ -6,7 +6,7 @@ notices; Kyyn's proprietary policy does not replace them.
 
 | Directory | Source | Archive SHA-256 | License |
 | --- | --- | --- | --- |
-| MicroHs | [e131f43eca647534193767d91ed3e93693afa2b9](https://github.com/augustss/MicroHs/tree/e131f43eca647534193767d91ed3e93693afa2b9), version 0.16.11.0 | `662a0e37a2dce8b16dd618bd6015b3281870042907fc1bbc5a6162f4306fea1a` (Git archive below) | Apache-2.0; retain included notices |
+| MicroHs | [6174d880c1b41450ec59713cb54e40b2b59d0323](https://github.com/augustss/MicroHs/tree/6174d880c1b41450ec59713cb54e40b2b59d0323), version 0.16.11.0 | `36fc04ac40e00442c785ee59543c5b28c38dc1f11ba44561c904811191c8124d` (Git archive below) | Apache-2.0; retain included notices |
 | json | [json-0.11](https://hackage.haskell.org/package/json-0.11/json-0.11.tar.gz) | `d079ab12e2482349421044851cf52cf23d0bf762ca9b5c854c902def7277e690` | BSD-3-Clause |
 | transformers | [transformers-0.6.1.1](https://hackage.haskell.org/package/transformers-0.6.1.1/transformers-0.6.1.1.tar.gz) | `81d2548e0f100a174fba36b332c0efd7c960e79d3c21ad6e1ff5f538b992d725` | BSD-3-Clause |
 | agentic | [08ff9315f4c0fa0da10bfaf679f473dd58f40ae1](https://github.com/drshade/haskell-agentic/tree/08ff9315f4c0fa0da10bfaf679f473dd58f40ae1/agentic), version 0.2.0.5 | `8b2fd4a31399ee6fa2d5a0f2bc1b95e3bb0ea0b890ef7fdb2f0807aebac90532` (Git archive below) | BSD-2-Clause |
@@ -14,7 +14,7 @@ notices; Kyyn's proprietary policy does not replace them.
 | agentic-jev | [08ff9315f4c0fa0da10bfaf679f473dd58f40ae1](https://github.com/drshade/haskell-agentic/tree/08ff9315f4c0fa0da10bfaf679f473dd58f40ae1/agentic-jev), version 0.2.0.5 | `309ae47798b33e97ec81664025c4c5e20ff5ca25f9dacf22ffaf2689e2f9a21a` (`git archive 08ff9315f4c0fa0da10bfaf679f473dd58f40ae1 agentic-jev`) | BSD-2-Clause |
 
 The MicroHs source is the unmodified output of
-`git archive e131f43eca647534193767d91ed3e93693afa2b9` in `augustss/MicroHs`;
+`git archive 6174d880c1b41450ec59713cb54e40b2b59d0323` in `augustss/MicroHs`;
 the table hashes that tar stream. Both native frontend and guest runtime use
 this revision. Upstream's own `.gitignore` matches some files it tracks, so add
 the extracted tree with `git add -f` and check it against the upstream tree.
