@@ -314,7 +314,8 @@ uses `/users/{userId}` under its consent and application access policy.
 
 ```haskell
 data MeetingsPosition = MeetingsPosition
-  { lastSuccessfulFetch :: Text, deniedRequests :: [Text] }
+  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip] }
+data MeetingSkip = MeetingSkip { reference :: Text, reason :: Text }
 ```
 
 Publish the acquisition-start timestamp with the successful capture, including
@@ -332,8 +333,17 @@ attendance records skips that artifact. A denial on a later page discards that
 whole incomplete collection. Preserve other accessible artifacts and record each
 denied request. Do not mark skipped identities as captured. They may be attempted
 again when their meeting falls in a later overlap or explicit backfill. Identity
-and calendar discovery denials, authentication failures, unresolved eligible
-meetings, malformed responses and other request failures fail the fetch.
+and calendar discovery denials, authentication failures, transport failures,
+malformed collection or artifact responses and unexpected server errors still fail
+the fetch.
+
+Skip individual meetings with unsupported or unspecified providers, missing join
+URLs, zero or multiple resolution matches, or incomplete meeting-reference metadata
+(including a missing organizer ID). Record the calendar event ID or join URL and
+reason in `skippedMeetings` in the successful position. These skips do not stop
+other meetings or prevent the boundary from advancing, even if every meeting is
+skipped. They are diagnostics for that run, not permanent exclusions. A subsequent
+overlap or explicit backfill may resolve a previously skipped meeting.
 
 An item is an artifact, not a selected "best" transcript or an inferred occurrence.
 Use an unambiguous encoding of artifact kind, onlineMeeting ID and Graph artifact
@@ -356,8 +366,7 @@ have their own permissions, supported meeting kinds and availability limits.
 In particular, report listing exposes at most the latest 50 reports; fetching every
 returned page cannot remove that provider limit. A missing eligible artifact is not
 proof that a meeting did not happen. Retain the denied-request diagnostics rather
-than treating inaccessible resources as proof of absence. Unsupported modes remain
-explicit failures.
+than treating inaccessible resources as proof of absence. Unsupported meetings are recorded as skips.
 
 #### SharePoint and OneDrive files
 

@@ -9,7 +9,9 @@ data MeetingsConfig = MeetingsConfig
   { auth :: GraphAuth, userId :: Text, retentionDays :: Integer } deriving (Eq, Show)
 data MeetingsFetch = MeetingsFetch { since :: Maybe Text } deriving (Eq, Show)
 data MeetingsPosition = MeetingsPosition
-  { lastSuccessfulFetch :: Text, deniedRequests :: [Text] } deriving (Eq, Show)
+  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip] } deriving (Eq, Show)
+data MeetingSkip = MeetingSkip
+  { reference :: Text, reason :: Text } deriving (Eq, Show)
 data MeetingRef = MeetingRef
   { onlineMeetingId :: Text, joinUrl :: Text, subject :: Text, organizer :: Text } deriving (Eq, Show)
 data ParticipantIdentity = ParticipantIdentity

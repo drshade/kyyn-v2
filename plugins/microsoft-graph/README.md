@@ -248,7 +248,12 @@ ClientSecret uses the same `userId`. Its application requires consented
 `Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All` and
 `OnlineMeetingArtifact.Read.All`, plus a Teams application access policy for the
 configured user. Consent alone does not grant all meeting-artifact access. A
-meeting that returns no resolution fails the fetch. A 403 during meeting
+meeting with an unsupported provider, missing join URL, zero or multiple
+resolution matches, or incomplete meeting metadata (including a missing organizer
+ID) is skipped. Its event ID or join URL and reason are saved in `skippedMeetings`
+in the sync position. Other meetings continue, and a successful fetch advances
+the boundary even if every meeting was skipped. These records do not permanently
+exclude meetings from later overlaps or explicit backfills. A 403 during meeting
 resolution skips that meeting; transcript and attendance requests otherwise run
 independently. A 403 skips only the affected artifact family or content request,
 without inferring access from organizer status. A denial on a later page discards

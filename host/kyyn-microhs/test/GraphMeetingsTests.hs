@@ -1,6 +1,6 @@
 -- Generated Meetings adapters under GHC and MicroHs with recorded providers.
 -- Covers initial/overlap/backfill windows and independent 403 skips, repeated calendar URLs, artifact identity,
--- pagination, capture-once, retention, failed downloads/pages, delegated identity,
+-- pagination, per-meeting skips, capture-once, retention, failed downloads/pages, delegated identity,
 -- captured reads and fingerprint parity. No live tenant calls.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
@@ -116,9 +116,26 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       assert "403 diagnostics missing" (not (null denied))
       captured <- changesFrom partial >>= mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v)
       (restored,_) <- provider captured "normal"
-      (recovered,_,_) <- brokerWith Normal restored program (inputWithPrior now Nothing False (Just now))
+      (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now Nothing False))
       assert "denied artifacts permanently skipped" . (== (4-count)) . length =<< changesFrom recovered
-    forM_ ["blob-failure","page-failure","artifact-unauthorized","artifact-error","forbidden","unresolved","foreign-page","cycle","unsupported"] $ \scenario -> do
+    forM_ [("unsupported",4),("missing-join",4),("unresolved",4),("ambiguous",4),("missing-organizer",4),("unresolved-only",0)] $ \(scenario,count) -> do
+      (skipProvider,_) <- provider [] scenario
+      (partial,_,_) <- brokerWith Normal skipProvider program (input now Nothing False)
+      assert ("bad meeting blocked good meeting: " ++ Text.unpack scenario) . (== count) . length =<< changesFrom partial
+      saved <- maybe (fail "Missing skip result") (get "value") partial >>= get "position"
+      assert "skipped meetings prevented boundary advance" . (== now) =<< get "lastSuccessfulFetch" saved
+      skips <- get "skippedMeetings" saved :: IO [Value]
+      assert "meeting skip diagnostics missing" (not (null skips))
+      forM_ skips $ \note -> do
+        ref <- get "reference" note :: IO Text.Text
+        why <- get "reason" note :: IO Text.Text
+        assert "skip must identify meeting and reason" (not (Text.null ref) && not (Text.null why))
+      if count == 0 then do
+        (restored,_) <- provider [] "normal"
+        (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now Nothing False))
+        assert "unresolved meetings permanently excluded" . (==4) . length =<< changesFrom recovered
+      else pure ()
+    forM_ ["blob-failure","page-failure","artifact-unauthorized","artifact-error","forbidden","foreign-page","cycle","resolution-error","malformed-artifact"] $ \scenario -> do
       (bad,_) <- provider [] scenario
       (failed,_,_) <- brokerWith Normal bad program (input now Nothing False)
       assert ("failure returned publishable data: " ++ Text.unpack scenario) . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing failure") (get "tag") failed
@@ -164,7 +181,7 @@ inputWithPrior :: Text.Text -> Maybe Text.Text -> Bool -> Maybe Text.Text -> Val
 inputWithPrior started since device previous = object ["arguments" .= object
   ["input" .= object ["config" .= object ["auth" .= auth,"userId" .= text "user-id","retentionDays" .= text "30"],
     "options" .= maybe none (\s -> tagged "Some" (object ["since" .= tagged "Some" (text s)])) since],
-    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t,"deniedRequests" .= ([] :: [Text.Text])])) previous],"snapshot" .= text "selected"]
+    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t,"deniedRequests" .= ([] :: [Text.Text]),"skippedMeetings" .= ([] :: [Value])])) previous],"snapshot" .= text "selected"]
   where
     auth = if device then tagged "DeviceCode" (object ["tenant" .= text "tenant","clientId" .= text "client","tokenKey" .= text "key","scopes" .= (["User.Read"] :: [Text.Text])])
       else tagged "ClientSecret" (object ["tenant" .= text "tenant","clientId" .= text "client","secretKey" .= text "key"])
@@ -202,7 +219,7 @@ provider old scenario = do
           else if "/me?$select=id" `Text.isSuffixOf` url then pure (http 200 (object ["id" .= text (if scenario == "wrong-user" then "another-user" else "user-id")]))
           else if "calendarView" `Text.isInfixOf` url then
             if scenario == "forbidden" then pure (http 403 (object [])) else pure (http 200 (object
-              (["value" .= [event (scenario == "unsupported"),event False,object ["isOnlineMeeting" .= False],future]] ++
+              (["value" .= ([event (scenario == "unsupported"),event False,object ["isOnlineMeeting" .= False],future] ++ [badEvent | scenario `elem` ["missing-join","unresolved","ambiguous","missing-organizer"]])] ++
                 ["@odata.nextLink" .= (base <> "/calendarView?page=2") | not ("page=2" `Text.isSuffixOf` url)])))
           else if scenario == "artifact-unauthorized" && "/transcripts" `Text.isSuffixOf` url then pure (http 401 (object []))
           else if scenario == "artifact-error" && "/attendanceReports" `Text.isSuffixOf` url then pure (http 500 (object []))
@@ -210,9 +227,15 @@ provider old scenario = do
           else if scenario == "transcripts-denied" && "/transcripts?page=2" `Text.isSuffixOf` url then pure (http 403 (object []))
           else if scenario == "reports-denied" && "/attendanceReports" `Text.isSuffixOf` url then pure (http 403 (object []))
           else if scenario == "records-denied" && "/attendanceRecords?page=2" `Text.isSuffixOf` url then pure (http 403 (object []))
-          else if "onlineMeetings?$filter=" `Text.isInfixOf` url then pure (http 200 (collection
-            [object ["id" .= text "meeting-1","subject" .= text "Meeting 雪","participants" .= object
-              ["organizer" .= object ["identity" .= object ["user" .= object ["id" .= text "organizer-id"]]]]] | scenario /= "unresolved"]))
+          else if "onlineMeetings?$filter=" `Text.isInfixOf` url then
+            if scenario == "resolution-error" then pure (http 500 (object []))
+            else pure (http 200 (collection (if scenario == "unresolved-only" then []
+              else if "bad-meeting" `Text.isInfixOf` url then case scenario of
+                "unresolved" -> []
+                "ambiguous" -> [resolvedMeeting,resolvedMeeting]
+                "missing-organizer" -> [change ["participants"] (const (object [])) resolvedMeeting]
+                _ -> [resolvedMeeting]
+              else [resolvedMeeting])))
           else if "/transcripts" `Text.isSuffixOf` url then pure (http 200 (object ["value" .= [transcript "same"],"@odata.nextLink" .=
             (if scenario == "foreign-page" then "https://other.example/transcripts" else meeting <> "/transcripts?page=2")]))
           else if "/transcripts?page=2" `Text.isSuffixOf` url then pure (http 200 (object
@@ -226,10 +249,13 @@ provider old scenario = do
         _ -> fail ("Unexpected capability " ++ capability ++ "/" ++ method)
   pure (respond,trace)
   where
-    event unsupported = object ["isOnlineMeeting" .= True,"onlineMeetingProvider" .= text (if unsupported then "skypeForBusiness" else "teamsForBusiness"),
+    resolvedMeeting = object ["id" .= text "meeting-1","subject" .= text "Meeting 雪","participants" .= object
+      ["organizer" .= object ["identity" .= object ["user" .= object ["id" .= text "organizer-id"]]]]]
+    badEvent = change ["onlineMeeting"] (const (if scenario == "missing-join" then Null else object ["joinUrl" .= text "https://teams.example/bad-meeting"])) (event False)
+    event unsupported = object ["id" .= text "event-id","isOnlineMeeting" .= True,"onlineMeetingProvider" .= text (if unsupported then "skypeForBusiness" else "teamsForBusiness"),
       "onlineMeeting" .= object ["joinUrl" .= text "https://teams.example/meet'a"], "end" .= object ["dateTime" .= text "2026-10-19T13:00:00.0000000","timeZone" .= text "UTC"]]
     future = object ["isOnlineMeeting" .= True, "end" .= object ["dateTime" .= text "2027-01-01T11:00:00","timeZone" .= text "UTC"]]
-    transcript key = object ["id" .= text key,"createdDateTime" .= text "2026-10-19T10:01:00Z","endDateTime" .= text "2026-10-19T11:00:00Z"]
+    transcript key = object ["id" .= text key,"createdDateTime" .= text "2026-10-19T10:01:00Z","endDateTime" .= text (if scenario == "malformed-artifact" then "invalid" else "2026-10-19T11:00:00Z")]
     report key start end = object ["id" .= text key,"meetingStartDateTime" .= text start,"meetingEndDateTime" .= text end]
     attendee = object ["identity" .= object ["id" .= text "guest-id","displayName" .= text "Guest 雪","tenantId" .= Null, "@odata.type" .= text "#microsoft.graph.azureCommunicationServicesUserIdentity", "azureCommunicationServicesResourceId" .= text "acs-resource"],
       "emailAddress" .= text "guest@example.test", "role" .= text "Attendee", "totalAttendanceInSeconds" .= (60 :: Int),
