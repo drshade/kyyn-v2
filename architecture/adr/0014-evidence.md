@@ -368,6 +368,46 @@ returned page cannot remove that provider limit. A missing eligible artifact is 
 proof that a meeting did not happen. Retain the denied-request diagnostics rather
 than treating inaccessible resources as proof of absence. Unsupported meetings are recorded as skips.
 
+#### Salesforce queries
+
+```haskell
+data SalesforceAuth
+  = ClientSecret { clientId :: Text, secretKey :: Text }
+  | DeviceCode { clientId :: Text, tokenKey :: Text }
+data QueryConfig = QueryConfig
+  { instanceUrl :: Text, auth :: SalesforceAuth, apiVersion :: Text
+  , query :: Text, idField :: Text }
+data Record = Record { recordId :: Text, json :: Text }
+```
+
+`Salesforce.Query` executes the configured SOQL SELECT on each fetch. Each instance
+is a complete query result, with no rolling window or sync position. Follow all
+query-result pages before comparing with prior evidence. Require a nonempty string
+identity from the configured top-level `idField` (normally `Id`); missing or duplicate
+identities fail the fetch, never fall back to row numbers. Aggregate results are
+usable only when they supply such a stable unique identity.
+
+Capture one item per returned record. Its JSON text preserves all returned fields,
+including custom fields, nulls, arrays and relationship objects. Sort object keys
+recursively, preserve array order and exact numeric values, and exclude acquisition
+timestamps. The fingerprint covers the canonical record and configured query URL;
+the query URL is also its external source reference. This uses a fixed payload
+contract, not runtime generation of a separate type for each SOQL projection.
+
+Compare stable IDs and fingerprints to emit new, changed and removed evidence;
+unchanged records emit no change. Removal means no longer in this query's result,
+not proof of upstream deletion and not an automatic removal of curated facts.
+Successful empty results remove prior query evidence. Any failed page, inconsistent
+pagination, malformed response, missing identity or incomplete nested relationship
+query prevents publication of both updates and removals. Nested child queries that
+require their own pagination are rejected; query that child object separately.
+
+Authentication belongs to the plugin under ADR0016: use the configured My Domain
+origin for token and query requests, device login with `api refresh_token`, or
+client credentials for the configured Salesforce integration user. Local secret
+keys store refresh tokens or client secrets. There is no kernel connection registry,
+write-back capability, schema discovery or Bulk API route in this connector.
+
 #### SharePoint and OneDrive files
 
 ```haskell

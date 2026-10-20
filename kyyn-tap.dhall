@@ -13,4 +13,9 @@
   , source = "https://github.com/drshade/kyyn-v2"
   , path = "plugins/github"
   }
+, { name = "salesforce"
+  , description = "SOQL query results as record evidence"
+  , source = "https://github.com/drshade/kyyn-v2"
+  , path = "plugins/salesforce"
+  }
 ]
