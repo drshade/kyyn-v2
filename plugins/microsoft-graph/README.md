@@ -1,6 +1,6 @@
 # Microsoft Graph
 
-This plugin provides `Calendar` and `Mail` source connectors, with shared Graph
+This plugin provides `Calendar`, `Mail` and `Meetings` source connectors, with shared Graph
 authentication. Use `plugin guide microsoft-graph` to read this guide from an
 installed package.
 
@@ -47,6 +47,7 @@ let Connector =
           { auth : Auth, mailbox : Text
           , folders : List < WellKnownFolder : Text | FolderPath : Text >
           , retentionDays : Integer }
+      | Meetings : { auth : Auth, userId : Text, retentionDays : Integer }
       >
 in [ { name = "work"
      , binding = "workCalendar"
@@ -213,6 +214,101 @@ and fingerprints remain, so truncation does not cause repeated capture. Reading 
 truncated message reports that its payload is unavailable. Retention is independent
 of whether any recipe has processed a message.
 
+## Meetings: transcripts and attendance
+
+`Meetings` captures artifacts from recently ended Teams meetings discovered in
+one user's default calendar. Each transcript and attendance report is a separate
+evidence item, including multiple artifacts from recurring meetings. The connector
+keeps all returned artifacts; recipes decide how they relate to calendar facts.
+
+Add a Meetings instance using the `Connector` union above:
+
+```dhall
+{ name = "meetings", binding = "meetingArtifacts"
+, connector = Connector.Meetings
+    { auth = Auth.DeviceCode
+        { tenant = "YOUR-TENANT-ID", clientId = "YOUR-APP-CLIENT-ID"
+        , tokenKey = "graph-meetings-refresh"
+        , scopes = [ "User.Read", "Calendars.Read", "OnlineMeetings.Read"
+                   , "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ] }
+    , userId = "YOUR-ENTRA-USER-OBJECT-ID"
+    , retentionDays = +90
+    }
+}
+```
+
+`userId` is the Entra object ID, not an email address. DeviceCode verifies that it
+matches the signed-in user and accesses that user's meetings. These permissions
+require the appropriate tenant consent; personal Microsoft accounts are unsupported.
+When sharing a refresh-token key with other connectors, include their scopes too
+and use the same complete scope list on each instance. Run login again after
+changing scopes.
+
+ClientSecret uses the same `userId`. Its application requires consented
+`Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All` and
+`OnlineMeetingArtifact.Read.All`, plus a Teams application access policy for the
+configured user. Consent alone does not grant all meeting-artifact access. A
+meeting with an unsupported provider, missing join URL, zero or multiple
+resolution matches, or incomplete meeting metadata (including a missing organizer
+ID) is skipped. Its event ID or join URL and reason are saved in `skippedMeetings`
+in the sync position. Other meetings continue, and a successful fetch advances
+the boundary even if every meeting was skipped. These records do not permanently
+exclude meetings from later overlaps or explicit backfills. A 403 during meeting
+resolution skips that meeting; transcript and attendance requests otherwise run
+independently. A 403 skips only the affected artifact family or content request,
+without inferring access from organizer status. A denial on a later page discards
+the incomplete collection. Denied URLs are retained in `deniedRequests` in the
+saved sync position (not currently emitted as CLI warnings). Authentication,
+calendar-discovery and other unexpected failures still fail the fetch.
+
+After checking and accepting the configuration:
+
+```sh
+kyyn-v2 --kb /path/to/kb plugin connector login microsoft-graph meetings
+kyyn-v2 --kb /path/to/kb evidence fetch microsoft-graph meetings
+kyyn-v2 --kb /path/to/kb evidence list microsoft-graph meetings
+kyyn-v2 --kb /path/to/kb plugin connector method execute microsoft-graph meetings artifact --input '"ARTIFACT-ID"'
+```
+
+The initial fetch covers the preceding **30 days**. Later fetches start **one day
+before the last successful fetch's acquisition start**, through now. This catches
+late artifacts while covering gaps between runs without rescanning all 30 days.
+Failed fetches do not advance the saved boundary. A successful run advances it even
+if there are no new artifacts or some artifact requests returned 403.
+
+To backfill or recheck older meetings (including after permissions change), use
+`--options '{ since = Some "2026-01-01T00:00:00Z" }'`. This overrides the boundary
+on both initial and subsequent fetches. The next ordinary fetch uses the usual
+one-day overlap from that successful run. Artifacts arriving later than the overlap
+can be missed until an explicit backfill. Skipped 403 requests are retried only if
+their meetings fall in the selected window; there is no background retry loop.
+
+The connector deduplicates repeated join URLs and captures each artifact identity
+once. Provider deletion does not delete captured artifacts. Transcript `created`
+is Graph's transcript creation timestamp, not an inferred meeting start. Attendance
+`started` and `ended` are the report's session times; participant identities and all
+returned attendance intervals are retained. Transcript VTT bytes are stored as a
+`BlobRef`; CLI blob results include a local path. The `artifact` method reads only
+captured data and makes no provider requests.
+
+Each published artifact must have complete metadata and content. A 403 skips the
+affected request as described above; other page or download failures prevent
+publication of the whole fetch. Graph returns at most the latest 50 attendance reports for a
+meeting; pagination cannot recover reports outside that provider limit. Only
+calendar-backed Teams online meetings are discovered, not standalone calls or
+virtual-event endpoints. Tenant settings may prohibit transcripts or
+speaker-attributed VTT; a 403 refusal is recorded and skipped. There is no silent change to
+an unattributed transcript format.
+
+Retention uses each artifact's end time. A nonnegative `retentionDays` controls
+payload truncation during fetch; zero truncates artifacts ended before that fetch
+started. Identities and fingerprints remain, and old artifacts are not downloaded
+again. Recurring-meeting listings can include sessions older than the discovery
+window. On first capture, their content is downloaded before retention is applied,
+so an old transcript may be downloaded and immediately truncated. Reading a
+truncated artifact reports that its payload is unavailable.
+`evidence clear microsoft-graph meetings` removes the capture and permits recapture.
+
 ## Verification and provider documentation
 
 The `graph-calendar` test compiles the actual adapters under GHC and MicroHs and
@@ -221,6 +317,10 @@ delta continuation, duplicate IDs, removals, resets and failed pages. Live Entra
 test with the user's own app and account.
 The `graph-mail` test exercises recorded-provider acquisition under both compilers,
 including capture-once, attachment retries/failure, retention and fingerprint parity.
+The `graph-meetings` test covers initial/overlap/backfill windows and independent 403 handling, recurring-meeting discovery,
+artifact identity, pagination, retention, capture-once, delegated identity, failure
+paths and captured reads under both compilers. Live tenant access is not established
+by these recorded-provider tests.
 
 - [Calendar delta synchronization](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0)
 - [Event IDs, changeKey and lastModifiedDateTime](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)
@@ -231,3 +331,9 @@ including capture-once, attachment retries/failure, retention and fingerprint pa
 - [Mail delta synchronization](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0)
 - [Attachment content](https://learn.microsoft.com/en-us/graph/api/attachment-get?view=graph-rest-1.0)
 - [Linked attachment metadata](https://learn.microsoft.com/en-us/graph/api/resources/referenceattachment?view=graph-rest-1.0)
+
+- [Resolve online meetings by join URL](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-get?view=graph-rest-1.0)
+- [Transcript metadata and permissions](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-list-transcripts?view=graph-rest-1.0)
+- [Transcript content and tenant controls](https://learn.microsoft.com/en-us/graph/api/calltranscript-get?view=graph-rest-1.0)
+- [Attendance report listing and limits](https://learn.microsoft.com/en-us/graph/api/meetingattendancereport-list?view=graph-rest-1.0)
+- [Attendance record pages](https://learn.microsoft.com/en-us/graph/api/attendancerecord-list?view=graph-rest-1.0)
