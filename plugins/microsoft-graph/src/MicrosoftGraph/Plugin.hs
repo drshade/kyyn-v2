@@ -16,4 +16,9 @@ connectors = [SourceConnector
       , CapturedMethod "body" "Read the captured plain-text body." "MicrosoftGraph.Mail.Read.body"
       , CapturedMethod "attachments" "Read captured attachment references." "MicrosoftGraph.Mail.Read.attachments"
       ]
+  }, SourceConnector
+  { name = "Meetings"
+  , fetch = "MicrosoftGraph.Meetings.fetch", validateConfig = "MicrosoftGraph.Meetings.Config.validate"
+  , login = Just "MicrosoftGraph.Meetings.Config.login"
+  , methods = [CapturedMethod "artifact" "Read a captured transcript or attendance report." "MicrosoftGraph.Meetings.Read.artifact"]
   }]

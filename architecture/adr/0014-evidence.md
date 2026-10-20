@@ -290,7 +290,7 @@ data MeetingRef = MeetingRef
   { onlineMeetingId :: Text, joinUrl :: Text
   , subject :: Text, organizer :: Text }
 data MeetingArtifact
-  = Transcript { meeting :: MeetingRef, started :: Text, ended :: Text
+  = Transcript { meeting :: MeetingRef, created :: Text, ended :: Text
                , content :: BlobRef }
   | Attendance { meeting :: MeetingRef, started :: Text, ended :: Text
                , attendees :: [AttendanceRecord] }
@@ -299,10 +299,18 @@ data MeetingArtifact
 `AttendanceRecord` preserves the provider's participant identity and attendance
 intervals; its ordinary record definition is plugin-owned. Instance configuration
 selects the user and retention days. Fetch options select a look-back window,
-defaulting to three days before acquisition start. Discover recently ended online
+defaulting to thirty days before acquisition start on every fetch. Discover recently ended online
 meeting events with calendarView, resolve onlineMeeting by join URL, and enumerate
 its transcript/report resources. Use actual artifact/session times, not the
-calendar start as an item key.
+calendar start as an item key. Transcript `created` and `ended` preserve Graph's
+`createdDateTime` and `endDateTime`; creation is not asserted to be the meeting's
+start. Attendance uses the report's actual session start/end timestamps.
+
+Configuration uses an Entra user object ID. Delegated acquisition verifies that
+ID against `/me` and uses that signed-in user's endpoints; application acquisition
+uses `/users/{userId}` under its consent and application access policy. Missing
+access or an unresolved eligible meeting fails the fetch. A nullary sync position
+supplies the host invocation time; discovery rescans the look-back on every fetch.
 
 An item is an artifact, not a selected "best" transcript or an inferred occurrence.
 Use an unambiguous encoding of artifact kind, onlineMeeting ID and Graph artifact
