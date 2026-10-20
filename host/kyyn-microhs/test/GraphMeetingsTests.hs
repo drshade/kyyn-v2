@@ -75,6 +75,7 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     firstParticipant:_ <- pure participants
     identity <- get "identity" firstParticipant >>= get "value"
     assert "participant identity lost" . (== tagged "Some" (text "guest-id")) =<< get "id" identity
+    assert "ACS identity resource lost" . (== tagged "Some" (text "acs-resource")) =<< get "azureCommunicationServicesResourceId" identity
     intervals <- get "attendanceIntervals" firstParticipant :: IO [Value]
     assert "participant intervals lost" (length intervals == 2)
     events <- readIORef trace
@@ -199,7 +200,7 @@ provider old scenario = do
     future = object ["isOnlineMeeting" .= True, "end" .= object ["dateTime" .= text "2027-01-01T11:00:00","timeZone" .= text "UTC"]]
     transcript key = object ["id" .= text key,"createdDateTime" .= text "2026-10-19T10:01:00Z","endDateTime" .= text "2026-10-19T11:00:00Z"]
     report key start end = object ["id" .= text key,"meetingStartDateTime" .= text start,"meetingEndDateTime" .= text end]
-    attendee = object ["identity" .= object ["id" .= text "guest-id","displayName" .= text "Guest 雪","tenantId" .= Null],
+    attendee = object ["identity" .= object ["id" .= text "guest-id","displayName" .= text "Guest 雪","tenantId" .= Null, "@odata.type" .= text "#microsoft.graph.azureCommunicationServicesUserIdentity", "azureCommunicationServicesResourceId" .= text "acs-resource"],
       "emailAddress" .= text "guest@example.test", "role" .= text "Attendee", "totalAttendanceInSeconds" .= (60 :: Int),
       "attendanceIntervals" .= replicate 2 (object ["joinDateTime" .= text "2026-10-19T10:00:00Z","leaveDateTime" .= text "2026-10-19T10:00:30Z","durationInSeconds" .= (30 :: Int)])]
 

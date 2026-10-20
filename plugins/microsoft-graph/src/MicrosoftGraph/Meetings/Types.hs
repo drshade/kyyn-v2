@@ -12,7 +12,8 @@ data MeetingsPosition = MeetingsPosition deriving (Eq, Show)
 data MeetingRef = MeetingRef
   { onlineMeetingId :: Text, joinUrl :: Text, subject :: Text, organizer :: Text } deriving (Eq, Show)
 data ParticipantIdentity = ParticipantIdentity
-  { id :: Maybe Text, displayName :: Maybe Text, tenantId :: Maybe Text } deriving (Eq, Show)
+  { id :: Maybe Text, displayName :: Maybe Text, tenantId :: Maybe Text
+  , providerType :: Maybe Text, azureCommunicationServicesResourceId :: Maybe Text } deriving (Eq, Show)
 data AttendanceInterval = AttendanceInterval
   { joinDateTime :: Maybe Text, leaveDateTime :: Maybe Text, durationInSeconds :: Maybe Integer } deriving (Eq, Show)
 data AttendanceRecord = AttendanceRecord

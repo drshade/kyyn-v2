@@ -299,8 +299,8 @@ data MeetingArtifact
 `AttendanceRecord` preserves the provider's participant identity and attendance
 intervals; its ordinary record definition is plugin-owned. Instance configuration
 selects the user and retention days. Fetch options select a look-back window,
-defaulting to thirty days before acquisition start on every fetch. Discover recently ended online
-meeting events with calendarView, resolve onlineMeeting by join URL, and enumerate
+defaulting to thirty days before acquisition start on every fetch. Discover
+recently ended online meeting events with calendarView, resolve onlineMeeting by join URL, and enumerate
 its transcript/report resources. Use actual artifact/session times, not the
 calendar start as an item key. Transcript `created` and `ended` preserve Graph's
 `createdDateTime` and `endDateTime`; creation is not asserted to be the meeting's

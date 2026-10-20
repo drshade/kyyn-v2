@@ -24,7 +24,8 @@ canonicalArtifact artifact = render $ case artifact of
     record (AttendanceRecord identity email role total intervals) = JSArray
       [optional participant identity, optional string email, optional string role,
         optional integer total, JSArray (map interval intervals)]
-    participant (ParticipantIdentity key name tenant) = JSArray (map (optional string) [key,name,tenant])
+    participant (ParticipantIdentity key name tenant kind resource) = JSArray
+      (map (optional string) [key,name,tenant,kind,resource])
     interval (AttendanceInterval join leave duration) = JSArray
       [optional string join, optional string leave, optional integer duration]
 

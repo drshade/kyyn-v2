@@ -126,6 +126,7 @@ attendance value = AttendanceRecord <$> optional participant "identity" value
   where
     participant item = ParticipantIdentity <$> Json.optionalText "id" item
       <*> Json.optionalText "displayName" item <*> Json.optionalText "tenantId" item
+      <*> Json.optionalText "@odata.type" item <*> Json.optionalText "azureCommunicationServicesResourceId" item
     interval item = AttendanceInterval <$> optional time "joinDateTime" item <*> optional time "leaveDateTime" item
       <*> optional (fmap toInteger . Json.integer) "durationInSeconds" item
     time item = do
