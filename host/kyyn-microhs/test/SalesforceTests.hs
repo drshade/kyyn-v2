@@ -1,12 +1,14 @@
 -- Generated Salesforce Query and login adapters under GHC and MicroHs. Recorded
 -- providers cover exact JSON, complete snapshots, pagination failures, identities,
--- removals/restoration, local reads, credential rotation and device polling.
+-- removals/restoration (including 3,000-row snapshots), local reads, credential
+-- rotation, rejected refresh grants and device polling HTTP failures.
 -- No live credentials or Salesforce calls.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value(..), FromJSON, object, (.=), (.:), toJSON)
 import Data.Aeson.Key (Key)
+import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as Map
 import Data.Aeson.Types (parseEither, withObject, parseJSON)
 import qualified Data.ByteString as Bytes
@@ -94,6 +96,24 @@ main = withSystemTempDirectory "kyyn-salesforce-" $ \temporary -> do
     (refreshed,_,_) <- brokerWith Normal device program (input True)
     assert "refresh fetch" . (==2) . length =<< changesFrom refreshed
     assert "rotated token not saved" . elem "put:rotated" =<< readIORef deviceTrace
+    (revoked,_) <- provider [] "auth-failure"
+    (rejected,_,_) <- brokerWith Normal revoked program (input True)
+    assert "revoked refresh token lacked login guidance" ("run connector login again" `Text.isInfixOf` Text.pack (show rejected))
+    assert "provider credential leaked" (not ("secret-value" `Text.isInfixOf` Text.pack (show rejected)))
+    (large,_) <- provider [] "large"
+    (initialLarge,_,_) <- brokerWith Normal large program (input False)
+    largeChanges <- changesFrom initialLarge
+    assert "large initial count" (length largeChanges == 3000)
+    largeStored <- mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v) largeChanges
+    (shifted,_) <- provider (reverse largeStored) "large-shift"
+    (shiftedResult,_,_) <- brokerWith Normal shifted program (input False)
+    shiftedChanges <- changesFrom shiftedResult
+    tags <- mapM tagOf shiftedChanges
+    assert "large snapshot delta" (tags == replicate 1500 "New" ++ replicate 1500 "Removed")
+    addedIds <- mapM (\c -> get "value" c >>= get "id") (take 1500 shiftedChanges)
+    removedIds <- mapM (get "value") (drop 1500 shiftedChanges)
+    assert "large new identities" (addedIds == map largeId [3000..4499])
+    assert "large removed identities" (removedIds == map largeId [0..1499])
     forM_ [set "instanceUrl" (text "https://example.test/path") (configuration False),set "query" (text "DELETE FROM Account") (configuration False)] $ \invalid -> do
       (failed,_,_) <- brokerWith Normal (\_ _ _ _ -> fail "Invalid config called host") program (object ["arguments" .= invalid,"snapshot" .= text "prior"])
       assert "invalid config accepted" . (== ("Left" :: Text.Text)) =<< maybe (fail "No result") (get "tag") failed
@@ -112,10 +132,15 @@ main = withSystemTempDirectory "kyyn-salesforce-" $ \temporary -> do
     (appResult,_,_) <- brokerWith Normal app program (configuration False)
     assert "client credentials login" (appResult == Just (tagged "Right" (object [])))
     assert "application token was persisted" . not . any (Text.isPrefixOf "put:") =<< readIORef appTrace
-    forM_ ["declined","expired","empty-token"] $ \scenario -> do
+    forM_ ["declined","expired","empty-token","poll-html","poll-server-pending"] $ \scenario -> do
       (bad,badTrace) <- provider [] scenario
       (failed,_,_) <- brokerWith Normal bad program (configuration True)
       assert "failed login succeeded" . (== ("Left" :: Text.Text)) =<< maybe (fail "No result") (get "tag") failed
+      if scenario == "poll-html" || scenario == "poll-server-pending" then do
+        assert "poll failure lost HTTP status" ("HTTP 500" `Text.isInfixOf` Text.pack (show failed))
+        waits <- filter (Text.isPrefixOf "wait:") <$> readIORef badTrace
+        assert "server failure retried as pending" (waits == ["wait:1"])
+      else pure ()
       assert "failed login wrote a token" . not . any (Text.isPrefixOf "put:") =<< readIORef badTrace
   reader <- right (capturedReadSources TextType payload payload "Salesforce.Query.Read.record" sources)
   (readers,_) <- compileBoth temporary toolchain compiler "salesforce-record" reader
@@ -142,14 +167,15 @@ provider old scenario = do
   trace <- newIORef []
   polls <- newIORef (0 :: Int)
   attempts <- newIORef (0 :: Int)
-  let respond raw capability method args = case (capability,method) of
+  let oldMap = Map.fromList [(Key.fromText key,value) | (key,value) <- old]
+      respond raw capability method args = case (capability,method) of
         ("secrets","get") -> pure (tagged "Right" (text "secret-value"),Bytes.empty)
         ("secrets","put") -> do value <- get "value" args; modifyIORef' trace (("put:" <> value):); pure (object [],Bytes.empty)
         ("waiting","seconds") -> do seconds <- get "seconds" args; modifyIORef' trace (("wait:" <> seconds):); pure (object [],Bytes.empty)
         ("login","display") -> pure (object [],Bytes.empty)
         ("digest","text") -> do values <- right (parseEither parseJSON args); pure (toJSON (runPureEff (runContentDigest (Digest.digestText values))),Bytes.empty)
         ("evidence","list") -> pure (tagged "Right" (toJSON (map fst old)),Bytes.empty)
-        ("evidence","read") -> do key <- get "id" args; pure (tagged "Right" (maybe none (tagged "Some") (lookup key old)),Bytes.empty)
+        ("evidence","read") -> do key <- get "id" args; pure (tagged "Right" (maybe none (tagged "Some") (Map.lookup (Key.fromText key) oldMap)),Bytes.empty)
         ("http","send") -> do
           url <- get "url" args
           let body = Encoding.decodeUtf8 raw
@@ -161,7 +187,9 @@ provider old scenario = do
             else if "response_type=device_code" `Text.isInfixOf` body then pure (http 200 [] "{\"device_code\":\"code\",\"user_code\":\"USER\",\"verification_uri\":\"https://example.my.salesforce.com/setup/connect\",\"interval\":1}")
             else if "grant_type=device" `Text.isInfixOf` body then do
               n <- readIORef polls; modifyIORef' polls (+1)
-              pure (if scenario == "declined" then http 400 [] "{\"error\":\"access_denied\"}"
+              pure (if scenario == "poll-html" then http 500 [] "<html>Unavailable</html>"
+                else if scenario == "poll-server-pending" then http 500 [] "{\"error\":\"authorization_pending\"}"
+                else if scenario == "declined" then http 400 [] "{\"error\":\"access_denied\"}"
                 else if scenario == "expired" then http 400 [] "{\"error\":\"expired_token\"}"
                 else if n == 0 then http 400 [] "{\"error\":\"authorization_pending\"}"
                 else if n == 1 then http 400 [] "{\"error\":\"slow_down\"}"
@@ -182,6 +210,12 @@ provider old scenario = do
 
 page :: Text.Text -> Bool -> Text.Text
 page scenario second
+  | scenario == "large" || scenario == "large-shift" =
+      let start = (if scenario == "large-shift" then 1500 else 0) + (if second then 1500 else 0)
+          records = Text.intercalate "," ["{\"Id\":\"" <> largeId n <> "\"}" | n <- [start..start+1499]]
+      in "{\"totalSize\":3000,\"done\":" <> (if second then "true" else "false") <>
+         ",\"records\":[" <> records <> "]" <>
+         (if second then "" else ",\"nextRecordsUrl\":\"/services/data/v62.0/query/cursor-2\"") <> "}"
   | scenario == "empty" = "{\"records\":[],\"done\":true,\"totalSize\":0}"
   | otherwise = "{\"totalSize\":" <> (if scenario == "bad-count" then "3" else "2") <> ",\"done\":" <>
       (if scenario == "bad-done" then "null" else if second && scenario /= "cycle" then "true" else "false") <>
@@ -220,3 +254,6 @@ assert label condition = unless condition (fail label)
 
 tagOf :: Value -> IO Text.Text
 tagOf = get "tag"
+
+largeId :: Int -> Text.Text
+largeId n = "row-" <> Text.justifyRight 5 '0' (Text.pack (show n))

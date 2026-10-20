@@ -51,7 +51,9 @@ Missing, blank, numeric or duplicate identities fail the whole fetch. There is n
 row-number fallback. Aggregate queries without a suitable identity are unsupported.
 
 Several named Query instances can share authentication settings and a secret key
-while running different queries. Each instance has independent evidence.
+while running different queries. Each instance has independent evidence. When
+DeviceCode instances share a tokenKey, run their logins and fetches sequentially:
+concurrent refreshes can race if the org rotates refresh tokens.
 
 Check, ready and accept the evolution before login or fetch:
 
@@ -103,6 +105,8 @@ Object keys have a deterministic order; array order and exact decimal/integer
 values are preserved. Equivalent JSON key order or numeric spelling does not
 create updates. The source reference is the configured query URL. Changing that
 query URL changes the fingerprint even for otherwise identical returned records.
+Changing apiVersion therefore updates every returned record; Salesforce may also
+include that version in each record’s attributes.url.
 The `record` method only reads captured evidence; it makes no provider request.
 
 There is no lookback, retained query cursor, or fetch-options record. Follow-up

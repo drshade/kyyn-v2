@@ -21,6 +21,11 @@ accessToken origin auth = runExceptT $ do
         ClientSecret {} -> [("grant_type","client_credentials"),("client_id",client),("client_secret",secret)]
         DeviceCode {} -> [("grant_type","refresh_token"),("client_id",client),("refresh_token",secret)]
   response <- ExceptT (Http.postForm (tokenEndpoint origin) fields)
+  case (auth,response) of
+    (DeviceCode {},HttpResponse 400 _ body)
+      | (Json.parse body >>= Json.member "error" >>= Json.text) == Right "invalid_grant" ->
+          throwE "Salesforce refresh token was rejected; run connector login again"
+    _ -> pure ()
   value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
   token <- either throwE pure (required "access_token" value)
   case auth of
@@ -55,12 +60,14 @@ login origin auth = fmap (either (Left . LoginError) Right) $ runExceptT $ case 
           lift (waitSeconds interval)
           response@(HttpResponse status _ body) <- ExceptT (Http.postForm endpoint
             [("grant_type","device"),("client_id",client),("code",code)])
-          value <- either throwE pure (Json.parse body)
           if status >= 200 && status < 300 then do
+            value <- either throwE pure (Json.parse body)
             _ <- either throwE pure (required "access_token" value)
             refresh <- either throwE pure (required "refresh_token" value)
             lift (putSecret key refresh)
-          else case Json.member "error" value >>= Json.text of
+          else if status /= 400 then
+            either throwE (const (throwE "Salesforce device login failed")) (Http.requireSuccess response)
+          else case Json.parse body >>= Json.member "error" >>= Json.text of
             Right "authorization_pending" -> poll client key code (remaining-interval) interval
             Right "slow_down" | interval <= maxBound-5 -> poll client key code (remaining-interval) (interval+5)
             Right "access_denied" -> throwE "Salesforce device login was declined"

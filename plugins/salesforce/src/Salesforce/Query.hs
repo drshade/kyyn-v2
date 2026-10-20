@@ -2,7 +2,7 @@
 module Salesforce.Query (fetch) where
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (sortOn)
+import Data.List (sort, sortOn)
 import qualified Data.Text as Text
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
@@ -36,7 +36,16 @@ fetch config@(QueryConfig origin auth version query _) snapshot = fmap (either (
         pure [SetEvidencePayload (EvidenceId key) fingerprint (Available record)]
       Just (Evidence previous _ _) | previous == fingerprint -> pure []
       _ -> pure [UpdatedEvidence (EvidenceId key) value]
-  let keys = map (EvidenceId . fst) rows
-  pure (additions ++ [RemovedEvidence key | key <- oldKeys, key `notElem` keys])
+  let keys = map fst rows
+  pure (additions ++ removed (sort [key | EvidenceId key <- oldKeys]) keys)
   where
     failure = either (\(FetchError message) -> Left message) Right
+
+-- Both inputs are sorted, so each identity is visited at most once.
+removed :: [Text.Text] -> [Text.Text] -> [EvidenceChange Record]
+removed [] _ = []
+removed old [] = map (RemovedEvidence . EvidenceId) old
+removed old@(key:rest) current@(next:remaining) = case compare key next of
+  LT -> RemovedEvidence (EvidenceId key) : removed rest current
+  EQ -> removed rest remaining
+  GT -> removed old remaining
