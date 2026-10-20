@@ -286,18 +286,22 @@ returned attendance intervals are retained. Transcript VTT bytes are stored as a
 `BlobRef`; CLI blob results include a local path. The `artifact` method reads only
 captured data and makes no provider requests.
 
-All metadata pages, attendance-record pages and transcript downloads must succeed
-before publication. Graph returns at most the latest 50 attendance reports for a
+Each published artifact must have complete metadata and content. A 403 skips the
+affected request as described above; other page or download failures prevent
+publication of the whole fetch. Graph returns at most the latest 50 attendance reports for a
 meeting; pagination cannot recover reports outside that provider limit. Only
 calendar-backed Teams online meetings are discovered, not standalone calls or
 virtual-event endpoints. Tenant settings may prohibit transcripts or
-speaker-attributed VTT; such refusals fail the fetch. There is no silent change to
+speaker-attributed VTT; a 403 refusal is recorded and skipped. There is no silent change to
 an unattributed transcript format.
 
 Retention uses each artifact's end time. A nonnegative `retentionDays` controls
 payload truncation during fetch; zero truncates artifacts ended before that fetch
 started. Identities and fingerprints remain, and old artifacts are not downloaded
-again. Reading a truncated artifact reports that its payload is unavailable.
+again. Recurring-meeting listings can include sessions older than the discovery
+window. On first capture, their content is downloaded before retention is applied,
+so an old transcript may be downloaded and immediately truncated. Reading a
+truncated artifact reports that its payload is unavailable.
 `evidence clear microsoft-graph meetings` removes the capture and permits recapture.
 
 ## Verification and provider documentation
