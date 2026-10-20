@@ -21,4 +21,9 @@ connectors = [SourceConnector
   , fetch = "MicrosoftGraph.Meetings.fetch", validateConfig = "MicrosoftGraph.Meetings.Config.validate"
   , login = Just "MicrosoftGraph.Meetings.Config.login"
   , methods = [CapturedMethod "artifact" "Read a captured transcript or attendance report." "MicrosoftGraph.Meetings.Read.artifact"]
+  }, SourceConnector
+  { name = "Files"
+  , fetch = "MicrosoftGraph.Files.fetch", validateConfig = "MicrosoftGraph.Files.Config.validate"
+  , login = Just "MicrosoftGraph.Files.Config.login"
+  , methods = [CapturedMethod "file" "Read captured file metadata and its content blob." "MicrosoftGraph.Files.Read.file"]
   }]

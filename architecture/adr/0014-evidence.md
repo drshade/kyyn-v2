@@ -417,7 +417,7 @@ data FilesScope
   | SharedUrl { url :: Text }
 data FilesConfig = FilesConfig
   { auth :: GraphAuth, scope :: FilesScope
-  , folderPath :: Text, includeGlobs :: [Text] }
+  , itemPath :: Text, includeGlobs :: [Text] }
 data FilePayload = FilePayload
   { name :: Text, path :: Text, webUrl :: Text
   , mediaType :: Text, size :: Integer
@@ -427,7 +427,8 @@ data FilePayload = FilePayload
 
 Resolve the configured site/library, user drive or shared URL on every fetch.
 The selected path may identify a file or folder; an empty path selects the scope
-root. A folder is listed recursively, following every children page. Include globs
+root. For SharedUrl, the path is relative to the resolved shared folder; a shared
+file requires an empty path. A folder is listed recursively, following every children page. Include globs
 match relative slash-separated file paths: `*`/`?` stay within a segment,
 `**` crosses segments, and an empty list includes every file.
 
@@ -449,6 +450,12 @@ applicable retries, leaving the capture unchanged. A successful empty listing
 removes prior evidence; files no longer in the selection emit RemovedEvidence.
 Files have no age-out retention. Provider listing and content calls are not an
 upstream transaction; publication of the completed local batch remains atomic.
+Repeated file/folder IDs fail the fetch rather than choosing between paths. A file
+missed during a concurrent move may be removed and then added on a later fetch.
+The modifier is lastModifiedBy user, application or device displayName (in that
+order), or empty if absent. There is no connector-specific size limit: selected
+content is streamed in full to host blob storage; folder/glob scope and available
+disk space determine the practical bounds.
 
 This trades repeated metadata listing for a small connector without sync-state
 recovery or hierarchy maintenance. File bytes are stored as blobs, not extracted
