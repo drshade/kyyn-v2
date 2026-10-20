@@ -7,6 +7,7 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Control.Monad.Trans.Class (lift)
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Types (GraphAuth(..))
+import MicrosoftGraph.Config (graphRoot)
 import qualified MicrosoftGraph.Json as Json
 import qualified MicrosoftGraph.Http as Http
 import Text.JSON.Types (JSValue)
@@ -19,7 +20,7 @@ accessToken auth = runExceptT $ case auth of
   ClientSecret tenant client key -> do
     secret <- readKey key
     response <- ExceptT (Http.postForm (endpoint tenant "token")
-      [("client_id",client),("client_secret",secret),("grant_type","client_credentials"),("scope","https://graph.microsoft.com/.default")])
+      [("client_id",client),("client_secret",secret),("grant_type","client_credentials"),("scope",graphRoot <> ".default")])
     value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
     either throwE pure (tokenField "access_token" value)
   DeviceCode tenant client key scopes -> do

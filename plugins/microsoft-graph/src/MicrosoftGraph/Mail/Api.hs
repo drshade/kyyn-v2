@@ -8,12 +8,13 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Mail.Types (MailFolder(..), Message(..), Attachment(..), AttachmentContent(..))
 import MicrosoftGraph.Types (Person(..))
+import MicrosoftGraph.Config (graphApiBase)
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
 import Text.JSON.Types (JSValue(..), fromJSObject)
 
 baseUrl :: Text -> Text
-baseUrl mailbox = "https://graph.microsoft.com/v1.0/users/" <> Json.escape mailbox
+baseUrl mailbox = graphApiBase <> "users/" <> Json.escape mailbox
 
 requestHeaders :: Text -> [(Text,Text)]
 requestHeaders token = [("Authorization","Bearer " <> token),
@@ -21,7 +22,7 @@ requestHeaders token = [("Authorization","Bearer " <> token),
 
 get :: Text -> Text -> Acquisition payload (Either Text HttpResponse)
 get token url
-  | "https://graph.microsoft.com/v1.0/" `Text.isPrefixOf` url = Http.send (HttpRequest "GET" url (requestHeaders token) "")
+  | graphApiBase `Text.isPrefixOf` url = Http.send (HttpRequest "GET" url (requestHeaders token) "")
   | otherwise = pure (Left "Unexpected Graph pagination URL")
 
 document :: Text -> Text -> Acquisition payload (Either Text JSValue)
@@ -72,7 +73,7 @@ delta token = runExceptT . pages []
               Just link -> fmap (fmap (\(more,final) -> (entries ++ more,final))) (pages (url:seen) link)
               Nothing -> do
                 final <- either throwE pure (textField "@odata.deltaLink" value)
-                if "https://graph.microsoft.com/v1.0/" `Text.isPrefixOf` final then pure (Just (entries,final))
+                if graphApiBase `Text.isPrefixOf` final then pure (Just (entries,final))
                   else throwE "Unexpected Graph delta URL"
 
 captureMessage :: Text -> Text -> Text -> Text -> Acquisition Message (Either Text Message)

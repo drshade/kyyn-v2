@@ -4,9 +4,9 @@ import Kyyn.Plugin
 connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Calendar"
-  , fetch = "MicrosoftGraph.Calendar.fetch", validateConfig = "MicrosoftGraph.Config.validate"
-  , login = Just "MicrosoftGraph.Login.login"
-  , methods = [CapturedMethod "event" "Read the latest captured calendar event." "MicrosoftGraph.Read.event"]
+  , fetch = "MicrosoftGraph.Calendar.fetch", validateConfig = "MicrosoftGraph.Calendar.Config.validate"
+  , login = Just "MicrosoftGraph.Calendar.Config.login"
+  , methods = [CapturedMethod "event" "Read the latest captured calendar event." "MicrosoftGraph.Calendar.Read.event"]
   }, SourceConnector
   { name = "Mail"
   , fetch = "MicrosoftGraph.Mail.fetch", validateConfig = "MicrosoftGraph.Mail.Config.validate"
