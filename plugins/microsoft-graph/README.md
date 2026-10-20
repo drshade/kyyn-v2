@@ -414,7 +414,9 @@ To capture a shortcut target, configure its actual drive or sharing URL directly
 There is no retained skip log or sync position.
 
 The payload includes metadata and a content blob, not extracted document text.
-A present unchanged content tag and size reuse the existing blob; metadata-only
+Size is the actual stored byte count; it need not equal Graph’s listed size.
+Missing MIME types use application/octet-stream.
+A present unchanged content tag reuses the existing blob; metadata-only
 changes update the payload without downloading identical bytes. Missing tags or
 truncated payloads require downloading content. `modifiedBy` is the provider's
 user display name, otherwise application/device display name, or empty when absent.

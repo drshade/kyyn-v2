@@ -90,10 +90,25 @@ main = withSystemTempDirectory "kyyn-graph-files-" $ \temporary -> do
     (restored,_,_) <- brokerWith Normal restore program (input configuration)
     assert "truncated restore" . (== ["SetPayload","SetPayload"]) =<< (changesFrom restored >>= mapM tagOf)
     assert "truncated content not fetched" . (==2) . length . filter (Text.isPrefixOf "blob:") =<< readIORef restoreTrace
-    forM_ ["page-failure","foreign","cycle","missing-root","malformed-item","missing-size","bad-size","download-failure"] $ \scenario -> do
+    forM_ ["page-failure","foreign","cycle","missing-root","malformed-item","download-failure"] $ \scenario -> do
       (bad,_) <- provider stored scenario
       (failed,_,_) <- brokerWith Normal bad program (input configuration)
       assert ("partial listing published: " ++ Text.unpack scenario) . (== ("Left" :: Text.Text)) =<< maybe (fail "No failure") (get "tag") failed
+    forM_ ["bad-size","missing-size","missing-mime"] $ \scenario -> do
+      (fresh,_) <- provider [] scenario
+      (firstResult,_,_) <- brokerWith Normal fresh program (input configuration)
+      initial <- changesFrom firstResult
+      captured <- mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v) initial
+      forM_ captured $ \(_,evidence) -> do
+        value <- get "payload" evidence >>= get "value"
+        assert "size must be actual bytes" . (== ("3" :: Text.Text)) =<< get "size" value
+        if scenario == "missing-mime" then
+          assert "missing MIME fallback" . (== ("application/octet-stream" :: Text.Text)) =<< get "mediaType" value
+        else pure ()
+      (repeatFetch,repeatTrace) <- provider captured scenario
+      (repeated,_,_) <- brokerWith Normal repeatFetch program (input configuration)
+      assert "listed size caused repeated changes" . null =<< changesFrom repeated
+      assert "listed size caused repeated downloads" . null . filter (Text.isPrefixOf "blob:") =<< readIORef repeatTrace
     forM_ ["duplicate","folder-cycle","shortcut","package"] $ \scenario -> do
       (skip,_) <- provider stored scenario
       (skipped,_,_) <- brokerWith Normal skip program (input configuration)
@@ -182,7 +197,8 @@ fileValue scenario key
   | scenario == "malformed-item" = "null"
   | otherwise =
   "{\"id\":\"" <> key <> "\",\"name\":\"" <> (if scenario == "renamed" && key == "a" then "renamed" else key) <> ".txt\"," <>
-  "\"webUrl\":\"https://example.sharepoint.com/" <> key <> "\",\"file\":{\"mimeType\":\"text/plain\"}," <>
+  "\"webUrl\":\"https://example.sharepoint.com/" <> key <> "\",\"file\":{" <>
+  (if scenario == "missing-mime" then "" else "\"mimeType\":\"text/plain\"") <> "}," <>
   (if scenario == "missing-size" then "" else "\"size\":" <> (if scenario == "bad-size" then "4" else "3") <> ",") <>
   (if scenario == "no-tag" || scenario == "download-failure" then "" else "\"cTag\":\"" <> (if scenario == "changed" && key == "a" then "v2" else "v1") <> "\",") <>
   "\"lastModifiedDateTime\":\"2026-10-20T12:00:00Z\",\"lastModifiedBy\":{\"application\":{\"displayName\":\"Automation\"}}}"

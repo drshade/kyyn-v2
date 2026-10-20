@@ -440,9 +440,12 @@ the new listing supplies its current path. A configured path is resolved again,
 so moving the selected root may require updating configuration. An unresolved
 root is a failed fetch, not an empty folder.
 
-Compare a present nonempty `cTag` and size to the previous available payload:
+Compare a present nonempty `cTag` to the previous available payload:
 unchanged content reuses its blob; changed/absent tags or truncated payloads
-require retrieval. A rename/path/metadata change updates the payload fingerprint
+require retrieval. Payload size is the actual stored byte count, not a required
+match to the provider-listed size. Missing MIME type uses application/octet-stream.
+Fingerprint all payload fields using explicit canonical JSON encoding.
+A rename/path/metadata change updates the payload fingerprint
 but does not itself require downloading identical bytes. Download URLs are
 transient acquisition data, not stable payload fields. Missing required file metadata, failed pages or failed content downloads fail the whole fetch after
 applicable retries, leaving the capture unchanged. A successful empty listing
