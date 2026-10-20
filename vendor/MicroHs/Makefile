@@ -315,8 +315,8 @@ nfibtest: bin/mhs bin/mhseval
 
 ######
 
-VERSION=0.16.8.0
-HVERSION=0,16,8,0
+VERSION=0.16.11.0
+HVERSION=0,16,11,0
 MCABAL=$(HOME)/.mcabal
 MCABALMHS=$(MCABAL)/mhs-$(VERSION)
 MDATA=$(MCABALMHS)/packages/mhs-$(VERSION)/data
@@ -413,4 +413,9 @@ bin/hmhs: generated/hmhs.c
 	@mkdir -p bin
 	$(CCEVAL) generated/hmhs.c $(CCLIBS) -o bin/hmhs
 
-
+testhugs: newmhs
+	rm -f generated/hmhs.c
+	make bin/hmhs
+	bin/hmhs $(MHSINC) $(MAINMODULE) -ohugs-mhs.comb
+	bin/mhs  $(MHSINC) $(MAINMODULE) -omhs-mhs.comb
+	cmp hugs-mhs.comb mhs-mhs.comb

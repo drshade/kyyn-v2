@@ -1,5 +1,6 @@
 -- Copyright 2023 Lennart Augustsson
 -- See LICENSE file for full license.
+{-# OPTIONS_GHC -Wno-orphans #-}
 module MicroHs.Ident(
   Line, Col,
   Ident,
@@ -49,8 +50,10 @@ appendDot x y = x ++ ('.':y)
 type Line = Int
 type Col  = Int
 
+{- Move to MHSPrelude
 data SLoc = SLoc FilePath Line Col
   deriving (Show, Eq)
+-}
 
 -- instance Show SLoc where
 --  show (SLoc f l c) = show f ++ "," ++ show l ++ ":" ++ show c
@@ -197,10 +200,10 @@ isDummyIdent (Ident _ s) = s == pack "_"
 showSLoc :: SLoc -> String
 showSLoc (SLoc fn l c) =
   if null fn then "no location" else
-  show fn ++ ": " ++
+  fn ++ ":" ++
     if l == 0  then "no location" else
     if l == -1 then "end-of-file" else
-    "line " ++ show l ++ ", col " ++ show c
+    show l ++ ":" ++ show c
 
 slocFile :: SLoc -> FilePath
 slocFile (SLoc f _ _) = f

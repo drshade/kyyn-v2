@@ -3,13 +3,13 @@
 module Kyyn.MicroHs.Inspection (InspectionError(..), inspectDataType, inspectModuleImports, inspectPluginSignature, inspectRecipeSignature, inspectRecipeExports, inspectionSettings) where
 
 import Control.DeepSeq (force)
-import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
+import Control.Exception (SomeException, SomeAsyncException, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (unless)
 import Data.List (nubBy, nub)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Plugin (PluginEntryKind(..), PluginSignature(..), expectedPluginSignature)
 import Kyyn.Domain.Recipe (RecipeSignature(..))
-import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
+import Kyyn.MicroHs.CompilerDiagnostic (compilerFailure)
 import Kyyn.MicroHs.Timing (withTimingIO)
 import Kyyn.MicroHs.Source (readParsedSource)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
@@ -53,7 +53,7 @@ inspectDataType compiler sources selected = withTimingIO "inspection" selected (
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
-      | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (compilerMessage (displayException err))))
+      | Just message <- compilerFailure err = pure (Left (CompilerError message))
       | otherwise = pure (Left (NativeError (displayException err)))
     inspect = do
       let flags = inspectionFlags compiler sources
@@ -109,7 +109,7 @@ inspectExports compiler sources selected lower = withTimingIO "inspection" selec
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
-      | Just (_ :: ErrorCall) <- fromException err = pure (Left (CompilerError (compilerMessage (displayException err))))
+      | Just message <- compilerFailure err = pure (Left (CompilerError message))
       | otherwise = pure (Left (NativeError (displayException err)))
     inspect = do
       let imported = mkIdent selected

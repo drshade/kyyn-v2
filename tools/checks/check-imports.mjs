@@ -378,11 +378,11 @@ const interpreterModules = {
 };
 
 const compilerModules = {
-  'Kyyn.MicroHs.Source': ['MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Parse', 'System.FilePath', 'System.Process'],
+  'Kyyn.MicroHs.Source': ['MicroHs.Error', 'MicroHs.Expr', 'MicroHs.Flags', 'MicroHs.Parse', 'System.FilePath', 'System.Process'],
   'Kyyn.MicroHs.Interpreter.InspectionCache': ['Crypto.Hash.SHA256', 'Data.ByteString', 'Data.ByteString.Builder', 'Data.ByteString.Lazy',
     'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Numeric', 'Effectful', 'GHC.Clock', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Path',
     'Kyyn.MicroHs.Timing', 'Kyyn.Plumbing.Capability.FileSystem'],
-  'Kyyn.MicroHs.CompilerDiagnostic': ['Data.List'],
+  'Kyyn.MicroHs.CompilerDiagnostic': ['Control.Exception', 'Data.List', 'MicroHs.Error'],
   'Kyyn.MicroHs.Inspection': ['Kyyn.Domain.Recipe', 'Kyyn.MicroHs.Source', 'Kyyn.Domain.Plugin', ...allowed['kyyn-microhs'], 'Kyyn.MicroHs.CompilerDiagnostic', 'Kyyn.MicroHs.Timing'],
   'Kyyn.MicroHs.Timing': ['Control.Exception', 'Data.Word', 'GHC.Clock', 'System.Environment', 'System.IO', 'Text.Printf'],
   'Kyyn.MicroHs.Interpreter.GuestExecution': ['Kyyn.Plumbing.Protocol.Frame', 'Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic',

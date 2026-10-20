@@ -4,6 +4,7 @@ module MHSPrelude(
   module Control.Error,
   module Control.Monad,
   module Control.Monad.Fail,
+  module Control.Exception,
   module Data.Bool,
   module Data.Bounded,
   module Data.Char,
@@ -31,23 +32,27 @@ module MHSPrelude(
   module Data.String,
   module Data.Tuple,
   module Data.Typeable,
+  module Data.Version,
   module System.IO.Base,
+  module Text.Read,
   module Text.Show,
   first, second,
-  mhsError,
   _usingMhs, _wordSize,
   _isWindows,
   appendDot,
   wantGMP, wantImath,
   compiledWithMhs,
   Int64,
+  Word,
   HasCallStack,
+  MhsError(..), SLoc(..),
   ) where
 import qualified Prelude()
 --import Primitives(primRnfNoErr, primRnfErr)
 import Control.Applicative(Applicative(..))
 import Control.DeepSeq.Class
 import Control.Error(error, undefined, errorWithoutStackTrace)
+import Control.Exception
 import Control.Monad(Monad(..), mapM, mapM_, sequence, sequence_, (=<<))
 import Control.Monad.Fail(MonadFail(..))
 import Data.Bool(Bool(..), (&&), (||), not, otherwise)
@@ -83,16 +88,16 @@ import Data.Records  -- needed for data types with fields
 import Data.Semigroup
 import Data.String(IsString(..), lines, unlines, words, unwords)
 import Data.Tuple(fst, snd, curry, uncurry)
+import Data.Version
+import Data.Word(Word)
 import System.IO.Base(IO, putChar, putStr, putStrLn, print, getLine, getContents, interact,
-                      FilePath, readFile, writeFile, appendFile,
-                      cprint, cuprint)
+                      FilePath, readFile, writeFile, appendFile)
+import Text.Read(readMaybe)
 import Text.Show(Show(..), ShowS, shows, showChar, showString, showParen)
 import {-# SOURCE #-} Data.Typeable
 import Primitives(_wordSize, _isWindows)
 import Data.Text(Text)
-
-mhsError :: String -> a
-mhsError = errorWithoutStackTrace
+import Control.Exception(Exception, throw)
 
 -- So we can detect mhs vs ghc
 _usingMhs :: Bool
@@ -129,3 +134,14 @@ second f (a, b) = (a, f b)
 
 class HasCallStack
 instance HasCallStack
+
+---
+-- This belongs in MicroHs.Error, but Hugs cannot derive Tyoeable
+-- and GHC doesn't allow explicit Typeable instances.
+data MhsError
+  = MhsSyntaxError SLoc String String
+  | MhsTypeError   SLoc String String String  -- header, expected, actual
+  | MhsOtherError  SLoc String
+  | MhsError            String                -- no location
+data SLoc = SLoc FilePath Int Int
+  deriving (Show, Eq)

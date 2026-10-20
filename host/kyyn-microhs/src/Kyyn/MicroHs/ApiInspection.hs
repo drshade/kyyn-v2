@@ -2,12 +2,12 @@
 module Kyyn.MicroHs.ApiInspection (inspectApi, ApiError(..), apiInspectionSettings) where
 
 import Control.DeepSeq (force)
-import Control.Exception (SomeException, SomeAsyncException, ErrorCall, catch, evaluate, displayException, fromException, throwIO)
+import Control.Exception (SomeException, SomeAsyncException, catch, evaluate, displayException, fromException, throwIO)
 import Control.Monad (foldM)
 import Data.Char (isAlpha, isAlphaNum, isSpace, isSymbol, isPunctuation)
 import Data.List (nub, nubBy, sortOn, isPrefixOf, stripPrefix, intercalate, find)
 import Kyyn.Domain.GuestApi
-import Kyyn.MicroHs.CompilerDiagnostic (compilerMessage)
+import Kyyn.MicroHs.CompilerDiagnostic (compilerFailure)
 import Kyyn.MicroHs.Timing (withTimingIO)
 import Kyyn.MicroHs.Source (readParsedSource)
 import MicroHs.Compile (compileModuleP, addPreludeImport, emptyCache)
@@ -37,7 +37,7 @@ inspectApi compiler sources selected = withTimingIO "api-inspection" (intercalat
   where
     failure (err :: SomeException)
       | Just (_ :: SomeAsyncException) <- fromException err = throwIO err
-      | Just (_ :: ErrorCall) <- fromException err = pure (Left (ApiCompilerError (compilerMessage (displayException err))))
+      | Just message <- compilerFailure err = pure (Left (ApiCompilerError message))
       | otherwise = pure (Left (ApiNativeError (displayException err)))
     flags = apiFlags compiler sources
     inspect = do

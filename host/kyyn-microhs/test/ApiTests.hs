@@ -35,6 +35,12 @@ main = do
       public = ["Kyyn.Schema", "Kyyn.Validation", "Kyyn.Query", "Kyyn.Evolution", "Kyyn.Edit", "Kyyn.Optics", "Kyyn.Plugin"]
       inspect paths names = inspectApi compiler paths names >>= either (fail . show) pure
   modules <- inspect sources public
+  duplicateFields <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.DuplicateFields"]
+  assert ("duplicate field export ownership: " ++ show duplicateFields)
+    (case [signature | ApiModule _ symbols _ <- duplicateFields,
+      ApiSymbol "shared" ValueNamespace _ signature _ _ <- symbols] of
+      [signature] -> "Public" `isInfixOf` signature && not ("Private" `isInfixOf` signature)
+      _ -> False)
   qualified <- inspect ((repo </> "host/kyyn-microhs/test/api-docs"):sources) ["Kyyn.QualifiedFixture"]
   let qualifiedDeclarations = [(n,d) | ApiModule _ symbols _ <- qualified, ApiSymbol n _ _ _ (Just d) _ <- symbols]
   forM_ [("before", "before :: Edit Before.Root ()"), ("after", "after :: Edit After.Root ()"),
@@ -166,15 +172,26 @@ main = do
     createDirectoryIfMissing True (temporary </> "Kyyn")
     let symbols = nubBy (\(_,a) (_,b) -> sameOrigin a b)
           [(m,s) | m <- public, s <- symbolsIn m]
-        signatures = [(m,n,d) | (m,ApiSymbol n ValueNamespace origin _ (Just d) _) <- symbols,
+        signatures = [(m,n,origin,d) | (m,ApiSymbol n ValueNamespace origin _ (Just d) _) <- symbols,
           not (authoredFunction n origin)]
         valueName n@(c:_) | isAlpha c || c == '_' = n
         valueName n = "(" ++ n ++ ")"
-        witness (i,(m,n,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
+        -- Records exported together may share a field name, so a field is
+        -- witnessed by selection on the record its signature names.
+        witness (i,(m,n,origin,d)) = ["proof" ++ show i ++ dropWhile (/= ':') d,
           "proof" ++ show i ++ " = " ++
-            (if valueName n == n then m ++ "." ++ n else "(" ++ m ++ "." ++ n ++ ")")]
+            (if "get$." `isInfixOf` origin then "\\record -> record." ++ n
+             else if valueName n == n then m ++ "." ++ n else "(" ++ m ++ "." ++ n ++ ")")]
+        owner origin = takeWhile (/= '.') (drop 5 (snd (breakOn "get$." origin)))
+        breakOn p s@(c:rest) | p `isPrefixOf` s = ([], s)
+                             | otherwise = let (a, b) = breakOn p rest in (c:a, b)
+        breakOn _ [] = ([], [])
+        recordArgument d = take 1 (words (drop 3 (dropWhile (/= ':') d)))
+    forM_ [(n,origin,d) | (_,n,origin,d) <- signatures, "get$." `isInfixOf` origin] $ \(n,origin,d) ->
+      assert ("field signature names its owning record: " ++ n ++ " " ++ origin ++ " " ++ d)
+        (recordArgument d == [owner origin])
     writeFile (temporary </> "Kyyn/ValueProof.hs") (unlines
-      (["{-# LANGUAGE GADTs, RankNTypes #-}", "module Kyyn.ValueProof where",
+      (["{-# LANGUAGE GADTs, RankNTypes, OverloadedRecordDot #-}", "module Kyyn.ValueProof where",
         "import Control.Monad.Trans.State.Strict (StateT)", "import Data.Text (Text)"]
       ++ map ("import " ++) public ++ concatMap witness (zip [1 :: Int ..] signatures)))
     _ <- inspect (temporary:sources) ["Kyyn.ValueProof"]

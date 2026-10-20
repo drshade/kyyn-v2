@@ -3,10 +3,9 @@ MHSOUTPUT=
 MHS=../bin/gmhs
 TMHS=$(MHS) $(MHSTARGET) $(MHSOUTPUT)
 EVAL=../bin/mhseval +RTS -H1M -RTS
-EVALUATOR?=../bin/mhseval
 .PHONY: test nfib clean errtest alltest cache info
 
-alltest: info test errtest testforimp testforexp testforimpexp testapplysp testpipenonblockio testpreprocessorpaths testlargegetline
+alltest: info test errtest testforimp testforexp testforimpexp testapplysp testpipenonblockio testpreprocessorpaths
 # interactivetest
 
 cache:
@@ -21,6 +20,7 @@ test:
 #	$(TMHS) IOTest     && (echo q | $(EVAL) a bb ccc | sed 's/^[0-9]*ms/1ms/' > IOTest.out) && diff IOTest.ref IOTest.out
 	$(TMHS) Serdes     && $(EVAL) > Serdes.out     && diff Serdes.ref Serdes.out
 	$(TMHS) StringTest && $(EVAL) > StringTest.out && diff StringTest.ref StringTest.out
+	$(TMHS) LargeGetLine && $(EVAL) > LargeGetLine.out && diff LargeGetLine.ref LargeGetLine.out
 	$(TMHS) ListTest   && $(EVAL) > ListTest.out   && diff ListTest.ref ListTest.out
 	$(TMHS) Fac        && $(EVAL) > Fac.out        && diff Fac.ref Fac.out
 	$(TMHS) Misc       && $(EVAL) > Misc.out       && diff Misc.ref Misc.out
@@ -61,6 +61,7 @@ test:
 	$(TMHS) HigherKind && $(EVAL) > HigherKind.out && diff HigherKind.ref HigherKind.out
 	$(TMHS) PolyKind   && $(EVAL) > PolyKind.out   && diff PolyKind.ref PolyKind.out
 	$(TMHS) Record     && $(EVAL) > Record.out     && diff Record.ref Record.out
+	$(TMHS) RecordExport && $(EVAL) > RecordExport.out && diff RecordExport.ref RecordExport.out
 	$(TMHS) Deriving   && $(EVAL) > Deriving.out   && diff Deriving.ref Deriving.out
 	$(TMHS) Unicode    && $(EVAL) > Unicode.out    && diff Unicode.ref Unicode.out
 	$(TMHS) BindPat    && $(EVAL) > BindPat.out    && diff BindPat.ref BindPat.out
@@ -129,21 +130,12 @@ test:
 	$(TMHS) QualString && $(EVAL) > QualString.out && diff QualString.ref QualString.out
 	$(TMHS) MD5        && $(EVAL) > MD5.out        && diff MD5.ref MD5.out
 	$(TMHS) Interpolate && $(EVAL) > Interpolate.out && diff Interpolate.ref Interpolate.out
+	$(TMHS) ExtraComma && $(EVAL) > ExtraComma.out && diff ExtraComma.ref ExtraComma.out
 	$(TMHS) DerivingBuiltin
 
 .PHONY: testpreprocessorpaths
 testpreprocessorpaths:
 	sh preprocessor-paths.sh $(TMHS)
-
-.PHONY: testlargegetline
-testlargegetline:
-	$(TMHS) LargeGetLine -oout.comb
-	awk 'BEGIN { for (line = 0; line < 2; line++) { \
-	    for (i = 0; i < 100000; i++) printf "0123456789"; \
-	    printf "\n"; } printf "\nend\n"; }' > LargeGetLine.tmp
-	# Use defaults first, then vary GC timing and constrain the evaluator stack.
-	$(EVALUATOR) < LargeGetLine.tmp > LargeGetLine.out && diff LargeGetLine.ref LargeGetLine.out
-	$(EVALUATOR) +RTS -H8M -K4096 -RTS < LargeGetLine.tmp > LargeGetLine.out && diff LargeGetLine.ref LargeGetLine.out
 
 testforimp:
 	$(TMHS) ForeignC -of.exe && ./f.exe > ForeignC.out && diff ForeignC.ref ForeignC.out
@@ -196,4 +188,4 @@ nfib:
 	$(TMHS) Nfib && $(EVAL)
 
 clean:
-	rm -f *.out *.tmp *.js *.exe *.so a.out *_stub.h
+	rm -f *.out *.tmp *.js *.exe *.so a.out *_stub.h .mhscache

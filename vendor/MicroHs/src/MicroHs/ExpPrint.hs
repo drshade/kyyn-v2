@@ -7,6 +7,7 @@ import qualified MicroHs.IdentMap as M
 import Data.Maybe
 import MicroHs.Desugar(LDef)
 import MicroHs.EncodeData(encList)
+import MicroHs.Error(mhsError)
 import MicroHs.Exp
 import MicroHs.Expr(Lit(..), showLit, errorMessage, HasLoc(..), CType)
 import MicroHs.Ident(Ident, showIdent, mkIdent, showSLoc)
@@ -31,7 +32,7 @@ removeUnused (ds, emain) = dfs roots M.empty
     dMap = M.fromList ds
     dfs :: [Ident] -> M.Map Exp -> [LDef]
     dfs [] done = M.toList done
-    dfs (i:is) done | Just _ <- M.lookup i done = dfs is done
+    dfs (i:is) done | isJust (M.lookup i done) = dfs is done
                     | otherwise = dfs (freeVars e ++ is) (M.insert i e done)
                                   where e = fromMaybe (error $ "removeUnused: undef " ++ show i) $ M.lookup i dMap
 

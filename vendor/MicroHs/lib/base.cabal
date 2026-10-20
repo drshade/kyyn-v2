@@ -1,6 +1,6 @@
 cabal-version:  3.0
 name:           base
-version:        0.16.8.0
+version:        0.16.11.0
 license:        Apache-2.0
 license-file:   LICENSE
 maintainer:     lennart@augustsson.net
@@ -181,6 +181,7 @@ library base
         Mhs.MutArr
         Mhs.MutUArr
         Mhs.UArr
+        Mhs.Print
         Numeric
         Numeric.FormatFloat
         Numeric.Natural

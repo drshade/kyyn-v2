@@ -26,6 +26,7 @@ import Data.List
 import Data.Maybe
 import MicroHs.Builtin
 import MicroHs.Deriving
+import MicroHs.Error(MhsError(MhsTypeError))
 import MicroHs.Expr
 import MicroHs.Fixity
 import MicroHs.Flags
@@ -35,6 +36,7 @@ import qualified MicroHs.IdentMap as M
 import qualified MicroHs.IntMap as IM
 import MicroHs.List
 import MicroHs.Names
+import MicroHs.Lex(readInt)
 import MicroHs.Parse(dotDotIdent)
 import MicroHs.SymTab
 import MicroHs.TCMonad
@@ -119,7 +121,8 @@ typeCheck flags globs impt aimps (EModule mn exps defs) =
            impMdls = [(fromMaybe m mm, tm) | (ImportSpec _ _ m mm _, tm) <- imps]
            allMdls = thisMdl : impMdls
            (texps, vexps) =
-             unzip $ map (getTVExps impMap (typeTable tcs) (valueTable tcs) (assocTable tcs)) exps
+             let tys = typeTable tcs; vals = valueTable tcs; ast = assocTable tcs in
+             unzip $ map (getTVExps impMap tys vals ast) (gatherAssoc tys ast exps)
              where impMap = M.fromListWith (++) [(i, [m]) | (i, m) <- allMdls]
            fexps = map (tFixDefs . snd) allMdls
            sexps = synTable tcs
@@ -180,14 +183,31 @@ filterImports (imp@(ImportSpec _ _ _ _ (Just (hide, is))), TModule mn fx ts vs d
     (if hide then
        id -- don't complain about missing hidden identifiers; we use it for compatibility
      else
-       checkBad (ivs \\ allVs) .
-       checkBad (its \\ allTs))
+       checkBad (ivs `deleteAlls` allVs) .
+       checkBad (its `deleteAlls` allTs))
     (imp, TModule mn fx ts' vs' ds a)
 
 checkBad :: forall a . [Ident] -> a -> a
 checkBad [] a = a
 checkBad (i:_) _ =
   errorMessage (getSLoc i) $ "not exported: " ++ showIdent i
+
+-- When eporting a data type the associated selectors can be exported
+-- with the type or not.  E.g.
+--   module M(T, a) where data T = T { a :: Int }
+-- behaves the same as
+--   module M(T(a)) ...
+-- So for each type export item we gather up the associated selectors and add them.
+gatherAssoc :: TypeTable -> AssocTable -> [ExportItem] -> [ExportItem]
+gatherAssoc tys ast exps =
+  let vs = [ i | ExpValue i <- exps ]
+      gather :: ExportItem -> ExportItem
+      gather (ExpTypeSome ti is) | is /= [dotDotIdent] =
+        let assc = [ i | ValueExport i _ <- getAssocs ast $ tyQIdent $ expLookup ti tys ]
+            xs = (assc `intersect` vs) \\ is
+        in  ExpTypeSome ti (xs ++ is)
+      gather e = e
+  in  map gather exps
 
 -- Type and value exports
 getTVExps :: forall a . M.Map [TModule a] -> TypeTable -> ValueTable -> AssocTable -> ExportItem ->
@@ -201,7 +221,7 @@ getTVExps impMap _ _ _ (ExpModule m) =
     _ -> errorMessage (getSLoc m) $ "undefined module: " ++ showIdent m
 getTVExps _ tys vals ast (ExpTypeSome ti is) =
   let e = expLookup ti tys
-      assc = getAssocs vals ast $ tyQIdent e   -- all associated values
+      assc = getAssocs ast $ tyQIdent e   -- all associated values
       ves = concatMap one is
       one i | i == dotDotIdent = assc          -- '..' means all associated values
             | otherwise =
@@ -249,7 +269,7 @@ mkTModule tds tcs =
         _       -> Entry (EVar qi) t  -- XXX A hack for boot modules
 
     -- Find all value Entry for names associated with a type.
-    assoc i = getAssocs vt at (qualIdent mn i)
+    assoc i = getAssocs at (qualIdent mn i)
 
     -- All top level values possible to export.
     ves = [ ValueExport i (ventry i t') | Sign is t <- tds, let t' = expandSyn' st t, i <- is ] ++
@@ -273,8 +293,8 @@ mkTModule tds tcs =
 
 -- Find all value Entry for names associated with a type.
 -- XXX join stLookup code with tentry
-getAssocs :: (HasCallStack) => ValueTable -> AssocTable -> Ident -> [ValueExport]
-getAssocs _vt at ai = fromMaybe [] $ M.lookup ai at
+getAssocs :: (HasCallStack) => AssocTable -> Ident -> [ValueExport]
+getAssocs at ai = fromMaybe [] $ M.lookup ai at
 
 mkTCState :: IdentModule -> GlobTables -> [(ImportSpec, TModule a)] -> TCState
 mkTCState mdlName globs mdls =
@@ -627,7 +647,7 @@ getUVar i = gets (IM.lookup i . uvarSubst)
 munify :: HasCallStack =>
           SLoc -> Expected -> EType -> T ()
 munify loc (Infer r) b = tSetRefType loc r b
-munify loc (Check a) b = unify loc a b
+munify loc (Check a) b = unify loc b a
 
 -- Expand type synonyms, but keep location info
 expandSynLoc :: EType -> T EType
@@ -728,7 +748,7 @@ tcErrorTK :: HasCallStack =>
              SLoc -> String -> T ()
 tcErrorTK loc msg = do
   tcm <- gets tcMode
-  tcError loc $ msgTCMode' tcm ++ " error: " ++ msg
+  tcError loc $ msgTCMode' tcm ++ ": " ++ msg
 
 -- For error messages
 msgTCMode :: TCMode -> String
@@ -743,40 +763,60 @@ msgTCMode' TCType = "kind"
 msgTCMode' TCKind = "sort"
 msgTCMode' TCSort = "realm"
 
+-- The convention is  unify loc actual expected.
+-- The original pair is carried along so that a mismatch deep inside
+-- a type is reported in terms of the whole types.
 unify :: HasCallStack =>
          SLoc -> EType -> EType -> T ()
-unify loc a b = unifyR loc a b
+unify loc a b = unifyR loc (a, b) a b
+
+type Orig = (EType, EType)   -- (actual, expected) as given to unify
 
 unifyR :: HasCallStack =>
-          SLoc -> EType -> EType -> T ()
-unifyR _   (EVar x1)    (EVar x2)      | x1 == x2  = return ()
-unifyR loc (EApp f1 a1) (EApp f2 a2)               = do { unifyR loc f1 f2; unifyR loc a1 a2 }
-unifyR loc t1@(EUVar r1) t2@(EUVar r2) | r1 < r2   = unifyVar loc r2 t1   -- always make higher
-                                       | r1 > r2   = unifyVar loc r1 t2   --   TRefs point to lower
-                                       | otherwise = return ()
-unifyR loc (EUVar r1)   t2                         = unifyVar loc r1 t2
-unifyR loc t1           (EUVar r2)                 = unifyVar loc r2 t1
-unifyR loc t1           t2                         = do
+          SLoc -> Orig -> EType -> EType -> T ()
+unifyR _   _ (EVar x1)    (EVar x2)      | x1 == x2  = return ()
+unifyR loc o (EApp f1 a1) (EApp f2 a2)               = do { unifyR loc o f1 f2; unifyR loc o a1 a2 }
+unifyR loc o t1@(EUVar r1) t2@(EUVar r2) | r1 < r2   = unifyVar loc o r2 t1   -- always make higher
+                                         | r1 > r2   = unifyVar loc o r1 t2   --   TRefs point to lower
+                                         | otherwise = return ()
+unifyR loc o (EUVar r1)   t2                         = unifyVar loc o r1 t2
+unifyR loc o t1           (EUVar r2)                 = unifyVar loc o r2 t1
+unifyR loc o t1           t2                         = do
   tcm <- gets tcMode
+  eqs <- gets typeEqTable
   case tcm of
-    -- Defer to constraint solver.
+    -- Defer to constraint solver, unless this is a definite mismatch
+    -- that no given equality could resolve.
     -- XXX needs changing if we have kind equalities.
-    TCExpr -> addEqConstraint loc t1 t2
-    _      -> tcErrorTK loc $ "cannot unify " ++ showExpr t1 ++ " and " ++ showExpr t2
+    TCExpr | not (null eqs) || not (rigidClash t1 t2) -> addEqConstraint loc t1 t2
+    _ -> mismatchError loc o
+
+-- Two types with different rigid heads (or arities) can never unify.
+rigidClash :: EType -> EType -> Bool
+rigidClash t1 t2 =
+  case (getAppM t1, getAppM t2) of
+    (Just (c1, as1), Just (c2, as2)) -> c1 /= c2 || length as1 /= length as2
+    _                                -> False
+
+mismatchError :: HasCallStack => SLoc -> Orig -> T a
+mismatchError loc (actual, expected) = do
+  tcm <- gets tcMode
+  (a, e) <- niceTypes2 actual expected
+  throw $ MhsTypeError loc (msgTCMode' tcm) (showTypeUser a) (showTypeUser e)
 
 unifyVar :: HasCallStack =>
-            SLoc -> TRef -> EType -> T ()
-unifyVar loc r t = do
+            SLoc -> Orig -> TRef -> EType -> T ()
+unifyVar loc o r t = do
   mt <- getUVar r
 --  tcTrace $ "unifyVar: " ++ show (r,t)
   case mt of
-    Nothing -> unifyUnboundVar loc r t
-    Just t' -> unify loc t' t
+    Nothing -> unifyUnboundVar loc o r t
+    Just t' -> unifyR loc o t' t
 
 -- Unify an unbount tyvar r1 with the type at2
 unifyUnboundVar :: HasCallStack =>
-                   SLoc -> TRef -> EType -> T ()
-unifyUnboundVar loc r1 at2@(EUVar r2) = do
+                   SLoc -> Orig -> TRef -> EType -> T ()
+unifyUnboundVar loc o r1 at2@(EUVar r2) = do
   -- We know r1 /= r2
   mt2 <- getUVar r2
   case mt2 of
@@ -787,13 +827,54 @@ unifyUnboundVar loc r1 at2@(EUVar r2) = do
         setUVar r1 at2
       else
         setUVar r2 (EUVar r1)
-    Just t2 -> unify loc (EUVar r1) t2
-unifyUnboundVar loc r1 t2 = do
+    Just t2 -> unifyR loc o (EUVar r1) t2
+unifyUnboundVar loc _ r1 t2 = do
   vs <- getMetaTyVars [t2]
-  if r1 `elem` vs then
-    tcErrorTK loc $ "cyclic " ++ showExpr (EUVar r1) ++ " = " ++ showExpr t2
+  if r1 `elem` vs then do
+    (a, b) <- niceTypes2 (EUVar r1) t2
+    tcError loc $ "occurs check: cannot construct the infinite type: " ++ showTypeUser a ++ " ~ " ++ showTypeUser b
    else
     setUVar r1 t2
+
+-----------------------------------------
+-- Error message support
+
+-- Show a type for the user, with String instead of [Char].
+showTypeUser :: EType -> String
+showTypeUser = sub . showEType
+  where
+    sub ('#' : s) | (_:_, r) <- span isDigit s = sub r    -- drop skolem uniques, a#12 shows as a
+    sub (c : s) = c : sub s
+    sub [] = []
+
+-- Dereference and give unification variables readable names.
+niceTypes :: [EType] -> T [EType]
+niceTypes ts = do
+  ts' <- mapM derefUVar ts
+  let vs = nub (concatMap uvarsOf ts')
+      used = concatMap allVarsExpr ts'
+      names = [ n | n <- map (:[]) ['a'..'z'] ++ [ 't' : show k | k <- [1::Int ..] ], mkIdent n `notElem` used ]
+      sub = zip vs names
+      go (EUVar i) | Just n <- lookup i sub = EVar (mkIdent n)
+      go (EApp f a) = EApp (go f) (go a)
+      go (EForall b iks t) = EForall b iks (go t)
+      go (ESign t k) = ESign (go t) k
+      go t = t
+  return (map go ts')
+
+niceTypes2 :: EType -> EType -> T (EType, EType)
+niceTypes2 a b = do
+  ts <- niceTypes [a, b]
+  case ts of
+    [a', b'] -> return (a', b')
+    _        -> impossible
+
+uvarsOf :: EType -> [Int]
+uvarsOf (EUVar i) = [i]
+uvarsOf (EApp f a) = uvarsOf f ++ uvarsOf a
+uvarsOf (EForall _ _ t) = uvarsOf t
+uvarsOf (ESign t _) = uvarsOf t
+uvarsOf _ = []
 
 -- Reset unification map
 tcReset :: T ()
@@ -813,21 +894,22 @@ tLookup msg i = do
   env <- gets valueTable
   case stLookup msg i env of
     Right (Entry e s) -> return (setSLocExpr (getSLoc i) e, s)
-    Left            e -> do
-{-
-      tcm <- gets tcMode
-      tcTrace ("TCMode=" ++ show tcm)
-      tcTrace ("Value table:\n" ++ show env)
-      tenv <- gets typeTable
-      tcTrace ("Type table:\n" ++ show tenv)
--}
-      tcError (getSLoc i) e
+    Left            e -> tcError (getSLoc i) e
 
 tLookupV :: HasCallStack =>
            Ident -> T (Expr, EType)
 tLookupV i = do
   tcm <- gets tcMode
-  tLookup (msgTCMode tcm) i
+  env <- gets valueTable
+  let sloc e = setSLocExpr (getSLoc i) e
+  case stLookupST i env of
+    STOne (Entry e s) -> return (sloc e, s)
+    -- If the identifier is ambiguous we use a pretty gruesome hack:
+    -- if there is only one hit that is not a record getter, we use that.
+    -- This allows ordinary functions/methods to have the same name as a
+    -- field, and they will be preferred.
+    STMany es | [Entry e s] <- filter (\ (Entry e' _) -> not (isGetExpr e')) es -> return (sloc e, s)
+    _ -> tLookup (msgTCMode tcm) i       -- generate the error normally
 
 tInst :: HasCallStack => Expr -> EType -> T (Expr, EType)
 --tInst ae t | trace ("tInst: " ++ show (ae, t)) False = undefined
@@ -1108,20 +1190,22 @@ addAssocs adef = do
   let
     addAssoc ti is = do
       vt <- gets valueTable
-      let val i =
-            case stLookup "" i vt of
+      let val (i, lookupName) =
+            case stLookup "" lookupName vt of
               Right e -> [ValueExport i e]
               _       -> []  -- fields with existential type have no selector
       addAssocTable (qualIdent mn ti) (concatMap val is)
 
-    assocData (Constr _ _ c _ (Left _)) = [c]
-    assocData (Constr _ _ c _ (Right its)) = c : map fst its
+    assocData _ (Constr _ _ c _ (Left _)) = [(c, c)]
+    -- Keep the visible field name, but look up its owner-specific getter.
+    assocData ti (Constr _ _ c _ (Right its)) =
+      (c, c) : [ (f, mkGetName ti f) | (f, _) <- its ]
 
   case adef of
     Data    (i, _) cs _ | not (isMatchDataTypeName i)
-                        -> addAssoc i (nub $ concatMap assocData cs)
-    Newtype (i, _) c  _ -> addAssoc i (assocData c)
-    Class _ (i, _) _ ms -> addAssoc i [ x | Sign ns _ <- ms, m <- ns, x <- [m, mkDefaultMethodId m] ]
+                        -> addAssoc i (nub $ concatMap (assocData i) cs)
+    Newtype (i, _) c  _ -> addAssoc i (assocData i c)
+    Class _ (i, _) _ ms -> addAssoc i [ (x, x) | Sign ns _ <- ms, m <- ns, x <- [m, mkDefaultMethodId m] ]
     _                   -> return ()
 
 -- Add type synonyms to the synonym table, and data/newtype to the data table.
@@ -1479,6 +1563,12 @@ expandInst dinst@(Instance act bs extra) = do
       else "ambiguous instance binding"
       )
 
+{-
+  if qiCls == identDataTypeableTypeable then
+    trace ("instance Typeable ignored"
+    return []
+   else
+-}
   return (dinst : concat defs)
 
 expandInst d = return [d]
@@ -1853,7 +1943,11 @@ tGetExpType (Infer r) = tGetRefType r
 
 tcExpr :: HasCallStack =>
           Expected -> Expr -> T Expr
-tcExpr mt ae = tcExprR mt ae {-do
+tcExpr mt ae =
+  case ae of
+    -- Only literals are needed in the context, for "arising from the literal".
+    ELit _ _ -> tcExprR mt ae
+    _        -> tcExprR mt ae {-do
   tcTrace ("tcExpr enter: mt=" ++ show mt ++ " ae=" ++ showExpr ae)
   r <- tcExprR mt ae
   tcTrace ("tcExpr exit: " ++ showExpr r)
@@ -1888,20 +1982,7 @@ tcExprR mt ae =
     EQVar e t ->  -- already resolved, just instantiate
              instSigma loc e t mt
 
-    EApp f e ->
-      case f of
-        -- If we have parsed a e.lbl as a record select,
-        -- but it turns out that the lbl is not a label,
-        -- then we rejig the expression into function compositions,
-        -- i.e., e . lbl.
-        ESelect is@(lbl:_) -> do
-          b <- isLabel lbl
-          if b then
-            tcExprAp mt ae []
-           else
-            --trace ("convert to . " ++ show (f, e)) $
-            tcExpr mt (EOper e $ map (\ i -> (mkIdentSLoc (getSLoc i) ".", EVar i)) is)
-        _ -> tcExprAp mt ae []
+    EApp _ _ -> tcExprAp mt ae []
 
     EOper e ies -> tcOper e ies >>= tcExpr mt
     ELam _ qs -> tcExprLam mt loc qs
@@ -2209,15 +2290,21 @@ isLabel :: Ident -> T Bool
 isLabel i = do
   env <- gets valueTable
   case stLookup "" i env of
-    Left _ -> return True
-    Right (Entry (EVar g) t) ->
-      return $ isInfixOf "get$." (unIdent g) || countArrows t == 0
-    Right _ -> undefined -- return True
+    Left _ -> return True  --
+    Right (Entry e t) ->
+      return $ isGetExpr e || countArrows t == 0
+
+isGetExpr :: Expr -> Bool
+isGetExpr (EVar g) = isInfixOf (getPrefix ++ ".") (unIdent g)
+isGetExpr _ = False
 
 tcExprAp :: HasCallStack =>
             Expected -> Expr -> [Expr] -> T Expr
 --tcExprAp _ ae args | trace ("tcExprAp: " ++ show (ae, args)) False = undefined
 tcExprAp mt ae args = do
+  let rest = do
+        (f, t) <- tInferExpr ae
+        tcExprApFn mt f t args
   case ae of
     EApp f a -> tcExprAp mt f (a : args)
     EParen f -> tcExprAp mt f args
@@ -2241,9 +2328,23 @@ tcExprAp mt ae args = do
                _ -> tcExprApFn mt fn t' args
     EQVar f t ->  -- already resolved
       tcExprApFn mt f t args
-    _ -> do
-      (f, t) <- tInferExpr ae
-      tcExprApFn mt f t args
+
+    ESelect is@(lbl:_) | (e:args') <- args -> do
+      -- If we have parsed a e.lbl as a record select,
+      -- but it turns out that the lbl is not a label,
+      -- then we rejig the expression into function compositions,
+      -- i.e., e . lbl.
+      -- This is dodgy, since it will already have been parsed with
+      -- the wrong fixity.
+      b <- isLabel lbl
+      if b then
+        rest
+       else
+        let eoper = EOper e $ map (\ i -> (mkIdentSLoc (getSLoc i) ".", EVar i)) is
+        in  --trace ("convert " ++ show (EApp ae e) ++ " to " ++ show eoper) $
+            tcExprAp mt eoper args'
+
+    _ -> rest
 
 data AnArg = ArgExpr Expr EType | ArgCtx EConstraint
 --  deriving Show
@@ -2540,9 +2641,18 @@ tcLSect (EOper e ies) op = do
   e' <- tcOper e (ies ++ [(op, x)])
   case e' of
     EApp f x' | x' `eqExpr` x -> return f
-    _                         -> tcError loc "Bad section fixity"
-tcLSect e op =
-  return (EApp (EVar op) e)
+    _                         -> badSectionFixity loc
+tcLSect e op | greedyExpr e = badSectionFixity (getSLoc op)
+             | otherwise    = return (EApp (EVar op) e)
+
+-- These construct have a greedy parser and cannot be in a left section
+greedyExpr :: Expr -> Bool
+greedyExpr (ELam _ _) = True
+greedyExpr (ECase _ _) = True
+greedyExpr (ELet _ _) = True
+greedyExpr (EIf _ _ _) = True
+greedyExpr (EDo _ _) = True
+greedyExpr _ = False
 
 tcRSect :: Ident -> Expr -> T Expr
 tcRSect op (EOper e ies) = do
@@ -2551,10 +2661,13 @@ tcRSect op (EOper e ies) = do
   e' <- tcOper x ((op, e):ies)
   case e' of
     EApp (EApp _ x') _ | x `eqExpr` x' -> return (eLam [x] e')
-    _                                  -> tcError loc "Bad section fixity"
+    _                                  -> badSectionFixity loc
 tcRSect op e = do
   let x = eVarI (getSLoc op) "$x"
   return (eLam [x] (EApp (EApp (EVar op) x) e))
+
+badSectionFixity :: SLoc -> T a
+badSectionFixity loc = tcError loc "Bad section fixity"
 
 unArrow :: HasCallStack =>
            SLoc -> EType -> T (EType, EType)
@@ -3246,11 +3359,24 @@ subsCheckRho loc exp1 arho1 rho2 | Just _ <- getImplies arho1 = do
   (exp1', rho1) <- tInst exp1 arho1
   subsCheckRho loc exp1' rho1 rho2
 subsCheckRho loc exp1 rho1 rho2 | Just (a2, r2) <- getArrow rho2 = do -- Rule FUN
-  (a1, r1) <- unArrow loc rho1
-  subsCheckFun loc exp1 a1 r1 a2 r2
+  rho1' <- derefUVar rho1
+  case rho1' of
+    -- Not an arrow, unify the whole types so a mismatch reports both.
+    EVar _   -> unify loc rho1' rho2 >> return exp1
+    EApp _ _ | Nothing <- getArrow rho1' -> unify loc rho1' rho2 >> return exp1
+    _ -> do
+      (a1, r1) <- unArrow loc rho1'
+      subsCheckFun loc exp1 a1 r1 a2 r2
 subsCheckRho loc exp1 rho1 rho2 | Just (a1, r1) <- getArrow rho1 = do -- Rule FUN
-  (a2,r2) <- unArrow loc rho2
-  subsCheckFun loc exp1 a1 r1 a2 r2
+  rho2' <- derefUVar rho2
+  case rho2' of
+    -- Not an arrow, unify the whole types so a mismatch reports both
+    -- (and in the right order, unArrow would treat rho2 as the actual type).
+    EVar _   -> unify loc rho1 rho2' >> return exp1
+    EApp _ _ | Nothing <- getArrow rho2' -> unify loc rho1 rho2' >> return exp1
+    _ -> do
+      (a2,r2) <- unArrow loc rho2'
+      subsCheckFun loc exp1 a1 r1 a2 r2
 subsCheckRho loc exp1 tau1 tau2 = do  -- Rule MONO
 --  tcTrace $ "subsCheckRho: MONO " ++ show (tau1, tau2)
   unify loc tau1 tau2 -- Revert to ordinary unification
@@ -3926,6 +4052,11 @@ checkConstraints = do
     [] -> return ()
     (i, t) : _ -> do
       t' <- derefUVar t
+      case t' of
+        EApp (EApp (EVar eq) a) e | eq == identTypeEq -> mismatchError (getSLoc i) (a, e)
+        _ -> do
+          c <- head <$> niceTypes [t']
+          tcError (getSLoc i) $ "no instance for (" ++ showTypeUser c ++ ")"
 {-
       is <- gets instTable
       traceM $ "Cannot satisfy constraint: " ++ unlines (map (\ (xi, ii) -> show xi ++ ":\n  " ++ showInstInfo ii) (M.toList is))
@@ -3936,8 +4067,6 @@ checkConstraints = do
       cs' <- gets constraints
       traceM (show (length cs, length cs'))
 -}
-      tcError (getSLoc i) $ "Cannot satisfy constraint: " ++ showExpr t'
-                            ++ "\n     fully qualified: " ++ showExprRaw t'
 
 -- Add a type equality constraint.
 addEqConstraint :: SLoc -> EType -> EType -> T ()
