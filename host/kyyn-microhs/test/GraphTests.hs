@@ -67,13 +67,13 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
       directories = ["shared/kyyn-types/src","guest/kyyn-sdk/src","guest/kyyn-runtime/src","vendor/json","vendor/transformers","plugins/microsoft-graph/src"]
   sources <- filter (isSuffixOf ".hs" . relativeName . fst) . concatMap files <$> mapM load directories
   let inspect name = fmap fst <$> inspectDataType toolchain (map (repo </>) directories) name >>= right
-  config <- inspect "MicrosoftGraph.Types.CalendarConfig"
-  payload <- inspect "MicrosoftGraph.Types.Event"
-  position <- inspect "MicrosoftGraph.Types.CalendarPosition"
+  config <- inspect "MicrosoftGraph.Calendar.Types.CalendarConfig"
+  payload <- inspect "MicrosoftGraph.Calendar.Types.Event"
+  position <- inspect "MicrosoftGraph.Calendar.Types.CalendarPosition"
   (derived,_) <- inspectPluginSignature toolchain (map (repo </>) directories) AcquisitionEntry "MicrosoftGraph.Calendar.fetch" >>= right
   assert "Graph signature-derived contracts differ" (derived == StatefulFetchSignature config Nothing payload position)
   fetchSources <- right (statefulAcquisitionSources config payload Nothing position "MicrosoftGraph.Calendar.fetch" sources)
-  loginAdapter <- right (loginSources config "MicrosoftGraph.Login.login" sources)
+  loginAdapter <- right (loginSources config "MicrosoftGraph.Calendar.Config.login" sources)
   (fetchPrograms,_) <- compileBoth temporary toolchain compiler "graph-fetch" fetchSources
   (loginPrograms,_) <- compileBoth temporary toolchain compiler "graph-login" loginAdapter
   forM_ loginPrograms $ \program -> do

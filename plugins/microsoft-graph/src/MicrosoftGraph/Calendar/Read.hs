@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MicrosoftGraph.Read (event) where
+module MicrosoftGraph.Calendar.Read (event) where
 import Kyyn.Plugin
-import MicrosoftGraph.Types
+import MicrosoftGraph.Calendar.Types
 event :: EventId -> EvidenceSnapshot Event -> CapturedRead Event (Either FetchError Event)
 event key snapshot = do
   result <- readEvidence snapshot (EvidenceId key)

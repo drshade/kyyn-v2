@@ -62,9 +62,9 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
         runEff (runFailure (runFileSystemIO scope (readTree root))) >>= right
       inspect name = fmap fst <$> inspectDataType toolchain (map (repo </>) directories) name >>= right
   sources <- filter (isSuffixOf ".hs" . relativeName . fst) . concatMap files <$> mapM load directories
-  configType <- inspect "MicrosoftGraph.Types.CalendarConfig"
-  payloadType <- inspect "MicrosoftGraph.Types.Event"
-  positionType <- inspect "MicrosoftGraph.Types.CalendarPosition"
+  configType <- inspect "MicrosoftGraph.Calendar.Types.CalendarConfig"
+  payloadType <- inspect "MicrosoftGraph.Calendar.Types.Event"
+  positionType <- inspect "MicrosoftGraph.Calendar.Types.CalendarPosition"
   adapter <- right (statefulAcquisitionSources configType payloadType Nothing positionType "MicrosoftGraph.Calendar.fetch" sources)
   (_,program) <- compileBoth temporary toolchain ghc "graph" adapter
   config <- right (checkContract configType (SchemaMetadata [] [] []))

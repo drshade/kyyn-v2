@@ -8,8 +8,9 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (groupBy, sort, sortOn)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
-import MicrosoftGraph.Types
-import MicrosoftGraph.Config (window)
+import MicrosoftGraph.Calendar.Types
+import MicrosoftGraph.Types (Person(..))
+import MicrosoftGraph.Calendar.Config (window)
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
