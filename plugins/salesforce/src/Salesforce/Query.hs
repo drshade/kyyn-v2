@@ -3,6 +3,7 @@ module Salesforce.Query (fetch) where
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (sortOn)
+import qualified Data.Text as Text
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import Kyyn.Validation
@@ -21,7 +22,7 @@ fetch config@(QueryConfig origin auth version query _) snapshot = fmap (either (
   token <- ExceptT (Auth.accessToken origin auth)
   rows <- sortOn fst <$> ExceptT (Api.records token config)
   let reference = origin <> "/services/data/" <> version <> "/query?q=" <> Json.escape query
-  inputs <- either throwE pure (mapM (\(_,Record _ body) -> Json.canonical (JSArray [JSString (toJSString reference),JSString (toJSString body)])) rows)
+  inputs <- either throwE pure (mapM (\(_,Record _ body) -> Json.canonical (JSArray [JSString (toJSString (Text.unpack reference)),JSString (toJSString (Text.unpack body))])) rows)
   digests <- ExceptT (Right <$> digestText inputs)
   if length digests /= length rows then throwE "Host returned the wrong number of Salesforce digests" else pure ()
   oldKeys <- ExceptT (fmap failure (listEvidenceIds snapshot))
