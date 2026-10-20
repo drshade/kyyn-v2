@@ -4,7 +4,7 @@
   , path = "plugins/local-file"
   }
 , { name = "microsoft-graph"
-  , description = "Microsoft mail and calendar evidence and authentication"
+  , description = "Microsoft mail, calendar and meeting artifact evidence"
   , source = "https://github.com/drshade/kyyn-v2"
   , path = "plugins/microsoft-graph"
   }

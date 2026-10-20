@@ -7,7 +7,7 @@ import qualified Data.Text as Text
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Config (graphApiBase)
 import MicrosoftGraph.Types (GraphAuth(..))
-import MicrosoftGraph.Meetings.Types
+import MicrosoftGraph.Meetings.Types hiding (id)
 import MicrosoftGraph.Timestamp (timestamp)
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
@@ -20,14 +20,14 @@ userBase (MeetingsConfig auth user _) = graphApiBase <> case auth of
   DeviceCode {} -> "me"
   ClientSecret {} -> "users/" <> Json.escape user
 
-headers :: Text -> [(Text,Text)]
-headers token = [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")]
+requestHeaders :: Text -> [(Text,Text)]
+requestHeaders token = [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")]
 
 document :: Text -> Text -> Acquisition payload (Either Text JSValue)
 document token url
   | not (graphApiBase `Text.isPrefixOf` url) = pure (Left "Unexpected Graph pagination URL")
   | otherwise = fmap (\r -> r >>= Http.requireSuccess >>= Json.parse)
-      (Http.send (HttpRequest "GET" url (headers token) ""))
+      (Http.send (HttpRequest "GET" url (requestHeaders token) ""))
 
 collection :: Text -> Text -> Acquisition payload (Either Text [JSValue])
 collection token = runExceptT . pages []
@@ -109,7 +109,7 @@ capture token base (Pending kind key first end meeting@(MeetingRef meetingId _ _
   case kind of
     "Transcript" -> do
       content <- ExceptT (Http.download (BlobDownload
-        (HttpRequest "GET" (url <> "/transcripts/" <> Json.escape key <> "/content?$format=text/vtt") (headers token) "")
+        (HttpRequest "GET" (url <> "/transcripts/" <> Json.escape key <> "/content?$format=text/vtt") (requestHeaders token) "")
         (Just "transcript.vtt") (Just "text/vtt")))
       pure (Transcript meeting first end content)
     "Attendance" -> do

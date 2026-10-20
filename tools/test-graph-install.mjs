@@ -1,5 +1,5 @@
 // Install actual Graph source, discover contracts, accept configuration and check
-// RSVP/Mail/blob payload discovery, shared delegated scope validation and missing-secret
+// RSVP/Mail/Meetings/blob payload discovery, shared delegated scope validation and missing-secret
 // failures. No live provider requests.
 
 import assert from 'node:assert/strict';
@@ -45,7 +45,8 @@ try {
   fs.writeFileSync(configPath, `(let Auth = < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
     | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text, scopes : List Text } >
     let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text }
-      | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer } >
+      | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer }
+      | Meetings : { auth : Auth, userId : Text, retentionDays : Integer } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
       , mailbox = "user@example.test", calendarId = None Text, sharedCalendar = False
@@ -54,7 +55,10 @@ try {
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
           , mailbox = "user@example.test"
           , folders = [ < WellKnownFolder : Text | FolderPath : Text >.WellKnownFolder "sentitems" ]
-          , retentionDays = +90 } } ]) : (${schema})`);
+          , retentionDays = +90 } }
+      , { name = "meetings", binding = "meetingArtifacts", connector = Connector.Meetings
+          { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
+          , userId = "user-id", retentionDays = +90 } } ]) : (${schema})`);
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
@@ -82,6 +86,16 @@ try {
     const result = cli(args, 1);
     assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
   }
+  const meetings = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'meetings']).result;
+  assert.match(meetings.fetchOptionsType, /since\s*:\s*Optional Text/);
+  const artifact = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'meetings', 'artifact']).result;
+  for (const field of ['Transcript', 'Attendance', 'created', 'started', 'ended', 'attendanceIntervals', 'identity', 'sha256']) {
+    assert(artifact.resultType.includes(field), artifact.resultType);
+  }
+  for (const args of [['plugin', 'connector', 'login', 'microsoft-graph', 'meetings'], ['evidence', 'fetch', 'microsoft-graph', 'meetings']]) {
+    const result = cli(args, 1);
+    assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
+  }
   const delegated = cli(['evolution', 'new', 'delegated-scopes']).result;
   const delegatedPath = path.join(delegated.path, 'target/plugins/config/microsoft-graph.dhall');
   const applicationConfig = fs.readFileSync(delegatedPath, 'utf8');
@@ -99,6 +113,18 @@ try {
   fs.writeFileSync(delegatedPath, delegatedConfig('[ "https://graph.microsoft.com/calendars.readwrite.shared" ]'));
   cli(['evolution', 'check', delegated.id]);
   fs.writeFileSync(delegatedPath, delegatedConfig('[ "Calendars.Read.Shared" ]').replace('sharedCalendar = True', 'sharedCalendar = False'));
+  cli(['evolution', 'check', delegated.id]);
+  const meetingConfig = applicationConfig.replace('userId = "user-id", retentionDays = +90', 'userId = "user-id", retentionDays = -1');
+  fs.writeFileSync(delegatedPath, meetingConfig);
+  assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /retentionDays must be nonnegative/);
+  const meetingAuth = 'Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }\n          , userId';
+  function meetingScopes(scopes) {
+    return applicationConfig.replace(meetingAuth,
+      `Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-graph-secret", scopes = ${scopes} }\n          , userId`);
+  }
+  fs.writeFileSync(delegatedPath, meetingScopes('[ "Calendars.Read" ]'));
+  assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /OnlineMeetingTranscript.Read.All/);
+  fs.writeFileSync(delegatedPath, meetingScopes('[ "User.Read", "Calendars.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ]'));
   cli(['evolution', 'check', delegated.id]);
   assert.equal(git(kb, 'rev-parse', 'HEAD'), head);
   console.log('Installed Graph plugin: schema, validation, acceptance, method discovery and missing-secret paths passed (no provider calls).');
