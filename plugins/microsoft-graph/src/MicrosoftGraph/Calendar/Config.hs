@@ -7,7 +7,7 @@ import Kyyn.Validation
 import Kyyn.Plugin.Host (PluginLogin, LoginError)
 import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Calendar.Types (CalendarConfig(..))
-import MicrosoftGraph.Config (authentication)
+import MicrosoftGraph.Config (authentication, graphRoot)
 import qualified MicrosoftGraph.Auth as Auth
 import MicrosoftGraph.Timestamp (timestamp)
 
@@ -22,7 +22,7 @@ validate config@(CalendarConfig auth mailbox _ _ _ _) = ValidationReport $
         sharedCalendar config && not (any (`elem` ["calendars.read.shared","calendars.readwrite.shared"]) (map normalize scopes))]
   where
     normalize s = let lower = Text.toLower s
-      in maybe lower id (Text.stripPrefix "https://graph.microsoft.com/" lower)
+      in maybe lower id (Text.stripPrefix graphRoot lower)
 
 window :: CalendarConfig -> Either Text (Text,Text)
 window (CalendarConfig _ _ calendar _ start end) = do

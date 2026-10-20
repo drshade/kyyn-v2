@@ -11,6 +11,7 @@ import Kyyn.Plugin.Host
 import MicrosoftGraph.Calendar.Types
 import MicrosoftGraph.Types (Person(..))
 import MicrosoftGraph.Calendar.Config (window)
+import MicrosoftGraph.Config (graphRoot, graphApiBase)
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
@@ -20,7 +21,7 @@ fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Eve
 fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition) snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
   (start,end) <- either throwE pure (window config)
   token <- ExceptT (Auth.accessToken auth)
-  let base = "https://graph.microsoft.com/v1.0/users/" <> Json.escape mailbox
+  let base = graphApiBase <> "users/" <> Json.escape mailbox
       initial = base <> "/calendarView/delta?startDateTime=" <> Json.escape start <> "&endDateTime=" <> Json.escape end
   roundResult <- pages token [] (maybe initial (\(CalendarPosition link) -> link) priorPosition)
   (baseline,entries,next) <- case roundResult of
@@ -54,7 +55,7 @@ fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition
     fetchResult = either (\(FetchError message) -> Left message) Right
     pages token seen url
       | url `elem` seen = throwE "Calendar pagination repeated a page; retry the fetch."
-      | not ("https://graph.microsoft.com/" `Text.isPrefixOf` url) = throwE "Unexpected Graph pagination URL."
+      | not (graphRoot `Text.isPrefixOf` url) = throwE "Unexpected Graph pagination URL."
       | otherwise = do
           response@(HttpResponse status _ body) <- ExceptT (Http.send (HttpRequest "GET" url
             [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\", odata.maxpagesize=100")] ""))
@@ -66,7 +67,7 @@ fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition
               Just link -> fmap (fmap (\(rest,final) -> (entries <> rest,final))) (pages token (url:seen) link)
               Nothing -> do
                 final <- either throwE pure (Json.member "@odata.deltaLink" value >>= Json.text)
-                if "https://graph.microsoft.com/" `Text.isPrefixOf` final
+                if graphRoot `Text.isPrefixOf` final
                   then pure (Just (entries,final)) else throwE "Unexpected Graph delta URL."
 
 errorCode :: Text -> Maybe Text

@@ -1,11 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MicrosoftGraph.Config (authentication) where
+module MicrosoftGraph.Config (graphRoot, graphApiBase, authentication) where
 
 import qualified Data.Text as Text
 import Data.Text (Text)
 import Data.Char (isAsciiLower, isAsciiUpper, isSpace)
 import Kyyn.Validation
 import MicrosoftGraph.Types (GraphAuth(..))
+
+graphRoot :: Text
+graphRoot = "https://graph.microsoft.com/"
+
+graphApiBase :: Text
+graphApiBase = graphRoot <> "v1.0/"
 
 authentication :: GraphAuth -> Text -> [Diagnostic]
 authentication auth mailbox =
