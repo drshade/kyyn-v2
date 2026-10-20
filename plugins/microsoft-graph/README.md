@@ -248,8 +248,13 @@ ClientSecret uses the same `userId`. Its application requires consented
 `Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All` and
 `OnlineMeetingArtifact.Read.All`, plus a Teams application access policy for the
 configured user. Consent alone does not grant all meeting-artifact access. A
-meeting that cannot be resolved or accessed fails the fetch rather than being
-silently skipped.
+meeting that returns no resolution fails the fetch. A 403 during meeting
+resolution skips that meeting; transcript and attendance requests otherwise run
+independently. A 403 skips only the affected artifact family or content request,
+without inferring access from organizer status. A denial on a later page discards
+the incomplete collection. Denied URLs are retained in `deniedRequests` in the
+saved sync position (not currently emitted as CLI warnings). Authentication,
+calendar-discovery and other unexpected failures still fail the fetch.
 
 After checking and accepting the configuration:
 
@@ -260,11 +265,18 @@ kyyn-v2 --kb /path/to/kb evidence list microsoft-graph meetings
 kyyn-v2 --kb /path/to/kb plugin connector method execute microsoft-graph meetings artifact --input '"ARTIFACT-ID"'
 ```
 
-Every fetch rescans the preceding **30 days**, using the host's acquisition-start
-clock. To backfill farther, use
-`--options '{ since = Some "2026-01-01T00:00:00Z" }'`. Unlike Mail, this option is
-valid on later fetches too. A bounded look-back can miss artifacts published after
-their meeting has left the window; use a wider boundary to discover them.
+The initial fetch covers the preceding **30 days**. Later fetches start **one day
+before the last successful fetch's acquisition start**, through now. This catches
+late artifacts while covering gaps between runs without rescanning all 30 days.
+Failed fetches do not advance the saved boundary. A successful run advances it even
+if there are no new artifacts or some artifact requests returned 403.
+
+To backfill or recheck older meetings (including after permissions change), use
+`--options '{ since = Some "2026-01-01T00:00:00Z" }'`. This overrides the boundary
+on both initial and subsequent fetches. The next ordinary fetch uses the usual
+one-day overlap from that successful run. Artifacts arriving later than the overlap
+can be missed until an explicit backfill. Skipped 403 requests are retried only if
+their meetings fall in the selected window; there is no background retry loop.
 
 The connector deduplicates repeated join URLs and captures each artifact identity
 once. Provider deletion does not delete captured artifacts. Transcript `created`
@@ -296,7 +308,7 @@ delta continuation, duplicate IDs, removals, resets and failed pages. Live Entra
 test with the user's own app and account.
 The `graph-mail` test exercises recorded-provider acquisition under both compilers,
 including capture-once, attachment retries/failure, retention and fingerprint parity.
-The `graph-meetings` test covers rolling/backfill windows, recurring-meeting discovery,
+The `graph-meetings` test covers initial/overlap/backfill windows and independent 403 handling, recurring-meeting discovery,
 artifact identity, pagination, retention, capture-once, delegated identity, failure
 paths and captured reads under both compilers. Live tenant access is not established
 by these recorded-provider tests.

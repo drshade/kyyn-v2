@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MicrosoftGraph.Http (send, download, postForm, requireSuccess) where
+module MicrosoftGraph.Http (send, download, downloadOptional, postForm, requireSuccess) where
 
 import qualified Data.Text as Text
 import Data.Text (Text)
@@ -18,16 +18,22 @@ send request = do
           Nothing -> pure (Left ("Provider returned HTTP " <> Text.pack (show status) <> "; retry later (no usable Retry-After)."))
       | otherwise -> pure (Right response)
 
+-- The optional form preserves a typed 403 outcome for connectors that can skip
+-- an inaccessible artifact. Existing callers still fail on every denied download.
 download :: BlobDownload -> Acquisition payload (Either Text BlobRef)
-download request = do
+download request = fmap (>>= maybe (Left "Attachment download returned HTTP 403") Right) (downloadOptional request)
+
+downloadOptional :: BlobDownload -> Acquisition payload (Either Text (Maybe BlobRef))
+downloadOptional request = do
   result <- storeBlob request
   case result of
     Left (FetchError problem) -> pure (Left problem)
     Right (BlobResponse status headers blob)
       | status == 429 || status == 503 -> case retryAfter headers of
-          Just delay -> waitSeconds delay >> download request
+          Just delay -> waitSeconds delay >> downloadOptional request
           Nothing -> pure (Left "Attachment throttled without usable Retry-After; retry later.")
-      | status >= 200 && status < 300 -> pure (maybe (Left "Attachment download returned no content reference") Right blob)
+      | status == 403 -> pure (Right Nothing)
+      | status >= 200 && status < 300 -> pure (maybe (Left "Attachment download returned no content reference") (Right . Just) blob)
       | otherwise -> pure (Left ("Attachment download returned HTTP " <> Text.pack (show status)))
 
 retryAfter :: [(Text,Text)] -> Maybe Int

@@ -298,8 +298,10 @@ data MeetingArtifact
 
 `AttendanceRecord` preserves the provider's participant identity and attendance
 intervals; its ordinary record definition is plugin-owned. Instance configuration
-selects the user and retention days. Fetch options select a look-back window,
-defaulting to thirty days before acquisition start on every fetch. Discover
+selects the user and retention days. The initial fetch starts thirty days before
+acquisition start. Later fetches start one day before the prior successful fetch's
+acquisition start, covering both the intervening time and a one-day overlap.
+An explicit `since` overrides either boundary, including on later fetches. Discover
 recently ended online meeting events with calendarView, resolve onlineMeeting by join URL, and enumerate
 its transcript/report resources. Use actual artifact/session times, not the
 calendar start as an item key. Transcript `created` and `ended` preserve Graph's
@@ -308,9 +310,30 @@ start. Attendance uses the report's actual session start/end timestamps.
 
 Configuration uses an Entra user object ID. Delegated acquisition verifies that
 ID against `/me` and uses that signed-in user's endpoints; application acquisition
-uses `/users/{userId}` under its consent and application access policy. Missing
-access or an unresolved eligible meeting fails the fetch. A nullary sync position
-supplies the host invocation time; discovery rescans the look-back on every fetch.
+uses `/users/{userId}` under its consent and application access policy.
+
+```haskell
+data MeetingsPosition = MeetingsPosition
+  { lastSuccessfulFetch :: Text, deniedRequests :: [Text] }
+```
+
+Publish the acquisition-start timestamp with the successful capture, including
+empty or partially accessible captures. Failed fetches leave the prior boundary
+unchanged. The position's `deniedRequests` records Graph request URLs returning
+403 in that successful round; it contains no authorization headers or tokens.
+It is diagnostic state, not a permanent exclusion list. The existing acquisition
+API has no general warning-output capability; these details remain in the typed
+sync position rather than appearing as CLI warnings.
+
+Attempt transcript and attendance requests independently, without predicting
+access from organizer status. A 403 during meeting resolution skips that meeting;
+a 403 listing an artifact family skips that family; a 403 downloading content or
+attendance records skips that artifact. A denial on a later page discards that
+whole incomplete collection. Preserve other accessible artifacts and record each
+denied request. Do not mark skipped identities as captured. They may be attempted
+again when their meeting falls in a later overlap or explicit backfill. Identity
+and calendar discovery denials, authentication failures, unresolved eligible
+meetings, malformed responses and other request failures fail the fetch.
 
 An item is an artifact, not a selected "best" transcript or an inferred occurrence.
 Use an unambiguous encoding of artifact kind, onlineMeeting ID and Graph artifact
@@ -323,15 +346,18 @@ meeting judgement. Curation links artifacts to calendar facts and cites them.
 
 Provider deletions are not tracked. Retention truncates older artifact payloads
 using their ended time, retaining identity/fingerprint/references and deduplication.
-Discovery is a bounded look-back, not a guarantee
-of finding arbitrarily late artifacts; authors can request a wider window.
+Discovery and its one-day overlap are not a guarantee of finding arbitrarily late
+artifacts or revisiting older access denials after permissions change. Authors can
+request an explicit wider `since` to recover them; an explicit backfill still saves
+its acquisition-start timestamp for the next ordinary fetch.
 The [transcript API](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-list-transcripts)
 and [attendance API](https://learn.microsoft.com/en-us/graph/api/meetingattendancereport-list)
 have their own permissions, supported meeting kinds and availability limits.
 In particular, report listing exposes at most the latest 50 reports; fetching every
 returned page cannot remove that provider limit. A missing eligible artifact is not
-proof that a meeting did not happen. Fail clearly on authorization or unsupported
-mode rather than presenting it as empty evidence.
+proof that a meeting did not happen. Retain the denied-request diagnostics rather
+than treating inaccessible resources as proof of absence. Unsupported modes remain
+explicit failures.
 
 #### SharePoint and OneDrive files
 

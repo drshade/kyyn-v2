@@ -8,7 +8,8 @@ import MicrosoftGraph.Types (GraphAuth)
 data MeetingsConfig = MeetingsConfig
   { auth :: GraphAuth, userId :: Text, retentionDays :: Integer } deriving (Eq, Show)
 data MeetingsFetch = MeetingsFetch { since :: Maybe Text } deriving (Eq, Show)
-data MeetingsPosition = MeetingsPosition deriving (Eq, Show)
+data MeetingsPosition = MeetingsPosition
+  { lastSuccessfulFetch :: Text, deniedRequests :: [Text] } deriving (Eq, Show)
 data MeetingRef = MeetingRef
   { onlineMeetingId :: Text, joinUrl :: Text, subject :: Text, organizer :: Text } deriving (Eq, Show)
 data ParticipantIdentity = ParticipantIdentity

@@ -1,5 +1,5 @@
 -- Generated Meetings adapters under GHC and MicroHs with recorded providers.
--- Covers rolling/backfill windows, repeated calendar URLs, artifact identity,
+-- Covers initial/overlap/backfill windows and independent 403 skips, repeated calendar URLs, artifact identity,
 -- pagination, capture-once, retention, failed downloads/pages, delegated identity,
 -- captured reads and fingerprint parity. No live tenant calls.
 {-# LANGUAGE OverloadedStrings #-}
@@ -86,28 +86,49 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     modifyIORef' results (output:)
     let old = stored
     (again,againTrace) <- provider old "normal"
-    (repeatResult,_,_) <- brokerWith Normal again program (input "2026-10-21T12:00:00Z" Nothing False)
+    (repeatResult,_,_) <- brokerWith Normal again program (inputWithPrior "2026-10-27T12:00:00Z" Nothing False (Just now))
     assert "capture-once changed artifacts" . null =<< changesFrom repeatResult
     repeatEvents <- readIORef againTrace
     assert "repeat captured payloads again" (not ("blob" `elem` repeatEvents) && not (any (Text.isInfixOf "/attendanceRecords") repeatEvents))
-    assert "window did not slide on later fetch" (any (Text.isInfixOf "startDateTime=2026-09-21") repeatEvents)
+    assert "overlap must cover gap since last success" (any (Text.isInfixOf "startDateTime=2026-10-19T12%3A00%3A00Z") repeatEvents)
+    (outside,outsideTrace) <- provider old "late"
+    (outsideResult,_,_) <- brokerWith Normal outside program (inputWithPrior "2026-10-22T12:00:00Z" Nothing False (Just "2026-10-21T12:00:00Z"))
+    assert "older meetings were rechecked outside overlap" . null =<< changesFrom outsideResult
+    assert "outside-window meeting was resolved" . not . any (Text.isInfixOf "onlineMeetings?$filter=") =<< readIORef outsideTrace
+    outsidePosition <- maybe (fail "Missing empty fetch result") (get "value") outsideResult >>= get "position"
+    assert "empty successful fetch did not advance boundary" . (== ("2026-10-22T12:00:00Z" :: Text.Text)) =<< get "lastSuccessfulFetch" outsidePosition
     (late,_) <- provider old "late"
-    (lateResult,_,_) <- brokerWith Normal late program (input now Nothing False)
+    (lateResult,_,_) <- brokerWith Normal late program (inputWithPrior now Nothing False (Just now))
     assert "new artifact on an already captured meeting was skipped" . (==1) . length =<< changesFrom lateResult
     (aged,_) <- provider old "normal"
     (agedResult,_,_) <- brokerWith Normal aged program (input "2026-12-20T12:00:00Z" (Just "2026-09-01T00:00:00Z") False)
     ageChanges <- changesFrom agedResult
     assert "retention must truncate only remaining payloads" (length ageChanges == 3)
     forM_ ageChanges $ \c -> assert "retention removed identity" . (== ("SetPayload" :: Text.Text)) =<< get "tag" c
-    forM_ ["blob-failure","page-failure","forbidden","unresolved","foreign-page","cycle","unsupported"] $ \scenario -> do
+    forM_ [("transcripts-denied",2),("reports-denied",2),("records-denied",2),("content-denied",2),("resolution-denied",0)] $ \(scenario,count) -> do
+      (deniedProvider,_) <- provider [] scenario
+      (partial,_,_) <- brokerWith Normal deniedProvider program (input now Nothing False)
+      partialOutput <- maybe (fail "Missing partial result") (get "value") partial
+      assert ("403 skipped unrelated artifacts: " ++ Text.unpack scenario) . (== count) . length =<< changesFrom partial
+      saved <- get "position" partialOutput
+      assert "successful fetch boundary not saved" . (== now) =<< get "lastSuccessfulFetch" saved
+      denied <- get "deniedRequests" saved :: IO [Text.Text]
+      assert "403 diagnostics missing" (not (null denied))
+      captured <- changesFrom partial >>= mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v)
+      (restored,_) <- provider captured "normal"
+      (recovered,_,_) <- brokerWith Normal restored program (inputWithPrior now Nothing False (Just now))
+      assert "denied artifacts permanently skipped" . (== (4-count)) . length =<< changesFrom recovered
+    forM_ ["blob-failure","page-failure","artifact-unauthorized","artifact-error","forbidden","unresolved","foreign-page","cycle","unsupported"] $ \scenario -> do
       (bad,_) <- provider [] scenario
       (failed,_,_) <- brokerWith Normal bad program (input now Nothing False)
       assert ("failure returned publishable data: " ++ Text.unpack scenario) . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing failure") (get "tag") failed
     forM_ [now,"invalid"] $ \boundary -> do
       (rejected,_,_) <- brokerWith Normal (\_ _ _ _ -> fail "Invalid boundary invoked a host capability") program (input now (Just boundary) False)
       assert "invalid boundary accepted" . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing boundary failure") (get "tag") rejected
+    (invalidPosition,_,_) <- brokerWith Normal (\_ _ _ _ -> fail "Invalid position invoked host") program (inputWithPrior now Nothing False (Just "invalid"))
+    assert "invalid position accepted" . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing position rejection") (get "tag") invalidPosition
     (backfill,backfillTrace) <- provider [] "normal"
-    _ <- brokerWith Normal backfill program (input now (Just "2026-01-01T00:00:00Z") False)
+    _ <- brokerWith Normal backfill program (inputWithPrior now (Just "2026-01-01T00:00:00Z") False (Just now))
     assert "explicit backfill ignored" . any (Text.isInfixOf "startDateTime=2026-01-01") =<< readIORef backfillTrace
     (delegated,_) <- provider [] "normal"
     (deviceResult,_,_) <- brokerWith Normal delegated program (input now Nothing True)
@@ -137,10 +158,13 @@ now = "2026-10-20T12:00:00Z"
 none :: Value
 none = object ["tag" .= text "None"]
 input :: Text.Text -> Maybe Text.Text -> Bool -> Value
-input started since device = object ["arguments" .= object
+input started since device = inputWithPrior started since device Nothing
+
+inputWithPrior :: Text.Text -> Maybe Text.Text -> Bool -> Maybe Text.Text -> Value
+inputWithPrior started since device previous = object ["arguments" .= object
   ["input" .= object ["config" .= object ["auth" .= auth,"userId" .= text "user-id","retentionDays" .= text "30"],
     "options" .= maybe none (\s -> tagged "Some" (object ["since" .= tagged "Some" (text s)])) since],
-    "startedAt" .= started,"priorPosition" .= none],"snapshot" .= text "selected"]
+    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t,"deniedRequests" .= ([] :: [Text.Text])])) previous],"snapshot" .= text "selected"]
   where
     auth = if device then tagged "DeviceCode" (object ["tenant" .= text "tenant","clientId" .= text "client","tokenKey" .= text "key","scopes" .= (["User.Read"] :: [Text.Text])])
       else tagged "ClientSecret" (object ["tenant" .= text "tenant","clientId" .= text "client","secretKey" .= text "key"])
@@ -164,7 +188,8 @@ provider old scenario = do
           modifyIORef' trace ("blob":)
           n <- readIORef attempts
           modifyIORef' attempts (+1)
-          pure (downloadResult (Right (if scenario == "blob-failure" then BlobResponse 403 [] Nothing
+          pure (downloadResult (Right (if scenario == "blob-failure" then BlobResponse 500 [] Nothing
+            else if scenario == "content-denied" then BlobResponse 403 [] Nothing
             else if n == 0 then BlobResponse 429 [("Retry-After","1")] Nothing
             else BlobResponse 200 [] (Just (BlobRef (Text.replicate 64 "a") 40 "text/vtt" (Just "transcript.vtt"))))),Bytes.empty)
         ("http","send") -> do
@@ -179,6 +204,12 @@ provider old scenario = do
             if scenario == "forbidden" then pure (http 403 (object [])) else pure (http 200 (object
               (["value" .= [event (scenario == "unsupported"),event False,object ["isOnlineMeeting" .= False],future]] ++
                 ["@odata.nextLink" .= (base <> "/calendarView?page=2") | not ("page=2" `Text.isSuffixOf` url)])))
+          else if scenario == "artifact-unauthorized" && "/transcripts" `Text.isSuffixOf` url then pure (http 401 (object []))
+          else if scenario == "artifact-error" && "/attendanceReports" `Text.isSuffixOf` url then pure (http 500 (object []))
+          else if scenario == "resolution-denied" && "onlineMeetings?$filter=" `Text.isInfixOf` url then pure (http 403 (object []))
+          else if scenario == "transcripts-denied" && "/transcripts?page=2" `Text.isSuffixOf` url then pure (http 403 (object []))
+          else if scenario == "reports-denied" && "/attendanceReports" `Text.isSuffixOf` url then pure (http 403 (object []))
+          else if scenario == "records-denied" && "/attendanceRecords?page=2" `Text.isSuffixOf` url then pure (http 403 (object []))
           else if "onlineMeetings?$filter=" `Text.isInfixOf` url then pure (http 200 (collection
             [object ["id" .= text "meeting-1","subject" .= text "Meeting 雪","participants" .= object
               ["organizer" .= object ["identity" .= object ["user" .= object ["id" .= text "organizer-id"]]]]] | scenario /= "unresolved"]))
@@ -196,7 +227,7 @@ provider old scenario = do
   pure (respond,trace)
   where
     event unsupported = object ["isOnlineMeeting" .= True,"onlineMeetingProvider" .= text (if unsupported then "skypeForBusiness" else "teamsForBusiness"),
-      "onlineMeeting" .= object ["joinUrl" .= text "https://teams.example/meet'a"], "end" .= object ["dateTime" .= text "2026-10-19T11:00:00.0000000","timeZone" .= text "UTC"]]
+      "onlineMeeting" .= object ["joinUrl" .= text "https://teams.example/meet'a"], "end" .= object ["dateTime" .= text "2026-10-19T13:00:00.0000000","timeZone" .= text "UTC"]]
     future = object ["isOnlineMeeting" .= True, "end" .= object ["dateTime" .= text "2027-01-01T11:00:00","timeZone" .= text "UTC"]]
     transcript key = object ["id" .= text key,"createdDateTime" .= text "2026-10-19T10:01:00Z","endDateTime" .= text "2026-10-19T11:00:00Z"]
     report key start end = object ["id" .= text key,"meetingStartDateTime" .= text start,"meetingEndDateTime" .= text end]
