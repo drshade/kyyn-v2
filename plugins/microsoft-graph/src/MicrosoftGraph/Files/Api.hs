@@ -5,7 +5,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Encoding
 import qualified Data.ByteString as Bytes
-import Data.List (group, sort, sortOn)
+import Data.List (groupBy, sortOn)
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Config (graphApiBase)
 import MicrosoftGraph.Files.Types
@@ -65,25 +65,24 @@ listing token (FilesConfig _ scope path globs) = runExceptT $ do
     if optional "folder" root == JSNull then throwE "Configured path requires a folder scope" else pure ()
     ExceptT (document token (itemUrl drive rootId <> ":/" <> Text.intercalate "/" (map Json.escape (Text.splitOn "/" path))))
   (_,rows) <- walk drive "" [] selected
-  let identities = sort [key | (key,_,_,_) <- rows]
-  if any ((>1) . length) (group identities) then throwE "Graph Files listing repeated a file identity" else pure ()
-  pure (sortOn (\(key,_,_,_) -> key) rows)
+  -- Stable sorting retains the first observed occurrence of a repeated file.
+  pure [row | row:_ <- groupBy sameId (sortOn (\(key,_,_,_) -> key) rows)]
   where
+    unsupported value = optional "remoteItem" value /= JSNull || optional "package" value /= JSNull ||
+      (optional "file" value == JSNull && optional "folder" value == JSNull)
+    sameId (left,_,_,_) (right,_,_,_) = left == right
     walk drive prefix seen value = do
-      key <- either throwE pure (field "id" value)
-      name <- either throwE pure (field "name" value)
-      if Text.any (== '/') name || name `elem` [".",".."] then throwE "Invalid Graph file name" else pure ()
-      if optional "remoteItem" value /= JSNull then throwE "Remote shortcuts are unsupported; select the target drive or sharing URL directly" else pure ()
-      let relative = if Text.null prefix then name else prefix <> "/" <> name
-          identity = Json.escape drive <> "/" <> Json.escape key
-      if optional "file" value /= JSNull then
-        pure (seen, [(identity,drive,relative,value) | Config.matches globs relative])
-      else if optional "folder" value /= JSNull then do
-        if identity `elem` seen then throwE "Graph Files listing repeated a folder identity" else pure ()
-        children <- ExceptT (collection token (itemUrl drive key <> "/children"))
-        -- The selected folder's own name is excluded from relative paths.
-        walkChildren drive (if null seen then "" else relative) (identity:seen) children
-      else throwE "Unsupported Graph item: expected an ordinary file or folder"
+        key <- either throwE pure (field "id" value)
+        name <- either throwE pure (field "name" value)
+        if Text.any (== '/') name || name `elem` [".",".."] then throwE "Invalid Graph file name" else pure ()
+        let relative = if Text.null prefix then name else prefix <> "/" <> name
+            identity = Json.escape drive <> "/" <> Json.escape key
+        if unsupported value then pure (seen,[]) else if optional "file" value /= JSNull then
+          pure (seen, [(identity,drive,relative,value) | Config.matches globs relative])
+        else if identity `elem` seen then pure (seen,[]) else do
+          children <- ExceptT (collection token (itemUrl drive key <> "/children"))
+          -- The selected folder's own name is excluded from relative paths.
+          walkChildren drive (if null seen then "" else relative) (identity:seen) children
     walkChildren _ _ seen [] = pure (seen,[])
     walkChildren drive prefix seen (value:rest) = do
       (visited,rows) <- walk drive prefix seen value

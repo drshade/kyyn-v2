@@ -444,14 +444,14 @@ Compare a present nonempty `cTag` and size to the previous available payload:
 unchanged content reuses its blob; changed/absent tags or truncated payloads
 require retrieval. A rename/path/metadata change updates the payload fingerprint
 but does not itself require downloading identical bytes. Download URLs are
-transient acquisition data, not stable payload fields. Missing metadata, unsupported
-item kinds, failed pages or failed content downloads fail the whole fetch after
+transient acquisition data, not stable payload fields. Missing required file metadata, failed pages or failed content downloads fail the whole fetch after
 applicable retries, leaving the capture unchanged. A successful empty listing
 removes prior evidence; files no longer in the selection emit RemovedEvidence.
 Files have no age-out retention. Provider listing and content calls are not an
 upstream transaction; publication of the completed local batch remains atomic.
-Repeated file/folder IDs fail the fetch rather than choosing between paths. A file
-missed during a concurrent move may be removed and then added on a later fetch.
+Repeated file IDs retain the first observed occurrence; repeated folders are
+visited once. Non-file/folder items, packages (including OneNote notebooks) and
+remoteItem shortcuts are skipped on every fetch, without recording skip state.
 The modifier is lastModifiedBy user, application or device displayName (in that
 order), or empty if absent. There is no connector-specific size limit: selected
 content is streamed in full to host blob storage; folder/glob scope and available

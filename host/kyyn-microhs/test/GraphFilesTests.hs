@@ -90,10 +90,14 @@ main = withSystemTempDirectory "kyyn-graph-files-" $ \temporary -> do
     (restored,_,_) <- brokerWith Normal restore program (input configuration)
     assert "truncated restore" . (== ["SetPayload","SetPayload"]) =<< (changesFrom restored >>= mapM tagOf)
     assert "truncated content not fetched" . (==2) . length . filter (Text.isPrefixOf "blob:") =<< readIORef restoreTrace
-    forM_ ["page-failure","foreign","cycle","duplicate","folder-cycle","missing-root","missing-size","bad-size","download-failure","shortcut","package"] $ \scenario -> do
+    forM_ ["page-failure","foreign","cycle","missing-root","malformed-item","missing-size","bad-size","download-failure"] $ \scenario -> do
       (bad,_) <- provider stored scenario
       (failed,_,_) <- brokerWith Normal bad program (input configuration)
       assert ("partial listing published: " ++ Text.unpack scenario) . (== ("Left" :: Text.Text)) =<< maybe (fail "No failure") (get "tag") failed
+    forM_ ["duplicate","folder-cycle","shortcut","package"] $ \scenario -> do
+      (skip,_) <- provider stored scenario
+      (skipped,_,_) <- brokerWith Normal skip program (input configuration)
+      assert ("duplicate/unsupported item handling: " ++ Text.unpack scenario) . (== ["Removed"]) =<< (changesFrom skipped >>= mapM tagOf)
     forM_ [("*.txt",1),("**/*.txt",2),("folder/?.txt",1),("**/a.txt",1),("**/b.txt",1),("**/txt",0)] $ \(pattern,count) -> do
       (filtered,_) <- provider [] "normal"
       (resultFiltered,_,_) <- brokerWith Normal filtered program (input (set "includeGlobs" (toJSON [pattern :: Text.Text]) configuration))
@@ -174,7 +178,9 @@ provider old scenario = do
   pure (respond,trace)
 
 fileValue :: Text.Text -> Text.Text -> Text.Text
-fileValue scenario key =
+fileValue scenario key
+  | scenario == "malformed-item" = "null"
+  | otherwise =
   "{\"id\":\"" <> key <> "\",\"name\":\"" <> (if scenario == "renamed" && key == "a" then "renamed" else key) <> ".txt\"," <>
   "\"webUrl\":\"https://example.sharepoint.com/" <> key <> "\",\"file\":{\"mimeType\":\"text/plain\"}," <>
   (if scenario == "missing-size" then "" else "\"size\":" <> (if scenario == "bad-size" then "4" else "3") <> ",") <>

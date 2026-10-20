@@ -407,8 +407,11 @@ Names and relative paths are payload metadata, so renames and moves preserve
 identity when Graph keeps the IDs. Removed files and files moved outside the
 selection leave the capture. Empty successful listings remove prior evidence.
 Concurrent upstream moves can make a file temporarily absent; a later complete
-fetch adds it again. Duplicate file/folder identities fail the fetch rather than
-choosing arbitrarily between inconsistent paths.
+fetch adds it again. Repeated file identities keep the first
+observed occurrence, and repeated folders are visited once. OneNote notebooks
+and other packages, remote shortcuts, and other non-file/folder items are skipped.
+To capture a shortcut target, configure its actual drive or sharing URL directly.
+There is no retained skip log or sync position.
 
 The payload includes metadata and a content blob, not extracted document text.
 A present unchanged content tag and size reuse the existing blob; metadata-only
