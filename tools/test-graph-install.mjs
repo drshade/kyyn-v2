@@ -1,5 +1,5 @@
 // Install actual Graph source, discover contracts, accept configuration and check
-// RSVP/Mail/Meetings/blob payload discovery, shared delegated scope validation and missing-secret
+// RSVP/Mail/Meetings/Files/blob payload discovery, shared delegated scope validation and missing-secret
 // failures. No live provider requests.
 
 import assert from 'node:assert/strict';
@@ -44,9 +44,11 @@ try {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `(let Auth = < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
     | DeviceCode : { tenant : Text, clientId : Text, tokenKey : Text, scopes : List Text } >
+    let Scope = < SiteLibrary : { site : Text, library : Text } | OneDrive : { user : Text } | SharedUrl : { url : Text } >
     let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text }
       | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer }
-      | Meetings : { auth : Auth, userId : Text, retentionDays : Integer } >
+      | Meetings : { auth : Auth, userId : Text, retentionDays : Integer }
+      | Files : { auth : Auth, scope : Scope, itemPath : Text, includeGlobs : List Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
       , mailbox = "user@example.test", calendarId = None Text, sharedCalendar = False
@@ -58,7 +60,11 @@ try {
           , retentionDays = +90 } }
       , { name = "meetings", binding = "meetingArtifacts", connector = Connector.Meetings
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
-          , userId = "user-id", retentionDays = +90 } } ]) : (${schema})`);
+          , userId = "user-id", retentionDays = +90 } }
+      , { name = "files", binding = "files", connector = Connector.Files
+          { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
+          , scope = Scope.SiteLibrary { site = "site", library = "Documents" }
+          , itemPath = "Reports", includeGlobs = [ "**/*.pdf" ] } } ]) : (${schema})`);
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
@@ -96,6 +102,16 @@ try {
     const result = cli(args, 1);
     assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')), JSON.stringify(result));
   }
+  const files = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'files']).result;
+  assert.equal(files.fetchOptionsType, null);
+  const fileMethod = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'files', 'file']).result;
+  for (const field of ['name', 'path', 'webUrl', 'mediaType', 'size', 'modified', 'modifiedBy', 'cTag', 'content', 'sha256']) {
+    assert(fileMethod.resultType.includes(field), fileMethod.resultType);
+  }
+  for (const operation of [['plugin', 'connector', 'login'], ['evidence', 'fetch']]) {
+    const result = cli([...operation, 'microsoft-graph', 'files'], 1);
+    assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')));
+  }
   const delegated = cli(['evolution', 'new', 'delegated-scopes']).result;
   const delegatedPath = path.join(delegated.path, 'target/plugins/config/microsoft-graph.dhall');
   const applicationConfig = fs.readFileSync(delegatedPath, 'utf8');
@@ -126,6 +142,12 @@ try {
   assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /OnlineMeetingTranscript.Read.All/);
   fs.writeFileSync(delegatedPath, meetingScopes('[ "User.Read", "Calendars.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ]'));
   cli(['evolution', 'check', delegated.id]);
+  fs.writeFileSync(delegatedPath, applicationConfig.replace('itemPath = "Reports"', 'itemPath = "../Reports"'));
+  assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /relative slash-separated/);
+  for (const scope of ['Scope.OneDrive { user = "me" }', 'Scope.SharedUrl { url = "https://example.sharepoint.com/:f:/share" }']) {
+    fs.writeFileSync(delegatedPath, applicationConfig.replace('Scope.SiteLibrary { site = "site", library = "Documents" }', scope));
+    cli(['evolution', 'check', delegated.id]);
+  }
   assert.equal(git(kb, 'rev-parse', 'HEAD'), head);
   console.log('Installed Graph plugin: schema, validation, acceptance, method discovery and missing-secret paths passed (no provider calls).');
 } finally {

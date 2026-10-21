@@ -1,6 +1,6 @@
 # Microsoft Graph
 
-This plugin provides `Calendar`, `Mail` and `Meetings` source connectors, with shared Graph
+This plugin provides `Calendar`, `Mail`, `Meetings` and `Files` source connectors, with shared Graph
 authentication. Use `plugin guide microsoft-graph` to read this guide from an
 installed package.
 
@@ -48,6 +48,11 @@ let Connector =
           , folders : List < WellKnownFolder : Text | FolderPath : Text >
           , retentionDays : Integer }
       | Meetings : { auth : Auth, userId : Text, retentionDays : Integer }
+      | Files :
+          { auth : Auth
+          , scope : < SiteLibrary : { site : Text, library : Text }
+                    | OneDrive : { user : Text } | SharedUrl : { url : Text } >
+          , itemPath : Text, includeGlobs : List Text }
       >
 in [ { name = "work"
      , binding = "workCalendar"
@@ -337,3 +342,94 @@ by these recorded-provider tests.
 - [Transcript content and tenant controls](https://learn.microsoft.com/en-us/graph/api/calltranscript-get?view=graph-rest-1.0)
 - [Attendance report listing and limits](https://learn.microsoft.com/en-us/graph/api/meetingattendancereport-list?view=graph-rest-1.0)
 - [Attendance record pages](https://learn.microsoft.com/en-us/graph/api/attendancerecord-list?view=graph-rest-1.0)
+
+## SharePoint and OneDrive files
+
+`Files` captures a single file or every ordinary file below a selected folder,
+including subfolders. Each fetch lists the selection again and follows every page.
+There is no delta cursor, age window or fetch-options record.
+
+Use the `Files` alternative in the connector schema above. For example:
+
+```dhall
+Connector.Files
+  { auth = Auth.DeviceCode
+      { tenant = "YOUR-TENANT-ID", clientId = "YOUR-APP-CLIENT-ID"
+      , tokenKey = "graph-files-refresh", scopes = [ "Files.Read.All" ] }
+  , scope =
+      < SiteLibrary : { site : Text, library : Text }
+      | OneDrive : { user : Text } | SharedUrl : { url : Text }
+      >.SiteLibrary { site = "YOUR-GRAPH-SITE-ID", library = "Documents" }
+  , itemPath = "Reports"
+  , includeGlobs = [ "**/*.pdf", "**/*.docx" ]
+  }
+```
+
+`SiteLibrary.site` is a Graph site ID; `library` is its drive ID or exact library
+name. Ambiguous names fail with guidance to use an ID. `OneDrive.user` accepts a
+user ID/email, or `me` with delegated authentication. `SharedUrl.url` accepts a
+sharing URL for a file or folder. It is resolved through Graph's shares API;
+ordinary browser navigation URLs are not automatically converted to sharing links.
+
+`itemPath` is relative to the library/OneDrive root, or to the folder identified
+by a sharing URL. Empty selects that root or shared item itself. If the sharing
+URL identifies a file, leave `itemPath` empty. Paths use forward slashes and
+unescaped names; the connector encodes them for Graph. The configured path is
+resolved every time: if you rename or move the selected root, update its path.
+A missing root fails the fetch and preserves earlier evidence.
+
+Globs match case-sensitive relative file paths below the selected folder.
+`*` and `?` stay within a path segment; `**` crosses directories, and `**/` also
+matches zero directories. An empty list includes every file. For a single-file
+selection, the relative path is its filename. Globs filter files; all folders
+are still traversed.
+
+Graph permissions depend on the scope and account. Library and file APIs support
+read permissions such as delegated `Files.Read.All` or application
+`Files.Read.All`/`Sites.Read.All`. The shares API documents `Files.ReadWrite`
+(delegated) or `Files.ReadWrite.All` (application) as its least permissions even
+for resolving a shared item. The connector performs reads only. Consent to the
+appropriate scopes and rerun connector login after changing them. Use a separate
+tokenKey or keep scopes consistent for instances sharing a refresh token, and
+run refreshes sequentially when sharing that key.
+
+Accept the evolution, then run (substitute your configured instance name):
+
+```sh
+kyyn-v2 plugin connector login microsoft-graph files
+kyyn-v2 evidence fetch microsoft-graph files
+kyyn-v2 evidence list microsoft-graph files
+kyyn-v2 plugin connector method execute microsoft-graph files file --input '"DRIVE-ID/ITEM-ID"'
+```
+
+Evidence IDs combine escaped drive and item IDs; copy them from `evidence list`.
+Names and relative paths are payload metadata, so renames and moves preserve
+identity when Graph keeps the IDs. Removed files and files moved outside the
+selection leave the capture. Empty successful listings remove prior evidence.
+Concurrent upstream moves can make a file temporarily absent; a later complete
+fetch adds it again. Repeated file identities keep the first
+observed occurrence, and repeated folders are visited once. OneNote notebooks
+and other packages, remote shortcuts, and other non-file/folder items are skipped.
+To capture a shortcut target, configure its actual drive or sharing URL directly.
+There is no retained skip log or sync position.
+
+The payload includes metadata and a content blob, not extracted document text.
+Size is the actual stored byte count; it need not equal Graph’s listed size.
+Missing MIME types use application/octet-stream.
+A present unchanged content tag reuses the existing blob; metadata-only
+changes update the payload without downloading identical bytes. Missing tags or
+truncated payloads require downloading content. `modifiedBy` is the provider's
+user display name, otherwise application/device display name, or empty when absent.
+The `file` method reads captured metadata and its blob reference without networking.
+
+Expect one metadata request per folder page, scope-resolution requests, and one
+streamed download per new/changed file. There is no connector-specific size cap:
+selected files are downloaded in full to local blob storage, so choose a narrow
+folder/glob selection and allow enough local disk space. Unchanged files with
+usable content tags are not downloaded again. Graph throttling follows the shared
+plugin Retry-After handling. Failed pages or downloads leave the prior capture
+unchanged; a listing is not an upstream transaction across concurrent edits.
+
+Provider references: [children listing](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children),
+[shared items](https://learn.microsoft.com/en-us/graph/api/shares-get), and
+[content download](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content).

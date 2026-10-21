@@ -417,7 +417,7 @@ data FilesScope
   | SharedUrl { url :: Text }
 data FilesConfig = FilesConfig
   { auth :: GraphAuth, scope :: FilesScope
-  , folderPath :: Text, includeGlobs :: [Text] }
+  , itemPath :: Text, includeGlobs :: [Text] }
 data FilePayload = FilePayload
   { name :: Text, path :: Text, webUrl :: Text
   , mediaType :: Text, size :: Integer
@@ -425,32 +425,45 @@ data FilePayload = FilePayload
   , cTag :: Maybe Text, content :: BlobRef }
 ```
 
-Resolve the configured site/library, user drive or pasted URL to drive/item IDs
-on initial acquisition and retain them in the typed sync position. A changed
-source configuration starts a new producer, not a cursor pointed at another drive.
-The selected folder is rooted by ID after resolution. Include globs match relative
-slash-separated paths beneath it: `*`/`?` stay within a segment, `**` crosses
-segments, and an empty list includes every file. No separate recursive flag.
+Resolve the configured site/library, user drive or shared URL on every fetch.
+The selected path may identify a file or folder; an empty path selects the scope
+root. For SharedUrl, the path is relative to the resolved shared folder; a shared
+file requires an empty path. A folder is listed recursively, following every children page. Include globs
+match relative slash-separated file paths: `*`/`?` stay within a segment,
+`**` crosses segments, and an empty list includes every file.
 
-Use drive-root delta for the business-drive path, filtering results to the selected
-subtree and globs in plugin code. Evidence ID is an unambiguous driveId/itemId pair,
-not a path. Retain the folder hierarchy in the connector-owned position so folder
-renames/moves update descendants' paths and scope even when the provider omits
-those descendants. Coalesce repeated item entries before deriving one consistent
-delta against the prior capture. A failed page, hydration or content download
-fails the whole fetch after applicable retries, leaving the capture and position
-unchanged. A provider-invalidated cursor triggers complete reconciliation,
-not blind deletion from a partial response.
+Each fetch reconciles a complete listing with the prior capture. There is no
+delta cursor, persisted folder hierarchy, or move-reconstruction mechanism.
+Evidence ID is an unambiguous driveId/itemId pair, not a path. A rename or move
+within the selection naturally preserves identity when Graph preserves those IDs;
+the new listing supplies its current path. A configured path is resolved again,
+so moving the selected root may require updating configuration. An unresolved
+root is a failed fetch, not an empty folder.
 
-Hydrate metadata absent from delta before content decisions. Compare `cTag` to the
-previous payload: unchanged content reuses its blob; changed/absent tags require
-retrieval rather than treating absent tags as equal proof of unchanged content.
-A rename/path/metadata change updates the payload fingerprint but does not itself
-require downloading identical bytes. Download URLs are transient acquisition data,
-not stable payload fields. Provider deletions and moving out of the selected scope
-emit RemovedEvidence. Files have no age-out retention; the capture mirrors their
-latest scoped state. Follow the [drive delta contract](https://learn.microsoft.com/en-us/graph/api/driveitem-delta)
-for cursor reset, repeated entries and hierarchy omissions.
+Compare a present nonempty `cTag` to the previous available payload:
+unchanged content reuses its blob; changed/absent tags or truncated payloads
+require retrieval. Payload size is the actual stored byte count, not a required
+match to the provider-listed size. Missing MIME type uses application/octet-stream.
+Fingerprint all payload fields using explicit canonical JSON encoding.
+A rename/path/metadata change updates the payload fingerprint
+but does not itself require downloading identical bytes. Download URLs are
+transient acquisition data, not stable payload fields. Missing required file metadata, failed pages or failed content downloads fail the whole fetch after
+applicable retries, leaving the capture unchanged. A successful empty listing
+removes prior evidence; files no longer in the selection emit RemovedEvidence.
+Files have no age-out retention. Provider listing and content calls are not an
+upstream transaction; publication of the completed local batch remains atomic.
+Repeated file IDs retain the first observed occurrence; repeated folders are
+visited once. Non-file/folder items, packages (including OneNote notebooks) and
+remoteItem shortcuts are skipped on every fetch, without recording skip state.
+The modifier is lastModifiedBy user, application or device displayName (in that
+order), or empty if absent. There is no connector-specific size limit: selected
+content is streamed in full to host blob storage; folder/glob scope and available
+disk space determine the practical bounds.
+
+This trades repeated metadata listing for a small connector without sync-state
+recovery or hierarchy maintenance. File bytes are stored as blobs, not extracted
+text. Follow the [children listing contract](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children)
+and [content download contract](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content).
 
 ### Atomic refresh and invocation-local reads
 
