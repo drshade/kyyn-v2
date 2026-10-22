@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module MicrosoftGraph.Meetings.Api (Pending(..), discover, artifacts, capture, userBase) where
+module MicrosoftGraph.Meetings.Api (Pending(..), discover, artifacts, capture, targets, Discovery(..)) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Text (Text)
@@ -15,15 +15,19 @@ import Text.JSON.Types (JSValue(..), fromJSObject)
 
 data Pending = Pending Text Text Text Text MeetingRef -- kind, provider id, first time, end, meeting
 
-userBase :: MeetingsConfig -> Text
-userBase (MeetingsConfig auth user _) = graphApiBase <> case auth of
-  DeviceCode {} -> "me"
-  ClientSecret {} -> "users/" <> Json.escape user
+data Discovery = Discovered [Text] [MeetingSkip] | DeniedUser | UnavailableUser
+
+targets :: Text -> GraphAuth -> Acquisition payload (Either Text [Text])
+targets _ DeviceCode {} = pure (Right [graphApiBase <> "me"])
+targets token ClientSecret {} = runExceptT $ do
+  users <- ExceptT (requiredRequest (collection token (graphApiBase <> "users?$select=id")))
+  ids <- either throwE pure (mapM (required "id") users)
+  pure [graphApiBase <> "users/" <> Json.escape key | key <- ids]
 
 requestHeaders :: Text -> [(Text,Text)]
 requestHeaders token = [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")]
 
-data RequestError = Denied Text | Failed Text
+data RequestError = Denied Text | MailboxUnavailable | Failed Text
 
 document :: Text -> Text -> Acquisition payload (Either RequestError JSValue)
 document token url
@@ -32,6 +36,10 @@ document token url
       result <- Http.send (HttpRequest "GET" url (requestHeaders token) "")
       pure $ case result of
         Right (HttpResponse 403 _ _) -> Left (Denied url)
+        Right (HttpResponse 404 _ body)
+          | "/calendarView" `Text.isInfixOf` url,
+            Right code <- Json.parse body >>= Json.member "error" >>= required "code",
+            code `elem` ["MailboxNotEnabledForRESTAPI","MailboxNotSupportedForRESTAPI"] -> Left MailboxUnavailable
         _ -> either (Left . Failed) Right (result >>= Http.requireSuccess >>= Json.parse)
 
 collection :: Text -> Text -> Acquisition payload (Either RequestError [JSValue])
@@ -52,34 +60,37 @@ optionalRequest :: Acquisition payload (Either RequestError a)
   -> Acquisition payload (Either Text (Maybe a,[Text]))
 optionalRequest = fmap $ \result -> case result of
   Left (Denied url) -> Right (Nothing,[url])
+  Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
   Left (Failed message) -> Left message
   Right value -> Right (Just value,[])
 
 requiredRequest :: Acquisition payload (Either RequestError a) -> Acquisition payload (Either Text a)
 requiredRequest = fmap $ \result -> case result of
   Left (Denied _) -> Left "Access denied during Meetings identity or calendar discovery; check consent."
+  Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
   Left (Failed message) -> Left message
   Right value -> Right value
 
 -- Discover join URLs, rather than treating a recurring calendar event as an artifact.
-discover :: Text -> MeetingsConfig -> Text -> Text -> Acquisition payload (Either Text ([Text],[MeetingSkip]))
-discover token config@(MeetingsConfig auth user _) since now = runExceptT $ do
-  case auth of
-    ClientSecret {} -> pure ()
-    DeviceCode {} -> do
-      me <- ExceptT (requiredRequest (document token (graphApiBase <> "me?$select=id")))
-      actual <- either throwE pure (required "id" me)
-      if Text.toLower actual == Text.toLower user then pure ()
-        else throwE "Meetings userId must match the signed-in user's Entra object ID"
-  let url = userBase config <> "/calendarView?startDateTime=" <> Json.escape since <>
-        "&endDateTime=" <> Json.escape now <> "&$select=id,end,isOnlineMeeting,onlineMeetingProvider,onlineMeeting"
-  events <- ExceptT (requiredRequest (collection token url))
-  results <- either throwE pure (mapM endedMeeting events)
-  pure (concatMap fst results, concatMap snd results)
+discover :: Text -> Text -> Bool -> Text -> Text -> Acquisition payload (Either Text Discovery)
+discover token base application since now = runExceptT $ do
+  let url = base <> "/calendarView?startDateTime=" <> Json.escape since <>
+        "&endDateTime=" <> Json.escape now <> "&$select=id,end,isOrganizer,isOnlineMeeting,onlineMeetingProvider,onlineMeeting"
+  response <- ExceptT (Right <$> collection token url)
+  case response of
+    Left (Denied _) | application -> pure DeniedUser
+    Left MailboxUnavailable | application -> pure UnavailableUser
+    Left (Denied _) -> throwE "Access denied during Meetings calendar discovery; check consent."
+    Left MailboxUnavailable -> throwE "Mailbox is not available through the Graph calendar API"
+    Left (Failed message) -> throwE message
+    Right events -> do
+      results <- either throwE pure (mapM endedMeeting events)
+      pure (Discovered (concatMap fst results) (concatMap snd results))
   where
     endedMeeting value = do
       online <- optional Json.boolean "isOnlineMeeting" value
-      if online /= Just True then pure ([],[]) else do
+      organizer <- if application && online == Just True then Just <$> (Json.member "isOrganizer" value >>= Json.boolean) else Right Nothing
+      if online /= Just True || application && organizer /= Just True then pure ([],[]) else do
         end <- Json.member "end" value
         zone <- required "timeZone" end
         date <- required "dateTime" end

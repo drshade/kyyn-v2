@@ -10,8 +10,8 @@ import MicrosoftGraph.Config (authentication, graphRoot)
 import qualified MicrosoftGraph.Auth as Auth
 
 validate :: MeetingsConfig -> ValidationReport
-validate (MeetingsConfig auth user retention) = ValidationReport $
-  authentication auth user <>
+validate (MeetingsConfig auth retention) = ValidationReport $
+  authentication auth "meetings" <>
   [errorDiagnostic "graph.meetings-retention" "retentionDays must be nonnegative." | retention < 0] <>
   case auth of
     ClientSecret {} -> []
@@ -23,4 +23,4 @@ validate (MeetingsConfig auth user retention) = ValidationReport $
             any (not . any (`elem` normalized)) required]
 
 login :: MeetingsConfig -> PluginLogin (Either LoginError ())
-login (MeetingsConfig auth _ _) = Auth.login auth
+login (MeetingsConfig auth _) = Auth.login auth

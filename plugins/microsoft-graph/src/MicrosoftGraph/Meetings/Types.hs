@@ -6,10 +6,11 @@ import Kyyn.Plugin (BlobRef)
 import MicrosoftGraph.Types (GraphAuth)
 
 data MeetingsConfig = MeetingsConfig
-  { auth :: GraphAuth, userId :: Text, retentionDays :: Integer } deriving (Eq, Show)
+  { auth :: GraphAuth, retentionDays :: Integer } deriving (Eq, Show)
 data MeetingsFetch = MeetingsFetch { since :: Maybe Text } deriving (Eq, Show)
 data MeetingsPosition = MeetingsPosition
-  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip] } deriving (Eq, Show)
+  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip]
+  , deniedUsers :: Integer, unavailableUsers :: Integer } deriving (Eq, Show)
 data MeetingSkip = MeetingSkip
   { reference :: Text, reason :: Text } deriving (Eq, Show)
 data MeetingRef = MeetingRef
