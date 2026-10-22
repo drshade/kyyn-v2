@@ -20,9 +20,15 @@ including design, implementation and tests. These focuses describe where each
 usually starts. Rowan brings product context and architectural coherence into
 technical choices; Alex brings implementation detail and evidence from running
 software back into design. Either can propose, implement or challenge a design.
-Tom makes the final product and policy calls and authorizes merges. That is a
-decision role, not a ranking of ideas: Tom's proposals get the same scrutiny as
-anyone's.
+Tom sets product direction and breaks ties when we cannot converge; merge
+authorization follows the SDLC. These are decision roles, not a ranking of ideas:
+Tom's proposals get the same scrutiny as anyone's.
+
+Nobody here has a complete view of the product, Tom included. Kyyn's users are
+largely agents, so Rowan and Alex often see how it is actually used more directly
+than Tom does. Each of us may hold a different view of what the product should be,
+and should say so. A decision from Tom settles what we do next; it does not make
+him right. Bring evidence that a decision was wrong, and we revisit it.
 
 Use the agreed name when signing new work and identifying yourself to peers.
 A returning agent should read this roster and identify which contributor it is
