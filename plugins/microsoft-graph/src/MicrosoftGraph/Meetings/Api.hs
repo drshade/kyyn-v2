@@ -20,7 +20,7 @@ data Discovery = Discovered [Text] [MeetingSkip] | DeniedUser | UnavailableUser
 targets :: Text -> GraphAuth -> Acquisition payload (Either Text [Text])
 targets _ DeviceCode {} = pure (Right [graphApiBase <> "me"])
 targets token ClientSecret {} = runExceptT $ do
-  users <- ExceptT (requiredRequest (collection token (graphApiBase <> "users?$select=id")))
+  users <- ExceptT (requiredRequest (collection token (graphApiBase <> "users?$select=id&$top=999")))
   ids <- either throwE pure (mapM (required "id") users)
   pure [graphApiBase <> "users/" <> Json.escape key | key <- ids]
 
@@ -39,7 +39,7 @@ document token url
         Right (HttpResponse 404 _ body)
           | "/calendarView" `Text.isInfixOf` url,
             Right code <- Json.parse body >>= Json.member "error" >>= required "code",
-            code `elem` ["MailboxNotEnabledForRESTAPI","MailboxNotSupportedForRESTAPI"] -> Left MailboxUnavailable
+            code `elem` ["MailboxNotEnabledForRESTAPI","ErrorMailboxNotEnabledForRESTAPI","MailboxNotSupportedForRESTAPI"] -> Left MailboxUnavailable
         _ -> either (Left . Failed) Right (result >>= Http.requireSuccess >>= Json.parse)
 
 collection :: Text -> Text -> Acquisition payload (Either RequestError [JSValue])

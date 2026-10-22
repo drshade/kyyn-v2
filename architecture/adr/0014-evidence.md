@@ -310,7 +310,7 @@ start. Attendance uses the report's actual session start/end timestamps.
 
 MeetingsConfig contains authentication and retentionDays, not a configured user
 ID. Delegated acquisition uses `/me` directly. Application acquisition completes
-paginated `/users?$select=id` enumeration (`User.Read.All`) and then walks each
+paginated `/users?$select=id&$top=999` enumeration (`User.Read.All`) and then walks each
 user's default calendar under its calendar permissions. It selects events with
 `isOrganizer = true` locally before resolving their join URLs under that user.
 This avoids discovering the same meeting under every attendee and preserves
@@ -342,7 +342,7 @@ of a specific policy cause. Delegated artifact denials retain their request URLs
 These diagnostic values reset each successful round and are not exclusions.
 The acquisition API has no general warning-output capability; diagnostics remain
 in the typed position. unavailableUsers counts application users whose calendar
-returns 404 with MailboxNotEnabledForRESTAPI or MailboxNotSupportedForRESTAPI.
+returns 404 with MailboxNotEnabledForRESTAPI, ErrorMailboxNotEnabledForRESTAPI or MailboxNotSupportedForRESTAPI.
 These users are skipped without failing the tenant walk. Other errors are not
 silently treated as absent mailboxes.
 

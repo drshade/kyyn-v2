@@ -162,17 +162,18 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     (forbidden,_) <- provider [] "forbidden"
     (deniedDevice,_,_) <- brokerWith Normal forbidden program (input now Nothing True)
     assert "delegated calendar denial was swallowed" . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing denial") (get "tag") deniedDevice
-    forM_ ["multi","multi-fallback"] $ \scenario -> do
+    forM_ ["multi","multi-fallback","multi-alias","multi-supported"] $ \scenario -> do
       (multi,multiTrace) <- provider [] scenario
       (multiResult,_,_) <- brokerWith Normal multi program (input now Nothing False)
       delta <- changesFrom multiResult
-      assert "multi-user artifact count" (length delta == if scenario == "multi" then 8 else 4)
+      assert "multi-user artifact count" (length delta == if scenario == "multi-fallback" then 4 else 8)
       state <- maybe (fail "Missing tenant result") (get "value") multiResult >>= get "position"
-      assert "tenant denial count" . (== (if scenario == "multi" then "2" else "3" :: Text.Text)) =<< get "deniedUsers" state
+      assert "tenant denial count" . (== (if scenario == "multi-fallback" then "3" else "2" :: Text.Text)) =<< get "deniedUsers" state
       assert "unavailable mailbox count" . (== ("1" :: Text.Text)) =<< get "unavailableUsers" state
       assert "tenant denial URLs grew position" . null =<< (get "deniedRequests" state :: IO [Text.Text])
       requests <- readIORef multiTrace
       assert "directory pagination missing" (any (Text.isInfixOf "/users?page=2") requests)
+      assert "directory scope narrowed" ("https://graph.microsoft.com/v1.0/users?$select=id&$top=999" `elem` requests)
       assert "attendee calendar resolved shared meeting" (not (any (\url -> "/users/second-user/onlineMeetings?$filter=" `Text.isInfixOf` url && "meet%27%27a" `Text.isInfixOf` url) requests))
       assert "directory duplicate walked user twice" (length (filter (\url -> "/users/second-user/calendarView?startDateTime=" `Text.isInfixOf` url) requests) == 1)
     forM_ ["users-denied","users-page-failure","users-foreign","users-cycle","unexpected-mailbox-error"] $ \scenario -> do
@@ -234,7 +235,7 @@ provider old scenario = do
           n <- readIORef attempts
           modifyIORef' attempts (+1)
           pure (downloadResult (Right (if scenario == "blob-failure" then BlobResponse 500 [] Nothing
-            else if scenario == "content-denied" || scenario == "multi-fallback" && "/users/user-id/" `Text.isInfixOf` url then BlobResponse 403 [] Nothing
+            else if scenario == "content-denied" || scenario == "multi-fallback" && "/users/second-user/" `Text.isInfixOf` url then BlobResponse 403 [] Nothing
             else if n == 0 then BlobResponse 429 [("Retry-After","1")] Nothing
             else BlobResponse 200 [] (Just (BlobRef (Text.replicate 64 "a") 40 "text/vtt" (Just "transcript.vtt"))))),Bytes.empty)
         ("http","send") -> do
@@ -245,9 +246,9 @@ provider old scenario = do
                 Just rest -> "https://graph.microsoft.com/v1.0/users/" <> Text.takeWhile (/= '/') rest
                 Nothing -> "https://graph.microsoft.com/v1.0/me"
               secondUser = "/users/second-user" `Text.isSuffixOf` base
-              meetingId = if secondUser && scenario == "multi" then "meeting-2" else "meeting-1"
+              meetingId = if secondUser && scenario /= "multi-fallback" then "meeting-2" else "meeting-1"
               meeting = base <> "/onlineMeetings/" <> meetingId
-              multi = scenario `elem` ["multi","multi-fallback"]
+              multi = scenario `elem` ["multi","multi-fallback","multi-alias","multi-supported"]
           if "login.microsoftonline.com" `Text.isInfixOf` url then pure (http 200 (object ["access_token" .= text "token"]))
           else if "/users?" `Text.isInfixOf` url then
             if scenario == "users-denied" then pure (http 403 (object []))
@@ -262,7 +263,7 @@ provider old scenario = do
           else if "calendarView" `Text.isInfixOf` url then
             if scenario == "forbidden" || "/users/calendar-denied/" `Text.isInfixOf` url then pure (http 403 (object []))
             else if scenario == "unexpected-mailbox-error" then pure (http 404 (object ["error" .= object ["code" .= text "UnknownFailure"]]))
-            else if "/users/no-mailbox/" `Text.isInfixOf` url then pure (http 404 (object ["error" .= object ["code" .= text "MailboxNotEnabledForRESTAPI"]]))
+            else if "/users/no-mailbox/" `Text.isInfixOf` url then pure (http 404 (object ["error" .= object ["code" .= text (if scenario == "multi-alias" then "ErrorMailboxNotEnabledForRESTAPI" else if scenario == "multi-supported" then "MailboxNotSupportedForRESTAPI" else "MailboxNotEnabledForRESTAPI")]]))
             else pure (http 200 (object
               (["value" .= (if secondUser then
                 [change ["isOrganizer"] (const (Bool False)) (event False), change ["onlineMeeting"] (const (object ["joinUrl" .= text "https://teams.example/second"])) (event False)]

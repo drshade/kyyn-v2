@@ -3,7 +3,7 @@ module MicrosoftGraph.Meetings (fetch) where
 
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (groupBy, sortOn, nub)
+import Data.List (groupBy, sortOn, nub, group, sort)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import MicrosoftGraph.Meetings.Types
@@ -16,7 +16,7 @@ import qualified MicrosoftGraph.Auth as Auth
 
 fetch :: MeetingsConfig -> Maybe MeetingsFetch -> FetchContext MeetingsPosition -> EvidenceSnapshot MeetingArtifact
   -> Acquisition MeetingArtifact (Either FetchError (FetchResult MeetingArtifact MeetingsPosition))
-fetch config@(MeetingsConfig auth retention) options (FetchContext started previous) snapshot =
+fetch (MeetingsConfig auth retention) options (FetchContext started previous) snapshot =
   fmap (either (Left . FetchError) Right) $ runExceptT $ do
     now <- either throwE pure (timestamp started)
     since <- either throwE pure (case options of
@@ -29,7 +29,7 @@ fetch config@(MeetingsConfig auth retention) options (FetchContext started previ
     if retention < 0 then throwE "retentionDays must be nonnegative" else pure ()
     token <- ExceptT (Auth.accessToken auth)
     let application = case auth of ClientSecret {} -> True; _ -> False
-    bases <- nub <$> ExceptT (Api.targets token auth)
+    bases <- unique <$> ExceptT (Api.targets token auth)
     discoveries <- forM bases $ \base -> do
       found <- ExceptT (Api.discover token base application since started)
       pure (base,found)
@@ -60,7 +60,7 @@ fetch config@(MeetingsConfig auth retention) options (FetchContext started previ
           Nothing -> captureOptions choices
     let fresh = concatMap fst captures
         denied = [(base,url) | (base,(_,notes,_)) <- rounds, url <- notes] ++ concatMap snd captures
-        deniedCount = toInteger (length (nub ([base | (base,DeniedUser) <- discoveries] ++ map fst denied)))
+        deniedCount = toInteger (length (unique ([base | (base,DeniedUser) <- discoveries] ++ map fst denied)))
         unavailableCount = toInteger (length [() | (_,UnavailableUser) <- discoveries])
         deniedUrls = if application then [] else nub (map snd denied)
     digests <- ExceptT (Right <$> digestText (map (canonicalArtifact . snd) fresh))
@@ -85,3 +85,6 @@ fetch config@(MeetingsConfig auth retention) options (FetchContext started previ
     endTime (Attendance _ _ end _) = end
     meetingRef (Transcript meeting _ _ _) = meeting
     meetingRef (Attendance meeting _ _ _) = meeting
+
+unique :: Ord a => [a] -> [a]
+unique values = [first | first:_ <- group (sort values)]

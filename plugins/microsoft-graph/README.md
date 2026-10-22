@@ -247,11 +247,15 @@ appropriate tenant consent; personal Microsoft accounts are unsupported. When
 sharing a refresh-token key with other connectors, use the same complete scope
 list on each instance. Run login again after changing scopes.
 
-ClientSecret lists all tenant users through paginated `/users?$select=id`, then
+ClientSecret lists all tenant users through paginated `/users?$select=id&$top=999`, then
 reads each user's calendar. Its application requires consented `User.Read.All`,
 `Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All`
 and `OnlineMeetingArtifact.Read.All`, plus the Teams application access policy
 for users whose meeting artifacts it may access. No trainer list is configured.
+Meetings organized outside this tenant are not discovered by the application walk,
+even if tenant users attended (for example, some vendor-led training). Disabled
+accounts and guests are not filtered out of the user list; recent organizer
+history may still matter, and provider access determines what can be captured.
 Calendar access is separately governed by Exchange/Graph permissions: Teams
 policy controls meeting access, not the directory or calendar listing.
 
@@ -266,7 +270,8 @@ is not used, and its applicability to the intended per-user access policy has no
 been established here.
 
 A denied application calendar skips that user. Recognized 404 mailbox codes
-`MailboxNotEnabledForRESTAPI` and `MailboxNotSupportedForRESTAPI` skip users without
+`MailboxNotEnabledForRESTAPI`, `ErrorMailboxNotEnabledForRESTAPI` and
+`MailboxNotSupportedForRESTAPI` skip users without
 a Graph-accessible calendar. Other 404s and unexpected errors remain fatal.
 Directory enumeration must complete: a denial or failure on any user-list page
 fails the entire fetch. Expect at least one calendar request per tenant user,
