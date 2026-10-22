@@ -234,7 +234,7 @@ Add a Meetings instance using the `Connector` union above:
     { auth = Auth.DeviceCode
         { tenant = "YOUR-TENANT-ID", clientId = "YOUR-APP-CLIENT-ID"
         , tokenKey = "graph-meetings-refresh"
-        , scopes = [ "User.Read", "Calendars.Read", "OnlineMeetings.Read"
+        , scopes = [ "Calendars.Read", "OnlineMeetings.Read"
                    , "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ] }
     , retentionDays = +90
     }

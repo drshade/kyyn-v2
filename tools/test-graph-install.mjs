@@ -141,7 +141,7 @@ try {
   }
   fs.writeFileSync(delegatedPath, meetingScopes('[ "Calendars.Read" ]'));
   assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /OnlineMeetingTranscript.Read.All/);
-  fs.writeFileSync(delegatedPath, meetingScopes('[ "User.Read", "Calendars.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ]'));
+  fs.writeFileSync(delegatedPath, meetingScopes('[ "Calendars.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ]'));
   cli(['evolution', 'check', delegated.id]);
   fs.writeFileSync(delegatedPath, applicationConfig.replace('itemPath = "Reports"', 'itemPath = "../Reports"'));
   assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /relative slash-separated/);
