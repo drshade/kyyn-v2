@@ -308,34 +308,54 @@ calendar start as an item key. Transcript `created` and `ended` preserve Graph's
 `createdDateTime` and `endDateTime`; creation is not asserted to be the meeting's
 start. Attendance uses the report's actual session start/end timestamps.
 
-Configuration uses an Entra user object ID. Delegated acquisition verifies that
-ID against `/me` and uses that signed-in user's endpoints; application acquisition
-uses `/users/{userId}` under its consent and application access policy.
+MeetingsConfig contains authentication and retentionDays, not a configured user
+ID. Delegated acquisition uses `/me` directly. Application acquisition completes
+paginated `/users?$select=id` enumeration (`User.Read.All`) and then walks each
+user's default calendar under its calendar permissions. It selects events with
+`isOrganizer = true` locally before resolving their join URLs under that user.
+This avoids discovering the same meeting under every attendee and preserves
+attendance support. Delegated discovery continues to include attended meetings.
+Teams application access policy governs meeting access; it does not narrow the
+user directory or the separate calendar permission. No second user allowlist is
+stored in connector configuration.
+
+This organizer-owned discovery is not a blanket provider lookup restriction:
+[Get onlineMeeting](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-get)
+documents invited attendee IDs for application lookup by meeting ID. Its join-URL
+lookup documentation does not establish an organizer-only guarantee. We retain
+calendar discovery instead of getAllTranscripts because it supports the existing
+transcript and attendance behavior across both auth modes; the bulk transcript
+endpoint's compatibility with the required per-user policy has not been established.
 
 ```haskell
 data MeetingsPosition = MeetingsPosition
-  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip] }
+  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip]
+  , deniedUsers :: Integer, unavailableUsers :: Integer }
 data MeetingSkip = MeetingSkip { reference :: Text, reason :: Text }
 ```
 
 Publish the acquisition-start timestamp with the successful capture, including
 empty or partially accessible captures. Failed fetches leave the prior boundary
-unchanged. The position's `deniedRequests` records Graph request URLs returning
-403 in that successful round; it contains no authorization headers or tokens.
-It is diagnostic state, not a permanent exclusion list. The existing acquisition
-API has no general warning-output capability; these details remain in the typed
-sync position rather than appearing as CLI warnings.
+unchanged. In application mode, record the count of distinct user contexts with
+at least one 403 in deniedUsers; leave deniedRequests empty. A denial is not proof
+of a specific policy cause. Delegated artifact denials retain their request URLs.
+These diagnostic values reset each successful round and are not exclusions.
+The acquisition API has no general warning-output capability; diagnostics remain
+in the typed position. unavailableUsers counts application users whose calendar
+returns 404 with MailboxNotEnabledForRESTAPI or MailboxNotSupportedForRESTAPI.
+These users are skipped without failing the tenant walk. Other errors are not
+silently treated as absent mailboxes.
 
 Attempt transcript and attendance requests independently, without predicting
-access from organizer status. A 403 during meeting resolution skips that meeting;
-a 403 listing an artifact family skips that family; a 403 downloading content or
-attendance records skips that artifact. A denial on a later page discards that
-whole incomplete collection. Preserve other accessible artifacts and record each
-denied request. Do not mark skipped identities as captured. They may be attempted
-again when their meeting falls in a later overlap or explicit backfill. Identity
-and calendar discovery denials, authentication failures, transport failures,
-malformed collection or artifact responses and unexpected server errors still fail
-the fetch.
+artifact access from organizer status. A 403 during meeting resolution skips that
+meeting; a 403 listing an artifact family skips that family; a 403 downloading
+content or attendance records skips that artifact. A denial on a later page
+discards the incomplete collection. Application calendar 403s skip the affected
+user; delegated calendar discovery and directory enumeration denials are fatal.
+Authentication failures, transport failures, malformed collections or artifacts
+and unexpected server errors also fail the fetch. Do not mark skipped identities
+as captured; overlap or explicit backfill may try them again. Deduplicate artifacts
+across user contexts and try another context when a capture is denied in the first.
 
 Skip individual meetings with unsupported or unspecified providers, missing join
 URLs, zero or multiple resolution matches, or incomplete meeting-reference metadata

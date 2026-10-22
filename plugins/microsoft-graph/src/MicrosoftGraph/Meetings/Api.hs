@@ -66,7 +66,7 @@ optionalRequest = fmap $ \result -> case result of
 
 requiredRequest :: Acquisition payload (Either RequestError a) -> Acquisition payload (Either Text a)
 requiredRequest = fmap $ \result -> case result of
-  Left (Denied _) -> Left "Access denied during Meetings identity or calendar discovery; check consent."
+  Left (Denied _) -> Left "Cannot enumerate tenant users; check application User.Read.All and admin consent."
   Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
   Left (Failed message) -> Left message
   Right value -> Right value

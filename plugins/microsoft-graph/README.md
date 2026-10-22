@@ -47,7 +47,7 @@ let Connector =
           { auth : Auth, mailbox : Text
           , folders : List < WellKnownFolder : Text | FolderPath : Text >
           , retentionDays : Integer }
-      | Meetings : { auth : Auth, userId : Text, retentionDays : Integer }
+      | Meetings : { auth : Auth, retentionDays : Integer }
       | Files :
           { auth : Auth
           , scope : < SiteLibrary : { site : Text, library : Text }
@@ -222,7 +222,7 @@ of whether any recipe has processed a message.
 ## Meetings: transcripts and attendance
 
 `Meetings` captures artifacts from recently ended Teams meetings discovered in
-one user's default calendar. Each transcript and attendance report is a separate
+the credential's calendar scope. Each transcript and attendance report is a separate
 evidence item, including multiple artifacts from recurring meetings. The connector
 keeps all returned artifacts; recipes decide how they relate to calendar facts.
 
@@ -236,35 +236,61 @@ Add a Meetings instance using the `Connector` union above:
         , tokenKey = "graph-meetings-refresh"
         , scopes = [ "User.Read", "Calendars.Read", "OnlineMeetings.Read"
                    , "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ] }
-    , userId = "YOUR-ENTRA-USER-OBJECT-ID"
     , retentionDays = +90
     }
 }
 ```
 
-`userId` is the Entra object ID, not an email address. DeviceCode verifies that it
-matches the signed-in user and accesses that user's meetings. These permissions
-require the appropriate tenant consent; personal Microsoft accounts are unsupported.
-When sharing a refresh-token key with other connectors, include their scopes too
-and use the same complete scope list on each instance. Run login again after
-changing scopes.
+DeviceCode uses the signed-in user's `/me` endpoints. There is no configured
+user ID and no tenant user enumeration. The delegated permissions above require
+appropriate tenant consent; personal Microsoft accounts are unsupported. When
+sharing a refresh-token key with other connectors, use the same complete scope
+list on each instance. Run login again after changing scopes.
 
-ClientSecret uses the same `userId`. Its application requires consented
-`Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All` and
-`OnlineMeetingArtifact.Read.All`, plus a Teams application access policy for the
-configured user. Consent alone does not grant all meeting-artifact access. A
-meeting with an unsupported provider, missing join URL, zero or multiple
-resolution matches, or incomplete meeting metadata (including a missing organizer
-ID) is skipped. Its event ID or join URL and reason are saved in `skippedMeetings`
-in the sync position. Other meetings continue, and a successful fetch advances
-the boundary even if every meeting was skipped. These records do not permanently
-exclude meetings from later overlaps or explicit backfills. A 403 during meeting
-resolution skips that meeting; transcript and attendance requests otherwise run
-independently. A 403 skips only the affected artifact family or content request,
-without inferring access from organizer status. A denial on a later page discards
-the incomplete collection. Denied URLs are retained in `deniedRequests` in the
-saved sync position (not currently emitted as CLI warnings). Authentication,
-calendar-discovery and other unexpected failures still fail the fetch.
+ClientSecret lists all tenant users through paginated `/users?$select=id`, then
+reads each user's calendar. Its application requires consented `User.Read.All`,
+`Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All`
+and `OnlineMeetingArtifact.Read.All`, plus the Teams application access policy
+for users whose meeting artifacts it may access. No trainer list is configured.
+Calendar access is separately governed by Exchange/Graph permissions: Teams
+policy controls meeting access, not the directory or calendar listing.
+
+Application discovery keeps events marked `isOrganizer` so a meeting is discovered
+under its organizer rather than every attendee. Delegated discovery keeps attended
+meetings too. This is our discovery rule, not a claim that all Graph application
+lookups are organizer-only: the [Get onlineMeeting documentation](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-get)
+explicitly permits invited attendees for meeting-ID lookup and does not establish
+an organizer-only rule for every lookup. Calendar discovery preserves attendance
+capture; the application-only [getAllTranscripts API](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-getalltranscripts)
+is not used, and its applicability to the intended per-user access policy has not
+been established here.
+
+A denied application calendar skips that user. Recognized 404 mailbox codes
+`MailboxNotEnabledForRESTAPI` and `MailboxNotSupportedForRESTAPI` skip users without
+a Graph-accessible calendar. Other 404s and unexpected errors remain fatal.
+Directory enumeration must complete: a denial or failure on any user-list page
+fails the entire fetch. Expect at least one calendar request per tenant user,
+plus calendar pages and organizer meeting/artifact requests. Calls are sequential
+and use shared Graph throttling handling. Use an explicit one-week `since` for the
+pilot; the connector's normal initial window remains 30 days.
+
+Unsupported providers, missing join URLs, zero/multiple resolution matches and
+incomplete meeting-reference metadata remain per-meeting skips, recorded in
+`skippedMeetings`. A meeting-resolution 403 skips that meeting. Transcript and
+attendance requests run independently; a 403 skips only the denied collection or
+artifact. A denial on a later page discards that incomplete collection. Already
+captured artifact IDs are not downloaded again; duplicate artifacts across user
+contexts publish once. An alternative context can supply a capture denied in the
+first context.
+
+The successful sync position records `deniedUsers` (distinct user contexts with
+at least one 403) and `unavailableUsers` (recognized unavailable mailboxes).
+A 403 does not prove that Teams policy was the cause. Application mode leaves
+`deniedRequests` empty to avoid storing many user URLs; delegated mode retains
+its artifact-denial URLs. These are diagnostics for the latest successful run,
+not a permanent exclusion list or CLI warnings. An empty/partially accessible
+successful run advances the boundary. Delegated calendar-discovery denials,
+authentication failures, malformed responses and unexpected errors remain fatal.
 
 After checking and accepting the configuration:
 
