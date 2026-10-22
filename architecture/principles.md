@@ -57,6 +57,26 @@ contradictory, harmful or disproportionate, raise the concern with concrete
 consequences and propose the smallest correction. Do not blindly comply, silently
 override the decision, or use ambiguity as permission for a broader redesign.
 
+## Decide with what we know; revise when we learn more
+
+A timely decision on current evidence is better than no decision. When work in
+hand depends on a choice, make the best decision current evidence supports, build,
+and learn from use. Do not wait for certainty where trying a reasonable choice and
+correcting it costs less than delay. Make consequential assumptions explicit. For
+significant architectural choices, record the decision and reasoning in the owning
+ADR.
+
+Rank work by value. Deferring something trivial, speculative or gold-plated is
+often the right decision. Put deferred outcomes worth retaining in an Issue and
+return when they justify the effort; discard work we do not need.
+
+ADRs and code are malleable. Any decision is open to challenge when new evidence
+or experience shows a better path, however settled it seemed or whoever made it.
+Revise the owning ADR and code together rather than defending yesterday's design
+or working around it. Nobody needs permission to raise a challenge or propose a
+revision: name what we have learned and what should change. Review and acceptance
+follow the SDLC.
+
 ## Keep boundaries strong and implementations small
 
 Explicit effects and typed interfaces state who owns each operation and what it
