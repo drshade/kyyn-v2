@@ -1,7 +1,7 @@
 {
   "adr": "0029",
   "title": "Evidence blobs and connector-owned sync positions",
-  "cursor": 187,
+  "cursor": 205,
   "nodes": [
     {
       "id": "0029.01",

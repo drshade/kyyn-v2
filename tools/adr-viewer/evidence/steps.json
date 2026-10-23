@@ -2049,5 +2049,152 @@
     "pr": 239,
     "title": "adr-viewer: partial deliveries between specification and realisation",
     "adrs": []
+  },
+  {
+    "seq": 188,
+    "sha": "c512ebdbf0f8c8cd6c74a4b0c5e4cf0d64590d1b",
+    "date": "2026-10-09T15:53:36+02:00",
+    "pr": 240,
+    "title": "Batch GitHub discussion reads to reduce fetch round trips",
+    "adrs": []
+  },
+  {
+    "seq": 189,
+    "sha": "c48c406a9d8fe707f9c202e9519f241adc527a9b",
+    "date": "2026-10-09T18:32:40+02:00",
+    "pr": 243,
+    "title": "Cache recipe signature inspection during root preparation",
+    "adrs": []
+  },
+  {
+    "seq": 190,
+    "sha": "0e3be2440402c239f46180eeebaade74cd9778dd",
+    "date": "2026-10-13T15:00:28+01:00",
+    "pr": 244,
+    "title": "Clarify repairability without backwards compatibility",
+    "adrs": []
+  },
+  {
+    "seq": 191,
+    "sha": "b25972205d4006e4a36339b858e16af2a678bbd3",
+    "date": "2026-10-14T00:01:57+01:00",
+    "pr": 242,
+    "title": "adr-viewer: curate steps 170-187",
+    "adrs": []
+  },
+  {
+    "seq": 192,
+    "sha": "abbebccca49bba934faa7e26427b1ab076134613",
+    "date": "2026-10-14T00:02:17+01:00",
+    "pr": 246,
+    "title": "adr-viewer: on-demand specification-gap snapshots",
+    "adrs": []
+  },
+  {
+    "seq": 193,
+    "sha": "cbc6bdb9306ae2867e500ab4c0e1e9fc94523ce6",
+    "date": "2026-10-15T14:09:58+01:00",
+    "pr": 247,
+    "title": "adr-viewer: score spec gaps against all ADRs at once",
+    "adrs": []
+  },
+  {
+    "seq": 194,
+    "sha": "bc0d6a51523c14995a1f0e86f2bcd7b15328bb2e",
+    "date": "2026-10-16T17:44:22+01:00",
+    "pr": 248,
+    "title": "adr-viewer: score spec gaps against all ADRs at once",
+    "adrs": []
+  },
+  {
+    "seq": 195,
+    "sha": "8adda937eb48324478171d1aab76623f8a08c0e0",
+    "date": "2026-10-20T06:38:23+01:00",
+    "pr": 249,
+    "title": "Return MicroHs to upstream and witness guest API fields by record",
+    "adrs": []
+  },
+  {
+    "seq": 196,
+    "sha": "855d68237bdcb05e333e0671e3fc9ad1dd38bc51",
+    "date": "2026-10-20T07:20:38+01:00",
+    "pr": 250,
+    "title": "Organize Graph plugin around shared and connector-specific modules",
+    "adrs": []
+  },
+  {
+    "seq": 197,
+    "sha": "42fbb9b2219223746e33674eeca5b7909f6d0740",
+    "date": "2026-10-20T20:17:23+01:00",
+    "pr": 251,
+    "title": "Add Graph Meetings transcripts and attendance capture",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 198,
+    "sha": "b667796c62e0224c8365a90a21dfdb1054311233",
+    "date": "2026-10-20T20:42:48+01:00",
+    "pr": 252,
+    "title": "Add Salesforce SOQL query connector",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 199,
+    "sha": "1a0315557592d9e68ae816d429eeb2800978fdba",
+    "date": "2026-10-21T07:29:21+01:00",
+    "pr": 253,
+    "title": "Add SharePoint and OneDrive file capture to Graph plugin",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 200,
+    "sha": "7990996bb6c460392ab6f2c79103a2b81dd00c38",
+    "date": "2026-10-21T09:26:17+02:00",
+    "title": "Add team roster for Tom, Alex and Rowan",
+    "adrs": []
+  },
+  {
+    "seq": 201,
+    "sha": "d3a93a35671f56d1d6f870226249411e907405f2",
+    "date": "2026-10-22T11:42:44+02:00",
+    "title": "Point agents to the team roster",
+    "adrs": []
+  },
+  {
+    "seq": 202,
+    "sha": "8851e1968ee9d6a0b1585a829de72561b8ba4af3",
+    "date": "2026-10-22T11:49:44+02:00",
+    "title": "Describe team focuses and peer collaboration",
+    "adrs": []
+  },
+  {
+    "seq": 203,
+    "sha": "b526ba6f5e6ee227c65cf955b499e1b5459196ef",
+    "date": "2026-10-22T11:53:52+02:00",
+    "title": "Frame Tom's role as decisions, not authority on the product",
+    "adrs": []
+  },
+  {
+    "seq": 204,
+    "sha": "e80d5f59d39fe101b799a97c0557d61676412be9",
+    "date": "2026-10-22T11:59:48+02:00",
+    "title": "Add principle: decide with what we know, revise when we learn more",
+    "adrs": []
+  },
+  {
+    "seq": 205,
+    "sha": "0766505f20f6f3c7f4eab75afb3a23351df7783e",
+    "date": "2026-10-23T06:55:20+01:00",
+    "pr": 256,
+    "title": "Scope Graph Meetings by credential across tenant users",
+    "adrs": [
+      "0014"
+    ]
   }
 ]
