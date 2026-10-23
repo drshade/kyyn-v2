@@ -59,7 +59,7 @@ main = withSystemTempDirectory "kyyn-graph-directory-" $ \temporary -> do
     stored <- get "value" first >>= get "evidence"
     users <- get "payload" stored >>= get "value" >>= get "users" :: IO [Value]
     assert "sorted users" . (== ["a","b"]) =<< mapM (get "id" :: Value -> IO Text.Text) users
-    let guest:_ = users
+    guest:_ <- pure users
     assert "disabled guest retained" . (== ("Guest" :: Text.Text)) =<< (get "userType" guest >>= get "value")
     assert "disabled value" . (== False) =<< (get "accountEnabled" guest >>= get "value")
     assert "null preserved" . (== ("None" :: Text.Text)) =<< (get "mail" guest >>= get "tag")

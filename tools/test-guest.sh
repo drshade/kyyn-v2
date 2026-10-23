@@ -21,6 +21,7 @@ cabal test graph-calendar --test-show-details=direct
 cabal test graph-mail --test-show-details=direct
 cabal test graph-meetings --test-show-details=direct
 cabal test graph-files --test-show-details=direct
+cabal test graph-directory --test-show-details=direct
 cabal test salesforce-query --test-show-details=direct
 cabal test github --test-show-details=direct
 cabal test plugin-registration --test-show-details=direct
