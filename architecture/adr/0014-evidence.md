@@ -388,6 +388,41 @@ returned page cannot remove that provider limit. A missing eligible artifact is 
 proof that a meeting did not happen. Retain the denied-request diagnostics rather
 than treating inaccessible resources as proof of absence. Unsupported meetings are recorded as skips.
 
+#### Directory snapshots
+
+```haskell
+data DirectoryConfig = DirectoryConfig { auth :: GraphAuth }
+data DirectoryUser = DirectoryUser
+  { id :: Text, displayName :: Maybe Text, givenName :: Maybe Text
+  , surname :: Maybe Text, mail :: Maybe Text, userPrincipalName :: Maybe Text
+  , accountEnabled :: Maybe Bool, userType :: Maybe Text }
+data DirectoryPayload = DirectoryPayload { users :: [DirectoryUser] }
+```
+
+`MicrosoftGraph.Directory` reads every page of `/users` visible to the credential,
+with the same endpoint for application and delegated access. It has no configured
+filter; guests and disabled users remain evidence. Request the eight selected
+fields above and up to 999 rows per page. `User.Read.All` with admin consent is the
+read permission for this profile; delegated work/school access also depends on the
+signed-in user's directory access. Teams meeting policies do not restrict this
+roster. See [List users](https://learn.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0).
+
+Each successful fetch captures one item, `directory`, holding all users sorted by
+ID. Its fingerprint hashes an explicit JSON array encoding of the selected fields,
+including nulls, without fetch time or provider page order. Additions, removals and
+profile changes update that item; an empty roster is a successful snapshot, and
+an unchanged roster emits no semantic delta. Restore a truncated unchanged payload
+using `SetEvidencePayload`. The captured `directory` method reads locally only.
+
+Nullable fields preserve unknown values rather than guessing classification.
+Require every selected field to be present, a nonempty ID, and unique IDs across
+the complete scan. Reject malformed fields, duplicate IDs, failed or denied pages,
+foreign pagination URLs and pagination cycles without publishing partial evidence.
+No delta state or per-user requests are required. Graph pagination is not a
+transactional directory view; replication delays and concurrent edits remain
+provider limitations. This roster includes personal names/emails: downstream
+redaction and dispatch workflows own their destination restrictions.
+
 #### Salesforce queries
 
 ```haskell

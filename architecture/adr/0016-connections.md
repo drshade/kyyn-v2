@@ -256,7 +256,7 @@ or create an evolution. Its secret writes are local setup, not accepted-root wri
 ### Microsoft Graph authentication
 
 One vendored `microsoft-graph` plugin shares ordinary authentication code among
-its Calendar, Mail, Meetings and Files connector types. Each API needs its own permission/support proof;
+its Calendar, Mail, Meetings, Files and Directory connector types. Each API needs its own permission/support proof;
 sharing token code does not prove an API supports both authentication modes.
 The plugin, not Kyyn core, owns this configuration type:
 
