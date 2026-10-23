@@ -1,5 +1,5 @@
 // Install actual Graph source, discover contracts, accept configuration and check
-// RSVP/Mail/Meetings/Files/blob payload discovery, shared delegated scope validation and missing-secret
+// RSVP/Mail/Meetings/Files/Directory/blob payload discovery, shared delegated scope validation and missing-secret
 // failures. No live provider requests.
 
 import assert from 'node:assert/strict';
@@ -49,6 +49,7 @@ try {
     let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text }
       | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer }
       | Meetings : { auth : Auth, retentionDays : Integer }
+      | Directory : { auth : Auth }
       | Files : { auth : Auth, scope : Scope, itemPath : Text, includeGlobs : List Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
@@ -62,6 +63,8 @@ try {
       , { name = "meetings", binding = "meetingArtifacts", connector = Connector.Meetings
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
           , retentionDays = +90 } }
+      , { name = "directory", binding = "directory", connector = Connector.Directory
+          { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" } } }
       , { name = "files", binding = "files", connector = Connector.Files
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
           , scope = Scope.SiteLibrary { site = "site", library = "Documents" }
@@ -113,6 +116,16 @@ try {
     const result = cli([...operation, 'microsoft-graph', 'files'], 1);
     assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')));
   }
+  const directory = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'directory']).result;
+  assert.equal(directory.fetchOptionsType, null);
+  const directoryMethod = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'directory', 'directory']).result;
+  for (const field of ['users', 'displayName', 'givenName', 'surname', 'mail', 'userPrincipalName', 'accountEnabled', 'userType']) {
+    assert(directoryMethod.resultType.includes(field), directoryMethod.resultType);
+  }
+  for (const operation of [['plugin', 'connector', 'login'], ['evidence', 'fetch']]) {
+    const result = cli([...operation, 'microsoft-graph', 'directory'], 1);
+    assert(result.diagnostics.some(d => d.message.includes('Missing secret missing-graph-secret')));
+  }
   const delegated = cli(['evolution', 'new', 'delegated-scopes']).result;
   const delegatedPath = path.join(delegated.path, 'target/plugins/config/microsoft-graph.dhall');
   const applicationConfig = fs.readFileSync(delegatedPath, 'utf8');
@@ -148,6 +161,13 @@ try {
   for (const scope of ['Scope.OneDrive { user = "me" }', 'Scope.SharedUrl { url = "https://example.sharepoint.com/:f:/share" }']) {
     fs.writeFileSync(delegatedPath, applicationConfig.replace('Scope.SiteLibrary { site = "site", library = "Documents" }', scope));
     cli(['evolution', 'check', delegated.id]);
+  }
+  for (const [scope, status] of [['User.ReadBasic.All', 1], ['User.Read.All', 0]]) {
+    fs.writeFileSync(delegatedPath, applicationConfig.replace(
+      /(connector = Connector.Directory\s*\{ auth = )Auth.ClientSecret \{[^}]*\}/,
+      `$1Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-graph-secret", scopes = [ "${scope}" ] }`));
+    const checked = cli(['evolution', 'check', delegated.id], status);
+    if (status) assert.match(JSON.stringify(checked), /Directory requires User.Read.All/);
   }
   assert.equal(git(kb, 'rev-parse', 'HEAD'), head);
   console.log('Installed Graph plugin: schema, validation, acceptance, method discovery and missing-secret paths passed (no provider calls).');

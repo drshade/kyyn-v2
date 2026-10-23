@@ -26,4 +26,9 @@ connectors = [SourceConnector
   , fetch = "MicrosoftGraph.Files.fetch", validateConfig = "MicrosoftGraph.Files.Config.validate"
   , login = Just "MicrosoftGraph.Files.Config.login"
   , methods = [CapturedMethod "file" "Read captured file metadata and its content blob." "MicrosoftGraph.Files.Read.file"]
+  }, SourceConnector
+  { name = "Directory"
+  , fetch = "MicrosoftGraph.Directory.fetch", validateConfig = "MicrosoftGraph.Directory.Config.validate"
+  , login = Just "MicrosoftGraph.Directory.Config.login"
+  , methods = [CapturedMethod "directory" "Read the captured user directory snapshot." "MicrosoftGraph.Directory.Read.directory"]
   }]

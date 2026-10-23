@@ -464,3 +464,36 @@ unchanged; a listing is not an upstream transaction across concurrent edits.
 Provider references: [children listing](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children),
 [shared items](https://learn.microsoft.com/en-us/graph/api/shares-get), and
 [content download](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content).
+
+## Directory
+
+`Directory` captures the user directory visible to its credential. Configure only
+`auth`; there is no user filter or fetch window. Both application (`ClientSecret`)
+and delegated (`DeviceCode`) use `/users`, selecting `id`, `displayName`,
+`givenName`, `surname`, `mail`, `userPrincipalName`, `accountEnabled` and `userType`.
+Guests and disabled accounts remain in the snapshot for curation to interpret.
+
+Grant `User.Read.All` with administrator consent. Delegated configuration must
+include that scope (or a supported broader directory/user read permission), and
+requires a work/school member account with directory access. `User.ReadBasic.All`
+does not cover this profile. Adding a delegated scope requires login again.
+Application access does not inherit Teams meeting access policy restrictions.
+See Microsoft's [List users permissions](https://learn.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0).
+
+Each fetch follows every page, requesting up to 999 users per page, and stores one
+item named `directory`. `directory "directory"` reads its typed payload, containing
+`users` sorted by ID. Names, emails and classification fields are optional: provider
+null means unknown, including `accountEnabled`; it never means disabled. Missing
+selected fields, wrong types, duplicate IDs, denied requests and failed pages fail
+the entire fetch. The previous snapshot remains available.
+
+Unchanged content produces no update, regardless of page/row order. Any selected
+field change, addition or disappearance updates the snapshot; an empty directory
+is a valid empty snapshot. Truncated content is restored on the next successful
+fetch. There is no delta cursor or per-user request. Graph's paginated list is not
+an atomic tenant-wide view and can have replication delays; retry a failed scan.
+
+Directory names and email addresses are personal data stored in local evidence.
+For the BEE pilot, the local redactor may read this roster, but neither the roster
+nor its token map is sent to Jev. Dispatch restrictions belong to that workflow;
+the connector itself does not enforce a destination policy.
