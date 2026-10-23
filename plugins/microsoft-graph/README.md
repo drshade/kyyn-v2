@@ -1,6 +1,6 @@
 # Microsoft Graph
 
-This plugin provides `Calendar`, `Mail`, `Meetings` and `Files` source connectors, with shared Graph
+This plugin provides `Calendar`, `Mail`, `Meetings`, `Files` and `Directory` source connectors, with shared Graph
 authentication. Use `plugin guide microsoft-graph` to read this guide from an
 installed package.
 
@@ -48,6 +48,7 @@ let Connector =
           , folders : List < WellKnownFolder : Text | FolderPath : Text >
           , retentionDays : Integer }
       | Meetings : { auth : Auth, retentionDays : Integer }
+      | Directory : { auth : Auth }
       | Files :
           { auth : Auth
           , scope : < SiteLibrary : { site : Text, library : Text }

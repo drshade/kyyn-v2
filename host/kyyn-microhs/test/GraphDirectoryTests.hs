@@ -65,7 +65,7 @@ main = withSystemTempDirectory "kyyn-graph-directory-" $ \temporary -> do
     assert "null preserved" . (== ("None" :: Text.Text)) =<< (get "mail" guest >>= get "tag")
     assert "two pages" . (==2) . length =<< readIORef trace
     modifyIORef' outputs (initial:)
-    forM_ [("normal",[]),("reordered",[]),("changed",["Updated"]),("removed",["Updated"]),("empty",["Updated"]),("null-enabled",["Updated"])] $ \(scenario,expected) -> do
+    forM_ [("normal",[]),("reordered",[]),("changed",["Updated"]),("added",["Updated"]),("removed",["Updated"]),("empty",["Updated"]),("null-enabled",["Updated"])] $ \(scenario,expected) -> do
       (repeatFetch,_) <- provider (Just stored) scenario
       (repeated,_,_) <- brokerWith Normal repeatFetch program (input configuration)
       assert ("delta " ++ Text.unpack scenario) . (==expected) =<< (changesFrom repeated >>= mapM tagOf)
@@ -115,11 +115,14 @@ provider old scenario = do
           if "login.microsoftonline.com" `Text.isInfixOf` url then pure (http 200 "{\"access_token\":\"token\"}")
           else do
             assert "credentials left Graph" ("https://graph.microsoft.com/v1.0/users?" `Text.isPrefixOf` url)
+            headers <- get "headers" args :: IO [Value]
+            assert "authenticated directory request" (object ["name" .= text "Authorization","value" .= text "Bearer token"] `elem` headers)
             assert "no capture filter" (not ("$filter" `Text.isInfixOf` url))
             modifyIORef' trace (url:)
             let second = "page=2" `Text.isSuffixOf` url
                 key = if second /= (scenario == "reordered") then "a" else "b"
-                row = userValue scenario (if scenario == "duplicate" then "b" else key)
+                row = userValue scenario (if scenario == "duplicate" then "b" else key) <>
+                  (if scenario == "added" && second then "," <> userValue scenario "c" else "")
                 next = if scenario == "foreign" then "https://example.invalid/leak" else if scenario == "cycle" then url else "https://graph.microsoft.com/v1.0/users?page=2"
             pure $ if scenario == "denied" || scenario == "late-denied" && second then http 403 "{}"
               else if scenario == "late-failure" && second then http 500 "{}"
