@@ -40,6 +40,7 @@ try {
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'microsoft-graph', '--evolution', draft.id]).result.schema;
   assert.match(schema, /ClientSecret/);
   assert.match(schema, /DeviceCode/);
+  assert(!schema.includes("userId"), "Meetings must derive its user scope from the credential");
   const configPath = path.join(draft.path, 'target/plugins/config/microsoft-graph.dhall');
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, `(let Auth = < ClientSecret : { tenant : Text, clientId : Text, secretKey : Text }
@@ -47,7 +48,7 @@ try {
     let Scope = < SiteLibrary : { site : Text, library : Text } | OneDrive : { user : Text } | SharedUrl : { url : Text } >
     let Connector = < Calendar : { auth : Auth, mailbox : Text, calendarId : Optional Text, sharedCalendar : Bool, windowStart : Text, windowEnd : Text }
       | Mail : { auth : Auth, mailbox : Text, folders : List < WellKnownFolder : Text | FolderPath : Text >, retentionDays : Integer }
-      | Meetings : { auth : Auth, userId : Text, retentionDays : Integer }
+      | Meetings : { auth : Auth, retentionDays : Integer }
       | Files : { auth : Auth, scope : Scope, itemPath : Text, includeGlobs : List Text } >
     in [ { name = "test", binding = "calendar", connector = Connector.Calendar
       { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
@@ -60,7 +61,7 @@ try {
           , retentionDays = +90 } }
       , { name = "meetings", binding = "meetingArtifacts", connector = Connector.Meetings
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
-          , userId = "user-id", retentionDays = +90 } }
+          , retentionDays = +90 } }
       , { name = "files", binding = "files", connector = Connector.Files
           { auth = Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }
           , scope = Scope.SiteLibrary { site = "site", library = "Documents" }
@@ -130,17 +131,17 @@ try {
   cli(['evolution', 'check', delegated.id]);
   fs.writeFileSync(delegatedPath, delegatedConfig('[ "Calendars.Read.Shared" ]').replace('sharedCalendar = True', 'sharedCalendar = False'));
   cli(['evolution', 'check', delegated.id]);
-  const meetingConfig = applicationConfig.replace('userId = "user-id", retentionDays = +90', 'userId = "user-id", retentionDays = -1');
+  const meetingConfig = applicationConfig.replace(/(connector = Connector.Meetings[\s\S]*?retentionDays = )\+90/, '$1-1');
   fs.writeFileSync(delegatedPath, meetingConfig);
   assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /retentionDays must be nonnegative/);
-  const meetingAuth = 'Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }\n          , userId';
+  const meetingAuth = 'Auth.ClientSecret { tenant = "fixture", clientId = "fixture", secretKey = "missing-graph-secret" }\n          , retentionDays';
   function meetingScopes(scopes) {
     return applicationConfig.replace(meetingAuth,
-      `Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-graph-secret", scopes = ${scopes} }\n          , userId`);
+      `Auth.DeviceCode { tenant = "fixture", clientId = "fixture", tokenKey = "missing-graph-secret", scopes = ${scopes} }\n          , retentionDays`);
   }
   fs.writeFileSync(delegatedPath, meetingScopes('[ "Calendars.Read" ]'));
   assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /OnlineMeetingTranscript.Read.All/);
-  fs.writeFileSync(delegatedPath, meetingScopes('[ "User.Read", "Calendars.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ]'));
+  fs.writeFileSync(delegatedPath, meetingScopes('[ "Calendars.Read", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All", "OnlineMeetingArtifact.Read.All" ]'));
   cli(['evolution', 'check', delegated.id]);
   fs.writeFileSync(delegatedPath, applicationConfig.replace('itemPath = "Reports"', 'itemPath = "../Reports"'));
   assert.match(JSON.stringify(cli(['evolution', 'check', delegated.id], 1)), /relative slash-separated/);

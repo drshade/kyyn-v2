@@ -10,17 +10,17 @@ import MicrosoftGraph.Config (authentication, graphRoot)
 import qualified MicrosoftGraph.Auth as Auth
 
 validate :: MeetingsConfig -> ValidationReport
-validate (MeetingsConfig auth user retention) = ValidationReport $
-  authentication auth user <>
+validate (MeetingsConfig auth retention) = ValidationReport $
+  authentication auth "meetings" <>
   [errorDiagnostic "graph.meetings-retention" "retentionDays must be nonnegative." | retention < 0] <>
   case auth of
     ClientSecret {} -> []
     DeviceCode _ _ _ scopes ->
       let normalized = map (\s -> let lower = Text.toLower s in maybe lower id (Text.stripPrefix graphRoot lower)) scopes
-          required = [["user.read","user.readwrite"], ["calendars.read","calendars.readwrite"],
+          required = [["calendars.read","calendars.readwrite"],
             ["onlinemeetings.read","onlinemeetings.readwrite"], ["onlinemeetingtranscript.read.all"], ["onlinemeetingartifact.read.all"]]
-      in [errorDiagnostic "graph.meetings-scopes" "Meetings requires User.Read, Calendars.Read, OnlineMeetings.Read, OnlineMeetingTranscript.Read.All and OnlineMeetingArtifact.Read.All; consent and run login again after adding scopes." |
+      in [errorDiagnostic "graph.meetings-scopes" "Meetings requires Calendars.Read, OnlineMeetings.Read, OnlineMeetingTranscript.Read.All and OnlineMeetingArtifact.Read.All; consent and run login again after adding scopes." |
             any (not . any (`elem` normalized)) required]
 
 login :: MeetingsConfig -> PluginLogin (Either LoginError ())
-login (MeetingsConfig auth _ _) = Auth.login auth
+login (MeetingsConfig auth _) = Auth.login auth
