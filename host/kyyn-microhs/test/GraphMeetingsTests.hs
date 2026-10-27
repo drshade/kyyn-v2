@@ -1,6 +1,7 @@
 -- Generated Meetings adapters under GHC and MicroHs with recorded providers.
 -- Covers initial/overlap/backfill windows and independent 403 skips, repeated calendar URLs, artifact identity,
--- pagination, per-meeting skips, capture-once, retention, failed downloads/pages, credential scope,
+-- artifact-window boundaries, narrow resolution-404 skips, pagination, capture-once,
+-- retention, failed downloads/pages, credential scope,
 -- enabled-member selection, tenant user pagination, policy/calendar denials and unavailable mailboxes,
 -- captured reads and fingerprint parity. No live tenant calls.
 {-# LANGUAGE OverloadedStrings #-}
@@ -63,12 +64,12 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     assert "meetings adapter exit" (status == ExitSuccess)
     output <- maybe (fail "Missing result") (get "value") result
     changes <- get "changes" output :: IO [Value]
-    assert "all artifacts must be captured" (length changes == 4)
+    assert "all artifacts must be captured" (length changes == 3)
     stored <- mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v) changes :: IO [(Text.Text,Value)]
-    assert "artifact kind prevents ID collision" (length (nub (map fst stored)) == 4)
+    assert "artifact kind prevents ID collision" (length (nub (map fst stored)) == 3)
     artifacts <- mapM (get "payload" . snd) stored
     let available = [v | Object fields <- artifacts, Just (String "Available") <- [Map.lookup "tag" fields], Just v <- [Map.lookup "value" fields]]
-    assert "only old actual session is truncated" (length available == 3)
+    assert "in-window artifacts are available" (length available == 3)
     let attendance = [v | Object fields <- available, Just (String "Attendance") <- [Map.lookup "tag" fields], Just v <- [Map.lookup "value" fields]]
     [report] <- pure attendance
     participants <- get "attendees" report :: IO [Value]
@@ -108,7 +109,7 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     ageChanges <- changesFrom agedResult
     assert "retention must truncate only remaining payloads" (length ageChanges == 3)
     forM_ ageChanges $ \c -> assert "retention removed identity" . (== ("SetPayload" :: Text.Text)) =<< get "tag" c
-    forM_ [("transcripts-denied",2),("reports-denied",2),("records-denied",2),("content-denied",2),("resolution-denied",0)] $ \(scenario,count) -> do
+    forM_ [("transcripts-denied",1),("reports-denied",2),("records-denied",2),("content-denied",1),("resolution-denied",0)] $ \(scenario,count) -> do
       (deniedProvider,_) <- provider [] scenario
       (partial,_,_) <- brokerWith Normal deniedProvider program (input now Nothing False)
       partialOutput <- maybe (fail "Missing partial result") (get "value") partial
@@ -120,9 +121,9 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       assert "denied user count missing" . (== ("1" :: Text.Text)) =<< get "deniedUsers" saved
       captured <- changesFrom partial >>= mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v)
       (restored,_) <- provider captured "normal"
-      (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now Nothing False))
-      assert "denied artifacts permanently skipped" . (== (4-count)) . length =<< changesFrom recovered
-    forM_ [("unsupported",4),("missing-join",4),("unresolved",4),("ambiguous",4),("missing-organizer",4),("unresolved-only",0)] $ \(scenario,count) -> do
+      (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now (Just "2026-09-20T12:00:00Z") False))
+      assert "denied artifacts permanently skipped" . (== (3-count)) . length =<< changesFrom recovered
+    forM_ [("unsupported",3),("missing-join",3),("unresolved",3),("ambiguous",3),("missing-organizer",3),("unresolved-only",0),("resolve-not-found",3),("resolve-not-found-only",0),("resolve-late-not-found",0)] $ \(scenario,count) -> do
       (skipProvider,_) <- provider [] scenario
       (partial,_,_) <- brokerWith Normal skipProvider program (input now Nothing False)
       assert ("bad meeting blocked good meeting: " ++ Text.unpack scenario) . (== count) . length =<< changesFrom partial
@@ -136,10 +137,10 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
         assert "skip must identify meeting and reason" (not (Text.null ref) && not (Text.null why))
       if count == 0 then do
         (restored,_) <- provider [] "normal"
-        (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now Nothing False))
-        assert "unresolved meetings permanently excluded" . (==4) . length =<< changesFrom recovered
+        (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now (Just "2026-09-20T12:00:00Z") False))
+        assert "unresolved meetings permanently excluded" . (==3) . length =<< changesFrom recovered
       else pure ()
-    forM_ ["blob-failure","page-failure","artifact-unauthorized","artifact-error","foreign-page","cycle","resolution-error","malformed-artifact"] $ \scenario -> do
+    forM_ ["blob-failure","page-failure","artifact-unauthorized","artifact-error","foreign-page","cycle","resolution-error","malformed-artifact","resolve-unknown-404","transcript-not-found","report-not-found","records-not-found"] $ \scenario -> do
       (bad,_) <- provider [] scenario
       (failed,_,_) <- brokerWith Normal bad program (input now Nothing False)
       assert ("failure returned publishable data: " ++ Text.unpack scenario) . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing failure") (get "tag") failed
@@ -149,16 +150,29 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     (invalidPosition,_,_) <- brokerWith Normal (\_ _ _ _ -> fail "Invalid position invoked host") program (inputWithPrior now Nothing False (Just "invalid"))
     assert "invalid position accepted" . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing position rejection") (get "tag") invalidPosition
     (backfill,backfillTrace) <- provider [] "normal"
-    _ <- brokerWith Normal backfill program (inputWithPrior now (Just "2026-01-01T00:00:00Z") False (Just now))
+    (backfillResult,_,_) <- brokerWith Normal backfill program (inputWithPrior now (Just "2026-01-01T00:00:00Z") False (Just now))
+    backfilled <- changesFrom backfillResult
+    assert "explicit backfill did not capture old report" (length backfilled == 4)
+    backfillPayloads <- mapM (\c -> get "value" c >>= get "evidence" >>= get "payload" >>= get "tag") backfilled :: IO [Text.Text]
+    assert "backfilled old report was not truncated" (length (filter (== "Truncated") backfillPayloads) == 1)
     assert "explicit backfill ignored" . any (Text.isInfixOf "startDateTime=2026-01-01") =<< readIORef backfillTrace
+    (windowProvider,windowTrace) <- provider [] "artifact-window"
+    (windowResult,_,_) <- brokerWith Normal windowProvider program (input now (Just "2026-10-19T00:00:00Z") False)
+    assert "artifact window boundaries" . (==7) . length =<< changesFrom windowResult
+    windowRequests <- readIORef windowTrace
+    assert "out-of-window artifact content requested" (not (any (Text.isInfixOf "out-window") windowRequests))
+    assert "historical attendance records requested" (not (any (Text.isInfixOf "/attendanceReports/old/") windowRequests))
+    (overlapProvider,_) <- provider [] "artifact-window"
+    (overlapResult,_,_) <- brokerWith Normal overlapProvider program (inputWithPrior now Nothing False (Just now))
+    assert "overlap did not constrain recurring-series artifacts" . (==2) . length =<< changesFrom overlapResult
     (delegated,delegatedTrace) <- provider [] "normal"
     (deviceResult,_,_) <- brokerWith Normal delegated program (input now Nothing True)
-    assert "delegated path failed" . (==4) . length =<< changesFrom deviceResult
+    assert "delegated path failed" . (==3) . length =<< changesFrom deviceResult
     deviceEvents <- readIORef delegatedTrace
     assert "delegated enumerated tenant or checked configured user" (not (any (Text.isInfixOf "/users") deviceEvents) && not (any (Text.isInfixOf "/me?$select=id") deviceEvents))
     (deniedArtifact,_) <- provider [] "transcripts-denied"
     (partialDevice,_,_) <- brokerWith Normal deniedArtifact program (input now Nothing True)
-    assert "delegated independent artifact skip" . (==2) . length =<< changesFrom partialDevice
+    assert "delegated independent artifact skip" . (==1) . length =<< changesFrom partialDevice
     deviceState <- maybe (fail "Missing delegated state") (get "value") partialDevice >>= get "position"
     assert "delegated denial URLs lost" . not . null =<< (get "deniedRequests" deviceState :: IO [Text.Text])
     (forbidden,_) <- provider [] "forbidden"
@@ -168,7 +182,7 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       (multi,multiTrace) <- provider [] scenario
       (multiResult,_,_) <- brokerWith Normal multi program (input now Nothing False)
       delta <- changesFrom multiResult
-      assert "multi-user artifact count" (length delta == if scenario == "multi-fallback" then 4 else 8)
+      assert "multi-user artifact count" (length delta == if scenario == "multi-fallback" then 3 else 6)
       state <- maybe (fail "Missing tenant result") (get "value") multiResult >>= get "position"
       assert "tenant denial count" . (== (if scenario == "multi-fallback" then "3" else "2" :: Text.Text)) =<< get "deniedUsers" state
       assert "unavailable mailbox count" . (== ("1" :: Text.Text)) =<< get "unavailableUsers" state
@@ -234,6 +248,7 @@ provider old scenario = do
           assert "blob bytes passed through guest" (Bytes.null raw)
           modifyIORef' trace ("blob":)
           url <- get "url" args :: IO Text.Text
+          modifyIORef' trace (("blob-url:" <> url):)
           n <- readIORef attempts
           modifyIORef' attempts (+1)
           pure (downloadResult (Right (if scenario == "blob-failure" then BlobResponse 500 [] Nothing
@@ -272,7 +287,7 @@ provider old scenario = do
             else pure (http 200 (object
               (["value" .= (if secondUser then
                 [change ["isOrganizer"] (const (Bool False)) (event False), change ["onlineMeeting"] (const (object ["joinUrl" .= text "https://teams.example/second"])) (event False)]
-                else [event (scenario == "unsupported"),event False,object ["isOnlineMeeting" .= False],future] ++ [badEvent | scenario `elem` ["missing-join","unresolved","ambiguous","missing-organizer"]])] ++
+                else [event (scenario == "unsupported"),event False,object ["isOnlineMeeting" .= False],future] ++ [badEvent | scenario `elem` ["missing-join","unresolved","ambiguous","missing-organizer","resolve-not-found"]])] ++
                 ["@odata.nextLink" .= (base <> "/calendarView?page=2") | not ("page=2" `Text.isSuffixOf` url)])))
           else if "/users/policy-denied/onlineMeetings" `Text.isInfixOf` url then pure (http 403 (object []))
           else if scenario == "artifact-unauthorized" && "/transcripts" `Text.isSuffixOf` url then pure (http 401 (object []))
@@ -281,8 +296,15 @@ provider old scenario = do
           else if scenario == "transcripts-denied" && "/transcripts?page=2" `Text.isSuffixOf` url then pure (http 403 (object []))
           else if scenario == "reports-denied" && "/attendanceReports" `Text.isSuffixOf` url then pure (http 403 (object []))
           else if scenario == "records-denied" && "/attendanceRecords?page=2" `Text.isSuffixOf` url then pure (http 403 (object []))
+          else if scenario == "transcript-not-found" && "/transcripts" `Text.isSuffixOf` url then pure (http 404 notFound)
+          else if scenario == "report-not-found" && "/attendanceReports" `Text.isSuffixOf` url then pure (http 404 notFound)
+          else if scenario == "records-not-found" && "/attendanceRecords" `Text.isInfixOf` url then pure (http 404 notFound)
+          else if scenario == "resolve-late-not-found" && "/onlineMeetings?page=2" `Text.isSuffixOf` url then pure (http 404 notFound)
           else if "onlineMeetings?$filter=" `Text.isInfixOf` url then
-            if scenario == "resolution-error" then pure (http 500 (object []))
+            if scenario == "resolve-not-found-only" || scenario == "resolve-not-found" && "bad-meeting" `Text.isInfixOf` url then pure (http 404 notFound)
+            else if scenario == "resolve-unknown-404" then pure (http 404 (object ["error" .= object ["code" .= text "UnknownFailure"]]))
+            else if scenario == "resolve-late-not-found" then pure (http 200 (object ["value" .= [resolvedMeeting], "@odata.nextLink" .= (base <> "/onlineMeetings?page=2")]))
+            else if scenario == "resolution-error" then pure (http 500 (object []))
             else pure (http 200 (collection (if scenario == "unresolved-only" then []
               else if "bad-meeting" `Text.isInfixOf` url then case scenario of
                 "unresolved" -> []
@@ -290,12 +312,12 @@ provider old scenario = do
                 "missing-organizer" -> [change ["participants"] (const (object [])) resolvedMeeting]
                 _ -> [resolvedMeeting]
               else [change ["id"] (const (text meetingId)) resolvedMeeting])))
-          else if "/transcripts" `Text.isSuffixOf` url then pure (http 200 (object ["value" .= [transcript "same"],"@odata.nextLink" .=
+          else if "/transcripts" `Text.isSuffixOf` url then pure (http 200 (object ["value" .= ([transcript "same"] ++ windowTranscripts),"@odata.nextLink" .=
             (if scenario == "foreign-page" then "https://other.example/transcripts" else meeting <> "/transcripts?page=2")]))
           else if "/transcripts?page=2" `Text.isSuffixOf` url then pure (http 200 (object
             (["value" .= ([transcript "second"] ++ [transcript "late" | scenario == "late"])] ++ ["@odata.nextLink" .= url | scenario == "cycle"])))
           else if "/attendanceReports" `Text.isSuffixOf` url then pure (http 200 (collection
-            [report "same" "2026-10-19T10:00:00Z" "2026-10-19T11:00:00Z", report "old" "2026-01-01T10:00:00Z" "2026-01-01T11:00:00Z"]))
+            ([report "same" "2026-10-19T10:00:00Z" "2026-10-19T11:00:00Z", report "old" "2026-01-01T10:00:00Z" "2026-01-01T11:00:00Z"] ++ windowReports)))
           else if "/attendanceRecords" `Text.isInfixOf` url then
             if "page=2" `Text.isSuffixOf` url && scenario == "page-failure" then pure (http 500 (object []))
             else pure (http 200 (object (["value" .= [attendee]] ++ ["@odata.nextLink" .= (url <> "?page=2") | not ("page=2" `Text.isSuffixOf` url)])))
@@ -303,13 +325,25 @@ provider old scenario = do
         _ -> fail ("Unexpected capability " ++ capability ++ "/" ++ method)
   pure (respond,trace)
   where
+    windowTimes :: [(Text.Text,Text.Text,Text.Text)]
+    windowTimes =
+      [("out-window-old","2026-01-01T10:00:00Z","2026-01-01T11:00:00Z"),
+       ("out-window-straddle","2026-10-18T23:00:00Z","2026-10-19T01:00:00Z"),
+       ("out-window-future","2026-10-21T10:00:00Z","2026-10-21T11:00:00Z"),
+       ("out-window-ongoing","2026-10-20T11:00:00Z","2026-10-20T13:00:00Z"),
+       ("lower","2026-10-19T00:00:00Z","2026-10-19T01:00:00Z"),
+       ("upper","2026-10-20T12:00:00Z","2026-10-20T12:00:00Z")]
+    windowTranscripts = [object ["id" .= key, "createdDateTime" .= start, "endDateTime" .= end]
+      | (key,start,end) <- windowTimes, scenario == "artifact-window"]
+    windowReports = [report key start end | (key,start,end) <- windowTimes, scenario == "artifact-window"]
+    notFound = object ["error" .= object ["code" .= text "NotFound"]]
     resolvedMeeting = object ["id" .= text "meeting-1","subject" .= text "Meeting 雪","participants" .= object
       ["organizer" .= object ["identity" .= object ["user" .= object ["id" .= text "organizer-id"]]]]]
     badEvent = change ["onlineMeeting"] (const (if scenario == "missing-join" then Null else object ["joinUrl" .= text "https://teams.example/bad-meeting"])) (event False)
     event unsupported = object ["id" .= text "event-id","isOnlineMeeting" .= True,"isOrganizer" .= True,"onlineMeetingProvider" .= text (if unsupported then "skypeForBusiness" else "teamsForBusiness"),
       "onlineMeeting" .= object ["joinUrl" .= text "https://teams.example/meet'a"], "end" .= object ["dateTime" .= text "2026-10-19T13:00:00.0000000","timeZone" .= text "UTC"]]
     future = object ["isOnlineMeeting" .= True,"isOrganizer" .= True, "end" .= object ["dateTime" .= text "2027-01-01T11:00:00","timeZone" .= text "UTC"]]
-    transcript key = object ["id" .= text key,"createdDateTime" .= text "2026-10-19T10:01:00Z","endDateTime" .= text (if scenario == "malformed-artifact" then "invalid" else "2026-10-19T11:00:00Z")]
+    transcript key = object ["id" .= text key,"createdDateTime" .= text (if key == "late" then "2026-10-20T11:01:00Z" else "2026-10-19T10:01:00Z"),"endDateTime" .= text (if scenario == "malformed-artifact" then "invalid" else "2026-10-19T11:00:00Z")]
     report key start end = object ["id" .= text key,"meetingStartDateTime" .= text start,"meetingEndDateTime" .= text end]
     attendee = object ["identity" .= object ["id" .= text "guest-id","displayName" .= text "Guest 雪","tenantId" .= Null, "@odata.type" .= text "#microsoft.graph.azureCommunicationServicesUserIdentity", "azureCommunicationServicesResourceId" .= text "acs-resource"],
       "emailAddress" .= text "guest@example.test", "role" .= text "Attendee", "totalAttendanceInSeconds" .= (60 :: Int),
