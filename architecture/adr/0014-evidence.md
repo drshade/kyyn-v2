@@ -310,8 +310,13 @@ start. Attendance uses the report's actual session start/end timestamps.
 
 MeetingsConfig contains authentication and retentionDays, not a configured user
 ID. Delegated acquisition uses `/me` directly. Application acquisition completes
-paginated `/users?$select=id&$top=999` enumeration (`User.Read.All`) and then walks each
-user's default calendar under its calendar permissions. It selects events with
+paginated `/users?$select=id,accountEnabled,userType&$top=999` enumeration
+(`User.Read.All`) and then walks default calendars only for enabled member accounts
+(`accountEnabled = true`, `userType = "Member"`). Missing or malformed classification
+fields fail the fetch. Guests and disabled accounts are excluded; historical
+meetings organized by now-disabled accounts are deliberately outside this scope.
+Enabled members can still include non-human identities. Directory remains complete
+for redaction. Calendar pages request up to 1,000 events under calendar permissions. It selects events with
 `isOrganizer = true` locally before resolving their join URLs under that user.
 This avoids discovering the same meeting under every attendee and preserves
 attendance support. Delegated discovery continues to include attended meetings.
