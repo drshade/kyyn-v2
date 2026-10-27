@@ -248,15 +248,18 @@ appropriate tenant consent; personal Microsoft accounts are unsupported. When
 sharing a refresh-token key with other connectors, use the same complete scope
 list on each instance. Run login again after changing scopes.
 
-ClientSecret lists all tenant users through paginated `/users?$select=id&$top=999`, then
-reads each user's calendar. Its application requires consented `User.Read.All`,
+ClientSecret lists tenant users through paginated
+`/users?$select=id,accountEnabled,userType&$top=999`, then reads calendars only for
+enabled member accounts (`accountEnabled = true`, `userType = "Member"`). Its application requires consented `User.Read.All`,
 `Calendars.Read`, `OnlineMeetings.Read.All`, `OnlineMeetingTranscript.Read.All`
 and `OnlineMeetingArtifact.Read.All`, plus the Teams application access policy
 for users whose meeting artifacts it may access. No trainer list is configured.
 Meetings organized outside this tenant are not discovered by the application walk,
 even if tenant users attended (for example, some vendor-led training). Disabled
-accounts and guests are not filtered out of the user list; recent organizer
-history may still matter, and provider access determines what can be captured.
+accounts and guests are excluded from Meetings discovery. Historical meetings
+organized by now-disabled accounts are deliberately outside this scope. Enabled
+members may still include non-human accounts; this is not an employee classifier.
+Directory continues to capture every readable account for redaction and curation.
 Calendar access is separately governed by Exchange/Graph permissions: Teams
 policy controls meeting access, not the directory or calendar listing.
 
@@ -275,8 +278,9 @@ A denied application calendar skips that user. Recognized 404 mailbox codes
 `MailboxNotSupportedForRESTAPI` skip users without
 a Graph-accessible calendar. Other 404s and unexpected errors remain fatal.
 Directory enumeration must complete: a denial or failure on any user-list page
-fails the entire fetch. Expect at least one calendar request per tenant user,
-plus calendar pages and organizer meeting/artifact requests. Calls are sequential
+fails the entire fetch, as do missing or malformed account classification fields.
+Expect at least one calendar request per enabled member, plus calendar pages and
+organizer meeting/artifact requests. Calendar pages request up to 1,000 events. Calls are sequential
 and use shared Graph throttling handling. Use an explicit one-week `since` for the
 pilot; the connector's normal initial window remains 30 days.
 

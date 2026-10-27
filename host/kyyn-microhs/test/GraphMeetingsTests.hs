@@ -1,7 +1,7 @@
 -- Generated Meetings adapters under GHC and MicroHs with recorded providers.
 -- Covers initial/overlap/backfill windows and independent 403 skips, repeated calendar URLs, artifact identity,
 -- pagination, per-meeting skips, capture-once, retention, failed downloads/pages, credential scope,
--- tenant user pagination, policy/calendar denials and unavailable mailboxes,
+-- enabled-member selection, tenant user pagination, policy/calendar denials and unavailable mailboxes,
 -- captured reads and fingerprint parity. No live tenant calls.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
@@ -80,6 +80,8 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     intervals <- get "attendanceIntervals" firstParticipant :: IO [Value]
     assert "participant intervals lost" (length intervals == 2)
     events <- readIORef trace
+    assert "disabled/guest calendars queried" (not (any (\url -> any (`Text.isInfixOf` url) ["/users/disabled/","/users/guest/"]) events))
+    assert "calendar page size missing" (any (Text.isInfixOf "&$top=1000") events)
     assert "default window is thirty days" (any (Text.isInfixOf "startDateTime=2026-09-20T12%3A00%3A00Z") events)
     assert "repeated calendar join URL refetched artifacts" (length (filter (Text.isInfixOf "onlineMeetings?$filter=") events) == 1)
     assert "throttled blob did not retry" (length (filter (== "blob") events) == 3 && "wait" `elem` events)
@@ -173,10 +175,10 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       assert "tenant denial URLs grew position" . null =<< (get "deniedRequests" state :: IO [Text.Text])
       requests <- readIORef multiTrace
       assert "directory pagination missing" (any (Text.isInfixOf "/users?page=2") requests)
-      assert "directory scope narrowed" ("https://graph.microsoft.com/v1.0/users?$select=id&$top=999" `elem` requests)
+      assert "directory selection fields missing" ("https://graph.microsoft.com/v1.0/users?$select=id,accountEnabled,userType&$top=999" `elem` requests)
       assert "attendee calendar resolved shared meeting" (not (any (\url -> "/users/second-user/onlineMeetings?$filter=" `Text.isInfixOf` url && "meet%27%27a" `Text.isInfixOf` url) requests))
       assert "directory duplicate walked user twice" (length (filter (\url -> "/users/second-user/calendarView?startDateTime=" `Text.isInfixOf` url) requests) == 1)
-    forM_ ["users-denied","users-page-failure","users-foreign","users-cycle","unexpected-mailbox-error"] $ \scenario -> do
+    forM_ ["users-denied","users-page-failure","users-foreign","users-cycle","users-bad-enabled","users-missing-type","unexpected-mailbox-error"] $ \scenario -> do
       (bad,badTrace) <- provider [] scenario
       (failed,_,_) <- brokerWith Normal bad program (input now Nothing False)
       assert ("directory/unexpected error was swallowed: " ++ Text.unpack scenario) . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing failure") (get "tag") failed
@@ -254,10 +256,13 @@ provider old scenario = do
             if scenario == "users-denied" then pure (http 403 (object []))
             else if scenario == "users-page-failure" && "page=2" `Text.isSuffixOf` url then pure (http 500 (object []))
             else if multi then pure (http 200 (object
-              (["value" .= [object ["id" .= text key] | key <- if "page=2" `Text.isSuffixOf` url
-                then ["policy-denied","no-mailbox","second-user"] else ["user-id","second-user","calendar-denied"]]] ++
+              (["value" .= [directoryUser key | key <- if "page=2" `Text.isSuffixOf` url
+                then ["policy-denied","no-mailbox","second-user","disabled"] else ["user-id","second-user","calendar-denied","guest"]]] ++
               ["@odata.nextLink" .= text "https://graph.microsoft.com/v1.0/users?page=2" | not ("page=2" `Text.isSuffixOf` url)])))
-            else pure (http 200 (object (["value" .= [object ["id" .= text "user-id"]]] ++
+            else pure (http 200 (object (["value" .=
+              (if scenario == "users-bad-enabled" then [object ["id" .= text "bad", "accountEnabled" .= text "true", "userType" .= text "Member"]]
+               else if scenario == "users-missing-type" then [object ["id" .= text "bad", "accountEnabled" .= True]]
+               else map directoryUser ["user-id","disabled","guest"]) ] ++
               ["@odata.nextLink" .= (if scenario == "users-foreign" then "https://other.example/users" else if scenario == "users-cycle" then url else "https://graph.microsoft.com/v1.0/users?page=2") |
                 scenario `elem` ["users-page-failure","users-foreign","users-cycle"]])))
           else if "calendarView" `Text.isInfixOf` url then
@@ -332,3 +337,8 @@ change (key:rest) f (Object fields) = case Map.lookup key fields of
   Just value -> Object (Map.insert key (change rest f value) fields)
   Nothing -> error "Missing fixture key"
 change _ _ _ = error "Invalid fixture path"
+
+-- Extra accounts must never cause a calendar request, even if they have calendars.
+directoryUser :: Text.Text -> Value
+directoryUser key = object ["id" .= key, "accountEnabled" .= (key /= "disabled"),
+  "userType" .= (if key == "guest" then "Guest" else "Member" :: Text.Text)]

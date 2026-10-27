@@ -20,9 +20,15 @@ data Discovery = Discovered [Text] [MeetingSkip] | DeniedUser | UnavailableUser
 targets :: Text -> GraphAuth -> Acquisition payload (Either Text [Text])
 targets _ DeviceCode {} = pure (Right [graphApiBase <> "me"])
 targets token ClientSecret {} = runExceptT $ do
-  users <- ExceptT (requiredRequest (collection token (graphApiBase <> "users?$select=id&$top=999")))
-  ids <- either throwE pure (mapM (required "id") users)
-  pure [graphApiBase <> "users/" <> Json.escape key | key <- ids]
+  users <- ExceptT (requiredRequest (collection token (graphApiBase <> "users?$select=id,accountEnabled,userType&$top=999")))
+  ids <- either throwE pure (mapM activeMember users)
+  pure [graphApiBase <> "users/" <> Json.escape key | Just key <- ids]
+  where
+    activeMember value = do
+      key <- required "id" value
+      enabled <- Json.member "accountEnabled" value >>= Json.boolean
+      kind <- Json.member "userType" value >>= Json.text
+      pure (if enabled && kind == "Member" then Just key else Nothing)
 
 requestHeaders :: Text -> [(Text,Text)]
 requestHeaders token = [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")]
@@ -75,7 +81,7 @@ requiredRequest = fmap $ \result -> case result of
 discover :: Text -> Text -> Bool -> Text -> Text -> Acquisition payload (Either Text Discovery)
 discover token base application since now = runExceptT $ do
   let url = base <> "/calendarView?startDateTime=" <> Json.escape since <>
-        "&endDateTime=" <> Json.escape now <> "&$select=id,end,isOrganizer,isOnlineMeeting,onlineMeetingProvider,onlineMeeting"
+        "&endDateTime=" <> Json.escape now <> "&$select=id,end,isOrganizer,isOnlineMeeting,onlineMeetingProvider,onlineMeeting&$top=1000"
   response <- ExceptT (Right <$> collection token url)
   case response of
     Left (Denied _) | application -> pure DeniedUser
