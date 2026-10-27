@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Meetings.Api (Pending(..), discover, artifacts, capture, targets, Discovery(..)) where
 
+import Control.Monad (filterM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -33,7 +34,7 @@ targets token ClientSecret {} = runExceptT $ do
 requestHeaders :: Text -> [(Text,Text)]
 requestHeaders token = [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")]
 
-data RequestError = Denied Text | MailboxUnavailable | Failed Text
+data RequestError = Denied Text | MailboxUnavailable | UnresolvedMeeting | Failed Text
 
 document :: Text -> Text -> Acquisition payload (Either RequestError JSValue)
 document token url
@@ -46,6 +47,9 @@ document token url
           | "/calendarView" `Text.isInfixOf` url,
             Right code <- Json.parse body >>= Json.member "error" >>= required "code",
             code `elem` ["MailboxNotEnabledForRESTAPI","ErrorMailboxNotEnabledForRESTAPI","MailboxNotSupportedForRESTAPI"] -> Left MailboxUnavailable
+        Right (HttpResponse 404 _ body)
+          | "/onlineMeetings" `Text.isSuffixOf` Text.takeWhile (/= '?') url,
+            Right "NotFound" <- Json.parse body >>= Json.member "error" >>= required "code" -> Left UnresolvedMeeting
         _ -> either (Left . Failed) Right (result >>= Http.requireSuccess >>= Json.parse)
 
 collection :: Text -> Text -> Acquisition payload (Either RequestError [JSValue])
@@ -67,6 +71,7 @@ optionalRequest :: Acquisition payload (Either RequestError a)
 optionalRequest = fmap $ \result -> case result of
   Left (Denied url) -> Right (Nothing,[url])
   Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
+  Left UnresolvedMeeting -> Left "Calendar meeting could not be resolved"
   Left (Failed message) -> Left message
   Right value -> Right (Just value,[])
 
@@ -74,6 +79,7 @@ requiredRequest :: Acquisition payload (Either RequestError a) -> Acquisition pa
 requiredRequest = fmap $ \result -> case result of
   Left (Denied _) -> Left "Cannot enumerate tenant users; check application User.Read.All and admin consent."
   Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
+  Left UnresolvedMeeting -> Left "Calendar meeting could not be resolved"
   Left (Failed message) -> Left message
   Right value -> Right value
 
@@ -88,6 +94,7 @@ discover token base application since now = runExceptT $ do
     Left MailboxUnavailable | application -> pure UnavailableUser
     Left (Denied _) -> throwE "Access denied during Meetings calendar discovery; check consent."
     Left MailboxUnavailable -> throwE "Mailbox is not available through the Graph calendar API"
+    Left UnresolvedMeeting -> throwE "Unexpected unresolved meeting during calendar discovery"
     Left (Failed message) -> throwE message
     Right events -> do
       results <- either throwE pure (mapM endedMeeting events)
@@ -115,10 +122,12 @@ discover token base application since now = runExceptT $ do
               Left problem -> skip ("Missing or invalid join URL: " <> problem)
               Right url -> pure ([url],[])
 
-artifacts :: Text -> Text -> Text -> Acquisition payload (Either Text ([Pending],[Text],[MeetingSkip]))
-artifacts token base joinUrl = runExceptT $ do
+artifacts :: Text -> Text -> Text -> Text -> Text -> Acquisition payload (Either Text ([Pending],[Text],[MeetingSkip]))
+artifacts token base joinUrl since until = runExceptT $ do
+  lower <- either throwE pure (timestamp since)
+  upper <- either throwE pure (timestamp until)
   let filterValue = "JoinWebUrl eq '" <> Text.replace "'" "''" joinUrl <> "'"
-  (resolved,denied) <- ExceptT (optionalRequest (collection token (base <> "/onlineMeetings?$filter=" <> Json.escape filterValue)))
+  (resolved,denied) <- ExceptT (optionalRequest (fmap resolvedOrMissing (collection token (base <> "/onlineMeetings?$filter=" <> Json.escape filterValue))))
   case resolved of
     Nothing -> pure ([],denied,[])
     Just matches -> case matches of
@@ -131,9 +140,16 @@ artifacts token base joinUrl = runExceptT $ do
           (reports,reportDenied) <- ExceptT (optionalRequest (collection token (url <> "/attendanceReports")))
           items <- either throwE pure $ (++) <$> mapM (pending meeting "Transcript" "createdDateTime" "endDateTime") (maybe [] id transcripts)
             <*> mapM (pending meeting "Attendance" "meetingStartDateTime" "meetingEndDateTime") (maybe [] id reports)
-          pure (items,transcriptDenied ++ reportDenied,[])
+          selected <- either throwE pure $ filterM (within lower upper) items
+          pure (selected,transcriptDenied ++ reportDenied,[])
       _ -> skip "Join URL resolved to multiple online meetings"
   where
+    resolvedOrMissing (Left UnresolvedMeeting) = Right []
+    resolvedOrMissing result = result
+    within lower upper (Pending _ _ first end _) = do
+      firstAt <- timestamp first
+      endAt <- timestamp end
+      pure (firstAt >= lower && firstAt <= upper && endAt <= upper)
     skip why = pure ([],[],[MeetingSkip joinUrl why])
     meetingRef value = do
       key <- required "id" value

@@ -35,7 +35,7 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
       pure (base,found)
     rounds <- fmap concat $ forM discoveries $ \(base,found) -> case found of
       Discovered urls _ -> forM (nub urls) $ \url -> do
-        result <- ExceptT (Api.artifacts token base url)
+        result <- ExceptT (Api.artifacts token base url since started)
         pure (base,result)
       _ -> pure []
     let pending = [(base,item) | (base,(items,_,_)) <- rounds, item <- items]

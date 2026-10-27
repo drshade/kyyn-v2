@@ -225,7 +225,8 @@ of whether any recipe has processed a message.
 `Meetings` captures artifacts from recently ended Teams meetings discovered in
 the credential's calendar scope. Each transcript and attendance report is a separate
 evidence item, including multiple artifacts from recurring meetings. The connector
-keeps all returned artifacts; recipes decide how they relate to calendar facts.
+keeps every artifact within the fetch window; recipes decide how they relate to
+calendar facts.
 
 Add a Meetings instance using the `Connector` union above:
 
@@ -317,6 +318,14 @@ late artifacts while covering gaps between runs without rescanning all 30 days.
 Failed fetches do not advance the saved boundary. A successful run advances it even
 if there are no new artifacts or some artifact requests returned 403.
 
+The same lower boundary applies to each listed artifact: transcript
+`createdDateTime` or attendance `meetingStartDateTime` must be at or after `since`
+and no later than acquisition start. Its end time must also be no later than
+acquisition start. Both boundaries are inclusive. Recurring-series lists may include
+much older occurrences; those are discarded before transcript downloads or
+attendance-record requests. All listing pages are still read and validated.
+An occurrence starting before the boundary is excluded even if it ends after it.
+
 To backfill or recheck older meetings (including after permissions change), use
 `--options '{ since = Some "2026-01-01T00:00:00Z" }'`. This overrides the boundary
 on both initial and subsequent fetches. The next ordinary fetch uses the usual
@@ -333,7 +342,10 @@ returned attendance intervals are retained. Transcript VTT bytes are stored as a
 captured data and makes no provider requests.
 
 Each published artifact must have complete metadata and content. A 403 skips the
-affected request as described above; other page or download failures prevent
+affected request as described above. HTTP 404 with Graph code `NotFound` during
+join-URL resolution records the existing "Calendar meeting could not be resolved"
+skip, including when a later resolution page fails. Other resolution 404 codes,
+artifact-list 404s and content failures remain errors. Other page or download failures prevent
 publication of the whole fetch. Graph returns at most the latest 50 attendance reports for a
 meeting; pagination cannot recover reports outside that provider limit. Only
 calendar-backed Teams online meetings are discovered, not standalone calls or
@@ -344,9 +356,10 @@ an unattributed transcript format.
 Retention uses each artifact's end time. A nonnegative `retentionDays` controls
 payload truncation during fetch; zero truncates artifacts ended before that fetch
 started. Identities and fingerprints remain, and old artifacts are not downloaded
-again. Recurring-meeting listings can include sessions older than the discovery
-window. On first capture, their content is downloaded before retention is applied,
-so an old transcript may be downloaded and immediately truncated. Reading a
+again. Retention is independent of the acquisition window: an explicit backfill
+can select older artifacts, whose content is downloaded before retention is applied
+and may therefore be immediately truncated. Out-of-window recurring-series artifacts
+are not downloaded. Reading a
 truncated artifact reports that its payload is unavailable.
 `evidence clear microsoft-graph meetings` removes the capture and permits recapture.
 

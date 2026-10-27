@@ -298,7 +298,7 @@ data MeetingArtifact
 
 `AttendanceRecord` preserves the provider's participant identity and attendance
 intervals; its ordinary record definition is plugin-owned. Instance configuration
-selects the user and retention days. The initial fetch starts thirty days before
+selects authentication and retention days. The initial fetch starts thirty days before
 acquisition start. Later fetches start one day before the prior successful fetch's
 acquisition start, covering both the intervening time and a one-day overlap.
 An explicit `since` overrides either boundary, including on later fetches. Discover
@@ -307,6 +307,16 @@ its transcript/report resources. Use actual artifact/session times, not the
 calendar start as an item key. Transcript `created` and `ended` preserve Graph's
 `createdDateTime` and `endDateTime`; creation is not asserted to be the meeting's
 start. Attendance uses the report's actual session start/end timestamps.
+
+Apply the resolved fetch window to listed artifacts before any content acquisition.
+Transcript creation or attendance session start must fall between `since` and
+acquisition start, inclusive, and the artifact end must be no later than acquisition
+start. Discard out-of-window occurrences from recurring-series listings before
+transcript blob downloads or attendance-record requests. Read and validate every
+listing page; this local time selection does not make a partial listing successful.
+A session starting before `since` is excluded even if it ends within the window.
+The rule applies to initial acquisition, overlap and explicit backfills; retention
+is independent and applies only to selected or already captured artifacts.
 
 MeetingsConfig contains authentication and retentionDays, not a configured user
 ID. Delegated acquisition uses `/me` directly. Application acquisition completes
@@ -363,17 +373,21 @@ as captured; overlap or explicit backfill may try them again. Deduplicate artifa
 across user contexts and try another context when a capture is denied in the first.
 
 Skip individual meetings with unsupported or unspecified providers, missing join
-URLs, zero or multiple resolution matches, or incomplete meeting-reference metadata
+URLs, zero or multiple resolution matches, resolution HTTP 404 with Graph code
+`NotFound`, or incomplete meeting-reference metadata
 (including a missing organizer ID). Record the calendar event ID or join URL and
 reason in `skippedMeetings` in the successful position. These skips do not stop
 other meetings or prevent the boundary from advancing, even if every meeting is
 skipped. They are diagnostics for that run, not permanent exclusions. A subsequent
-overlap or explicit backfill may resolve a previously skipped meeting.
+overlap or explicit backfill may resolve a previously skipped meeting. A `NotFound`
+on a later resolution page discards the incomplete resolution collection and skips
+the meeting. Other 404 codes and 404s from transcript/report/record/content endpoints
+remain errors, apart from the separately specified calendar mailbox skips.
 
 An item is an artifact, not a selected "best" transcript or an inferred occurrence.
 Use an unambiguous encoding of artifact kind, onlineMeeting ID and Graph artifact
 ID; this preserves provider identity even if IDs are only unique within a meeting
-or collide across transcript/report families. Keep every returned transcript/report,
+or collide across transcript/report families. Keep every in-window transcript/report,
 skip already captured IDs, and fingerprint the captured payload. VTT content is a
 blob. Fetch every available page of attendance records, preserving all attendees.
 No longest-transcript selection, heuristic occurrence linkage or connector-authored
