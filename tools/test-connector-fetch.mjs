@@ -1,5 +1,6 @@
 // Installed acquisition: typed configuration, independent instances, latest payloads,
 // one latest-fetch summary, refresh/removal, clear/refetch and failed-fetch preservation.
+// Fetches also check opt-in sync timings preserve JSON and expose acquisition/publication.
 // --options-smoke covers option contracts; --read-smoke covers captured methods;
 // --tool-smoke covers a registered helper composing sources. Uses disposable files.
 
@@ -37,9 +38,15 @@ function git(directory, ...args) {
   return result.stdout.trim();
 }
 function cli(args, expected = 0) {
+  const fetching = args[0] === 'evidence' && args[1] === 'fetch';
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env: { ...env, KYYN_TIMINGS: fetching ? '1' : '0' }, encoding: 'utf8', timeout: 120000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
+  if (fetching) {
+    assert.match(result.stderr, /\[kyyn timing\] sync-acquisition /);
+    assert.match(result.stderr, /\[kyyn timing\] sync-command /);
+    if (expected === 0) assert.match(result.stderr, /\[kyyn sync\] evidence-publish calls=1 /);
+  }
   return JSON.parse(result.stdout);
 }
 const config = directory => `{ directory = ${JSON.stringify(directory)}, recursive = True }`;

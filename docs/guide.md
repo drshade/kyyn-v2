@@ -223,6 +223,34 @@ for the task. If progress tracking is useful, model it in recipe state. Cite use
 source identifiers in rationales; a citation does not guarantee permanent access
 to that evidence.
 
+To investigate a slow acquisition, enable optional timing output:
+
+```sh
+KYYN_TIMINGS=1 kyyn-v2 --kb /path/to/kb --json evidence fetch microsoft-graph meetings \
+  --options '{ since = Some "2026-10-27T12:00:00Z" }' > result.json 2> timings.log
+```
+
+Choose a `since` before the current time. Ordinary sync uses its saved overlap;
+an explicit `since` controls the measurement window. Use a disposable KB when
+measuring first downloads rather than reuse of existing evidence.
+
+Timing output goes to stderr; stdout remains the normal JSON result. Only the
+literal `KYYN_TIMINGS=1` enables it. Sync operations emit start/completion events
+with a matching call number, followed by operation counts and elapsed-time totals.
+HTTP events show method and status (or transport failure), blob downloads show
+status and stored bytes, and waits show requested seconds. Evidence begin, read,
+publication and overall acquisition spans separate network work from local storage.
+Cancellation records an aborted span and emits the accumulated summary when the
+process can unwind normally; forced termination cannot guarantee a final summary.
+
+The command and acquisition spans contain child operations: do not add them to
+HTTP, blob or wait totals. A blob download includes network and storage time.
+Requests are counted individually, including retries. Waits are plugin-requested
+delays, not proof of a particular throttle unless paired with a 429/503 response.
+These are capability-level measurements; they do not label provider-specific
+stages such as calendar discovery versus meeting resolution. URLs, headers,
+request/response bodies, evidence IDs and payloads are omitted from sync events.
+
 Secrets are configured separately for each checkout and stored as plaintext in
 ignored local storage. Use `secret set` with its hidden prompt or stdin rather
 than placing credentials in source, connector options or shell arguments. Follow

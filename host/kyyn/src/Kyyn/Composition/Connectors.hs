@@ -3,7 +3,9 @@ module Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
 import Effectful (Eff)
-import Kyyn.Configuration (Host, SelectedKb(..))
+import Kyyn.Configuration (Host(..), SelectedKb(..))
+import Data.Maybe (isJust)
+import Kyyn.Composition.SyncTimings
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure)
@@ -91,20 +93,24 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
         pure (methodOutputResult result rendered blobs)
 
 dispatchEvidence :: Host -> Cli.EvidenceCommand -> SelectedKb -> IO Response
-dispatchEvidence host command (SelectedKb kb revision _) = case command of
+dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision _) = case command of
   Cli.ClearEvidence plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> finish $ runBase host . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) $ do
       existed <- clearConnectorEvidence plugin name
       pure (clearResult plugin name existed)
-  Cli.FetchConnector plugin name options mode -> withRuntime host $ \toolchain sdk -> case knowledgeBaseScope kb of
-    Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-    Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runFileAcquisitionIO
-      . runHttpTransportIO . runSecretStoreIO scope . runWaitingIO
-      . runContentDigest . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runEvidenceAcquisition scope $ runExceptT $ do
-        (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
-        let Response outcome result humanLines diagnostics = fetchResult snapshot
-        pure (Response outcome result humanLines (warnings ++ diagnostics))
+  Cli.FetchConnector plugin name options mode -> withRuntime host $ \toolchain sdk -> do
+    sync <- newSyncTimings (isJust timings)
+    withSyncReport sync $ case knowledgeBaseScope kb of
+      Left message -> pure (refusal [errorDiagnostic "kb.path" message])
+      Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO
+        . runBlobStorageIO scope . observeBlobs sync . runEvidenceStore scope . observeEvidence sync . runFileAcquisitionIO
+        . runHttpTransportIO . observeHttp sync . runSecretStoreIO scope . runWaitingIO . observeWaiting sync
+        . runContentDigest . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk
+        . runEvidenceAcquisition scope . observeAcquisition sync $ runExceptT $ do
+          (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
+          let Response outcome result humanLines diagnostics = fetchResult snapshot
+          pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> inspectEvidence $
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
   Cli.ShowCurrentEvidence plugin name key -> inspectEvidence $ runExceptT $ do
