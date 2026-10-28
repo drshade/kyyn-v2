@@ -65,6 +65,8 @@ observeHttp timings = interpose $ \env operation@(Http.SendHttp (Http.HttpReques
   where
     safeMethod method | method `elem` ["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"] = Text.unpack method
                       | otherwise = "OTHER"
+    -- HttpError constructors are nullary. Revisit this before adding fields:
+    -- diagnostics must never serialize provider or transport payloads.
     describe (Left problem) = "transport=" ++ show problem
     describe (Right (Http.HttpResponse status _ _)) = "status=" ++ show status
 

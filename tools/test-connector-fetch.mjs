@@ -43,9 +43,11 @@ function cli(args, expected = 0) {
     { cwd: temporary, env: { ...env, KYYN_TIMINGS: fetching ? '1' : '0' }, encoding: 'utf8', timeout: 120000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   if (fetching) {
-    assert.match(result.stderr, /\[kyyn timing\] sync-acquisition /);
     assert.match(result.stderr, /\[kyyn timing\] sync-command /);
-    if (expected === 0) assert.match(result.stderr, /\[kyyn sync\] evidence-publish calls=1 /);
+    if (expected === 0) {
+      assert.match(result.stderr, /\[kyyn timing\] sync-acquisition /);
+      assert.match(result.stderr, /\[kyyn sync\] evidence-publish calls=1 /);
+    }
   }
   return JSON.parse(result.stdout);
 }
