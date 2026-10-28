@@ -33,6 +33,7 @@ node tools/checks/check-plugin-catalogue.mjs
 node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
+cabal test sync-timings --test-show-details=direct
 cabal test cli-arguments --test-show-details=direct
 cabal test cli-adapters --test-show-details=direct
 cabal test guest-catalogue --test-show-details=direct
