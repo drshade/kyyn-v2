@@ -118,13 +118,13 @@ dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision
     evidenceBatchResult <$> ExceptT (readEvidenceBatch selection expected)
   Cli.ShowCurrentEvidence plugin name key -> inspectEvidence $ runExceptT $ do
     selection <- ExceptT (selectConnectorEvidence kb revision plugin name)
-    (snapshot,latest,payload,found) <- ExceptT (readCurrentEvidence selection key)
+    (snapshot,latest,payload,found,blobs) <- ExceptT (readCurrentEvidence selection key)
     case found of
       Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
-      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item "Payload: truncated")
+      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item blobs "Payload: truncated")
       Just item@(Evidence _ _ (Available (CheckedValue _ value))) -> do
         rendered <- ExceptT (encodeValue (contractShape payload) value)
-        pure (evidenceItemResult snapshot latest key item rendered)
+        pure (evidenceItemResult snapshot latest key item blobs rendered)
   where
     inspectEvidence action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])

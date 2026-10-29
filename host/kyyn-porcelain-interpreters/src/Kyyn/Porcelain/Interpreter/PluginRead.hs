@@ -6,21 +6,20 @@ import Control.Monad (unless)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (contractId, contractShape, rootType)
-import Kyyn.Domain.Blob (ResolvedBlob(..), blobReferences)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceProblem(..), evidenceProblemDiagnostic, EvidenceSnapshotRef(..))
-import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(..), indexBlobs)
-import Kyyn.Domain.Diagnostic (Diagnostic(..), errorDiagnostic)
+import Kyyn.Domain.Contract (contractId, contractShape)
+import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceProblem(..), evidenceProblemDiagnostic)
+import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(..))
+import Kyyn.Domain.Diagnostic (Diagnostic(..))
 import Kyyn.Domain.Plugin (pluginNameText)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue)
 import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
-import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage, blobPathAt)
-import Kyyn.Types.Plugin (FetchError(..))
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Porcelain.Capability.PluginRead
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedMethod(..))
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
+import Kyyn.Porcelain.Protocol.CapturedBlobs (resolveBlobs)
 import Kyyn.Porcelain.Protocol.PluginBroker (executeCapturedRead)
 
 runPluginRead :: (BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, DhallHandling :> es, Failure :> es)
@@ -38,15 +37,4 @@ runPluginRead = interpret $ \_ -> \case
     _ <- ExceptT (encodeValue (contractShape input) value)
     result <- ExceptT (executeCapturedRead program (CheckedValue (contractId input) value) current output)
     pure (fmap (CheckedValue (contractId output)) result)
-  ResolveCapturedBlobs contexts contract value -> runExceptT $ do
-    let parse = either (throwE . pure . errorDiagnostic "blob.reference") pure
-    refs <- parse (blobReferences (rootType contract) value)
-    if null refs then pure [] else do
-      let origins = [(ref,instanceRef) | index@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _) <- contexts,
-            ref <- indexBlobs index]
-      mapM (\ref -> case lookup ref origins of
-        Nothing -> throwE [errorDiagnostic "blob.unreachable" "Result contains a blob outside the captured evidence."]
-        Just instanceRef -> do
-          path <- ExceptT (fmap (either (\(FetchError message) -> Left [errorDiagnostic "blob.unavailable" (Text.unpack message)]) Right)
-            (blobPathAt instanceRef ref))
-          pure (ResolvedBlob ref path)) refs
+  ResolveCapturedBlobs contexts contract value -> resolveBlobs contexts contract value

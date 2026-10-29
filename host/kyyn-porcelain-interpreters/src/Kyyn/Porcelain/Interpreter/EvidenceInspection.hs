@@ -9,12 +9,8 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence
-import Kyyn.Domain.Blob (ResolvedBlob(..), blobReferences)
-import Kyyn.Domain.Contract (rootType)
 import Kyyn.Domain.Value (CheckedValue(..))
-import Kyyn.Types.Plugin (FetchError(..))
-import qualified Data.Text as Text
-import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage, blobPathAt)
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex), EvidenceSelection(EvidenceSelection), indexCapture)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Git (TreePath(..))
@@ -28,6 +24,7 @@ import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Porcelain.Capability.RootStore (rootLocation)
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
+import Kyyn.Porcelain.Protocol.CapturedBlobs (resolveBlobs)
 import Kyyn.Porcelain.Capability.EvidenceInspection
 
 runEvidenceInspection :: (Git.Git :> es, DhallHandling :> es, Store.EvidenceStore :> es, BlobStorage :> es)
@@ -61,7 +58,7 @@ runEvidenceInspection = interpret $ \_ request -> case request of
     pure (diagnostic (loaded >>= maybe (Left NotFetched) (Right . indexCapture)))
   ReadEvidenceBatch selection expected -> runExceptT $ do
     loaded <- ExceptT (fmap diagnostic (Store.openCurrentEvidence selection))
-    index@(EvidenceIndex snapshot@(EvidenceSnapshotRef instanceRef _ actual) latest payload _) <-
+    index@(EvidenceIndex snapshot@(EvidenceSnapshotRef _ _ actual) latest payload _) <-
       maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
     unless (maybe True (== actual) expected) $
       throwE [errorDiagnostic "evidence.fetch-mismatch" "Current evidence differs from --expect-fetch. Inspect the latest capture and retry."]
@@ -69,21 +66,19 @@ runEvidenceInspection = interpret $ \_ request -> case request of
     entries <- mapM (\(key,_,_) -> do
       found <- ExceptT (fmap diagnostic (Store.readCapturedEvidence index key))
       item <- maybe (throwE [errorDiagnostic "evidence.invalid-data" "Item is missing from the selected capture."]) pure found
-      refs <- case item of
+      paths <- case item of
         Evidence _ _ Truncated -> pure []
-        Evidence _ _ (Available (CheckedValue _ value)) ->
-          either (throwE . pure . errorDiagnostic "blob.reference") pure (blobReferences (rootType payload) value)
-      paths <- mapM (\ref -> do
-        path <- ExceptT (fmap (either (\(FetchError message) -> Left [errorDiagnostic "blob.unavailable" (Text.unpack message)]) Right)
-          (blobPathAt instanceRef ref))
-        pure (ResolvedBlob ref path)) refs
+        Evidence _ _ (Available (CheckedValue _ value)) -> ExceptT (resolveBlobs [index] payload value)
       pure (key,item,paths)) keys
     pure (EvidenceBatch snapshot latest entries)
   ReadCurrentEvidence selection key -> runExceptT $ do
     loaded <- ExceptT (fmap diagnostic (Store.openCurrentEvidence selection))
     index@(EvidenceIndex snapshot latest payload _) <- maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
     item <- ExceptT (fmap diagnostic (Store.readCapturedEvidence index key))
-    pure (snapshot,latest,payload,item)
+    paths <- case item of
+      Just (Evidence _ _ (Available (CheckedValue _ value))) -> ExceptT (resolveBlobs [index] payload value)
+      _ -> pure []
+    pure (snapshot,latest,payload,item,paths)
 
 diagnostic :: Either EvidenceProblem a -> Either [Diagnostic] a
 diagnostic = either (Left . pure . evidenceProblemDiagnostic) Right

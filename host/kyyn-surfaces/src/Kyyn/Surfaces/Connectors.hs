@@ -9,9 +9,7 @@ import Kyyn.Domain.Evidence
 import Kyyn.Domain.Blob (ResolvedBlob(..), blobValue)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
-import qualified Data.Text.Encoding as Encoding
-import qualified Data.ByteString.Lazy as Bytes
-import Data.Aeson (encode)
+import Data.Aeson.Types (Pair)
 import Kyyn.Surfaces.Result (Response, success)
 
 connectorListResult :: PluginName -> [(ConnectorName,BindingName,ConnectorTypeName)] -> Response
@@ -63,16 +61,26 @@ evidenceListResult (EvidenceCapture snapshot latest items) = success
     availability (Available ()) = "Available" :: String
     availability Truncated = "Truncated"
 
-evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> Text.Text -> Response
-evidenceItemResult snapshot latest (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) rendered = success
-  (object ["selection" .= context snapshot, "latest" .= summaryValue latest, "id" .= key, "fingerprint" .= fingerprint,
-    "externalReferences" .= refs, "payload" .= encodedPayload])
-  (summaryLines latest ++ ["Evidence: " ++ Text.unpack key, "Fingerprint: " ++ Text.unpack fingerprint] ++
-    ["Source: " ++ Text.unpack ref | ref <- refs] ++ [Text.unpack (Text.stripEnd rendered)])
+evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> [ResolvedBlob] -> Text.Text -> Response
+evidenceItemResult snapshot latest key item blobs rendered = success
+  (object (["selection" .= context snapshot, "latest" .= summaryValue latest] ++ itemFields key item blobs))
+  (summaryLines latest ++ itemLines key item blobs ++ [Text.unpack (Text.stripEnd rendered)])
+
+itemFields :: EvidenceId -> Evidence CheckedValue -> [ResolvedBlob] -> [Pair]
+itemFields (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) blobs =
+  ["id" .= key, "fingerprint" .= fingerprint, "externalReferences" .= refs, "payload" .= encodedPayload,
+    "blobs" .= [object ["reference" .= blobValue ref,"path" .= path] | ResolvedBlob ref path <- blobs]]
   where
     encodedPayload = case payload of
       Available (CheckedValue _ value) -> object ["tag" .= ("Available" :: String),"value" .= value]
       Truncated -> object ["tag" .= ("Truncated" :: String)]
+
+itemLines :: EvidenceId -> Evidence CheckedValue -> [ResolvedBlob] -> [String]
+itemLines (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) blobs =
+  [Text.unpack key ++ "  " ++ Text.unpack fingerprint ++ "  " ++ availability] ++
+  ["  Source: " ++ Text.unpack ref | ref <- refs] ++ ["  Blob: " ++ path | ResolvedBlob _ path <- blobs]
+  where
+    availability = case payload of Available _ -> "Available"; Truncated -> "Truncated"
 
 summaryValue :: FetchSummary -> Value
 summaryValue (FetchSummary identity at added updated removed options) = object
@@ -97,13 +105,8 @@ text :: Coercible a String => a -> String
 text = coerce
 
 evidenceBatchResult :: EvidenceBatch -> Response
-evidenceBatchResult (EvidenceBatch snapshot latest entries) = success value
-  [Text.unpack (Encoding.decodeUtf8 (Bytes.toStrict (encode value)))]
-  where
-    value = object ["selection" .= context snapshot, "latest" .= summaryValue latest,
-      "items" .= [object ["id" .= key, "fingerprint" .= fingerprint, "externalReferences" .= refs,
-        "payload" .= encoded payload, "blobs" .=
-          [object ["reference" .= blobValue ref,"path" .= path] | ResolvedBlob ref path <- blobs]]
-        | (EvidenceId key,Evidence (EvidenceFingerprint fingerprint) refs payload,blobs) <- entries]]
-    encoded Truncated = object ["tag" .= ("Truncated" :: String)]
-    encoded (Available (CheckedValue _ payload)) = object ["tag" .= ("Available" :: String),"value" .= payload]
+evidenceBatchResult (EvidenceBatch snapshot latest entries) = success
+  (object ["selection" .= context snapshot, "latest" .= summaryValue latest,
+    "items" .= [object (itemFields key item blobs) | (key,item,blobs) <- entries]])
+  (summaryLines latest ++ if null entries then ["No current evidence."] else
+    concat [itemLines key item blobs | (key,item,blobs) <- entries])
