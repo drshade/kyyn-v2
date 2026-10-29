@@ -210,7 +210,10 @@ into that summary. Connector discovery exposes `reportType` as a rendered type,
 or null for a list-returning connector, so agents can discover the report shape.
 
 Human output labels it “Report from last successful fetch” and formats it from the
-stored checked contract as readable structured data. No-report captures say that
+stored checked contract as readable structured data. Long lists may use a generic
+bounded preview with total and omitted-entry counts and an explicit `--json` hint;
+never silently drop entries or apply provider-specific formatting. JSON contains the
+complete report. No-report captures say that
 no connector report was supplied. These reads run no provider or guest code and
 never expose the private position. Failed attempts leave the previous successful
 capture/report intact; the header must not call it the result of the last attempt.

@@ -354,7 +354,7 @@ data MeetingStage
   = CalendarDiscovery | MeetingResolution | TranscriptListing
   | AttendanceListing | TranscriptContent | AttendanceRecords
 
-data MeetingAccessIssue = MeetingAccessIssue
+data MeetingIssue = MeetingIssue
   { context :: MeetingContext, stage :: MeetingStage
   , reference :: Maybe Text, reason :: Text }
 data MeetingSkip = MeetingSkip
@@ -362,9 +362,9 @@ data MeetingSkip = MeetingSkip
 
 data MeetingsReport = MeetingsReport
   { since :: Text, until :: Text, scope :: MeetingsScope
-  , deniedRequests :: [MeetingAccessIssue]
-  , unavailableUsers :: [MeetingAccessIssue]
-  , skippedMeetings :: [MeetingSkip] }
+  , deniedRequests :: [MeetingIssue]
+  , unavailableUsers :: [MeetingIssue]
+  , skippedMeetings :: [MeetingSkip], coverageLimits :: [MeetingIssue] }
 ```
 
 Publish the acquisition-start timestamp as the private position with every
@@ -388,7 +388,8 @@ For each handled 403, record the affected context, operation stage, source/resou
 reference when known, and a connector-authored reason in `deniedRequests`. Record
 calendar HTTP 404 with MailboxNotEnabledForRESTAPI, ErrorMailboxNotEnabledForRESTAPI
 or MailboxNotSupportedForRESTAPI in `unavailableUsers` with the user context,
-CalendarDiscovery stage and recognized code as reason. These skips do not fail the
+CalendarDiscovery stage and recognized code as reason. These 404 entries are not
+also emitted in `deniedRequests`, which records handled 403s. These skips do not fail the
 tenant walk; other unexpected errors retain the failure rules below. Counts of
 affected accounts can be derived from distinct contexts; they do not replace the
 identities. Deduplicate repeated identical issues, retaining distinct resource or
@@ -445,7 +446,12 @@ The [transcript API](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-l
 and [attendance API](https://learn.microsoft.com/en-us/graph/api/meetingattendancereport-list)
 have their own permissions, supported meeting kinds and availability limits.
 In particular, report listing exposes at most the latest 50 reports; fetching every
-returned page cannot remove that provider limit. A missing eligible artifact is not
+returned page cannot remove that provider limit. When a completed report listing
+returns at least 50 distinct reports, add a `coverageLimits` entry with the attempted
+context, AttendanceListing stage, meeting reference and the reason “Attendance
+listing reached the provider limit; older reports may be omitted.” This is a
+potential coverage limitation, not a skipped meeting or proof of omitted reports;
+continue selecting and capturing the returned eligible artifacts. A missing eligible artifact is not
 proof that a meeting did not happen. Retain the denied-request diagnostics rather
 than treating inaccessible resources as proof of absence. Unsupported meetings are recorded as skips.
 
@@ -650,8 +656,9 @@ returns a Truncated envelope without opening a payload file, and decodes/checks
 only the selected Available payload. Envelope metadata comes from the index.
 `listCapturedEvidence` projects metadata, availability and the public report without
 reading payloads. `FetchReport` is defined by ADR 0029; it is stored with the latest
-summary and is not a field inside item payloads. The private sync position is not
-part of the inspection index. Single-item, bulk and enumeration results use the
+summary and is not a field inside item payloads. The private sync position is
+stored in the index document but not projected into the host `EvidenceIndex`
+value used for inspection. Single-item, bulk and enumeration results use the
 report belonging to the same captured index as their summary and items.
 The public inspection operations remain effects; their interpreter uses these
 store operations rather than materializing all evidence.
@@ -704,8 +711,9 @@ blobs/<sha256>           captured attachment bytes (ADR 0029)
 ```
 
 The index holds producer/connector identity, the compiler-derived payload contract
-descriptor, latest-fetch summary, optional checked sync position together with its
-compiler-derived contract descriptor, and an entry per
+descriptor, latest-fetch summary, optional checked public report together with its
+compiler-derived contract descriptor, optional checked sync position together with
+its compiler-derived contract descriptor, and an entry per
 evidence ID. Each entry contains fingerprint, external references and either
 Truncated or a payload-file reference. The latter also records that payload's
 referenced BlobRefs, derived by the host using its nominal contract walker when
@@ -756,12 +764,19 @@ it with plugin code or render it to callers. Acquisition additionally requires t
 stored descriptor to agree with the prepared connector's position contract before
 supplying the value as its prior position.
 
+Store the public report descriptor and value together in that same document.
+Both are absent for a list-returning capture, or both present for a context/result
+capture, including a nullary report. Inspection reconstructs and checks its contract
+without plugin execution and projects the checked pair as `FetchReport`. Never
+infer a report by reading the private position or default a broken report to absence.
+
 Decode the binary document once. Check the descriptor fields against their fixed
 host-owned representation, reconstruct the expected index contract, and check the
 already-decoded document against it. This bootstrap does not execute plugin code
 or decode the binary bytes again. A malformed descriptor, missing descriptor/value
-partner or mismatched position is a storage diagnostic, not an absent position
-that silently restarts acquisition.
+partner for either position or report, or a value mismatching its descriptor, is a
+storage diagnostic. It must not silently restart acquisition or hide a broken report.
+Report contract checking includes ADR 0029's exclusion of nested BlobRefs.
 
 Persist the payload descriptor as part of the capture so generic inspection needs
 no compiler. Its authority is the successful checked fetch that wrote it, bound to
@@ -812,7 +827,7 @@ Retain one local expected-fetch comparison and one publication point:
    are complete. Completeness uses storage metadata, not a full reread/hash of
    every unchanged payload. A conflicting or invalid batch publishes nothing.
 3. Atomically replace `index.dhallb` with the new index. Evidence metadata, payload
-   references, summary and position become visible together.
+   references, summary, public report and position become visible together.
 4. Reclaim payloads and blobs no longer referenced by the published
    index. Failed/interrupted staging can leave unreferenced files for cleanup,
    never a published pointer to incomplete data. Cleanup failure after replacement
@@ -821,7 +836,7 @@ Retain one local expected-fetch comparison and one publication point:
 Truncation removes the payload reference while retaining evidence metadata;
 removal drops the index entry. Failed acquisition leaves the prior index and its
 files usable. No old indices or payload generations are deliberately retained.
-Explicit clear removes index (including position), payloads and blobs. Sync positions remain
+Explicit clear removes index (including report and position), payloads and blobs. Sync positions remain
 connector-owned data with the behavior specified by ADR 0029.
 
 The layout change needs no automatic upgrade mechanism: old monolithic captures
