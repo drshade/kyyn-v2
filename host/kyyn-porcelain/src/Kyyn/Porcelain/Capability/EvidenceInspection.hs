@@ -1,9 +1,10 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvidenceInspection
-  ( EvidenceInspection(..), selectEvidence, currentEvidence, readCurrentEvidence ) where
+  ( EvidenceInspection(..), selectEvidence, currentEvidence, readCurrentEvidence, EvidenceBatch(..), readEvidenceBatch ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
+import Kyyn.Domain.Blob (ResolvedBlob)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence
@@ -18,8 +19,10 @@ data EvidenceInspection :: Effect where
     -> EvidenceInspection m (Either [Diagnostic] EvidenceSelection)
   ListCurrentEvidence :: EvidenceSelection
     -> EvidenceInspection m (Either [Diagnostic] EvidenceCapture)
+  ReadEvidenceBatch :: EvidenceSelection -> Maybe FetchId
+    -> EvidenceInspection m (Either [Diagnostic] EvidenceBatch)
   ReadCurrentEvidence :: EvidenceSelection -> EvidenceId
-    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue)))
+    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue), [ResolvedBlob]))
 type instance DispatchOf EvidenceInspection = Dynamic
 
 selectEvidence :: EvidenceInspection :> es => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
@@ -33,5 +36,9 @@ currentEvidence = send . ListCurrentEvidence
 
 readCurrentEvidence :: EvidenceInspection :> es
   => EvidenceSelection -> EvidenceId
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue)))
+  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue), [ResolvedBlob]))
 readCurrentEvidence selection = send . ReadCurrentEvidence selection
+
+readEvidenceBatch :: EvidenceInspection :> es => EvidenceSelection -> Maybe FetchId
+  -> Eff es (Either [Diagnostic] EvidenceBatch)
+readEvidenceBatch selection = send . ReadEvidenceBatch selection

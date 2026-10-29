@@ -1,5 +1,6 @@
 // Installed acquisition: typed configuration, independent instances, latest payloads,
 // one latest-fetch summary, refresh/removal, clear/refetch and failed-fetch preservation.
+// Bulk inspection checks payloads, deterministic ordering, capture preconditions and no KB mutation.
 // Fetches also check opt-in sync timings preserve JSON and expose acquisition/publication.
 // --options-smoke covers option contracts; --read-smoke covers captured methods;
 // --tool-smoke covers a registered helper composing sources. Uses disposable files.
@@ -216,6 +217,19 @@ bulk ids = do
   assert.deepEqual(listedFirst.items.map(item => item.id).sort(), ['removed.txt', 'unchanged.txt', 'updated.txt']);
   assert(listedFirst.items.every(item => item.fingerprint.length > 0 && item.availability === 'Available'
     && Object.keys(item).sort().join(',') === 'availability,fingerprint,id'));
+  const bulk = cli(['evidence', 'show', 'local-file', 'sales', '--all', '--expect-fetch', first]).result;
+  assert.deepEqual(bulk.selection, listedFirst.selection);
+  assert.deepEqual(bulk.latest, listedFirst.latest);
+  assert.deepEqual(bulk.items.map(item => item.id), ['removed.txt', 'unchanged.txt', 'updated.txt']);
+  for (const item of bulk.items) {
+    const shown = cli(['evidence', 'show', 'local-file', 'sales', item.id]).result;
+    assert.deepEqual(item.payload, shown.payload);
+    assert.deepEqual(item.externalReferences, shown.externalReferences);
+    assert.deepEqual(item.blobs, []);
+  }
+  assert.equal(cli(['evidence', 'show', 'local-file', 'sales', '--all', '--expect-fetch', 'wrong'], 1)
+    .diagnostics[0].code, 'evidence.fetch-mismatch');
+  assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
   const captured = cli(['evidence', 'show', 'local-file', 'sales', 'updated.txt']).result;
   assert.deepEqual(captured.externalReferences, [path.join(sales, 'updated.txt')]);
   assert(!JSON.stringify(listedFirst).includes('sales evidence'));

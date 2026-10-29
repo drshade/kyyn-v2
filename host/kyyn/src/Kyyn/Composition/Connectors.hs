@@ -15,7 +15,7 @@ import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Domain.Evidence (Evidence(..), EvidencePayload(..))
-import Kyyn.Porcelain.Capability.EvidenceInspection (readCurrentEvidence)
+import Kyyn.Porcelain.Capability.EvidenceInspection (readCurrentEvidence, readEvidenceBatch)
 import qualified Data.Text as Text
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
 import Kyyn.MicroHs.Toolchain (GuestToolchain)
@@ -113,15 +113,18 @@ dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision
           pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> inspectEvidence $
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
+  Cli.ShowAllEvidence plugin name expected -> inspectEvidence $ runExceptT $ do
+    selection <- ExceptT (selectConnectorEvidence kb revision plugin name)
+    evidenceBatchResult <$> ExceptT (readEvidenceBatch selection expected)
   Cli.ShowCurrentEvidence plugin name key -> inspectEvidence $ runExceptT $ do
     selection <- ExceptT (selectConnectorEvidence kb revision plugin name)
-    (snapshot,latest,payload,found) <- ExceptT (readCurrentEvidence selection key)
+    (snapshot,latest,payload,found,blobs) <- ExceptT (readCurrentEvidence selection key)
     case found of
       Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
-      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item "Payload: truncated")
+      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item blobs "Payload: truncated")
       Just item@(Evidence _ _ (Available (CheckedValue _ value))) -> do
         rendered <- ExceptT (encodeValue (contractShape payload) value)
-        pure (evidenceItemResult snapshot latest key item rendered)
+        pure (evidenceItemResult snapshot latest key item blobs rendered)
   where
     inspectEvidence action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])

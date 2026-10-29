@@ -8,7 +8,9 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Evidence (ConnectorInstanceRef(..), EvidenceProblem(..), evidenceProblemDiagnostic)
+import Kyyn.Domain.Evidence
+import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex), EvidenceSelection(EvidenceSelection), indexCapture)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Git (TreePath(..))
@@ -22,9 +24,10 @@ import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Porcelain.Capability.RootStore (rootLocation)
 import qualified Kyyn.Porcelain.Capability.EvidenceStore as Store
+import Kyyn.Porcelain.Protocol.CapturedBlobs (resolveBlobs)
 import Kyyn.Porcelain.Capability.EvidenceInspection
 
-runEvidenceInspection :: (Git.Git :> es, DhallHandling :> es, Store.EvidenceStore :> es)
+runEvidenceInspection :: (Git.Git :> es, DhallHandling :> es, Store.EvidenceStore :> es, BlobStorage :> es)
   => Eff (EvidenceInspection : es) a -> Eff es a
 runEvidenceInspection = interpret $ \_ request -> case request of
   SelectEvidence kb@(KnowledgeBase repository _) revision plugin name -> runExceptT $ do
@@ -53,11 +56,29 @@ runEvidenceInspection = interpret $ \_ request -> case request of
   ListCurrentEvidence selection -> do
     loaded <- Store.openCurrentEvidence selection
     pure (diagnostic (loaded >>= maybe (Left NotFetched) (Right . indexCapture)))
+  ReadEvidenceBatch selection expected -> runExceptT $ do
+    loaded <- ExceptT (fmap diagnostic (Store.openCurrentEvidence selection))
+    index@(EvidenceIndex snapshot@(EvidenceSnapshotRef _ _ actual) latest payload _) <-
+      maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
+    unless (maybe True (== actual) expected) $
+      throwE [errorDiagnostic "evidence.fetch-mismatch" "Current evidence differs from --expect-fetch. Inspect the latest capture and retry."]
+    let EvidenceCapture _ _ keys = indexCapture index
+    entries <- mapM (\(key,_,_) -> do
+      found <- ExceptT (fmap diagnostic (Store.readCapturedEvidence index key))
+      item <- maybe (throwE [errorDiagnostic "evidence.invalid-data" "Item is missing from the selected capture."]) pure found
+      paths <- case item of
+        Evidence _ _ Truncated -> pure []
+        Evidence _ _ (Available (CheckedValue _ value)) -> ExceptT (resolveBlobs [index] payload value)
+      pure (key,item,paths)) keys
+    pure (EvidenceBatch snapshot latest entries)
   ReadCurrentEvidence selection key -> runExceptT $ do
     loaded <- ExceptT (fmap diagnostic (Store.openCurrentEvidence selection))
     index@(EvidenceIndex snapshot latest payload _) <- maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
     item <- ExceptT (fmap diagnostic (Store.readCapturedEvidence index key))
-    pure (snapshot,latest,payload,item)
+    paths <- case item of
+      Just (Evidence _ _ (Available (CheckedValue _ value))) -> ExceptT (resolveBlobs [index] payload value)
+      _ -> pure []
+    pure (snapshot,latest,payload,item,paths)
 
 diagnostic :: Either EvidenceProblem a -> Either [Diagnostic] a
 diagnostic = either (Left . pure . evidenceProblemDiagnostic) Right

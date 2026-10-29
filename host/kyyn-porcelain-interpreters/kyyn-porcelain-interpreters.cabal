@@ -8,6 +8,7 @@ build-type: Simple
 library
   hs-source-dirs: src
   other-modules: Kyyn.Porcelain.Protocol.ModelConfiguration
+    Kyyn.Porcelain.Protocol.CapturedBlobs
   exposed-modules: Kyyn.Porcelain.Interpreter.RootStore
     Kyyn.Porcelain.Interpreter.PluginInstallation
     Kyyn.Porcelain.Interpreter.PluginDocumentation

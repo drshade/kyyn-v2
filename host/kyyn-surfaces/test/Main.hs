@@ -10,7 +10,7 @@ import Kyyn.Domain.Evolution (EvolutionName(..), EvolutionFilter(..), evolutionI
 import Kyyn.Domain.Git (gitRevision, gitUrl)
 import Kyyn.Domain.Tap (tapName)
 import Kyyn.Domain.Plugin (pluginName, connectorName, methodName)
-import Kyyn.Domain.Evidence (EvidenceId(..), SyncMode(..))
+import Kyyn.Domain.Evidence (EvidenceId(..), FetchId(..), SyncMode(..))
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
 import Kyyn.Domain.Secret (secretName)
@@ -162,6 +162,13 @@ main = do
     (Invocation selected Human (Evidence (ListCurrentEvidence localFile sales)))
   succeeds ["evidence","show","local-file","sales","notes.txt"]
     (Invocation selected Human (Evidence (ShowCurrentEvidence localFile sales (EvidenceId "notes.txt"))))
+  succeeds ["evidence","show","local-file","sales","--all","--expect-fetch","abc"]
+    (Invocation selected Human (Evidence (ShowAllEvidence localFile sales (Just (FetchId "abc")))))
+  succeeds ["evidence","show","local-file","sales","--all"]
+    (Invocation selected Human (Evidence (ShowAllEvidence localFile sales Nothing)))
+  refuses ["evidence","show","local-file","sales","notes.txt","--all"]
+  refuses ["evidence","show","local-file","sales","notes.txt","--expect-fetch","abc"]
+  refuses ["evidence","show","local-file","sales","--all","--expect-fetch",""]
   forM_ [["evidence","show","local-file","sales"], ["evidence","show","local-file","sales",""],
     ["evidence","show","local-file","sales","notes.txt","--evolution","abc123"]] refuses
   forM_ [["evidence","list"], ["evidence","list","local-file"],

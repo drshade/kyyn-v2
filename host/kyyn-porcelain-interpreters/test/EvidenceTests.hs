@@ -1,6 +1,7 @@
 -- Real Dhall/filesystem plus recording document persistence: latest-only payloads,
 -- ordered deltas, isolation, CAS publication, latest summary, producer changes, clear/refetch
--- and corrupt-data refusal. No plugin invocation or compiler.
+-- and corrupt-data refusal. Bulk inspection covers capture matching, empty/truncated
+-- payloads, blob paths and corruption, with no compiler or provider calls.
 
 {-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main (main) where
@@ -15,7 +16,7 @@ import qualified Data.Text as Text
 import Data.Time.Clock (UTCTime)
 import Data.Time.Format.ISO8601 (iso8601ParseM)
 import Effectful (Eff, IOE, runEff, runPureEff, (:>), UnliftStrategy(..))
-import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift)
+import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift, interpose, passthrough)
 import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue, sdkBlobRefType)
@@ -50,7 +51,7 @@ import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import qualified Kyyn.Porcelain.Protocol.EvidenceIndex as Index
-import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectory, doesFileExist, doesDirectoryExist, listDirectory)
+import System.Directory (createDirectory, createDirectoryIfMissing, removeDirectory, removeFile, doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
@@ -188,8 +189,10 @@ main = do
         run = execute scope
         load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
         listing instanceRef owner = run (noGit (runEvidenceInspection (Inspection.currentEvidence (selectionFor instanceRef owner))))
-        inspect instanceRef owner item = fmap (fmap (\(at,latestSummary,_,found) -> (at,latestSummary,found)))
+        inspect instanceRef owner item = fmap (fmap (\(at,latestSummary,_,found,_) -> (at,latestSummary,found)))
           (run (noGit (runEvidenceInspection (Inspection.readCurrentEvidence (selectionFor instanceRef owner) item))))
+        batch instanceRef owner expected = run (noGit (runEvidenceInspection
+          (Inspection.readEvidenceBatch (selectionFor instanceRef owner) expected)))
         storePath = directory </> ".kyyn/evidence/folder-73616c6573"
         statePath = storePath </> "index.dhallb"
     empty <- load instanceA producer
@@ -198,6 +201,7 @@ main = do
     assert "listing unfetched evidence succeeded" (absentListing == Left [evidenceProblemDiagnostic NotFetched])
     absentItem <- inspect instanceA producer itemA
     assert "unfetched inspection became a missing item" (absentItem == Left [evidenceProblemDiagnostic NotFetched])
+    assert "unfetched batch succeeded" . isLeft =<< batch instanceA producer Nothing
     let ignorePath = directory </> ".kyyn/.gitignore"
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
@@ -209,12 +213,19 @@ main = do
     emptyFetch <- run (publishFixture emptyInstance producer contract Nothing Nothing []) >>= right
     EvidenceCapture emptyAt (FetchSummary _ _ adds updates removals _) listedEmpty <- listing emptyInstance producer >>= right
     assert "fetched empty capture refused" (emptyAt == emptyFetch && null listedEmpty && (adds,updates,removals) == (0,0,0))
+    EvidenceBatch batchAt batchSummary entries1 <- batch instanceA producer (Just (key f1)) >>= right
+    assert "batch lost selection, summary or payloads" (batchAt == f1 && batchSummary == summary1
+      && entries1 == [(itemA,value "old",[]),(itemB,value "removed",[])])
+    EvidenceBatch _ _ emptyEntries <- batch emptyInstance producer Nothing >>= right
+    assert "empty batch refused or invented items" (null emptyEntries)
     ignore <- Bytes.readFile ignorePath
     assert "first publication did not ignore local evidence" (ignore == "*\n")
     Bytes.writeFile ignorePath "*\n# preserve local comment\n"
     independent <- run (publishFixture instanceB producer contract Nothing Nothing [NewEvidence itemA (value "independent")]) >>= right
     let suppliedOptions = Just "{ label = \"scoped\" }"
     f2 <- run (publishFixture instanceA producer contract (Just (key f1)) suppliedOptions second) >>= right
+    assert "stale expected fetch accepted" . isLeft =<< run (rejectPayloadReads (noGit (runEvidenceInspection
+      (Inspection.readEvidenceBatch (selectionFor instanceA producer) (Just (key f1))))))
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
     EvidenceCapture at2 summary2@(FetchSummary identity time added updated removed options) listedLatest <- listing instanceA producer >>= right
@@ -267,6 +278,7 @@ main = do
     assert "same-schema producer change accepted" (incompatible == Left ProducerContractChanged)
     incompatibleListing <- listing instanceA changedProducer
     assert "listing swallowed producer refusal" (incompatibleListing == Left [evidenceProblemDiagnostic ProducerContractChanged])
+    assert "batch swallowed incompatible producer" . isLeft =<< batch instanceA changedProducer Nothing
     failedReset <- run (publishFixture instanceA changedProducer contract (Just (key f3)) Nothing [RemovedEvidence itemA])
     assert "invalid new-producer batch accepted" (isLeft failedReset)
     retained <- load instanceA producer
@@ -291,6 +303,7 @@ main = do
     emptyCapture <- load instanceA changedProducer
     assert "empty capture confused with not fetched" (captureContents emptyCapture == Just (fresh,[]))
     Bytes.writeFile statePath "{ malformed = True }"
+    assert "corrupt batch became empty" . isLeft =<< batch instanceA changedProducer Nothing
     bad <- run (loadCurrentEvidence instanceA changedProducer contract)
     assert "malformed evidence became absent" (case bad of Left (InvalidEvidence _) -> True; _ -> False)
     badFetch <- run (publishFixture instanceA changedProducer contract (Just (key fresh)) Nothing [])
@@ -416,9 +429,23 @@ blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \direc
   resolved <- resolve [captured] (blobValue ref) >>= right
   assert "blob surface lost originating path" (resolved == [ResolvedBlob ref blobPath])
   assert "forged result resolved without capture" . isLeft =<< resolve [] (blobValue ref)
+  EvidenceBatch _ _ bulkBlobs <- execute scope (noGit (runEvidenceInspection
+    (Inspection.readEvidenceBatch (selectionFor instanceA owner) Nothing))) >>= right
+  assert "batch blob paths missing" (bulkBlobs == [(itemA,item,[ResolvedBlob ref blobPath]),(itemB,item,[ResolvedBlob ref blobPath])])
+  Bytes.writeFile blobPath "corrupt"
+  assert "corrupt blob accepted by batch" . isLeft =<< execute scope (noGit (runEvidenceInspection
+    (Inspection.readEvidenceBatch (selectionFor instanceA owner) Nothing)))
+  removeFile blobPath
+  assert "missing blob accepted by batch" . isLeft =<< execute scope (noGit (runEvidenceInspection
+    (Inspection.readEvidenceBatch (selectionFor instanceA owner) Nothing)))
+  Bytes.writeFile blobPath ""
   execute scope (discardFetchBlobs instanceA Nothing [ref])
   assert "changed-head cleanup deleted published bytes" =<< doesFileExist blobPath
   second <- publish (Just (key first)) [SetEvidencePayload itemA (EvidenceFingerprint "same") Truncated] >>= right
+  EvidenceBatch _ _ mixed <- execute scope (noGit (runEvidenceInspection
+    (Inspection.readEvidenceBatch (selectionFor instanceA owner) Nothing))) >>= right
+  assert "batch omitted truncation" (case mixed of
+    [(_,Evidence _ _ Truncated,[]),(_,_,[_])] -> True; _ -> False)
   assert "truncating one use deleted shared blob" =<< doesFileExist blobPath
   _ <- publish (Just (key second)) [SetEvidencePayload itemB (EvidenceFingerprint "same") Truncated] >>= right
   assert "truncated payload retained bytes" . not =<< doesFileExist blobPath
@@ -522,7 +549,7 @@ selectionProof = do
           | actual == scope && selectedRevision == revision && relativeName path == "nested/root/plugins/config/folder.dhall" -> pure (Right (Just configuration))
         _ -> error "Evidence selection read outside its selected package/configuration"
       noStore = interpret $ \_ (_ :: EvidenceStore m a) -> error "Source selection opened the evidence store"
-      selectionResult = runPureEff . runDhallHandling . git . noStore . runEvidenceInspection $
+      selectionResult = runPureEff . runDhallHandling . git . noBlobs . noStore . runEvidenceInspection $
         Inspection.selectEvidence kb revision plugin (ConnectorName "sales")
   EvidenceSelection ref kind (PackageIdentity identity) <- right selectionResult
   captured <- right (guestSources source [(manifest,"{ name = \"folder\", entryModule = \"Folder\" }"),(source,"module Folder where\n")])
@@ -548,3 +575,8 @@ cleanupFailureProof = do
   bytes <- maybe (fail "Cleanup failure erased committed index") pure stored
   _ <- right (runPureEff (runDhallHandling (Index.decodeIndex bytes)))
   pure ()
+
+rejectPayloadReads :: EvidenceStore :> es => Eff es a -> Eff es a
+rejectPayloadReads = interpose $ \env operation -> case operation of
+  ReadCapturedEvidence {} -> error "Expected-fetch mismatch read a payload"
+  _ -> passthrough env operation
