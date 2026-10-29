@@ -11,7 +11,7 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionName(..), EvolutionFilter(..
 import Kyyn.Domain.Git (GitRevision, gitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.Tap (TapName, tapName, qualifiedPlugin)
 import Kyyn.Domain.Plugin (PluginName, ConnectorName(..), MethodName, methodName, pluginName, connectorName, pluginNameText)
-import Kyyn.Domain.Evidence (EvidenceId(..), SyncMode(..))
+import Kyyn.Domain.Evidence (EvidenceId(..), FetchId(..), SyncMode(..))
 import qualified Data.Text as Text
 import Kyyn.Domain.Recipe (RecipeId, recipeId)
 import Kyyn.Domain.Recipe (DescriptionFormat(..))
@@ -59,6 +59,7 @@ data EvidenceCommand
   = FetchConnector PluginName ConnectorName (Maybe String) SyncMode
   | ListCurrentEvidence PluginName ConnectorName
   | ShowCurrentEvidence PluginName ConnectorName EvidenceId
+  | ShowAllEvidence PluginName ConnectorName (Maybe FetchId)
   | ClearEvidence PluginName ConnectorName
   deriving (Eq, Show)
 data GuestCommand = ListGuestModules | ShowGuestModule String | ShowGuestSymbol String deriving (Eq, Show)
@@ -197,10 +198,14 @@ evidenceParser = hsubparser
     <*> optional (strOption (long "options" <> metavar "DHALL" <> help "Connector-specific fetch options as hermetic Dhall"))
     <*> flag ContinueSync RestartSync (long "restart-sync" <> help "Start a fresh sync while keeping existing evidence for comparison"))
   <> group "list" "List current evidence IDs and fingerprints" (ListCurrentEvidence <$> plugin <*> instanceName)
-  <> group "show" "Show a current evidence payload and source references" (ShowCurrentEvidence <$> plugin <*> instanceName
-      <*> argument (eitherReader (\key -> if null key then Left "Evidence ID must not be empty" else Right (EvidenceId (Text.pack key)))) (metavar "ID"))
+  <> group "show" "Show a current evidence payload and source references" (showEvidence <$> plugin <*> instanceName <*>
+      ((Left <$> argument (eitherReader (\key -> if null key then Left "Evidence ID must not be empty" else Right (EvidenceId (Text.pack key)))) (metavar "ID"))
+        <|> (Right <$> (flag' () (long "all" <> help "Show all payloads from one current capture") *>
+          optional (option (eitherReader (\identifier -> if null identifier then Left "Fetch ID must not be empty" else Right (FetchId identifier)))
+            (long "expect-fetch" <> metavar "ID" <> help "Refuse if the current fetch differs"))))))
   <> group "clear" "Clear one connector instance's evidence cache" (ClearEvidence <$> plugin <*> instanceName))
   where
+    showEvidence p i = either (ShowCurrentEvidence p i) (ShowAllEvidence p i)
     plugin = pluginArgument
     instanceName = argument (eitherReader connectorName) (metavar "INSTANCE")
 

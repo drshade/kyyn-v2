@@ -3,7 +3,7 @@ module Kyyn.Domain.Evidence
   ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
   , EvidencePayload(..), Evidence(..), EvidenceChange(..), EvidenceState(..), FetchSummary(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), applyChanges, validateState
-  , evidenceProblemDiagnostic, EvidenceCapture(..), SyncMode(..), instancePath
+  , evidenceProblemDiagnostic, EvidenceCapture(..), EvidenceBatch(..), SyncMode(..), instancePath
   ) where
 
 import Control.Monad (foldM, unless)
@@ -12,6 +12,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.ByteString as Bytes
 import Numeric (showHex)
+import Kyyn.Domain.Blob (ResolvedBlob)
+import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Plugin (PluginName, PackageIdentity, pluginNameText)
 import Kyyn.Domain.Contract (ContractId)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
@@ -34,6 +36,9 @@ data EvidenceState a = EvidenceState
   { latest :: FetchSummary, values :: [(EvidenceId, Evidence a)]
   } deriving (Eq, Show)
 data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint, EvidencePayload ())] deriving (Eq, Show)
+
+data EvidenceBatch = EvidenceBatch EvidenceSnapshotRef FetchSummary
+  [(EvidenceId, Evidence CheckedValue, [ResolvedBlob])] deriving (Eq, Show)
 
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
 data EvidenceProblem = NotFetched | ProducerContractChanged

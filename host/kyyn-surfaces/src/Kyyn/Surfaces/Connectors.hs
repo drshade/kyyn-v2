@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, clearResult,
-  evidenceListResult, evidenceItemResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
+  evidenceListResult, evidenceItemResult, evidenceBatchResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
 
 import Data.Aeson (Value, object, (.=))
 import Data.Coerce (Coercible, coerce)
@@ -9,6 +9,9 @@ import Kyyn.Domain.Evidence
 import Kyyn.Domain.Blob (ResolvedBlob(..), blobValue)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
+import qualified Data.Text.Encoding as Encoding
+import qualified Data.ByteString.Lazy as Bytes
+import Data.Aeson (encode)
 import Kyyn.Surfaces.Result (Response, success)
 
 connectorListResult :: PluginName -> [(ConnectorName,BindingName,ConnectorTypeName)] -> Response
@@ -92,3 +95,15 @@ fetchName :: FetchId -> String
 fetchName (FetchId name) = name
 text :: Coercible a String => a -> String
 text = coerce
+
+evidenceBatchResult :: EvidenceBatch -> Response
+evidenceBatchResult (EvidenceBatch snapshot latest entries) = success value
+  [Text.unpack (Encoding.decodeUtf8 (Bytes.toStrict (encode value)))]
+  where
+    value = object ["selection" .= context snapshot, "latest" .= summaryValue latest,
+      "items" .= [object ["id" .= key, "fingerprint" .= fingerprint, "externalReferences" .= refs,
+        "payload" .= encoded payload, "blobs" .=
+          [object ["reference" .= blobValue ref,"path" .= path] | ResolvedBlob ref path <- blobs]]
+        | (EvidenceId key,Evidence (EvidenceFingerprint fingerprint) refs payload,blobs) <- entries]]
+    encoded Truncated = object ["tag" .= ("Truncated" :: String)]
+    encoded (Available (CheckedValue _ payload)) = object ["tag" .= ("Available" :: String),"value" .= payload]

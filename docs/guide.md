@@ -364,3 +364,24 @@ Git, not the Haskell/Node/C toolchains. Plain `cabal install` does not install
 the runtime assets. Rerun the installer to update; KBs are left untouched.
 An executable update can make a KB's vendored plugin source incompatible with the
 new SDK; updating the executable does not update those plugins.
+
+### Explore a complete evidence capture
+
+Read all current payloads without writing a recipe or opening cache files:
+
+```sh
+kyyn-v2 --kb /path/to/kb --json evidence show microsoft-graph meetings --all > meetings.json
+```
+
+The normal response envelope contains `result.selection`, `result.latest` and
+`result.items`. Each item has an ID, fingerprint, external references, a payload
+(`Available` with a value, or `Truncated`), and a `blobs` array of references and
+usable local paths. Binary content is not embedded. No provider requests are made.
+An empty captured result is different from an instance that has never been fetched.
+
+To require the same capture as a preceding inspection, add
+`--expect-fetch FETCH_ID`, using `result.selection.fetch` from that inspection.
+A mismatch refuses the operation; this cannot retrieve an older capture.
+The command reads one index and buffers all selected payloads before returning a
+single JSON response. Do not refresh or clear that instance while inspecting it;
+blob paths can cease to exist after a later refresh or clear.

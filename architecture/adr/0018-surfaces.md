@@ -192,6 +192,7 @@ An agent creates an authored recipe-based workspace with
 evidence fetch PLUGIN INSTANCE
 evidence list PLUGIN INSTANCE
 evidence show PLUGIN INSTANCE ID
+evidence show PLUGIN INSTANCE --all [--expect-fetch FETCH_ID]
 evidence clear PLUGIN INSTANCE
 ```
 
@@ -199,6 +200,17 @@ Fetching checks the accepted configured instance; no draft acquisition context.
 List shows current IDs, fingerprints and availability. Show exposes the current
 payload with references and usable blob exports, not only a historical event.
 Present the latest fetch identity/time/basic summary with the capture.
+`show --all` opens one current index and reads its items in ID order. Its result
+contains one selection/latest-fetch header and an items array with IDs,
+fingerprints, source references, availability-tagged payloads and resolved local
+blob paths. It follows the ordinary structured response envelope, not JSON Lines;
+errors refuse the whole operation rather than yielding a partial successful export.
+The operation buffers the result; it is not a bounded-memory streaming API.
+`--expect-fetch` checks the opened capture and refuses a mismatch before reading
+payloads. It is a consistency precondition, not a historical selector. An empty
+successful capture yields an empty array; unfetched and incompatible captures
+remain errors. Inspection neither fetches provider data nor runs plugin code.
+Blob lifetime and non-overlapping read/refresh assumptions remain those of ADR 0029.
 Plugin-specific methods remain available for richer views.
 
 Clearing removes only the instance's local capture, latest summary and position,
