@@ -167,6 +167,7 @@ main = do
   succeeds ["evidence","show","local-file","sales","--all"]
     (Invocation selected Human (Evidence (ShowAllEvidence localFile sales Nothing)))
   refuses ["evidence","show","local-file","sales","notes.txt","--all"]
+  refuses ["evidence","show","local-file","sales","notes.txt","--expect-fetch","abc"]
   refuses ["evidence","show","local-file","sales","--all","--expect-fetch",""]
   forM_ [["evidence","show","local-file","sales"], ["evidence","show","local-file","sales",""],
     ["evidence","show","local-file","sales","notes.txt","--evolution","abc123"]] refuses
