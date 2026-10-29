@@ -199,7 +199,24 @@ evidence clear PLUGIN INSTANCE
 Fetching checks the accepted configured instance; no draft acquisition context.
 List shows current IDs, fingerprints and availability. Show exposes the current
 payload with references and usable blob exports, not only a historical event.
-Present the latest fetch identity/time/basic summary with the capture.
+Present the latest fetch identity/time/basic summary with the capture. Include the
+connector's public report in that same latest-fetch presentation on `evidence list`,
+individual `show` and `show --all`; no separate status verb or provider-aware host
+formatter is needed. JSON puts the report's ordinary checked value in
+`result.latest.report`, or null when the connector supplies no report. A nullary
+report follows its checked encoding and is not treated as absent. Keep the existing
+host-owned summary fields alongside it; do not flatten arbitrary plugin fields
+into that summary. Connector discovery exposes `reportType` as a rendered type,
+or null for a list-returning connector, so agents can discover the report shape.
+
+Human output labels it “Report from last successful fetch” and formats it from the
+stored checked contract as readable structured data. No-report captures say that
+no connector report was supplied. These reads run no provider or guest code and
+never expose the private position. Failed attempts leave the previous successful
+capture/report intact; the header must not call it the result of the last attempt.
+A successful acquisition may have skipped or inaccessible scope; neither an empty
+report nor successful command status implies complete coverage. ADR 0029 owns the
+report contract, publication and omission rules.
 `show --all` opens one current index and reads its items in ID order. Its result
 contains one selection/latest-fetch header and an items array with IDs,
 fingerprints, source references, availability-tagged payloads and resolved local
@@ -213,7 +230,7 @@ remain errors. Inspection neither fetches provider data nor runs plugin code.
 Blob lifetime and non-overlapping read/refresh assumptions remain those of ADR 0029.
 Plugin-specific methods remain available for richer views.
 
-Clearing removes only the instance's local capture, latest summary and position,
+Clearing removes only the instance's local capture, latest summary, report and position,
 not accepted facts or recipe state. Distinguish unfetched, incompatible producer,
 publication conflict, malformed delta/storage and unavailable payload. Missing
 evidence does not claim upstream deletion. ADR 0014 owns these semantics.

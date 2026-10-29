@@ -343,23 +343,65 @@ transcript and attendance behavior across both auth modes; the bulk transcript
 endpoint's compatibility with the required per-user policy has not been established.
 
 ```haskell
-data MeetingsPosition = MeetingsPosition
-  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip]
-  , deniedUsers :: Integer, unavailableUsers :: Integer }
-data MeetingSkip = MeetingSkip { reference :: Text, reason :: Text }
+data MeetingsPosition = MeetingsPosition { lastSuccessfulFetch :: Text }
+
+data MeetingsScope
+  = DelegatedMailbox
+  | EnabledMemberMailboxes { examinedUserIds :: [Text] }
+
+data MeetingContext = SignedInUser | DirectoryUser { userId :: Text }
+data MeetingStage
+  = CalendarDiscovery | MeetingResolution | TranscriptListing
+  | AttendanceListing | TranscriptContent | AttendanceRecords
+
+data MeetingAccessIssue = MeetingAccessIssue
+  { context :: MeetingContext, stage :: MeetingStage
+  , reference :: Maybe Text, reason :: Text }
+data MeetingSkip = MeetingSkip
+  { context :: MeetingContext, reference :: Maybe Text, reason :: Text }
+
+data MeetingsReport = MeetingsReport
+  { since :: Text, until :: Text, scope :: MeetingsScope
+  , deniedRequests :: [MeetingAccessIssue]
+  , unavailableUsers :: [MeetingAccessIssue]
+  , skippedMeetings :: [MeetingSkip] }
 ```
 
-Publish the acquisition-start timestamp with the successful capture, including
-empty or partially accessible captures. Failed fetches leave the prior boundary
-unchanged. In application mode, record the count of distinct user contexts with
-at least one 403 in deniedUsers; leave deniedRequests empty. A denial is not proof
-of a specific policy cause. Delegated artifact denials retain their request URLs.
-These diagnostic values reset each successful round and are not exclusions.
-The acquisition API has no general warning-output capability; diagnostics remain
-in the typed position. unavailableUsers counts application users whose calendar
-returns 404 with MailboxNotEnabledForRESTAPI, ErrorMailboxNotEnabledForRESTAPI or MailboxNotSupportedForRESTAPI.
-These users are skipped without failing the tenant walk. Other errors are not
-silently treated as absent mailboxes.
+Publish the acquisition-start timestamp as the private position with every
+successful capture, including empty or partially accessible captures. Failed
+fetches leave the prior boundary unchanged. The separate public report belongs
+to that successful round under [ADR 0029](0029-evidence-blobs-sync.md).
+
+`since` is the effective lower bound after resolving the thirty-day initial window,
+one-day overlap or explicit option; `until` is the acquisition-start upper bound.
+The scope states whether discovery used the signed-in mailbox or enabled member
+mailboxes. In application mode, `examinedUserIds` contains the sorted, distinct
+IDs of all selected enabled members whose calendars were attempted, including
+refused/unavailable ones. Completing directory enumeration and attempting each
+selected calendar are prerequisites to successful publication. An empty selected
+set is explicit; it is not a claim that the tenant contains no meetings. Disabled
+accounts, guests and non-default calendars remain outside the stated scope.
+Delegated scope does not require an extra identity lookup: `SignedInUser` denotes
+the configured credential's `/me` context, not a guessed directory ID.
+
+For each handled 403, record the affected context, operation stage, source/resource
+reference when known, and a connector-authored reason in `deniedRequests`. Record
+calendar HTTP 404 with MailboxNotEnabledForRESTAPI, ErrorMailboxNotEnabledForRESTAPI
+or MailboxNotSupportedForRESTAPI in `unavailableUsers` with the user context,
+CalendarDiscovery stage and recognized code as reason. These skips do not fail the
+tenant walk; other unexpected errors retain the failure rules below. Counts of
+affected accounts can be derived from distinct contexts; they do not replace the
+identities. Deduplicate repeated identical issues, retaining distinct resource or
+stage failures. A refusal does not establish its policy cause or imply that every
+artifact for the account is inaccessible.
+
+`reference` identifies the affected calendar event, online meeting or artifact
+where known; a meeting join URL is a source reference. Use Nothing when no source
+identifier is known. Do not store HTTP endpoint/request URLs, pagination links,
+response bodies or headers. Reasons describe the observed condition rather than
+copying provider response bodies. Report values reset each successful round and
+are not permanent exclusions. They describe discovery and access attempts, not
+training classifications, proof of no activity or a guarantee of complete coverage.
 
 Attempt transcript and attendance requests independently, without predicting
 artifact access from organizer status. A 403 during meeting resolution skips that
@@ -376,7 +418,7 @@ Skip individual meetings with unsupported or unspecified providers, missing join
 URLs, zero or multiple resolution matches, resolution HTTP 404 with Graph code
 `NotFound`, or incomplete meeting-reference metadata
 (including a missing organizer ID). Record the calendar event ID or join URL and
-reason in `skippedMeetings` in the successful position. These skips do not stop
+reason and attempted context in `skippedMeetings` in the successful report. These skips do not stop
 other meetings or prevent the boundary from advancing, even if every meeting is
 skipped. They are diagnostics for that run, not permanent exclusions. A subsequent
 overlap or explicit backfill may resolve a previously skipped meeting. A `NotFound`
@@ -542,7 +584,7 @@ and [content download contract](https://learn.microsoft.com/en-us/graph/api/driv
 ### Atomic refresh and invocation-local reads
 
 Publish one complete successful batch atomically. Failure leaves the current
-capture, sync position and latest-fetch summary unchanged. Publication checks the expected previous
+capture, sync position, public report and latest-fetch summary unchanged. Publication checks the expected previous
 fetch ID (or no fetch for a new instance) so a concurrent acquisition cannot apply its delta against a different
 base. This is local update consistency, not a curation approval workflow.
 
@@ -571,6 +613,7 @@ data EvidenceSelection = EvidenceSelection
 data EvidenceIndex = EvidenceIndex
   { snapshot :: EvidenceSnapshotRef
   , latest :: FetchSummary
+  , report :: Maybe FetchReport
   , payloadContract :: CheckedContract
   , items :: Map EvidenceId (Evidence PayloadLocation)
   }
@@ -605,7 +648,11 @@ payload contract agrees with the index before dispatch.
 `readCapturedEvidence` returns Nothing for an ID absent from the captured index,
 returns a Truncated envelope without opening a payload file, and decodes/checks
 only the selected Available payload. Envelope metadata comes from the index.
-`listCapturedEvidence` projects metadata and availability without reading payloads.
+`listCapturedEvidence` projects metadata, availability and the public report without
+reading payloads. `FetchReport` is defined by ADR 0029; it is stored with the latest
+summary and is not a field inside item payloads. The private sync position is not
+part of the inspection index. Single-item, bulk and enumeration results use the
+report belonging to the same captured index as their summary and items.
 The public inspection operations remain effects; their interpreter uses these
 store operations rather than materializing all evidence.
 

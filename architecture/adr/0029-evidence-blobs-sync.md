@@ -137,7 +137,7 @@ Successful fetch publication checks that every resulting reference resolves to a
 complete blob in that instance. Blobs must exist before the atomic evidence-index
 replacement specified in [ADR 0014](0014-evidence.md), so readers cannot observe
 published references to incomplete files.
-Evidence, latest-fetch summary and sync position commit together under the existing
+Evidence, latest-fetch summary, public report and sync position commit together under the existing
 expected-fetch check. Failure leaves that document unchanged.
 
 The completeness check and index replacement run together under the
@@ -177,7 +177,7 @@ readBlobAt
   => ConnectorInstanceRef -> BlobRef -> Eff es (Either FetchError ByteString)
 ```
 
-Clearing an instance clears its blobs along with its evidence and sync position.
+Clearing an instance clears its blobs along with its evidence, public report and sync position.
 Payload truncation/restoration follows ADR 0014 and is not a source-removal event.
 
 ### Surface results expose files, not binary transcripts
@@ -203,24 +203,29 @@ data FetchContext position = FetchContext
   { startedAt :: Text
   , priorPosition :: Maybe position
   }
-data FetchResult payload position = FetchResult
+data FetchResult payload position report = FetchResult
   { changes :: [EvidenceChange payload]
   , position :: position
+  , report :: report
   }
 
 fetch :: Config -> FetchContext Position -> EvidenceSnapshot Payload
-      -> Acquisition Payload (Either FetchError (FetchResult Payload Position))
+      -> Acquisition Payload (Either FetchError (FetchResult Payload Position Report))
 
 fetch :: Config -> Maybe Options -> FetchContext Position -> EvidenceSnapshot Payload
-      -> Acquisition Payload (Either FetchError (FetchResult Payload Position))
+      -> Acquisition Payload (Either FetchError (FetchResult Payload Position Report))
 ```
 
 `startedAt` is one host-captured UTC instant for the invocation. It supports relative
 backfill/retention windows without an ambient guest clock. `Position` is an ordinary
 concrete plugin-defined type; the compiler derives its contract and verifies the
-same type in context/result. Stateless connectors may keep the existing signatures;
-they have no stored position. A connector needing invocation time but no provider
-cursor can use a nullary position type. No kernel Graph deltaLink type exists.
+same type in context/result. `Report` is a separate concrete plugin-defined type,
+checked as described below. Stateless list-returning signatures remain valid;
+they have neither a stored position nor a public report. A connector that needs a
+report or invocation time but no continuation can use the context/result form
+with a nullary position type. A context/result connector with nothing to report
+uses a nullary report type. There is no optional report in that result form and
+no additional fetch signature or kernel Graph deltaLink type.
 
 The host stores checked position data inside the ignored current evidence index
 (ADR 0014), separate from payload files. Generic evidence inspection does not
@@ -233,12 +238,62 @@ the position. Even a no-change fetch may publish a new position.
 
 The stored position continues the previous sync; `evidence fetch --restart-sync`
 passes `Nothing` once while retaining evidence for comparison, whereas `evidence clear`
-deletes evidence and position. For stateless connectors restart is a reported no-op.
+deletes evidence, report and position. For stateless list-returning connectors restart is a reported no-op.
 Provider pagination, cursor expiry/reset and endpoint-specific reconciliation are
 plugin logic. Publish only the final successful continuation, not intermediate
 page links. Treat stored position as private acquisition data: no normal history
 display, logs, citation fields or recipe state. Recipe state and connector sync
 positions have different owners and must not advance each other.
+
+### Public reports describe the last successful acquisition
+
+A report is an explicit public projection authored by the connector, not a view of
+its position. `FetchContext` supplies only the prior private position; a report
+is not continuation input, recipe state or evidence to process. It describes the
+acquisition that published the current index, not every item accumulated in that
+index and not the latest attempted fetch.
+
+Derive the report contract from the checked `FetchResult Payload Position Report`
+signature. Keep it in the prepared connector and generated dispatch alongside the
+payload and position contracts. Validate the returned report before publication,
+including when the evidence delta is empty. It must be ordinary contract data;
+reject report contracts containing the recognized BlobRef type, including nested
+references. Reports describe coverage and do not own captured files or add another
+blob-retention root. Private compiler/transport representations remain omitted.
+
+The host representation preserves the checked contract with the value:
+
+```haskell
+data FetchReport = FetchReport CheckedContract CheckedValue
+```
+
+Store the report and its compiler-derived contract descriptor alongside the latest
+summary in the ignored evidence index. A list-returning fetch publishes no report;
+a context/result fetch publishes exactly its newly checked report. Do not merge
+reports across runs or retain a preceding report when replacing a producer. An
+empty or no-change successful acquisition still replaces the report. Reports do
+not change evidence fingerprints or manufacture evidence changes.
+
+Evidence, summary, report and position publish under one expected-fetch check.
+A failed, cancelled or conflicting acquisition leaves all four unchanged. No
+attempt-history store, failure-report publication, checkpoint or partial report
+is added. A corrupt or contract-invalid stored report is an explicit storage
+failure, not an absent report. Changed-producer inspection is refused under the
+same rules as evidence; generic reads reconstruct the stored checked report
+without compiling or executing plugin code.
+
+The host has no provider-specific coverage fields. Effective time windows,
+examined account scopes, skipped resources and reasons belong to the plugin's
+report type. Report absence or an empty report never establishes full coverage.
+[ADR 0018](0018-surfaces.md) owns its explicit inspection presentation.
+
+Private positions remain excluded from that presentation. Plugins must not copy
+credentials, provider continuation tokens, raw HTTP request URLs, response headers
+or bodies into reports. An account ID, source event ID or meeting source reference
+may be included when it identifies the affected context; it is not a raw transport
+trace. Report contents are not emitted into routine logs or timing diagnostics.
+As with evidence payloads, the host checks structure, not whether arbitrary
+plugin-authored text contains a secret. There is no automatic sanitization claim.
 
 ## Consequences and verification
 
@@ -254,6 +309,17 @@ evidence and its blobs, and sequential refresh/cleanup removes unreferenced byte
 without retaining history. Test surface file usability after method return until
 refresh or explicit instance clearing. Concurrent read/reclamation behavior is
 not a supported guarantee or a verification requirement.
+
+Check typed report derivation and dispatch under both GHC and MicroHs, including
+nullary report/position types and stateless absence. Reject malformed report values
+and BlobRef-bearing report contracts before publication. Verify stored report
+contract reconstruction without guest execution, and corruption refusal.
+
+Check that successful empty/no-change acquisitions replace reports without item
+changes. Failed/cancelled/conflicting fetches preserve the old summary, report,
+position and evidence together. Producer replacement and clearing must not expose
+an old report as current. Explicit inspection includes report data, while ordinary
+logs and timing events exclude it and all private position data.
 
 Check positions across empty batches, pagination failure, local base conflict,
 restart and producer changes. A cursor must never describe changes that were not
