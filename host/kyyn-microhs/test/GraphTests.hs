@@ -20,6 +20,7 @@ import Data.IORef (newIORef, readIORef, modifyIORef')
 import Data.List (isInfixOf, isSuffixOf)
 import Data.Version (showVersion)
 import Effectful (runEff)
+import Kyyn.Domain.DataType (DataType(..))
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path
 import Kyyn.MicroHs.Inspection (inspectDataType, inspectPluginSignature)
@@ -71,8 +72,8 @@ main = withSystemTempDirectory "kyyn-graph-" $ \temporary -> do
   payload <- inspect "MicrosoftGraph.Calendar.Types.Event"
   position <- inspect "MicrosoftGraph.Calendar.Types.CalendarPosition"
   (derived,_) <- inspectPluginSignature toolchain (map (repo </>) directories) AcquisitionEntry "MicrosoftGraph.Calendar.fetch" >>= right
-  assert "Graph signature-derived contracts differ" (derived == StatefulFetchSignature config Nothing payload position)
-  fetchSources <- right (statefulAcquisitionSources config payload Nothing position "MicrosoftGraph.Calendar.fetch" sources)
+  assert "Graph signature-derived contracts differ" (derived == StatefulFetchSignature config Nothing payload position UnitType)
+  fetchSources <- right (statefulAcquisitionSources config payload Nothing position UnitType "MicrosoftGraph.Calendar.fetch" sources)
   loginAdapter <- right (loginSources config "MicrosoftGraph.Calendar.Config.login" sources)
   (fetchPrograms,_) <- compileBoth temporary toolchain compiler "graph-fetch" fetchSources
   (loginPrograms,_) <- compileBoth temporary toolchain compiler "graph-login" loginAdapter

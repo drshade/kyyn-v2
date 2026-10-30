@@ -113,8 +113,8 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   (box,_) <- inspectDataType toolchain [schemaDirectory] "SignatureCases.Payload" >>= right
   forM_ [(AcquisitionEntry,"good",FetchSignature config Nothing box),
          (AcquisitionEntry,"goodOptions",FetchSignature config (Just options) box),
-         (AcquisitionEntry,"goodStateful",StatefulFetchSignature config Nothing box StringType),
-         (AcquisitionEntry,"goodStatefulOptions",StatefulFetchSignature config (Just options) box StringType),
+         (AcquisitionEntry,"goodStateful",StatefulFetchSignature config Nothing box StringType StringType),
+         (AcquisitionEntry,"goodStatefulOptions",StatefulFetchSignature config (Just options) box StringType StringType),
          (CapturedReadEntry,"goodRead",ReadSignature StringType box StringType)] $ \(kind,name,expectedSignature) -> do
     (actual,_) <- inspectPluginSignature toolchain [schemaDirectory] kind ("SignatureCases." ++ name) >>= right
     assert ("Wrong derived signature for " ++ name) (actual == expectedSignature)
@@ -128,7 +128,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   genericSources <- right (acquisitionSources config box Nothing "SignatureCases.good" common)
   _ <- compileBoth temporary toolchain nativeCompiler "generic-helper" genericSources
   forM_ [("goodStateful",Nothing),("goodStatefulOptions",Just options)] $ \(entry,selectedOptions) -> do
-    sources <- right (statefulAcquisitionSources config box selectedOptions StringType ("SignatureCases." ++ entry) common)
+    sources <- right (statefulAcquisitionSources config box selectedOptions StringType StringType ("SignatureCases." ++ entry) common)
     (programs,artifact) <- compileBoth temporary toolchain nativeCompiler entry sources
     if entry == "goodStateful" then statefulTests temporary toolchain config box artifact else pure ()
     forM_ programs $ \program -> forM_ [Nothing,Just ("saved" :: String)] $ \prior -> do
@@ -142,7 +142,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
         ["input" .= arguments,"startedAt" .= ("2026-10-07T12:00:00Z" :: String),"priorPosition" .= optional],
         "snapshot" .= ("prior" :: String)])
       assert "typed fetch context/result did not round trip" (result == Just (success (object
-        ["changes" .= ([] :: [Value]),"position" .= (maybe "first" id prior ++ ":2026-10-07T12:00:00Z")]))
+        ["changes" .= ([] :: [Value]),"position" .= (maybe "first" id prior ++ ":2026-10-07T12:00:00Z"),"report" .= ("public summary" :: String)]))
         && null trace && status == ExitSuccess)
   folder <- load "host/kyyn-microhs/test/plugin" "Folder.hs"
   view <- load "host/kyyn-microhs/test/plugin" "ReadDocument.hs"

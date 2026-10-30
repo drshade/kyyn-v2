@@ -26,6 +26,7 @@ node tools/test-plugin-guides.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-plugin-taps.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-plugin-evolution.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-connector-fetch.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-connector-fetch.mjs "$journey_stage/install/bin/kyyn-v2" --report-smoke
 node tools/test-network-connector.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-blob-connector.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-graph-install.mjs "$journey_stage/install/bin/kyyn-v2"

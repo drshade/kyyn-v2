@@ -58,7 +58,7 @@ main = withSystemTempDirectory "kyyn-graph-mail-" $ \temporary -> do
   payload <- inspect "MicrosoftGraph.Mail.Types.Message"
   options <- inspect "MicrosoftGraph.Mail.Types.MailFetch"
   position <- inspect "MicrosoftGraph.Mail.Types.MailPosition"
-  adapter <- right (statefulAcquisitionSources config payload (Just options) position "MicrosoftGraph.Mail.fetch" sources)
+  adapter <- right (statefulAcquisitionSources config payload (Just options) position UnitType "MicrosoftGraph.Mail.fetch" sources)
   (programs,_) <- compileBoth temporary toolchain compiler "mail" adapter
   benchmark <- (== Just "1") <$> lookupEnv "KYYN_MAIL_BENCHMARK"
   results <- newIORef []

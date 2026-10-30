@@ -181,7 +181,7 @@ rolling window or second full-events acquisition path.
 newtype CalendarPosition = CalendarPosition { deltaLink :: Text }
 
 fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Event
-      -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition))
+      -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition ()))
 ```
 
 The first fetch establishes a baseline. Subsequent fetches follow the saved delta

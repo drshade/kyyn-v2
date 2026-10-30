@@ -37,12 +37,12 @@ toolBrokerTests = do
       methodNameValue = either error id (methodName "content")
       program = fixtureProgram "not executed"
       method = PreparedMethod methodNameValue "Read" contract contract program
-      connector = PreparedConnector kind contract contract program program [method] Nothing Nothing Nothing
+      connector = PreparedConnector kind contract contract program program [method] Nothing Nothing Nothing Nothing
       plugins = [PreparedPlugin (PreparedPackage plugin (PackageIdentity "package") [connector])
         [ConfiguredConnector instanceName binding connector (CheckedValue (contractId contract) (string "config"))]]
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")
         (EvidenceProducer (PackageIdentity "package") (contractId contract)) (FetchId "captured")
-      captured = EvidenceIndex snapshot (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing) contract mempty
+      captured = EvidenceIndex snapshot (FetchSummary (FetchId "captured") "2026-10-07" 1 0 0 Nothing) contract mempty Nothing
       recordReads :: Eff (PluginRead : es) a -> Eff es (a,Int)
       recordReads = reinterpret (runState (0 :: Int)) $ \_ operation -> case operation of
         LoadCapturedInput {} -> error "Recipe input was reread from latest instead of its pinned capture"

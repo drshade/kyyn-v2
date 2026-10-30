@@ -69,7 +69,7 @@ statefulTests temporary toolchain configType payloadType program = do
       producer = EvidenceProducer package (contractId payload)
       config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
       fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition kb) $
-        fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program config Nothing (Just position) mode Nothing
+        fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program config Nothing (Just position) (Just position) mode Nothing
       load = runStore kb (beginFixture instanceRef producer payload (Just position)) >>= right
   first <- fetch ContinueSync >>= right
   MaterializedBaseline _ base _ stored <- load
@@ -111,7 +111,7 @@ nativeTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
       fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition kb) $
-        fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config (path :: String)) Nothing Nothing ContinueSync Nothing
+        fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config (path :: String)) Nothing Nothing Nothing ContinueSync Nothing
   first <- fetch "source-files" >>= right
   let producer = EvidenceProducer package (contractId payload)
       load = runStore kb (loadCurrentEvidence instanceRef producer payload) >>= right >>= maybe (fail "Missing evidence") pure
@@ -197,7 +197,7 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThirdIndex currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            (runContentDigest . runEvidenceAcquisition kb) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing ContinueSync Nothing)
+            (runContentDigest . runEvidenceAcquisition kb) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -209,7 +209,7 @@ nativeTests temporary toolchain configType payloadType program = do
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
       noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . runEvidenceAcquisition kb)
-        (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) optionsContract Nothing ContinueSync (Just "True"))
+        (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) optionsContract Nothing Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."
 
@@ -222,7 +222,7 @@ recordAcquisition index (CurrentEvidence snapshot@(EvidenceSnapshotRef _ _ ident
     BeginFetch _ _ Nothing -> State.modify @[String] (++ ["begin"]) >>
       pure (Right (FetchBaseline "2026-10-07T12:00:00Z" (Just identity) (Just index) Nothing))
     ReadCapturedEvidence actual key | actual == index -> pure (Right (lookup key items))
-    PublishFetch _ _ expected _ [] Nothing | expected == Just identity ->
+    PublishFetch _ _ expected _ [] Nothing Nothing | expected == Just identity ->
       State.modify @[String] (++ ["publish"]) >> pure (Right snapshot)
     _ -> error "Acquisition reopened evidence or published against a head other than its loaded input"
 
@@ -234,14 +234,14 @@ data MaterializedBaseline = MaterializedBaseline String (Maybe FetchId) (Maybe C
 
 publishFetchWithPosition :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
   -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue) -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
-publishFetchWithPosition ref (EvidenceProducer package _) = publishFetch (EvidenceSelection ref (ConnectorTypeName "Folder") package)
+publishFetchWithPosition ref (EvidenceProducer package _) schema base options changes position = publishFetch (EvidenceSelection ref (ConnectorTypeName "Folder") package) schema base options changes position (fmap (\(c,v) -> FetchReport c v) position)
 
 publishFixture :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
   -> [EvidenceChange CheckedValue] -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
 publishFixture ref owner schema base options changes = publishFetchWithPosition ref owner schema base options changes Nothing
 
 materialize :: EvidenceStore :> es => EvidenceIndex -> Eff es (Either EvidenceProblem CurrentEvidence)
-materialize index@(EvidenceIndex snapshot summary _ _) = runExceptT $ do
+materialize index@(EvidenceIndex snapshot summary _ _ _) = runExceptT $ do
   let EvidenceState _ entries = indexState index
   values <- mapM (\(ident,_) -> do
     found <- ExceptT (readCapturedEvidence index ident)

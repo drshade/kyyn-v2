@@ -58,27 +58,45 @@ main = do
         (EvidenceProducer (PackageIdentity "fixture") (contractId evidenceContract)) (FetchId "latest")
       latest = FetchSummary (FetchId "latest") "2026-10-07T00:00:00Z" 1 0 0 Nothing
       latestValue = object ["id" .= ("latest" :: String), "fetchedAt" .= ("2026-10-07T00:00:00Z" :: String),
-        "added" .= (1 :: Integer), "updated" .= (0 :: Integer), "removed" .= (0 :: Integer), "options" .= (Nothing :: Maybe String)]
+        "added" .= (1 :: Integer), "updated" .= (0 :: Integer), "removed" .= (0 :: Integer), "options" .= (Nothing :: Maybe String),"report" .= Null]
       latestLine = "Latest fetch: latest  2026-10-07T00:00:00Z  1 added, 0 updated, 0 removed"
-  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc",Available ())]) of
+  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc",Available ())] Nothing) of
     Response _ payload messages _ -> unless
       (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
         "items" .= [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"availability" .= ("Available" :: String)]]]
-        && messages == [latestLine,"notes.txt  abc  Available"]) (fail "Current listing output lost summary or IDs/fingerprints")
-  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc",Truncated)]) of
+        && messages == [latestLine,"No connector report was supplied.","notes.txt  abc  Available"]) (fail "Current listing output lost summary or IDs/fingerprints")
+  case evidenceListResult (EvidenceCapture snapshot latest [(EvidenceId "notes.txt",EvidenceFingerprint "abc",Truncated)] Nothing) of
     Response _ (Object fields) messages _ -> unless
       (KeyMap.lookup "items" fields == Just (toJSON [object ["id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"availability" .= ("Truncated" :: String)]])
-        && messages == [latestLine,"notes.txt  abc  Truncated"]) (fail "Listing omitted truncation")
+        && messages == [latestLine,"No connector report was supplied.","notes.txt  abc  Truncated"]) (fail "Listing omitted truncation")
     _ -> fail "Expected structured listing"
-  case evidenceListResult (EvidenceCapture snapshot latest []) of
-    Response _ _ messages _ -> unless (messages == [latestLine,"No current evidence."]) (fail "Empty listing output")
+  case evidenceListResult (EvidenceCapture snapshot latest [] Nothing) of
+    Response _ _ messages _ -> unless (messages == [latestLine,"No connector report was supplied.","No current evidence."]) (fail "Empty listing output")
   case evidenceItemResult snapshot latest (EvidenceId "notes.txt")
-    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (Available (CheckedValue (contractId evidenceContract) (String "hello")))) [] "\"hello\"\n" of
+    (Evidence (EvidenceFingerprint "abc") ["file:///notes.txt"] (Available (CheckedValue (contractId evidenceContract) (String "hello")))) [] Nothing "\"hello\"\n" of
     Response _ payload messages _ -> unless
       (payload == object ["selection" .= object ["plugin" .= ("local-file" :: String),"instance" .= ("sales" :: String),"fetch" .= ("latest" :: String)], "latest" .= latestValue,
         "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"externalReferences" .= ["file:///notes.txt" :: String],"blobs" .= ([] :: [Value]),"payload" .= object ["tag" .= ("Available" :: String),"value" .= ("hello" :: String)]]
-        && messages == [latestLine,"notes.txt  abc  Available","  Source: file:///notes.txt","\"hello\""])
+        && messages == [latestLine,"No connector report was supplied.","notes.txt  abc  Available","  Source: file:///notes.txt","\"hello\""])
       (fail "Current evidence inspection lost payload or source metadata")
+  let reportContract = either (error . show) id (checkContract (ListType TextType) (SchemaMetadata [] [] []))
+      reportValue = toJSON (["account-" ++ show n | n <- [1..13 :: Int]])
+      publicReport = FetchReport reportContract (CheckedValue (contractId reportContract) reportValue)
+  case evidenceListResult (EvidenceCapture snapshot latest [] (Just publicReport)) of
+    Response _ (Object fields) messages _ -> do
+      let reported = do
+            Object header <- KeyMap.lookup "latest" fields
+            KeyMap.lookup "report" header
+      unless (reported == Just reportValue) (fail "JSON report was truncated or omitted")
+      unless (any (isInfixOf "3 omitted; use --json") messages && not (any (isInfixOf "account-13") messages))
+        (fail "Human report failed to bound a long list")
+    _ -> fail "Missing public report response"
+  let unitContract = either (error . show) id (checkContract UnitType (SchemaMetadata [] [] []))
+  case evidenceListResult (EvidenceCapture snapshot latest [] (Just (FetchReport unitContract (CheckedValue (contractId unitContract) (object []))))) of
+    Response _ (Object fields) _ _ -> unless
+      ((do Object header <- KeyMap.lookup "latest" fields; KeyMap.lookup "report" header) == Just (object []))
+      (fail "Unit report became absent")
+    _ -> fail "Missing unit report response"
   let citation = EvidenceRef "local-file" "sales" "notes.txt" []
       checkInstanceKeys (Object fields) =
         not (KeyMap.member "connector" fields) && all checkInstanceKeys (KeyMap.elems fields)
@@ -87,7 +105,7 @@ main = do
       hasInstance (Object fields) = KeyMap.lookup "instance" fields == Just (String "sales") || any hasInstance (KeyMap.elems fields)
       hasInstance (Array values) = any hasInstance values
       hasInstance _ = False
-      results = [evidenceListResult (EvidenceCapture snapshot latest [])]
+      results = [evidenceListResult (EvidenceCapture snapshot latest [] Nothing)]
   mapM_ (\(Response _ payload _ _) -> unless (checkInstanceKeys payload) (fail "Evidence output mislabeled instance")) results
   let render name namespace origin signature = case GuestApi.symbolResult
         (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of

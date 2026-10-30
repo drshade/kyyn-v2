@@ -385,3 +385,24 @@ A mismatch refuses the operation; this cannot retrieve an older capture.
 The command reads one index and buffers all selected payloads before returning a
 single JSON response. Do not refresh or clear that instance while inspecting it;
 blob paths can cease to exist after a later refresh or clear.
+
+### Inspect the last successful sync
+
+`evidence list PLUGIN INSTANCE` displays a report from the last successful fetch.
+The JSON forms of list, single-item show and bulk show expose the same value as
+`result.latest.report`. Discover its schema with `plugin connector show PLUGIN
+INSTANCE` (`reportType` in JSON). A connector without a report returns `null`;
+a connector using a unit report returns `{}`. Human output previews long lists
+and states how many entries were omitted; use `--json` for the complete report.
+
+The Meetings report records the effective window, examined mailbox IDs for
+application authentication, refusals, unavailable mailboxes, skipped meetings
+and potential attendance-list coverage limits. Each issue identifies the source
+context and processing stage. It describes that fetch, not the whole accumulated
+capture. A successful fetch with no new artifacts still updates its report. A
+failed attempt leaves the previous successful report intact.
+
+The report is public connector data; private resume positions are not exposed.
+Upgrading a vendored Graph plugin requires an evolution, then clearing and
+refetching incompatible captures. A fresh Meetings fetch defaults to 30 days;
+use its explicit `since` option when rebuilding a longer historical window.

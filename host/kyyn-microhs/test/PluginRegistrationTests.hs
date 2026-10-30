@@ -153,7 +153,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         "LocalFile.Read.content" (authored ++ files sdk))
       compileFirstParty (temporary </> "ghc-read") readAdapter
       mapM_ (\(ConfiguredConnector name _ selectedConnector config) -> do
-        (selectedKind,payload,entry,_,_,_,_) <- right (sourceDetails selectedConnector)
+        (selectedKind,payload,entry,_,_,_,_,_) <- right (sourceDetails selectedConnector)
         let invoke producerIdentity selected value = runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
               (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runGuestExecution toolchain (runPluginRead
                 (callCapturedMethod (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind producerIdentity) payload selected value)))))))) >>= right
@@ -165,11 +165,11 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
         assert "Read before fetch was not refused" (hasCode "evidence.not-fetched" absent)
         snapshot <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
           (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope) (runFileAcquisitionIO (runGuestExecution toolchain (noNetwork $ (runContentDigest . runEvidenceAcquisition scope)
-            (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity) payload entry config Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
+            (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity) payload entry config Nothing Nothing Nothing ContinueSync Nothing))))))))) >>= right >>= right
         current <- runEff (runFailure (runFileSystemIO scope (runDhallHandling (runDocumentPersistenceIO $ (runBlobStorageIO scope . runEvidenceStore scope)
           (openCurrentEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) selectedKind identity)))))) >>= right >>= right
         assert "configured local-file did not fetch a real file" (case current of
-          Just (EvidenceIndex selected _ _ items) -> selected == snapshot && length items == 1
+          Just (EvidenceIndex selected _ _ items _) -> selected == snapshot && length items == 1
           Nothing -> False)
         result <- invoke identity method (arguments "one.txt") >>= right
         assert "Content read returned the wrong payload" (result == (CheckedValue (contractId output) (toJSON ("one" :: String)),[]))

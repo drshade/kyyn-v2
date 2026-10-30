@@ -46,7 +46,7 @@ integer = Scalar IntegerScalar
 
 encodeIndex :: DhallHandling :> es => IndexDocument -> Eff es (Either EvidenceProblem ByteString)
 encodeIndex (IndexDocument (PackageIdentity producer) (ConnectorTypeName connector) contract state@(EvidenceState summary values) position report) =
-  case validateState state >> traverse_ validatePosition position >> traverse_ validateReport report of
+  case validatePresence position report >> validateState state >> traverse_ validatePosition position >> traverse_ validateReport report of
     Left problem -> pure (Left problem)
     Right () -> do
       encoded <- encodeBinaryValue (Record [("header",headerShape),("body",bodyShape (fst <$> position) (reportContract <$> report))])
@@ -95,6 +95,7 @@ decodeIndex bytes = do
           (Nothing,Nothing) -> pure Nothing
           (Just expected,Just value) -> pure (Just (FetchReport expected (CheckedValue (contractId expected) value)))
           _ -> fail "Report descriptor and value must both be present or absent"
+        either (fail . show) pure (validatePresence position report)
         let state = EvidenceState summary values
         either (fail . show) pure (validateState state)
         pure (IndexDocument package connector contract state position report))
@@ -160,3 +161,8 @@ parseOptional decode = withObject "optional" $ \v -> do
 
 reportContract :: FetchReport -> CheckedContract
 reportContract (FetchReport contract _) = contract
+
+validatePresence :: Maybe a -> Maybe b -> Either EvidenceProblem ()
+validatePresence Nothing Nothing = Right ()
+validatePresence (Just _) (Just _) = Right ()
+validatePresence _ _ = Left (InvalidEvidence "Sync position and public report must both be present or absent")
