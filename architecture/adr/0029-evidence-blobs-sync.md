@@ -147,6 +147,18 @@ lock; concurrent fetches still use the expected-fetch check. This prevents
 reclamation between a successful completeness check and publication, without
 pinning blobs for readers or in-flight acquisitions.
 
+Independent downloads within one acquisition may run concurrently under ADR 0009.
+Each download owns its unique temporary file; publishing identical content hashes
+from multiple workers is safe and leaves one complete content-addressed file.
+Registration of newly created references is atomic and invocation-scoped, including
+the install/register interval under cancellation. Initialize shared cache/ignore
+metadata before workers can race to create it. Never use a non-atomic read/modify/write
+list to track worker-created blobs. On failure, join all workers before running the
+existing published-reference-aware cleanup; no surviving worker may recreate bytes
+after cleanup or publish a reference after the fetch has failed. The batch scheduler
+neither publishes evidence nor changes the expected-fetch check. Existing concurrent
+fetch isolation and reclamation rules continue to apply.
+
 After publication, reclaim bytes no longer referenced by Available payloads in
 latest evidence. The index records host-derived blob references for each Available
 payload, so this does not require decoding every unchanged payload. Truncated

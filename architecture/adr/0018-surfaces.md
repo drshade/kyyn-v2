@@ -233,6 +233,14 @@ remain errors. Inspection neither fetches provider data nor runs plugin code.
 Blob lifetime and non-overlapping read/refresh assumptions remain those of ADR 0029.
 Plugin-specific methods remain available for richer views.
 
+Native evidence-fetch execution defaults to four concurrent requests per acquisition
+batch. The process-local `KYYN_FETCH_CONCURRENCY` override accepts canonical integers
+1 through 8; reject invalid values before provider work. This is execution policy,
+not KB/plugin configuration, a fetch option or part of a stored position/report.
+Width 1 supplies a serial baseline. The host passes the effective width to the
+generated adapter, enforces it for every batch and records it in opt-in timings
+under ADR 0019. Other CLI operations do not parse or depend on this override.
+
 Clearing removes only the instance's local capture, latest summary, report and position,
 not accepted facts or recipe state. Distinguish unfetched, incompatible producer,
 publication conflict, malformed delta/storage and unavailable payload. Missing

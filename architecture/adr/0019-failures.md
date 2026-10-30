@@ -100,6 +100,25 @@ to inspect `git status` and repair the checkout through Git; it must not claim
 non-acceptance. Its interruption exit status is distinct from an ordinary refusal.
 Do not promise that killing a guest rolls back host actions it already requested.
 
+Acquisition batch execution is structured within that same operation. Fatal host
+failure, malformed protocol or caller cancellation cancels all running workers,
+prevents queued work from starting, and joins workers before closing their scope
+or reclaiming staged blobs. WaitSeconds and HTTP/download calls remain cancellable.
+Typed provider refusals/timeouts are returned to their requesting branches; they
+are not fatal worker exceptions merely because the result is Left. A failed round
+has no successful reply, and the scheduler never retries a whole batch: dispatched
+HTTP effects may already have happened. Ending the guest does not roll those back.
+If a later batch contains a forbidden effect, previous batches are not undone.
+
+Opt-in sync timings distinguish summed request duration from elapsed acquisition
+and command wall time. Under concurrency those durations overlap and must not be
+added to predict total latency. Record effective width, round count/wall time,
+request counts by remote (HTTP/download), waiting and local classes, HTTP status
+counts (including 429), and peak in-flight requests. Mark rounds containing a
+WaitSeconds member and record their elapsed time, so barrier stalls can be
+distinguished from request latency. Counter updates are atomic. Timing labels retain the existing
+ban on source identities, URLs, headers, bodies, secrets and report contents.
+
 Report progress and results to the owning caller. Do not add a generic persisted
 operation registry; durability belongs to a concrete operation that needs it.
 A crashed pure call can rerun from captured inputs; an external write cannot
