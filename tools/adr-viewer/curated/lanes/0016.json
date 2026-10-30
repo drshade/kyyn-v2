@@ -1,7 +1,7 @@
 {
   "adr": "0016",
   "title": "Local secrets, typed configuration and named connector bindings",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0016.01",
@@ -408,6 +408,11 @@
       "seq": 157,
       "pr": 204,
       "note": "Adds calendar windowStart/windowEnd config fields whose semantics are owned by ADR 0014; provider-config detail only"
+    },
+    {
+      "seq": 207,
+      "pr": 259,
+      "note": "Adds Directory to the list of Graph connectors sharing authentication code; the connector itself is ADR 0014's decision (0014.82) and the shared-auth rule (0016.16) is unchanged."
     }
   ],
   "notes": "The lane's most notable detour is guest secret access: the founding text gave plugins a GetSecret request, seq 97 removed it as speculative (host store + CLI only, evolutions pure), and seq 110/113 reintroduced read-and-replace guest requests once Graph needed token rotation. The ADR also grew in scope: retitled at seq 76 from 'Local secrets and plugin-owned authentication' to include typed configuration and named connector bindings, and later accreted a large Microsoft Graph authentication section that is really plugin-specific design living in a core ADR. Seq 151's shared combined-scope DeviceCode config (0016.16) ran ahead of the code until PR #213 at seq 165 added configured scopes shared by login and refresh; it is marked realised there with medium confidence because only the Calendar connector exists, so the Mail/Meetings/Files permission rules in the same node are not yet exercised. The founding 'Trust and consequences' section carries real requirements (traces omit secret values and HTTP headers/URLs/bodies) but per the rules produced no node; worth a human check whether it should. Several small config-field steps (sharedCalendar, scopes String->Text, window fields) were judged editorial/provider detail rather than architecture."

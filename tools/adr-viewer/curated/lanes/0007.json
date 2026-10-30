@@ -1,7 +1,7 @@
 {
   "adr": "0007",
   "title": "Library-backed JSON hidden behind typed adapters",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0007.01",
@@ -213,7 +213,12 @@
         "seq": 78,
         "evidence": "PR #96 conversational adapter handles one request at a time and aborts on wrong IDs/tags before resuming"
       },
-      "confidence": "medium"
+      "confidence": "medium",
+      "ended": {
+        "seq": 214,
+        "how": "replaced",
+        "by": "0007.23"
+      }
     },
     {
       "id": "0007.10",
@@ -473,6 +478,53 @@
         "evidence": "PR #215 carries captured blob-read bytes raw through the plugin protocol (PluginMessages/PluginBroker) and returns metadata-only blob-download responses"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0007.22",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Bounded acquisition batch frames partition one raw body section",
+      "detail": "Acquisition input carries a host-chosen concurrency width, and concurrent groups use HostBatch/HostBatchResponse frames of 1 to width contiguous-ID members whose bodies partition the existing raw section exactly by bodyLength. The host validates the whole frame before dispatching anything, one owner writes the ordered reply after all workers finish, and the guest checks the exact ordered match before resuming any continuation.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Bounded acquisition batches"
+      ],
+      "anchors": [
+        "GuestBatch",
+        "HostBatch",
+        "HostBatchReply",
+        "HostBatchResponse",
+        "RequestPart",
+        "ResponsePart"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0007.23",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Lockstep adapters with one outstanding frame exchange per guest",
+      "detail": "Replaces 0007.09's one outstanding request: adapters are still generated in lockstep with no version negotiation, but a guest may now have one outstanding frame exchange, which can be a bounded batch of requests.",
+      "kind": "replace",
+      "supersedes": [
+        "0007.09"
+      ],
+      "sections": [
+        "Protocol boundary and tradeoffs"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "The lockstep, no-negotiation core has held since seq 78 (0007.09); batch exchanges are unbuilt because PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "medium"
     }
   ],
   "editorial": [
@@ -507,5 +559,5 @@
       "note": "Context now points Dhall storage at the sealed-tool/KB principle (one current persisted format, no compatibility paths); Context produces no nodes, and the persisted-record versioning it concerns is owned by ADR 0010. The guest catalogue version check removed in the same PR was never a 0007 commitment (0007.09 already rules out version negotiation)."
     }
   ],
-  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane. Generated adapters grew case by case: ADT codecs (#6), validator (#25), queries (#27). Seq 185 (PR #236) only re-pointed the Context paragraph at the new sealed-tool/KB principle; editorial here, with the format-versioning removal recorded in ADR 0010's lane."
+  "notes": "Founding decision had no ### subsections; it was split by commitment across 'Decision proposed', 'Proposed value profile' and 'Protocol boundary' (10 nodes). The lane is short and stable: the only real reversal is framing, where LF-terminated JSON lines (seq 1, used from seq 78) were replaced by chunk-framed binary sections with raw HTTP bodies (seq 154) after a measured throughput problem (issue #199), implemented the next step (seq 155). Seq 5 is where the proposal became concrete: library choice plus decoded-value checks that were added to work around json-0.11 surrogate/leading-zero bugs rather than patching the library. Seq 1's verification and protocol-boundary text promised nested plugin-call cancellation; I found only indirect evidence (per-call method guests in KB tools, PR #107), so 0007.10 is low confidence. Platform portability of binary handles (0007.19) is explicitly a requirement whose macOS/WSL verification is not asserted. Seq 167 (PR #215) extended the raw body to blob-download requests and successful blob-read responses (0007.21 refines 0007.18), so ADR 0029's byte reads no longer need a binary-to-text codec; the matching 0029 wording change is editorial in that lane. Generated adapters grew case by case: ADT codecs (#6), validator (#25), queries (#27). Seq 185 (PR #236) only re-pointed the Context paragraph at the new sealed-tool/KB principle; editorial here, with the format-versioning removal recorded in ADR 0010's lane. Seq 214 (PR #274, docs-only) added bounded batch frames (0007.22) and replaced the one-outstanding-request rule with one outstanding frame exchange (0007.23 replaces 0007.09, medium: its surviving lockstep core was already built, but the node shows unrealised until batches exist). The protocol's 'synchronous' to 'request/response' rewording is part of the same change."
 }

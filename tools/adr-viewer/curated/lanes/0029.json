@@ -1,7 +1,7 @@
 {
   "adr": "0029",
   "title": "Evidence blobs and connector-owned sync positions",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0029.01",
@@ -272,6 +272,93 @@
         "evidence": "PR #217 adds the batched native ContentDigest capability with a pure interpreter, used by Graph Mail fingerprints"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0029.12",
+      "seq": 212,
+      "pr": 270,
+      "summary": "Context/result fetches return a typed public report beside the position",
+      "detail": "FetchResult gains a report parameter: a context/result connector returns a separate plugin-defined Report type derived from its checked signature, nullary when it has nothing to say, while stateless list-returning signatures have neither position nor report. The report is a connector-authored public projection of the acquisition that published the current index, never continuation input or evidence.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Sync positions are typed connector data",
+        "Decision / Public reports describe the last successful acquisition"
+      ],
+      "anchors": [
+        "FetchResult",
+        "Report"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 213,
+        "evidence": "PR #271 implements the accepted #270 design: the Report contract flows through signature inspection, codecs, preparation and dispatch; Mail and Calendar use unit reports"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.13",
+      "seq": 212,
+      "pr": 270,
+      "summary": "Reports publish atomically with evidence and replace on every success",
+      "detail": "Evidence, summary, report and position publish under one expected-fetch check, and a failed, cancelled or conflicting fetch leaves all four unchanged. Every successful fetch, including an empty or no-change one, replaces the report; reports are never merged, carried across producer replacement or published for failures, and clear removes them.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Public reports describe the last successful acquisition",
+        "Decision / Publication and reclamation"
+      ],
+      "anchors": [
+        "FetchReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 213,
+        "evidence": "PR #271 implements the accepted #270 design; tests cover preservation on failure and conflict and no-change replacement"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.14",
+      "seq": 212,
+      "pr": 270,
+      "summary": "Reports are BlobRef-free public data with no transport secrets",
+      "detail": "Report contracts are rejected if they reach the BlobRef type, so reports own no files. The host stores them as checked contract plus value with no provider-specific fields, reconstructs them without running plugin code, treats corruption as a storage failure, and keeps them out of logs and timings; plugins must not copy credentials, continuation tokens, request URLs or response bodies into them.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Public reports describe the last successful acquisition"
+      ],
+      "anchors": [
+        "FetchReport",
+        "CheckedContract",
+        "CheckedValue"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 213,
+        "evidence": "PR #271 implements the accepted #270 design: validateReportContract rejects nested BlobRefs, with a test"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0029.15",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Concurrent downloads use atomic, invocation-scoped blob registration",
+      "detail": "Independent downloads in one acquisition may run concurrently, each into its own temporary file. Registration of new references is atomic and covers cancellation, shared cache metadata is initialized before workers start, and on failure all workers are joined before cleanup so none can recreate bytes or publish a reference afterwards.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Publication and reclamation"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -301,5 +388,5 @@
       "note": "Points blob publication, reclamation and sync-position storage at ADR 0014's new evidence index (index-recorded blob references, position inside the index); the index layout is owned by 0014 (0014.67, 0014.68) and 0029's completeness, lock and reclamation requirements are unchanged."
     }
   ],
-  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented. Both changes withdraw something an earlier node stated, so they are replacements that restate the surviving core: 0029.09 replaces 0029.02 (no maxBytes or media-type policy), and 0029.10 replaces 0029.04 (BlobScope reader protection withdrawn in favour of a store lock and an explicit non-overlapping-use assumption). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there. Seq 167 (PR #215) then built the whole blob half at once: BlobRef, host-streamed downloads, scoped captured reads, publication checks with reclamation, and CLI result paths, so 0029.01, 0029.03, 0029.05, 0029.09 and 0029.10 are realised there (0029.05 at medium confidence: paths are listed but not made read-only, and MCP is not separately evidenced). Its wording change moving byte reads onto ADR 0007's raw body is editorial here. Seq 168 (PR #217, Graph Mail) added payload fingerprints (0029.11), built in the same step. Seq 172 (PR #220) only re-points blob publication and position storage at ADR 0014's evidence index, so it is editorial here; the index-recorded blob references and in-index position are 0014's decisions."
+  "notes": "This lane was born at seq 151 as a docs-only design. Its two halves fared very differently. The sync-position half (0029.06) was built within a day (seq 156) and then refined twice by implementation PRs that loosened the spec: config changes no longer invalidate a position, and an explicit --restart-sync was added. The blob half (0029.01-05: BlobRef, streamed downloads, scoped reads, reclamation and surface file paths) is the bulk of the ADR and is still entirely unrealised; no blob identifier ever reached code, and the position PRs explicitly defer blobs. The seq 155 String->Text sweep touches this lane only as a format follow-on, so I recorded it as editorial. Seq 164 (PR #212, docs-only) simplified the unbuilt blob half before any of it was implemented. Both changes withdraw something an earlier node stated, so they are replacements that restate the surviving core: 0029.09 replaces 0029.02 (no maxBytes or media-type policy), and 0029.10 replaces 0029.04 (BlobScope reader protection withdrawn in favour of a store lock and an explicit non-overlapping-use assumption). PR #214 at seq 166 lists 0029 as governing but implements only payload availability (ADR 0014) and explicitly defers blob storage, so no 0029 node is realised there. Seq 167 (PR #215) then built the whole blob half at once: BlobRef, host-streamed downloads, scoped captured reads, publication checks with reclamation, and CLI result paths, so 0029.01, 0029.03, 0029.05, 0029.09 and 0029.10 are realised there (0029.05 at medium confidence: paths are listed but not made read-only, and MCP is not separately evidenced). Its wording change moving byte reads onto ADR 0007's raw body is editorial here. Seq 168 (PR #217, Graph Mail) added payload fingerprints (0029.11), built in the same step. Seq 172 (PR #220) only re-points blob publication and position storage at ADR 0014's evidence index, so it is editorial here; the index-recorded blob references and in-index position are 0014's decisions. Seq 212 (PR #270, docs-only) added public fetch reports: the FetchResult report parameter (0029.12), atomic publication and replacement (0029.13) and the BlobRef and secrets boundary (0029.14), all built by PR #271 at seq 213. Seq 214 (PR #274, docs-only) made blob registration safe for concurrent downloads (0029.15), still unbuilt."
 }

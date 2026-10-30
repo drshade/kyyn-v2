@@ -1,7 +1,7 @@
 {
   "adr": "0021",
   "title": "Architecture is a tested deliverable before feature volume",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0021.01",

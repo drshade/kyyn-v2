@@ -1,7 +1,7 @@
 {
   "adr": "0014",
   "title": "Current evidence and recipe-owned state",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0014.01",
@@ -1965,7 +1965,12 @@
         "seq": 197,
         "evidence": "PR #251 implements initial, overlap and explicit-backfill windows with capture-once and retention, tested under GHC and MicroHs and live against a delegated tenant"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 209,
+        "how": "replaced",
+        "by": "0014.84"
+      }
     },
     {
       "id": "0014.74",
@@ -2133,7 +2138,12 @@
         "seq": 205,
         "evidence": "PR #256 removes userId, adds paginated directory enumeration and organizer filtering with cross-user deduplication, tested against recorded providers; tenant-wide live proof deferred to #255"
       },
-      "confidence": "high"
+      "confidence": "high",
+      "ended": {
+        "seq": 208,
+        "how": "replaced",
+        "by": "0014.83"
+      }
     },
     {
       "id": "0014.81",
@@ -2155,6 +2165,217 @@
         "how": "same_step",
         "seq": 205,
         "evidence": "PR #256 adds deniedUsers and unavailableUsers, skips denied calendars and the three unavailable-mailbox codes, and tests distinct denial counts"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.82",
+      "seq": 207,
+      "pr": 259,
+      "summary": "Directory connector captures the visible user roster as one snapshot",
+      "detail": "MicrosoftGraph.Directory reads every /users page visible to the credential, unfiltered, and captures one `directory` item holding all users sorted by ID with nullable selected fields. Its canonical fingerprint ignores page order and fetch time, an unchanged roster emits no delta, and malformed fields, duplicate IDs or failed, denied, foreign or cyclic pages publish nothing.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "DirectoryConfig",
+        "DirectoryUser",
+        "DirectoryPayload"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 207,
+        "evidence": "PR #259 adds the Directory connector with canonical snapshot detection and failure handling, tested against recorded providers; no live directory call"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.83",
+      "seq": 208,
+      "pr": 260,
+      "summary": "Application Meetings walks only enabled member accounts' calendars",
+      "detail": "Replaces 0014.80's walk of every directory user: application acquisition selects accounts with accountEnabled = true and userType = Member before any calendar call, failing on missing or malformed classification, so guests and disabled accounts (and meetings they organized) are outside scope. Organizer-only selection, delegated /me discovery and cross-context deduplication carry over; calendar pages request up to 1,000 events.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.80"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MeetingsConfig"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 208,
+        "evidence": "PR #260 selects enabled members during the user walk and tests disabled, guest and malformed-classification accounts"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.84",
+      "seq": 209,
+      "pr": 261,
+      "summary": "Meetings selects only in-window artifacts before downloading content",
+      "detail": "Replaces 0014.73's capture of every returned artifact: the resolved window (thirty-day initial, one-day overlap or explicit since) now also filters listed artifacts, keeping only those that start between since and acquisition start and end by acquisition start, before any transcript download or attendance-record request. Every listing page is still read and validated; capture-once, artifact keys and independent retention carry over.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.73"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MeetingArtifact"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 209,
+        "evidence": "PR #261 filters recurring-series listings before content acquisition, tested at window boundaries for both artifact kinds"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.85",
+      "seq": 209,
+      "pr": 261,
+      "summary": "Resolution 404 NotFound is a per-meeting skip; other 404s stay fatal",
+      "detail": "Refines 0014.81: an onlineMeeting resolution returning 404 with Graph code NotFound, including on a later page (which discards that incomplete collection), skips the meeting like other unresolvable meetings. Other 404 codes and 404s from artifact, record or content endpoints remain errors apart from the recognised mailbox skips.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.81"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MeetingSkip",
+        "NotFound"
+      ],
+      "realised": {
+        "how": "same_step",
+        "seq": 209,
+        "evidence": "PR #261 narrows the skip to NotFound on the resolution collection and tests unrelated 404s as fatal"
+      },
+      "confidence": "medium",
+      "ended": {
+        "seq": 212,
+        "how": "replaced",
+        "by": "0014.86"
+      }
+    },
+    {
+      "id": "0014.86",
+      "seq": 212,
+      "pr": 270,
+      "summary": "Meetings diagnostics become a public typed report with identities",
+      "detail": "Replaces 0014.85's position-held diagnostics: the private MeetingsPosition keeps only the successful boundary, and a public MeetingsReport states the effective since/until, the delegated or enabled-member scope with every examined user ID, and each handled 403, unavailable mailbox and meeting skip with its context, stage, source reference and reason instead of counts or request URLs. The skip and fatal rules carry over; report values reset each successful round and claim no complete coverage.",
+      "kind": "replace",
+      "supersedes": [
+        "0014.85"
+      ],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MeetingsPosition",
+        "MeetingsReport",
+        "MeetingIssue",
+        "MeetingContext",
+        "MeetingStage",
+        "MeetingsScope"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 213,
+        "evidence": "PR #271 implements the accepted #270 design: Meetings keeps only its timestamp privately and emits the typed report with contextual 403/404 entries"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.87",
+      "seq": 212,
+      "pr": 270,
+      "summary": "Attendance listings reaching 50 reports record a potential coverage limit",
+      "detail": "When a completed attendance-report listing returns at least 50 distinct reports, the report gains a coverageLimits entry naming the context and meeting, since older reports may be omitted by the provider. This is a possible limitation, not a skip, and returned eligible artifacts are still captured.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [
+        "MeetingsReport"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 213,
+        "evidence": "PR #271 implements the accepted #270 design; tests cover the 49/50 report boundary"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.88",
+      "seq": 212,
+      "pr": 270,
+      "summary": "The index stores the checked public report; inspection never sees the position",
+      "detail": "Refines 0014.68: the evidence index also holds the optional checked public report with its contract descriptor, both present for context/result captures (including nullary reports) and both absent for list-returning ones. It becomes visible with the index replacement and is removed by clear; inspection projects the report but not the private position, and a malformed or partnerless report is a storage diagnostic, never inferred or defaulted to absence.",
+      "kind": "refine",
+      "supersedes": [
+        "0014.68"
+      ],
+      "sections": [
+        "Decision / Indexed Dhall storage and selective reads",
+        "Decision / Publishing an indexed capture",
+        "Decision / Atomic refresh and invocation-local reads"
+      ],
+      "anchors": [
+        "FetchReport",
+        "EvidenceIndex"
+      ],
+      "realised": {
+        "how": "later_step",
+        "seq": 213,
+        "evidence": "PR #271 implements the accepted #270 design: report descriptor and value in the index, with legacy/malformed index refusal and private-position isolation tests"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.89",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Graph plugin retries safe GETs within fixed per-request budgets",
+      "detail": "The Graph plugin, not the native broker, retries known safe GET reads at most twice on timeout (1s then 2s) and at most five times on 429/503 with a valid Retry-After, never resetting either counter, so a logical request sends at most eight times. Blob downloads get only the status budget; token POSTs, other transport errors and whole fetches are never retried automatically, and cancellation interrupts waits.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged (#273 owns the retries)"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0014.90",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Meetings runs independent discovery and captures under concurrentlyE",
+      "detail": "Meetings uses ADR 0009's concurrentlyE for per-user calendar discovery, per-meeting artifact discovery and artifact captures, acquiring a usable token before each group so refresh-token writes stay sequential. Pagination and fallback contexts for one artifact stay sequential; order, deduplication, fingerprints and report contents match the width-one baseline, and only the final complete acquisition is published.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Microsoft Graph mail, meeting artifacts and files"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged (#272 owns the concurrency)"
       },
       "confidence": "high"
     }
@@ -2249,7 +2470,12 @@
       "seq": 177,
       "pr": 226,
       "note": "Folder connector text now says relative directories resolve against the KB directory; that path rule is ADR 0009's shared file path contract (0009.35), so it is editorial here."
+    },
+    {
+      "seq": 213,
+      "pr": 271,
+      "note": "The Calendar fetch sketch gains a unit report type (FetchResult Event CalendarPosition ()); the signature is ADR 0029's decision (0029.12), and the step's code is realisation evidence for 0014.86-0014.88."
     }
   ],
-  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Payload availability (0014.47) was realised by PR #214 at seq 166, and the sync-position slice (0014.49) by PR #203. Seq 168 (PR #217) built Graph Mail with attachment BlobRefs, realising 0014.60, 0014.62 and 0014.64 (the latter two-connector nodes at medium confidence because the Files connector is still missing), and its spec edits are two refinements built in the same step: per-folder stored since reused on cursor reset (0014.65 refines 0014.62) and reference attachments as Graph v1.0 resource links with no beta call (0014.66 refines 0014.64). Spec ahead of code: the Teams meeting-artifact connector (0014.51) and the SharePoint/OneDrive Files connector (part of 0014.60/0014.63/0014.66) are unbuilt. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch). Deliveries record the steps that built part of a decision before it was complete; 0014.01's acquisition and 0014.57's recipe state are the longest builds. Blob infrastructure (#215) is not a delivery for 0014.63: no Files connector uses it yet. Seq 172 (PR #220, docs-only, prompted by slow evidence list/show on a real Mail capture) replaced the single state.dhall document with a binary Dhall index plus content-addressed payload files (0014.67 replaces 0014.22), kept the sync position in the index with its descriptor (0014.68 refines 0014.49), narrowed the per-invocation view to a captured index with unpinned selective payload reads (0014.69 replaces 0014.61), made generic list/show compiler-free and selective (0014.70 refines 0014.56), and specified staged publication with reclamation (0014.71). PR #222 at seq 174 built all of it and moved the expected-fetch comparison ahead of staging under the lock (0014.72, medium: arguably a code-alignment edit, but it tightens what publication requires). Seq 177's KB-relative folder path is ADR 0009's rule and editorial here. No step through 187 builds the Teams meeting-artifact or Files connectors (0014.51, 0014.63). Seq 197 (PR #251) built the Meetings connector, realising 0014.51 in the step that replaced it twice over: its look-back became initial/overlap/backfill windows (0014.73) and its fail-on-authorization rule became recorded per-artifact and per-meeting skips (0014.74); 0014.75 added the configured user ID, which seq 205 (PR #256) replaced with credential-derived scope and a tenant-wide organizer walk (0014.80), changing application-mode diagnostics to user counts (0014.81 replaces 0014.74). Seq 198 (PR #252) added the Salesforce Query connector in this ADR's connector section (0014.76 snapshot semantics, 0014.77 canonical JSON records); its auth paragraph applies ADR 0016 and is folded into 0014.76 rather than given a node. Seq 199 (PR #253) replaced the never-built drive-delta Files design with complete listings (0014.78 replaces 0014.63, whose BlobRef content is listed as a delivery of that step) and stateless skip rules (0014.79, medium: arguably detail of 0014.78). 0014.64's download-failure rule now also holds for Files."
+  "notes": "The lane oscillated on evidence retention: founding said 'replaceable local cache' (seq 1); seq 76 swung to retaining every fetch delta with historical selection, fully implemented in #95 (seq 77); seven steps later seq 84 reverted to latest-only on Tom's explicit correction ('a KB current, not a forensic archive'), so the historical store, baselines and producer archives were built and torn out within days. Curation progress has an even larger arc: founding said no kernel review queue and that a KB models completeness with ordinary facts (0014.06); seq 76 proposed a KB-authored cursor (never built); seq 89 introduced host-owned recipe acknowledgements, a Git-tracked register and net pending discovery, all implemented and refined (91-93, 134-135 Reconciliation) and then removed at seq 158 in favour of recipe-owned typed state - effectively returning to the founding stance, with typed per-recipe state in place of 'ordinary facts'. Many nodes (0014.30-0014.39, 0014.45, 0014.46) were realised and superseded within about two weeks. 'No generic viewEvidence' (seq 76) was likewise reversed at seq 158 by generic listEvidenceIds/readEvidence, which also absorbed the seq-107 'evidence list' command. The Graph calendar design at seq 110 explicitly rejected calendarView; seq 157 reversed to calendarView delta after live performance work. Payload availability (0014.47) was realised by PR #214 at seq 166, and the sync-position slice (0014.49) by PR #203. Seq 168 (PR #217) built Graph Mail with attachment BlobRefs, realising 0014.60, 0014.62 and 0014.64 (the latter two-connector nodes at medium confidence because the Files connector is still missing), and its spec edits are two refinements built in the same step: per-folder stored since reused on cursor reset (0014.65 refines 0014.62) and reference attachments as Graph v1.0 resource links with no beta call (0014.66 refines 0014.64). Spec ahead of code: the Teams meeting-artifact connector (0014.51) and the SharePoint/OneDrive Files connector (part of 0014.60/0014.63/0014.66) are unbuilt. Founding has no ### subsections, so it was split into ten distinct commitments (including the 'Updates and alternatives' plugin-change rule); merging was considered for 01-03 but their fates diverge. Judgement calls: 0014.06 is a negative constraint and is marked same_step at seq 1 because no queue existed; 0014.01 is dated to seq 87 when KB-side interpretation via typed tools landed (acquisition alone was proven at 78/81); the seq-158 rewrite is split into no-processing-log (55, which absorbs all acknowledgement/register/pending nodes), generic reads (56), typed recipe state (57, replacing the recipe-as-fact and Open/Closed nodes since the Recipe type became method+state), evolution-only state changes (58, replacing the RecipeChange report case) and plugin-change independence (59). Seq 164 (PR #212, docs-only) is split by decision, following review: 0014.60 replaces 0014.48 (BlobRefs narrowed to captured files and attachments; mail text is an ordinary field); 0014.61 replaces 0014.26 (the immutable per-invocation view survives, but blob references no longer pin bytes against refresh or clear); 0014.62 and 0014.63 refine the Mail and Files connectors (capture-once including drafts, text inline, retention independent of recipes; file content always a BlobRef); and 0014.64 replaces both connectors' download policy (no size/media skip policy; any download failure fails the whole fetch). Deliveries record the steps that built part of a decision before it was complete; 0014.01's acquisition and 0014.57's recipe state are the longest builds. Blob infrastructure (#215) is not a delivery for 0014.63: no Files connector uses it yet. Seq 172 (PR #220, docs-only, prompted by slow evidence list/show on a real Mail capture) replaced the single state.dhall document with a binary Dhall index plus content-addressed payload files (0014.67 replaces 0014.22), kept the sync position in the index with its descriptor (0014.68 refines 0014.49), narrowed the per-invocation view to a captured index with unpinned selective payload reads (0014.69 replaces 0014.61), made generic list/show compiler-free and selective (0014.70 refines 0014.56), and specified staged publication with reclamation (0014.71). PR #222 at seq 174 built all of it and moved the expected-fetch comparison ahead of staging under the lock (0014.72, medium: arguably a code-alignment edit, but it tightens what publication requires). Seq 177's KB-relative folder path is ADR 0009's rule and editorial here. No step through 187 builds the Teams meeting-artifact or Files connectors (0014.51, 0014.63). Seq 197 (PR #251) built the Meetings connector, realising 0014.51 in the step that replaced it twice over: its look-back became initial/overlap/backfill windows (0014.73) and its fail-on-authorization rule became recorded per-artifact and per-meeting skips (0014.74); 0014.75 added the configured user ID, which seq 205 (PR #256) replaced with credential-derived scope and a tenant-wide organizer walk (0014.80), changing application-mode diagnostics to user counts (0014.81 replaces 0014.74). Seq 198 (PR #252) added the Salesforce Query connector in this ADR's connector section (0014.76 snapshot semantics, 0014.77 canonical JSON records); its auth paragraph applies ADR 0016 and is folded into 0014.76 rather than given a node. Seq 199 (PR #253) replaced the never-built drive-delta Files design with complete listings (0014.78 replaces 0014.63, whose BlobRef content is listed as a delivery of that step) and stateless skip rules (0014.79, medium: arguably detail of 0014.78). 0014.64's download-failure rule now also holds for Files. Seq 207 (PR #259) added the Directory snapshot connector (0014.82). The BEE pilot then drove three Meetings corrections: enabled member accounts only (0014.83 replaces 0014.80, seq 208), in-window artifact selection before downloads (0014.84 replaces 0014.73, seq 209; a replace because every returned artifact was no longer kept) and NotFound resolution skips (0014.85, medium: arguably a narrowing of the fatal set rather than a refinement). Seq 212 (PR #270, docs-only) moved Meetings diagnostics out of the private position into a public report with identities (0014.86 replaces 0014.85), added the 50-report coverage limit (0014.87) and stored the report in the index (0014.88 refines 0014.68); PR #271 built all three at seq 213. Seq 214 (PR #274, docs-only) specified Graph read retries (0014.89) and concurrent Meetings acquisition (0014.90); both are unbuilt at step 214."
 }

@@ -1,7 +1,7 @@
 {
   "adr": "0019",
   "title": "Typed failures, explicit cancellation and modest operational state",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0019.01",
@@ -312,8 +312,46 @@
         "evidence": "PR #235 removes the recover command; the CLI interruption and base-mismatch diagnostics now say to inspect git status and restore the checkout from Git (Kyyn.Surfaces.Result)"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0019.13",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Batch workers are structured: cancel and join on failure, no batch retry",
+      "detail": "Fatal host failure, malformed protocol or caller cancellation cancels running workers, stops queued work and joins workers before closing scope or reclaiming blobs. Typed provider refusals return to their branches rather than failing workers, and a failed round is never retried as a whole because dispatched effects may already have happened.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0019.14",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Sync timings under concurrency report width, rounds and overlapping durations",
+      "detail": "Opt-in sync timings separate summed request duration from elapsed wall time and record effective width, round counts and times, request counts by class, HTTP status counts including 429, peak in-flight requests and rounds containing waits, with atomic counters and the existing ban on identities, URLs, bodies, secrets and report contents.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged; seq 210 (#262) built sequential timings only"
+      },
+      "confidence": "medium"
     }
   ],
   "editorial": [],
-  "notes": "Founding ADR with no ### subsections; split into 7 commitments (typed boundary failures, Failure vocabulary, compile-error classification, compiler-text policy, post-effect outcome honesty, scoped cancellation, no operation registry). The lane changed only four times. The most notable thing is how far the founding Failure vocabulary was from what got built: PR #7 deliberately implemented only the constructors in use, and five of the seven founding constructors (CodeRejected, ProtocolBroken, ContractMismatch, InvalidRequest, OperationCancelled) never existed in code. The ADR only caught up at the seq 143 desired-state reconciliation, which I treated as replacing 0019.02 and 0019.03 (code_first) rather than as editorial because it reverses concrete commitments: cancellation stops being a Failure constructor and checking-code compile errors move from ProposedCodeRejected to post-materialization Rejected. Seq 42 reworded the post-commit cancellation promise ('cancelling after ref update reports acceptance') into the weaker, more honest 'may yield no result; inspect Git', aligning with ADR 0012's crash-recovery design. Realisation seqs for the broad founding principles (.01, .04, .06) are judgement calls with medium/low confidence. Seq 183 (PR #234) withdrew the automatic Git-history outcome lookup and the recovery command named by 0019.08, so it is a replace (0019.12): the operator now establishes the outcome and repairs the checkout through Git, and a stale retry is refused as BaseMismatch. This follows ADR 0012's simplification; PR #235 (seq 184) built it the next step. The removed 'no dedicated projection/recovery service' sentence still holds through 0019.07."
+  "notes": "Founding ADR with no ### subsections; split into 7 commitments (typed boundary failures, Failure vocabulary, compile-error classification, compiler-text policy, post-effect outcome honesty, scoped cancellation, no operation registry). The lane changed only four times. The most notable thing is how far the founding Failure vocabulary was from what got built: PR #7 deliberately implemented only the constructors in use, and five of the seven founding constructors (CodeRejected, ProtocolBroken, ContractMismatch, InvalidRequest, OperationCancelled) never existed in code. The ADR only caught up at the seq 143 desired-state reconciliation, which I treated as replacing 0019.02 and 0019.03 (code_first) rather than as editorial because it reverses concrete commitments: cancellation stops being a Failure constructor and checking-code compile errors move from ProposedCodeRejected to post-materialization Rejected. Seq 42 reworded the post-commit cancellation promise ('cancelling after ref update reports acceptance') into the weaker, more honest 'may yield no result; inspect Git', aligning with ADR 0012's crash-recovery design. Realisation seqs for the broad founding principles (.01, .04, .06) are judgement calls with medium/low confidence. Seq 183 (PR #234) withdrew the automatic Git-history outcome lookup and the recovery command named by 0019.08, so it is a replace (0019.12): the operator now establishes the outcome and repairs the checkout through Git, and a stale retry is refused as BaseMismatch. This follows ADR 0012's simplification; PR #235 (seq 184) built it the next step. The removed 'no dedicated projection/recovery service' sentence still holds through 0019.07. Seq 214 (PR #274, docs-only) added structured batch cancellation (0019.13) and concurrency-aware sync timings (0019.14, medium: extends the opt-in timings PR #262 built at seq 210 without an ADR change). Both are unbuilt."
 }

@@ -2196,5 +2196,100 @@
     "adrs": [
       "0014"
     ]
+  },
+  {
+    "seq": 206,
+    "sha": "fcadb65729375cee1a134b577b7142c93ed95c5a",
+    "date": "2026-10-23T07:15:37+01:00",
+    "pr": 258,
+    "title": "adr-viewer: curate steps 188-205",
+    "adrs": []
+  },
+  {
+    "seq": 207,
+    "sha": "55e8d136ea517cbe8a27f17c93f6ac9523f2c1b7",
+    "date": "2026-10-23T07:30:06+01:00",
+    "pr": 259,
+    "title": "Add Graph Directory snapshot connector",
+    "adrs": [
+      "0014",
+      "0016"
+    ]
+  },
+  {
+    "seq": 208,
+    "sha": "94ee127da47115e7510e2ee558b349d483f37cb5",
+    "date": "2026-10-27T14:15:26Z",
+    "pr": 260,
+    "title": "Limit Meetings discovery to enabled member accounts",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 209,
+    "sha": "ba26f0225f5031af94da8e71491558d99a859474",
+    "date": "2026-10-27T15:32:52Z",
+    "pr": 261,
+    "title": "Bound meeting artifact downloads and skip unresolved meetings",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 210,
+    "sha": "f952ce78a8ce4e4eb83cfb531680865685e1dc77",
+    "date": "2026-10-28T11:23:36Z",
+    "pr": 262,
+    "title": "Instrument connector acquisition with opt-in sync timings",
+    "adrs": []
+  },
+  {
+    "seq": 211,
+    "sha": "8b554d5b61d19a725e73a6a228fbb550beb68762",
+    "date": "2026-10-29T12:27:56Z",
+    "pr": 269,
+    "title": "Expose complete evidence captures through bulk inspection",
+    "adrs": [
+      "0018"
+    ]
+  },
+  {
+    "seq": 212,
+    "sha": "3ab33663ee9f6e4db1538a0d6b954d07cac79948",
+    "date": "2026-10-30T06:35:03Z",
+    "pr": 270,
+    "title": "Define public sync reports alongside private connector positions",
+    "adrs": [
+      "0014",
+      "0015",
+      "0018",
+      "0029"
+    ]
+  },
+  {
+    "seq": 213,
+    "sha": "bb116f79d00a8d79ef29773276bbcc4602a6204e",
+    "date": "2026-10-30T08:25:35Z",
+    "pr": 271,
+    "title": "Expose typed sync coverage reports in evidence inspection",
+    "adrs": [
+      "0014"
+    ]
+  },
+  {
+    "seq": 214,
+    "sha": "6f7034a016309ca149d25b4845dd95490d997611",
+    "date": "2026-10-30T09:52:31Z",
+    "pr": 274,
+    "title": "Design bounded acquisition concurrency and safe Graph read retries",
+    "adrs": [
+      "0007",
+      "0009",
+      "0014",
+      "0018",
+      "0019",
+      "0029"
+    ]
   }
 ]
