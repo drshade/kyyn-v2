@@ -3,7 +3,8 @@
 module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeAcquisitionResult, executeLogin) where
 
 import Kyyn.Runtime.Json
-import Kyyn.Runtime.Plugin (exchange, exchangeBody, execute, input, eitherCodec, changeCodec, fileRequest, evidenceRequest, blobCodec)
+import Kyyn.Runtime.Plugin (exchange, execute, eitherCodec, changeCodec, fileExchange, evidenceExchange, blobCodec)
+import Kyyn.Runtime.Concurrent
 import Kyyn.Runtime.Transport
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -23,24 +24,24 @@ executeAcquisitionResult :: forall config payload result. Codec config -> Codec 
   -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload))))))
         (Either FetchError result)) -> IO ()
 executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
-  (config,snapshot) <- input transport configCodec
-  execute transport (eitherCodec resultCodec) (handler transport) (selected config snapshot)
+  (config,snapshot,width) <- acquisitionInput transport configCodec
+  executeConcurrent transport width (eitherCodec resultCodec) handler (selected config snapshot)
   where
-    handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))))) a -> IO a
-    handler transport identity (InLeft call) = httpRequest transport identity call
-    handler transport identity (InRight (InLeft call)) = secretRequest transport identity call
-    handler transport identity (InRight (InRight (InLeft call))) = waitingRequest transport identity call
-    handler transport identity (InRight (InRight (InRight (InLeft call)))) = fileRequest transport identity call
-    handler transport identity (InRight (InRight (InRight (InRight (InLeft (StoreBlob (BlobDownload (HttpRequest method url headers body) name media))))))) = do
-      (reply,raw) <- exchangeBody transport identity "blobs" "store" (record
+    handler :: (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))))) a -> Exchange a
+    handler (InLeft call) = httpExchange call
+    handler (InRight (InLeft call)) = secretExchange call
+    handler (InRight (InRight (InLeft call))) = waitingExchange call
+    handler (InRight (InRight (InRight (InLeft call)))) = fileExchange call
+    handler (InRight (InRight (InRight (InRight (InLeft (StoreBlob (BlobDownload (HttpRequest method url headers body) name media))))))) =
+      Exchange (WireRequest "blobs" "store" (record
         [("method",encodeWith textCodec method),("url",encodeWith textCodec url),
          ("headers",encodeWith headersCodec headers),("name",encodeWith (optionalCodec textCodec) name),
-         ("mediaType",encodeWith (optionalCodec textCodec) media)]) (TE.encodeUtf8 body)
-      if B.null raw then either fail pure (decodeWith (eitherCodec blobResponseCodec) reply)
-        else fail "Raw body accompanies blob download metadata"
-    handler transport identity (InRight (InRight (InRight (InRight (InRight (InLeft (DigestText values))))))) =
-      exchange transport identity "digest" "text" (encodeWith (listCodec textCodec) values) (listCodec textCodec)
-    handler transport identity (InRight (InRight (InRight (InRight (InRight (InRight call)))))) = evidenceRequest transport payloadCodec identity call
+         ("mediaType",encodeWith (optionalCodec textCodec) media)]) (TE.encodeUtf8 body)) $ \(reply,raw) ->
+        if B.null raw then decodeWith (eitherCodec blobResponseCodec) reply
+          else Left "Raw body accompanies blob download metadata"
+    handler (InRight (InRight (InRight (InRight (InRight (InLeft (DigestText values))))))) =
+      metadataExchange "digest" "text" (encodeWith (listCodec textCodec) values) (listCodec textCodec)
+    handler (InRight (InRight (InRight (InRight (InRight (InRight call)))))) = evidenceExchange payloadCodec call
 
 blobResponseCodec :: Codec BlobResponse
 blobResponseCodec = Codec encode decode
@@ -71,23 +72,31 @@ executeLogin configCodec selected = withTransport $ \transport -> do
       (fmap LoginError . decodeWith textCodec)
 
 httpRequest :: Transport -> Integer -> Http a -> IO a
-httpRequest transport identity (SendHttp (HttpRequest method url headers body)) = do
-  (value,raw) <- exchangeBody transport identity "http" "send"
-    (record [("method",encodeWith textCodec method),("url",encodeWith textCodec url),
-      ("headers",encodeWith headersCodec headers)]) (TE.encodeUtf8 body)
-  result <- either fail pure (decodeWith (resultCodec httpErrorCodec (responseCodec raw)) value)
-  case result of
-    Left _ | not (B.null raw) -> fail "Raw body accompanies failed HTTP request"
-    _ -> pure result
+httpRequest transport identity = executeExchange transport identity . httpExchange
+
+httpExchange :: Http a -> Exchange a
+httpExchange (SendHttp (HttpRequest method url headers body)) = Exchange
+  (WireRequest "http" "send" (record [("method",encodeWith textCodec method),("url",encodeWith textCodec url),
+    ("headers",encodeWith headersCodec headers)]) (TE.encodeUtf8 body)) $ \(value,raw) -> do
+    result <- decodeWith (resultCodec httpErrorCodec (responseCodec raw)) value
+    case result of
+      Left _ | not (B.null raw) -> Left "Raw body accompanies failed HTTP request"
+      _ -> Right result
 
 secretRequest :: Transport -> Integer -> Secrets a -> IO a
-secretRequest transport identity (GetSecret key) = exchange transport identity "secrets" "get"
+secretRequest transport identity = executeExchange transport identity . secretExchange
+
+secretExchange :: Secrets a -> Exchange a
+secretExchange (GetSecret key) = metadataExchange "secrets" "get"
   (record [("key",encodeWith textCodec key)]) (resultCodec secretErrorCodec textCodec)
-secretRequest transport identity (PutSecret key value) = exchange transport identity "secrets" "put"
+secretExchange (PutSecret key value) = metadataExchange "secrets" "put"
   (record [("key",encodeWith textCodec key),("value",encodeWith textCodec value)]) unitCodec
 
 waitingRequest :: Transport -> Integer -> Waiting a -> IO a
-waitingRequest transport identity (WaitSeconds seconds) = exchange transport identity "waiting" "seconds"
+waitingRequest transport identity = executeExchange transport identity . waitingExchange
+
+waitingExchange :: Waiting a -> Exchange a
+waitingExchange (WaitSeconds seconds) = metadataExchange "waiting" "seconds"
   (record [("seconds",encodeWith integerCodec (toInteger seconds))]) unitCodec
 
 loginRequest :: Transport -> Integer -> LoginInteraction a -> IO a

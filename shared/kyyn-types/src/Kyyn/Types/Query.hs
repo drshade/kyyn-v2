@@ -56,3 +56,17 @@ runLocally root = go
         let found = find (\(Fact factId _) -> factId == identity) (select root)
             (value, trace) = go (next found)
         in (value, FactRead name identity : trace)
+
+    go (Concurrent branches next) =
+      let results = map go branches
+          (value,trace) = go (next (map fst results))
+      in (value,concatMap snd results ++ trace)
+    go (ConcurrentEither branches next) =
+      let (results,seen) = goEither branches
+          (value,trace) = go (next results)
+      in (value,seen ++ trace)
+    goEither :: [Program (SnapshotRead root) (Either e b)] -> (Either e [b],[ReadAccess])
+    goEither [] = (Right [],[])
+    goEither (branch:rest) = case go branch of
+      (Left problem,trace) -> (Left problem,trace)
+      (Right value,trace) -> let (values,more) = goEither rest in (fmap (value:) values,trace ++ more)

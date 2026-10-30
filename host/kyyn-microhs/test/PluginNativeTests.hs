@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
-module PluginNativeTests (nativeTests, statefulTests, noNetwork, runStore) where
+module PluginNativeTests (nativeTests, statefulTests, batchTests, noNetwork, runStore) where
 
 import Control.Monad (unless, forM_)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
@@ -31,8 +31,9 @@ import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
 import Kyyn.Plumbing.Capability.GuestCompilation (CompiledProgram)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
-import Kyyn.Porcelain.Protocol.PluginBroker (executeCapturedRead)
-import Kyyn.Plumbing.Protocol.PluginMessages (evidenceValue)
+import Kyyn.Porcelain.Protocol.PluginBroker (executeCapturedRead, conversationAcquisition)
+import Kyyn.Plumbing.Protocol.PluginHost (decodePluginHostCall)
+import Kyyn.Plumbing.Protocol.PluginMessages (evidenceValue, decodeFrameWith)
 import Kyyn.Plumbing.Capability.FileAcquisition (FileAcquisition, readSourceText)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
@@ -46,6 +47,7 @@ import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution (runProcessExecutionIO)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition (fetchEvidence)
 import Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition)
+import Kyyn.Plumbing.Capability.ConcurrentExecution
 import Kyyn.Plumbing.Interpreter.ContentDigest (runContentDigest)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Domain.DataType (DataType(..))
@@ -68,7 +70,7 @@ statefulTests temporary toolchain configType payloadType program = do
       package = PackageIdentity "stateful-source"
       producer = EvidenceProducer package (contractId payload)
       config = CheckedValue (contractId configContract) (object ["directory" .= ("/unused" :: String),"recursive" .= True])
-      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition kb) $
+      fetch mode = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . sequentialConcurrent . runEvidenceAcquisition kb) $
         fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program config Nothing (Just position) (Just position) mode Nothing
       load = runStore kb (beginFixture instanceRef producer payload (Just position)) >>= right
   first <- fetch ContinueSync >>= right
@@ -110,7 +112,7 @@ nativeTests temporary toolchain configType payloadType program = do
   let instanceRef = ConnectorInstanceRef plugin "documents"
       package = PackageIdentity "native-test-source"
       config path = CheckedValue (contractId configContract) (object ["directory" .= path,"recursive" .= True])
-      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . runEvidenceAcquisition kb) $
+      fetch path = runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $ noNetwork $ (runContentDigest . sequentialConcurrent . runEvidenceAcquisition kb) $
         fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config (path :: String)) Nothing Nothing Nothing ContinueSync Nothing
   first <- fetch "source-files" >>= right
   let producer = EvidenceProducer package (contractId payload)
@@ -197,7 +199,7 @@ nativeTests temporary toolchain configType payloadType program = do
       recorded = runPureEff $ State.runState ([] :: [String]) $ runFailure $ runDhallHandling $
         noNetwork $ noFiles $ noBlobReads $ recordAcquisition currentThirdIndex currentThird $
           exchangeFrames requests expected (toJSON ([] :: [Value])) (pure ()) $
-            (runContentDigest . runEvidenceAcquisition kb) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing Nothing ContinueSync Nothing)
+            (runContentDigest . sequentialConcurrent . runEvidenceAcquisition kb) (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) Nothing Nothing Nothing ContinueSync Nothing)
       (outer,trace) = recorded
   result <- right outer >>= right
   assert "acquisition did not use one loaded input and its fetch as CAS base"
@@ -208,7 +210,7 @@ nativeTests temporary toolchain configType payloadType program = do
       noGuest = interpret $ \_ _ -> error "Invalid options executed a guest"
   forM_ [Nothing,Just payload] $ \optionsContract -> do
     refused <- right $ runPureEff $ runFailure $ runDhallHandling $
-      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . runEvidenceAcquisition kb)
+      noNetwork $ noFiles $ noBlobReads $ noEvidence $ noGuest $ (runContentDigest . sequentialConcurrent . runEvidenceAcquisition kb)
         (fetchEvidence (EvidenceSelection instanceRef (ConnectorTypeName "Folder") package) payload program (config directory) optionsContract Nothing Nothing ContinueSync (Just "True"))
     assert "unsupported or incorrectly typed fetch options were accepted" (isLeft refused)
   putStrLn "Native acquisition: latest captured input and summary, unchanged files and failure atomicity passed."
@@ -302,3 +304,46 @@ assert message condition = unless condition (fail message)
 isLeft :: Either [Diagnostic] a -> Bool
 isLeft (Left _) = True
 isLeft _ = False
+
+sequentialConcurrent :: Eff (ConcurrentExecution : es) a -> Eff es a
+sequentialConcurrent = interpret $ \env operation -> case operation of
+  ConcurrencyWidth -> pure 4
+  ConcurrentlyBounded _ actions -> localSeqUnlift env $ \unlift -> mapM unlift actions
+
+-- The whole batch, including its last member, must pass preflight before any
+-- responder runs. Singleton forbidden capabilities are still batches.
+batchTests :: CompiledProgram -> IO ()
+batchTests program = do
+  let member identity capability method args size = object
+        ["id" .= (identity :: String),"capability" .= (capability :: String),"method" .= (method :: String),
+         "arguments" .= args,"bodyLength" .= (size :: String)]
+      waiting identity = member identity "waiting" "seconds" (object ["seconds" .= ("0" :: String)]) "0"
+      batch :: [Value] -> Bytes.ByteString -> Wire.Frame
+      batch parts raw = Wire.Frame (Lazy.toStrict (encode (object ["tag" .= ("HostBatch" :: String),"requests" .= parts]))) raw
+      decode (Wire.Frame metadata raw) = decodeFrameWith (decodePluginHostCall raw) metadata
+      replay :: Wire.Frame -> Eff (GuestExecution : es) a -> Eff es a
+      replay frame = interpret $ \env operation -> case operation of
+        ExecuteCompiled {} -> error "Batch fixture used one-shot execution"
+        ExecuteGuest _ _ respond -> localSeqUnlift env $ \unlift -> do
+          _ <- unlift (respond frame)
+          pure (Wire.jsonFrame (Lazy.toStrict (encode (object ["tag" .= ("Completed" :: String),
+            "result" .= object ["tag" .= ("Right" :: String),"value" .= object []]]))),ProcessExit 0 Bytes.empty)
+      check frame = runPureEff $ State.runState (0 :: Int) $ runFailure $ sequentialConcurrent $ replay frame $
+        conversationAcquisition 4 decode program "{}" (\_ -> State.modify @Int (+1) >> pure (object [],Bytes.empty))
+  let (valid,called) = check (batch [waiting "1",waiting "2"] Bytes.empty)
+  assert "valid native batch did not dispatch" ((case valid of Right (Right _) -> True; _ -> False) && called == 2)
+  forM_ [ batch [] Bytes.empty
+        , batch (map (waiting . show) [1..5 :: Int]) Bytes.empty
+        , batch [waiting "1",waiting "3"] Bytes.empty
+        , batch [waiting "1",waiting "1"] Bytes.empty
+        , batch [waiting "01"] Bytes.empty
+        , batch [waiting "1",member "2" "waiting" "seconds" (object []) "0"] Bytes.empty
+        , batch [waiting "1"] "trailing"
+        , batch [member "1" "waiting" "seconds" (object ["seconds" .= ("0" :: String)]) "99999999999999999999999999999999"] Bytes.empty
+        , batch [member "1" "waiting" "seconds" (object ["seconds" .= ("0" :: String)]) "00"] Bytes.empty
+        , batch [member "1" "secrets" "put" (object ["key" .= ("secret" :: String),"value" .= ("value" :: String)]) "0"] Bytes.empty
+        , batch [waiting "1",member "2" "evidence" "list" (object ["snapshot" .= ("wrong" :: String)]) "0"] Bytes.empty
+        ] $ \frame -> do
+    let (result,count) = check frame
+    assert "invalid batch performed effects before rejection" ((case result of Left _ -> True; _ -> False) && count == 0)
+  putStrLn "Native batch preflight and singleton capability guard passed."

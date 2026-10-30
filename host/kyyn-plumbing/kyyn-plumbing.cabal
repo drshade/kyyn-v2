@@ -10,12 +10,14 @@ library
   other-modules: Kyyn.Runtime.Json Kyyn.Runtime.ModelWire Kyyn.Runtime.JudgementWire
   exposed-modules: Kyyn.Plumbing.Capability.SchemaInspection.Codecs
     Kyyn.Plumbing.Capability.BlobStorage
+    Kyyn.Plumbing.Capability.ConcurrentExecution
     Kyyn.Plumbing.Capability.ContentDigest
     Kyyn.Plumbing.Protocol.Blob
     Kyyn.Plumbing.Capability.SchemaInspection.Agentic
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
     Kyyn.Plumbing.Capability.GuestExecution Kyyn.Plumbing.Capability.FileAcquisition
+    Kyyn.Plumbing.Protocol.AcquisitionBatch
     Kyyn.Plumbing.Protocol.PluginMessages
     Kyyn.Plumbing.Protocol.Sink
     Kyyn.Plumbing.Protocol.Frame

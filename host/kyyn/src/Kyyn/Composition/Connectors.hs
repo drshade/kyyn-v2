@@ -5,6 +5,8 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT)
 import Effectful (Eff)
 import Kyyn.Configuration (Host(..), SelectedKb(..))
 import Data.Maybe (isJust)
+import System.Environment (lookupEnv)
+import Kyyn.Plumbing.Interpreter.ConcurrentExecution (runConcurrentExecutionObserved)
 import Kyyn.Composition.SyncTimings
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport(..), errorDiagnostic)
@@ -100,18 +102,22 @@ dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision
     Right scope -> finish $ runBase host . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) $ do
       existed <- clearConnectorEvidence plugin name
       pure (clearResult plugin name existed)
-  Cli.FetchConnector plugin name options mode -> withRuntime host $ \toolchain sdk -> do
-    sync <- newSyncTimings (isJust timings)
-    withSyncReport sync $ case knowledgeBaseScope kb of
-      Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-      Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO
-        . runBlobStorageIO scope . observeBlobs sync . runEvidenceStore scope . observeEvidence sync . runFileAcquisitionIO
-        . runHttpTransportIO . observeHttp sync . runSecretStoreIO scope . runWaitingIO . observeWaiting sync
-        . runContentDigest . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk
-        . runEvidenceAcquisition scope . observeAcquisition sync $ runExceptT $ do
-          (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
-          let Response outcome result humanLines diagnostics = fetchResult snapshot
-          pure (Response outcome result humanLines (warnings ++ diagnostics))
+  Cli.FetchConnector plugin name options mode -> do
+    configured <- lookupEnv "KYYN_FETCH_CONCURRENCY"
+    case fetchConcurrency configured of
+      Left message -> pure (refusal [errorDiagnostic "sync.concurrency" message])
+      Right width -> withRuntime host $ \toolchain sdk -> do
+        sync <- newSyncTimings (isJust timings)
+        withSyncReport sync $ case knowledgeBaseScope kb of
+          Left message -> pure (refusal [errorDiagnostic "kb.path" message])
+          Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO
+            . runBlobStorageIO scope . observeBlobs sync . runEvidenceStore scope . observeEvidence sync . runFileAcquisitionIO
+            . runHttpTransportIO . observeHttp sync . runSecretStoreIO scope . runWaitingIO . observeWaiting sync
+            . runContentDigest . runConcurrentExecutionObserved width (observeConcurrent sync) . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk
+            . runEvidenceAcquisition scope . observeAcquisition sync $ runExceptT $ do
+              (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
+              let Response outcome result humanLines diagnostics = fetchResult snapshot
+              pure (Response outcome result humanLines (warnings ++ diagnostics))
   Cli.ListCurrentEvidence plugin name -> inspectEvidence $
     fmap (fmap evidenceListResult) (connectorCurrentEvidence kb revision plugin name)
   Cli.ShowAllEvidence plugin name expected -> inspectEvidence $ runExceptT $ do
@@ -134,3 +140,9 @@ dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision
 
 respond :: IO (Either OperationalFailure (Either [Diagnostic] Response)) -> IO Response
 respond = finish . fmap (fmap (either refusal id))
+
+fetchConcurrency :: Maybe String -> Either String Int
+fetchConcurrency Nothing = Right 4
+fetchConcurrency (Just value) = case reads value of
+  [(width,"")] | width >= 1 && width <= 8 && show width == value -> Right width
+  _ -> Left "KYYN_FETCH_CONCURRENCY must be a canonical integer from 1 through 8."

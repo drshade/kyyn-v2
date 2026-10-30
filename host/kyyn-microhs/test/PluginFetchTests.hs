@@ -1,17 +1,21 @@
 -- GHC/MicroHs pipe tests for typed acquisition and captured reads, plus native
 -- broker/store fixtures: delta publication, failure preservation and snapshot reuse.
--- --network-only selects HTTP/secrets/wait/login frames; no live provider.
+-- --network-only selects HTTP/secrets/wait/login frames; --concurrent-only selects
+-- scheduler/batch contracts and a 5,000-request synthetic timing; --retry-only
+-- selects Graph retry/replay contracts. No live provider.
 
 {-# LANGUAGE OverloadedStrings, GADTs #-}
 module PluginFetchTests (main, compileBoth, brokerWith, Scenario(..)) where
 
 import Control.Monad (forM_, unless)
 import Data.Aeson (Value(..), eitherDecodeStrict, encode, object, (.=), (.:), toJSON)
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Aeson.Types (parseEither, withObject)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
+import GHC.Clock (getMonotonicTimeNSec)
 import Data.Version (showVersion)
 import Data.IORef (IORef, newIORef, readIORef, writeIORef, modifyIORef')
 import Effectful (runEff, Eff, IOE, (:>), liftIO)
@@ -44,7 +48,7 @@ import System.IO (hFlush, hClose, hIsEOF, hGetContents, hSetBinaryMode)
 import System.IO.Temp (withSystemTempDirectory)
 import System.Process
 import System.Timeout (timeout)
-import PluginNativeTests (nativeTests, statefulTests)
+import PluginNativeTests (nativeTests, statefulTests, batchTests)
 
 assert :: String -> Bool -> IO ()
 assert message condition = unless condition (fail message)
@@ -57,7 +61,9 @@ main = do
   args <- getArgs
   if args == ["--network-only"] then networkTests
   else if args == ["--blobs-only"] then blobTests
-  else folderTests >> networkTests >> blobTests
+  else if args == ["--concurrent-only"] then concurrentTests
+  else if args == ["--retry-only"] then retryTests
+  else folderTests >> networkTests >> blobTests >> concurrentTests >> retryTests
 
 blobTests :: IO ()
 blobTests = withSystemTempDirectory "kyyn-plugin-blobs-" $ \temporary -> do
@@ -69,7 +75,7 @@ blobTests = withSystemTempDirectory "kyyn-plugin-blobs-" $ \temporary -> do
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Concurrent","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   let ref = object ["sha256" .= replicate 64 'a',"size" .= ("256" :: String),
         "mediaType" .= ("application/octet-stream" :: String),"name" .= object ["tag" .= ("None" :: String)]]
@@ -81,7 +87,7 @@ blobTests = withSystemTempDirectory "kyyn-plugin-blobs-" $ \temporary -> do
             "blob" .= object ["tag" .= ("Some" :: String),"value" .= ref]]),Bytes.empty)
           ("blobs","read") -> pure (success (object []),Bytes.pack [0..255])
           _ -> fail "Unexpected blob capability"
-  forM_ [("BlobCapture",input (String "https://fixture.test/blob"),success ref,[("blobs","store")]),
+  forM_ [("BlobCapture",fetchInput (input (String "https://fixture.test/blob")),success ref,[("blobs","store")]),
          ("BlobRead",input ref,success (String "binary, not UTF-8"),replicate 2 ("blobs","read"))] $ \(label,argument,expected,expectedTrace) -> do
     fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin" </> label ++ ".hs")
     sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
@@ -102,7 +108,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
     [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Concurrent","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]] ++
     [load "host/kyyn-microhs/test/plugin" name | name <- ["FolderSchema.hs","SignatureCases.hs"]])
   let schemaDirectory = temporary </> "schema"
@@ -140,7 +146,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
             Just _ -> object ["config" .= configValue,"options" .= object ["tag" .= ("None" :: String)]]
       (result,trace,status) <- broker Normal program (object ["arguments" .= object
         ["input" .= arguments,"startedAt" .= ("2026-10-07T12:00:00Z" :: String),"priorPosition" .= optional],
-        "snapshot" .= ("prior" :: String)])
+        "concurrency" .= ("4" :: String),"snapshot" .= ("prior" :: String)])
       assert "typed fetch context/result did not round trip" (result == Just (success (object
         ["changes" .= ([] :: [Value]),"position" .= (maybe "first" id prior ++ ":2026-10-07T12:00:00Z"),"report" .= ("public summary" :: String)]))
         && null trace && status == ExitSuccess)
@@ -155,7 +161,7 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
     \(selected,message) -> do
       (result,trace,status) <- broker Normal program (object
         ["arguments" .= object ["config" .= object ["directory" .= ("/folder" :: String),"recursive" .= True],
-          "options" .= selected],"snapshot" .= ("prior" :: String)])
+          "options" .= selected],"concurrency" .= ("4" :: String),"snapshot" .= ("prior" :: String)])
       assert "typed options/default did not reach acquisition unchanged"
         (result == Just (failure message) && null trace && status == ExitSuccess)
   acquisition <- right (acquisitionSources config payload Nothing "Folder.fetch" (folder:common))
@@ -171,26 +177,26 @@ folderTests = withSystemTempDirectory "kyyn-plugin-fetch-" $ \temporary -> do
         [change "Updated" "changed.txt" "changed 🦋\nline two",change "New" "new.txt" "new",
          object ["tag" .= ("Removed" :: String),"value" .= ("gone.txt" :: String)]])
   forM_ fetchPrograms $ \program -> do
-    (result,trace,status) <- broker Normal program (input (configValue "/folder"))
+    (result,trace,status) <- broker Normal program (fetchInput (input (configValue "/folder")))
     assert "acquisition delta differs between compilers" (result == Just expected && status == ExitSuccess)
     assert "acquisition did not suspend for typed evidence reads"
       (length [() | ("evidence","read") <- trace] == 3 && ("files","list") `elem` trace)
-    (restored,_,restoredStatus) <- broker TruncatedPayload program (input (configValue "/folder"))
+    (restored,_,restoredStatus) <- broker TruncatedPayload program (fetchInput (input (configValue "/folder")))
     let restoration = object ["tag" .= ("SetPayload" :: String),"value" .= object
           ["id" .= ("same.txt" :: String),"fingerprint" .= ("recorded-same" :: String),
            "payload" .= object ["tag" .= ("Available" :: String),"value" .= object ["text" .= ("same" :: String)]]]]
     assert "same-version truncated content was not restored" (restoredStatus == ExitSuccess && restored == Just (success (toJSON
       [change "Updated" "changed.txt" "changed 🦋\nline two",restoration,change "New" "new.txt" "new",
        object ["tag" .= ("Removed" :: String),"value" .= ("gone.txt" :: String)]])))
-    (empty,emptyTrace,emptyStatus) <- broker Normal program (input (configValue ""))
+    (empty,emptyTrace,emptyStatus) <- broker Normal program (fetchInput (input (configValue "")))
     assert "empty directory caused host effects" (empty == Just (failure "Folder directory must be nonempty") && null emptyTrace && emptyStatus == ExitSuccess)
-    (unreadable,unreadableTrace,unreadableStatus) <- broker DirectoryFailure program (input (configValue "/folder"))
+    (unreadable,unreadableTrace,unreadableStatus) <- broker DirectoryFailure program (fetchInput (input (configValue "/folder")))
     assert "failed enumeration became removals" (unreadable == Just (failure "Directory unreadable") &&
       unreadableTrace == [("files","list")] && unreadableStatus == ExitSuccess)
-    (readFailure,_,readFailureStatus) <- broker FileFailure program (input (configValue "/folder"))
+    (readFailure,_,readFailureStatus) <- broker FileFailure program (fetchInput (input (configValue "/folder")))
     assert "failed file read produced a successful delta" (readFailure == Just (failure "File unreadable") && readFailureStatus == ExitSuccess)
     forM_ [WrongId,WrongPayload] $ \scenario -> do
-      (bad,_,badStatus) <- broker scenario program (input (configValue "/folder"))
+      (bad,_,badStatus) <- broker scenario program (fetchInput (input (configValue "/folder")))
       assert "malformed host reply resumed a continuation" (bad == Nothing && badStatus /= ExitSuccess)
   forM_ readPrograms $ \program -> do
     (result,trace,status) <- broker Normal program (input (String "changed.txt"))
@@ -251,6 +257,10 @@ broker scenario = brokerWith scenario (\body capability method args -> do
   assert "non-HTTP request has a raw body" (Bytes.null body)
   (,Bytes.empty) <$> respond scenario capability method args)
 
+fetchInput :: Value -> Value
+fetchInput (Object values) = Object (KeyMap.insert "concurrency" (String "4") values)
+fetchInput _ = error "Expected acquisition input object"
+
 brokerWith :: Scenario -> (Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString)) -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
 brokerWith scenario respondTo program input = do
   result <- timeout 20000000 $ withCreateProcess program {std_in = CreatePipe,std_out = CreatePipe,std_err = CreatePipe} $ \stdin stdout stderr process ->
@@ -282,6 +292,27 @@ brokerWith scenario respondTo program input = do
                       (if scenario == WrongId then "wrong" else identity),"result" .=
                       (if scenario == WrongPayload then success (Bool True) else answer)]) responseBody
                     loop rest (trace ++ [(capability,method)])
+                  "HostBatch" -> do
+                    parts <- right (parseEither (withObject "batch" (.: "requests")) message)
+                    assert "empty batch" (not (null (parts :: [Value])))
+                    let respondParts _ remaining [] = do
+                          assert "trailing request body" (Bytes.null remaining)
+                          pure ([],[],[])
+                        respondParts serial remaining (part:more) = do
+                          (identity,capability,method,args,sizeText) <- right (parseEither (withObject "batch member" $ \fields ->
+                            (,,,,) <$> fields .: "id" <*> fields .: "capability" <*> fields .: "method" <*> fields .: "arguments" <*> fields .: "bodyLength") part)
+                          let size = read sizeText :: Int
+                          assert "invalid batch body length" (size >= 0 && size <= Bytes.length remaining && show size == sizeText)
+                          assert "batch IDs are not sequential" (identity == show serial)
+                          let (raw,remainingBody) = Bytes.splitAt size remaining
+                          (answer,responseBody) <- respondTo raw capability method args
+                          (answers,bodies,calls) <- respondParts (serial+1) remainingBody more
+                          pure (object ["id" .= (if scenario == WrongId then "wrong" else identity),
+                            "result" .= (if scenario == WrongPayload then success (Bool True) else answer),
+                            "bodyLength" .= show (Bytes.length responseBody)]:answers,responseBody:bodies,(capability,method):calls)
+                    (answers,bodies,calls) <- respondParts (length trace + 1) body parts
+                    emit (object ["tag" .= ("HostBatchResponse" :: String),"responses" .= answers]) (Bytes.concat bodies)
+                    loop rest (trace ++ calls)
                   _ -> fail "Unknown guest frame"
         emit input Bytes.empty
         (output,trace) <- loop Bytes.empty []
@@ -343,7 +374,7 @@ networkTests = withSystemTempDirectory "kyyn-plugin-network-" $ \temporary -> do
   common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
       name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
     [load "guest/kyyn-sdk/src" "Kyyn/Plugin/Host.hs"] ++
-    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Plugin","PluginHost"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Concurrent","Plugin","PluginHost"]] ++
     [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
   fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin/Network.hs")
   sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
@@ -398,3 +429,52 @@ recordWait = interpret $ \_ (Interaction.WaitSeconds n) -> if n == 0 then pure (
 
 recordLogin :: IOE :> es => IORef [String] -> Eff (Interaction.LoginInteraction : es) a -> Eff es a
 recordLogin messages = interpret $ \_ (Interaction.DisplayInstructions value) -> liftIO (modifyIORef' messages (++ [value]))
+
+concurrentTests :: IO ()
+concurrentTests = withSystemTempDirectory "kyyn-concurrent-guest-" $ \temporary -> do
+  repo <- getEnv "KYYN_TEST_ROOT"
+  toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
+  compiler <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe (fail "Matching GHC required") pure
+  let path = either error id . relativePath
+      load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
+  common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
+      name <- ["Evidence","Program","Plugin","Blob"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Concurrent"]] ++
+    [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
+  fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin/Concurrent.hs")
+  sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
+  (programs,artifact) <- compileBoth temporary toolchain compiler "concurrent" sources
+  batchTests artifact
+  forM_ programs $ \program -> do
+    (status,out,err) <- readCreateProcessWithExitCode program ""
+    assert ("scheduler contract failed: " ++ out ++ err) (status == ExitSuccess)
+  forM_ programs $ \program -> case cmdspec program of
+    RawCommand executable arguments -> do
+      start <- getMonotonicTimeNSec
+      (status,out,err) <- readCreateProcessWithExitCode program {cmdspec = RawCommand executable (arguments ++ ["--benchmark"])} ""
+      end <- getMonotonicTimeNSec
+      assert ("synthetic scheduler failed: " ++ out ++ err) (status == ExitSuccess)
+      putStrLn ("Synthetic scheduler milliseconds=" ++ show ((end-start) `div` 1000000) ++ " " ++ out)
+    _ -> fail "Expected direct guest executable"
+  putStrLn "Concurrent scheduler contract passed under GHC and MicroHs."
+
+retryTests :: IO ()
+retryTests = withSystemTempDirectory "kyyn-retry-guest-" $ \temporary -> do
+  repo <- getEnv "KYYN_TEST_ROOT"
+  toolchain <- getEnv "KYYN_TEST_TOOLCHAIN"
+  compiler <- findExecutable ("ghc-" ++ showVersion compilerVersion) >>= maybe (fail "Matching GHC required") pure
+  let path = either error id . relativePath
+      load base file = (,) (path file) <$> Bytes.readFile (repo </> base </> file)
+  common <- sequence ([load "shared/kyyn-types/src" ("Kyyn/Types/" ++ name ++ ".hs") |
+      name <- ["Evidence","Program","Plugin","PluginHost","Blob"]] ++
+    [load "guest/kyyn-sdk/src" name | name <- ["Kyyn/Plugin.hs","Kyyn/Plugin/Host.hs"]] ++
+    [load "plugins/microsoft-graph/src" name | name <- ["MicrosoftGraph/Http.hs","MicrosoftGraph/Json.hs"]] ++
+    [load "guest/kyyn-runtime/src" ("Kyyn/Runtime/" ++ name ++ ".hs") | name <- ["Json","Transport","Concurrent"]] ++
+    [load "vendor/json" name | name <- ["Text/JSON/Types.hs","Text/JSON/String.hs"]])
+  fixture <- Bytes.readFile (repo </> "host/kyyn-microhs/test/plugin/GraphRetry.hs")
+  sources <- right (guestSources (path "KyynPluginEntry.hs") ((path "KyynPluginEntry.hs",fixture):common))
+  (programs,_) <- compileBoth temporary toolchain compiler "retry" sources
+  forM_ programs $ \program -> do
+    (status,out,err) <- readCreateProcessWithExitCode program ""
+    assert ("retry contract failed: " ++ out ++ err) (status == ExitSuccess)
+  putStrLn "Concurrent retry contract passed under GHC and MicroHs."

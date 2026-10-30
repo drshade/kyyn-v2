@@ -99,7 +99,7 @@ configuration = object ["auth" .= tagged "ClientSecret" (object ["tenant" .= tex
 device :: Text.Text -> Value
 device permission = tagged "DeviceCode" (object ["tenant" .= text "tenant","clientId" .= text "client","tokenKey" .= text "secret","scopes" .= [permission]])
 input :: Value -> Value
-input config = object ["arguments" .= config,"snapshot" .= text "prior"]
+input config = object ["concurrency" .= text "4","arguments" .= config,"snapshot" .= text "prior"]
 
 provider :: Maybe Value -> Text.Text -> IO (Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString), IORef [Text.Text])
 provider old scenario = do

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, ScopedTypeVariables #-}
 module Kyyn.Composition.SyncTimings
   ( SyncTimings, newSyncTimings, withSyncReport
-  , observeHttp, observeBlobs, observeWaiting, observeEvidence, observeAcquisition ) where
+  , observeConcurrent, observeHttp, observeBlobs, observeWaiting, observeEvidence, observeAcquisition ) where
 
 import Control.Exception (IOException, catch, finally)
 import Data.IORef
@@ -11,6 +11,7 @@ import Effectful (Eff, IOE, (:>), liftIO)
 import Effectful.Dispatch.Dynamic (interpose, passthrough)
 import qualified Effectful.Exception as Exception
 import GHC.Clock (getMonotonicTimeNSec)
+import Kyyn.Plumbing.Interpreter.ConcurrentExecution (ConcurrentEvent(..))
 import Kyyn.MicroHs.Timing (emitTiming)
 import qualified Kyyn.Plumbing.Capability.HttpTransport as Http
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
@@ -22,14 +23,15 @@ import System.IO (hPutStrLn, stderr)
 import Text.Printf (printf)
 
 data SyncTimings = SyncTimings (IORef Int) (IORef [(String,(Int,Word64))])
+  (IORef (Int,Int)) (IORef (Maybe (Word64,Int,Int,Int,Int))) (IORef [(Int,Int)])
 
 newSyncTimings :: Bool -> IO (Maybe SyncTimings)
 newSyncTimings False = pure Nothing
-newSyncTimings True = Just <$> (SyncTimings <$> newIORef 0 <*> newIORef [])
+newSyncTimings True = Just <$> (SyncTimings <$> newIORef 0 <*> newIORef [] <*> newIORef (0,0) <*> newIORef Nothing <*> newIORef [])
 
 withSyncReport :: Maybe SyncTimings -> IO a -> IO a
 withSyncReport Nothing action = action
-withSyncReport (Just (SyncTimings _ totals)) action = do
+withSyncReport (Just (SyncTimings _ totals workers _ statuses)) action = do
   start <- getMonotonicTimeNSec
   action `finally` do
     emitTiming "sync-command" "" start
@@ -37,10 +39,43 @@ withSyncReport (Just (SyncTimings _ totals)) action = do
     mapM_ (\(stage,(count,nanos)) ->
       hPutStrLn stderr (printf "[kyyn sync] %s calls=%d elapsed_ms=%.3f" stage count (fromIntegral nanos / 1000000 :: Double))
         `catch` \(_ :: IOException) -> pure ()) (reverse values)
+    (_,peak) <- readIORef workers
+    codes <- readIORef statuses
+    timingLine ("[kyyn sync] concurrency peak_in_flight=" ++ show peak)
+    mapM_ (\(code,count) -> timingLine ("[kyyn sync] http-status status=" ++ show code ++ " calls=" ++ show count)) codes
+
+observeConcurrent :: Maybe SyncTimings -> ConcurrentEvent -> IO ()
+observeConcurrent Nothing _ = pure ()
+observeConcurrent (Just (SyncTimings _ totals workers selected _)) event = case event of
+  WorkerStarted -> atomicModifyIORef' workers (\(active,peak) -> ((active+1,max peak (active+1)),()))
+  WorkerFinished -> atomicModifyIORef' workers (\(active,peak) -> ((active-1,peak),()))
+  RoundStarted width count -> do
+    start <- getMonotonicTimeNSec
+    counts <- readIORef totals
+    writeIORef selected (Just (start,width,count,remote counts,number "wait" counts))
+  RoundFinished -> do
+    snapshot <- readIORef selected
+    case snapshot of
+      Nothing -> pure ()
+      Just (start,width,count,priorRemote,priorWait) -> do
+        end <- getMonotonicTimeNSec
+        counts <- readIORef totals
+        let remoteCalls = remote counts - priorRemote
+            waits = number "wait" counts - priorWait
+        timingLine (printf "[kyyn sync] round width=%d requests=%d remote=%d waiting=%d local=%d elapsed_ms=%.3f"
+          width count remoteCalls waits (count-remoteCalls-waits) (fromIntegral (end-start) / 1000000 :: Double))
+    writeIORef selected Nothing
+  where
+    number key = maybe 0 fst . lookup key
+    remote counts = number "http" counts + number "blob-download" counts
+
+timingLine :: String -> IO ()
+timingLine line = hPutStrLn stderr line `catch` \(_ :: IOException) -> pure ()
+
 
 measure :: IOE :> es => Maybe SyncTimings -> String -> String -> (a -> String) -> Eff es a -> Eff es a
 measure Nothing _ _ _ action = action
-measure (Just (SyncTimings serial totals)) stage detail describe action = do
+measure (Just (SyncTimings serial totals _ _ _)) stage detail describe action = do
   number <- liftIO (atomicModifyIORef' serial (\n -> (n+1,n+1)))
   start <- liftIO getMonotonicTimeNSec
   let label = "call=" ++ show number ++ " " ++ detail
@@ -61,7 +96,13 @@ outcome = either (const "failed") (const "ok")
 observeHttp :: (IOE :> es, Http.HttpTransport :> es) => Maybe SyncTimings -> Eff es a -> Eff es a
 observeHttp Nothing = id
 observeHttp timings = interpose $ \env operation@(Http.SendHttp (Http.HttpRequest method _ _ _)) ->
-  measure timings "http" ("method=" ++ safeMethod method) describe (passthrough env operation)
+  measure timings "http" ("method=" ++ safeMethod method) describe $ do
+    result <- passthrough env operation
+    case (timings,result) of
+      (Just (SyncTimings _ _ _ _ statuses),Right (Http.HttpResponse status _ _)) -> liftIO $
+        atomicModifyIORef' statuses (\counts -> ((status,1 + maybe 0 id (lookup status counts)):filter ((/=status) . fst) counts,()))
+      _ -> pure ()
+    pure result
   where
     safeMethod method | method `elem` ["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"] = Text.unpack method
                       | otherwise = "OTHER"

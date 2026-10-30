@@ -72,7 +72,7 @@ main = withSystemTempDirectory "kyyn-salesforce-" $ \temporary -> do
       (unchanged,_,_) <- brokerWith Normal same program (input False)
       assert "unchanged record emitted changes" . null =<< changesFrom unchanged
     (sameQuery,_) <- provider stored "normal"
-    (changedSource,_,_) <- brokerWith Normal sameQuery program (object ["arguments" .= set "query" (text "SELECT Id, Amount FROM Opportunity WHERE IsClosed = false") (configuration False),"snapshot" .= text "prior"])
+    (changedSource,_,_) <- brokerWith Normal sameQuery program (object ["concurrency" .= text "4","arguments" .= set "query" (text "SELECT Id, Amount FROM Opportunity WHERE IsClosed = false") (configuration False),"snapshot" .= text "prior"])
     assert "query source reference change was ignored" . (== ["Updated","Updated"]) =<< (changesFrom changedSource >>= mapM tagOf)
     (changed,_) <- provider stored "changed"
     (updated,_,_) <- brokerWith Normal changed program (input False)
@@ -115,7 +115,7 @@ main = withSystemTempDirectory "kyyn-salesforce-" $ \temporary -> do
     assert "large new identities" (addedIds == map largeId [3000..4499])
     assert "large removed identities" (removedIds == map largeId [0..1499])
     forM_ [set "instanceUrl" (text "https://example.test/path") (configuration False),set "query" (text "DELETE FROM Account") (configuration False)] $ \invalid -> do
-      (failed,_,_) <- brokerWith Normal (\_ _ _ _ -> fail "Invalid config called host") program (object ["arguments" .= invalid,"snapshot" .= text "prior"])
+      (failed,_,_) <- brokerWith Normal (\_ _ _ _ -> fail "Invalid config called host") program (object ["concurrency" .= text "4","arguments" .= invalid,"snapshot" .= text "prior"])
       assert "invalid config accepted" . (== ("Left" :: Text.Text)) =<< maybe (fail "No result") (get "tag") failed
   results <- readIORef outputs
   [ghcResult,mhsResult] <- pure results
@@ -158,7 +158,7 @@ configuration device = object ["instanceUrl" .= text origin,"auth" .= auth,"apiV
   "query" .= text "SELECT Id, Amount FROM Opportunity","idField" .= text "Id"]
   where auth = tagged (if device then "DeviceCode" else "ClientSecret") (object ["clientId" .= text "client",(if device then "tokenKey" else "secretKey") .= text "secret"])
 input :: Bool -> Value
-input device = object ["arguments" .= configuration device,"snapshot" .= text "prior"]
+input device = object ["concurrency" .= text "4","arguments" .= configuration device,"snapshot" .= text "prior"]
 origin :: Text.Text
 origin = "https://example.my.salesforce.com"
 

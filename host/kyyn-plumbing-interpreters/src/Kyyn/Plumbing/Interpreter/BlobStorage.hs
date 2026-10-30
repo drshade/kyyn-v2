@@ -8,7 +8,8 @@ import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.CaseInsensitive as CI
 import Data.String (fromString)
-import Data.IORef (newIORef, readIORef, modifyIORef')
+import Data.IORef (newIORef, readIORef, atomicModifyIORef')
+import Control.Concurrent.MVar (newMVar, takeMVar, putMVar)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, IOE, (:>), liftIO)
@@ -37,16 +38,19 @@ runBlobStorageIO :: (IOE :> es, Files.FileSystem :> es)
 runBlobStorageIO kb action = do
   manager <- liftIO (Http.newManager tlsManagerSettings { Http.managerRetryableException = const False })
   created <- liftIO (newIORef [])
+  initialize <- liftIO (newMVar ())
   interpret (\env -> \case
     WithBlobDownloads instanceRef cleanup operation -> localSeqUnlift env $ \unlift -> do
+      Files.ensureIgnoredDirectory kb cacheLocation
       before <- liftIO (length <$> readIORef created)
       unlift operation `Exception.finally` (do
         after <- liftIO (readIORef created)
         unlift (cleanup [ref | (owner,ref) <- take (length after - before) after, owner == instanceRef]))
     StoreBlobAt instanceRef download -> do
-      Files.ensureIgnoredDirectory kb cacheLocation
+      Exception.bracket_ (liftIO (takeMVar initialize)) (liftIO (putMVar initialize ()))
+        (Files.ensureIgnoredDirectory kb cacheLocation)
       liftIO (safe (downloadBlob manager (directory instanceRef)
-        (\ref -> modifyIORef' created ((instanceRef,ref):)) download))
+        (\ref -> atomicModifyIORef' created (\refs -> ((instanceRef,ref):refs,()))) download))
     DiscardBlobsAt instanceRef refs -> liftIO $ forM_ refs $ \ref -> do
       path <- checkedPath (directory instanceRef) ref
       removeFile path `catch` \(_ :: IOException) -> pure ()

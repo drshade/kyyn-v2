@@ -1,11 +1,11 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, TypeOperators, OverloadedStrings #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Plugin
-  ( Connector(..), CapturedMethod(..), Program, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
+  ( Connector(..), CapturedMethod(..), Program, concurrently, concurrentlyE, EvidenceSnapshot, FetchError(..), EvidenceId(..), EvidenceFingerprint(..)
   , EvidencePayload(..), Evidence(..), EvidenceChange(..), CapturedText(..), FetchContext(..), FetchResult(..), CapturedRead, ReadsEvidence, listEvidenceIds, readEvidence
   , BlobRef(..), readBlob, readBlobText ) where
 
-import Kyyn.Types.Program (Program, (:+:)(..), request)
+import Kyyn.Types.Program (Program, (:+:)(..), request, concurrently, concurrentlyE)
 import Kyyn.Types.PluginHost (Http, Secrets, Waiting, ContentDigest)
 import Kyyn.Types.Blob (BlobRef(..), BlobRead(..), BlobAcquisition)
 import qualified Data.ByteString as Bytes

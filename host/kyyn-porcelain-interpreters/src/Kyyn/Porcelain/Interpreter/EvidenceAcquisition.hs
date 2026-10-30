@@ -22,13 +22,14 @@ import Kyyn.Plumbing.Capability.Failure (Failure)
 import Kyyn.Porcelain.Protocol.PluginHost (executeAcquisition)
 import Kyyn.Plumbing.Capability.HttpTransport (HttpTransport)
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage, withBlobDownloads)
+import Kyyn.Plumbing.Capability.ConcurrentExecution (ConcurrentExecution)
 import Kyyn.Plumbing.Capability.ContentDigest (ContentDigest)
 import Kyyn.Plumbing.Capability.SecretStore (SecretStore)
 import Kyyn.Plumbing.Capability.PluginInteraction (Waiting)
 import Kyyn.Plumbing.Protocol.PluginMessages (changesShape, parseChanges)
 import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
-runEvidenceAcquisition :: (ContentDigest :> es, BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
+runEvidenceAcquisition :: (ConcurrentExecution :> es, ContentDigest :> es, BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => DirectoryScope -> Eff (EvidenceAcquisition : es) a -> Eff es a
 runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract reportContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config

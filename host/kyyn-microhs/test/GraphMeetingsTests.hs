@@ -245,7 +245,7 @@ inputWithPrior :: Text.Text -> Maybe Text.Text -> Bool -> Maybe Text.Text -> Val
 inputWithPrior started since device previous = object ["arguments" .= object
   ["input" .= object ["config" .= object ["auth" .= auth,"retentionDays" .= text "30"],
     "options" .= maybe none (\s -> tagged "Some" (object ["since" .= tagged "Some" (text s)])) since],
-    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t])) previous],"snapshot" .= text "selected"]
+    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t])) previous],"concurrency" .= ("4" :: String),"snapshot" .= text "selected"]
   where
     auth = if device then tagged "DeviceCode" (object ["tenant" .= text "tenant","clientId" .= text "client","tokenKey" .= text "key","scopes" .= (["User.Read"] :: [Text.Text])])
       else tagged "ClientSecret" (object ["tenant" .= text "tenant","clientId" .= text "client","secretKey" .= text "key"])

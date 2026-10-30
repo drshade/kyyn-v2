@@ -44,6 +44,7 @@ node --check tools/test-recipe-state-run.mjs
 node --check tools/test-plugin-install.mjs
 cabal test processes --test-show-details=direct
 cabal test frames --test-show-details=direct
+cabal test concurrent-execution --test-show-details=direct
 cabal test dhall-values --test-show-details=direct
 cabal test roots --test-show-details=direct
 cabal test git-snapshots --test-show-details=direct

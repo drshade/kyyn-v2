@@ -234,6 +234,16 @@ Choose a `since` before the current time. Ordinary sync uses its saved overlap;
 an explicit `since` controls the measurement window. Use a disposable KB when
 measuring first downloads rather than reuse of existing evidence.
 
+Independent Meetings requests run with up to four host workers. Set
+`KYYN_FETCH_CONCURRENCY=1` to compare serial execution, or choose a width from
+`1` through `8`. The override applies to this process's evidence fetches; it
+is not stored in KB configuration or sync positions. Pagination within each
+workflow remains sequential. A retry wait holds the current request round open.
+
+Concurrency timing lines report each round's width, request count, local/remote/
+waiting counts and wall time, with peak active requests and HTTP status totals
+in the summary. HTTP duration sums can exceed wall time when requests overlap.
+
 Timing output goes to stderr; stdout remains the normal JSON result. Only the
 literal `KYYN_TIMINGS=1` enables it. Sync operations emit start/completion events
 with a matching call number, followed by operation counts and elapsed-time totals.
