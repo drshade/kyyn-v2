@@ -204,15 +204,17 @@ sync positions. Provider citations remain separate from these operational tokens
 #### Safe Graph read retries
 
 The Graph plugin, not the native HTTP broker, owns retries. Its known safe GET
-reads have at most three attempts total per logical request. HttpTimedOut permits
-retry after 1 second following the first failed attempt and 2 seconds following
-the second. For HTTP 429/503 with a valid Retry-After, use that provider delay
-instead; those attempts consume the same three-attempt budget. Exhaustion preserves
-the failure; a missing/invalid Retry-After remains an immediate refusal. Other
-transport errors are not assumed transient. Token/login POSTs and other requests
-are not automatically replayed by this policy. Cancellation interrupts retry waits.
+reads have two separate retry budgets per logical request: at most two retries
+for HttpTimedOut (wait 1 second then 2 seconds), and at most five retries for
+HTTP 429/503 carrying a valid Retry-After (wait the provider's full delay).
+Exhaustion preserves the failure; a missing/invalid Retry-After remains an immediate
+refusal. Each counter persists across the other kind of retry and is never reset
+within the logical request: at most eight sends can occur including the initial
+attempt. Other transport errors are not assumed transient. Token/login POSTs and
+other requests are not automatically replayed by this policy. Cancellation
+interrupts retry waits.
 
-GET blob downloads use the same bounded status/Retry-After policy. Their current
+GET blob downloads permit at most five status/Retry-After retries, as above. Their current
 FetchError does not carry a typed transport classification, so a download transport
 failure remains terminal; do not parse its error text to retry it. Structured blob
 transport recovery requires its own contract decision. No whole-fetch automatic
@@ -302,15 +304,19 @@ All actual downloads use the same status-aware retry route as metadata requests.
 
 #### Teams meeting artifacts
 
-Meetings uses ADR 0009's `concurrently` for independent user calendar discovery,
+Meetings uses ADR 0009's `concurrentlyE` for independent user calendar discovery,
 independent unique meeting artifact discovery, and independent artifact captures.
-Fetch authentication once before these groups. Pagination within a collection and
+Acquire a usable token before each group, outside concurrency, so refresh-token
+writes remain sequential. This reduces expiry risk but does not promise that an
+arbitrarily long group cannot outlive a token; an unrecovered authentication failure
+remains terminal. Pagination within a collection and
 fallback capture contexts for the same artifact stay sequential. Preserve stable
 input/result order, existing artifact deduplication, fingerprints and report
 contents; a refusal can coexist with successful capture through another context.
-A terminal branch failure still fails the fetch after group results are collected;
-only the final complete successful acquisition is published. A pure/recorded
-width-one execution is the correctness baseline for higher widths.
+A terminal branch failure stops its group at the next completed round under
+`concurrentlyE`; subsequent acquisition groups are not run. Only the final complete
+successful acquisition is published. A pure/recorded width-one execution is the
+success-value baseline for higher widths; failure selection follows ADR 0009.
 
 
 ```haskell

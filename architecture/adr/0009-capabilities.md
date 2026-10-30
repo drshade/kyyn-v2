@@ -70,6 +70,8 @@ data Program request a where
   Request :: request x -> (x -> Program request a) -> Program request a
   Concurrent :: [Program request x]
              -> ([x] -> Program request a) -> Program request a
+  ConcurrentEither :: [Program request (Either e x)]
+                   -> (Either e [x] -> Program request a) -> Program request a
 
 request :: effect a -> Program effect a
 
@@ -90,11 +92,15 @@ The continuation stays in the running guest and is never encoded on the wire.
 
 ### Independent acquisition workflows
 
-Expose one generic SDK combinator, re-exported by `Kyyn.Plugin`:
+Expose generic SDK combinators, re-exported by `Kyyn.Plugin`:
 
 ```haskell
 concurrently :: [Program request a] -> Program request [a]
 concurrently branches = Concurrent branches Pure
+
+concurrentlyE :: [Program request (Either e a)]
+              -> Program request (Either e [a])
+concurrentlyE branches = ConcurrentEither branches Pure
 ```
 
 The author declares that branches are independent; neither the host nor the SDK
@@ -153,11 +159,31 @@ Mutable interpreter state reached by workers must be explicitly shared and atomi
 or confined to the owning thread; copying a local State handler is not a mechanism
 for collecting worker mutations. Blob accounting is governed by ADR 0029.
 
-For identical supplied request results, sequential and concurrent interpreters
-must produce the same final typed value. This is not a promise of identical values
+For identical supplied request results, sequential and concurrent interpretations
+of `concurrently` must produce the same final typed value. This is not a promise of identical values
 when independent live provider requests observe changing external state. Typed
 `Left` results remain ordinary branch values; the scheduler does not interpret
 application errors or cancel siblings when one branch returns a `Left`.
+
+`concurrentlyE` is the explicit fail-fast variant for independent workflows whose
+final values are Either. Its sequential fold short-circuits on the first Left in
+input order. In acquisition, inspect completed branch results before dispatch and
+after each fully completed round. If any direct child has finished with Left,
+finish that group with the error at the lowest input index among the children
+that have failed at that boundary. Discard the group's remaining continuations;
+do not select more of its requests. Pure immediate failures require no dispatch.
+Do not confuse an intermediate request's Left with a branch's final Left: the
+branch may recover or retry. Nested failure propagates through its parent only
+when that parent's program chooses to return Left; unrelated outer branches remain
+subject to their own group's policy. Empty groups return Right [].
+
+The in-flight round is already joined when fail-fast is decided, so no partial
+batch response or per-request cancellation protocol is needed. Earlier effects
+are not rolled back. Successful `concurrentlyE` results match sequential order;
+when multiple branches fail, its diagnostic may differ from the sequential fold's
+first error because a slower earlier branch may not have reached its failure.
+The concurrent choice is deterministic for a fixed width and supplied response
+transcript, not invariant under changing width. Tests must exercise that distinction.
 
 The first snapshot interpreter is entirely local and pure. Its generated binding
 associates a collection's declared identity with its typed root selector:

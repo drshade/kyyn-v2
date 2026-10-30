@@ -113,8 +113,10 @@ If a later batch contains a forbidden effect, previous batches are not undone.
 Opt-in sync timings distinguish summed request duration from elapsed acquisition
 and command wall time. Under concurrency those durations overlap and must not be
 added to predict total latency. Record effective width, round count/wall time,
-request counts by remote (HTTP/download), waiting and local classes, and peak
-in-flight requests. Counter updates are atomic. Timing labels retain the existing
+request counts by remote (HTTP/download), waiting and local classes, HTTP status
+counts (including 429), and peak in-flight requests. Mark rounds containing a
+WaitSeconds member and record their elapsed time, so barrier stalls can be
+distinguished from request latency. Counter updates are atomic. Timing labels retain the existing
 ban on source identities, URLs, headers, bodies, secrets and report contents.
 
 Report progress and results to the owning caller. Do not add a generic persisted
