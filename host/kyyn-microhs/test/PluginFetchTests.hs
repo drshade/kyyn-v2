@@ -250,7 +250,7 @@ rejectBoth temporary toolchain ghc sources = do
   rejected <- compileMicroHs temporary toolchain sources
   assert "MicroHs granted a capability outside the declared row" (case rejected of Left _ -> True; Right _ -> False)
 
-data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload | TruncatedPayload deriving (Eq)
+data Scenario = Normal | DirectoryFailure | FileFailure | WrongId | WrongPayload | TruncatedPayload | MissingBatchReply | ReorderedBatchReply | DuplicateBatchReply | LastBadBatchReply | TrailingBatchBody | NonCanonicalBatchLength deriving (Eq)
 
 broker :: Scenario -> CreateProcess -> Value -> IO (Maybe Value,[(String,String)],ExitCode)
 broker scenario = brokerWith scenario (\body capability method args -> do
@@ -311,7 +311,18 @@ brokerWith scenario respondTo program input = do
                             "result" .= (if scenario == WrongPayload then success (Bool True) else answer),
                             "bodyLength" .= show (Bytes.length responseBody)]:answers,responseBody:bodies,(capability,method):calls)
                     (answers,bodies,calls) <- respondParts (length trace + 1) body parts
-                    emit (object ["tag" .= ("HostBatchResponse" :: String),"responses" .= answers]) (Bytes.concat bodies)
+                    let editLast key value = reverse . changeFirst key value . reverse
+                        changeFirst key value (Object fields:more) = Object (KeyMap.insert key value fields):more
+                        changeFirst _ _ values = values
+                        changed = case scenario of
+                          MissingBatchReply -> drop 1 answers
+                          ReorderedBatchReply -> reverse answers
+                          DuplicateBatchReply -> editLast "id" (String "1") answers
+                          LastBadBatchReply -> editLast "result" (Bool True) answers
+                          NonCanonicalBatchLength -> editLast "bodyLength" (String "00") answers
+                          _ -> answers
+                        raw = Bytes.concat bodies <> if scenario == TrailingBatchBody then "extra" else Bytes.empty
+                    emit (object ["tag" .= ("HostBatchResponse" :: String),"responses" .= changed]) raw
                     loop rest (trace ++ calls)
                   _ -> fail "Unknown guest frame"
         emit input Bytes.empty
@@ -450,6 +461,14 @@ concurrentTests = withSystemTempDirectory "kyyn-concurrent-guest-" $ \temporary 
     assert ("scheduler contract failed: " ++ out ++ err) (status == ExitSuccess)
   forM_ programs $ \program -> case cmdspec program of
     RawCommand executable arguments -> do
+      let wired = program {cmdspec = RawCommand executable (arguments ++ ["--wire"])}
+          input = object ["arguments" .= ("0" :: String),"snapshot" .= ("selected" :: String),"concurrency" .= ("4" :: String)]
+          respondTo _ _ _ args = pure (args,Bytes.empty)
+      (output,trace,wireStatus) <- brokerWith Normal respondTo wired input
+      assert "valid batch wire changed results" (output == Just (toJSON (["1","2"] :: [String])) && length trace == 4 && wireStatus == ExitSuccess)
+      forM_ [WrongId,WrongPayload,MissingBatchReply,ReorderedBatchReply,DuplicateBatchReply,LastBadBatchReply,TrailingBatchBody,NonCanonicalBatchLength] $ \scenario -> do
+        (failed,calls,exit) <- brokerWith scenario respondTo wired input
+        assert "malformed batch reply resumed a continuation" (failed == Nothing && length calls == 2 && exit /= ExitSuccess)
       start <- getMonotonicTimeNSec
       (status,out,err) <- readCreateProcessWithExitCode program {cmdspec = RawCommand executable (arguments ++ ["--benchmark"])} ""
       end <- getMonotonicTimeNSec

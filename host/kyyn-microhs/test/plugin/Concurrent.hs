@@ -9,6 +9,7 @@ import Data.IORef
 import qualified Data.ByteString as Bytes
 import Kyyn.Types.Program
 import Kyyn.Runtime.Concurrent
+import Kyyn.Runtime.Transport (withTransport)
 import Kyyn.Runtime.Json
 
 data ReadInt a where
@@ -37,7 +38,13 @@ recorded width program = do
 main :: IO ()
 main = do
   args <- getArgs
-  if args == ["--benchmark"] then benchmark else contracts
+  if args == ["--benchmark"] then benchmark
+  else if args == ["--wire"] then withTransport $ \transport -> do
+    (_,_,width) <- acquisitionInput transport integerCodec
+    executeConcurrent transport width (listCodec integerCodec) handle $ do
+      values <- concurrently [readInt 1,readInt 2]
+      mapM readInt values
+  else contracts
 
 contracts :: IO ()
 contracts = do
