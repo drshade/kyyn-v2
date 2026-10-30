@@ -304,6 +304,8 @@ scope or examined enabled-member user IDs, contextual `deniedRequests`,
 `unavailableUsers`, `skippedMeetings` and `coverageLimits`. Issues identify the
 processing stage and a source reference when available. They do not contain raw
 Graph request URLs. A 403 does not prove that Teams policy was the cause.
+A denied request can coexist with successful capture through another user context;
+`deniedRequests` records attempts, not proof of missing artifacts.
 Attendance listings reaching 50 distinct reports produce a potential coverage
 warning: older reports may be omitted by Graph, but returned artifacts remain
 eligible for capture.

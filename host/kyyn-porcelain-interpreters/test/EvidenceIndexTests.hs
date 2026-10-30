@@ -70,19 +70,20 @@ main = do
       optionalValue :: Maybe Value -> Value
       optionalValue Nothing = object ["tag" .= ("None" :: String)]
       optionalValue (Just v) = object ["tag" .= ("Some" :: String), "value" .= v]
-      header = Record [("producer",scalar),("connector",scalar),("payloadType",dataTypeShape),
-        ("positionType",Optional dataTypeShape),("reportType",Optional dataTypeShape)]
+      header legacy = Record ([("producer",scalar),("connector",scalar),("payloadType",dataTypeShape),
+        ("positionType",Optional dataTypeShape)] ++ [("reportType",Optional dataTypeShape) | not legacy])
       latest = Record [("identity",scalar),("fetchedAt",scalar),("added",natural),("updated",natural),("removed",natural),("options",Optional scalar)]
       location = Record [("sha256",scalar),("size",natural),("blobs",List (Record
         [("sha256",scalar),("size",natural),("mediaType",scalar),("name",Optional scalar)]))]
       entry = Record [("id",scalar),("evidence",Record [("fingerprint",scalar),("externalReferences",List scalar),
         ("payload",Union [("Available",Just location),("Truncated",Nothing)])])]
-      raw reportDescriptor reportShape reportBody = runPureEff $ runDhallHandling $ encodeBinaryValue
-        (Record [("header",header),("body",Record [("latest",latest),("values",List entry),
+      raw = rawWith False
+      rawWith legacy reportDescriptor reportShape reportBody = runPureEff $ runDhallHandling $ encodeBinaryValue
+        (Record [("header",header legacy),("body",Record [("latest",latest),("values",List entry),
           ("position",Optional natural),("report",Optional reportShape)])])
-        (object ["header" .= object ["producer" .= ("source" :: String),"connector" .= ("Mail" :: String),
-          "payloadType" .= dataTypeValue TextType,"positionType" .= optionalValue (Just (dataTypeValue IntegerType)),
-          "reportType" .= optionalValue reportDescriptor],
+        (object ["header" .= object (["producer" .= ("source" :: String),"connector" .= ("Mail" :: String),
+          "payloadType" .= dataTypeValue TextType,"positionType" .= optionalValue (Just (dataTypeValue IntegerType))] ++
+          ["reportType" .= optionalValue reportDescriptor | not legacy]),
           "body" .= object ["latest" .= object ["identity" .= ("first" :: String),"fetchedAt" .= ("now" :: String),
             "added" .= ("0" :: String),"updated" .= ("0" :: String),"removed" .= ("0" :: String),"options" .= optionalValue Nothing],
             "values" .= ([] :: [Value]),"position" .= optionalValue (Just (String "42")),"report" .= optionalValue reportBody]])
@@ -91,7 +92,8 @@ main = do
   mapM_ (\encoded -> do
     invalidBytes <- either (fail . show) pure encoded
     unless (isLeft (decode invalidBytes)) (fail "Malformed stored report descriptor/value accepted"))
-    [raw (Just (dataTypeValue TextType)) scalar Nothing,
+    [rawWith True (Just (dataTypeValue TextType)) scalar (Just (String "report")),
+     raw (Just (dataTypeValue TextType)) scalar Nothing,
      raw Nothing (Record []) (Just (object [])),
      raw (Just (dataTypeValue TextType)) (Scalar BoolScalar) (Just (Bool True))]
   putStrLn "Evidence index: descriptor/position/metadata round trip and identity validation passed."

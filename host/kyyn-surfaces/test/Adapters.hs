@@ -91,6 +91,11 @@ main = do
       unless (any (isInfixOf "3 omitted; use --json") messages && not (any (isInfixOf "account-13") messages))
         (fail "Human report failed to bound a long list")
     _ -> fail "Missing public report response"
+  let absentContract = either (error . show) id (checkContract (OptionalType TextType) (SchemaMetadata [] [] []))
+      absentReport = FetchReport absentContract (CheckedValue (contractId absentContract) (object ["tag" .= ("None" :: String)]))
+  case evidenceListResult (EvidenceCapture snapshot latest [] (Just absentReport)) of
+    Response _ _ messages _ -> unless (any (isInfixOf "None") messages)
+      (fail "Human report hid an absent optional reference")
   let unitContract = either (error . show) id (checkContract UnitType (SchemaMetadata [] [] []))
   case evidenceListResult (EvidenceCapture snapshot latest [] (Just (FetchReport unitContract (CheckedValue (contractId unitContract) (object []))))) of
     Response _ (Object fields) _ _ -> unless
