@@ -96,14 +96,15 @@ fetch config options snapshot = case options of
   if (reportSmoke) {
     const implementation = path.join(source, 'src/LocalFile/Folder.hs');
     fs.writeFileSync(implementation, fs.readFileSync(implementation, 'utf8')
+      .replace('module LocalFile.Folder (fetch)', 'module LocalFile.Folder (fetch, Report(..))')
       .replace('fetch ::', 'fetchDefault ::').replace('fetch (Schema.', 'fetchDefault (Schema.') + `
-data Report = Report { changed :: Int, notes :: [String] }
+data Report = Report { changed :: Integer, notes :: [String] }
 fetch :: Schema.FolderConfig -> FetchContext String -> EvidenceSnapshot Schema.Document
   -> Acquisition Schema.Document (Either FetchError (FetchResult Schema.Document String Report))
 fetch config (FetchContext started _) snapshot = do
   result <- fetchDefault config snapshot
   pure (fmap (\\changes -> FetchResult changes ("private-resume:" ++ Text.unpack started)
-    (Report (length changes) ["fixture partial coverage"])) result)
+    (Report (fromIntegral (length changes)) ["fixture partial coverage"])) result)
 `);
   }
   git(source, 'init', '-q', '-b', 'main');

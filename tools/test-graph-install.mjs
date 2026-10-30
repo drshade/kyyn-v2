@@ -75,7 +75,7 @@ try {
   const head = git(kb, 'rev-parse', 'HEAD');
   const descriptor = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'test']).result;
   assert.equal(descriptor.fetchOptionsType, null);
-  assert.equal(descriptor.reportType, "{}");
+  assert.equal(descriptor.reportType.trim(), "{}");
   const method = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'test', 'event']).result;
   assert.match(method.resultType, /bodyPreview/);
   assert.match(method.resultType, /responseStatus\s*:\s*Optional/);
@@ -83,7 +83,7 @@ try {
   assert.match(method.resultType, /\bresponse\s*:\s*Text/);
   assert.match(method.resultType, /\btime\s*:\s*Optional Text/);
   const mail = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'sent']).result;
-  assert.equal(mail.reportType, "{}");
+  assert.equal(mail.reportType.trim(), "{}");
   assert.match(mail.fetchOptionsType, /since\s*:\s*Optional Text/);
   const mailMethod = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'sent', 'message']).result;
   assert.match(mailMethod.resultType, /body\s*:\s*Text/);
