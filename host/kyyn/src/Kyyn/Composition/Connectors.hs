@@ -66,9 +66,10 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
   Cli.ListConnectors plugin workspace -> respond $ runDiscovery host toolchain sdk $
     fmap (fmap (connectorListResult plugin)) (listConfiguredConnectors kb revision workspace plugin)
   Cli.ShowConnector plugin name workspace -> respond $ runDiscovery host toolchain sdk $ runExceptT $ do
-    options <- ExceptT (connectorFetchOptions kb revision workspace plugin name)
+    (options,report) <- ExceptT (connectorFetchOptions kb revision workspace plugin name)
     schema <- traverse (ExceptT . fmap Right . renderType . contractShape) options
-    pure (connectorResult plugin name schema)
+    reportSchema <- traverse (ExceptT . fmap Right . renderType . contractShape) report
+    pure (connectorResult plugin name schema reportSchema)
   Cli.ShowConnectorSchema plugin workspace -> respond $ runDiscovery host toolchain sdk $ runExceptT $ do
     shape <- ExceptT (connectorConfigurationSchema kb revision workspace plugin)
     schema <- ExceptT (Right <$> renderType shape)
@@ -118,13 +119,13 @@ dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision
     evidenceBatchResult <$> ExceptT (readEvidenceBatch selection expected)
   Cli.ShowCurrentEvidence plugin name key -> inspectEvidence $ runExceptT $ do
     selection <- ExceptT (selectConnectorEvidence kb revision plugin name)
-    (snapshot,latest,payload,found,blobs) <- ExceptT (readCurrentEvidence selection key)
+    (snapshot,latest,payload,found,blobs,report) <- ExceptT (readCurrentEvidence selection key)
     case found of
       Nothing -> pure (refusal [errorDiagnostic "evidence.not-found" "No current evidence with this ID. Use evidence list to find current items."])
-      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item blobs "Payload: truncated")
+      Just item@(Evidence _ _ Truncated) -> pure (evidenceItemResult snapshot latest key item blobs report "Payload: truncated")
       Just item@(Evidence _ _ (Available (CheckedValue _ value))) -> do
         rendered <- ExceptT (encodeValue (contractShape payload) value)
-        pure (evidenceItemResult snapshot latest key item blobs rendered)
+        pure (evidenceItemResult snapshot latest key item blobs report rendered)
   where
     inspectEvidence action = case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])

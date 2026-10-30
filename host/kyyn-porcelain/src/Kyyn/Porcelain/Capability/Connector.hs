@@ -40,7 +40,7 @@ loginConfiguredConnector kb revision plugin name = runExceptT $ do
   plugins <- ExceptT (preparePlugins code)
   (package,instanceValue@(ConfiguredConnector _ _ connector config)) <-
     checked (selectedInstance plugin name plugins)
-  (_,_,_,_,_,entry,_) <- checked (sourceDetails connector)
+  (_,_,_,_,_,entry,_,_) <- checked (sourceDetails connector)
   selected <- maybe (throwE [errorDiagnostic "plugin.login-unsupported" "This connector does not provide a login operation."]) pure entry
   report <- ExceptT (validatePlugins [PreparedPlugin package [instanceValue]])
   case checkReport () report of
@@ -72,18 +72,18 @@ listConnectorMethods kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   (_,ConfiguredConnector _ _ connector _) <- checked (selectedInstance plugin name plugins)
-  (_,_,_,methods,_,_,_) <- checked (sourceDetails connector)
+  (_,_,_,methods,_,_,_,_) <- checked (sourceDetails connector)
   pure methods
 
 connectorFetchOptions :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName
-  -> Eff es (Either [Diagnostic] (Maybe CheckedContract))
+  -> Eff es (Either [Diagnostic] (Maybe CheckedContract,Maybe CheckedContract))
 connectorFetchOptions kb revision workspace plugin name = runExceptT $ do
   code <- sourceAt kb revision workspace
   plugins <- ExceptT (preparePlugins code)
   (_,ConfiguredConnector _ _ connector _) <- checked (selectedInstance plugin name plugins)
-  (_,_,_,_,options,_,_) <- checked (sourceDetails connector)
-  pure options
+  (_,_,_,_,options,_,_,report) <- checked (sourceDetails connector)
+  pure (options,report)
 
 selectConnectorMethod :: (RootOpening :> es, Evolution.EvolutionStore :> es, PluginPreparation :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> PluginName -> ConnectorName -> MethodName
@@ -93,7 +93,7 @@ selectConnectorMethod kb revision workspace plugin name method = runExceptT $ do
   plugins <- ExceptT (preparePlugins code)
   (PreparedPackage _ identity _,ConfiguredConnector _ _ connector _) <-
     checked (selectedInstance plugin name plugins)
-  (kind,payload,_,methods,_,_,_) <- checked (sourceDetails connector)
+  (kind,payload,_,methods,_,_,_,_) <- checked (sourceDetails connector)
   case [m | m@(PreparedMethod n _ _ _ _) <- methods, n == method] of
     [selected] -> pure (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity,payload,selected)
     _ -> throwE [errorDiagnostic "plugin.method-unknown" ("No captured method named " ++ coerce method)]
@@ -124,8 +124,8 @@ fetchConfiguredConnector kb@(KnowledgeBase repository _) revision plugin name su
     Passed _ diagnostics -> pure diagnostics
   (PreparedPackage _ identity _,ConfiguredConnector _ _ connector config) <-
     checked (selectedInstance plugin name (preparedPlugins prepared))
-  (kind,payload,entry,_,options,_,position) <- checked (sourceDetails connector)
-  snapshot <- ExceptT (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity) payload entry config options position mode supplied)
+  (kind,payload,entry,_,options,_,position,publicReport) <- checked (sourceDetails connector)
+  snapshot <- ExceptT (fetchEvidence (EvidenceSelection (ConnectorInstanceRef plugin (coerce name)) kind identity) payload entry config options position publicReport mode supplied)
   let ValidationReport warnings = report
       notes = [Diagnostic Warning "plugin.sync-stateless" "This connector has no sync position; --restart-sync has no effect." Nothing |
         mode == RestartSync, Nothing <- [position]]

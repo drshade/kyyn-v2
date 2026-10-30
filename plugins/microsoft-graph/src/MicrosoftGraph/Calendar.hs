@@ -17,7 +17,7 @@ import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
 import Text.JSON.Types (JSValue(..), fromJSObject)
 
-fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Event -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition))
+fetch :: CalendarConfig -> FetchContext CalendarPosition -> EvidenceSnapshot Event -> Acquisition Event (Either FetchError (FetchResult Event CalendarPosition ()))
 fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition) snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
   (start,end) <- either throwE pure (window config)
   token <- ExceptT (Auth.accessToken auth)
@@ -50,7 +50,7 @@ fetch config@(CalendarConfig auth mailbox _ _ _ _) (FetchContext _ priorPosition
     prior <- ExceptT (fmap fetchResult (listEvidenceIds snapshot))
     pure (map RemovedEvidence (removedIds prior (sort (map fst events))))
     else pure []
-  pure (FetchResult (concat updates <> removed) (CalendarPosition next))
+  pure (FetchResult (concat updates <> removed) (CalendarPosition next) ())
   where
     fetchResult = either (\(FetchError message) -> Left message) Right
     pages token seen url

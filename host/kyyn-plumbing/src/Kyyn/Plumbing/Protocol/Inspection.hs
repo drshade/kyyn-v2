@@ -52,7 +52,7 @@ encodePluginSignature (signature,closure) = fmap (fmap Text.encodeUtf8) $ encode
   where
     (kind,types) = case signature of
       FetchSignature config options payload -> ("fetch" :: String,[config,payload] ++ maybe [] pure options)
-      StatefulFetchSignature config options payload position -> ("stateful-fetch",[config,payload,position] ++ maybe [] pure options)
+      StatefulFetchSignature config options payload position report -> ("stateful-fetch",[config,payload,position,report] ++ maybe [] pure options)
       ReadSignature input payload result -> ("read",[input,payload,result])
       SinkSignature config options input result -> ("sink",[config,options,input,result])
 
@@ -67,8 +67,8 @@ decodePluginSignature bytes = case Text.decodeUtf8' bytes of
       signature <- case (kind :: String,types) of
         ("fetch",[config,payload]) -> pure (FetchSignature config Nothing payload)
         ("fetch",[config,payload,options]) -> pure (FetchSignature config (Just options) payload)
-        ("stateful-fetch",[config,payload,position]) -> pure (StatefulFetchSignature config Nothing payload position)
-        ("stateful-fetch",[config,payload,position,options]) -> pure (StatefulFetchSignature config (Just options) payload position)
+        ("stateful-fetch",[config,payload,position,report]) -> pure (StatefulFetchSignature config Nothing payload position report)
+        ("stateful-fetch",[config,payload,position,report,options]) -> pure (StatefulFetchSignature config (Just options) payload position report)
         ("read",[input,payload,result]) -> pure (ReadSignature input payload result)
         ("sink",[config,options,input,result]) -> pure (SinkSignature config options input result)
         _ -> fail "Invalid plugin signature cache"

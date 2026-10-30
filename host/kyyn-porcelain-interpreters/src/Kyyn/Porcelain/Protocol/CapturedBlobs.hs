@@ -18,7 +18,7 @@ resolveBlobs contexts contract value = runExceptT $ do
     let parse = either (throwE . pure . errorDiagnostic "blob.reference") pure
     refs <- parse (blobReferences (rootType contract) value)
     if null refs then pure [] else do
-      let origins = [(ref,instanceRef) | index@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _) <- contexts,
+      let origins = [(ref,instanceRef) | index@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _ _) <- contexts,
             ref <- indexBlobs index]
       mapM (\ref -> case lookup ref origins of
         Nothing -> throwE [errorDiagnostic "blob.unreachable" "Result contains a blob outside the captured evidence."]

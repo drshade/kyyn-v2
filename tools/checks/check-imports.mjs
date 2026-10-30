@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const allowed = {
-  'kyyn-surfaces': ['Data.Aeson.Types', 'Kyyn.Domain.Query', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Recipe', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
+  'kyyn-surfaces': ['Data.Foldable', 'Data.Aeson.Types', 'Kyyn.Domain.Query', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Model', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Recipe', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Options.Applicative',
     'Data.Coerce', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Value', 'Kyyn.Domain.Tool', 'Kyyn.Domain.Secret',
     'Kyyn.Domain.Plugin', 'Kyyn.Domain.Tap',
     'Kyyn.Domain.GuestApi', 'Kyyn.Surfaces.Result', 'Data.Char', 'Data.List', 'Data.Aeson.KeyMap',
@@ -136,7 +136,7 @@ const domainModules = {
   'Kyyn.Domain.Model': ['Kyyn.Domain.Secret'],
   'Kyyn.Domain.FactProposal': ['Data.Aeson', 'Kyyn.Domain.Value', 'Kyyn.Types.Evolution'],
   'Kyyn.Domain.Tool': ['Kyyn.Domain.Contract', 'Kyyn.Domain.Plugin'],
-  'Kyyn.Domain.Evidence': ['Kyyn.Domain.Blob', 'Data.Text.Encoding', 'Data.ByteString', 'Numeric', 'Data.Text', 'Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
+  'Kyyn.Domain.Evidence': ['Kyyn.Domain.DataType', 'Kyyn.Domain.Blob', 'Data.Text.Encoding', 'Data.ByteString', 'Numeric', 'Data.Text', 'Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Kyyn.Domain.DataType', 'Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Types.Plugin', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Control.DeepSeq', 'GHC.Generics', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
@@ -326,7 +326,7 @@ const interpreterModules = {
     'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence',
     'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Porcelain.Capability.EvidenceInspection'],
   'Kyyn.Runtime.PluginRegistration': ['Kyyn.Types.Plugin', 'Kyyn.Runtime.Json', 'Text.JSON.Types'],
-  'Kyyn.Porcelain.Interpreter.PluginPreparation': ['GHC.Records', 'Data.Text', 'Kyyn.Types.SchemaMetadata', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson',
+  'Kyyn.Porcelain.Interpreter.PluginPreparation': ['Kyyn.Domain.Evidence', 'GHC.Records', 'Data.Text', 'Kyyn.Types.SchemaMetadata', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson',
     'Kyyn.Plumbing.Capability.ProcessExecution',
     'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List', 'Data.Coerce', 'Data.Text.Encoding', 'Numeric',
     'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.FileTree',

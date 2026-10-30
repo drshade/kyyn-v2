@@ -30,7 +30,7 @@ runPluginRead = interpret $ \_ -> \case
           Diagnostic severity code message location -> [Diagnostic severity code
             (Text.pack (pluginNameText plugin ++ "/" ++ name ++ ": ") <> message) location]
     loaded <- ExceptT (fmap (either (Left . problem) Right) (Store.openCurrentEvidence selection))
-    index@(EvidenceIndex _ _ actual _) <- maybe (throwE (problem NotFetched)) pure loaded
+    index@(EvidenceIndex _ _ actual _ _) <- maybe (throwE (problem NotFetched)) pure loaded
     unless (contractId actual == contractId expected) (throwE (problem ProducerContractChanged))
     pure index
   ExecuteCapturedMethod current (PreparedMethod _ _ input output program) value -> runExceptT $ do

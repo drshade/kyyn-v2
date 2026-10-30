@@ -2,6 +2,7 @@
 module MicrosoftGraph.Meetings.Api (Pending(..), discover, artifacts, capture, targets, Discovery(..)) where
 
 import Control.Monad (filterM)
+import Data.List (nub)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Text (Text)
 import qualified Data.Text as Text
@@ -16,14 +17,14 @@ import Text.JSON.Types (JSValue(..), fromJSObject)
 
 data Pending = Pending Text Text Text Text MeetingRef -- kind, provider id, first time, end, meeting
 
-data Discovery = Discovered [Text] [MeetingSkip] | DeniedUser | UnavailableUser
+data Discovery = Discovered [Text] [MeetingSkip] | DeniedUser | UnavailableUser Text
 
-targets :: Text -> GraphAuth -> Acquisition payload (Either Text [Text])
-targets _ DeviceCode {} = pure (Right [graphApiBase <> "me"])
+targets :: Text -> GraphAuth -> Acquisition payload (Either Text [(MeetingContext,Text)])
+targets _ DeviceCode {} = pure (Right [(SignedInUser,graphApiBase <> "me")])
 targets token ClientSecret {} = runExceptT $ do
   users <- ExceptT (requiredRequest (collection token (graphApiBase <> "users?$select=id,accountEnabled,userType&$top=999")))
   ids <- either throwE pure (mapM activeMember users)
-  pure [graphApiBase <> "users/" <> Json.escape key | Just key <- ids]
+  pure [(DirectoryUser key,graphApiBase <> "users/" <> Json.escape key) | Just key <- ids]
   where
     activeMember value = do
       key <- required "id" value
@@ -34,7 +35,7 @@ targets token ClientSecret {} = runExceptT $ do
 requestHeaders :: Text -> [(Text,Text)]
 requestHeaders token = [("Authorization","Bearer " <> token),("Prefer","outlook.timezone=\"UTC\"")]
 
-data RequestError = Denied Text | MailboxUnavailable | UnresolvedMeeting | Failed Text
+data RequestError = Denied | MailboxUnavailable Text | UnresolvedMeeting | Failed Text
 
 document :: Text -> Text -> Acquisition payload (Either RequestError JSValue)
 document token url
@@ -42,11 +43,11 @@ document token url
   | otherwise = do
       result <- Http.send (HttpRequest "GET" url (requestHeaders token) "")
       pure $ case result of
-        Right (HttpResponse 403 _ _) -> Left (Denied url)
+        Right (HttpResponse 403 _ _) -> Left Denied
         Right (HttpResponse 404 _ body)
           | "/calendarView" `Text.isInfixOf` url,
             Right code <- Json.parse body >>= Json.member "error" >>= required "code",
-            code `elem` ["MailboxNotEnabledForRESTAPI","ErrorMailboxNotEnabledForRESTAPI","MailboxNotSupportedForRESTAPI"] -> Left MailboxUnavailable
+            code `elem` ["MailboxNotEnabledForRESTAPI","ErrorMailboxNotEnabledForRESTAPI","MailboxNotSupportedForRESTAPI"] -> Left (MailboxUnavailable code)
         Right (HttpResponse 404 _ body)
           | "/onlineMeetings" `Text.isSuffixOf` Text.takeWhile (/= '?') url,
             Right "NotFound" <- Json.parse body >>= Json.member "error" >>= required "code" -> Left UnresolvedMeeting
@@ -66,34 +67,35 @@ collection token = runExceptT . pages []
 
 -- A denial on any page discards the incomplete collection. It is not evidence
 -- that the collection was empty, and no artifact identity is marked captured.
-optionalRequest :: Acquisition payload (Either RequestError a)
-  -> Acquisition payload (Either Text (Maybe a,[Text]))
-optionalRequest = fmap $ \result -> case result of
-  Left (Denied url) -> Right (Nothing,[url])
-  Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
+optionalRequest :: MeetingContext -> MeetingStage -> Maybe Text
+  -> Acquisition payload (Either RequestError a)
+  -> Acquisition payload (Either Text (Maybe a,[MeetingIssue]))
+optionalRequest context stage reference = fmap $ \result -> case result of
+  Left Denied -> Right (Nothing,[MeetingIssue context stage reference "Access refused (HTTP 403)"])
+  Left (MailboxUnavailable _) -> Left "Mailbox is not available through the Graph calendar API"
   Left UnresolvedMeeting -> Left "Calendar meeting could not be resolved"
   Left (Failed message) -> Left message
   Right value -> Right (Just value,[])
 
 requiredRequest :: Acquisition payload (Either RequestError a) -> Acquisition payload (Either Text a)
 requiredRequest = fmap $ \result -> case result of
-  Left (Denied _) -> Left "Cannot enumerate tenant users; check application User.Read.All and admin consent."
-  Left MailboxUnavailable -> Left "Mailbox is not available through the Graph calendar API"
+  Left Denied -> Left "Cannot enumerate tenant users; check application User.Read.All and admin consent."
+  Left (MailboxUnavailable _) -> Left "Mailbox is not available through the Graph calendar API"
   Left UnresolvedMeeting -> Left "Calendar meeting could not be resolved"
   Left (Failed message) -> Left message
   Right value -> Right value
 
 -- Discover join URLs, rather than treating a recurring calendar event as an artifact.
-discover :: Text -> Text -> Bool -> Text -> Text -> Acquisition payload (Either Text Discovery)
-discover token base application since now = runExceptT $ do
+discover :: Text -> MeetingContext -> Text -> Bool -> Text -> Text -> Acquisition payload (Either Text Discovery)
+discover token context base application since now = runExceptT $ do
   let url = base <> "/calendarView?startDateTime=" <> Json.escape since <>
         "&endDateTime=" <> Json.escape now <> "&$select=id,end,isOrganizer,isOnlineMeeting,onlineMeetingProvider,onlineMeeting&$top=1000"
   response <- ExceptT (Right <$> collection token url)
   case response of
-    Left (Denied _) | application -> pure DeniedUser
-    Left MailboxUnavailable | application -> pure UnavailableUser
-    Left (Denied _) -> throwE "Access denied during Meetings calendar discovery; check consent."
-    Left MailboxUnavailable -> throwE "Mailbox is not available through the Graph calendar API"
+    Left Denied | application -> pure DeniedUser
+    Left (MailboxUnavailable code) | application -> pure (UnavailableUser code)
+    Left Denied -> throwE "Access denied during Meetings calendar discovery; check consent."
+    Left (MailboxUnavailable _) -> throwE "Mailbox is not available through the Graph calendar API"
     Left UnresolvedMeeting -> throwE "Unexpected unresolved meeting during calendar discovery"
     Left (Failed message) -> throwE message
     Right events -> do
@@ -115,33 +117,37 @@ discover token base application since now = runExceptT $ do
         if at < lower || at > upper then pure ([],[]) else do
           eventId <- Json.optionalText "id" value
           provider <- Json.optionalText "onlineMeetingProvider" value
-          let skip why = Right ([],[MeetingSkip (maybe "calendar event without ID" id eventId) why])
+          let skip why = Right ([],[MeetingSkip context eventId why])
           if provider /= Just "teamsForBusiness"
             then skip ("Unsupported online meeting provider: " <> maybe "unspecified" id provider)
             else case Json.member "onlineMeeting" value >>= required "joinUrl" of
               Left problem -> skip ("Missing or invalid join URL: " <> problem)
               Right url -> pure ([url],[])
 
-artifacts :: Text -> Text -> Text -> Text -> Text -> Acquisition payload (Either Text ([Pending],[Text],[MeetingSkip]))
-artifacts token base joinUrl since until = runExceptT $ do
+artifacts :: Text -> MeetingContext -> Text -> Text -> Text -> Text -> Acquisition payload (Either Text ([Pending],[MeetingIssue],[MeetingSkip],[MeetingIssue]))
+artifacts token context base joinUrl since until = runExceptT $ do
   lower <- either throwE pure (timestamp since)
   upper <- either throwE pure (timestamp until)
   let filterValue = "JoinWebUrl eq '" <> Text.replace "'" "''" joinUrl <> "'"
-  (resolved,denied) <- ExceptT (optionalRequest (fmap resolvedOrMissing (collection token (base <> "/onlineMeetings?$filter=" <> Json.escape filterValue))))
+  (resolved,denied) <- ExceptT (optionalRequest context MeetingResolution (Just joinUrl) (fmap resolvedOrMissing (collection token (base <> "/onlineMeetings?$filter=" <> Json.escape filterValue))))
   case resolved of
-    Nothing -> pure ([],denied,[])
+    Nothing -> pure ([],denied,[],[])
     Just matches -> case matches of
       [] -> skip "Calendar meeting could not be resolved"
       [value] -> case meetingRef value of
         Left problem -> skip ("Incomplete meeting metadata: " <> problem)
         Right meeting@(MeetingRef key _ _ _) -> do
           let url = base <> "/onlineMeetings/" <> Json.escape key
-          (transcripts,transcriptDenied) <- ExceptT (optionalRequest (collection token (url <> "/transcripts")))
-          (reports,reportDenied) <- ExceptT (optionalRequest (collection token (url <> "/attendanceReports")))
+          (transcripts,transcriptDenied) <- ExceptT (optionalRequest context TranscriptListing (Just key) (collection token (url <> "/transcripts")))
+          (reports,reportDenied) <- ExceptT (optionalRequest context AttendanceListing (Just key) (collection token (url <> "/attendanceReports")))
           items <- either throwE pure $ (++) <$> mapM (pending meeting "Transcript" "createdDateTime" "endDateTime") (maybe [] id transcripts)
             <*> mapM (pending meeting "Attendance" "meetingStartDateTime" "meetingEndDateTime") (maybe [] id reports)
           selected <- either throwE pure $ filterM (within lower upper) items
-          pure (selected,transcriptDenied ++ reportDenied,[])
+          reportIds <- either throwE pure (mapM (required "id") (maybe [] id reports))
+          let limits = [MeetingIssue context AttendanceListing (Just key)
+                "Attendance listing reached the provider limit; older reports may be omitted."
+                | length (nub reportIds) >= 50]
+          pure (selected,transcriptDenied ++ reportDenied,[],limits)
       _ -> skip "Join URL resolved to multiple online meetings"
   where
     resolvedOrMissing (Left UnresolvedMeeting) = Right []
@@ -150,7 +156,7 @@ artifacts token base joinUrl since until = runExceptT $ do
       firstAt <- timestamp first
       endAt <- timestamp end
       pure (firstAt >= lower && firstAt <= upper && endAt <= upper)
-    skip why = pure ([],[],[MeetingSkip joinUrl why])
+    skip why = pure ([],[],[MeetingSkip context (Just joinUrl) why],[])
     meetingRef value = do
       key <- required "id" value
       subject <- maybe "" id <$> Json.optionalText "subject" value
@@ -166,8 +172,8 @@ artifacts token base joinUrl since until = runExceptT $ do
       if kind == "Attendance" && firstAt > endAt then Left "Meeting artifact ends before it starts" else pure ()
       pure (Pending kind key first end meeting)
 
-capture :: Text -> Text -> Pending -> Acquisition MeetingArtifact (Either Text (Maybe MeetingArtifact,[Text]))
-capture token base (Pending kind key first end meeting@(MeetingRef meetingId _ _ _)) = runExceptT $ do
+capture :: Text -> MeetingContext -> Text -> Pending -> Acquisition MeetingArtifact (Either Text (Maybe MeetingArtifact,[MeetingIssue]))
+capture token context base (Pending kind key first end meeting@(MeetingRef meetingId _ _ _)) = runExceptT $ do
   let url = base <> "/onlineMeetings/" <> Json.escape meetingId
   case kind of
     "Transcript" -> do
@@ -175,9 +181,9 @@ capture token base (Pending kind key first end meeting@(MeetingRef meetingId _ _
       content <- ExceptT (Http.downloadOptional (BlobDownload
         (HttpRequest "GET" contentUrl (requestHeaders token) "")
         (Just "transcript.vtt") (Just "text/vtt")))
-      pure (Transcript meeting first end <$> content, [contentUrl | Nothing <- [content]])
+      pure (Transcript meeting first end <$> content, [MeetingIssue context TranscriptContent (Just key) "Access refused (HTTP 403)" | Nothing <- [content]])
     "Attendance" -> do
-      (records,denied) <- ExceptT (optionalRequest (collection token (url <> "/attendanceReports/" <> Json.escape key <> "/attendanceRecords")))
+      (records,denied) <- ExceptT (optionalRequest context AttendanceRecords (Just key) (collection token (url <> "/attendanceReports/" <> Json.escape key <> "/attendanceRecords")))
       attendees <- either throwE pure (traverse (mapM attendance) records)
       pure (Attendance meeting first end <$> attendees,denied)
     _ -> throwE "Unsupported meeting artifact kind"

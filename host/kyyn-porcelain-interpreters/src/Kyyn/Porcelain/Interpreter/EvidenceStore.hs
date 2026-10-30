@@ -35,10 +35,10 @@ runEvidenceStore kb = interpret $ \_ -> \case
     bytes <- readCurrent
     document <- traverse (ExceptT . decodeIndex) bytes
     let base = case document of
-          Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> Just key
+          Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _ _) -> Just key
           Nothing -> Nothing
     case document of
-      Just selected@(IndexDocument stored connector payload _ position)
+      Just selected@(IndexDocument stored connector payload _ position _)
         | stored == package && connector == kind && contractId payload == contractId contract
         , fmap (contractId . fst) position == fmap contractId positionContract ->
           pure (FetchBaseline started base (Just (capturedIndex instanceRef selected)) (snd <$> position))
@@ -46,10 +46,10 @@ runEvidenceStore kb = interpret $ \_ -> \case
   OpenCurrentEvidence (EvidenceSelection instanceRef kind package) -> lockedIndex instanceRef $ runExceptT $ do
     bytes <- readCurrent
     traverse (\contents -> do
-      document@(IndexDocument stored selected _ _ _) <- ExceptT (decodeIndex contents)
+      document@(IndexDocument stored selected _ _ _ _) <- ExceptT (decodeIndex contents)
       unless (stored == package && selected == kind) (throwE ProducerContractChanged)
       pure (capturedIndex instanceRef document)) bytes
-  ReadCapturedEvidence index@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ contract _) key -> runExceptT $
+  ReadCapturedEvidence index@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ contract _ _) key -> runExceptT $
     case indexedEvidence index key of
       Nothing -> pure Nothing
       Just (Evidence token refs Truncated) -> pure (Just (Evidence token refs Truncated))
@@ -57,16 +57,16 @@ runEvidenceStore kb = interpret $ \_ -> \case
         scope <- checkedScope instanceRef
         value <- ExceptT (Payload.readPayload scope contract location)
         pure (Just (Evidence token refs (Available value)))
-  PublishFetch (EvidenceSelection instanceRef kind package) contract expected options changes position ->
+  PublishFetch (EvidenceSelection instanceRef kind package) contract expected options changes position report ->
     lockedIndex instanceRef $ runExceptT $ do
       scope <- checkedScope instanceRef
       contents <- readCurrent
       prior <- traverse (ExceptT . decodeIndex) contents
       let current = case prior of
-            Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> Just key
+            Just (IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _ _) -> Just key
             Nothing -> Nothing
           old = case prior of
-            Just (IndexDocument stored selected oldContract (EvidenceState _ values) _)
+            Just (IndexDocument stored selected oldContract (EvidenceState _ values) _ _)
               | stored == package && selected == kind && contractId oldContract == contractId contract -> values
             _ -> []
       unless (current == expected) (throwE BaseSnapshotConflict)
@@ -77,7 +77,7 @@ runEvidenceStore kb = interpret $ \_ -> \case
             (toInteger (length [() | NewEvidence _ _ <- changes]))
             (toInteger (length [() | UpdatedEvidence _ _ <- changes]))
             (toInteger (length [() | RemovedEvidence _ <- changes])) options
-          document = IndexDocument package kind contract (EvidenceState latest next) position
+          document = IndexDocument package kind contract (EvidenceState latest next) position report
           locations = [location | (_,Evidence _ _ (Available location)) <- next]
           refs = concat [references | PayloadLocation _ _ references <- locations]
       encoded <- ExceptT (encodeIndex document)
@@ -94,11 +94,11 @@ runEvidenceStore kb = interpret $ \_ -> \case
     current <- runExceptT $ do
       bytes <- readCurrent
       document <- traverse (ExceptT . decodeIndex) bytes
-      pure (fmap (\(IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> key) document)
+      pure (fmap (\(IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _ _) -> key) document)
     when (current == Right expected) (Blobs.discardBlobsAt instanceRef created)
   EvidenceHead instanceRef -> lockedIndex instanceRef $ runExceptT $ do
     bytes <- readCurrent
-    traverse (fmap (\(IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _) -> key) . ExceptT . decodeIndex) bytes
+    traverse (fmap (\(IndexDocument _ _ _ (EvidenceState (FetchSummary key _ _ _ _ _) _) _ _) -> key) . ExceptT . decodeIndex) bytes
   ClearEvidence instanceRef -> lockedIndex instanceRef Document.clearCurrent
   where
     instanceScope instanceRef = directoryScope

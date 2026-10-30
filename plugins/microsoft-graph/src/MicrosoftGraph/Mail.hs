@@ -17,7 +17,7 @@ import MicrosoftGraph.Timestamp (timestamp, daysBefore)
 import Text.JSON.Types (JSValue(..), fromJSObject)
 
 fetch :: MailConfig -> Maybe MailFetch -> FetchContext MailPosition -> EvidenceSnapshot Message
-  -> Acquisition Message (Either FetchError (FetchResult Message MailPosition))
+  -> Acquisition Message (Either FetchError (FetchResult Message MailPosition ()))
 fetch (MailConfig auth mailbox folders retentionDays) options (FetchContext started prior) snapshot =
   fmap (either (Left . FetchError) Right) $ runExceptT $ do
     now <- either throwE pure (timestamp started)
@@ -65,7 +65,7 @@ fetch (MailConfig auth mailbox folders retentionDays) options (FetchContext star
           at <- either throwE pure (timestamp received)
           pure [SetEvidencePayload key fingerprint Truncated | at < cutoff]
         _ -> pure []
-    pure (FetchResult (additions ++ concat truncated) (MailPosition (map snd rounds)))
+    pure (FetchResult (additions ++ concat truncated) (MailPosition (map snd rounds)) ())
   where
     fetchResult = either (\(FetchError message) -> Left message) Right
 

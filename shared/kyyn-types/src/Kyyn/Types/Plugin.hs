@@ -13,9 +13,9 @@ data FetchContext position = FetchContext
   { startedAt :: Text, priorPosition :: Maybe position }
   deriving (Eq, Show)
 
--- | Changes and their final provider position, published together on success.
-data FetchResult payload position = FetchResult
-  { changes :: [EvidenceChange payload], position :: position }
+-- | Changes, final provider position and public report, published together on success.
+data FetchResult payload position report = FetchResult
+  { changes :: [EvidenceChange payload], position :: position, report :: report }
   deriving (Eq, Show)
 
 -- | A configured instance of one connector type.

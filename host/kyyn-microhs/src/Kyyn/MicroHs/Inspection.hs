@@ -215,10 +215,13 @@ lowerPluginSignature table kind signature = do
         unless (eqEType change payload) (Left "EvidenceChange payload differs from snapshot payload")
         FetchSignature <$> lower input <*> traverse lower options <*> lower payload
       Just p -> do
-        (returnedPayload,returnedPosition) <- pair "Kyyn.Types.Plugin.FetchResult" value
+        returned <- application "Kyyn.Types.Plugin.FetchResult" 3 value
+        (returnedPayload,returnedPosition,report) <- case returned of
+          [a,b,c] -> Right (a,b,c)
+          _ -> Left "invalid FetchResult type"
         unless (eqEType returnedPayload payload && eqEType returnedPosition p)
           (Left "FetchResult payload/position differs from snapshot/context")
-        StatefulFetchSignature <$> lower input <*> traverse lower options <*> lower payload <*> lower p
+        StatefulFetchSignature <$> lower input <*> traverse lower options <*> lower payload <*> lower p <*> lower report
     CapturedReadEntry -> ReadSignature <$> lower input <*> lower payload <*> lower value
 
 -- Traverses CHECKED constructor signatures. Aliases in them are already expanded

@@ -32,14 +32,14 @@ withContextCodec argumentsCodec positionCodec = Codec encode decode
       (,) <$> field "input" argumentsCodec values
           <*> (FetchContext <$> field "startedAt" textCodec values <*> field "priorPosition" (optionalCodec positionCodec) values)
 
-fetchResultCodec :: Codec payload -> Codec position -> Codec (FetchResult payload position)
-fetchResultCodec payloadCodec positionCodec = Codec encode decode
+fetchResultCodec :: Codec payload -> Codec position -> Codec report -> Codec (FetchResult payload position report)
+fetchResultCodec payloadCodec positionCodec reportCodec = Codec encode decode
   where
-    encode (FetchResult changes position) = record
-      [("changes",encodeWith (listCodec (changeCodec payloadCodec)) changes),("position",encodeWith positionCodec position)]
+    encode (FetchResult changes position report) = record
+      [("changes",encodeWith (listCodec (changeCodec payloadCodec)) changes),("position",encodeWith positionCodec position),("report",encodeWith reportCodec report)]
     decode value = do
-      values <- fields ["changes","position"] value
-      FetchResult <$> field "changes" (listCodec (changeCodec payloadCodec)) values <*> field "position" positionCodec values
+      values <- fields ["changes","position","report"] value
+      FetchResult <$> field "changes" (listCodec (changeCodec payloadCodec)) values <*> field "position" positionCodec values <*> field "report" reportCodec values
 
 executeCapturedRead :: forall arguments payload result. Codec arguments -> Codec payload -> Codec result
   -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload :+: BlobRead) (Either FetchError result)) -> IO ()

@@ -21,22 +21,22 @@ import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataT
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 
 data IndexDocument = IndexDocument PackageIdentity ConnectorTypeName CheckedContract
-  (EvidenceState PayloadLocation) (Maybe (CheckedContract, CheckedValue)) deriving (Eq, Show)
+  (EvidenceState PayloadLocation) (Maybe (CheckedContract, CheckedValue)) (Maybe FetchReport) deriving (Eq, Show)
 
 capturedIndex :: ConnectorInstanceRef -> IndexDocument -> EvidenceIndex
-capturedIndex instanceRef (IndexDocument package _ contract (EvidenceState latest@(FetchSummary fetchId _ _ _ _ _) values) _) =
+capturedIndex instanceRef (IndexDocument package _ contract (EvidenceState latest@(FetchSummary fetchId _ _ _ _ _) values) _ report) =
   EvidenceIndex (EvidenceSnapshotRef instanceRef (EvidenceProducer package (contractId contract)) fetchId)
-    latest contract (Map.fromList [(key,value) | (EvidenceId key,value) <- values])
+    latest contract (Map.fromList [(key,value) | (EvidenceId key,value) <- values]) report
 
 headerShape :: Shape
-headerShape = Record [("producer",text),("connector",text),("payloadType",dataTypeShape),("positionType",Optional dataTypeShape)]
+headerShape = Record [("producer",text),("connector",text),("payloadType",dataTypeShape),("positionType",Optional dataTypeShape),("reportType",Optional dataTypeShape)]
 
-bodyShape :: Maybe CheckedContract -> Shape
-bodyShape position = Record
+bodyShape :: Maybe CheckedContract -> Maybe CheckedContract -> Shape
+bodyShape position report = Record
   [("latest",Record [("identity",text),("fetchedAt",text),("added",integer),("updated",integer),("removed",integer),("options",Optional text)])
   ,("values",List (Record [("id",text),("evidence",Record
     [("fingerprint",text),("externalReferences",List text),("payload",Union [("Available",Just locationShape),("Truncated",Nothing)])])]))
-  ,("position",Optional (maybe (Record []) contractShape position))]
+  ,("position",Optional (maybe (Record []) contractShape position)),("report",Optional (maybe (Record []) contractShape report))]
   where
     locationShape = Record [("sha256",text),("size",integer),("blobs",List (either error id (shapeOf sdkBlobRefType)))]
 
@@ -45,17 +45,22 @@ text = Scalar TextScalar
 integer = Scalar IntegerScalar
 
 encodeIndex :: DhallHandling :> es => IndexDocument -> Eff es (Either EvidenceProblem ByteString)
-encodeIndex (IndexDocument (PackageIdentity producer) (ConnectorTypeName connector) contract state@(EvidenceState summary values) position) =
-  case validateState state >> traverse_ validatePosition position of
+encodeIndex (IndexDocument (PackageIdentity producer) (ConnectorTypeName connector) contract state@(EvidenceState summary values) position report) =
+  case validateState state >> traverse_ validatePosition position >> traverse_ validateReport report of
     Left problem -> pure (Left problem)
     Right () -> do
-      encoded <- encodeBinaryValue (Record [("header",headerShape),("body",bodyShape (fst <$> position))])
+      encoded <- encodeBinaryValue (Record [("header",headerShape),("body",bodyShape (fst <$> position) (reportContract <$> report))])
         (object ["header" .= object ["producer" .= producer,"connector" .= connector,
-          "payloadType" .= dataTypeValue (rootType contract),"positionType" .= optional (dataTypeValue . rootType . fst) position],
+          "payloadType" .= dataTypeValue (rootType contract),"positionType" .= optional (dataTypeValue . rootType . fst) position,
+          "reportType" .= optional (dataTypeValue . rootType . reportContract) report],
           "body" .= object ["latest" .= summaryValue summary,"values" .= map member values,
-            "position" .= optional (\(_,CheckedValue _ value) -> value) position]])
+            "position" .= optional (\(_,CheckedValue _ value) -> value) position,
+            "report" .= optional (\(FetchReport _ (CheckedValue _ value)) -> value) report]])
       pure (either (Left . InvalidEvidence . show) Right encoded)
   where
+    validateReport (FetchReport expected value) = do
+      either (Left . InvalidEvidence) Right (validateReportContract expected)
+      validatePosition (expected,value)
     validatePosition (expected,CheckedValue actual _) = unless (actual == contractId expected)
       (Left (InvalidEvidence "Sync position has the wrong contract"))
     member (EvidenceId key,Evidence (EvidenceFingerprint fingerprint) refs payload) = object
@@ -70,13 +75,13 @@ decodeIndex :: DhallHandling :> es => ByteString -> Eff es (Either EvidenceProbl
 decodeIndex bytes = do
   decoded <- decodeBinaryEnvelope headerShape
     (either (Left . pure . errorDiagnostic "evidence.descriptor")
-      (\(_,_,_,position) -> Right (bodyShape position)) . parseEither parseHeader) bytes
+      (\(_,_,_,position,report) -> Right (bodyShape position report)) . parseEither parseHeader) bytes
   pure $ case decoded of
     Left problems -> Left (InvalidEvidence (show problems))
     Right value -> either (Left . InvalidEvidence) Right (parseEither document value)
   where
     document = withObject "evidence index" $ \outer -> do
-      (package,connector,contract,positionContract) <- outer .: "header" >>= parseHeader
+      (package,connector,contract,positionContract,reportType) <- outer .: "header" >>= parseHeader
       outer .: "body" >>= withObject "evidence body" (\body -> do
         summary <- body .: "latest" >>= parseSummary
         values <- body .: "values" >>= traverse member
@@ -85,9 +90,14 @@ decodeIndex bytes = do
           (Nothing,Nothing) -> pure Nothing
           (Just expected,Just value) -> pure (Just (expected,CheckedValue (contractId expected) value))
           _ -> fail "Position descriptor and value must both be present or absent"
+        storedReport <- body .: "report" >>= parseOptional pure
+        report <- case (reportType,storedReport) of
+          (Nothing,Nothing) -> pure Nothing
+          (Just expected,Just value) -> pure (Just (FetchReport expected (CheckedValue (contractId expected) value)))
+          _ -> fail "Report descriptor and value must both be present or absent"
         let state = EvidenceState summary values
         either (fail . show) pure (validateState state)
-        pure (IndexDocument package connector contract state position))
+        pure (IndexDocument package connector contract state position report))
     member = withObject "evidence member" $ \entry -> (,)
       <$> (EvidenceId <$> entry .: "id") <*> (entry .: "evidence" >>= withObject "evidence" (\e -> Evidence
         <$> (EvidenceFingerprint <$> e .: "fingerprint") <*> e .: "externalReferences"
@@ -104,11 +114,16 @@ decodeIndex bytes = do
         (fail "Invalid payload SHA-256")
       PayloadLocation hash size <$> (v .: "blobs" >>= traverse parseBlob)
 
-parseHeader :: Value -> Parser (PackageIdentity, ConnectorTypeName, CheckedContract, Maybe CheckedContract)
-parseHeader = withObject "evidence header" $ \header -> (,,,)
+parseHeader :: Value -> Parser (PackageIdentity, ConnectorTypeName, CheckedContract, Maybe CheckedContract, Maybe CheckedContract)
+parseHeader = withObject "evidence header" $ \header -> (,,,,)
   <$> (PackageIdentity <$> header .: "producer") <*> (ConnectorTypeName <$> header .: "connector")
   <*> (header .: "payloadType" >>= descriptor) <*> (header .: "positionType" >>= parseOptional descriptor)
+  <*> (header .: "reportType" >>= parseOptional reportDescriptor)
   where
+    reportDescriptor value = do
+      contract <- descriptor value
+      either fail pure (validateReportContract contract)
+      pure contract
     descriptor value = do
       datatype <- parseDataType value
       either (fail . show) pure (checkContract datatype (SchemaMetadata [] [] []))
@@ -142,3 +157,6 @@ parseOptional decode = withObject "optional" $ \v -> do
     "None" -> pure Nothing
     "Some" -> Just <$> (v .: "value" >>= decode)
     _ -> fail "Invalid optional tag"
+
+reportContract :: FetchReport -> CheckedContract
+reportContract (FetchReport contract _) = contract

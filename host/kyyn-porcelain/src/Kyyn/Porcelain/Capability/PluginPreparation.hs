@@ -24,6 +24,7 @@ data PreparedConnector = PreparedConnector
   , fetchOptionsContract :: Maybe CheckedContract
   , loginEntry :: Maybe CompiledProgram
   , syncPositionContract :: Maybe CheckedContract
+  , reportContract :: Maybe CheckedContract
   }
   | PreparedSinkConnector
   { connectorType :: ConnectorTypeName
@@ -42,9 +43,9 @@ data PreparedPackage = PreparedPackage PluginName PackageIdentity [PreparedConne
 data PreparedPlugin = PreparedPlugin PreparedPackage [ConfiguredConnector] deriving (Eq, Show)
 
 sourceDetails :: PreparedConnector -> Either [Diagnostic]
-  (ConnectorTypeName,CheckedContract,CompiledProgram,[PreparedMethod],Maybe CheckedContract,Maybe CompiledProgram,Maybe CheckedContract)
+  (ConnectorTypeName,CheckedContract,CompiledProgram,[PreparedMethod],Maybe CheckedContract,Maybe CompiledProgram,Maybe CheckedContract,Maybe CheckedContract)
 sourceDetails PreparedConnector {connectorType = kind,payloadContract = payload,fetchEntry = entry,methods = ms,
-  fetchOptionsContract = options,loginEntry = login,syncPositionContract = position} = Right (kind,payload,entry,ms,options,login,position)
+  fetchOptionsContract = options,loginEntry = login,syncPositionContract = position,reportContract = report} = Right (kind,payload,entry,ms,options,login,position,report)
 sourceDetails PreparedSinkConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not a sink."]
 
 data PluginPreparation :: Effect where

@@ -15,7 +15,7 @@ import MicrosoftGraph.Timestamp (timestamp, daysBefore)
 import qualified MicrosoftGraph.Auth as Auth
 
 fetch :: MeetingsConfig -> Maybe MeetingsFetch -> FetchContext MeetingsPosition -> EvidenceSnapshot MeetingArtifact
-  -> Acquisition MeetingArtifact (Either FetchError (FetchResult MeetingArtifact MeetingsPosition))
+  -> Acquisition MeetingArtifact (Either FetchError (FetchResult MeetingArtifact MeetingsPosition MeetingsReport))
 fetch (MeetingsConfig auth retention) options (FetchContext started previous) snapshot =
   fmap (either (Left . FetchError) Right) $ runExceptT $ do
     now <- either throwE pure (timestamp started)
@@ -23,34 +23,34 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
       Just (MeetingsFetch (Just value)) -> Right value
       _ -> case previous of
         Nothing -> daysBefore 30 started
-        Just (MeetingsPosition lastFetch _ _ _ _) -> daysBefore 1 lastFetch)
+        Just (MeetingsPosition lastFetch) -> daysBefore 1 lastFetch)
     lower <- either throwE pure (timestamp since)
     if lower >= now then throwE "since must precede acquisition start" else pure ()
     if retention < 0 then throwE "retentionDays must be nonnegative" else pure ()
     token <- ExceptT (Auth.accessToken auth)
     let application = case auth of ClientSecret {} -> True; _ -> False
     bases <- unique <$> ExceptT (Api.targets token auth)
-    discoveries <- forM bases $ \base -> do
-      found <- ExceptT (Api.discover token base application since started)
-      pure (base,found)
-    rounds <- fmap concat $ forM discoveries $ \(base,found) -> case found of
+    discoveries <- forM bases $ \target@(context,base) -> do
+      found <- ExceptT (Api.discover token context base application since started)
+      pure (target,found)
+    rounds <- fmap concat $ forM discoveries $ \(target@(context,base),found) -> case found of
       Discovered urls _ -> forM (nub urls) $ \url -> do
-        result <- ExceptT (Api.artifacts token base url since started)
-        pure (base,result)
+        result <- ExceptT (Api.artifacts token context base url since started)
+        pure (target,result)
       _ -> pure []
-    let pending = [(base,item) | (base,(items,_,_)) <- rounds, item <- items]
-        skipped = nub (concat [notes | (_,Discovered _ notes) <- discoveries] ++ concat [notes | (_,(_,_,notes)) <- rounds])
+    let pending = [(base,item) | (base,(items,_,_,_)) <- rounds, item <- items]
+        skipped = nub (concat [notes | (_,Discovered _ notes) <- discoveries] ++ concat [notes | (_,(_,_,notes,_)) <- rounds])
         key (Pending kind item _ _ (MeetingRef meetingId _ _ _)) = artifactId kind meetingId item
         candidates = groupBy (\a b -> key (snd a) == key (snd b)) (sortOn (key . snd) pending)
         cutoff = now - fromInteger (retention * 86400)
         captureOptions [] = pure ([],[])
-        captureOptions ((base,item):rest) = do
-          (value,denied) <- ExceptT (Api.capture token base item)
+        captureOptions (((context,base),item):rest) = do
+          (value,denied) <- ExceptT (Api.capture token context base item)
           case value of
-            Just artifact -> pure ([(key item,artifact)],[(base,url) | url <- denied])
+            Just artifact -> pure ([(key item,artifact)],denied)
             Nothing -> do
               (fresh,moreDenied) <- captureOptions rest
-              pure (fresh,[(base,url) | url <- denied] ++ moreDenied)
+              pure (fresh,denied ++ moreDenied)
     captures <- forM candidates $ \choices -> case choices of
       [] -> pure ([],[])
       (_,item):_ -> do
@@ -59,10 +59,13 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
           Just _ -> pure ([],[])
           Nothing -> captureOptions choices
     let fresh = concatMap fst captures
-        denied = [(base,url) | (base,(_,notes,_)) <- rounds, url <- notes] ++ concatMap snd captures
-        deniedCount = toInteger (length (unique ([base | (base,DeniedUser) <- discoveries] ++ map fst denied)))
-        unavailableCount = toInteger (length [() | (_,UnavailableUser) <- discoveries])
-        deniedUrls = if application then [] else nub (map snd denied)
+        denied = nub (concat [notes | (_,(_,notes,_,_)) <- rounds] ++ concatMap snd captures ++
+          [MeetingIssue context CalendarDiscovery Nothing "Access refused (HTTP 403)"
+          | ((context,_),DeniedUser) <- discoveries])
+        unavailable = [MeetingIssue context CalendarDiscovery Nothing code
+          | ((context,_),UnavailableUser code) <- discoveries]
+        limits = nub (concat [notes | (_,(_,_,_,notes)) <- rounds])
+        scope = if application then EnabledMemberMailboxes (unique [key | (DirectoryUser key,_) <- bases]) else DelegatedMailbox
     digests <- ExceptT (Right <$> digestText (map (canonicalArtifact . snd) fresh))
     if length digests /= length fresh then throwE "Host returned the wrong number of content digests" else pure ()
     additions <- forM (zip fresh digests) $ \((key,value),digest) -> do
@@ -78,7 +81,8 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
           at <- either throwE pure (timestamp (endTime value))
           pure [SetEvidencePayload key fingerprint Truncated | at < cutoff]
         _ -> pure []
-    pure (FetchResult (additions ++ truncated) (MeetingsPosition started deniedUrls skipped deniedCount unavailableCount))
+    pure (FetchResult (additions ++ truncated) (MeetingsPosition started)
+      (MeetingsReport since started scope denied unavailable skipped limits))
   where
     fetchResult = either (\(FetchError message) -> Left message) Right
     endTime (Transcript _ _ end _) = end

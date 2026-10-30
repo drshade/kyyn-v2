@@ -43,7 +43,7 @@ answerAcquisition base prior call = case call of
 executeCapturedRead :: (EvidenceStore :> es, Blobs.BlobStorage :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => CompiledProgram -> CheckedValue -> EvidenceIndex -> CheckedContract
   -> Eff es (Either [Diagnostic] (Either FetchError Value))
-executeCapturedRead program (CheckedValue _ arguments) current@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _) result = do
+executeCapturedRead program (CheckedValue _ arguments) current@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _ _) result = do
   let refs = indexBlobs current
   output <- conversationWithBody (\(Frame bytes body) -> if Bytes.null body then decodeFrame bytes else Left "Unexpected raw body")
     program (initialInput arguments) $ \call -> case call of
@@ -61,7 +61,7 @@ answerEvidence :: (EvidenceStore :> es, Failure :> es) => Maybe EvidenceIndex ->
 answerEvidence prior call = case call of
   ListEvidence token -> do
     checkToken token
-    pure (success (toJSON (maybe [] (\(EvidenceIndex _ _ _ values) -> Map.keys values) prior)))
+    pure (success (toJSON (maybe [] (\(EvidenceIndex _ _ _ values _) -> Map.keys values) prior)))
   ReadEvidence token key -> do
     checkToken token
     selected <- case prior of
