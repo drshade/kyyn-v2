@@ -104,6 +104,9 @@ try {
     assert(meetings.reportType.includes(field), meetings.reportType);
   }
   assert(!meetings.reportType.includes('lastSuccessfulFetch'));
+  const transcript = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'meetings', 'transcript']).result;
+  assert.equal(transcript.inputType.trim(), 'Text');
+  assert.equal(transcript.resultType.trim(), 'Text');
   const artifact = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'meetings', 'artifact']).result;
   for (const field of ['Transcript', 'Attendance', 'created', 'started', 'ended', 'attendanceIntervals', 'identity', 'sha256']) {
     assert(artifact.resultType.includes(field), artifact.resultType);

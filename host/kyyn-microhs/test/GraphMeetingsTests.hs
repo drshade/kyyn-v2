@@ -3,7 +3,7 @@
 -- artifact-window boundaries, narrow resolution-404 skips, pagination, capture-once,
 -- retention, failed downloads/pages, credential scope,
 -- enabled-member selection, tenant user pagination, policy/calendar denials and unavailable mailboxes,
--- captured reads and fingerprint parity. No live tenant calls.
+-- captured VTT text, UTF-8/blob refusals and fingerprint parity. No live tenant calls.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
@@ -15,6 +15,7 @@ import Data.Aeson.Types (parseEither, withObject, parseJSON)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Data.IORef
 import Data.List (isSuffixOf, nub)
 import Data.Version (showVersion)
@@ -238,7 +239,44 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       (result,_,_) <- brokerWith Normal respond program (object ["arguments" .= text "id","snapshot" .= text "selected"])
       tag <- maybe (fail "Missing read result") (get "tag") result :: IO Text.Text
       assert "captured read result" (tag == if stored == Just evidence then "Right" else "Left")
-  putStrLn "Graph Meetings: windows, identity, capture-once, retention, failure paths, local reads and GHC/MicroHs parity passed."
+  transcriptReader <- right (capturedReadSources TextType payload TextType "MicrosoftGraph.Meetings.Read.transcript" sources)
+  (transcriptReaders,_) <- compileBoth temporary toolchain compiler "meeting-transcript" transcriptReader
+  captured <- mapM (\c -> get "value" c >>= get "evidence") changes
+  kinds <- mapM (\item -> do
+    kind <- get "payload" item >>= get "value" >>= get "tag"
+    pure (kind :: Text.Text,item)) captured
+  transcriptEvidence <- maybe (fail "Missing transcript fixture") pure (lookup "Transcript" kinds)
+  attendanceEvidence <- maybe (fail "Missing attendance fixture") pure (lookup "Attendance" kinds)
+  ref <- get "payload" transcriptEvidence >>= get "value" >>= get "value" >>= get "content" :: IO Value
+  let vtt = "WEBVTT\r\n\r\n00:00:01.000 --> 00:00:02.000\r\n<v Speaker>synthetic 雪 🦋</v>\r\n"
+      found value = tagged "Right" (tagged "Some" value)
+      unavailable = tagged "Left" (text "Captured evidence unavailable")
+      truncated = change ["payload"] (const (object ["tag" .= text "Truncated"])) transcriptEvidence
+      validBlob = (tagged "Right" (object []),Text.encodeUtf8 vtt)
+      cases =
+        [ ("VTT",found transcriptEvidence,validBlob,tagged "Right" (text vtt),True)
+        , ("empty text",found transcriptEvidence,(tagged "Right" (object []),Bytes.empty),tagged "Right" (text ""),True)
+        , ("unknown ID",tagged "Right" none,validBlob,tagged "Left" (text "No captured meeting artifact with that ID"),False)
+        , ("truncated",found truncated,validBlob,tagged "Left" (text "Meeting artifact payload has been truncated"),False)
+        , ("attendance",found attendanceEvidence,validBlob,tagged "Left" (text "Meeting artifact is an attendance report, not a transcript"),False)
+        , ("evidence failure",unavailable,validBlob,unavailable,False)
+        , ("missing blob",found transcriptEvidence,(tagged "Left" (text "Missing fixture blob"),Bytes.empty),tagged "Left" (text "Missing fixture blob"),True)
+        , ("corrupt blob",found transcriptEvidence,(tagged "Left" (text "Corrupt fixture blob"),Bytes.empty),tagged "Left" (text "Corrupt fixture blob"),True)
+        , ("invalid UTF-8",found transcriptEvidence,(tagged "Right" (object []),Bytes.pack [86,84,84,255]),tagged "Left" (text "Blob is not valid UTF-8 text"),True)
+        ]
+  forM_ transcriptReaders $ \program -> forM_ cases $ \(label,stored,blobReply,expected,readsBlob) -> do
+    let respond raw "evidence" "read" args = do
+          assert "evidence read has raw body" (Bytes.null raw)
+          assert "transcript input ID lost" . (== ("transcript-id" :: Text.Text)) =<< get "id" args
+          pure (stored,Bytes.empty)
+        respond raw "blobs" "read" args = do
+          assert "transcript read wrong blob or sent raw content" (Bytes.null raw && args == ref)
+          pure blobReply
+        respond _ _ _ _ = fail "Transcript reader requested a capability outside captured reads"
+    (result,trace,status) <- brokerWith Normal respond program (object ["arguments" .= text "transcript-id","snapshot" .= text "selected"])
+    assert (label ++ " transcript result differs") (status == ExitSuccess && result == Just expected)
+    assert (label ++ " transcript capability trace differs") (trace == [("evidence","read")] ++ [("blobs","read") | readsBlob])
+  putStrLn "Graph Meetings: windows, identity, capture-once, retention, failure paths, transcript text/refusals, local reads and GHC/MicroHs parity passed."
 
 now :: Text.Text
 now = "2026-10-20T12:00:00Z"

@@ -30,6 +30,7 @@ node tools/test-connector-fetch.mjs "$journey_stage/install/bin/kyyn-v2" --repor
 node tools/test-network-connector.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-blob-connector.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-graph-install.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-graph-transcript.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-salesforce-install.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-github-install.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-initialization.mjs "$journey_stage/install/bin/kyyn-v2"
