@@ -63,6 +63,12 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     (respond,trace) <- provider [] "normal"
     (result,_,status) <- brokerWith Normal respond program (input now Nothing False)
     assert "meetings adapter exit" (status == ExitSuccess)
+    forM_ [1,8 :: Int] $ \width -> do
+      (sameProvider,_) <- provider [] "normal"
+      let selectedWidth = change ["concurrency"] (const (text (Text.pack (show width)))) (input now Nothing False)
+      (sameResult,_,sameStatus) <- brokerWith Normal sameProvider program selectedWidth
+      assert "width changed recorded Meetings artifacts, position or report" (sameStatus == ExitSuccess && sameResult == result)
+
     output <- maybe (fail "Missing result") (get "value") result
     publicReport <- get "report" output
     assert "report lower bound differs from discovery" . (== ("2026-09-20T12:00:00Z" :: Text.Text)) =<< get "since" publicReport
