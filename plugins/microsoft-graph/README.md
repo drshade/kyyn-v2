@@ -354,6 +354,13 @@ returned attendance intervals are retained. Transcript VTT bytes are stored as a
 `BlobRef`; CLI blob results include a local path. The `artifact` method reads only
 captured data and makes no provider requests.
 
+The `transcript` method takes a transcript evidence ID and returns its captured
+VTT as UTF-8 `Text`, preserving the text without parsing or redacting it. KB tools
+can compose this method with local redaction before passing text to a model.
+It refuses unknown IDs, truncated payloads, attendance artifacts, unavailable or
+corrupt blobs, and non-UTF-8 content. It reads only captured evidence and blobs;
+it does not fetch missing content from Microsoft.
+
 Each published artifact must have complete metadata and content. A 403 skips the
 affected request as described above. HTTP 404 with Graph code `NotFound` during
 join-URL resolution records the existing "Calendar meeting could not be resolved"
