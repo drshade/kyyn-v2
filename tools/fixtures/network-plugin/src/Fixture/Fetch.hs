@@ -10,9 +10,10 @@ fetch (Config endpoint key localPath) snapshot = do
   case secret of
     Left _ -> pure (Left (FetchError "Run connector login first"))
     Right token -> do
-      response <- sendHttp (HttpRequest "GET" (endpoint <> "/fetch") [("Authorization",token)] "")
-      case response of
-        Right (HttpResponse 200 _ contents) -> do
+      responses <- concurrently [sendHttp (HttpRequest "GET" (endpoint <> "/fetch/" <> Text.pack (show n))
+        [("Authorization",token)] "") | n <- [1..9 :: Int]]
+      case [contents | Right (HttpResponse 200 _ contents) <- responses] of
+        contents:rest | length rest == 8 -> do
           local <- readTextFile localPath
           case local of
             Left problem -> pure (Left problem)
