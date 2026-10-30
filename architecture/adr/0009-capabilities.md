@@ -68,6 +68,8 @@ type-family-based row library:
 data Program request a where
   Pure    :: a -> Program request a
   Request :: request x -> (x -> Program request a) -> Program request a
+  Concurrent :: [Program request x]
+             -> ([x] -> Program request a) -> Program request a
 
 request :: effect a -> Program effect a
 
@@ -85,6 +87,77 @@ private adapter IO; ordinary code builds `Program`. The shared implementation
 compiles unchanged under GHC and pinned MicroHs, including dependent continuations
 whose read operations return different payload types.
 The continuation stays in the running guest and is never encoded on the wire.
+
+### Independent acquisition workflows
+
+Expose one generic SDK combinator, re-exported by `Kyyn.Plugin`:
+
+```haskell
+concurrently :: [Program request a] -> Program request [a]
+concurrently branches = Concurrent branches Pure
+```
+
+The author declares that branches are independent; neither the host nor the SDK
+infers independence from a GET method. Results preserve input order, and each
+branch preserves its ordinary monadic dependencies. `concurrently []` returns
+`[]` without a host call. A nested group must finish before its parent continuation
+runs. The generic `interpretProgram` folds groups sequentially in input order;
+ordinary Applicative/Monad composition remains sequential. Acquisition's transport
+interpreter schedules groups as below. Other program contexts retain sequential
+group interpretation and acquire no additional host capabilities.
+
+The acquisition guest steps branches to Pure results or suspended typed requests.
+It uses no threads and never serializes continuations. Suspended leaves have stable
+positions, with nested groups flattened in depth-first input order. A deterministic
+round-robin cursor selects at most the host-supplied width of runnable leaves for
+each request round. Completed leaves leave the rotation; newly exposed leaves
+join at their stable positions, after the previous selection cursor. Thus long
+branches cannot indefinitely starve later siblings. Each response resumes only
+the typed continuation that emitted its request. Completed results are assembled
+in original branch order, regardless of native completion order.
+
+One round completes before the next is emitted. Waiting on Retry-After therefore
+holds up that round, including unrelated branches; this is a deliberate initial
+tradeoff, not a separate provider-wide throttle service. All requests count toward
+the same bound, including cheap local effects. Nested groups share that bound;
+they do not create nested worker pools or multiply concurrency. Width bounds active
+requests and per-round response buffering, not the total authored branch list.
+An infinite or diverging pure branch retains ordinary nontermination semantics.
+
+Concurrent acquisition batches permit HTTP, blob downloads, waits, secret reads,
+file reads, captured-evidence reads and text digests. They refuse secret writes,
+login interaction, sink calls and every unknown capability/method as protocol
+failures before dispatching any member of that batch. The whole input frame is
+checked before effects run. Even one remaining request inside a group uses the
+batch protocol; singleton groups must not bypass this restriction. Authentication
+and token rotation occur before fan-out. Sequential acquisition retains its existing
+secret-write capability. This restriction does not prove that an arbitrary HTTP
+request is read-only: the plugin author still owns provider intent.
+
+Native concurrency belongs to an explicit plumbing capability, not IO hidden in
+the protocol broker. Its higher-order operation runs a bounded group of actions:
+
+```haskell
+concurrentlyBounded
+  :: ConcurrentExecution :> es
+  => Int -> [Eff es a] -> Eff es [a]
+```
+
+The native interpreter owns scoped workers and concurrent unlifting. It returns
+results in action order, cancels and joins workers on fatal failure/cancellation,
+and creates no detached work. The broker validates batch IDs and descriptors
+serially, then calls this capability with already-decoded requests. Process pipes
+and frame parsing remain single-owner: GuestExecution still invokes one responder
+per complete frame. Do not run its sequential unlift or pipe writer concurrently.
+Mutable interpreter state reached by workers must be explicitly shared and atomic
+or confined to the owning thread; copying a local State handler is not a mechanism
+for collecting worker mutations. Blob accounting is governed by ADR 0029.
+
+For identical supplied request results, sequential and concurrent interpreters
+must produce the same final typed value. This is not a promise of identical values
+when independent live provider requests observe changing external state. Typed
+`Left` results remain ordinary branch values; the scheduler does not interpret
+application errors or cancel siblings when one branch returns a `Left`.
 
 The first snapshot interpreter is entirely local and pure. Its generated binding
 associates a collection's declared identity with its typed root selector:
