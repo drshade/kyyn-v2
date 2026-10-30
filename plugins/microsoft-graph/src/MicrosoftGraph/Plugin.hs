@@ -20,7 +20,10 @@ connectors = [SourceConnector
   { name = "Meetings"
   , fetch = "MicrosoftGraph.Meetings.fetch", validateConfig = "MicrosoftGraph.Meetings.Config.validate"
   , login = Just "MicrosoftGraph.Meetings.Config.login"
-  , methods = [CapturedMethod "artifact" "Read a captured transcript or attendance report." "MicrosoftGraph.Meetings.Read.artifact"]
+  , methods =
+      [ CapturedMethod "artifact" "Read a captured transcript or attendance report." "MicrosoftGraph.Meetings.Read.artifact"
+      , CapturedMethod "transcript" "Read captured transcript VTT text by evidence ID, without contacting Microsoft." "MicrosoftGraph.Meetings.Read.transcript"
+      ]
   }, SourceConnector
   { name = "Files"
   , fetch = "MicrosoftGraph.Files.fetch", validateConfig = "MicrosoftGraph.Files.Config.validate"
