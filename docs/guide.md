@@ -242,7 +242,9 @@ workflow remains sequential. A retry wait holds the current request round open.
 
 Concurrency timing lines report each round's width, request count, local/remote/
 waiting counts and wall time, with peak active requests and HTTP status totals
-in the summary. HTTP duration sums can exceed wall time when requests overlap.
+in the summary. Status counts include blob downloads. The summary also totals
+round time and time spent in rounds containing waits. HTTP duration sums can
+exceed wall time when requests overlap.
 
 Timing output goes to stderr; stdout remains the normal JSON result. Only the
 literal `KYYN_TIMINGS=1` enables it. Sync operations emit start/completion events

@@ -24,14 +24,15 @@ import Text.Printf (printf)
 
 data SyncTimings = SyncTimings (IORef Int) (IORef [(String,(Int,Word64))])
   (IORef (Int,Int)) (IORef (Maybe (Word64,Int,Int,Int,Int))) (IORef [(Int,Int)])
+  (IORef (Int,Word64,Int,Word64))
 
 newSyncTimings :: Bool -> IO (Maybe SyncTimings)
 newSyncTimings False = pure Nothing
-newSyncTimings True = Just <$> (SyncTimings <$> newIORef 0 <*> newIORef [] <*> newIORef (0,0) <*> newIORef Nothing <*> newIORef [])
+newSyncTimings True = Just <$> (SyncTimings <$> newIORef 0 <*> newIORef [] <*> newIORef (0,0) <*> newIORef Nothing <*> newIORef [] <*> newIORef (0,0,0,0))
 
 withSyncReport :: Maybe SyncTimings -> IO a -> IO a
 withSyncReport Nothing action = action
-withSyncReport (Just (SyncTimings _ totals workers _ statuses)) action = do
+withSyncReport (Just (SyncTimings _ totals workers _ statuses rounds)) action = do
   start <- getMonotonicTimeNSec
   action `finally` do
     emitTiming "sync-command" "" start
@@ -41,12 +42,15 @@ withSyncReport (Just (SyncTimings _ totals workers _ statuses)) action = do
         `catch` \(_ :: IOException) -> pure ()) (reverse values)
     (_,peak) <- readIORef workers
     codes <- readIORef statuses
+    (roundCount,roundNanos,waitCount,waitNanos) <- readIORef rounds
+    timingLine (printf "[kyyn sync] rounds calls=%d elapsed_ms=%.3f wait_rounds=%d wait_elapsed_ms=%.3f"
+      roundCount (fromIntegral roundNanos / 1000000 :: Double) waitCount (fromIntegral waitNanos / 1000000 :: Double))
     timingLine ("[kyyn sync] concurrency peak_in_flight=" ++ show peak)
     mapM_ (\(code,count) -> timingLine ("[kyyn sync] http-status status=" ++ show code ++ " calls=" ++ show count)) codes
 
 observeConcurrent :: Maybe SyncTimings -> ConcurrentEvent -> IO ()
 observeConcurrent Nothing _ = pure ()
-observeConcurrent (Just (SyncTimings _ totals workers selected _)) event = case event of
+observeConcurrent (Just (SyncTimings _ totals workers selected _ rounds)) event = case event of
   WorkerStarted -> atomicModifyIORef' workers (\(active,peak) -> ((active+1,max peak (active+1)),()))
   WorkerFinished -> atomicModifyIORef' workers (\(active,peak) -> ((active-1,peak),()))
   RoundStarted width count -> do
@@ -62,6 +66,8 @@ observeConcurrent (Just (SyncTimings _ totals workers selected _)) event = case 
         counts <- readIORef totals
         let remoteCalls = remote counts - priorRemote
             waits = number "wait" counts - priorWait
+        atomicModifyIORef' rounds $ \(n,elapsed,wn,we) ->
+          ((n+1,elapsed+end-start,wn + if waits > 0 then 1 else 0,we + if waits > 0 then end-start else 0),())
         timingLine (printf "[kyyn sync] round width=%d requests=%d remote=%d waiting=%d local=%d elapsed_ms=%.3f"
           width count remoteCalls waits (count-remoteCalls-waits) (fromIntegral (end-start) / 1000000 :: Double))
     writeIORef selected Nothing
@@ -75,7 +81,7 @@ timingLine line = hPutStrLn stderr line `catch` \(_ :: IOException) -> pure ()
 
 measure :: IOE :> es => Maybe SyncTimings -> String -> String -> (a -> String) -> Eff es a -> Eff es a
 measure Nothing _ _ _ action = action
-measure (Just (SyncTimings serial totals _ _ _)) stage detail describe action = do
+measure (Just (SyncTimings serial totals _ _ _ _)) stage detail describe action = do
   number <- liftIO (atomicModifyIORef' serial (\n -> (n+1,n+1)))
   start <- liftIO getMonotonicTimeNSec
   let label = "call=" ++ show number ++ " " ++ detail
@@ -99,8 +105,7 @@ observeHttp timings = interpose $ \env operation@(Http.SendHttp (Http.HttpReques
   measure timings "http" ("method=" ++ safeMethod method) describe $ do
     result <- passthrough env operation
     case (timings,result) of
-      (Just (SyncTimings _ _ _ _ statuses),Right (Http.HttpResponse status _ _)) -> liftIO $
-        atomicModifyIORef' statuses (\counts -> ((status,1 + maybe 0 id (lookup status counts)):filter ((/=status) . fst) counts,()))
+      (_,Right (Http.HttpResponse status _ _)) -> liftIO (recordStatus timings status)
       _ -> pure ()
     pure result
   where
@@ -114,7 +119,12 @@ observeHttp timings = interpose $ \env operation@(Http.SendHttp (Http.HttpReques
 observeBlobs :: (IOE :> es, Blobs.BlobStorage :> es) => Maybe SyncTimings -> Eff es a -> Eff es a
 observeBlobs Nothing = id
 observeBlobs timings = interpose $ \env operation -> case operation of
-  Blobs.StoreBlobAt _ _ -> measure timings "blob-download" "" describe (passthrough env operation)
+  Blobs.StoreBlobAt _ _ -> measure timings "blob-download" "" describe $ do
+    result <- passthrough env operation
+    case result of
+      Right (BlobResponse status _ _) -> liftIO (recordStatus timings status)
+      Left _ -> pure ()
+    pure result
   _ -> passthrough env operation
   where
     describe (Left _) = "failed"
@@ -140,3 +150,8 @@ observeAcquisition :: (IOE :> es, Acquisition.EvidenceAcquisition :> es) => Mayb
 observeAcquisition Nothing = id
 observeAcquisition timings = interpose $ \env operation@Acquisition.FetchEvidence {} ->
   measure timings "acquisition" "" outcome (passthrough env operation)
+
+recordStatus :: Maybe SyncTimings -> Int -> IO ()
+recordStatus Nothing _ = pure ()
+recordStatus (Just (SyncTimings _ _ _ _ statuses _)) status =
+  atomicModifyIORef' statuses (\counts -> ((status,1 + maybe 0 id (lookup status counts)):filter ((/=status) . fst) counts,()))

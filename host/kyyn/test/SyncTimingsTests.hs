@@ -46,7 +46,7 @@ main = do
   assert "timing changed responses" (off == on && fst on == expected)
   assert "disabled instrumentation emitted output" (null quiet)
   forM_ ["sync-http-start", "method=GET status=429", "requested_seconds=2 ok", "status=200 bytes=123",
-    "[kyyn sync] http calls=1", "[kyyn sync] wait calls=1", "[kyyn sync] blob-download calls=1", "sync-command", "round width=4 requests=3 remote=2 waiting=1 local=0", "peak_in_flight=1", "status=429 calls=1"] $ \expectedText ->
+    "[kyyn sync] http calls=1", "[kyyn sync] wait calls=1", "[kyyn sync] blob-download calls=1", "sync-command", "round width=4 requests=3 remote=2 waiting=1 local=0", "peak_in_flight=1", "status=429 calls=1", "status=200 calls=1", "rounds calls=1", "wait_rounds=1"] $ \expectedText ->
       assert ("missing telemetry " ++ expectedText) (expectedText `isInfixOf` logText)
   forM_ ["private-", "secret-", "Authorization", "https://"] $ \secret ->
     assert "request/response content leaked" (not (secret `isInfixOf` logText))
