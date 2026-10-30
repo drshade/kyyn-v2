@@ -3,17 +3,19 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 import Control.Monad (unless)
-import Data.Aeson (Value(..))
+import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Text as Text
 import Effectful (runPureEff)
 import Kyyn.Domain.Blob (sdkBlobRefType)
 import Data.Either (isLeft)
 import Kyyn.Domain.Contract (checkContract, contractId)
-import Kyyn.Domain.DataType (DataType(..), Constructor(..))
+import Kyyn.Domain.DataType (DataType(..), Constructor(..), Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.EvidenceIndex
 import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorTypeName(..), pluginName)
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Plumbing.Capability.DhallHandling (encodeBinaryValue)
+import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Porcelain.Protocol.EvidenceIndex
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
@@ -61,4 +63,35 @@ main = do
     unless (isLeft (validateReportContract reportContract)) (fail "Nested report BlobRef accepted"))
     [sdkBlobRefType,ListType sdkBlobRefType,OptionalType sdkBlobRefType,
       Algebraic "Fixture.Report" [] [Constructor "Fixture.Report" [(Just "file",sdkBlobRefType)]]]
+  -- Produce valid binary Dhall with deliberately inconsistent descriptor/value pairs.
+  -- This bypasses encodeIndex's guards and exercises the untrusted stored-input path.
+  let scalar = Scalar TextScalar
+      natural = Scalar IntegerScalar
+      optionalValue :: Maybe Value -> Value
+      optionalValue Nothing = object ["tag" .= ("None" :: String)]
+      optionalValue (Just v) = object ["tag" .= ("Some" :: String), "value" .= v]
+      header = Record [("producer",scalar),("connector",scalar),("payloadType",dataTypeShape),
+        ("positionType",Optional dataTypeShape),("reportType",Optional dataTypeShape)]
+      latest = Record [("identity",scalar),("fetchedAt",scalar),("added",natural),("updated",natural),("removed",natural),("options",Optional scalar)]
+      location = Record [("sha256",scalar),("size",natural),("blobs",List (Record
+        [("sha256",scalar),("size",natural),("mediaType",scalar),("name",Optional scalar)]))]
+      entry = Record [("id",scalar),("evidence",Record [("fingerprint",scalar),("externalReferences",List scalar),
+        ("payload",Union [("Available",Just location),("Truncated",Nothing)])])]
+      raw reportDescriptor reportShape reportBody = runPureEff $ runDhallHandling $ encodeBinaryValue
+        (Record [("header",header),("body",Record [("latest",latest),("values",List entry),
+          ("position",Optional natural),("report",Optional reportShape)])])
+        (object ["header" .= object ["producer" .= ("source" :: String),"connector" .= ("Mail" :: String),
+          "payloadType" .= dataTypeValue TextType,"positionType" .= optionalValue (Just (dataTypeValue IntegerType)),
+          "reportType" .= optionalValue reportDescriptor],
+          "body" .= object ["latest" .= object ["identity" .= ("first" :: String),"fetchedAt" .= ("now" :: String),
+            "added" .= ("0" :: String),"updated" .= ("0" :: String),"removed" .= ("0" :: String),"options" .= optionalValue Nothing],
+            "values" .= ([] :: [Value]),"position" .= optionalValue (Just (String "42")),"report" .= optionalValue reportBody]])
+  validRaw <- either (fail . show) pure (raw (Just (dataTypeValue TextType)) scalar (Just (String "report")))
+  _ <- either (fail . show) pure (decode validRaw)
+  mapM_ (\encoded -> do
+    invalidBytes <- either (fail . show) pure encoded
+    unless (isLeft (decode invalidBytes)) (fail "Malformed stored report descriptor/value accepted"))
+    [raw (Just (dataTypeValue TextType)) scalar Nothing,
+     raw Nothing (Record []) (Just (object [])),
+     raw (Just (dataTypeValue TextType)) (Scalar BoolScalar) (Just (Bool True))]
   putStrLn "Evidence index: descriptor/position/metadata round trip and identity validation passed."
