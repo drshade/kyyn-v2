@@ -144,11 +144,11 @@ input authenticated = object ["arguments" .= object
   ["repositoryUrl" .= text "https://github.com/acme/project.git/"
   ,"branch" .= tag "Some" (text "develop"),"since" .= tag "Some" (text "2026-01-01T00:00:00Z")
   ,"tokenSecret" .= (if authenticated then tag "Some" (text "github-token") else none)]
-  ,"snapshot" .= text "selected"]
+  ,"concurrency" .= text "4","snapshot" .= text "selected"]
 
 defaultInput :: Value
 defaultInput = object ["arguments" .= object
-  ["repositoryUrl" .= text "https://github.com/acme/project", "branch" .= none, "since" .= none, "tokenSecret" .= none],"snapshot" .= text "selected"]
+  ["repositoryUrl" .= text "https://github.com/acme/project", "branch" .= none, "since" .= none, "tokenSecret" .= none],"concurrency" .= text "4","snapshot" .= text "selected"]
 
 provider :: Map.Map Text.Text Value -> Bool -> Text.Text -> Bool
   -> IO (Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString), IORef [Text.Text])

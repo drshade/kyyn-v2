@@ -337,7 +337,7 @@ input device = inputConfig (configuration device)
 
 inputConfig :: Value -> Value -> Value
 inputConfig config prior = object ["arguments" .= object ["input" .= config,"startedAt" .= ("2026-10-07T12:00:00Z" :: String),
-  "priorPosition" .= prior],"snapshot" .= ("prior" :: String)]
+  "priorPosition" .= prior],"concurrency" .= ("4" :: String),"snapshot" .= ("prior" :: String)]
 
 provider :: Bool -> IO (String -> String -> Value -> IO Value, IO [String])
 provider failPage = do

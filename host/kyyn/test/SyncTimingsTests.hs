@@ -13,6 +13,7 @@ import Kyyn.Composition.SyncTimings
 import qualified Kyyn.Plumbing.Capability.HttpTransport as Http
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import qualified Kyyn.Plumbing.Capability.PluginInteraction as Interaction
+import Kyyn.Plumbing.Interpreter.ConcurrentExecution (ConcurrentEvent(..))
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..))
 import Kyyn.Domain.Plugin (pluginName)
 import Kyyn.Types.Blob (BlobDownload(..), BlobResponse(..), BlobRef(..))
@@ -34,16 +35,18 @@ main = do
               Blobs.StoreBlobAt _ _ -> pure (Right (BlobResponse 200 [("X","private-blob-header")]
                 (Just (BlobRef "private-digest" 123 "private-media" (Just "private-filename")))))
               _ -> error "Unexpected blob operation") . observeBlobs timing $ do
+            liftIO (observeConcurrent timing (RoundStarted 4 3) >> observeConcurrent timing WorkerStarted)
             response <- Http.sendHttp request
             Interaction.waitSeconds 2
             blob <- Blobs.storeBlobAt ref (BlobDownload request (Just "private-name") Nothing)
+            liftIO (observeConcurrent timing WorkerFinished >> observeConcurrent timing RoundFinished)
             pure (response,blob)
   (off,quiet) <- exercise False
   (on,logText) <- exercise True
   assert "timing changed responses" (off == on && fst on == expected)
   assert "disabled instrumentation emitted output" (null quiet)
   forM_ ["sync-http-start", "method=GET status=429", "requested_seconds=2 ok", "status=200 bytes=123",
-    "[kyyn sync] http calls=1", "[kyyn sync] wait calls=1", "[kyyn sync] blob-download calls=1", "sync-command"] $ \expectedText ->
+    "[kyyn sync] http calls=1", "[kyyn sync] wait calls=1", "[kyyn sync] blob-download calls=1", "sync-command", "round width=4 requests=3 remote=2 waiting=1 local=0", "peak_in_flight=1", "status=429 calls=1", "status=200 calls=1", "rounds calls=1", "wait_rounds=1"] $ \expectedText ->
       assert ("missing telemetry " ++ expectedText) (expectedText `isInfixOf` logText)
   forM_ ["private-", "secret-", "Authorization", "https://"] $ \secret ->
     assert "request/response content leaked" (not (secret `isInfixOf` logText))

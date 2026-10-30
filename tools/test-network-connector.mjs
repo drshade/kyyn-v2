@@ -1,5 +1,6 @@
 // Installed connector registration/login/fetch against a loopback HTTP fixture.
-// Exercises local secrets, typed options and mixed host calls; no real credentials.
+// Exercises local secrets, mixed host calls, bounded overlap at widths 1/4/8
+// and failed-fetch publication preservation; no real credentials.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -22,19 +23,25 @@ const git = async (cwd, ...args) => (await execute('git', args, { cwd, env })).s
 const calls = [];
 let payload = 'first 雪';
 let failFetch = false;
+let active = 0, peak = 0;
 const server = http.createServer((request, response) => {
   calls.push(request.url);
   if (request.url === '/login') response.end('private-fixture-token');
   else {
     assert.equal(request.headers.authorization, 'private-fixture-token');
-    response.statusCode = failFetch ? 500 : 200;
-    response.end(payload);
+    active++;
+    peak = Math.max(peak, active);
+    setTimeout(() => {
+      response.statusCode = failFetch ? 500 : 200;
+      response.end(payload);
+      active--;
+    }, 75);
   }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-async function cli(args, expected = 0, selected = kb) {
+async function cli(args, expected = 0, selected = kb, overrides = {}) {
   let output;
-  try { output = await execute(executable, ['--kb', selected, '--json', ...args], { cwd: temporary, env, timeout: 120000 }); }
+  try { output = await execute(executable, ['--kb', selected, '--json', ...args], { cwd: temporary, env: { ...env, ...overrides }, timeout: 120000 }); }
   catch (error) { assert.equal(error.code, expected, error.stderr + error.stdout); output = error; }
   if (expected === 0) assert.equal(output.code, undefined, output.stderr);
   assert(!output.stdout.includes('private-fixture-token'));
@@ -70,8 +77,20 @@ try {
   assert.deepEqual(calls, []);
   const loggedIn = await cli(['plugin', 'connector', 'login', 'network-fixture', 'test']);
   assert.match(loggedIn.stderr, /Fixture login instructions/);
-  const fetch = () => cli(['evidence', 'fetch', 'network-fixture', 'test']);
-  await fetch();
+  const fetch = (width = 4) => cli(['evidence', 'fetch', 'network-fixture', 'test'], 0, kb,
+    { KYYN_FETCH_CONCURRENCY: String(width) });
+  let priorItems;
+  for (const width of [1, 4, 8]) {
+    peak = 0;
+    const before = calls.length;
+    await fetch(width);
+    assert.equal(calls.length - before, 9);
+    assert.equal(active, 0, 'fetch returned with requests still active');
+    assert.equal(peak, width, `expected width ${width}, observed ${peak}`);
+    const items = (await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result.items;
+    if (priorItems) assert.deepEqual(items, priorItems, 'width changed published evidence');
+    priorItems = items;
+  }
   payload = 'second 雪';
   await fetch();
   const latest = (await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result;
@@ -83,7 +102,7 @@ try {
   assert.deepEqual((await cli(['evidence', 'list', 'network-fixture', 'test'])).value.result, latest);
   assert.equal(await git(kb, 'rev-parse', 'HEAD'), head);
   assert.match(await git(kb, 'check-ignore', '.kyyn/secrets/test-token.dhall'), /test-token/);
-  console.log('Installed connector: explicit login, combined HTTP/file/secret/wait/evidence acquisition and failed-fetch atomicity passed.');
+  console.log('Installed connector: explicit login, bounded concurrent HTTP/file/secret/wait/evidence acquisition and failed-fetch atomicity passed.');
 } finally {
   await new Promise(resolve => server.close(resolve));
   fs.rmSync(temporary, { recursive: true, force: true });

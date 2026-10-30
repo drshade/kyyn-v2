@@ -1,8 +1,10 @@
 -- Real loopback streaming and filesystem storage, nominal nested contract traversal,
--- non-success response metadata, corruption and reclamation. No guest or provider.
+-- non-success responses, duplicate concurrent downloads, cancellation and reclamation.
+-- No guest or external provider.
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync, wait, cancel)
 import Control.Concurrent.MVar (newEmptyMVar, putMVar, takeMVar)
 import Control.Exception (bracket)
@@ -18,6 +20,8 @@ import Kyyn.Domain.DataType
 import Kyyn.Domain.Evidence (ConnectorInstanceRef(..))
 import Kyyn.Domain.Path (directoryScope)
 import Kyyn.Domain.Plugin (pluginName)
+import Kyyn.Plumbing.Capability.ConcurrentExecution
+import Kyyn.Plumbing.Interpreter.ConcurrentExecution
 import Kyyn.Plumbing.Capability.BlobStorage
 import Kyyn.Plumbing.Interpreter.BlobStorage
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -64,6 +68,29 @@ main = withSystemTempDirectory "kyyn-blobs-" $ \directory -> do
           BlobResponse 200 _ (Just capturedRef) -> pure capturedRef
           _ -> fail "Cancellation fixture did not download"
   assert "cancelled acquisition left unpublished blob" . isLeft =<< execute (blobPathAt instanceRef cancelledRef)
+  -- Both requests use the same interpreter/accounting scope and identical bytes.
+  duplicateRefs <- serve (response 200 "" "duplicate content") $ \first ->
+    serve (response 200 "" "duplicate content") $ \second -> execute $ runConcurrentExecutionIO 2 $
+      withBlobDownloads instanceRef (discardBlobsAt instanceRef) $ do
+        results <- concurrentlyBounded 2 [storeBlobAt instanceRef (BlobDownload (HttpRequest "GET" url [] "") Nothing Nothing) | url <- [first,second]]
+        pure [value | Right (BlobResponse 200 _ (Just value)) <- results]
+  assert "duplicate concurrent content diverged" (case duplicateRefs of [a,b] -> a == b; _ -> False)
+  mapM_ (\value -> assert "duplicate content escaped cleanup" . isLeft =<< execute (blobPathAt instanceRef value)) duplicateRefs
+  -- Cancel while a worker owns downloaded content, before a publish continuation.
+  cancelledBatchRef <- serve (response 200 "" "cancelled concurrent content") $ \url -> do
+    ready <- newEmptyMVar
+    withAsync (execute $ runConcurrentExecutionIO 2 $ withBlobDownloads instanceRef (discardBlobsAt instanceRef) $ do
+      _ <- concurrentlyBounded 2
+        [do result <- storeBlobAt instanceRef (BlobDownload (HttpRequest "GET" url [] "") Nothing Nothing)
+            liftIO (putMVar ready result)
+            liftIO (threadDelay 10000000)
+        ,liftIO (threadDelay 10000000)]
+      liftIO (fail "Cancelled batch reached its publication continuation" :: IO ())) $ \worker -> do
+        result <- takeMVar ready >>= right
+        cancel worker
+        case result of BlobResponse 200 _ (Just value) -> pure value; _ -> fail "Missing concurrent fixture blob"
+  assert "cancelled batch left unpublished blob" . isLeft =<< execute (blobPathAt instanceRef cancelledBatchRef)
+  _ <- execute (checkBlobsAt instanceRef [ref,empty]) >>= right
   BlobResponse 429 headers Nothing <- serve (response 429 "Retry-After: 2\r\n" "not evidence") download >>= right
   assert "non-success status headers lost" (lookup "Retry-After" headers == Just "2")
   _ <- serveInspect (\request -> assert "redirect forwarded credentials" (not ("private-token" `Bytes.isInfixOf` request)))

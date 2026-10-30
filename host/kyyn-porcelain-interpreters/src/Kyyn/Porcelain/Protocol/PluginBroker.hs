@@ -1,4 +1,4 @@
-module Kyyn.Porcelain.Protocol.PluginBroker (answerAcquisition, executeCapturedRead, conversation, conversationWithBody, answerEvidence, protocolFailure) where
+module Kyyn.Porcelain.Protocol.PluginBroker (answerAcquisition, executeCapturedRead, conversation, conversationWithBody, conversationAcquisition, answerEvidence, protocolFailure) where
 
 import Data.Aeson (Value, object, (.=), toJSON)
 import Data.ByteString (ByteString)
@@ -19,6 +19,8 @@ import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), Proce
 import Kyyn.Domain.Path (DirectoryScope, scopePath, directoryScope, relativePath, relativeName)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Types.Plugin (FetchError(..))
+import Kyyn.Plumbing.Capability.ConcurrentExecution (ConcurrentExecution, concurrentlyBounded)
+import Kyyn.Plumbing.Protocol.AcquisitionBatch
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeGuest)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
@@ -94,6 +96,32 @@ conversationWithBody decode program arguments respond = do
         (value,body) <- raise (respond call)
         pure (Just (Frame (encodeResponse identity value) body))
       Completed _ -> pure Nothing
+  finishConversation decode output status stderr
+
+conversationAcquisition :: (ConcurrentExecution :> es, GuestExecution :> es, Failure :> es)
+  => Int -> (Frame -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  -> (call -> Eff es (Value,ByteString)) -> Eff es (Either FetchError Value)
+conversationAcquisition width decode program arguments respond = do
+  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program (jsonFrame arguments) $ \bytes -> do
+    frame <- either protocolFailure pure (decodeAcquisitionFrame width decode bytes)
+    let checkId identity = do
+          expected <- get
+          if identity /= expected then protocolFailure "Unexpected guest request ID" else put (expected + 1)
+    case frame of
+      Single (HostRequest identity call) -> do
+        checkId identity
+        (value,body) <- raise (respond call)
+        pure (Just (Frame (encodeResponse identity value) body))
+      Batch requests -> do
+        mapM_ (checkId . fst) requests
+        replies <- raise (concurrentlyBounded width (map (respond . snd) requests))
+        pure (Just (encodeBatchResponse (zip (map fst requests) replies)))
+      Single (Completed _) -> pure Nothing
+  finishConversation decode output status stderr
+
+finishConversation :: Failure :> es => (Frame -> Either String (PluginFrame call))
+  -> Frame -> Int -> ByteString -> Eff es (Either FetchError Value)
+finishConversation decode output status stderr = do
   if status /= 0 then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
     ("Plugin exited " ++ show status ++ ": " ++ diagnostics stderr))) else do
     frame <- either protocolFailure pure (decode output)

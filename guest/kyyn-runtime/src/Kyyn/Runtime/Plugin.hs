@@ -1,6 +1,8 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, identityCodec, evidenceCodec, changeCodec, blobCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, fileExchange, evidenceExchange, identityCodec, evidenceCodec, changeCodec, blobCodec) where
 
+import Data.IORef (newIORef, readIORef, writeIORef)
+import Kyyn.Runtime.Concurrent (Exchange, metadataExchange, executeExchange)
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 import Kyyn.Types.Plugin
@@ -78,16 +80,22 @@ input transport codec = do
     pure (arguments,snapshot)
 
 execute :: Transport -> Codec result -> (forall a. Integer -> request a -> IO a) -> Program request result -> IO ()
-execute transport codec handler = go 1
-  where
-    go _ (Pure result) = emit transport (record [("tag",encodeWith stringCodec "Completed"),("result",encodeWith codec result)])
-    go identity (Request operation next) = handler identity operation >>= go (identity + 1) . next
+execute transport codec handler program = do
+  serial <- newIORef 1
+  result <- interpretProgram (\call -> do
+    identity <- readIORef serial
+    writeIORef serial (identity + 1)
+    handler identity call) program
+  emit transport (record [("tag",encodeWith stringCodec "Completed"),("result",encodeWith codec result)])
 
 fileRequest :: Transport -> Integer -> FileRead a -> IO a
-fileRequest transport identity (ListFiles directory recursive) = exchange transport identity "files" "list"
+fileRequest transport identity = executeExchange transport identity . fileExchange
+
+fileExchange :: FileRead a -> Exchange a
+fileExchange (ListFiles directory recursive) = metadataExchange "files" "list"
   (record [("directory",encodeWith stringCodec directory),("recursive",encodeWith boolCodec recursive)])
   (eitherCodec (listCodec stringCodec))
-fileRequest transport identity (ReadTextFile path) = exchange transport identity "files" "read"
+fileExchange (ReadTextFile path) = metadataExchange "files" "read"
   (record [("path",encodeWith stringCodec path)]) (eitherCodec capturedTextCodec)
 
 capturedTextCodec :: Codec CapturedText
@@ -102,9 +110,12 @@ capturedTextCodec = Codec encode decode
         <*> field "path" stringCodec values
 
 evidenceRequest :: Transport -> Codec payload -> Integer -> EvidenceRead payload a -> IO a
-evidenceRequest transport _ identity (ListEvidenceIds (EvidenceSnapshot snapshot)) = exchange transport identity "evidence" "list"
+evidenceRequest transport payloadCodec identity = executeExchange transport identity . evidenceExchange payloadCodec
+
+evidenceExchange :: Codec payload -> EvidenceRead payload a -> Exchange a
+evidenceExchange _ (ListEvidenceIds (EvidenceSnapshot snapshot)) = metadataExchange "evidence" "list"
   (record [("snapshot",encodeWith textCodec snapshot)]) (eitherCodec (listCodec identityCodec))
-evidenceRequest transport payloadCodec identity (ReadEvidence (EvidenceSnapshot snapshot) key) = exchange transport identity "evidence" "read"
+evidenceExchange payloadCodec (ReadEvidence (EvidenceSnapshot snapshot) key) = metadataExchange "evidence" "read"
   (record [("snapshot",encodeWith textCodec snapshot),("id",encodeWith identityCodec key)])
   (eitherCodec (optionalCodec (evidenceCodec payloadCodec)))
 

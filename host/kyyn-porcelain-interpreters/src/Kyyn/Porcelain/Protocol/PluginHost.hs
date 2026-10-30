@@ -13,9 +13,11 @@ import qualified Kyyn.Plumbing.Capability.HttpTransport as Http
 import qualified Kyyn.Plumbing.Capability.SecretStore as Secrets
 import qualified Kyyn.Plumbing.Capability.PluginInteraction as Interaction
 import Kyyn.Plumbing.Protocol.PluginHost
-import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), decodeFrameWith, decodeCall, initialInput)
+import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), decodeFrameWith, decodeCall)
 import Kyyn.Plumbing.Protocol.Frame (Frame(..))
-import Kyyn.Porcelain.Protocol.PluginBroker (protocolFailure, conversationWithBody, answerAcquisition)
+import Kyyn.Porcelain.Protocol.PluginBroker (protocolFailure, conversationWithBody, conversationAcquisition, answerAcquisition)
+import Kyyn.Plumbing.Capability.ConcurrentExecution (ConcurrentExecution, concurrencyWidth)
+import Kyyn.Plumbing.Protocol.AcquisitionBatch (acquisitionInput)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Domain.Path (DirectoryScope)
@@ -28,12 +30,14 @@ import qualified Kyyn.Plumbing.Capability.ContentDigest as Digest
 import Kyyn.Plumbing.Protocol.Blob (decodeDownload, downloadResult)
 import Kyyn.Types.Plugin (FetchError(..))
 
-executeAcquisition :: (EvidenceStore :> es, Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
+executeAcquisition :: (ConcurrentExecution :> es, EvidenceStore :> es, Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)
   => DirectoryScope -> ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe EvidenceIndex -> Eff es (Either [Diagnostic] Value)
-executeAcquisition base instanceRef program config prior = fmap (either
-  (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
-  conversationWithBody (decodeHostFrame decodeDigest) program (initialInput config)
+executeAcquisition base instanceRef program config prior = do
+  width <- concurrencyWidth
+  fmap (either
+    (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
+    conversationAcquisition width (decodeHostFrame decodeDigest) program (acquisitionInput width config)
     (either (fmap ((,Bytes.empty) . toJSON) . Digest.digestText)
       (either (fmap (\result -> (downloadResult result,Bytes.empty)) . Blobs.storeBlobAt instanceRef)
         (either (fmap (,Bytes.empty) . answerAcquisition base prior) answerNetwork)))

@@ -42,4 +42,4 @@ test-suite sync-timings
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
-    kyyn-plumbing, kyyn-microhs, effectful-core ==2.6.1.0, text, bytestring, temporary ==1.3
+    kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-microhs, effectful-core ==2.6.1.0, text, bytestring, temporary ==1.3

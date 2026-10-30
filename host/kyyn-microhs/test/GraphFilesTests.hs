@@ -148,7 +148,7 @@ configuration = object ["auth" .= tagged "ClientSecret" (object ["tenant" .= tex
   "scope" .= tagged "SiteLibrary" (object ["site" .= text "site","library" .= text "Documents"]),
   "itemPath" .= text "", "includeGlobs" .= ([] :: [Value])]
 input :: Value -> Value
-input config = object ["arguments" .= config,"snapshot" .= text "prior"]
+input config = object ["concurrency" .= text "4","arguments" .= config,"snapshot" .= text "prior"]
 
 provider :: [(Text.Text,Value)] -> Text.Text -> IO (Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString), IORef [Text.Text])
 provider old scenario = do

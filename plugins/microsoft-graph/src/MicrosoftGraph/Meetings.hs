@@ -3,6 +3,7 @@ module MicrosoftGraph.Meetings (fetch) where
 
 import Control.Monad (forM)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import Data.Text (Text)
 import Data.List (groupBy, sortOn, nub, group, sort)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
@@ -30,14 +31,12 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
     token <- ExceptT (Auth.accessToken auth)
     let application = case auth of ClientSecret {} -> True; _ -> False
     bases <- unique <$> ExceptT (Api.targets token auth)
-    discoveries <- forM bases $ \target@(context,base) -> do
-      found <- ExceptT (Api.discover token context base application since started)
-      pure (target,found)
-    rounds <- fmap concat $ forM discoveries $ \(target@(context,base),found) -> case found of
-      Discovered urls _ -> forM (nub urls) $ \url -> do
-        result <- ExceptT (Api.artifacts token context base url since started)
-        pure (target,result)
-      _ -> pure []
+    discoveries <- parallel [fmap (fmap ((,) target)) (Api.discover token context base application since started)
+      | target@(context,base) <- bases]
+    artifactToken <- ExceptT (Auth.accessToken auth)
+    rounds <- parallel [fmap (fmap ((,) target)) (Api.artifacts artifactToken context base url since started)
+      | (target@(context,base),Discovered urls _) <- discoveries, url <- nub urls]
+    captureToken <- ExceptT (Auth.accessToken auth)
     let pending = [(base,item) | (base,(items,_,_,_)) <- rounds, item <- items]
         skipped = nub (concat [notes | (_,Discovered _ notes) <- discoveries] ++ concat [notes | (_,(_,_,notes,_)) <- rounds])
         key (Pending kind item _ _ (MeetingRef meetingId _ _ _)) = artifactId kind meetingId item
@@ -45,19 +44,20 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
         cutoff = now - fromInteger (retention * 86400)
         captureOptions [] = pure ([],[])
         captureOptions (((context,base),item):rest) = do
-          (value,denied) <- ExceptT (Api.capture token context base item)
+          (value,denied) <- ExceptT (Api.capture captureToken context base item)
           case value of
             Just artifact -> pure ([(key item,artifact)],denied)
             Nothing -> do
               (fresh,moreDenied) <- captureOptions rest
               pure (fresh,denied ++ moreDenied)
-    captures <- forM candidates $ \choices -> case choices of
+    captures <- parallel [runExceptT $ case choices of
       [] -> pure ([],[])
       (_,item):_ -> do
         prior <- ExceptT (fmap fetchResult (readEvidence snapshot (EvidenceId (key item))))
         case prior of
           Just _ -> pure ([],[])
           Nothing -> captureOptions choices
+      | choices <- candidates]
     let fresh = concatMap fst captures
         denied = nub (concat [notes | (_,(_,notes,_,_)) <- rounds] ++ concatMap snd captures ++
           [MeetingIssue context CalendarDiscovery Nothing "Access refused (HTTP 403)"
@@ -92,3 +92,6 @@ fetch (MeetingsConfig auth retention) options (FetchContext started previous) sn
 
 unique :: Ord a => [a] -> [a]
 unique values = [first | first:_ <- group (sort values)]
+
+parallel :: [Acquisition payload (Either Text a)] -> ExceptT Text (Acquisition payload) [a]
+parallel = ExceptT . concurrentlyE

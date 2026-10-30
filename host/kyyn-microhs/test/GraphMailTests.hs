@@ -148,7 +148,7 @@ input started continuing = object ["arguments" .= object
      "mailbox" .= text "me@example.test","folders" .= [tagged "WellKnownFolder" (text "sentitems"),tagged "WellKnownFolder" (text "inbox")],"retentionDays" .= text "30"],
      "options" .= object ["tag" .= text "None"]],"startedAt" .= started,"priorPosition" .=
       (if continuing then tagged "Some" (object ["folders" .= [object ["folderId" .= f,"since" .= text "2026-09-08T12:00:00Z","deltaLink" .= (base <> "/mailFolders/" <> f <> "/messages/delta?cursor=1")] | f <- ["z-sent","a-inbox" :: Text.Text]]])
-       else object ["tag" .= text "None"])],"snapshot" .= text "selected"]
+       else object ["tag" .= text "None"])],"concurrency" .= ("4" :: String),"snapshot" .= text "selected"]
 
 provider :: Maybe Value -> Bool -> IO (Bytes.ByteString -> String -> String -> Value -> IO (Value,Bytes.ByteString), IORef [String])
 provider old failing = do

@@ -63,6 +63,12 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     (respond,trace) <- provider [] "normal"
     (result,_,status) <- brokerWith Normal respond program (input now Nothing False)
     assert "meetings adapter exit" (status == ExitSuccess)
+    forM_ [1,8 :: Int] $ \width -> do
+      (sameProvider,_) <- provider [] "normal"
+      let selectedWidth = change ["concurrency"] (const (text (Text.pack (show width)))) (input now Nothing False)
+      (sameResult,_,sameStatus) <- brokerWith Normal sameProvider program selectedWidth
+      assert "width changed recorded Meetings artifacts, position or report" (sameStatus == ExitSuccess && sameResult == result)
+
     output <- maybe (fail "Missing result") (get "value") result
     publicReport <- get "report" output
     assert "report lower bound differs from discovery" . (== ("2026-09-20T12:00:00Z" :: Text.Text)) =<< get "since" publicReport
@@ -245,7 +251,7 @@ inputWithPrior :: Text.Text -> Maybe Text.Text -> Bool -> Maybe Text.Text -> Val
 inputWithPrior started since device previous = object ["arguments" .= object
   ["input" .= object ["config" .= object ["auth" .= auth,"retentionDays" .= text "30"],
     "options" .= maybe none (\s -> tagged "Some" (object ["since" .= tagged "Some" (text s)])) since],
-    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t])) previous],"snapshot" .= text "selected"]
+    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t])) previous],"concurrency" .= ("4" :: String),"snapshot" .= text "selected"]
   where
     auth = if device then tagged "DeviceCode" (object ["tenant" .= text "tenant","clientId" .= text "client","tokenKey" .= text "key","scopes" .= (["User.Read"] :: [Text.Text])])
       else tagged "ClientSecret" (object ["tenant" .= text "tenant","clientId" .= text "client","secretKey" .= text "key"])
