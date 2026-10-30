@@ -55,7 +55,8 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
   payload <- inspect "MicrosoftGraph.Meetings.Types.MeetingArtifact"
   options <- inspect "MicrosoftGraph.Meetings.Types.MeetingsFetch"
   position <- inspect "MicrosoftGraph.Meetings.Types.MeetingsPosition"
-  adapter <- right (statefulAcquisitionSources config payload (Just options) position "MicrosoftGraph.Meetings.fetch" sources)
+  reportType <- inspect "MicrosoftGraph.Meetings.Types.MeetingsReport"
+  adapter <- right (statefulAcquisitionSources config payload (Just options) position reportType "MicrosoftGraph.Meetings.fetch" sources)
   (programs,_) <- compileBoth temporary toolchain compiler "meetings" adapter
   results <- newIORef []
   forM_ programs $ \program -> do
@@ -63,6 +64,12 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     (result,_,status) <- brokerWith Normal respond program (input now Nothing False)
     assert "meetings adapter exit" (status == ExitSuccess)
     output <- maybe (fail "Missing result") (get "value") result
+    publicReport <- get "report" output
+    assert "report lower bound differs from discovery" . (== ("2026-09-20T12:00:00Z" :: Text.Text)) =<< get "since" publicReport
+    assert "report upper bound differs from discovery" . (== now) =<< get "until" publicReport
+    reportScope <- get "scope" publicReport
+    assert "application scope missing" . (== ("EnabledMemberMailboxes" :: Text.Text)) =<< get "tag" reportScope
+    assert "ordinary listing reported a cap" . null =<< (get "coverageLimits" publicReport :: IO [Value])
     changes <- get "changes" output :: IO [Value]
     assert "all artifacts must be captured" (length changes == 3)
     stored <- mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v) changes :: IO [(Text.Text,Value)]
@@ -88,6 +95,13 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     assert "throttled blob did not retry" (length (filter (== "blob") events) == 3 && "wait" `elem` events)
     assert "join URL apostrophe was not escaped for OData" (any (Text.isInfixOf "meet%27%27a") events)
     modifyIORef' results (output:)
+    forM_ [("cap-49",0),("cap-50",1)] $ \(scenario,expectedLimits) -> do
+      (limited,_) <- provider [] scenario
+      (limitedResult,_,_) <- brokerWith Normal limited program (input now Nothing False)
+      limitedOutput <- maybe (fail "Missing limited result") (get "value") limitedResult
+      limits <- get "report" limitedOutput >>= get "coverageLimits" :: IO [Value]
+      assert "attendance cap boundary wrong" (length limits == expectedLimits)
+      assert "cap warning suppressed returned artifacts" . (==3) . length =<< changesFrom limitedResult
     let old = stored
     (again,againTrace) <- provider old "normal"
     (repeatResult,_,_) <- brokerWith Normal again program (inputWithPrior "2026-10-27T12:00:00Z" Nothing False (Just now))
@@ -116,9 +130,11 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       assert ("403 skipped unrelated artifacts: " ++ Text.unpack scenario) . (== count) . length =<< changesFrom partial
       saved <- get "position" partialOutput
       assert "successful fetch boundary not saved" . (== now) =<< get "lastSuccessfulFetch" saved
-      denied <- get "deniedRequests" saved :: IO [Text.Text]
-      assert "application denials stored request URLs" (null denied)
-      assert "denied user count missing" . (== ("1" :: Text.Text)) =<< get "deniedUsers" saved
+      public <- get "report" partialOutput
+      denied <- get "deniedRequests" public :: IO [Value]
+      contexts <- mapM (get "context") denied :: IO [Value]
+      assert "denied user identity missing" (length (nub contexts) == 1)
+      assert "report exposed request URLs" (not ("graph.microsoft.com" `Text.isInfixOf` Text.pack (show public)))
       captured <- changesFrom partial >>= mapM (\c -> do v <- get "value" c; (,) <$> get "id" v <*> get "evidence" v)
       (restored,_) <- provider captured "normal"
       (recovered,_,_) <- brokerWith Normal restored program (change ["arguments","priorPosition"] (const (tagged "Some" saved)) (input now (Just "2026-09-20T12:00:00Z") False))
@@ -129,10 +145,11 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       assert ("bad meeting blocked good meeting: " ++ Text.unpack scenario) . (== count) . length =<< changesFrom partial
       saved <- maybe (fail "Missing skip result") (get "value") partial >>= get "position"
       assert "skipped meetings prevented boundary advance" . (== now) =<< get "lastSuccessfulFetch" saved
-      skips <- get "skippedMeetings" saved :: IO [Value]
+      public <- maybe (fail "Missing report") (get "value") partial >>= get "report"
+      skips <- get "skippedMeetings" public :: IO [Value]
       assert "meeting skip diagnostics missing" (not (null skips))
       forM_ skips $ \note -> do
-        ref <- get "reference" note :: IO Text.Text
+        ref <- get "reference" note >>= get "value" :: IO Text.Text
         why <- get "reason" note :: IO Text.Text
         assert "skip must identify meeting and reason" (not (Text.null ref) && not (Text.null why))
       if count == 0 then do
@@ -173,8 +190,8 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
     (deniedArtifact,_) <- provider [] "transcripts-denied"
     (partialDevice,_,_) <- brokerWith Normal deniedArtifact program (input now Nothing True)
     assert "delegated independent artifact skip" . (==1) . length =<< changesFrom partialDevice
-    deviceState <- maybe (fail "Missing delegated state") (get "value") partialDevice >>= get "position"
-    assert "delegated denial URLs lost" . not . null =<< (get "deniedRequests" deviceState :: IO [Text.Text])
+    deviceState <- maybe (fail "Missing delegated state") (get "value") partialDevice >>= get "report"
+    assert "delegated denial context lost" . not . null =<< (get "deniedRequests" deviceState :: IO [Value])
     (forbidden,_) <- provider [] "forbidden"
     (deniedDevice,_,_) <- brokerWith Normal forbidden program (input now Nothing True)
     assert "delegated calendar denial was swallowed" . (== ("Left" :: Text.Text)) =<< maybe (fail "Missing denial") (get "tag") deniedDevice
@@ -183,10 +200,13 @@ main = withSystemTempDirectory "kyyn-graph-meetings-" $ \temporary -> do
       (multiResult,_,_) <- brokerWith Normal multi program (input now Nothing False)
       delta <- changesFrom multiResult
       assert "multi-user artifact count" (length delta == if scenario == "multi-fallback" then 3 else 6)
-      state <- maybe (fail "Missing tenant result") (get "value") multiResult >>= get "position"
-      assert "tenant denial count" . (== (if scenario == "multi-fallback" then "3" else "2" :: Text.Text)) =<< get "deniedUsers" state
-      assert "unavailable mailbox count" . (== ("1" :: Text.Text)) =<< get "unavailableUsers" state
-      assert "tenant denial URLs grew position" . null =<< (get "deniedRequests" state :: IO [Text.Text])
+      state <- maybe (fail "Missing tenant result") (get "value") multiResult >>= get "report"
+      denials <- get "deniedRequests" state :: IO [Value]
+      deniedContexts <- mapM (get "context") denials :: IO [Value]
+      assert "tenant denial identities" (length (nub deniedContexts) == if scenario == "multi-fallback" then 3 else 2)
+      unavailable <- get "unavailableUsers" state :: IO [Value]
+      assert "unavailable mailbox identity" (length unavailable == 1)
+      assert "tenant report contains transport URLs" (not ("graph.microsoft.com" `Text.isInfixOf` Text.pack (show state)))
       requests <- readIORef multiTrace
       assert "directory pagination missing" (any (Text.isInfixOf "/users?page=2") requests)
       assert "directory selection fields missing" ("https://graph.microsoft.com/v1.0/users?$select=id,accountEnabled,userType&$top=999" `elem` requests)
@@ -225,7 +245,7 @@ inputWithPrior :: Text.Text -> Maybe Text.Text -> Bool -> Maybe Text.Text -> Val
 inputWithPrior started since device previous = object ["arguments" .= object
   ["input" .= object ["config" .= object ["auth" .= auth,"retentionDays" .= text "30"],
     "options" .= maybe none (\s -> tagged "Some" (object ["since" .= tagged "Some" (text s)])) since],
-    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t,"deniedRequests" .= ([] :: [Text.Text]),"deniedUsers" .= text "0","unavailableUsers" .= text "0","skippedMeetings" .= ([] :: [Value])])) previous],"snapshot" .= text "selected"]
+    "startedAt" .= started,"priorPosition" .= maybe none (\t -> tagged "Some" (object ["lastSuccessfulFetch" .= t])) previous],"snapshot" .= text "selected"]
   where
     auth = if device then tagged "DeviceCode" (object ["tenant" .= text "tenant","clientId" .= text "client","tokenKey" .= text "key","scopes" .= (["User.Read"] :: [Text.Text])])
       else tagged "ClientSecret" (object ["tenant" .= text "tenant","clientId" .= text "client","secretKey" .= text "key"])
@@ -317,7 +337,7 @@ provider old scenario = do
           else if "/transcripts?page=2" `Text.isSuffixOf` url then pure (http 200 (object
             (["value" .= ([transcript "second"] ++ [transcript "late" | scenario == "late"])] ++ ["@odata.nextLink" .= url | scenario == "cycle"])))
           else if "/attendanceReports" `Text.isSuffixOf` url then pure (http 200 (collection
-            ([report "same" "2026-10-19T10:00:00Z" "2026-10-19T11:00:00Z", report "old" "2026-01-01T10:00:00Z" "2026-01-01T11:00:00Z"] ++ windowReports)))
+            ([report "same" "2026-10-19T10:00:00Z" "2026-10-19T11:00:00Z", report "old" "2026-01-01T10:00:00Z" "2026-01-01T11:00:00Z"] ++ windowReports ++ capReports)))
           else if "/attendanceRecords" `Text.isInfixOf` url then
             if "page=2" `Text.isSuffixOf` url && scenario == "page-failure" then pure (http 500 (object []))
             else pure (http 200 (object (["value" .= [attendee]] ++ ["@odata.nextLink" .= (url <> "?page=2") | not ("page=2" `Text.isSuffixOf` url)])))
@@ -335,6 +355,8 @@ provider old scenario = do
        ("upper","2026-10-20T12:00:00Z","2026-10-20T12:00:00Z")]
     windowTranscripts = [object ["id" .= key, "createdDateTime" .= start, "endDateTime" .= end]
       | (key,start,end) <- windowTimes, scenario == "artifact-window"]
+    capReports = [report (Text.pack ("old-" ++ show i)) "2026-01-01T10:00:00Z" "2026-01-01T11:00:00Z"
+      | i <- [1 .. (if scenario == "cap-49" then 47 else if scenario == "cap-50" then 48 else 0) :: Int]]
     windowReports = [report key start end | (key,start,end) <- windowTimes, scenario == "artifact-window"]
     notFound = object ["error" .= object ["code" .= text "NotFound"]]
     resolvedMeeting = object ["id" .= text "meeting-1","subject" .= text "Meeting 雪","participants" .= object

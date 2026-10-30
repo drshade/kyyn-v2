@@ -19,17 +19,17 @@ good _ snapshot = fmap (fmap (const [])) (ids snapshot)
 goodOptions :: Config -> Maybe Schema.FetchOptions -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError [EvidenceChange Payload])
 goodOptions config _ = good config
 
-goodStateful :: Config -> FetchContext String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
-goodStateful _ (FetchContext started prior) _ = pure (Right (FetchResult [] (maybe "first" id prior ++ ":" ++ Text.unpack started)))
+goodStateful :: Config -> FetchContext String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String String))
+goodStateful _ (FetchContext started prior) _ = pure (Right (FetchResult [] (maybe "first" id prior ++ ":" ++ Text.unpack started) "public summary"))
 
-goodStatefulOptions :: Config -> Maybe Schema.FetchOptions -> FetchContext String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
+goodStatefulOptions :: Config -> Maybe Schema.FetchOptions -> FetchContext String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String String))
 goodStatefulOptions config _ = goodStateful config
 
-badPosition :: Config -> FetchContext Bool -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
-badPosition _ _ _ = pure (Right (FetchResult [] "wrong"))
+badPosition :: Config -> FetchContext Bool -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String String))
+badPosition _ _ _ = pure (Right (FetchResult [] "wrong" "public summary"))
 
-badContext :: Config -> String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String))
-badContext _ _ _ = pure (Right (FetchResult [] "wrong"))
+badContext :: Config -> String -> EvidenceSnapshot Payload -> Acquisition Payload (Either FetchError (FetchResult Payload String String))
+badContext _ _ _ = pure (Right (FetchResult [] "wrong" "public summary"))
 
 goodRead :: String -> EvidenceSnapshot Payload -> CapturedRead Payload (Either FetchError String)
 goodRead _ snapshot = fmap (fmap (const "read")) (ids snapshot)

@@ -2,7 +2,7 @@
 module Kyyn.Surfaces.Connectors (connectorListResult, schemaResult, fetchResult, clearResult,
   evidenceListResult, evidenceItemResult, evidenceBatchResult, connectorResult, loginResult, methodListResult, methodResult, methodOutputResult) where
 
-import Data.Aeson (Value, object, (.=))
+import Data.Aeson (Value(..), encode, object, (.=))
 import Data.Coerce (Coercible, coerce)
 import qualified Data.Text as Text
 import Kyyn.Domain.Evidence
@@ -10,6 +10,11 @@ import Kyyn.Domain.Blob (ResolvedBlob(..), blobValue)
 import Kyyn.Domain.Plugin
 import Kyyn.Domain.Value (CheckedValue(..))
 import Data.Aeson.Types (Pair)
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
+import qualified Data.ByteString.Lazy as Bytes
+import qualified Data.Text.Encoding as Encoding
+import Data.Foldable (toList)
 import Kyyn.Surfaces.Result (Response, success)
 
 connectorListResult :: PluginName -> [(ConnectorName,BindingName,ConnectorTypeName)] -> Response
@@ -22,10 +27,10 @@ connectorListResult plugin connectors = success
 schemaResult :: PluginName -> Text.Text -> Response
 schemaResult plugin schema = success (object ["plugin" .= pluginNameText plugin,"schema" .= schema]) [Text.unpack (Text.stripEnd schema)]
 
-connectorResult :: PluginName -> ConnectorName -> Maybe Text.Text -> Response
-connectorResult plugin name options = success
-  (object ["plugin" .= pluginNameText plugin,"instance" .= text name,"fetchOptionsType" .= options])
-  [pluginNameText plugin ++ "/" ++ text name, maybe "Fetch options: none" (("Fetch options:\n" ++) . Text.unpack) options]
+connectorResult :: PluginName -> ConnectorName -> Maybe Text.Text -> Maybe Text.Text -> Response
+connectorResult plugin name options report = success
+  (object ["plugin" .= pluginNameText plugin,"instance" .= text name,"fetchOptionsType" .= options,"reportType" .= report])
+  [pluginNameText plugin ++ "/" ++ text name, maybe "Fetch options: none" (("Fetch options:\n" ++) . Text.unpack) options, maybe "Report: none" (("Report:\n" ++) . Text.unpack) report]
 
 loginResult :: PluginName -> ConnectorName -> Response
 loginResult plugin name = success (object ["plugin" .= pluginNameText plugin,"instance" .= text name])
@@ -52,19 +57,19 @@ fetchResult snapshot@(EvidenceSnapshotRef (ConnectorInstanceRef plugin name) _ i
   ["Fetched " ++ pluginNameText plugin ++ "/" ++ name, "Fetch: " ++ fetchName identity]
 
 evidenceListResult :: EvidenceCapture -> Response
-evidenceListResult (EvidenceCapture snapshot latest items) = success
-  (object ["selection" .= context snapshot, "latest" .= summaryValue latest, "items" .=
+evidenceListResult (EvidenceCapture snapshot latest items report) = success
+  (object ["selection" .= context snapshot, "latest" .= summaryValue latest report, "items" .=
     [object ["id" .= key,"fingerprint" .= fingerprint,"availability" .= availability payload] | (EvidenceId key,EvidenceFingerprint fingerprint,payload) <- items]])
-  (summaryLines latest ++ if null items then ["No current evidence."] else
+  (summaryLines latest report ++ if null items then ["No current evidence."] else
     [Text.unpack key ++ "  " ++ Text.unpack fingerprint ++ "  " ++ availability payload | (EvidenceId key,EvidenceFingerprint fingerprint,payload) <- items])
   where
     availability (Available ()) = "Available" :: String
     availability Truncated = "Truncated"
 
-evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> [ResolvedBlob] -> Text.Text -> Response
-evidenceItemResult snapshot latest key item blobs rendered = success
-  (object (["selection" .= context snapshot, "latest" .= summaryValue latest] ++ itemFields key item blobs))
-  (summaryLines latest ++ itemLines key item blobs ++ [Text.unpack (Text.stripEnd rendered)])
+evidenceItemResult :: EvidenceSnapshotRef -> FetchSummary -> EvidenceId -> Evidence CheckedValue -> [ResolvedBlob] -> Maybe FetchReport -> Text.Text -> Response
+evidenceItemResult snapshot latest key item blobs report rendered = success
+  (object (["selection" .= context snapshot, "latest" .= summaryValue latest report] ++ itemFields key item blobs))
+  (summaryLines latest report ++ itemLines key item blobs ++ [Text.unpack (Text.stripEnd rendered)])
 
 itemFields :: EvidenceId -> Evidence CheckedValue -> [ResolvedBlob] -> [Pair]
 itemFields (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payload) blobs =
@@ -82,14 +87,14 @@ itemLines (EvidenceId key) (Evidence (EvidenceFingerprint fingerprint) refs payl
   where
     availability = case payload of Available _ -> "Available"; Truncated -> "Truncated"
 
-summaryValue :: FetchSummary -> Value
-summaryValue (FetchSummary identity at added updated removed options) = object
-  ["id" .= fetchName identity,"fetchedAt" .= at,"added" .= added,"updated" .= updated,"removed" .= removed,"options" .= options]
+summaryValue :: FetchSummary -> Maybe FetchReport -> Value
+summaryValue (FetchSummary identity at added updated removed options) report = object
+  ["id" .= fetchName identity,"fetchedAt" .= at,"added" .= added,"updated" .= updated,"removed" .= removed,"options" .= options,"report" .= reportValue report]
 
-summaryLines :: FetchSummary -> [String]
-summaryLines (FetchSummary identity at added updated removed options) =
+summaryLines :: FetchSummary -> Maybe FetchReport -> [String]
+summaryLines (FetchSummary identity at added updated removed options) report =
   ["Latest fetch: " ++ fetchName identity ++ "  " ++ at ++ "  " ++ show added ++ " added, " ++ show updated ++ " updated, " ++ show removed ++ " removed"
-    ++ maybe "" ("  options=" ++) options]
+    ++ maybe "" ("  options=" ++) options] ++ reportLines report
 
 clearResult :: PluginName -> ConnectorName -> Bool -> Response
 clearResult plugin name existed = success
@@ -105,8 +110,25 @@ text :: Coercible a String => a -> String
 text = coerce
 
 evidenceBatchResult :: EvidenceBatch -> Response
-evidenceBatchResult (EvidenceBatch snapshot latest entries) = success
-  (object ["selection" .= context snapshot, "latest" .= summaryValue latest,
+evidenceBatchResult (EvidenceBatch snapshot latest entries report) = success
+  (object ["selection" .= context snapshot, "latest" .= summaryValue latest report,
     "items" .= [object (itemFields key item blobs) | (key,item,blobs) <- entries]])
-  (summaryLines latest ++ if null entries then ["No current evidence."] else
+  (summaryLines latest report ++ if null entries then ["No current evidence."] else
     concat [itemLines key item blobs | (key,item,blobs) <- entries])
+
+reportValue :: Maybe FetchReport -> Value
+reportValue Nothing = Null
+reportValue (Just (FetchReport _ (CheckedValue _ value))) = value
+
+reportLines :: Maybe FetchReport -> [String]
+reportLines Nothing = ["No connector report was supplied."]
+reportLines report = "Report from last successful fetch:" : preview 2 (reportValue report)
+  where
+    preview depth (Object fields) = concat
+      [indent depth (Key.toString key ++ ":") : preview (depth+2) value | (key,value) <- KeyMap.toList fields]
+    preview depth (Array values) =
+      let entries = toList values; count = length entries
+      in indent depth (show count ++ " entries") : concatMap (preview (depth+2)) (take 10 entries) ++
+        [indent depth (show (count-10) ++ " omitted; use --json for the complete report") | count > 10]
+    preview depth value = [indent depth (Text.unpack (Encoding.decodeUtf8 (Bytes.toStrict (encode value))))]
+    indent depth value = replicate depth ' ' ++ value

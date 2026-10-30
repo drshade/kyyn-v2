@@ -90,10 +90,10 @@ publishFixture ref owner schema base options changes = publishFetchWithPosition 
 
 publishFetchWithPosition :: EvidenceStore :> es => ConnectorInstanceRef -> EvidenceProducer -> CheckedContract -> Maybe FetchId -> Maybe String
   -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue) -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
-publishFetchWithPosition ref owner = publishFetch (selectionFor ref owner)
+publishFetchWithPosition ref owner schema base options changes position = publishFetch (selectionFor ref owner) schema base options changes position (fmap (\(c,v) -> FetchReport c v) position)
 
 materialize :: EvidenceStore :> es => EvidenceIndex -> Eff es (Either EvidenceProblem CurrentEvidence)
-materialize index@(EvidenceIndex snapshot summary _ _) = runExceptT $ do
+materialize index@(EvidenceIndex snapshot summary _ _ _) = runExceptT $ do
   let EvidenceState _ entries = indexState index
   values <- mapM (\(ident,_) -> do
     found <- ExceptT (readCapturedEvidence index ident)
@@ -106,7 +106,7 @@ loadCurrentEvidence :: EvidenceStore :> es => ConnectorInstanceRef -> EvidencePr
   -> Eff es (Either EvidenceProblem (Maybe CurrentEvidence))
 loadCurrentEvidence ref owner expected = runExceptT $ do
   index <- ExceptT (openCurrentEvidence (selectionFor ref owner))
-  traverse (\captured@(EvidenceIndex _ _ schema _) -> do
+  traverse (\captured@(EvidenceIndex _ _ schema _ _) -> do
     unless (contractId expected == contractId schema) (throwE ProducerContractChanged)
     ExceptT (materialize captured)) index
 
@@ -189,7 +189,7 @@ main = do
         run = execute scope
         load instanceRef owner = run (loadCurrentEvidence instanceRef owner contract) >>= right
         listing instanceRef owner = run (noGit (runEvidenceInspection (Inspection.currentEvidence (selectionFor instanceRef owner))))
-        inspect instanceRef owner item = fmap (fmap (\(at,latestSummary,_,found,_) -> (at,latestSummary,found)))
+        inspect instanceRef owner item = fmap (fmap (\(at,latestSummary,_,found,_,_) -> (at,latestSummary,found)))
           (run (noGit (runEvidenceInspection (Inspection.readCurrentEvidence (selectionFor instanceRef owner) item))))
         batch instanceRef owner expected = run (noGit (runEvidenceInspection
           (Inspection.readEvidenceBatch (selectionFor instanceRef owner) expected)))
@@ -206,17 +206,17 @@ main = do
     ignoredBefore <- doesFileExist ignorePath
     assert "read wrote the ignore file" (not ignoredBefore)
     f1 <- run (publishFixture instanceA producer contract Nothing (Just "first-options") first) >>= right
-    EvidenceCapture at1 summary1 listedFirst <- listing instanceA producer >>= right
+    EvidenceCapture at1 summary1 listedFirst _ <- listing instanceA producer >>= right
     assert "listing lost first IDs or fingerprints" (at1 == f1 &&
       listedFirst == [(itemA,EvidenceFingerprint "old",Available ()),(itemB,EvidenceFingerprint "removed",Available ())])
     let emptyInstance = ConnectorInstanceRef (either error id (pluginName "folder")) "empty"
     emptyFetch <- run (publishFixture emptyInstance producer contract Nothing Nothing []) >>= right
-    EvidenceCapture emptyAt (FetchSummary _ _ adds updates removals _) listedEmpty <- listing emptyInstance producer >>= right
+    EvidenceCapture emptyAt (FetchSummary _ _ adds updates removals _) listedEmpty _ <- listing emptyInstance producer >>= right
     assert "fetched empty capture refused" (emptyAt == emptyFetch && null listedEmpty && (adds,updates,removals) == (0,0,0))
-    EvidenceBatch batchAt batchSummary entries1 <- batch instanceA producer (Just (key f1)) >>= right
+    EvidenceBatch batchAt batchSummary entries1 _ <- batch instanceA producer (Just (key f1)) >>= right
     assert "batch lost selection, summary or payloads" (batchAt == f1 && batchSummary == summary1
       && entries1 == [(itemA,value "old",[]),(itemB,value "removed",[])])
-    EvidenceBatch _ _ emptyEntries <- batch emptyInstance producer Nothing >>= right
+    EvidenceBatch _ _ emptyEntries _ <- batch emptyInstance producer Nothing >>= right
     assert "empty batch refused or invented items" (null emptyEntries)
     ignore <- Bytes.readFile ignorePath
     assert "first publication did not ignore local evidence" (ignore == "*\n")
@@ -228,7 +228,7 @@ main = do
       (Inspection.readEvidenceBatch (selectionFor instanceA producer) (Just (key f1))))))
     preservedIgnore <- Bytes.readFile ignorePath
     assert "publication rewrote existing ignore file" (preservedIgnore == "*\n# preserve local comment\n")
-    EvidenceCapture at2 summary2@(FetchSummary identity time added updated removed options) listedLatest <- listing instanceA producer >>= right
+    EvidenceCapture at2 summary2@(FetchSummary identity time added updated removed options) listedLatest _ <- listing instanceA producer >>= right
     assert "listing retained removed item or old fingerprint" (at2 == f2 && listedLatest == [(itemA,EvidenceFingerprint "new",Available ())])
     assert "latest summary lost identity, count or options" (identity == key f2 && (added,updated,removed) == (0,1,1) && options == suppliedOptions && summary2 /= summary1)
     assert "fetch timestamp is not ISO 8601 UTC" (case iso8601ParseM time :: Maybe UTCTime of
@@ -326,8 +326,10 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
       run = execute scope
       cursor label = CheckedValue (contractId contract) (String label)
       begin owner = run (beginFixture instanceA owner contract (Just contract)) >>= right
-      publish owner base changes label = run (publishFetchWithPosition instanceA owner contract base Nothing changes
-        (Just (contract,cursor label)))
+      public label = FetchReport contract (cursor ("report: " <> label))
+      readReport owner = run (noGit (runEvidenceInspection (Inspection.currentEvidence (selectionFor instanceA owner)))) >>= right
+      publish owner base changes label = run (publishFetch (selectionFor instanceA owner) contract base Nothing changes
+        (Just (contract,cursor label)) (Just (public label)))
       path = directory </> ".kyyn/evidence/folder-73616c6573/index.dhallb"
   MaterializedBaseline started base prior position <- begin producer
   assert "new acquisition has prior state" (base == Nothing && prior == Nothing && position == Nothing)
@@ -340,6 +342,8 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   second <- publish producer firstBase [] "cursor-two" >>= right
   MaterializedBaseline _ secondBase _ secondPosition <- begin producer
   assert "empty batch did not advance position" (secondBase == Just (key second) && secondPosition == Just (cursor "cursor-two"))
+  EvidenceCapture _ _ _ firstReport <- readReport producer
+  assert "no-change report did not replace prior report" (firstReport == Just (public "cursor-two"))
   before <- Bytes.readFile path
   conflict <- publish producer firstBase [] "stale-cursor"
   assert "stale position published" (conflict == Left BaseSnapshotConflict)
@@ -348,6 +352,14 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   wrong <- run (publishFetchWithPosition instanceA producer contract secondBase Nothing []
     (Just (contract,CheckedValue (contractId contract) (Bool True))))
   assert "incorrect position shape accepted" (isLeft wrong)
+  malformedReport <- run (publishFetch (selectionFor instanceA producer) contract secondBase Nothing []
+    (Just (contract,cursor "must-not-advance")) (Just (FetchReport contract (CheckedValue (contractId contract) (Bool True)))))
+  assert "malformed public report accepted" (isLeft malformedReport)
+  missingReport <- run (publishFetch (selectionFor instanceA producer) contract secondBase Nothing []
+    (Just (contract,cursor "must-not-advance")) Nothing)
+  assert "stateful report silently absent" (isLeft missingReport)
+  EvidenceCapture _ _ _ retainedReport <- readReport producer
+  assert "failed publication changed report" (retainedReport == firstReport)
   after <- Bytes.readFile path
   assert "failed publication changed stored bytes" (before == after)
   let replacement = EvidenceProducer (PackageIdentity "replacement") (contractId contract)
@@ -361,6 +373,8 @@ positionProof = withSystemTempDirectory "kyyn-position-" $ \directory -> do
   MaterializedBaseline _ newBase newCapture newPosition <- begin replacement
   assert "replacement did not reset capture and position" (newBase == Just (key new) &&
     captureContents newCapture == Just (new,[]) && newPosition == Just (cursor "replacement-position"))
+  EvidenceCapture _ _ _ replacedReport <- readReport replacement
+  assert "replacement retained old report" (replacedReport == Just (public "replacement-position"))
   old <- run (loadCurrentEvidence instanceA producer contract)
   assert "old producer read replacement capture" (old == Left ProducerContractChanged)
   _ <- run (clearEvidence instanceA)
@@ -429,7 +443,7 @@ blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \direc
   resolved <- resolve [captured] (blobValue ref) >>= right
   assert "blob surface lost originating path" (resolved == [ResolvedBlob ref blobPath])
   assert "forged result resolved without capture" . isLeft =<< resolve [] (blobValue ref)
-  EvidenceBatch _ _ bulkBlobs <- execute scope (noGit (runEvidenceInspection
+  EvidenceBatch _ _ bulkBlobs _ <- execute scope (noGit (runEvidenceInspection
     (Inspection.readEvidenceBatch (selectionFor instanceA owner) Nothing))) >>= right
   assert "batch blob paths missing" (bulkBlobs == [(itemA,item,[ResolvedBlob ref blobPath]),(itemB,item,[ResolvedBlob ref blobPath])])
   Bytes.writeFile blobPath "corrupt"
@@ -442,7 +456,7 @@ blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \direc
   execute scope (discardFetchBlobs instanceA Nothing [ref])
   assert "changed-head cleanup deleted published bytes" =<< doesFileExist blobPath
   second <- publish (Just (key first)) [SetEvidencePayload itemA (EvidenceFingerprint "same") Truncated] >>= right
-  EvidenceBatch _ _ mixed <- execute scope (noGit (runEvidenceInspection
+  EvidenceBatch _ _ mixed _ <- execute scope (noGit (runEvidenceInspection
     (Inspection.readEvidenceBatch (selectionFor instanceA owner) Nothing))) >>= right
   assert "batch omitted truncation" (case mixed of
     [(_,Evidence _ _ Truncated,[]),(_,_,[_])] -> True; _ -> False)
@@ -473,7 +487,7 @@ selectiveIndexProof = do
         (EvidenceState summary
           [(itemA,Evidence (EvidenceFingerprint "one") [] (Available location))
           ,(itemB,Evidence (EvidenceFingerprint "two") [] (Available (PayloadLocation (Text.replicate 64 "b") 900 [])))
-          ,(EvidenceId "truncated",Evidence (EvidenceFingerprint "three") [] Truncated)]) Nothing
+          ,(EvidenceId "truncated",Evidence (EvidenceFingerprint "three") [] Truncated)]) Nothing Nothing
       scope = either error id (directoryScope "/recording-kb")
       files = interpret $ \_ operation -> case operation of
         ReadOptionalBytes _ path -> do
@@ -501,7 +515,7 @@ selectiveIndexProof = do
 indexedPublicationProof :: IO ()
 indexedPublicationProof = withSystemTempDirectory "kyyn-index-publication-" $ \directory -> do
   scope <- right (directoryScope directory)
-  let publish base changes = execute scope (publishFetch selection contract base Nothing changes Nothing)
+  let publish base changes = execute scope (publishFetch selection contract base Nothing changes Nothing Nothing)
       open = execute scope (openCurrentEvidence selection) >>= right >>= maybe (fail "Missing index") pure
       payloadDirectory = directory </> ".kyyn/evidence" </> instancePath instanceA </> "payloads"
   first <- publish Nothing [NewEvidence itemA (value "first"),NewEvidence itemB (value "second")] >>= right
@@ -567,7 +581,7 @@ cleanupFailureProof = do
         _ -> error "Unexpected filesystem operation during empty publication"
       (outcome,(stored,trace)) = runPureEff . State.runState ((Nothing,[]) :: Recording) . runFailure . files
         . runDhallHandling . recordDocuments . noBlobs . runEvidenceStore scope $
-          publishFetch selection contract Nothing Nothing [] Nothing
+          publishFetch selection contract Nothing Nothing [] Nothing Nothing
   assert "cleanup failure was not identified as post-publication" (case outcome of
     Left failure -> "was published" `Text.isInfixOf` Text.pack (show failure)
     Right _ -> False)

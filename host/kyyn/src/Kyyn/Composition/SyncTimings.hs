@@ -91,7 +91,7 @@ observeEvidence Nothing = id
 observeEvidence timings = interpose $ \env operation -> case operation of
   Evidence.BeginFetch {} -> measure timings "evidence-begin" "" outcome (passthrough env operation)
   Evidence.ReadCapturedEvidence {} -> measure timings "evidence-read" "" outcome (passthrough env operation)
-  Evidence.PublishFetch _ _ _ _ changes _ ->
+  Evidence.PublishFetch _ _ _ _ changes _ _ ->
     measure timings "evidence-publish" ("changes=" ++ show (length changes)) outcome (passthrough env operation)
   _ -> passthrough env operation
 

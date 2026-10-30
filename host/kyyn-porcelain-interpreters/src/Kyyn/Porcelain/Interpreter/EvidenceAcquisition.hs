@@ -30,7 +30,7 @@ import Kyyn.Porcelain.Capability.EvidenceAcquisition
 
 runEvidenceAcquisition :: (ContentDigest :> es, BlobStorage :> es, Store.EvidenceStore :> es, GuestExecution :> es, FileAcquisition :> es, HttpTransport :> es, SecretStore :> es, Waiting :> es,
     DhallHandling :> es, Failure :> es) => DirectoryScope -> Eff (EvidenceAcquisition : es) a -> Eff es a
-runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract mode supplied) -> runExceptT $ do
+runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract reportContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
   (arguments,optionsText) <- case (optionsContract,supplied) of
     (Nothing,Nothing) -> pure (configValue,Nothing)
@@ -51,19 +51,20 @@ runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(
             (case mode of ContinueSync -> position; RestartSync -> Nothing)]
   ExceptT $ withBlobDownloads instanceRef (Store.discardFetchBlobs instanceRef base) $ runExceptT $ do
     result <- ExceptT (executeAcquisition baseDirectory instanceRef program input prior)
-    (delta,savedPosition) <- case positionContract of
-      Nothing -> do
+    (delta,savedPosition,savedReport) <- case (positionContract,reportContract) of
+      (Nothing,Nothing) -> do
         _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)
-        pure (result,Nothing)
-      Just contract -> do
+        pure (result,Nothing,Nothing)
+      (Just contract,Just report) -> do
         _ <- ExceptT (encodeValue (Record [("changes",changesShape (contractShape payload)),
-          ("position",contractShape contract)]) result)
-        (changes,next) <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure
-          (parseEither (withObject "fetch result" $ \fields -> (,) <$> fields .: "changes" <*> fields .: "position") result)
-        pure (changes,Just (contract,CheckedValue (contractId contract) next))
+          ("position",contractShape contract),("report",contractShape report)]) result)
+        (changes,next,reported) <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure
+          (parseEither (withObject "fetch result" $ \fields -> (,,) <$> fields .: "changes" <*> fields .: "position" <*> fields .: "report") result)
+        pure (changes,Just (contract,CheckedValue (contractId contract) next),Just (FetchReport report (CheckedValue (contractId report) reported)))
+      _ -> throwE [errorDiagnostic "plugin.report-contract" "Position and report contracts must occur together"]
     changes <- either (throwE . pure . errorDiagnostic "plugin.invalid-delta") pure (parseChanges payload delta)
     ExceptT (fmap (either (Left . problem) Right)
-      (Store.publishFetch selection payload base optionsText changes savedPosition))
+      (Store.publishFetch selection payload base optionsText changes savedPosition savedReport))
 
 problem :: EvidenceProblem -> [Diagnostic]
 problem failure = [evidenceProblemDiagnostic failure]

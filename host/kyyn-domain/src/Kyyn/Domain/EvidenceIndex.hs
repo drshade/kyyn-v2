@@ -34,20 +34,21 @@ data EvidenceIndex = EvidenceIndex
   { snapshot :: EvidenceSnapshotRef, latest :: FetchSummary
   , payloadContract :: CheckedContract
   , items :: Map.Map Text (Evidence PayloadLocation)
+  , report :: Maybe FetchReport
   } deriving (Eq, Show)
 
 indexCapture :: EvidenceIndex -> EvidenceCapture
-indexCapture (EvidenceIndex snapshot latest _ items) = EvidenceCapture snapshot latest
+indexCapture (EvidenceIndex snapshot latest _ items report) = EvidenceCapture snapshot latest
   [(EvidenceId key, fingerprint, case payload of Available _ -> Available (); Truncated -> Truncated)
-  | (key,Evidence fingerprint _ payload) <- Map.toAscList items]
+  | (key,Evidence fingerprint _ payload) <- Map.toAscList items] report
 
 indexBlobs :: EvidenceIndex -> [BlobRef]
-indexBlobs (EvidenceIndex _ _ _ items) = concat
+indexBlobs (EvidenceIndex _ _ _ items _) = concat
   [refs | Evidence _ _ (Available (PayloadLocation _ _ refs)) <- Map.elems items]
 
 indexState :: EvidenceIndex -> EvidenceState PayloadLocation
-indexState (EvidenceIndex _ latest _ items) = EvidenceState latest
+indexState (EvidenceIndex _ latest _ items _) = EvidenceState latest
   [(EvidenceId key,value) | (key,value) <- Map.toAscList items]
 
 indexedEvidence :: EvidenceIndex -> EvidenceId -> Maybe (Evidence PayloadLocation)
-indexedEvidence (EvidenceIndex _ _ _ items) (EvidenceId key) = Map.lookup key items
+indexedEvidence (EvidenceIndex _ _ _ items _) (EvidenceId key) = Map.lookup key items

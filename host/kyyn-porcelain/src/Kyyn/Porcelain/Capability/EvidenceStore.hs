@@ -20,7 +20,7 @@ data EvidenceStore :: Effect where
   OpenCurrentEvidence :: EvidenceSelection -> EvidenceStore m (Either EvidenceProblem (Maybe EvidenceIndex))
   ReadCapturedEvidence :: EvidenceIndex -> EvidenceId -> EvidenceStore m (Either EvidenceProblem (Maybe (Evidence CheckedValue)))
   PublishFetch :: EvidenceSelection -> CheckedContract -> Maybe FetchId -> Maybe String
-    -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue)
+    -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue) -> Maybe FetchReport
     -> EvidenceStore m (Either EvidenceProblem EvidenceSnapshotRef)
   DiscardFetchBlobs :: ConnectorInstanceRef -> Maybe FetchId -> [BlobRef] -> EvidenceStore m ()
   EvidenceHead :: ConnectorInstanceRef -> EvidenceStore m (Either EvidenceProblem (Maybe FetchId))
@@ -51,6 +51,6 @@ readCapturedEvidence :: EvidenceStore :> es => EvidenceIndex -> EvidenceId
 readCapturedEvidence index = send . ReadCapturedEvidence index
 
 publishFetch :: EvidenceStore :> es => EvidenceSelection -> CheckedContract -> Maybe FetchId -> Maybe String
-  -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue)
+  -> [EvidenceChange CheckedValue] -> Maybe (CheckedContract,CheckedValue) -> Maybe FetchReport
   -> Eff es (Either EvidenceProblem EvidenceSnapshotRef)
-publishFetch selected contract base options changes = send . PublishFetch selected contract base options changes
+publishFetch selected contract base options changes position = send . PublishFetch selected contract base options changes position

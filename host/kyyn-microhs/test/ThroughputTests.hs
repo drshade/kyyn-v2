@@ -24,6 +24,7 @@ import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorTypeName(..), pluginName)
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Domain.DataType (DataType(..))
 import Kyyn.MicroHs.Inspection (inspectDataType)
 import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
@@ -65,7 +66,8 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
   configType <- inspect "MicrosoftGraph.Calendar.Types.CalendarConfig"
   payloadType <- inspect "MicrosoftGraph.Calendar.Types.Event"
   positionType <- inspect "MicrosoftGraph.Calendar.Types.CalendarPosition"
-  adapter <- right (statefulAcquisitionSources configType payloadType Nothing positionType "MicrosoftGraph.Calendar.fetch" sources)
+  report <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  adapter <- right (statefulAcquisitionSources configType payloadType Nothing positionType UnitType "MicrosoftGraph.Calendar.fetch" sources)
   (_,program) <- compileBoth temporary toolchain ghc "graph" adapter
   config <- right (checkContract configType (SchemaMetadata [] [] []))
   payload <- right (checkContract payloadType (SchemaMetadata [] [] []))
@@ -84,7 +86,7 @@ main = withSystemTempDirectory "kyyn-throughput-" $ \temporary -> do
     start <- getMonotonicTimeNSec
     outcome <- runStore kb $ runFileAcquisitionIO $ runGuestExecution compiler $
       recordHttp pages cursor bodyBytes $ recordSecrets $ recordWaiting $ (runContentDigest . runEvidenceAcquisition kb) $
-        fetchEvidence selection payload program (CheckedValue (contractId config) configuration) Nothing (Just position) ContinueSync Nothing
+        fetchEvidence selection payload program (CheckedValue (contractId config) configuration) Nothing (Just position) (Just report) ContinueSync Nothing
     _ <- right outcome
     published <- getMonotonicTimeNSec
     current <- runStore kb (openCurrentEvidence selection) >>= right >>= maybe (fail "No published capture") pure

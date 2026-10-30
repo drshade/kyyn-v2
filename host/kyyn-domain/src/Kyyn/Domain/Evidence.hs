@@ -3,7 +3,7 @@ module Kyyn.Domain.Evidence
   ( EvidenceId(..), EvidenceFingerprint(..), FetchId(..), ConnectorInstanceRef(..), EvidenceProducer(..)
   , EvidencePayload(..), Evidence(..), EvidenceChange(..), EvidenceState(..), FetchSummary(..)
   , EvidenceSnapshotRef(..), EvidenceProblem(..), applyChanges, validateState
-  , evidenceProblemDiagnostic, EvidenceCapture(..), EvidenceBatch(..), SyncMode(..), instancePath
+  , evidenceProblemDiagnostic, EvidenceCapture(..), EvidenceBatch(..), FetchReport(..), validateReportContract, SyncMode(..), instancePath
   ) where
 
 import Control.Monad (foldM, unless)
@@ -12,10 +12,11 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.ByteString as Bytes
 import Numeric (showHex)
-import Kyyn.Domain.Blob (ResolvedBlob)
+import Kyyn.Domain.Blob (ResolvedBlob, sdkBlobRefType)
+import Kyyn.Domain.DataType (reachableTypes)
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Plugin (PluginName, PackageIdentity, pluginNameText)
-import Kyyn.Domain.Contract (ContractId)
+import Kyyn.Domain.Contract (ContractId, CheckedContract, rootType)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 
@@ -35,10 +36,16 @@ data FetchSummary = FetchSummary
 data EvidenceState a = EvidenceState
   { latest :: FetchSummary, values :: [(EvidenceId, Evidence a)]
   } deriving (Eq, Show)
-data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint, EvidencePayload ())] deriving (Eq, Show)
+data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(EvidenceId, EvidenceFingerprint, EvidencePayload ())] (Maybe FetchReport) deriving (Eq, Show)
+
+data FetchReport = FetchReport CheckedContract CheckedValue deriving (Eq, Show)
+
+validateReportContract :: CheckedContract -> Either String ()
+validateReportContract contract = unless (sdkBlobRefType `notElem` reachableTypes (rootType contract))
+  (Left "Public report contracts cannot contain BlobRef")
 
 data EvidenceBatch = EvidenceBatch EvidenceSnapshotRef FetchSummary
-  [(EvidenceId, Evidence CheckedValue, [ResolvedBlob])] deriving (Eq, Show)
+  [(EvidenceId, Evidence CheckedValue, [ResolvedBlob])] (Maybe FetchReport) deriving (Eq, Show)
 
 data EvidenceSnapshotRef = EvidenceSnapshotRef ConnectorInstanceRef EvidenceProducer FetchId deriving (Eq, Show)
 data EvidenceProblem = NotFetched | ProducerContractChanged

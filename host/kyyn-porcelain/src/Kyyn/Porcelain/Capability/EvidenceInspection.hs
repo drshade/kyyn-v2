@@ -22,7 +22,7 @@ data EvidenceInspection :: Effect where
   ReadEvidenceBatch :: EvidenceSelection -> Maybe FetchId
     -> EvidenceInspection m (Either [Diagnostic] EvidenceBatch)
   ReadCurrentEvidence :: EvidenceSelection -> EvidenceId
-    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue), [ResolvedBlob]))
+    -> EvidenceInspection m (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue), [ResolvedBlob], Maybe FetchReport))
 type instance DispatchOf EvidenceInspection = Dynamic
 
 selectEvidence :: EvidenceInspection :> es => KnowledgeBase -> GitRevision -> PluginName -> ConnectorName
@@ -36,7 +36,7 @@ currentEvidence = send . ListCurrentEvidence
 
 readCurrentEvidence :: EvidenceInspection :> es
   => EvidenceSelection -> EvidenceId
-  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue), [ResolvedBlob]))
+  -> Eff es (Either [Diagnostic] (EvidenceSnapshotRef, FetchSummary, CheckedContract, Maybe (Evidence CheckedValue), [ResolvedBlob], Maybe FetchReport))
 readCurrentEvidence selection = send . ReadCurrentEvidence selection
 
 readEvidenceBatch :: EvidenceInspection :> es => EvidenceSelection -> Maybe FetchId

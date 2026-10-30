@@ -13,6 +13,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.Evidence (validateReportContract)
 import Kyyn.Domain.Contract (rootType, contractShape, contractId, checkContract)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), ValidationReport(..), errorDiagnostic)
@@ -99,17 +100,20 @@ prepare sdk code = do
      ConnectorDeclaration connector fetch validate declaredMethods login -> do
       let connectorLabel = label ++ "/" ++ coerce connector
       signature <- located connectorLabel (inspectPluginFunction sourceTree AcquisitionEntry fetch)
-      (configType,optionsType,payloadType,positionType) <- case signature of
-        FetchSignature c o p -> pure (c,o,p,Nothing)
-        StatefulFetchSignature c o p s -> pure (c,o,p,Just s)
+      (configType,optionsType,payloadType,positionType,reportType) <- case signature of
+        FetchSignature c o p -> pure (c,o,p,Nothing,Nothing)
+        StatefulFetchSignature c o p s r -> pure (c,o,p,Just s,Just r)
         _ -> bad connectorLabel "Expected acquisition signature"
       config <- contract configType
       payload <- contract payloadType
       options <- traverse contract optionsType
       position <- traverse contract positionType
-      acquisition <- checked connectorLabel (case position of
-        Nothing -> acquisitionSources (rootType config) (rootType payload) (rootType <$> options) fetch sources
-        Just p -> statefulAcquisitionSources (rootType config) (rootType payload) (rootType <$> options) (rootType p) fetch sources)
+      report <- traverse contract reportType
+      mapM_ (checked connectorLabel . validateReportContract) report
+      acquisition <- checked connectorLabel (case (position,report) of
+        (Nothing,Nothing) -> acquisitionSources (rootType config) (rootType payload) (rootType <$> options) fetch sources
+        (Just p,Just r) -> statefulAcquisitionSources (rootType config) (rootType payload) (rootType <$> options) (rootType p) (rootType r) fetch sources
+        _ -> Left "Position and report contracts must occur together")
       fetchEntry <- located connectorLabel (compileGuest acquisition)
       validation <- checked connectorLabel (validationSources (rootType config) validate sources)
       validationEntry <- located (connectorLabel ++ " " ++ validate ++ " (expected Config -> ValidationReport)") (compileGuest validation)
@@ -128,7 +132,7 @@ prepare sdk code = do
       loginEntry <- traverse (\selected -> do
         adapter <- checked connectorLabel (loginSources (rootType config) selected sources)
         located (connectorLabel ++ " " ++ selected ++ " (expected Config -> PluginLogin (Either LoginError ()))") (compileGuest adapter)) login
-      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry position)
+      pure (PreparedConnector connector config payload fetchEntry validationEntry methods options loginEntry position report)
     pure (PreparedPackage (manifestName manifest) (packageIdentity captured) connectors)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]

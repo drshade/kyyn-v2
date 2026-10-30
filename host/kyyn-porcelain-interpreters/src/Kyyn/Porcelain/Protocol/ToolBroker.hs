@@ -71,7 +71,7 @@ executeToolProgramCaptured program plugins model captured arguments = runExceptT
       let label = pluginNameText plugin ++ "/" ++ coerce instanceName
       (PreparedPackage _ identity _, ConfiguredConnector _ _ selected _) <-
         either (protocolFailure . ((label ++ ": ") ++) . show) pure (selectedInstance plugin instanceName configured)
-      (actual,payload,_,methods,_,_,_) <- either (protocolFailure . show) pure (sourceDetails selected)
+      (actual,payload,_,methods,_,_,_,_) <- either (protocolFailure . show) pure (sourceDetails selected)
       if actual /= kind then protocolFailure (label ++ ": connector type differs from the requested method") else pure ()
       pure (identity,payload,methods)
     capture plugin kind instanceName identity payload = do
@@ -80,8 +80,8 @@ executeToolProgramCaptured program plugins model captured arguments = runExceptT
       case loaded of
         Just current -> pure current
         Nothing -> do
-          current <- case [c | c@(EvidenceIndex (EvidenceSnapshotRef selected _ _) _ _ _) <- captured, selected == instanceRef] of
-            c@(EvidenceIndex _ _ actual _):_ | contractId actual == contractId payload -> pure c
+          current <- case [c | c@(EvidenceIndex (EvidenceSnapshotRef selected _ _) _ _ _ _) <- captured, selected == instanceRef] of
+            c@(EvidenceIndex _ _ actual _ _):_ | contractId actual == contractId payload -> pure c
             _: _ -> protocolFailure "Captured payload contract differs from the prepared connector"
             [] -> loadCapturedInput (EvidenceSelection instanceRef kind identity) payload >>= either throwError pure
           modify ((instanceRef,current):)

@@ -58,11 +58,11 @@ runEvidenceInspection = interpret $ \_ request -> case request of
     pure (diagnostic (loaded >>= maybe (Left NotFetched) (Right . indexCapture)))
   ReadEvidenceBatch selection expected -> runExceptT $ do
     loaded <- ExceptT (fmap diagnostic (Store.openCurrentEvidence selection))
-    index@(EvidenceIndex snapshot@(EvidenceSnapshotRef _ _ actual) latest payload _) <-
+    index@(EvidenceIndex snapshot@(EvidenceSnapshotRef _ _ actual) latest payload _ report) <-
       maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
     unless (maybe True (== actual) expected) $
       throwE [errorDiagnostic "evidence.fetch-mismatch" "Current evidence differs from --expect-fetch. Inspect the latest capture and retry."]
-    let EvidenceCapture _ _ keys = indexCapture index
+    let EvidenceCapture _ _ keys _ = indexCapture index
     entries <- mapM (\(key,_,_) -> do
       found <- ExceptT (fmap diagnostic (Store.readCapturedEvidence index key))
       item <- maybe (throwE [errorDiagnostic "evidence.invalid-data" "Item is missing from the selected capture."]) pure found
@@ -70,15 +70,15 @@ runEvidenceInspection = interpret $ \_ request -> case request of
         Evidence _ _ Truncated -> pure []
         Evidence _ _ (Available (CheckedValue _ value)) -> ExceptT (resolveBlobs [index] payload value)
       pure (key,item,paths)) keys
-    pure (EvidenceBatch snapshot latest entries)
+    pure (EvidenceBatch snapshot latest entries report)
   ReadCurrentEvidence selection key -> runExceptT $ do
     loaded <- ExceptT (fmap diagnostic (Store.openCurrentEvidence selection))
-    index@(EvidenceIndex snapshot latest payload _) <- maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
+    index@(EvidenceIndex snapshot latest payload _ report) <- maybe (throwE [evidenceProblemDiagnostic NotFetched]) pure loaded
     item <- ExceptT (fmap diagnostic (Store.readCapturedEvidence index key))
     paths <- case item of
       Just (Evidence _ _ (Available (CheckedValue _ value))) -> ExceptT (resolveBlobs [index] payload value)
       _ -> pure []
-    pure (snapshot,latest,payload,item,paths)
+    pure (snapshot,latest,payload,item,paths,report)
 
 diagnostic :: Either EvidenceProblem a -> Either [Diagnostic] a
 diagnostic = either (Left . pure . evidenceProblemDiagnostic) Right

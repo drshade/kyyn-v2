@@ -294,13 +294,26 @@ captured artifact IDs are not downloaded again; duplicate artifacts across user
 contexts publish once. An alternative context can supply a capture denied in the
 first context.
 
-The successful sync position records `deniedUsers` (distinct user contexts with
-at least one 403) and `unavailableUsers` (recognized unavailable mailboxes).
-A 403 does not prove that Teams policy was the cause. Application mode leaves
-`deniedRequests` empty to avoid storing many user URLs; delegated mode retains
-its artifact-denial URLs. These are diagnostics for the latest successful run,
-not a permanent exclusion list or CLI warnings. An empty/partially accessible
-successful run advances the boundary. Delegated calendar-discovery denials,
+The last successful fetch publishes a typed report alongside its evidence. Inspect
+it with `evidence list microsoft-graph meetings`; JSON list, single-item show and
+bulk show expose it as `result.latest.report`. `plugin connector show` exposes its
+`reportType`. Human output previews long lists; `--json` returns all entries.
+
+The report contains the effective `since`/`until` window, the delegated mailbox
+scope or examined enabled-member user IDs, contextual `deniedRequests`,
+`unavailableUsers`, `skippedMeetings` and `coverageLimits`. Issues identify the
+processing stage and a source reference when available. They do not contain raw
+Graph request URLs. A 403 does not prove that Teams policy was the cause.
+A denied request can coexist with successful capture through another user context;
+`deniedRequests` records attempts, not proof of missing artifacts.
+Attendance listings reaching 50 distinct reports produce a potential coverage
+warning: older reports may be omitted by Graph, but returned artifacts remain
+eligible for capture.
+
+These are diagnostics for the latest successful run, not the whole accumulated
+capture or a permanent exclusion list. An empty/partially accessible successful
+run updates the report and advances the private boundary. Failed attempts retain
+the preceding successful report. Delegated calendar-discovery denials,
 authentication failures, malformed responses and unexpected errors remain fatal.
 
 After checking and accepting the configuration:

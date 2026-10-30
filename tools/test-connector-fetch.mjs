@@ -3,6 +3,7 @@
 // Bulk inspection checks payloads, deterministic ordering, capture preconditions and no KB mutation.
 // Fetches also check opt-in sync timings preserve JSON and expose acquisition/publication.
 // --options-smoke covers option contracts; --read-smoke covers captured methods;
+// --report-smoke covers public report discovery/publication and failure preservation.
 // --tool-smoke covers a registered helper composing sources. Uses disposable files.
 
 import assert from 'node:assert/strict';
@@ -13,14 +14,15 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
+const reportSmoke = process.argv[3] === '--report-smoke';
 const configurationSmoke = process.argv[3] === '--configuration-smoke';
 const readSmoke = process.argv[3] === '--read-smoke';
 const toolSmoke = process.argv[3] === '--tool-smoke';
 const optionsSmoke = process.argv[3] === '--options-smoke';
-const methodChecks = readSmoke || (!configurationSmoke && !toolSmoke && !optionsSmoke);
-const toolChecks = toolSmoke || (!configurationSmoke && !readSmoke && !optionsSmoke);
-if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke || toolSmoke || optionsSmoke)))
-  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke|--tool-smoke|--options-smoke]');
+const methodChecks = readSmoke || (!configurationSmoke && !toolSmoke && !optionsSmoke && !reportSmoke);
+const toolChecks = toolSmoke || (!configurationSmoke && !readSmoke && !optionsSmoke && !reportSmoke);
+if (process.argv.length !== 3 && !(process.argv.length === 4 && (configurationSmoke || readSmoke || toolSmoke || optionsSmoke || reportSmoke)))
+  throw new Error('Usage: node tools/test-connector-fetch.mjs INSTALLED_EXECUTABLE [--configuration-smoke|--read-smoke|--tool-smoke|--options-smoke|--report-smoke]');
 const executable = path.resolve(process.argv[2]);
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-connector-fetch-'));
@@ -89,6 +91,20 @@ fetch :: Schema.FolderConfig -> Maybe Schema.FetchOptions -> EvidenceSnapshot Sc
 fetch config options snapshot = case options of
   Just (Schema.FetchOptions True) -> pure (Right [])
   _ -> fetchDefault config snapshot
+`);
+  }
+  if (reportSmoke) {
+    const implementation = path.join(source, 'src/LocalFile/Folder.hs');
+    fs.writeFileSync(implementation, fs.readFileSync(implementation, 'utf8')
+      .replace('module LocalFile.Folder (fetch)', 'module LocalFile.Folder (fetch, Report(..))')
+      .replace('fetch ::', 'fetchDefault ::').replace('fetch (Schema.', 'fetchDefault (Schema.') + `
+data Report = Report { changed :: Integer, notes :: [String] }
+fetch :: Schema.FolderConfig -> FetchContext String -> EvidenceSnapshot Schema.Document
+  -> Acquisition Schema.Document (Either FetchError (FetchResult Schema.Document String Report))
+fetch config (FetchContext started _) snapshot = do
+  result <- fetchDefault config snapshot
+  pure (fmap (\\changes -> FetchResult changes ("private-resume:" ++ Text.unpack started)
+    (Report (fromIntegral (length changes)) ["fixture partial coverage"])) result)
 `);
   }
   git(source, 'init', '-q', '-b', 'main');
@@ -226,6 +242,30 @@ bulk ids = do
     assert.deepEqual(item.payload, shown.payload);
     assert.deepEqual(item.externalReferences, shown.externalReferences);
     assert.deepEqual(item.blobs, []);
+  }
+  if (reportSmoke) {
+    const descriptor = cli(['plugin', 'connector', 'show', 'local-file', 'sales']).result;
+    assert.match(descriptor.reportType, /changed/);
+    const initialReport = { changed: '3', notes: ['fixture partial coverage'] };
+    assert.deepEqual(listedFirst.latest.report, initialReport);
+    for (const item of bulk.items) {
+      assert.deepEqual(cli(['evidence', 'show', 'local-file', 'sales', item.id]).result.latest.report, initialReport);
+    }
+    assert(!JSON.stringify(bulk).includes('private-resume:'));
+    const next = fetch('sales');
+    const noChanges = current('sales');
+    assert.deepEqual(noChanges.latest.report, { ...initialReport, changed: '0' });
+    fs.renameSync(sales, sales + '-offline');
+    cli(['evidence', 'fetch', 'local-file', 'sales'], 1);
+    assert.deepEqual(current('sales'), noChanges);
+    assert.equal(current('sales').selection.fetch, next);
+    fs.mkdirSync(sales);
+    fetch('sales');
+    assert.deepEqual(current('sales').items, []);
+    assert.deepEqual(current('sales').latest.report, initialReport);
+    assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
+    console.log('Public sync reports: discovery, list/single/bulk, no-change, empty capture, failure preservation and private position isolation passed.');
+    return;
   }
   assert.equal(cli(['evidence', 'show', 'local-file', 'sales', '--all', '--expect-fetch', 'wrong'], 1)
     .diagnostics[0].code, 'evidence.fetch-mismatch');

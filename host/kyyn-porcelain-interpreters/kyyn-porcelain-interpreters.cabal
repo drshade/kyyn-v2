@@ -58,7 +58,7 @@ test-suite evidence-index
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain-interpreters,
-    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson, text
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson, text
 
 test-suite plugin-installation
   type: exitcode-stdio-1.0

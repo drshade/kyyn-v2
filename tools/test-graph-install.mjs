@@ -75,6 +75,7 @@ try {
   const head = git(kb, 'rev-parse', 'HEAD');
   const descriptor = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'test']).result;
   assert.equal(descriptor.fetchOptionsType, null);
+  assert.equal(descriptor.reportType.trim(), "{}");
   const method = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'test', 'event']).result;
   assert.match(method.resultType, /bodyPreview/);
   assert.match(method.resultType, /responseStatus\s*:\s*Optional/);
@@ -82,6 +83,7 @@ try {
   assert.match(method.resultType, /\bresponse\s*:\s*Text/);
   assert.match(method.resultType, /\btime\s*:\s*Optional Text/);
   const mail = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'sent']).result;
+  assert.equal(mail.reportType.trim(), "{}");
   assert.match(mail.fetchOptionsType, /since\s*:\s*Optional Text/);
   const mailMethod = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'sent', 'message']).result;
   assert.match(mailMethod.resultType, /body\s*:\s*Text/);
@@ -98,6 +100,10 @@ try {
   }
   const meetings = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'meetings']).result;
   assert.match(meetings.fetchOptionsType, /since\s*:\s*Optional Text/);
+  for (const field of ['since', 'until', 'scope', 'examinedUserIds', 'deniedRequests', 'unavailableUsers', 'skippedMeetings', 'coverageLimits']) {
+    assert(meetings.reportType.includes(field), meetings.reportType);
+  }
+  assert(!meetings.reportType.includes('lastSuccessfulFetch'));
   const artifact = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'meetings', 'artifact']).result;
   for (const field of ['Transcript', 'Attendance', 'created', 'started', 'ended', 'attendanceIntervals', 'identity', 'sha256']) {
     assert(artifact.resultType.includes(field), artifact.resultType);
@@ -118,6 +124,7 @@ try {
   }
   const directory = cli(['plugin', 'connector', 'show', 'microsoft-graph', 'directory']).result;
   assert.equal(directory.fetchOptionsType, null);
+  assert.equal(directory.reportType, null);
   const directoryMethod = cli(['plugin', 'connector', 'method', 'show', 'microsoft-graph', 'directory', 'directory']).result;
   for (const field of ['users', 'displayName', 'givenName', 'surname', 'mail', 'userPrincipalName', 'accountEnabled', 'userType']) {
     assert(directoryMethod.resultType.includes(field), directoryMethod.resultType);

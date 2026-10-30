@@ -8,11 +8,21 @@ import MicrosoftGraph.Types (GraphAuth)
 data MeetingsConfig = MeetingsConfig
   { auth :: GraphAuth, retentionDays :: Integer } deriving (Eq, Show)
 data MeetingsFetch = MeetingsFetch { since :: Maybe Text } deriving (Eq, Show)
-data MeetingsPosition = MeetingsPosition
-  { lastSuccessfulFetch :: Text, deniedRequests :: [Text], skippedMeetings :: [MeetingSkip]
-  , deniedUsers :: Integer, unavailableUsers :: Integer } deriving (Eq, Show)
+data MeetingsPosition = MeetingsPosition { lastSuccessfulFetch :: Text } deriving (Eq, Show)
+data MeetingsScope = DelegatedMailbox | EnabledMemberMailboxes { examinedUserIds :: [Text] }
+  deriving (Eq, Show)
+data MeetingContext = SignedInUser | DirectoryUser { userId :: Text } deriving (Eq, Ord, Show)
+data MeetingStage = CalendarDiscovery | MeetingResolution | TranscriptListing
+  | AttendanceListing | TranscriptContent | AttendanceRecords deriving (Eq, Show)
+data MeetingIssue = MeetingIssue
+  { context :: MeetingContext, stage :: MeetingStage, reference :: Maybe Text, reason :: Text }
+  deriving (Eq, Show)
 data MeetingSkip = MeetingSkip
-  { reference :: Text, reason :: Text } deriving (Eq, Show)
+  { context :: MeetingContext, reference :: Maybe Text, reason :: Text } deriving (Eq, Show)
+data MeetingsReport = MeetingsReport
+  { since :: Text, until :: Text, scope :: MeetingsScope
+  , deniedRequests :: [MeetingIssue], unavailableUsers :: [MeetingIssue]
+  , skippedMeetings :: [MeetingSkip], coverageLimits :: [MeetingIssue] } deriving (Eq, Show)
 data MeetingRef = MeetingRef
   { onlineMeetingId :: Text, joinUrl :: Text, subject :: Text, organizer :: Text } deriving (Eq, Show)
 data ParticipantIdentity = ParticipantIdentity
