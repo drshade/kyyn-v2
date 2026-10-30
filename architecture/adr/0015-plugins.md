@@ -441,10 +441,12 @@ fetch :: Config -> Maybe Options -> EvidenceSnapshot Payload
 
 [ADR 0029](0029-evidence-blobs-sync.md#sync-positions-are-typed-connector-data)
 adds stateful signatures carrying a typed `FetchContext Position` and returning
-`FetchResult Payload Position`. Derive Position from the checked signature, just
-as Config, Payload and Options are derived; no position-type registration string.
-Preserve that contract in PreparedConnector and generated dispatch. Existing
-stateless entry forms have no position. BlobRefs in payloads/results retain their
+`FetchResult Payload Position Report`. Derive Position and Report from the checked
+signature, just as Config, Payload and Options are derived; no type-registration
+strings. Preserve both contracts in PreparedConnector and generated dispatch.
+Connector discovery exposes the optional report type alongside fetch options;
+absence means the list-returning form. Existing stateless entry forms have neither
+position nor report. BlobRefs in payloads/results retain their
 SDK identity for checked capture, reading and surface file presentation.
 
 Authored functions import ordinary SDK types and helpers, not a generated
