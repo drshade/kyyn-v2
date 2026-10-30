@@ -1,7 +1,7 @@
 {
   "adr": "0009",
   "title": "Typed capability rows describe program effects",
-  "cursor": 205,
+  "cursor": 214,
   "nodes": [
     {
       "id": "0009.01",
@@ -958,6 +958,91 @@
         "evidence": "PR #227: 'CapturedText now carries the resolved source path so evidence references remain absolute'"
       },
       "confidence": "high"
+    },
+    {
+      "id": "0009.38",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Program gains concurrent groups: concurrently and fail-fast concurrentlyE",
+      "detail": "Program adds Concurrent and ConcurrentEither constructors behind SDK combinators re-exported by Kyyn.Plugin. The author declares branches independent; results keep input order, the generic interpreter folds groups sequentially, and sequential and concurrent runs over identical responses must agree on success values. concurrentlyE fails fast at completed round boundaries with the lowest-index failure, deterministic for a fixed width but not across widths.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision",
+        "Decision / Independent acquisition workflows"
+      ],
+      "anchors": [
+        "Concurrent",
+        "ConcurrentEither",
+        "concurrently",
+        "concurrentlyE"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.39",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Acquisition schedules bounded round-robin rounds under one shared width",
+      "detail": "The acquisition guest steps branches to suspended requests without threads and selects at most the host-supplied width per round with a deterministic round-robin cursor, so long branches cannot starve siblings. Rounds complete before the next starts (a Retry-After wait holds up its round), and nested groups and local effects share the same bound.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Independent acquisition workflows"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.40",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Concurrent batches refuse secret writes, login and sinks before dispatch",
+      "detail": "Concurrent acquisition batches permit HTTP, downloads, waits, secret and file reads, captured-evidence reads and digests, and reject secret writes, login, sink calls and unknown methods before any member runs, even in singleton groups. Authentication and token rotation happen before fan-out.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Independent acquisition workflows"
+      ],
+      "anchors": [],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
+    },
+    {
+      "id": "0009.41",
+      "seq": 214,
+      "pr": 274,
+      "summary": "Native concurrency is a scoped ConcurrentExecution plumbing capability",
+      "detail": "concurrentlyBounded on an explicit ConcurrentExecution capability runs the broker's already-decoded requests in scoped workers, returns results in order, and cancels and joins on failure with no detached work. Pipes and frame parsing stay single-owner, and worker-reached interpreter state must be explicitly shared and atomic.",
+      "kind": "new",
+      "supersedes": [],
+      "sections": [
+        "Decision / Independent acquisition workflows"
+      ],
+      "anchors": [
+        "ConcurrentExecution",
+        "concurrentlyBounded"
+      ],
+      "realised": {
+        "how": "unrealised",
+        "seq": null,
+        "evidence": "PR #274 is a docs-only design; the implementation (#272, #273) has not merged"
+      },
+      "confidence": "high"
     }
   ],
   "editorial": [
@@ -997,5 +1082,5 @@
       "note": "Desired-state reconciliation: drops status/basis lines, turns 'illustrative' into contract wording, 'proposes' to 'defines', adds model turns to the tool table row (covered by 0009.31) and HttpTransport/SecretStore/Waiting to the executeAcquisition signature to match code already shipped in seq 113."
     }
   ],
-  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04, built only at seq 180). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row. Seq 167 (PR #215) realised the blob rows of 0009.32. The network algebras and login row were proved at seq 112 before installed connectors received them at 113. Seq 172 (PR #220) reversed 0009.18's 'no EvidenceStore dependency': the broker now enumerates a captured index and reads selected payloads through EvidenceStore (0009.34 replaces 0009.28, built at seq 174). Seq 177 (PR #226) added the sink request row (0009.36) and shared KB-relative path resolution for FileRead and FileWrite (0009.35 replaces 0009.17, withdrawing the absolute-directory rule); its sink-options wording in the capability table belongs to ADR 0017. Seq 178 (PR #227) built relative source paths and refined CapturedText with the resolved path (0009.37). Seq 180 (PR #229) built the FileWrite sink and explicit delivery, realising 0009.36 and the founding 0009.04 (medium: one sink, renderers are now queries)."
+  "notes": "Seq 1 had no ### subsections, so founding nodes were split per distinct commitment (10). The lane's biggest detour is the evolution context: the founding text let evolutions call plugin acquisition (EvolutionHost = SnapshotRead :+: MicrosoftCalls) and seq 76 kept that, but no code ever did it and seq 97/99 withdrew it in favour of ADR 0010 pure evolutions. Similarly KB tools were designed (seq 76) to read the selected root as well as captured evidence, but shipped (seq 87) with captured reads only and the spec followed at seq 97. Acquisition rows oscillated: file row (78) -> separate NetworkAcquisition row (110, briefly coded at 112) -> one unified row (113). Generated per-plugin bindings (78) were abandoned for payload-generic SDK types after a circular-dependency discovery (115/116). The spec is currently ahead of code on blobs (seq 151: BlobRead/BlobAcquisition absent; ReadsEvidence instance still injectEvidence = id) and on sinks/renderers (0009.04, built only at seq 180). Seq 99 bundled the evolution-table rewrite with judgement; I attributed the evolution change to 0009.21 at seq 97, where the effectful examples were actually deleted. 0009.31 is modelled as a refine of the judgement node since both extend the KB-tool row. Seq 167 (PR #215) realised the blob rows of 0009.32. The network algebras and login row were proved at seq 112 before installed connectors received them at 113. Seq 172 (PR #220) reversed 0009.18's 'no EvidenceStore dependency': the broker now enumerates a captured index and reads selected payloads through EvidenceStore (0009.34 replaces 0009.28, built at seq 174). Seq 177 (PR #226) added the sink request row (0009.36) and shared KB-relative path resolution for FileRead and FileWrite (0009.35 replaces 0009.17, withdrawing the absolute-directory rule); its sink-options wording in the capability table belongs to ADR 0017. Seq 178 (PR #227) built relative source paths and refined CapturedText with the resolved path (0009.37). Seq 180 (PR #229) built the FileWrite sink and explicit delivery, realising 0009.36 and the founding 0009.04 (medium: one sink, renderers are now queries). Seq 214 (PR #274, docs-only) added independent acquisition workflows: concurrent Program groups (0009.38), bounded round-robin scheduling (0009.39), the concurrent-effect allowlist (0009.40) and the native ConcurrentExecution capability (0009.41). None is built at step 214."
 }
