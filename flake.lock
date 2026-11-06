@@ -1,5 +1,22 @@
 {
   "nodes": {
+    "agentic": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793987623,
+        "narHash": "sha256-XtSQ6Q4H5kRpfuLtQ5F2aDC3OeakptC/9dIoy13MNl0=",
+        "owner": "drshade",
+        "repo": "haskell-agentic",
+        "rev": "043604a28ceb7d2ebba0921856b719b5f5d661b3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "drshade",
+        "repo": "haskell-agentic",
+        "rev": "043604a28ceb7d2ebba0921856b719b5f5d661b3",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1793726008,
@@ -18,6 +35,7 @@
     },
     "root": {
       "inputs": {
+        "agentic": "agentic",
         "nixpkgs": "nixpkgs"
       }
     }

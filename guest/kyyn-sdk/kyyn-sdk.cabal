@@ -7,13 +7,13 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
+  exposed-modules: Kyyn.Contract Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Evolution.Proposal Kyyn.Recipe
     Kyyn.Plugin Kyyn.Plugin.Host Kyyn.Plugin.Sink
-  other-modules: Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
+  other-modules: Kyyn.Contract.Scalars Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1, text, bytestring
+  build-depends: base >=4.20 && <4.21, kyyn-types, agentic ==0.2.1.0, time, json ==0.11, transformers ==0.6.1.1, text, bytestring
 
 test-suite evolution-core
   type: exitcode-stdio-1.0
@@ -26,3 +26,11 @@ test-suite evolution-core
   ghc-options: -Wall -Werror -main-is EvolutionCore.main
   default-extensions: OverloadedStrings
   build-depends: base >=4.20 && <4.21, kyyn-types, json ==0.11, transformers ==0.6.1.1, text
+
+test-suite wire-contracts
+  type: exitcode-stdio-1.0
+  main-is: ContractTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, agentic ==0.2.1.0, text, time

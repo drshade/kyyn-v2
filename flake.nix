@@ -3,7 +3,12 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  outputs = { self, nixpkgs }:
+  inputs.agentic = {
+    url = "github:drshade/haskell-agentic/043604a28ceb7d2ebba0921856b719b5f5d661b3";
+    flake = false;
+  };
+
+  outputs = { self, nixpkgs, agentic }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
@@ -28,11 +33,6 @@
             kyyn = "host/kyyn";
             kyyn-sdk = "guest/kyyn-sdk";
             json = "vendor/json";
-            agentic = "vendor/agentic";
-            agentic-aeson = "vendor/agentic-aeson";
-            agentic-openai = "vendor/agentic-openai";
-            agentic-anthropic = "vendor/agentic-anthropic";
-            agentic-jev = "vendor/agentic-jev";
           };
           haskell = pkgs.haskell.packages.ghc9103.override {
             overrides = final: prev:
@@ -57,13 +57,17 @@
                   url = "https://hackage-content.haskell.org/package/${name}-${pin.version}.tar.gz";
                   inherit (pin) hash;
                 }) { })) pinned
-              // builtins.mapAttrs (name: path:
-                pkgs.haskell.lib.overrideCabal
-                  (final.callCabal2nix name (self + "/${path}")
+              // builtins.listToAttrs (map (name: {
+                inherit name;
+                value = pkgs.haskell.lib.dontCheck
+                  (final.callCabal2nix name (agentic + "/${name}")
                     (pkgs.lib.optionalAttrs
                       (builtins.elem name [ "agentic-openai" "agentic-anthropic" "agentic-jev" ])
-                      # These providers mention agentic-io only in disabled tests.
-                      { agentic-io = null; }))
+                      { agentic-io = null; }));
+              }) [ "agentic" "agentic-aeson" "agentic-openai" "agentic-anthropic" "agentic-jev" ])
+              // builtins.mapAttrs (name: path:
+                pkgs.haskell.lib.overrideCabal
+                  (final.callCabal2nix name (self + "/${path}") { })
                   (_: {
                     # Some packages share source and guide files across directories.
                     src = source;
