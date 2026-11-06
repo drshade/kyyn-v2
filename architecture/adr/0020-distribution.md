@@ -13,8 +13,22 @@ Agents should be able to diagnose setup on an ordinary user's machine.
 
 ## Decision
 
-Install the native host and browser assets, and locate a supported Nix installation
-and Git executable. Each KB's `flake.nix` and `flake.lock` own its guest build and
+Build the native host from this repository's flake and locate a supported Nix
+installation and Git executable. The flake exports `packages.${system}.kyyn`
+and makes it the default package, alongside the guest SDK and KB build helper.
+Install with:
+
+```sh
+nix profile install github:drshade/kyyn-v2
+```
+
+This replaces the separate `install-cli.sh` and `stage-cli.sh` installation path.
+Contributors use `nix develop` for the pinned toolchain; ordinary Cabal commands
+remain available inside that environment. KB templates pin their SDK input to
+the repository revision that built the host. Later dependency changes remain
+explicit KB source changes, not automatic host-upgrade rewrites.
+
+Each KB's `flake.nix` and `flake.lock` own its guest build and
 dependencies under ADR 0002. GHC is supplied by that environment, not by a global
 Cabal setup or a MicroHs bundle shipped with the host. Authors may select arbitrary
 Haskell libraries, subject to their chosen compiler/SDK actually building them.
@@ -70,10 +84,12 @@ SDK source revisions are external dependency pins, not a protocol-version matrix
 
 ### Distribution boundaries
 
-Nix builds use captured source/configuration plus locked dependency inputs only.
-Never copy a whole live KB into the store: exclude facts, evidence, credentials,
-Git metadata and execution records. Facts and secrets remain host-managed runtime
-inputs. Build outputs and their dependency closures are retained through owned GC
+Host-initiated guest builds use captured source/configuration plus locked
+dependency inputs only. That capture excludes facts, evidence, credentials, Git
+metadata and execution records. Authors running Nix directly in their checkout
+get ordinary Nix source inclusion behavior; this is not a restriction on their
+flake or a promise to filter every direct Nix invocation. Facts and secrets remain
+host-managed runtime inputs. Build outputs and their dependency closures are retained through owned GC
 roots while in use (ADR 0002), and may be rebuilt after derived caches are removed.
 
 Tap installation still vendors plugin source under ADR 0015. All adapters in a KB
@@ -84,9 +100,9 @@ Keep build inputs/notices for distributable dependencies available under ADR 002
 
 The development host executable remains `kyyn-v2` to coexist with v1. The user guide
 owns implemented installation commands; this ADR defines the required distribution
-contract, not a claim that a particular script already implements it. Native host
-and Web build tools are developer dependencies. Browser assets are built before
-installation; running Kyyn does not require a Node.js development server.
+contract, not a claim that the flake installation is already implemented. The Web
+UI has no implementation or package yet. Add its package when the UI exists;
+its build technology and packaging do not need to be chosen for this change.
 
 ## Verification
 

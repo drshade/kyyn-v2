@@ -48,8 +48,9 @@ the implications are unclear; no particular combined-artifact licensing conclusi
 is established by this ADR.
 
 The selected host/guest JSON libraries are recorded in [ADR 0007](0007-wire.md),
-with source/license inventory in [vendored inputs](../../vendor/README.md) and
-[native dependency sources](../../docs/dependency-sources.md).
+with source revisions pinned by flake.lock and source/license inventory in
+[dependency sources](../../docs/dependency-sources.md). The inventory must cover
+the actual locked host and guest dependencies, including upstream flake inputs.
 Check the exact selected source/dependency terms alongside the compatibility proof;
 API convenience alone is not distribution clearance. This is one
 dependency-selection check, not a new runtime enforcement mechanism.

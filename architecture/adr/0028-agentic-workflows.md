@@ -123,14 +123,20 @@ and `Contract` instances. Flows may share that module; no generated contract
 imports or separate module rule is needed. Nonempty enums can derive `Options`,
 or supply ordinary instances for custom labels, descriptions and order.
 
-The SDK's contract representation owns both the describe/storage lowering and
-its model-facing projection. Its Agentic integration adapts that representation
-to the upstream `Codec`/`Contract` interface; authors do not derive a second,
-independent structural schema for Agentic. Reuse the upstream generic derivation
-machinery where it expresses this shared representation, with SDK adapters for
-Kyyn's supported exact scalars and public contract vocabulary. DerivingVia can
-supply adapters without orphan instances. The SDK must demonstrate that describe,
-storage round trips and model codecs agree for each supported shape.
+Upstream haskell-agentic's `Contract` is the single structural authority. Extend
+it upstream with an extensible scalar vocabulary so Kyyn can supply FactId,
+exact decimals and blob references without maintaining a competing contract class.
+Kyyn's describe, storage and model-codec interpreters all consume this same
+representation. Authors write exactly one `deriving (Generic, Contract)` per type;
+there is no additional Kyyn instance or model-facing DerivingVia clause.
+
+This haskell-agentic extension is a required upstream dependency of the GHC guest
+implementation. Pin the upstream revision providing it through the repository's
+flake input. The scalar extension must preserve typed encoding/decoding and allow
+distinct storage and model projections under ADR 0005, rather than flattening
+custom scalars into unlabelled primitive shapes. Verify descriptions, storage
+round trips and model projections for each supported shape and scalar. Unsupported
+projections fail before execution or model calls.
 
 Applied generic types and containers use compositional instances when their
 shapes are supported. Type aliases are not new instance identities; wrappers are
@@ -300,14 +306,14 @@ Production response caching or mandatory transcript retention is not selected.
 
 ## Verification
 
-Use the pinned unmodified library sources recorded in
-[vendored inputs](../../vendor/README.md). Core portability and Kyyn integration
-are separate obligations: the former does not prove generated codecs, provider
-adapters or recipe persistence.
+Use the haskell-agentic sources pinned by the flake lock, including the required
+upstream Contract extension. Library tests and Kyyn integration are separate
+obligations: the former does not prove derived codecs, provider adapters or recipe
+persistence.
 
 Exercise explicit record/sum contracts, typed tools, nested drafts, malformed
 output followed by correction, applicative judgements and flow descriptions under
-host and built guest with scripted handlers. Test a generated-contract flow through
+host and built guest with scripted handlers. Test a generically derived contract flow through
 Kyyn's real guest/host protocol, including cancellation and provider failures.
 
 A closed recipe must produce a reviewable frozen ordinary evolution. Verify typed request/state decoding, mandatory initial state, state-only proposals,

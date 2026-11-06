@@ -189,9 +189,13 @@ There is no `idField` metadata to keep consistent with a second identity model.
 ### Build-derived guest description
 
 The GHC guest SDK derives contracts in the module defining the authored type,
-using ordinary `Generic` and `Contract` deriving. One SDK lowering supplies the
-checked structural description and value codecs, including the distinct storage
-and model projections. Authors do not import generated `Kyyn.Contracts.*` modules
+using ordinary `deriving (Generic, Contract)`. The single `Contract` class is
+upstream haskell-agentic's structural description, extended with an extensible
+scalar vocabulary. Kyyn supplies scalar definitions for FactId, exact decimals
+and blob references. Kyyn interpreters derive the checked description and value
+codecs, including distinct storage and model projections, from that same contract.
+This requires an upstream haskell-agentic change (ADR 0028), not a second Kyyn
+contract class or a second derivation on each model-facing type. Authors do not import generated `Kyyn.Contracts.*` modules
 or maintain another structural schema. Applied types and containers can use
 compositional instances; supported contract shapes, not a monomorphic-only rule,
 determine eligibility. Aliases do not introduce a distinct instance identity.

@@ -23,6 +23,8 @@ The intended layout is:
 ```text
 kyyn-v2/
 ├── README.md
+├── flake.nix                         Host package, guest SDK, KB helper and dev shell
+├── flake.lock                        Pinned external inputs
 ├── cabal.project
 ├── architecture/                      ADRs, principles and field templates
 │
@@ -43,8 +45,6 @@ kyyn-v2/
 │   ├── kyyn-runtime/                  Private guest transport and execution support
 │   └── kyyn-guest-build/              GHC inspection, bindings and Nix build helper
 │
-├── web/                              Human-facing UI
-│
 ├── plugins/
 │   ├── files/                         First-party file sink
 │   └── microsoft-graph/               One plugin, multiple connector types
@@ -56,9 +56,6 @@ kyyn-v2/
 │   ├── integration/                   Cross-package and real Git/runtime tests
 │   └── field-scenarios/               Prepared KBs, agent tasks and expectations
 │
-├── vendor/
-│   └── …                             Explicit vendored upstream source where required
-│
 └── tools/                            Bootstrap, packaging and development scripts
 ```
 
@@ -68,8 +65,11 @@ and todo KB illustrate placement, not existing implementations or a requirement
 to build them all in the first slice. Real user KBs remain separate repositories.
 
 Each implemented Haskell package has its own Cabal file, `src/` and package-local
-`test/` where needed. `cabal.project` coordinates native builds; guest compilation
-must still be tested through the KB flake and real guest protocol, not inferred
+`test/` where needed. The repository flake exports `packages.${system}.kyyn`
+(also its default package), the guest SDK and the KB build helper. `nix develop`
+provides the contributor toolchain; `cabal.project` coordinates Cabal builds
+inside it. KB templates pin the SDK input to the host's repository revision.
+Guest compilation must still be tested through the KB flake and real guest protocol, not inferred
 from a successful host-linked SDK build. This layout does not require every guest dependency or plugin
 to become a native Cabal package.
 
@@ -116,7 +116,13 @@ generated bindings/codecs, the embedded description and API catalogue. It is bui
 with the KB-selected GHC/SDK dependencies. Compiler ASTs stay inside that package.
 The runtime package implements describe/invoke framing, and the public SDK remains
 the authoring interface. Source and notices for locked dependencies are supplied
-through Nix or explicit vendoring; there is no mandatory vendored compiler tree.
+through locked Nix dependencies. The haskell-agentic package family is a flake
+input; JSON and transformers libraries are ordinary package dependencies, with
+Aeson replacing the former JSON implementation where selected by ADR 0007.
+MicroHs is removed from the toolchain and dependency tree. Reserve `vendor/`
+only for genuinely patched upstream sources; there are none currently requiring
+that exception. Plugin source installed into a KB remains governed by ADR 0015,
+not this repository dependency policy.
 
 Constructor visibility must agree with package ownership. The implementation of
 `Validated` lives with checking in the porcelain package and exposes an abstract
@@ -127,10 +133,10 @@ does not make ordinary `Candidate` data a sealed proof or introduce another serv
 
 `kyyn-surfaces` translates CLI/MCP/HTTP requests and responses. It receives the
 relevant application execution functions from `kyyn`; it does not assemble handlers
-or import store, Git or provider implementations. `web/` contains the human-facing
-client, not another set of business workflows. Its Node.js-based development/build
-tooling produces packaged browser assets; [ADR 0020](0020-distribution.md) defines
-the build-time versus installed-runtime boundary.
+or import store, Git or provider implementations. Add a Web UI package when its
+implementation exists; no `web/` directory or Node build is required now. That
+client will consume the same application operations, not own another set of
+business workflows.
 
 The composition package can begin small:
 
@@ -186,16 +192,15 @@ When their implementations exist, use these explicit build/test entry points:
 | `tools/test.sh` | Coordinate native tests and the applicable guest, integration and Web checks; do not equate host-only success with a complete test run |
 | `tools/test-guest.sh` | Compile and exercise shared types, SDK and private guest runtime through the selected Nix guest environment |
 | `tests/integration/guest/` | Guest build/execution fixtures, first-party plugins through normal vendoring, and example KBs instantiated into isolated repositories |
-| `tools/build-web.sh` | Use Node.js build tooling to produce static browser assets |
-| `tools/package.sh` | Include those assets with the native application and guest provisioning support |
+| `flake.nix` | Build the host package and expose the guest SDK, KB build helper and contributor development shell |
 
 These are the intended locations, not scripts claimed to exist already. Package-local
 GHC tests also cover the shared source. Guest/plugin failures must fail the full
 test entry point rather than be silently skipped behind a passing Cabal build.
 
 `tools/` contains operational build/bootstrap/packaging scripts, not an alternative
-implementation of domain workflows. Vendored dependencies are upstream source inputs;
-compiled tools, generated bindings and Web build outputs are derived artifacts,
+implementation of domain workflows. Locked flake/package dependencies are upstream
+source inputs; compiled tools and generated bindings are derived artifacts,
 not additional independently authored source trees.
 
 ## Consequences and verification
