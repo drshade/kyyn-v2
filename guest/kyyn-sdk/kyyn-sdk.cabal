@@ -33,4 +33,4 @@ test-suite wire-contracts
   hs-source-dirs: test
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, agentic ==0.2.1.0, text, time
+  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, agentic ==0.2.1.0, text, time, aeson ==2.2.5.0

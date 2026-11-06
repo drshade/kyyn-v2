@@ -15,9 +15,3 @@ package agentic-anthropic
   tests: False
 package agentic-jev
   tests: False
-
-source-repository-package
-  type: git
-  location: https://github.com/drshade/haskell-agentic.git
-  tag: 043604a28ceb7d2ebba0921856b719b5f5d661b3
-  subdir: agentic agentic-aeson agentic-openai agentic-anthropic agentic-jev

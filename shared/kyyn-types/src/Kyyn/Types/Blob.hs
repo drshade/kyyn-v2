@@ -1,7 +1,12 @@
-{-# LANGUAGE GADTs, DuplicateRecordFields, NoFieldSelectors #-}
+{-# LANGUAGE GADTs, DuplicateRecordFields, NoFieldSelectors, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Types.Blob
-  ( BlobRef(..), BlobDownload(..), BlobResponse(..), BlobAcquisition(..), BlobRead(..) ) where
+  ( BlobRef(..), blobCodec, BlobDownload(..), BlobResponse(..), BlobAcquisition(..), BlobRead(..) ) where
 
+import Agentic.Contract
+import qualified Agentic.Codec as C
+import Agentic.Value (Value(..))
+import qualified Data.Text as T
+import Kyyn.Types.Scalar (textual, integerText)
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 import Kyyn.Types.Plugin (FetchError)
@@ -26,3 +31,23 @@ data BlobAcquisition a where
 
 data BlobRead a where
   ReadBlob :: BlobRef -> BlobRead (Either FetchError ByteString)
+
+-- | The caller supplies the structural optional codec so this leaf obeys the
+-- selected projection's null/tag policy without losing BlobRef's scalar identity.
+blobCodec :: Codec (Maybe Text) -> Codec BlobRef
+blobCodec optionalText = C.record "" $
+  BlobRef <$> C.requiredWith "sha256" Nothing digest (\(BlobRef x _ _ _) -> x)
+          <*> C.requiredWith "size" Nothing size (\(BlobRef _ x _ _) -> x)
+          <*> C.requiredWith "mediaType" Nothing text (\(BlobRef _ _ x _) -> x)
+          <*> C.requiredWith "name" Nothing optionalText (\(BlobRef _ _ _ x) -> x)
+  where
+    text = textual id Right
+    digest = textual id $ \t -> if T.length t == 64 && T.all (`elem` ("0123456789abcdef" :: String)) t
+      then Right t else Left "expected a lowercase SHA-256 digest"
+    size = textual (T.pack . show) $ \t -> do
+      n <- integerText.decode (String t)
+      if n < 0 then Left "blob size must be nonnegative" else Right n
+
+instance Contract BlobRef where
+  contract = scalar (ScalarInfo "Kyyn.BlobRef" []) model
+    where model = either (const Nothing) (Just . blobCodec) (compileModel (contract @(Maybe Text)))

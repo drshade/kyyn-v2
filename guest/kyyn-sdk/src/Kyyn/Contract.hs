@@ -3,18 +3,19 @@
 -- | Compile the single authored Agentic contract to Kyyn's exact wire profile.
 module Kyyn.Contract
   ( Contract(..), CompiledContract(..), compileContract, compileWire
-  , ProjectionError(..), Codec(..), Structure, Outline
+  , ProjectionError(..), Codec(..), Structure, Description
   ) where
 
 import Agentic.Contract
   ( Contract(..), Structure(..), Fields(..), Case(..), Constructor(..), FieldStyle(..)
-  , ProjectionError(..), ScalarInfo(..), Codec(..), Outline, compileWith, compileFieldsWith
+  , ProjectionError(..), ScalarInfo(..), Codec(..), Outline(..), OutlineField(..), OutlineCase(..), compileWith, compileFieldsWith
   , compileCaseWith, outline )
 import qualified Agentic.Codec as C
 import qualified Agentic.Schema as S
 import Agentic.Value (Value(..))
 import Agentic.Questions (Probability)
 import Control.Monad (unless)
+import Data.Kind (Type)
 import Data.Fixed (Fixed, E0, E1, E2, E3, E6, E9, E12)
 import Data.List (nub, sort)
 import Data.Text (Text)
@@ -23,17 +24,21 @@ import Data.Time (Day, UTCTime)
 import Numeric.Natural (Natural)
 import Type.Reflection
 import Kyyn.Contract.Scalars
+import Kyyn.Types.Contract (Description)
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Types.Fact (FactId)
 import Kyyn.Types.Blob (BlobRef)
 
 data CompiledContract a = CompiledContract
-  { description :: Outline, codec :: Codec a }
+  { description :: Description, codec :: Codec a }
 
 compileContract :: Structure a -> Either ProjectionError (CompiledContract a)
 compileContract structure = do
   finite [] structure
   compiled <- wire structure
-  pure (CompiledContract (outline structure) compiled)
+  wireDescription <- lowerOutline (outline structure)
+  either failure pure (D.validateDescription wireDescription)
+  pure (CompiledContract wireDescription compiled)
 
 compileWire :: Structure a -> Either ProjectionError (Codec a)
 compileWire = fmap codec . compileContract
@@ -68,7 +73,7 @@ wire = compileWith rules
 
 rules :: forall a. Structure a -> Maybe (Either ProjectionError (Codec a))
 rules structure = case structure of
-  Scalar _ _ -> Just (scalarWire structure)
+  Scalar _ _ -> Just (snd <$> scalarProjection structure)
   Optional child -> Just $ optionalWire <$> wire child
   Unit -> Just $ Right $ Codec (S.schemaOf (S.SObject [])) (const (Object [])) $ \v -> do
     _ <- object [] v
@@ -146,26 +151,57 @@ sumWire cases = do
       _ -> Left "expected a constructor tag"
     decode _ = Left "expected a tagged union"
 
-scalarWire :: forall a. Structure a -> Either ProjectionError (Codec a)
-scalarWire (Scalar info _)
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Text) = Right $ C.primitive (S.SString Nothing) String $ \v -> case v of String t -> Right t; _ -> Left "expected text"
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Bool) = Right $ C.primitive S.SBool Bool $ \v -> case v of Bool b -> Right b; _ -> Left "expected boolean"
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Integer) = Right integerText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Int) = Right $ Codec integerText.schema (integerText.encode . toInteger) $ \v -> do
+scalarProjection :: forall a. Structure a -> Either ProjectionError (D.ScalarKind, Codec a)
+scalarProjection (Scalar info _)
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Text) = known D.TextScalar $ C.primitive (S.SString Nothing) String $ \v -> case v of String t -> Right t; _ -> Left "expected text"
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Bool) = known D.BoolScalar $ C.primitive S.SBool Bool $ \v -> case v of Bool b -> Right b; _ -> Left "expected boolean"
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Integer) = known D.IntegerScalar integerText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Int) = known (D.IntScalar (toInteger (minBound :: Int)) (toInteger (maxBound :: Int))) $ Codec integerText.schema (integerText.encode . toInteger) $ \v -> do
       n <- integerText.decode v
       if n < toInteger (minBound :: Int) || n > toInteger (maxBound :: Int) then Left "Int out of range" else Right (fromInteger n)
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Natural) = Right naturalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Probability) = Right probabilityText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @FactId) = Right factIdText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @BlobRef) = blobCodec . optionalWire <$> wire (contract @Text)
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Day) = Right dayText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @UTCTime) = Right instantText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E0)) = Right decimalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E1)) = Right decimalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E2)) = Right decimalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E3)) = Right decimalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E6)) = Right decimalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E9)) = Right decimalText
-  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E12)) = Right decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Natural) = known D.NaturalScalar naturalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Probability) = known D.ProbabilityScalar probabilityText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @FactId) = known D.FactIdScalar factIdText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @BlobRef) = (\c -> (D.BlobRefScalar, blobCodec (optionalWire c))) <$> wire (contract @Text)
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @Day) = known D.DateScalar dayText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @UTCTime) = known D.InstantScalar instantText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E0)) = known (D.DecimalScalar 1) decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E1)) = known (D.DecimalScalar 10) decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E2)) = known (D.DecimalScalar 100) decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E3)) = known (D.DecimalScalar 1000) decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E6)) = known (D.DecimalScalar 1000000) decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E9)) = known (D.DecimalScalar 1000000000) decimalText
+  | Just HRefl <- eqTypeRep (typeRep @a) (typeRep @(Fixed E12)) = known (D.DecimalScalar 1000000000000) decimalText
   | otherwise = failure ("unsupported scalar " <> T.pack (show (typeRep @a)) <> " (" <> info.name <> ")")
-scalarWire _ = failure "expected a scalar"
+scalarProjection _ = failure "expected a scalar"
+
+known :: D.ScalarKind -> Codec a -> Either ProjectionError (D.ScalarKind, Codec a)
+known kind compiled = Right (kind,compiled)
+
+resolvedType :: SomeTypeRep -> D.TypeIdentity
+resolvedType (SomeTypeRep rep) =
+  let (constructor,args) = splitApps rep
+  in D.TypeIdentity (T.pack (tyConPackage constructor)) (T.pack (tyConModule constructor))
+       (T.pack (tyConName constructor)) (map resolvedType args)
+
+lowerOutline :: Outline -> Either ProjectionError Description
+lowerOutline original = case original of
+  OScalar identity@(SomeTypeRep (rep :: TypeRep t)) info ->
+    case eqTypeRep (typeRepKind rep) (typeRep @Type) of
+      Just HRefl -> withTypeable rep $ do
+        (kind,_) <- scalarProjection (Scalar info Nothing :: Structure t)
+        pure (D.ScalarDescription (resolvedType identity) kind info.name info.parameters)
+      Nothing -> failure "scalar type has an unsupported kind"
+  ONamed identity inner -> D.NamedDescription (resolvedType identity) <$> lowerOutline inner
+  ORecord con fields -> D.RecordDescription con.name (style con.style) <$> mapM lowerField fields
+  OSum cases -> D.SumDescription <$> mapM lowerCase cases
+  OList inner -> D.ListDescription <$> lowerOutline inner
+  OOptional inner -> D.OptionalDescription <$> lowerOutline inner
+  OUnit -> Right D.UnitDescription
+  OChecked label inner -> D.CheckedDescription label <$> lowerOutline inner
+  ODocumented doc inner -> D.DocumentedDescription doc <$> lowerOutline inner
+  where
+    style RecordFields = D.NamedFields
+    style PositionalFields = D.PositionalFields
+    lowerField (OutlineField name doc inner) = D.FieldDescription name (maybe "" id doc) <$> lowerOutline inner
+    lowerCase (OutlineCase con doc fields) = D.CaseDescription con.name (maybe "" id doc) (style con.style) <$> mapM lowerField fields

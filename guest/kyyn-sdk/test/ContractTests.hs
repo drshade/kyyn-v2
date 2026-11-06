@@ -8,6 +8,9 @@ import qualified Agentic.Schema as S
 import Agentic.Value (Value(..))
 import Agentic.Questions (Probability, fromBasisPoints)
 import Control.Monad (unless, forM_)
+import qualified Data.Aeson as Json
+import qualified Kyyn.Types.Contract as D
+import Kyyn.Types.SchemaMetadata
 import Data.Either (isLeft)
 import Data.Fixed (Fixed(..), E2)
 import Data.Text (Text)
@@ -58,12 +61,30 @@ roundTrip name value = do
 main :: IO ()
 main = do
   let item = Item (FactId "sample-1") (MkFixed 1234) (fromBasisPoints 8500)
+  compiledItem <- either (fail . show) pure (compileContract (contract @Item))
+  let description = compiledItem.description
+      metadata = SchemaMetadata [] [] []
+      identity = D.contractIdentity description metadata
+  expect "description transport round trip" (Json.eitherDecode (Json.encode description) == Right description)
+  expect "identity transport round trip" (D.parseFingerprint (D.fingerprint identity) == Right identity)
+  expect "metadata participates in identity" (identity /= D.contractIdentity description
+    (SchemaMetadata [RoleDecl "title" "item name" Title] [] []))
+  expect "description annotations participate in identity" (identity /= D.contractIdentity
+    (D.DocumentedDescription "changed" description) metadata)
+  expect "host recomputation from decoded description" $ case Json.eitherDecode (Json.encode description) of
+    Left _ -> False
+    Right decoded -> D.contractIdentity decoded metadata == identity
+  expect "invalid decimal descriptor" (isLeft (D.validateDescription (D.ScalarDescription
+    (D.TypeIdentity "pkg" "Module" "Decimal" []) (D.DecimalScalar 0) "decimal" [])))
+  expect "invalid fingerprint" (isLeft (D.parseFingerprint "not-a-digest"))
   stored <- compiled @Item
   expect "record wire profile" $ stored.encode item == Object
     [("key",String "sample-1"),("amount",String "12.34"),("confidence",String "8500")]
   model <- either (fail . show) pure (A.compileModel (contract @Item))
   expect "independent model probability" $ model.encode item == Object
     [("key",String "sample-1"),("amount",String "12.34"),("confidence",Number 0.85)]
+  factId <- compiled @FactId
+  expect "empty fact ID" (isLeft (factId.decode (String "")))
   roundTrip "fact envelopes" (Root [Fact (FactId "fact-1") item])
   forM_ [0, -1234, 123456789012345678901234567890123456789] $ \n ->
     roundTrip "exact fixed decimals" (MkFixed n :: Fixed E2)
