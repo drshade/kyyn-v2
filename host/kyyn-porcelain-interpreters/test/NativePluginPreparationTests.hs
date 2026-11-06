@@ -32,6 +32,7 @@ import Kyyn.Domain.Path
 import Kyyn.Domain.Plugin (packageIdentity)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestInspection (describeGuest)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.GuestExecution (runGuestExecution)
 import Kyyn.Plumbing.Interpreter.GuestInspection (runGuestInspection)
@@ -78,10 +79,16 @@ main = do
       reports <- case plugins of
         Left problems -> pure (Left problems)
         Right selected -> validatePlugins selected
-      pure (packages,plugins,reports)
-    (packageResult,pluginResult,reportResult) <- right prepared
+      inspected <- describeGuest program
+      attached <- case inspected of
+        Left problems -> pure (Left problems)
+        Right description -> preparePluginsFromGuest code program description
+      pure (packages,plugins,reports,attached)
+    (packageResult,pluginResult,reportResult,attachedResult) <- right prepared
     packages <- right packageResult
     plugins <- right pluginResult
+    attached <- right attachedResult
+    unless (attached == plugins) (fail "Reusing a checked guest changed prepared plugins")
     ValidationReport report <- right reportResult
     connectors <- case packages of
       [PreparedPackage _ identity selected] | identity == packageIdentity package -> pure selected

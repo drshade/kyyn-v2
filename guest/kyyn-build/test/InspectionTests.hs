@@ -11,7 +11,7 @@ import System.Directory (withCurrentDirectory)
 import System.Process (readProcess)
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Build.Inspection
-import Kyyn.Build.Manifest (parseManifest, parsePluginManifest)
+import Kyyn.Build.Manifest (parseManifest, parsePluginManifest, parseInstances, ConfiguredInstance(..))
 import Kyyn.Types.Guest
 
 main :: IO ()
@@ -72,6 +72,12 @@ main = do
     ["./outside.dhall", "{ name = \"../escape\", entryModule = \"Fixture.Plugin\" }",
      "{ name = \"valid\", entryModule = \"Fixture; injected\" }",
      "{ name = \"valid\", entryModule = \"Fixture.Plugin\", extra = True }"]
+  unless (parseInstances "[{ name = \"reader\", binding = \"files\", connector = < Files : Integer >.Files +10 }]"
+      == Right [ConfiguredInstance "reader" "files" "Files"])
+    (fail "Configured connector binding was not decoded")
+  case parseInstances "./outside.dhall" of
+    Left _ -> pure ()
+    Right _ -> fail "Configuration import accepted"
   let validManifest = Text.unlines
         ["{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Schema.validate\"",
          ", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }",

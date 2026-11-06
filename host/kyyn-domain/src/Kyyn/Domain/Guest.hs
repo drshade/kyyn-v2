@@ -29,11 +29,11 @@ checkedModules (CheckedGuest _ exports) = exports
 checkGuest :: G.GuestDescription -> Either [Diagnostic] CheckedGuest
 checkGuest description = do
   ensure (description.protocol == G.protocolIdentity) "guest.protocol" "Unrecognized guest protocol"
-  unique "entry" (map G.entryName description.entries)
+  unique "entry" (concatMap G.entryNames description.entries)
   entries <- traverse checkEntry description.entries
-  let methods = [(m.pluginName,m.connectorName,m.methodName) | G.CapturedReadEntry _ m _ <- entries]
-  ensure (length methods == length (nub methods)) "guest.methods" "Duplicate captured method identity"
-  checkConnectorContracts entries
+  unique "tool" [name | G.ToolEntry _ name _ _ <- entries]
+  let connectors = [identity | G.ConnectorEntry identity _ <- entries]
+  ensure (length connectors == length (nub connectors)) "guest.connectors" "Duplicate connector identity"
   unique "module" (map G.moduleName description.modules)
   forM_ description.modules $ \selected -> do
     unless (Text.null selected.moduleSource) (void (source selected.moduleSource))
@@ -49,29 +49,16 @@ checkEntry entry = case entry of
   G.ValidatorEntry name selected -> do
     ensure (name == "validate") "guest.entry" "Validator must use the validate entry"
     G.ValidatorEntry name <$> root selected
+  G.ToolEntry entryName name description contracts -> do
+    either (Left . pure . errorDiagnostic "guest.tool") (const (Right ())) (Plugin.methodName (Text.unpack name))
+    G.ToolEntry entryName name description <$> traverse check contracts
   G.QueryEntry name (G.QueryContracts rootContract arguments result) ->
     G.QueryEntry name <$> (G.QueryContracts <$> root rootContract <*> check arguments <*> check result)
-  G.ConfigurationEntry name connector config -> do
-    checkConnector connector
-    G.ConfigurationEntry name connector <$> check config
-  G.LoginEntry name connector config -> do
-    checkConnector connector
-    G.LoginEntry name connector <$> check config
-  G.SinkEntry name connector contracts -> do
-    checkConnector connector
-    G.SinkEntry name connector <$> traverse check contracts
-  G.SinkDefaultsEntry name connector options -> do
-    checkConnector connector
-    G.SinkDefaultsEntry name connector <$> check options
-  G.AcquisitionEntry name connector contracts -> do
-    checkConnector connector
-    G.AcquisitionEntry name connector <$> traverse check contracts
-  G.CapturedReadEntry name method contracts -> do
-    let nominal = either (Left . pure . errorDiagnostic "guest.method") (const (Right ()))
-    nominal (Plugin.pluginName (Text.unpack method.pluginName))
-    nominal (Plugin.connectorTypeName (Text.unpack method.connectorName))
-    nominal (Plugin.methodName (Text.unpack method.methodName))
-    G.CapturedReadEntry name method <$> traverse check contracts
+  G.ConnectorEntry identity selected -> do
+    checkConnector identity
+    checked <- traverse check selected
+    checkConnectorContracts checked
+    pure (G.ConnectorEntry identity checked)
   G.ContractEntry name selected -> G.ContractEntry name <$> check selected
   where
     root selected = do
@@ -85,48 +72,29 @@ checkEntry entry = case entry of
         "guest.identity" "Guest contract fingerprint disagrees with its structure and metadata"
       pure (InspectedSchema contract sources)
 
--- A connector's separate entry points must agree on its shared contracts.
--- Completeness for a particular workflow is checked when preparing that workflow.
-checkConnectorContracts :: [CheckedEntry] -> Either [Diagnostic] ()
-checkConnectorContracts entries = do
-  let roles = concatMap role entries
-  ensure (length roles == length (nub roles)) "guest.connectors" "Duplicate connector entry role"
-  compatible "configuration" (concatMap configs entries)
-  compatible "payload" (concatMap payloads entries)
-  compatible "sink options" (concatMap options entries)
-  let sources = [connector | G.AcquisitionEntry _ connector _ <- entries]
-      sinks = [connector | G.SinkEntry _ connector _ <- entries]
-  ensure (null [connector | connector <- sources, connector `elem` sinks])
-    "guest.connectors" "A connector cannot be both a source and a sink"
+-- Required roles are structural. Repeated type contracts must still agree:
+-- each adapter was compiled from an independently authored function.
+checkConnectorContracts :: G.ConnectorEntries InspectedSchema -> Either [Diagnostic] ()
+checkConnectorContracts selected = case selected of
+  G.SourceEntries config acquisition login methods -> do
+    let (configuration,payload) = case acquisition.invocationContract of
+          G.StatelessContracts c _ p -> (c,p)
+          G.StatefulContracts c _ p _ _ -> (c,p)
+    compatible "configuration" configuration config.invocationContract
+    forM_ login $ \entry -> compatible "configuration" configuration entry.invocationContract
+    unique "method" (map G.capturedName methods)
+    forM_ methods $ \method -> do
+      either (Left . pure . errorDiagnostic "guest.method") (const (Right ()))
+        (Plugin.methodName (Text.unpack method.capturedName))
+      let G.CapturedContracts _ actual _ = method.capturedInvocation.invocationContract
+      compatible "payload" payload actual
+  G.SinkEntries config publication defaults -> do
+    let G.SinkContracts configuration options _ _ = publication.invocationContract
+    compatible "configuration" configuration config.invocationContract
+    compatible "sink options" options defaults.invocationContract
   where
-    role entry = case entry of
-      G.ConfigurationEntry _ connector _ -> [("configuration" :: String,connector)]
-      G.LoginEntry _ connector _ -> [("login",connector)]
-      G.AcquisitionEntry _ connector _ -> [("acquisition",connector)]
-      G.SinkEntry _ connector _ -> [("sink",connector)]
-      G.SinkDefaultsEntry _ connector _ -> [("defaults",connector)]
-      _ -> []
-    configs entry = case entry of
-      G.ConfigurationEntry _ connector config -> [(connector,config)]
-      G.LoginEntry _ connector config -> [(connector,config)]
-      G.AcquisitionEntry _ connector (G.StatelessContracts config _ _) -> [(connector,config)]
-      G.AcquisitionEntry _ connector (G.StatefulContracts config _ _ _ _) -> [(connector,config)]
-      G.SinkEntry _ connector (G.SinkContracts config _ _ _) -> [(connector,config)]
-      _ -> []
-    payloads entry = case entry of
-      G.AcquisitionEntry _ connector (G.StatelessContracts _ _ payload) -> [(connector,payload)]
-      G.AcquisitionEntry _ connector (G.StatefulContracts _ _ payload _ _) -> [(connector,payload)]
-      G.CapturedReadEntry _ method (G.CapturedContracts _ payload _) ->
-        [(G.ConnectorIdentity method.pluginName method.connectorName,payload)]
-      _ -> []
-    options entry = case entry of
-      G.SinkEntry _ connector (G.SinkContracts _ selected _ _) -> [(connector,selected)]
-      G.SinkDefaultsEntry _ connector selected -> [(connector,selected)]
-      _ -> []
-    compatible label values = forM_ values $ \(connector,selected) ->
-      forM_ [other | (identity,other) <- values, identity == connector] $ \other ->
-        ensure (contractId selected.contract == contractId other.contract) "guest.connector-contract"
-          ("Inconsistent " ++ label ++ " contracts for " ++ Text.unpack connector.connectorPlugin ++ "/" ++ Text.unpack connector.connectorType)
+    compatible label a b = ensure (contractId a.contract == contractId b.contract)
+      "guest.connector-contract" ("Inconsistent connector " ++ label ++ " contracts")
 
 checkConnector :: G.ConnectorIdentity -> Either [Diagnostic] ()
 checkConnector connector = do

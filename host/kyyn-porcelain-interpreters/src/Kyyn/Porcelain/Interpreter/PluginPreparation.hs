@@ -3,7 +3,7 @@ module Kyyn.Porcelain.Interpreter.PluginPreparation (runPluginPreparation) where
 
 import Control.Monad (forM, unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (eitherDecodeStrict, object)
+import Data.Aeson (eitherDecodeStrict, toJSON)
 import GHC.Records (getField)
 import Data.Coerce (coerce)
 import Data.List (nub, stripPrefix, isPrefixOf)
@@ -13,8 +13,9 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Evidence (validateReportContract)
 import Kyyn.Domain.Contract (contractShape, contractId)
-import Kyyn.Domain.CompiledEntry (CompiledEntry, compiledEntries, entryDescription)
-import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
+import Kyyn.Domain.CompiledEntry (CompiledConnector(..), compiledConnectors)
+import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.Guest (InspectedSchema(..), CheckedGuest, checkedEntries)
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Domain.Diagnostic (Diagnostic(..), ValidationReport(..), errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree, files, fileTree)
@@ -37,6 +38,7 @@ runPluginPreparation :: (GuestCompilation :> es, GuestInspection :> es, GuestExe
 runPluginPreparation = interpret $ \_ -> \case
   PreparePackages code -> runExceptT (prepare code)
   PreparePlugins code -> runExceptT (prepare code >>= configure code)
+  PreparePluginsFromGuest code program description -> runExceptT (prepareFromGuest code program description >>= configure code)
   ValidatePlugins plugins -> runExceptT $ do
     reports <- forM [(plugin,instanceName,entry,config) |
       PreparedPlugin (PreparedPackage plugin _ _) instances <- plugins,
@@ -57,73 +59,51 @@ prepare code = do
     captured <- checked "plugins" (guestSources PluginEntries (files code))
     program <- located "plugins" (compileGuest captured)
     description <- located "plugins" (describeGuest program)
-    let handles = compiledEntries program description
-    unless (all (maybe False ((`elem` names) . Text.unpack . G.connectorPlugin) . owner) (checkedEntries description))
-      (bad "plugins" "Guest plugin selection describes unexpected entries or packages")
-    let identities = [identity | entry <- checkedEntries description, identity <- case entry of
-          G.AcquisitionEntry _ selected _ -> [selected]
-          G.SinkEntry _ selected _ -> [selected]
-          _ -> []]
-    unless (all (maybe False (`elem` identities) . owner) (checkedEntries description))
-      (bad "plugins" "Connector entry has no corresponding acquisition or sink")
-    forM names $ \name -> do
-      let label = "plugin " ++ name
-          prefix = "plugins/packages/" ++ name ++ "/source/"
-          packageFiles = [(rest,bytes) | (path,bytes) <- entries, Just rest <- [stripPrefix prefix path]]
-      manifestBytes <- maybe (bad label "Missing kyyn-plugin.dhall") pure (lookup "kyyn-plugin.dhall" packageFiles)
-      manifest <- located label (decodeManifest manifestBytes)
-      unless (pluginNameText (manifestName manifest) == name) (bad label "Manifest name differs from installed package directory")
-      package <- checked label . fileTree =<< traverse (\(path,bytes) -> (,) <$> checked label (relativePath path) <*> pure bytes) packageFiles
-      connectors <- forM [handle | handle <- handles, case entryDescription handle of
-        G.AcquisitionEntry _ identity _ -> identity.connectorPlugin == Text.pack name
-        G.SinkEntry _ identity _ -> identity.connectorPlugin == Text.pack name
-        _ -> False] $ \handle -> case entryDescription handle of
-          G.AcquisitionEntry _ identity contracts -> do
-            let connectorLabel = label ++ "/" ++ Text.unpack identity.connectorType
-                (config,options,payload,position,report) = case contracts of
-                  G.StatelessContracts c o p -> (c,o,p,Nothing,Nothing)
-                  G.StatefulContracts c o p s r -> (c,o,p,Just s,Just r)
-            validator <- one connectorLabel [entry | entry <- handles,
-              G.ConfigurationEntry _ actual _ <- [entryDescription entry], actual == identity]
-            kind <- checked connectorLabel (connectorTypeName (Text.unpack identity.connectorType))
-            mapM_ (checked connectorLabel . validateReportContract . getField @"contract") report
-            methods <- forM [(entry,method,input,result) | entry <- handles,
-              G.CapturedReadEntry _ method (G.CapturedContracts input _ result) <- [entryDescription entry],
-              method.pluginName == identity.connectorPlugin, method.connectorName == identity.connectorType] $ \(entry,method,input,result) -> do
-                selectedName <- checked connectorLabel (methodName (Text.unpack method.methodName))
-                pure (PreparedMethod selectedName (Text.unpack method.methodDescription) input.contract result.contract entry)
-            let logins = [entry | entry <- handles, G.LoginEntry _ actual _ <- [entryDescription entry], actual == identity]
-            login <- case logins of [] -> pure Nothing; _ -> Just <$> one connectorLabel logins
-            pure (PreparedConnector kind config.contract payload.contract handle validator methods
-              (getField @"contract" <$> options) login (getField @"contract" <$> position) (getField @"contract" <$> report))
-          G.SinkEntry _ identity (G.SinkContracts config options input result) -> do
-            let connectorLabel = label ++ "/" ++ Text.unpack identity.connectorType
-            validator <- one connectorLabel [entry | entry <- handles,
-              G.ConfigurationEntry _ actual _ <- [entryDescription entry], actual == identity]
-            defaults <- one connectorLabel [entry | entry <- handles,
-              G.SinkDefaultsEntry _ actual _ <- [entryDescription entry], actual == identity]
-            kind <- checked connectorLabel (connectorTypeName (Text.unpack identity.connectorType))
-            bytes <- ExceptT (Right <$> executeEntry defaults (object []))
-            value <- checked connectorLabel (eitherDecodeStrict bytes)
-            _ <- located connectorLabel (encodeValue (contractShape options.contract) value)
-            pure (PreparedSinkConnector kind config.contract validator input.contract options.contract result.contract handle
-              (CheckedValue (contractId options.contract) value))
-          _ -> bad label "Expected source or sink entry"
-      pure (PreparedPackage (manifestName manifest) (packageIdentity package) connectors)
+    unless (all (\entry -> case entry of G.ConnectorEntry{} -> True; _ -> False) (checkedEntries description))
+      (bad "plugins" "Plugin selection contains non-connector entries")
+    prepareFromGuest code program description
 
-owner :: G.GuestEntry a -> Maybe G.ConnectorIdentity
-owner entry = case entry of
-  G.ConfigurationEntry _ identity _ -> Just identity
-  G.LoginEntry _ identity _ -> Just identity
-  G.AcquisitionEntry _ identity _ -> Just identity
-  G.SinkEntry _ identity _ -> Just identity
-  G.SinkDefaultsEntry _ identity _ -> Just identity
-  G.CapturedReadEntry _ method _ -> Just (G.ConnectorIdentity method.pluginName method.connectorName)
-  _ -> Nothing
-
-one :: String -> [CompiledEntry] -> ExceptT [Diagnostic] (Eff es) CompiledEntry
-one _ [entry] = pure entry
-one label _ = bad label "Missing or ambiguous required connector entry"
+prepareFromGuest :: (GuestExecution :> es, DhallHandling :> es, Failure :> es)
+  => FileTree -> CompiledProgram -> CheckedGuest -> ExceptT [Diagnostic] (Eff es) [PreparedPackage]
+prepareFromGuest code program description = do
+  let entries = [(relativeName path,bytes) | (path,bytes) <- files code]
+      names = nub [takeWhile (/= '/') rest | (path,_) <- entries, Just rest <- [stripPrefix "plugins/packages/" path]]
+      connectors = compiledConnectors program description
+      owner (CompiledSource identity _ _ _ _ _) = identity
+      owner (CompiledSink identity _ _ _ _) = identity
+  unless (all ((`elem` names) . Text.unpack . G.connectorPlugin . owner) connectors)
+    (bad "plugins" "Guest describes an uninstalled plugin package")
+  forM names $ \name -> do
+    let label = "plugin " ++ name
+        prefix = "plugins/packages/" ++ name ++ "/source/"
+        packageFiles = [(rest,bytes) | (path,bytes) <- entries, Just rest <- [stripPrefix prefix path]]
+    manifestBytes <- maybe (bad label "Missing kyyn-plugin.dhall") pure (lookup "kyyn-plugin.dhall" packageFiles)
+    manifest <- located label (decodeManifest manifestBytes)
+    unless (pluginNameText (manifestName manifest) == name) (bad label "Manifest name differs from installed package directory")
+    package <- checked label . fileTree =<< traverse (\(path,bytes) -> (,) <$> checked label (relativePath path) <*> pure bytes) packageFiles
+    prepared <- forM [connector | connector <- connectors, (owner connector).connectorPlugin == Text.pack name] $ \connector -> do
+      let identity = owner connector
+          connectorLabel = label ++ "/" ++ Text.unpack identity.connectorType
+      kind <- checked connectorLabel (connectorTypeName (Text.unpack identity.connectorType))
+      case connector of
+        CompiledSource _ contracts acquisition validator login captured -> do
+          let (config,options,payload,position,report) = case contracts of
+                G.StatelessContracts c o p -> (c,o,p,Nothing,Nothing)
+                G.StatefulContracts c o p s r -> (c,o,p,Just s,Just r)
+          mapM_ (checked connectorLabel . validateReportContract . getField @"contract") report
+          methods <- forM captured $ \(method,entry) -> do
+            selectedName <- checked connectorLabel (methodName (Text.unpack method.capturedName))
+            let G.CapturedContracts input _ result = method.capturedInvocation.invocationContract
+            pure (PreparedMethod selectedName (Text.unpack method.capturedDescription) input.contract result.contract entry)
+          pure (PreparedConnector kind config.contract payload.contract acquisition validator methods
+            (getField @"contract" <$> options) login (getField @"contract" <$> position) (getField @"contract" <$> report))
+        CompiledSink _ (G.SinkContracts config options input result) publication validator defaults -> do
+          bytes <- ExceptT (Right <$> executeEntry defaults (toJSON G.SinkDefaultsInvocation))
+          value <- checked connectorLabel (eitherDecodeStrict bytes)
+          _ <- located connectorLabel (encodeValue (contractShape options.contract) value)
+          pure (PreparedSinkConnector kind config.contract validator input.contract options.contract result.contract publication
+            (CheckedValue (contractId options.contract) value))
+    pure (PreparedPackage (manifestName manifest) (packageIdentity package) prepared)
 
 configure :: DhallHandling :> es => FileTree -> [PreparedPackage] -> ExceptT [Diagnostic] (Eff es) [PreparedPlugin]
 configure code packages = do

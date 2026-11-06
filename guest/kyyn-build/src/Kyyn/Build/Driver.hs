@@ -12,6 +12,7 @@ import System.Directory (createDirectoryIfMissing, doesFileExist, doesPathExist,
 import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Process (callProcess, readProcess)
 import Kyyn.Build.Inspection
+import Kyyn.Build.ToolBindings (writeToolBindings)
 import Kyyn.Build.Plugins
 import qualified Kyyn.Types.Plugin as P
 import Kyyn.Build.Manifest
@@ -52,8 +53,8 @@ buildGuest compiler source output = do
         writeGuest generated exports [] []
         finishGuest compiler generated packages destination
       PluginEntries -> do
-        (_,pluginPackages,entries) <- preparePlugins compiler libdir generated basePackages
-        let modules = nub (map (Text.unpack . referenceModule . fst) entries)
+        (_,pluginPackages,entries,_) <- preparePlugins compiler libdir generated basePackages
+        let modules = nub (map (Text.unpack . referenceModule) (concatMap fst entries))
         (_,exports) <- inspectExports libdir (roots ++ [generated]) pluginPackages modules
         writeGuest generated exports modules (map snd entries)
         finishGuest compiler generated pluginPackages destination
@@ -62,71 +63,79 @@ buildGuest compiler source output = do
       EvolutionEntry -> fail "Evolution guest build is not implemented yet"
 
 preparePlugins :: FilePath -> FilePath -> FilePath -> [String]
-  -> IO ([FilePath],[String],[(Reference,String)])
+  -> IO ([FilePath],[String],[([Reference],String)],[RegisteredPlugin])
 preparePlugins compiler libdir generated basePackages = do
   plugins <- discoverPlugins
   let roots = "src" : map sourceRoot plugins
       packages = basePackages ++ map ("-i" ++) roots
   registrations <- bootstrapPlugins (\pluginRoots -> compile compiler generated "registrations" (basePackages ++ map ("-i" ++) pluginRoots)) generated plugins
-  let captured = [(plugin,connector.name,method) | RegisteredPlugin plugin connectors <- registrations,
-        connector@P.SourceConnector{} <- connectors, method <- connector.methods]
-  capturedEntries <- forM captured $ \(plugin,connector,method) -> do
-    implementation <- either fail pure (qualifiedReference False method.implementation)
-    (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
-    let name = Text.intercalate "." [plugin.pluginName,connector,method.methodName]
-        identity = "(CapturedMethodIdentity " ++ unwords (map show
-          [plugin.pluginName,connector,method.methodName,method.methodDescription]) ++ ")"
-    pure (implementation,"capturedReadEntry " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack method.implementation)
-  acquisitionEntries <- forM
-    [(plugin,connector) | RegisteredPlugin plugin connectors <- registrations, connector@P.SourceConnector{} <- connectors] $
-      \(plugin,connector) -> do
-        implementation <- either fail pure (qualifiedReference False connector.fetch)
-        (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
-        let name = "$acquisition." <> plugin.pluginName <> "." <> connector.name
-            identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector.name ++ ")"
-        pure (implementation,"acquisitionEntry " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack connector.fetch)
-  let ordinaryDeclarations = concat
-        [ (plugin,connector.name,"configuration","configurationEntry",connector.validateConfig) : case connector of
-            P.SourceConnector _ _ _ _ login ->
-              [(plugin,connector.name,"login","loginEntry",implementation) | Just implementation <- [login]]
-            P.SinkConnector _ _ publish defaults ->
-              [(plugin,connector.name,"sink","sinkEntry",publish),(plugin,connector.name,"sinkDefaults","sinkDefaultsEntry",defaults)]
-        | RegisteredPlugin plugin connectors <- registrations, connector <- connectors ]
-  ordinaryEntries <- forM ordinaryDeclarations $ \(plugin,connector,role,factory,reference) -> do
-    implementation <- either fail pure (qualifiedReference False reference)
-    (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
-    let name = "$" <> role <> "." <> plugin.pluginName <> "." <> connector
-        identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector ++ ")"
-    pure (implementation,factory ++ " " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack reference)
-  pure (roots,packages,capturedEntries ++ acquisitionEntries ++ ordinaryEntries)
+  entries <- forM [(plugin,connector) | RegisteredPlugin plugin connectors <- registrations, connector <- connectors] $ \(plugin,connector) -> do
+    let identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector.name ++ ")"
+        adapter role factory reference = do
+          implementation <- either fail pure (qualifiedReference False reference)
+          (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
+          let name = "$" <> role <> "." <> plugin.pluginName <> "." <> connector.name
+          pure ([implementation],"(" ++ factory ++ " " ++ show name ++ " " ++ show sources ++ " " ++ Text.unpack reference ++ ")")
+    (configReferences,config) <- adapter "configuration" "configurationEntry" connector.validateConfig
+    case connector of
+      P.SourceConnector _ fetch _ methods login -> do
+        (fetchReferences,acquire) <- adapter "acquisition" "acquisitionEntry" fetch
+        authentication <- traverse (adapter "login" "loginEntry") login
+        captured <- forM methods $ \method -> do
+          implementation <- either fail pure (qualifiedReference False method.implementation)
+          (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
+          let name = Text.intercalate "." [plugin.pluginName,connector.name,method.methodName]
+              methodIdentity = "(CapturedMethodIdentity " ++ unwords (map show
+                [plugin.pluginName,connector.name,method.methodName,method.methodDescription]) ++ ")"
+          pure ([implementation],"capturedReadEntry " ++ show name ++ " " ++ methodIdentity ++ " " ++ show sources ++ " " ++ Text.unpack method.implementation)
+        pure (configReferences ++ fetchReferences ++ maybe [] fst authentication ++ concatMap fst captured,
+          "sourceConnectorEntry " ++ identity ++ " " ++ config ++ " " ++ acquire ++ " " ++
+          maybe "Nothing" (\(_,entry) -> "(Just " ++ entry ++ ")") authentication ++ " [" ++ intercalate "," (map snd captured) ++ "]")
+      P.SinkConnector _ _ publish defaults -> do
+        (publishReferences,publication) <- adapter "sink" "sinkEntry" publish
+        (defaultReferences,options) <- adapter "sinkDefaults" "sinkDefaultsEntry" defaults
+        pure (configReferences ++ publishReferences ++ defaultReferences,
+          "sinkConnectorEntry " ++ identity ++ " " ++ config ++ " " ++ publication ++ " " ++ options)
+  pure (roots,packages,entries,registrations)
 
 buildRoot :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> GuestSelection -> IO ()
 buildRoot compiler libdir generated basePackages destination selection = do
   roots <- ("src" :) <$> installedPluginRoots
   let packages = basePackages ++ map ("-i" ++) roots
   pluginEntries <- if selection == RootEntries
-    then do (_,_,entries) <- preparePlugins compiler libdir generated basePackages; pure entries
+    then do
+      (_,_,entries,registrations) <- preparePlugins compiler libdir generated basePackages
+      writeToolBindings generated roots registrations
+      pure entries
     else pure []
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
-  unless (selection /= RootEntries || (null manifest.tools && null manifest.outputs))
-    (fail "Guest build: tool and output adapters are not implemented yet")
+  unless (selection /= RootEntries || null manifest.outputs)
+    (fail "Guest build: output adapters are not implemented yet")
   let name = Text.unpack . referenceName
       moduleName = Text.unpack . referenceModule
       rootModules = nub [moduleName manifest.schemaType,moduleName manifest.schemaMetadata]
       selectedQueries = if selection == RootEntries then manifest.queries else []
+      selectedTools = if selection == RootEntries then manifest.tools else []
   rootSources <- prepareRoot compiler libdir generated packages roots manifest
   let selectedModules = nub (rootModules ++ [moduleName manifest.validator | selection == RootEntries] ++ concat
         [[moduleName q.queryImplementation,moduleName q.inputType,moduleName q.inputMetadata,
-          moduleName q.resultType,moduleName q.resultMetadata] | q <- selectedQueries] ++ map (moduleName . fst) pluginEntries)
+          moduleName q.resultType,moduleName q.resultMetadata] | q <- selectedQueries] ++
+        concat [[moduleName implementation,moduleName input,moduleName result] | Tool _ _ implementation input result <- selectedTools] ++
+        map moduleName (concatMap fst pluginEntries))
   (_,exports) <- inspectExports libdir (roots ++ [generated]) packages selectedModules
   querySources <- forM selectedQueries $ \q -> do
     (arguments,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName q.inputType]
     (results,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName q.resultType]
     pure (q,arguments,results)
+  toolEntries <- forM selectedTools $ \(Tool selectedName description implementation input result) -> do
+    (inputSources,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName input]
+    (resultSources,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName result]
+    pure ("toolEntry @" ++ name input ++ " @" ++ name result ++ " " ++ show selectedName ++ " " ++ show description ++
+      " " ++ show inputSources ++ " " ++ show resultSources ++ " KyynGuestDispatch.dispatch " ++ name implementation)
   let rootEntry = if selection == RootEntries
         then "validationEntry @" ++ name manifest.schemaType ++ " " ++ name manifest.schemaMetadata ++ " " ++ show rootSources ++ " " ++ name manifest.validator
         else "describeEntry @" ++ name manifest.schemaType ++ " \"root\" " ++ name manifest.schemaMetadata ++ " " ++ show rootSources
-  writeGuest generated exports selectedModules (rootEntry : map snd pluginEntries ++
+  writeGuest generated exports (selectedModules ++ ["KyynGuestDispatch" | not (null selectedTools)]) (rootEntry : map snd pluginEntries ++ toolEntries ++
          ["queryEntry @" ++ name manifest.schemaType ++ " @" ++ name q.inputType ++ " @" ++ name q.resultType ++
           " " ++ show (Text.unpack q.queryName) ++
           " (" ++ name manifest.schemaMetadata ++ "," ++ show rootSources ++ ")" ++

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Build.Manifest
   ( Manifest(..), Query(..), Tool(..), Output(..), Reference, referenceName
-  , referenceModule, parseManifest, parsePluginManifest, qualifiedReference
+  , referenceModule, parseManifest, parsePluginManifest, qualifiedReference, ConfiguredInstance(..), parseInstances
   ) where
 
 import Control.Monad (unless)
@@ -98,6 +98,32 @@ parsePluginManifest source = do
     (Left "Invalid plugin name")
   _ <- qualifiedReference False (entry <> ".connectors")
   pure (name,entry)
+
+data ConfiguredInstance = ConfiguredInstance
+  { instanceName :: Text, instanceBinding :: Text, instanceConnector :: Text } deriving (Eq, Show)
+
+-- Only binding identities are needed to generate typed handles. The host checks
+-- the configuration value against the described connector contract before use.
+parseInstances :: Text -> Either String [ConfiguredInstance]
+parseInstances source = do
+  parsed <- first show (Parser.exprFromText "plugin configuration" source)
+  closed <- traverse (const (Left "Plugin configuration must be self-contained")) parsed
+  _ <- first show (TypeCheck.typeOf closed)
+  values <- list (D.normalize closed)
+  instances <- traverse instanceValue values
+  unique "instance" (map instanceName instances)
+  unique "binding" (map instanceBinding instances)
+  pure instances
+  where
+    instanceValue value = do
+      fields <- exact ["name","binding","connector"] value
+      name <- textField "name" fields
+      binding <- textField "binding" fields
+      _ <- qualifiedReference False ("Generated." <> binding)
+      connector <- field "connector" fields >>= \selected -> case selected of
+        D.App (D.Field (D.Union _) selection) _ -> Right (D.fieldSelectionLabel selection)
+        _ -> Left "Expected a selected connector union with a configuration value"
+      pure (ConfiguredInstance name binding connector)
 
 type Fields s = Map.Map Text (D.RecordField s Void)
 

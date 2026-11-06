@@ -6,8 +6,7 @@ import Effectful.Dispatch.Dynamic (send)
 import Data.ByteString (ByteString)
 import Data.Aeson (Value)
 import qualified Data.Text as Text
-import Kyyn.Domain.CompiledEntry (CompiledEntry, entryProgram, entryDescription)
-import Kyyn.Types.Guest (entryName)
+import Kyyn.Domain.CompiledEntry (CompiledEntry, entryProgram, invocationName)
 import Kyyn.Plumbing.Protocol.GuestInvocation (encodeInvocation)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
@@ -42,5 +41,5 @@ executeCompiledEntry selected entry input = do
 -- Select only an entry obtained from the checked description of this build.
 executeEntry :: (GuestExecution :> es, Failure :> es)
   => CompiledEntry -> Value -> Eff es ByteString
-executeEntry entry argument = executeCompiledEntry (Text.unpack (entryName (entryDescription entry)))
+executeEntry entry argument = executeCompiledEntry (Text.unpack (invocationName entry))
   (entryProgram entry) (encodeInvocation entry argument)

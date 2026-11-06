@@ -1,9 +1,10 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
+  ( Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
-  , QueryContracts(..), CapturedContracts(..), CapturedMethodIdentity(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
+  , QueryContracts(..), ToolContracts(..), CapturedContracts(..), CapturedMethodIdentity(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
   , protocolIdentity, describeContract
   ) where
 
@@ -130,18 +131,81 @@ data DescribedContract = DescribedContract
 -- contracts in the host. No optional or string-indexed bag of contracts exists.
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
+  | ToolEntry { entryName :: Text, toolName :: Text, toolDescription :: Text, toolContracts :: ToolContracts contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
-  | ConfigurationEntry { entryName :: Text, configurationConnector :: ConnectorIdentity, configurationContract :: contract }
-  | LoginEntry { entryName :: Text, loginConnector :: ConnectorIdentity, loginContract :: contract }
-  | SinkEntry { entryName :: Text, sinkConnector :: ConnectorIdentity, sinkContracts :: SinkContracts contract }
-  | SinkDefaultsEntry { entryName :: Text, defaultsConnector :: ConnectorIdentity, defaultsContract :: contract }
-  | AcquisitionEntry { entryName :: Text, acquisitionConnector :: ConnectorIdentity, acquisitionContracts :: AcquisitionContracts contract }
-  | CapturedReadEntry { entryName :: Text, capturedMethod :: CapturedMethodIdentity, capturedContracts :: CapturedContracts contract }
+  | ConnectorEntry { connectorIdentity :: ConnectorIdentity, connectorEntries :: ConnectorEntries contract }
   | ContractEntry { entryName :: Text, describedContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
+-- A connector is complete by construction. Named invocations carry their own
+-- contracts; no host workflow joins independent roles by connector strings.
+data Invocation contract = Invocation { invocationName :: Text, invocationContract :: contract }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+data CapturedEntry contract = CapturedEntry
+  { capturedName :: Text, capturedDescription :: Text, capturedInvocation :: Invocation (CapturedContracts contract) }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+data ConnectorEntries contract
+  = SourceEntries
+      { configure :: Invocation contract
+      , acquire :: Invocation (AcquisitionContracts contract)
+      , login :: Maybe (Invocation contract)
+      , methods :: [CapturedEntry contract]
+      }
+  | SinkEntries
+      { configure :: Invocation contract
+      , publish :: Invocation (SinkContracts contract)
+      , defaults :: Invocation contract
+      }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+
+entryNames :: GuestEntry contract -> [Text]
+entryNames (ConnectorEntry _ (SourceEntries config acquisition authentication captured)) =
+  [invocationName config,invocationName acquisition] ++ maybe [] (pure . invocationName) authentication ++
+  map (invocationName . capturedInvocation) captured
+entryNames (ConnectorEntry _ (SinkEntries config publication options)) =
+  [invocationName config,invocationName publication,invocationName options]
+entryNames entry = [entryName entry]
+
+instance ToJSON contract => ToJSON (Invocation contract) where
+  toJSON (Invocation name contract) = object ["entryName" .= name,"contract" .= contract]
+instance FromJSON contract => FromJSON (Invocation contract) where
+  parseJSON = exactObject "invocation" ["entryName","contract"] $ \fields ->
+    Invocation <$> fields .: "entryName" <*> fields .: "contract"
+instance ToJSON contract => ToJSON (CapturedEntry contract) where
+  toJSON (CapturedEntry name description invocation) = object
+    ["name" .= name,"description" .= description,"invocation" .= invocation]
+instance FromJSON contract => FromJSON (CapturedEntry contract) where
+  parseJSON = exactObject "captured method" ["name","description","invocation"] $ \fields ->
+    CapturedEntry <$> fields .: "name" <*> fields .: "description" <*> fields .: "invocation"
+instance ToJSON contract => ToJSON (ConnectorEntries contract) where
+  toJSON (SourceEntries config acquisition authentication captured) = object
+    ["kind" .= String "source","configure" .= config,"acquire" .= acquisition,
+     "login" .= optionalValue authentication,"methods" .= captured]
+  toJSON (SinkEntries config publication options) = object
+    ["kind" .= String "sink","configure" .= config,"publish" .= publication,"defaults" .= options]
+instance FromJSON contract => FromJSON (ConnectorEntries contract) where
+  parseJSON value = withObject "connector entries" (\fields -> do
+    kind <- fields .: "kind"
+    case kind :: Text of
+      "source" -> exactObject "source connector" ["kind","configure","acquire","login","methods"]
+        (\entry -> SourceEntries <$> entry .: "configure" <*> entry .: "acquire"
+          <*> (entry .: "login" >>= parseOptionalValue) <*> entry .: "methods") value
+      "sink" -> exactObject "sink connector" ["kind","configure","publish","defaults"]
+        (\entry -> SinkEntries <$> entry .: "configure" <*> entry .: "publish" <*> entry .: "defaults") value
+      _ -> fail "Unknown connector kind") value
+
+-- Defaults take an explicit empty request, shared by both sides of the boundary.
+data SinkDefaultsInvocation = SinkDefaultsInvocation deriving (Eq, Show)
+instance ToJSON SinkDefaultsInvocation where
+  toJSON SinkDefaultsInvocation = object []
+instance FromJSON SinkDefaultsInvocation where
+  parseJSON = exactObject "sink defaults invocation" [] (const (pure SinkDefaultsInvocation))
+
 data QueryContracts contract = QueryContracts
   { rootContract :: contract, argumentContract :: contract, resultContract :: contract }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+
+data ToolContracts contract = ToolContracts contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data CapturedMethodIdentity = CapturedMethodIdentity
@@ -151,6 +215,13 @@ data CapturedMethodIdentity = CapturedMethodIdentity
 data CapturedContracts contract = CapturedContracts
   { inputContract :: contract, payloadContract :: contract, outputContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
+
+instance ToJSON contract => ToJSON (CapturedContracts contract) where
+  toJSON (CapturedContracts input payload output) = object
+    ["input" .= input,"payload" .= payload,"output" .= output]
+instance FromJSON contract => FromJSON (CapturedContracts contract) where
+  parseJSON = exactObject "captured contracts" ["input","payload","output"] $ \fields ->
+    CapturedContracts <$> fields .: "input" <*> fields .: "payload" <*> fields .: "output"
 
 instance ToJSON CapturedMethodIdentity where
   toJSON (CapturedMethodIdentity plugin connector method description) = object
@@ -185,21 +256,13 @@ instance FromJSON DescribedContract where
 
 instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
+  toJSON (ToolEntry entry name description (ToolContracts input result)) = object
+    ["entryName" .= entry,"kind" .= String "tool","name" .= name,"description" .= description,
+     "input" .= input,"result" .= result]
   toJSON (QueryEntry name (QueryContracts root arguments result)) = object
     ["entryName" .= name,"kind" .= String "query","root" .= root,"arguments" .= arguments,"result" .= result]
-  toJSON (ConfigurationEntry name connector config) = object
-    ["entryName" .= name,"kind" .= String "configuration","connector" .= connector,"config" .= config]
-  toJSON (LoginEntry name connector config) = object
-    ["entryName" .= name,"kind" .= String "login","connector" .= connector,"config" .= config]
-  toJSON (SinkEntry name connector contracts) = object
-    ["entryName" .= name,"kind" .= String "sink","connector" .= connector,"contracts" .= contracts]
-  toJSON (SinkDefaultsEntry name connector options) = object
-    ["entryName" .= name,"kind" .= String "sinkDefaults","connector" .= connector,"options" .= options]
-  toJSON (AcquisitionEntry name connector contracts) = object
-    ["entryName" .= name,"kind" .= String "acquisition","connector" .= connector,"contracts" .= contracts]
-  toJSON (CapturedReadEntry name method (CapturedContracts arguments payload result)) = object
-    ["entryName" .= name,"kind" .= String "capturedRead","method" .= method,
-     "arguments" .= arguments,"payload" .= payload,"result" .= result]
+  toJSON (ConnectorEntry ident selected) = object
+    ["kind" .= String "connector","identity" .= ident,"entries" .= selected]
   toJSON (ContractEntry name value) = object ["entryName" .= name,"kind" .= String "contract","value" .= value]
 instance FromJSON contract => FromJSON (GuestEntry contract) where
   parseJSON value = withObject "guest entry" (\fields -> do
@@ -207,22 +270,14 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
     case kind :: Text of
       "validator" -> exactObject "validator entry" ["entryName","kind","root"]
         (\entry -> ValidatorEntry <$> entry .: "entryName" <*> entry .: "root") value
+      "tool" -> exactObject "tool entry" ["entryName","kind","name","description","input","result"]
+        (\entry -> ToolEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "description"
+          <*> (ToolContracts <$> entry .: "input" <*> entry .: "result")) value
       "query" -> exactObject "query entry" ["entryName","kind","root","arguments","result"]
         (\entry -> QueryEntry <$> entry .: "entryName" <*> (QueryContracts
           <$> entry .: "root" <*> entry .: "arguments" <*> entry .: "result")) value
-      "configuration" -> exactObject "configuration entry" ["entryName","kind","connector","config"]
-        (\entry -> ConfigurationEntry <$> entry .: "entryName" <*> entry .: "connector" <*> entry .: "config") value
-      "login" -> exactObject "login entry" ["entryName","kind","connector","config"]
-        (\entry -> LoginEntry <$> entry .: "entryName" <*> entry .: "connector" <*> entry .: "config") value
-      "sink" -> exactObject "sink entry" ["entryName","kind","connector","contracts"]
-        (\entry -> SinkEntry <$> entry .: "entryName" <*> entry .: "connector" <*> entry .: "contracts") value
-      "sinkDefaults" -> exactObject "sink defaults entry" ["entryName","kind","connector","options"]
-        (\entry -> SinkDefaultsEntry <$> entry .: "entryName" <*> entry .: "connector" <*> entry .: "options") value
-      "acquisition" -> exactObject "acquisition entry" ["entryName","kind","connector","contracts"]
-        (\entry -> AcquisitionEntry <$> entry .: "entryName" <*> entry .: "connector" <*> entry .: "contracts") value
-      "capturedRead" -> exactObject "captured read entry" ["entryName","kind","method","arguments","payload","result"]
-        (\entry -> CapturedReadEntry <$> entry .: "entryName" <*> entry .: "method" <*> (CapturedContracts
-          <$> entry .: "arguments" <*> entry .: "payload" <*> entry .: "result")) value
+      "connector" -> exactObject "connector entry" ["kind","identity","entries"]
+        (\entry -> ConnectorEntry <$> entry .: "identity" <*> entry .: "entries") value
       "contract" -> exactObject "contract entry" ["entryName","kind","value"]
         (\entry -> ContractEntry <$> entry .: "entryName" <*> entry .: "value") value
       _ -> fail "Unknown guest entry kind") value

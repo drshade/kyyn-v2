@@ -17,26 +17,26 @@ import Kyyn.Types.Evidence (EvidenceChange)
 import Kyyn.Types.Guest
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Runtime.Contract (runtimeCodec)
-import Kyyn.Runtime.Entry (Entry(..))
+import Kyyn.Runtime.Entry (Adapter(..))
 import Kyyn.Runtime.Plugin (changeCodec, fetchResultCodec)
 import Kyyn.Runtime.PluginHost (executeAcquisitionAction)
 import qualified Kyyn.Runtime.Json as Wire
 
 class AcquisitionFunction function where
-  acquisitionEntry :: Text -> ConnectorIdentity -> [Text] -> function -> Either ProjectionError Entry
+  acquisitionEntry :: Text -> [Text] -> function -> Either ProjectionError (Adapter (AcquisitionContracts DescribedContract))
 
 instance (Contract config, Contract payload) => AcquisitionFunction
   (config -> EvidenceSnapshot payload -> Acquisition payload (Either FetchError [EvidenceChange payload])) where
-  acquisitionEntry name connector sources selected =
-    makeAcquisition @config @payload name connector sources Nothing Nothing
+  acquisitionEntry name sources selected =
+    makeAcquisition @config @payload name sources Nothing Nothing
       (\input -> noOptions input >> noContext input >> pure selected)
       (Wire.listCodec . changeCodec)
 
 instance (Contract config, Contract options, Contract payload) => AcquisitionFunction
   (config -> Maybe options -> EvidenceSnapshot payload -> Acquisition payload (Either FetchError [EvidenceChange payload])) where
-  acquisitionEntry name connector sources selected = do
+  acquisitionEntry name sources selected = do
     options <- compileContract (contract @options)
-    makeAcquisition @config @payload name connector sources (Just (describe sources options)) Nothing
+    makeAcquisition @config @payload name sources (Just (describe sources options)) Nothing
       (\input -> do
         noContext input
         decoded <- traverse (decode options) input.acquisitionOptions
@@ -45,10 +45,10 @@ instance (Contract config, Contract options, Contract payload) => AcquisitionFun
 
 instance (Contract config, Contract payload, Contract position, Contract report) => AcquisitionFunction
   (config -> FetchContext position -> EvidenceSnapshot payload -> Acquisition payload (Either FetchError (FetchResult payload position report))) where
-  acquisitionEntry name connector sources selected = do
+  acquisitionEntry name sources selected = do
     position <- compileContract (contract @position)
     report <- compileContract (contract @report)
-    makeAcquisition @config @payload name connector sources Nothing
+    makeAcquisition @config @payload name sources Nothing
       (Just (describe sources position,describe sources report))
       (\input -> do
         noOptions input
@@ -58,11 +58,11 @@ instance (Contract config, Contract payload, Contract position, Contract report)
 
 instance (Contract config, Contract options, Contract payload, Contract position, Contract report) => AcquisitionFunction
   (config -> Maybe options -> FetchContext position -> EvidenceSnapshot payload -> Acquisition payload (Either FetchError (FetchResult payload position report))) where
-  acquisitionEntry name connector sources selected = do
+  acquisitionEntry name sources selected = do
     options <- compileContract (contract @options)
     position <- compileContract (contract @position)
     report <- compileContract (contract @report)
-    makeAcquisition @config @payload name connector sources (Just (describe sources options))
+    makeAcquisition @config @payload name sources (Just (describe sources options))
       (Just (describe sources position,describe sources report))
       (\input -> do
         decoded <- traverse (decode options) input.acquisitionOptions
@@ -71,11 +71,11 @@ instance (Contract config, Contract options, Contract payload, Contract position
       (\payload -> fetchResultCodec payload (runtimeCodec position.codec) (runtimeCodec report.codec))
 
 makeAcquisition :: forall config payload result. (Contract config, Contract payload)
-  => Text -> ConnectorIdentity -> [Text] -> Maybe DescribedContract -> Maybe (DescribedContract,DescribedContract)
+  => Text -> [Text] -> Maybe DescribedContract -> Maybe (DescribedContract,DescribedContract)
   -> (AcquisitionInvocation -> Either String
       (config -> EvidenceSnapshot payload -> Acquisition payload (Either FetchError result)))
-  -> (Wire.Codec payload -> Wire.Codec result) -> Either ProjectionError Entry
-makeAcquisition name connector sources options state select resultCodec = do
+  -> (Wire.Codec payload -> Wire.Codec result) -> Either ProjectionError (Adapter (AcquisitionContracts DescribedContract))
+makeAcquisition name sources options state select resultCodec = do
   config <- compileContract (contract @config)
   payload <- compileContract (contract @payload)
   let contracts = case state of
@@ -87,7 +87,7 @@ makeAcquisition name connector sources options state select resultCodec = do
         selected <- either fail pure (select input)
         executeAcquisitionAction transport input.acquisitionConcurrency (runtimeCodec payload.codec)
           (resultCodec (runtimeCodec payload.codec)) (selected configuration (EvidenceSnapshot input.acquisitionSnapshot))
-  pure (Entry (AcquisitionEntry name connector contracts) run)
+  pure (Adapter (Invocation name contracts) run)
 
 describe :: [Text] -> CompiledContract a -> DescribedContract
 describe sources compiled = describeContract compiled.description (SchemaMetadata [] [] []) sources

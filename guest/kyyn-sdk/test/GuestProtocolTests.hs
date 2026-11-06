@@ -59,6 +59,7 @@ main = do
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
+    ["--tool-built",path] -> checkTool (path,[])
     ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
@@ -202,26 +203,36 @@ checkRegistrations = do
 -- Exercise a callback on the transport already opened for invocation. The
 -- supplied host response is consumed only after the guest emits its request.
 capturedGuest :: IO ()
-capturedGuest = runGuest [] [capturedReadEntry @() @Item @Integer "local-file.Files.count"
+capturedGuest = runGuest [] [sourceConnectorEntry (G.ConnectorIdentity "local-file" "Files")
+  (configurationEntry "$configuration.local-file.Files" [] validateConfig)
+  (acquisitionEntry "$acquisition.local-file.Files" [] emptyFetch) Nothing
+  [capturedReadEntry @() @Item @Integer "local-file.Files.count"
   (G.CapturedMethodIdentity "local-file" "Files" "count" "Count captured files") []
-  (\() snapshot -> fmap (fmap (toInteger . length)) (Plugin.listEvidenceIds snapshot))]
+  (\() snapshot -> fmap (fmap (toInteger . length)) (Plugin.listEvidenceIds snapshot))]]
+
+validateConfig :: Integer -> ValidationReport
+validateConfig _ = ValidationReport []
+emptyFetch :: Integer -> Plugin.EvidenceSnapshot Item -> Acquisition Item (Either Plugin.FetchError [Plugin.EvidenceChange Item])
+emptyFetch _ _ = pure (Right [])
 
 checkCaptured :: (FilePath,[String]) -> IO ()
 checkCaptured executable@(path,args) = do
   descriptionValue <- invoke executable (object ["operation" .= ("describe" :: String)])
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
-  case [entry | entry@G.CapturedReadEntry{} <- description.entries] of
-    [G.CapturedReadEntry "local-file.Files.count" method _] ->
-      unless (method.methodName == "count") (fail "Captured method identity changed")
+  let methods = [method | G.ConnectorEntry _ (G.SourceEntries _ _ _ captured) <- description.entries, method <- captured]
+  case methods of
+    [G.CapturedEntry "count" _ (G.Invocation "local-file.Files.count" _)] -> pure ()
     _ -> fail "Missing captured read entry"
-  let rename entry = entry { G.entryName = "another.entry" }
-  unless (isLeft (Host.checkGuest description { G.entries = description.entries ++ map rename description.entries }))
-    (fail "Duplicate captured method identity accepted")
+  let duplicate entry = case entry of
+        G.ConnectorEntry ident (G.SourceEntries config acquire login captured) ->
+          G.ConnectorEntry ident (G.SourceEntries config acquire login (captured ++ captured))
+        other -> other
+  unless (isLeft (Host.checkGuest description { G.entries = map duplicate description.entries }))
+    (fail "Duplicate captured method accepted")
   forM_ ["", "bad/plugin"] $ \bad -> do
     let invalid entry = case entry of
-          G.CapturedReadEntry name method contracts ->
-            G.CapturedReadEntry name method { G.pluginName = bad } contracts
+          G.ConnectorEntry ident selected -> G.ConnectorEntry ident { G.connectorPlugin = bad } selected
           other -> other
     unless (isLeft (Host.checkGuest description { G.entries = map invalid description.entries }))
       (fail "Invalid plugin name in captured description accepted")
@@ -268,11 +279,13 @@ checkRequests = do
 
 acquisitionGuest :: IO ()
 acquisitionGuest = runGuest []
-  [acquisitionEntry "$acquisition.local-file.Files" (G.ConnectorIdentity "local-file" "Files") [] fetch,
-   acquisitionEntry "$acquisition.local-file.Options" (G.ConnectorIdentity "local-file" "Options") [] fetchOptions,
-   acquisitionEntry "$acquisition.local-file.State" (G.ConnectorIdentity "local-file" "State") [] fetchState,
-   acquisitionEntry "$acquisition.local-file.StateOptions" (G.ConnectorIdentity "local-file" "StateOptions") [] fetchStateOptions]
+  [source "Files" (acquisitionEntry "$acquisition.local-file.Files" [] fetch),
+   source "Options" (acquisitionEntry "$acquisition.local-file.Options" [] fetchOptions),
+   source "State" (acquisitionEntry "$acquisition.local-file.State" [] fetchState),
+   source "StateOptions" (acquisitionEntry "$acquisition.local-file.StateOptions" [] fetchStateOptions)]
   where
+    source name acquire = sourceConnectorEntry (G.ConnectorIdentity "local-file" name)
+      (configurationEntry ("$configuration.local-file." <> name) [] validateConfig) acquire Nothing []
     fetch :: Integer -> Plugin.EvidenceSnapshot Item -> Acquisition Item (Either Plugin.FetchError [Plugin.EvidenceChange Item])
     fetch _ _ = pure (Right [])
     fetchOptions :: Integer -> Maybe Integer -> Plugin.EvidenceSnapshot Item -> Acquisition Item (Either Plugin.FetchError [Plugin.EvidenceChange Item])
@@ -289,19 +302,27 @@ checkAcquisition executable = do
   descriptionValue <- invoke executable (toJSON G.Describe)
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
-  unless (length [() | G.AcquisitionEntry{} <- description.entries] == 4) (fail "Missing acquisition shapes")
-  case [entry | entry@G.AcquisitionEntry{} <- description.entries] of
-    selected@(G.AcquisitionEntry _ connector (G.StatelessContracts _ _ payload)) : _ -> do
-      unless (isLeft (Host.checkGuest description { G.entries = selected { G.entryName = "duplicate" } : description.entries }))
-        (fail "Duplicate acquisition role accepted")
-      -- The replacement contract is valid by itself, but wrong for this config.
-      let mismatch = G.ConfigurationEntry "mismatch" connector payload
-          withoutConfig = [entry | entry <- description.entries, case entry of
-            G.ConfigurationEntry _ actual _ -> actual /= connector
-            _ -> True]
-      unless (isLeft (Host.checkGuest description { G.entries = mismatch : withoutConfig }))
+  unless (length [() | G.ConnectorEntry _ G.SourceEntries{} <- description.entries] == 4) (fail "Missing acquisition shapes")
+  case [entry | entry@G.ConnectorEntry{} <- description.entries] of
+    selected@(G.ConnectorEntry ident (G.SourceEntries config acquire login methods)) : _ -> do
+      unless (isLeft (Host.checkGuest description { G.entries = selected : description.entries }))
+        (fail "Duplicate connector accepted")
+      case toJSON selected of
+        Object outer -> case Keys.lookup "entries" outer of
+          Just (Object roles) -> forM_ [Keys.delete "configure" roles,Keys.delete "acquire" roles,
+              Keys.insert "publish" (object []) roles,Keys.insert "login" Null roles] $ \malformed -> do
+            let encoded = encode (Object (Keys.insert "entries" (Object malformed) outer))
+            unless (isLeft (eitherDecodeStrict' (Lazy.toStrict encoded) :: Either String G.EntryDescription))
+              (fail "Incomplete or mixed connector roles accepted")
+          _ -> fail "Missing connector roles"
+        _ -> fail "Connector is not an object"
+      let payload = case acquire.invocationContract of
+            G.StatelessContracts _ _ p -> p
+            G.StatefulContracts _ _ p _ _ -> p
+          mismatch = G.ConnectorEntry ident (G.SourceEntries config { G.invocationContract = payload } acquire login methods)
+      unless (isLeft (Host.checkGuest description { G.entries = mismatch : drop 1 description.entries }))
         (fail "Inconsistent connector configuration contracts accepted")
-    _ -> fail "Missing stateless acquisition fixture"
+    _ -> fail "Missing acquisition fixture"
   let input = G.AcquisitionInvocation (String "10") Nothing Nothing "snapshot-1" 1
       context = G.AcquisitionContext "2026-11-06T12:00:00Z" (Just (String "7"))
       completed result = object ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= result]]
@@ -327,11 +348,14 @@ checkAcquisition executable = do
 
 pluginGuest :: IO ()
 pluginGuest = runGuest []
-  [configurationEntry "$configuration.local-file.Files" (G.ConnectorIdentity "local-file" "Files") [] validate,
-   loginEntry "$login.local-file.Files" (G.ConnectorIdentity "local-file" "Files") [] login,
-   configurationEntry "$configuration.local-file.Writer" (G.ConnectorIdentity "local-file" "Writer") [] validate,
-   sinkEntry "$sink.local-file.Writer" (G.ConnectorIdentity "local-file" "Writer") [] publish,
-   sinkDefaultsEntry "$sinkDefaults.local-file.Writer" (G.ConnectorIdentity "local-file" "Writer") [] (3 :: Integer)]
+  [sourceConnectorEntry (G.ConnectorIdentity "local-file" "Files")
+    (configurationEntry "$configuration.local-file.Files" [] validate)
+    (acquisitionEntry "$acquisition.local-file.Files" [] emptyFetch)
+    (Just (loginEntry "$login.local-file.Files" [] login)) [],
+   sinkConnectorEntry (G.ConnectorIdentity "local-file" "Writer")
+    (configurationEntry "$configuration.local-file.Writer" [] validate)
+    (sinkEntry "$sink.local-file.Writer" [] publish)
+    (sinkDefaultsEntry "$sinkDefaults.local-file.Writer" [] (3 :: Integer))]
   where
     validate :: Integer -> ValidationReport
     validate _ = ValidationReport []
@@ -348,7 +372,7 @@ checkPlugin executable = do
   let completed result = object ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= result]]
   forM_ [("$configuration.local-file.Files",String "10",Array mempty),
     ("$login.local-file.Files",toJSON (G.LoginInvocation (String "10")),completed (object [])),
-    ("$sinkDefaults.local-file.Writer",object [],String "3"),
+    ("$sinkDefaults.local-file.Writer",toJSON G.SinkDefaultsInvocation,String "3"),
     ("$sink.local-file.Writer",toJSON (G.SinkInvocation (String "10") (String "3") (String "7")),completed (String "20"))] $
       \(name,arguments,expected) -> do
         result <- invoke executable (toJSON (G.Invoke name arguments))
@@ -363,3 +387,36 @@ checkPlugin executable = do
         (status,_,_) <- call executable (toJSON (G.Invoke name arguments))
         unless (status /= ExitSuccess) (fail "Malformed plugin invocation accepted")
   putStrLn "Configuration, login, sink defaults and publication entries pass."
+
+checkTool :: (FilePath,[String]) -> IO ()
+checkTool executable@(path,args) = do
+  descriptionValue <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  let selected = [(name,entry) | G.ToolEntry entry name _ _ <- description.entries]
+  unless (map fst selected == ["count","listCount"]) (fail "Missing composed tools")
+  forM_ selected $ \(name,entry) -> do
+    let fields = ["plugin" .= ("local-file" :: String),"connectorType" .= ("Files" :: String),"instance" .= ("reader" :: String)]
+        (capability,method,arguments,responseValue) = if name == "count"
+          then ("plugin","read",object (fields ++ ["method" .= ("count" :: String),"input" .= object []]),String "2")
+          else ("evidence","list",object fields,toJSON (["one","two"] :: [String]))
+        response = object ["tag" .= ("HostResponse" :: String),"id" .= ("1" :: String),
+          "result" .= object ["tag" .= ("Right" :: String),"value" .= responseValue]]
+        invocation = toJSON (G.Invoke entry (object []))
+        framed value = Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))
+    (status,output,errors) <- Process.readProcess (Process.setStdin (Process.byteStringInput
+      (Lazy.fromStrict (framed invocation <> framed response))) (Process.proc path args))
+    unless (status == ExitSuccess) (fail (show errors))
+    (Frame.Frame request body,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) (Lazy.toStrict output)))
+    actual <- right (eitherDecodeStrict' request)
+    unless (Bytes.null body && actual == object ["tag" .= ("HostRequest" :: String),"id" .= ("1" :: String),
+      "capability" .= (capability :: String),"method" .= (method :: String),"arguments" .= arguments])
+      (fail ("Composed tool emitted the wrong callback: " ++ show actual))
+    (Frame.Frame completed completedBody,remaining) <- right (runIdentity (Frame.readFrame (pure Nothing) rest))
+    result <- right (eitherDecodeStrict' completed)
+    unless (Bytes.null completedBody && Bytes.null remaining && result == object
+      ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= ("2" :: String)]])
+      (fail "Composed tool returned the wrong result")
+    (bad,_,_) <- call executable (toJSON (G.Invoke entry (String "invalid")))
+    unless (bad /= ExitSuccess) (fail "Invalid tool input accepted")
+  putStrLn "Root-built tools invoke captured methods and evidence through the generated Calls algebra."

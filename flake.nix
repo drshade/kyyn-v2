@@ -96,6 +96,12 @@
             cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
             cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
           '';
+          toolSource = p.pkgs.runCommand "kyyn-tool-source" { } ''
+            mkdir -p "$out"
+            cp -R ${capturedSource}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/tool-guest}/. "$out/"
+          '';
           pluginsOnlySource = p.pkgs.runCommand "kyyn-plugins-only-source" { } ''
             mkdir -p "$out/plugins/packages/local-file/source" "$out/src"
             cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
@@ -127,6 +133,7 @@
         in {
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
+          guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
           guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
           guest-api = self.lib.mkGuest { inherit system; src = apiSource; };
@@ -137,7 +144,7 @@
         let
           p = project system;
           compiler = haskellPackages.ghcWithPackages (h:
-            [ h.kyyn-sdk h.kyyn-types h.aeson h.bytestring h.text ] ++ dependencies h);
+            [ h.kyyn-sdk h.kyyn-types h.kyyn-guest-build h.aeson h.bytestring h.text ] ++ dependencies h);
         in p.pkgs.stdenv.mkDerivation {
           name = "kyyn-guest";
           inherit src;

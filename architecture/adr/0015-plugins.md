@@ -526,6 +526,8 @@ data PreparedPlugin = PreparedPlugin PreparedPackage [ConfiguredConnector]
 data PluginPreparation :: Effect where
   PreparePackages :: FileTree -> PluginPreparation m (Either [Diagnostic] [PreparedPackage])
   PreparePlugins :: FileTree -> PluginPreparation m (Either [Diagnostic] [PreparedPlugin])
+  PreparePluginsFromGuest :: FileTree -> CompiledProgram -> CheckedGuest
+    -> PluginPreparation m (Either [Diagnostic] [PreparedPlugin])
   ValidatePlugins :: [PreparedPlugin] -> PluginPreparation m (Either [Diagnostic] ValidationReport)
 
 listConnectorMethods
@@ -545,6 +547,17 @@ checks configuration without invoking provider methods. `PreparedConnector` reta
 the derived configuration, payload and optional fetch-options contracts, fetch and
 config-validation entries, optional login, and captured-read methods. Its representation
 is not an additional authored registration form.
+
+The guest describes each connector as one typed source or sink node. A source
+contains configuration validation, acquisition, optional login and its captured
+methods; a sink contains configuration validation, publication and defaults.
+Each operation carries its invocable name and contracts. Required roles are
+structural, not a flat list joined by plugin/connector strings. The host checks
+contract agreement within the node and maps it directly to a prepared connector.
+Root tools and their plugin operations retain handles from the same checked Root
+executable; `PreparePluginsFromGuest` attaches configuration without building a
+second plugin executable. Plugin-only discovery may use an independent selection
+when no Root consumer is involved.
 
 PluginRead checks a method's structural input before dispatch and validates its
 result contract. Declared FetchError remains distinct from storage/contract

@@ -1,12 +1,14 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.PluginPreparation
   ( PluginPreparation(..), PreparedPackage(..), PreparedPlugin(..), PreparedConnector(..), ConfiguredConnector(..), PreparedMethod(..)
-  , preparePackages, preparePlugins, validatePlugins, instanceShape, selectedPackage, selectedPlugin, selectedInstance, sourceDetails ) where
+  , preparePackages, preparePluginsFromGuest, preparePlugins, validatePlugins, instanceShape, selectedPackage, selectedPlugin, selectedInstance, sourceDetails ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Data.Coerce (coerce)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
+import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.Guest (CheckedGuest)
 import Kyyn.Domain.CompiledEntry (CompiledEntry)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
@@ -51,6 +53,7 @@ sourceDetails PreparedSinkConnector{} = Left [errorDiagnostic "plugin.source-req
 data PluginPreparation :: Effect where
   PreparePackages :: FileTree -> PluginPreparation m (Either [Diagnostic] [PreparedPackage])
   PreparePlugins :: FileTree -> PluginPreparation m (Either [Diagnostic] [PreparedPlugin])
+  PreparePluginsFromGuest :: FileTree -> CompiledProgram -> CheckedGuest -> PluginPreparation m (Either [Diagnostic] [PreparedPlugin])
   ValidatePlugins :: [PreparedPlugin] -> PluginPreparation m (Either [Diagnostic] ValidationReport)
 type instance DispatchOf PluginPreparation = Dynamic
 
@@ -59,6 +62,10 @@ preparePackages = send . PreparePackages
 
 preparePlugins :: PluginPreparation :> es => FileTree -> Eff es (Either [Diagnostic] [PreparedPlugin])
 preparePlugins = send . PreparePlugins
+-- Root tools and their plugin methods share this already built executable.
+preparePluginsFromGuest :: PluginPreparation :> es => FileTree -> CompiledProgram -> CheckedGuest
+  -> Eff es (Either [Diagnostic] [PreparedPlugin])
+preparePluginsFromGuest code program description = send (PreparePluginsFromGuest code program description)
 validatePlugins :: PluginPreparation :> es => [PreparedPlugin] -> Eff es (Either [Diagnostic] ValidationReport)
 validatePlugins = send . ValidatePlugins
 

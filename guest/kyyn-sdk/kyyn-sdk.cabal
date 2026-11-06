@@ -52,6 +52,7 @@ library runtime
     Kyyn.Runtime.Recipe
     Kyyn.Runtime.SchemaMetadata
     Kyyn.Runtime.Sink
+    Kyyn.Runtime.ToolEntry
     Kyyn.Runtime.Transport
     Kyyn.Runtime.Validation
   other-modules: Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry Kyyn.Runtime.PluginEntry
