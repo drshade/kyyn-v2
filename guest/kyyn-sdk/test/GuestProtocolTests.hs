@@ -48,8 +48,23 @@ main = do
   case args of
     ["--guest"] -> guest
     ["--built",path] -> check (path,[])
+    ["--schema-built",path] -> checkSchema (path,[])
     [] -> getExecutablePath >>= \path -> check (path,["--guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
+
+checkSchema :: (FilePath,[String]) -> IO ()
+checkSchema executable = do
+  value <- invoke executable (object ["operation" .= ("describe" :: String)])
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  case description.entries of
+    [G.ContractEntry "root" selected] ->
+      unless (selected.loadedSources == ["src/Main.hs"]) (fail "Wrong schema-only source closure")
+    _ -> fail "Schema discovery produced runnable entries"
+  unless (all ((/= "Queries") . G.exportModule) description.exports) (fail "Unfinished query included in schema discovery")
+  (status,_,_) <- call executable (object ["operation" .= ("invoke" :: String),"entry" .= ("root" :: String),"argument" .= object []])
+  unless (status /= ExitSuccess) (fail "Description-only entry was invokable")
+  putStrLn "Schema discovery succeeds independently of unfinished query code."
 
 check :: (FilePath,[String]) -> IO ()
 check executable = do
@@ -89,8 +104,11 @@ check executable = do
       "exportSignature" .= ("data Root" :: String),"exportSource" .= ("src/Main.hs" :: String),
       "exportKind" .= ("unknown" :: String)]]])
   forM_ description.entries $ \entry -> forM_ entry $ \selected ->
-    unless (selected.identity == D.fingerprint (D.contractIdentity selected.structure selected.metadata))
-      (fail "Guest description fingerprint disagrees")
+    do
+      unless (selected.identity == D.fingerprint (D.contractIdentity selected.structure selected.metadata))
+        (fail "Guest description fingerprint disagrees")
+      unless ("src/Annotations.hs" `notElem` selected.loadedSources)
+        (fail "Metadata-only source included in schema dependency closure")
   forM_ [selected | G.QueryEntry _ (G.QueryContracts _ arguments result) <- description.entries,
        selected <- [arguments,result]] $ \selected ->
     unless (selected.metadata == SchemaMetadata [] [] []) (fail "Root metadata leaked into query arguments or result")

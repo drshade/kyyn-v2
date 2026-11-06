@@ -14,6 +14,7 @@ import System.Process (callProcess, readProcess)
 import Kyyn.Build.Inspection
 import Kyyn.Build.Manifest
 import Kyyn.Types.Guest
+import Kyyn.Types.GuestBuild
 import Kyyn.Types.SchemaMetadata
 
 -- The compiler and source are selected by the KB's build, never the host's PATH.
@@ -22,8 +23,13 @@ buildGuest :: FilePath -> FilePath -> FilePath -> IO ()
 buildGuest compiler source output = do
   destination <- makeAbsolute output
   withCurrentDirectory source $ do
+    hasSelection <- doesFileExist ".kyyn-build.json"
+    selection <- if hasSelection then Bytes.readFile ".kyyn-build.json" >>= either fail pure . eitherDecodeStrict'
+      else pure RootEntries
+    unless (selection `elem` [RootEntries,DiscoveryEntries RootSchema])
+      (fail "Selected guest build mode is not implemented yet")
     manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
-    unless (null manifest.tools && null manifest.outputs)
+    unless (selection /= RootEntries || (null manifest.tools && null manifest.outputs))
       (fail "Guest build: tool and output adapters are not implemented yet")
     libdir <- readProcess compiler ["--print-libdir"] "" >>= singleLine "compiler libdir"
     packages <- packageOptions libdir
@@ -38,7 +44,8 @@ buildGuest compiler source output = do
     let name = Text.unpack . referenceName
         moduleName = Text.unpack . referenceModule
         rootModules = nub [moduleName manifest.schemaType,moduleName manifest.schemaMetadata]
-    (rootSources,_) <- inspectExports libdir ["src"] packages rootModules
+        selectedQueries = if selection == RootEntries then manifest.queries else []
+    (rootSources,_) <- inspectExports libdir ["src"] packages [moduleName manifest.schemaType]
     -- This prepass cannot see generated bindings: Root determines their types.
     writeFile (generated </> "KyynGuestSchemaEntry.hs") (unlines
       (["{-# LANGUAGE TypeApplications #-}","module KyynGuestSchemaEntry where",
@@ -53,17 +60,20 @@ buildGuest compiler source output = do
     metadata <- Bytes.readFile (generated </> "metadata.json") >>= either fail pure . eitherDecodeStrict'
     generatedBindings <- either fail pure (bindings manifest metadata)
     writeFile (generated </> "KyynQueryBindings.hs") generatedBindings
-    let selectedModules = nub (rootModules ++ [moduleName manifest.validator] ++ concat
+    let selectedModules = nub (rootModules ++ [moduleName manifest.validator | selection == RootEntries] ++ concat
           [[moduleName q.queryImplementation,moduleName q.inputType,moduleName q.inputMetadata,
-            moduleName q.resultType,moduleName q.resultMetadata] | q <- manifest.queries])
+            moduleName q.resultType,moduleName q.resultMetadata] | q <- selectedQueries])
     (_,exports) <- inspectExports libdir ["src",generated] packages selectedModules
-    querySources <- forM manifest.queries $ \q -> do
-      (arguments,_) <- inspectExports libdir ["src",generated] packages [moduleName q.inputType,moduleName q.inputMetadata]
-      (results,_) <- inspectExports libdir ["src",generated] packages [moduleName q.resultType,moduleName q.resultMetadata]
+    querySources <- forM selectedQueries $ \q -> do
+      (arguments,_) <- inspectExports libdir ["src",generated] packages [moduleName q.inputType]
+      (results,_) <- inspectExports libdir ["src",generated] packages [moduleName q.resultType]
       pure (q,arguments,results)
     -- Runtime is a public sublibrary, deliberately absent from the author SDK.
     let packageTool = takeDirectory compiler </> "ghc-pkg"
     runtime <- readProcess packageTool ["field","z-kyyn-sdk-z-runtime","id","--simple-output"] "" >>= singleLine "runtime package"
+    let rootEntry = if selection == RootEntries
+          then "validationEntry @" ++ name manifest.schemaType ++ " " ++ name manifest.schemaMetadata ++ " " ++ show rootSources ++ " " ++ name manifest.validator
+          else "describeEntry @" ++ name manifest.schemaType ++ " \"root\" " ++ name manifest.schemaMetadata ++ " " ++ show rootSources
     writeFile (generated </> "KyynGuestEntry.hs") (unlines
       (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
         "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Contract (ProjectionError)",
@@ -75,7 +85,7 @@ buildGuest compiler source output = do
         "    _ -> fail \"Unexpected guest arguments\"",
         "selected :: [Either ProjectionError Entry]", "selected = [" ++
         intercalate ",\n  "
-          (("validationEntry @" ++ name manifest.schemaType ++ " " ++ name manifest.schemaMetadata ++ " " ++ show rootSources ++ " " ++ name manifest.validator) :
+          (rootEntry :
            ["queryEntry @" ++ name manifest.schemaType ++ " @" ++ name q.inputType ++ " @" ++ name q.resultType ++
             " " ++ show (Text.unpack q.queryName) ++
             " (" ++ name manifest.schemaMetadata ++ "," ++ show rootSources ++ ")" ++

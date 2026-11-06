@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Domain.Guest
-  ( CheckedGuest, CheckedEntry, checkGuest, checkedEntries, checkedExports
+  ( CheckedGuest, CheckedEntry, InspectedSchema(..), checkGuest, checkedEntries, checkedExports
   ) where
 
 import Control.Monad (unless, forM_, void)
@@ -9,13 +9,15 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Path (relativePath)
+import Kyyn.Domain.Path (RelativePath, relativePath)
 import qualified Kyyn.Types.Guest as G
 
 -- Descriptions cross a process boundary. The host checks structure, annotations
 -- and identity itself before exposing typed contracts to its workflows.
 data CheckedGuest = CheckedGuest [CheckedEntry] [G.ExportDescription] deriving (Eq, Show)
-type CheckedEntry = G.GuestEntry CheckedContract
+data InspectedSchema = InspectedSchema
+  { contract :: CheckedContract, loadedSources :: [RelativePath] } deriving (Eq, Show)
+type CheckedEntry = G.GuestEntry InspectedSchema
 
 checkedEntries :: CheckedGuest -> [CheckedEntry]
 checkedEntries (CheckedGuest entries _) = entries
@@ -33,7 +35,7 @@ checkGuest description = do
   forM_ description.exports $ \exported -> do
     ensure (all (not . Text.null) [exported.exportModule,exported.exportName,exported.exportSignature])
       "guest.exports" "Incomplete exported symbol"
-    unless (Text.null exported.exportSource) (source exported.exportSource)
+    unless (Text.null exported.exportSource) (void (source exported.exportSource))
   pure (CheckedGuest entries description.exports)
 
 checkEntry :: G.EntryDescription -> Either [Diagnostic] CheckedEntry
@@ -46,20 +48,20 @@ checkEntry entry = case entry of
   G.ContractEntry name selected -> G.ContractEntry name <$> check selected
   where
     root selected = do
-      contract <- check selected
-      void (checkRootLayout contract)
-      pure contract
+      inspected <- check selected
+      void (checkRootLayout inspected.contract)
+      pure inspected
     check selected = do
-      forM_ selected.loadedSources source
+      sources <- traverse source selected.loadedSources
       contract <- checkContract selected.structure selected.metadata
       ensure (contractFingerprint (contractId contract) == Text.unpack selected.identity)
         "guest.identity" "Guest contract fingerprint disagrees with its structure and metadata"
-      pure contract
+      pure (InspectedSchema contract sources)
 
-source :: Text -> Either [Diagnostic] ()
+source :: Text -> Either [Diagnostic] RelativePath
 source path = case relativePath (Text.unpack path) of
   Left problem -> Left [errorDiagnostic "guest.source" problem]
-  Right _ -> pure ()
+  Right selectedPath -> pure selectedPath
 
 unique :: String -> [Text] -> Either [Diagnostic] ()
 unique label names = ensure (all (not . Text.null) names && length names == length (nub names))

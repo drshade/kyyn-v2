@@ -88,9 +88,20 @@
           default = self.packages.${system}.kyyn;
         });
       legacyPackages = forAllSystems (system: (project system).haskell);
-      checks = forAllSystems (system: {
-        guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
-      });
+      checks = forAllSystems (system:
+        let
+          p = project system;
+          schemaSource = p.pkgs.runCommand "kyyn-schema-discovery-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"schema"}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Queries where' 'unfinished =' > "$out/src/Queries.hs"
+          '';
+        in {
+          guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
+          guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
+        });
       lib.mkGuest = { system, src, dependencies ? (h: [ ]),
         haskellPackages ? self.legacyPackages.${system} }:
         let

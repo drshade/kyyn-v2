@@ -7,7 +7,7 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Contract (checkRootLayout)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..), factsLocation, isFactPath, isRootMaterial, recipesLocation, recipeStatesLocation)
+import Kyyn.Domain.Root (Root(..), SourceRoot(..), factsLocation, isFactPath, isRootMaterial, recipesLocation, recipeStatesLocation)
 import Kyyn.Domain.Recipe (StoredRecipe)
 import Kyyn.Types.Fact (Fact)
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
@@ -25,10 +25,10 @@ runRootOpening
   :: (Schema.SchemaInspection :> es, Git.Git :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
   => FileTree -> Eff (RootOpening : es) a -> Eff es a
 runRootOpening sdk = interpret $ \_ -> \case
-  OpenCapturedSource tree -> openSource sdk tree
+  OpenCapturedSource tree -> openSource tree
   LoadSourceAt repository revision prefix -> do
     captured <- Git.readTreeExcluding repository revision prefix [factsLocation, recipesLocation, recipeStatesLocation]
-    either (pure . Left) (openSource sdk) captured
+    either (pure . Left) openSource captured
   OpenCapturedRoot tree -> openTree sdk tree
   LoadRootAt repository revision prefix -> do
     captured <- Git.readTreeAt repository revision prefix
@@ -77,7 +77,7 @@ openInput
   :: (Schema.SchemaInspection :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
   => FileTree -> FileTree -> Eff es (Either [Diagnostic] (Root, [RelativePath]))
 openInput sdk tree = runExceptT $ do
-  source@(SourceRoot contract code _ closure) <- ExceptT (openSource sdk tree)
+  source@(SourceRoot contract code _ closure) <- ExceptT (openSource tree)
   facts <- checked (fileTree [(p,b) | (p,b) <- files tree, isFactPath p])
   recipes <- ExceptT (loadRecipes sdk source tree)
   pure (Root contract facts code recipes, closure)
@@ -91,10 +91,10 @@ loadRecipes sdk source tree = runExceptT $ do
 
 openSource
   :: (Schema.SchemaInspection :> es, RootStore :> es)
-  => FileTree -> FileTree -> Eff es (Either [Diagnostic] SourceRoot)
-openSource sdk tree = runExceptT $ do
-  definition@(RootDefinition typeName metadataName _ _ _ authored _) <- ExceptT (readRootDefinition tree)
-  source <- checked (Schema.schemaSource (files authored ++ files sdk) typeName metadataName)
+  => FileTree -> Eff es (Either [Diagnostic] SourceRoot)
+openSource tree = runExceptT $ do
+  definition <- ExceptT (readRootDefinition tree)
+  source <- checked (Schema.schemaSource (files tree))
   Schema.InspectedSchema inspected closure <- ExceptT (Schema.inspectSchema source)
   contract <- ExceptT (pure (checkRootLayout inspected))
   let (_, codeEntries) = partition (isRootMaterial . fst) (files tree)

@@ -13,7 +13,7 @@ import Kyyn.Types.SchemaMetadata
 
 -- Protocol equality selects the current interface; there is no negotiation.
 protocolIdentity :: Text
-protocolIdentity = "kyyn-guest"
+protocolIdentity = "kyyn-guest-1"
 
 data DescribedContract = DescribedContract
   { structure :: Description, metadata :: SchemaMetadata, identity :: Text

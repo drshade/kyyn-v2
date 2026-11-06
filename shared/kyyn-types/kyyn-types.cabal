@@ -7,7 +7,7 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Types.Contract.ScalarKind Kyyn.Types.Guest Kyyn.Types.Contract Kyyn.Types.SchemaMetadata Kyyn.Types.Fact Kyyn.Types.Diagnostic
+  exposed-modules: Kyyn.Types.Contract.ScalarKind Kyyn.Types.Guest Kyyn.Types.GuestBuild Kyyn.Types.Contract Kyyn.Types.SchemaMetadata Kyyn.Types.Fact Kyyn.Types.Diagnostic
     Kyyn.Types.Program Kyyn.Types.Query
     Kyyn.Types.Evidence Kyyn.Types.Evolution
     Kyyn.Types.Plugin Kyyn.Types.KnowledgeBase

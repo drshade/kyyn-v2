@@ -16,6 +16,7 @@ library
     Kyyn.Plumbing.Capability.SchemaInspection.Agentic
     Kyyn.Plumbing.Capability.Failure Kyyn.Plumbing.Capability.ProcessExecution
     Kyyn.Plumbing.Capability.FileSystem Kyyn.Plumbing.Capability.GuestCompilation
+    Kyyn.Plumbing.Capability.GuestInspection
     Kyyn.Plumbing.Capability.GuestExecution Kyyn.Plumbing.Capability.FileAcquisition
     Kyyn.Plumbing.Protocol.AcquisitionBatch
     Kyyn.Plumbing.Protocol.PluginMessages
