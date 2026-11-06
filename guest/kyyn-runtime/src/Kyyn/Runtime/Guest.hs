@@ -72,7 +72,7 @@ buildEntries selected = do
 checkEntries :: [Either ProjectionError Entry] -> IO ()
 checkEntries selected = buildEntries selected >> pure ()
 
-runGuest :: [ExportDescription] -> [Either ProjectionError Entry] -> IO ()
+runGuest :: [ModuleDescription] -> [Either ProjectionError Entry] -> IO ()
 runGuest exports selected = do
   built <- buildEntries selected
   let descriptions = [description | Entry description _ <- built]

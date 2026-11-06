@@ -1,47 +1,41 @@
--- Read-only catalogue capability and real Dhall round trips, namespace/instance
--- preservation and missing/malformed/version refusal; no compiler.
-
-{-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
+-- Read-only discovery uses the selected build's module descriptions, preserves
+-- type/constructor names and compiler documentation, and propagates failures.
+{-# LANGUAGE DataKinds, GADTs, OverloadedStrings #-}
 module Main where
 
 import Control.Monad (unless)
-import qualified Data.ByteString as Bytes
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.FileTree (FileTree, fileTree)
 import Kyyn.Domain.GuestApi
-import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativeName)
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
-import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Plumbing.Protocol.GuestApi (encodeCatalogue, decodeCatalogue)
+import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection(..))
 import qualified Kyyn.Porcelain.Capability.GuestApi as Api
 import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi)
 
 main :: IO ()
 main = do
-  let symbols = [ApiSymbol "Item" TypeNamespace "Example.Item" "Type" Nothing Nothing,
-        ApiSymbol "Item" ValueNamespace "Example.Item" "String -> Item" Nothing Nothing,
-        ApiSymbol "make" ValueNamespace "Original.make" "String -> Item" (Just "make :: String -> Item")
-          (Just "Create an item: café.\n  Example indentation.")]
-      instances = ["instance Eq a => Eq (Item a)"]
-      catalogue = [ApiModule "Example" symbols instances]
-      scope = either error id (directoryScope "/test/runtime")
-      bytes = either (error . show) id (runPureEff (runDhallHandling (encodeCatalogue catalogue)))
-      readApi stored = runPureEff . runDhallHandling . onlyCatalogue scope stored . runGuestApi scope
-  assert "real Dhall round trip" (runPureEff (runDhallHandling (decodeCatalogue bytes)) == Right catalogue)
-  assert "list modules" (readApi (Just bytes) Api.listModules == Right ["Example"])
-  assert "module projection" (readApi (Just bytes) (Api.findModule "Example") == Right (ApiModule "Example" symbols instances))
-  assert "type/value namespaces" (readApi (Just bytes) (Api.findSymbol "Example.Item") == Right ("Example",take 2 symbols))
-  assert "unknown module" (refused (readApi (Just bytes) (Api.findModule "Missing")))
-  assert "unknown symbol" (refused (readApi (Just bytes) (Api.findSymbol "make")))
-  assert "missing catalogue" (refused (readApi Nothing Api.readCatalogue))
-  assert "malformed catalogue" (refused (readApi (Just "not dhall") Api.readCatalogue))
-  assert "wrong catalogue shape" (refused (readApi (Just "{ modules = [1] }") Api.readCatalogue))
-  putStrLn "Guest catalogue Dhall round trips, read-only discovery and refusal tests passed."
+  let symbols = [ExportDescription "Item" "data Item = Item Text" "Example.Item" Nothing ExportType,
+        ExportDescription "Item" "Item :: Text -> Item" "Example.Item" Nothing ExportConstructor,
+        ExportDescription "make" "make :: Text -> Item" "Original.make"
+          (Just "Create an item: café.\n  Example indentation.") ExportValue]
+      selected = ModuleDescription "Example" "src/Example.hs" Nothing ["instance Eq Item"] symbols
+      catalogue = [selected]
+      sources = either error id (fileTree [])
+      readApi response = runPureEff . onlySelected sources response . runGuestApi sources ["Example"]
+  assert "list modules" (readApi (Right catalogue) Api.listModules == Right ["Example"])
+  assert "module projection" (readApi (Right catalogue) (Api.findModule "Example") == Right selected)
+  assert "type/constructor namespaces" (readApi (Right catalogue) (Api.findSymbol "Example.Item") == Right ("Example",take 2 symbols))
+  assert "unknown module" (refused (readApi (Right catalogue) (Api.findModule "Missing")))
+  assert "unknown symbol" (refused (readApi (Right catalogue) (Api.findSymbol "make")))
+  let failed = Left [errorDiagnostic "guest.build" "GHC rejected selected source"]
+  assert "no fallback catalogue" (readApi failed Api.readCatalogue == failed)
+  putStrLn "Selected guest API descriptions, names, documentation and failure propagation pass."
 
-onlyCatalogue :: DirectoryScope -> Maybe Bytes.ByteString -> Eff (FileSystem : es) a -> Eff es a
-onlyCatalogue expected contents = interpret $ \_ -> \case
-  ReadOptionalBytes scope path | scope == expected && relativeName path == "guest-api.dhall" -> pure contents
-  _ -> error "API discovery performed an unexpected filesystem operation"
+onlySelected :: FileTree -> Either [Diagnostic] [ApiModule] -> Eff (ApiInspection : es) a -> Eff es a
+onlySelected expected response = interpret $ \_ (InspectApiModules sources modules) ->
+  if sources == expected && modules == ["Example"] then pure response
+  else error "API discovery changed the selected source or module"
 
 refused :: Either a b -> Bool
 refused (Left _) = True

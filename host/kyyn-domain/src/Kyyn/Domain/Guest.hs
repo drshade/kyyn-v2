@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Domain.Guest
-  ( CheckedGuest, CheckedEntry, InspectedSchema(..), checkGuest, checkedEntries, checkedExports
+  ( CheckedGuest, CheckedEntry, InspectedSchema(..), checkGuest, checkedEntries, checkedModules
   ) where
 
 import Control.Monad (unless, forM_, void)
@@ -14,7 +14,7 @@ import qualified Kyyn.Types.Guest as G
 
 -- Descriptions cross a process boundary. The host checks structure, annotations
 -- and identity itself before exposing typed contracts to its workflows.
-data CheckedGuest = CheckedGuest [CheckedEntry] [G.ExportDescription] deriving (Eq, Show)
+data CheckedGuest = CheckedGuest [CheckedEntry] [G.ModuleDescription] deriving (Eq, Show)
 data InspectedSchema = InspectedSchema
   { contract :: CheckedContract, loadedSources :: [RelativePath] } deriving (Eq, Show)
 type CheckedEntry = G.GuestEntry InspectedSchema
@@ -22,21 +22,23 @@ type CheckedEntry = G.GuestEntry InspectedSchema
 checkedEntries :: CheckedGuest -> [CheckedEntry]
 checkedEntries (CheckedGuest entries _) = entries
 
-checkedExports :: CheckedGuest -> [G.ExportDescription]
-checkedExports (CheckedGuest _ exports) = exports
+checkedModules :: CheckedGuest -> [G.ModuleDescription]
+checkedModules (CheckedGuest _ exports) = exports
 
 checkGuest :: G.GuestDescription -> Either [Diagnostic] CheckedGuest
 checkGuest description = do
   ensure (description.protocol == G.protocolIdentity) "guest.protocol" "Unrecognized guest protocol"
   unique "entry" (map G.entryName description.entries)
   entries <- traverse checkEntry description.entries
-  let symbols = [(e.exportModule,e.exportName,e.exportKind) | e <- description.exports]
-  ensure (length symbols == length (nub symbols)) "guest.exports" "Duplicate exported symbol"
-  forM_ description.exports $ \exported -> do
-    ensure (all (not . Text.null) [exported.exportModule,exported.exportName,exported.exportSignature])
-      "guest.exports" "Incomplete exported symbol"
-    unless (Text.null exported.exportSource) (void (source exported.exportSource))
-  pure (CheckedGuest entries description.exports)
+  unique "module" (map G.moduleName description.modules)
+  forM_ description.modules $ \selected -> do
+    unless (Text.null selected.moduleSource) (void (source selected.moduleSource))
+    let symbols = [(e.exportName,e.exportKind) | e <- selected.moduleExports]
+    ensure (length symbols == length (nub symbols)) "guest.exports" "Duplicate exported symbol"
+    forM_ selected.moduleExports $ \exported ->
+      ensure (all (not . Text.null) [exported.exportName,exported.exportSignature,exported.exportOrigin])
+        "guest.exports" "Incomplete exported symbol"
+  pure (CheckedGuest entries description.modules)
 
 checkEntry :: G.EntryDescription -> Either [Diagnostic] CheckedEntry
 checkEntry entry = case entry of

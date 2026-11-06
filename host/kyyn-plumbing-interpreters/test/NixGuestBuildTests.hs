@@ -14,7 +14,7 @@ import System.Environment (getArgs, getEnvironment)
 import System.Directory (doesPathExist)
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Domain.Path
-import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Guest (checkedEntries)
 import qualified Kyyn.Types.Guest as G
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
@@ -25,6 +25,8 @@ import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Plumbing.Interpreter.GuestCompilation
 import Kyyn.Plumbing.Interpreter.GuestExecution
 import Kyyn.Plumbing.Interpreter.GuestInspection
+import Kyyn.Plumbing.Capability.ApiInspection (inspectApiModules)
+import Kyyn.Plumbing.Interpreter.ApiInspection
 import Kyyn.Plumbing.Interpreter.SchemaInspection
 import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.ProcessExecution
@@ -46,7 +48,7 @@ main = do
     sources <- right (guestSources RootEntries (files tree))
     let settings = GuestBuildEnvironment nix "x86_64-linux" environment cache
         run action = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-          . runGuestExecution environment . runGuestInspection . runGuestCompilation settings . runSchemaInspection $ action
+          . runGuestExecution environment . runGuestInspection . runGuestCompilation settings . runSchemaInspection . runApiInspection $ action
     result <- run $ runExceptT $ do
       program <- ExceptT (compileGuest sources)
       description <- ExceptT (describeGuest program)
@@ -69,6 +71,14 @@ main = do
     schema <- run (Schema.inspectSchema schemaSelection) >>= right >>= right
     unless (map relativeName schema.loadedSources == ["src/Main.hs"])
       (fail "Host schema inspection included metadata-only or unfinished sources")
+    api <- run (inspectApiModules tree ["Queries","KyynQueryBindings","Data.Maybe"]) >>= right >>= right
+    unless (map G.moduleName api == ["Queries","KyynQueryBindings","Data.Maybe"])
+      (fail "Host API inspection changed selected modules")
+    unfinished <- right (fileTree [(p,if relativeName p `elem` ["kb.dhall","src/Main.hs"]
+      then "unfinished" else bytes) | (p,bytes) <- files tree])
+    independent <- run (inspectApiModules unfinished ["Data.Maybe"]) >>= right >>= right
+    unless (map G.moduleName independent == ["Data.Maybe"])
+      (fail "Unrelated broken Root blocked library discovery")
     incomplete <- right (guestSources RootEntries [(p,if relativeName p == "flake.lock"
       then "{\"version\":7,\"root\":\"root\",\"nodes\":{\"root\":{}}}" else bytes) | (p,bytes) <- files tree])
     rejected <- run (compileGuest incomplete) >>= right

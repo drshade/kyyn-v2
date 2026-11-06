@@ -1,7 +1,8 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Porcelain.Interpreter.WorkspaceApi (runWorkspaceApi) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
+import qualified Data.Text as Text
 import Data.List (stripPrefix, isPrefixOf, sortOn)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -9,7 +10,7 @@ import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.Git (TreePath(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
+import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ModuleDescription(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
 import Kyyn.Domain.Path (relativeName)
 import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
 import qualified Kyyn.Domain.KnowledgeBase as KB
@@ -62,9 +63,9 @@ runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
           InspectApiSymbol symbol -> take 1 (sortOn (negate . length)
             [name | name <- names, (name ++ ".") `isPrefixOf` symbol]) ++ selected
     inspected <- if null requested then pure [] else ExceptT (inspectApiModules sources requested)
-    let entry origin name = ApiEntry origin (case [m | m@(ApiModule actual _ _) <- inspected, actual == name] of
+    let entry origin name = ApiEntry origin (case [m | m <- inspected, Text.unpack m.moduleName == name] of
           [m] -> m
-          _ -> ApiModule name [] [])
+          _ -> ModuleDescription (Text.pack name) "" Nothing [] [])
     pure (map (entry GeneratedOrigin) names ++ map (entry KbOrigin) authored ++ map (entry PluginOrigin) pluginModules)
   InspectWorkspaceApi workspace -> runExceptT $ do
     PreparedEvolution (EvolutionContext kb@(KB.KnowledgeBase repository _) _ (Before revision _)

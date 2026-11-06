@@ -23,26 +23,43 @@ main = do
   withSystemTempDirectory "kyyn-ghc-inspection" $ \directory -> withCurrentDirectory directory $ do
     writeFile "Types.hs" (unlines
       ["{-# LANGUAGE NoFieldSelectors #-}","module Types (Root(..)) where",
-       "data Root = Root { count :: Integer }"])
+       "data Root = Root { count :: Integer } deriving Eq"])
     writeFile "Schema.hs" (unlines
       ["module Schema (Root(..), total) where","import Types",
-       "total :: Root -> Integer","total (Root n) = n", "private :: Bool", "private = True"])
-    (sources,exports) <- inspectExports libdir ["."] [] ["Schema","Schema"]
+       "-- | Count selected records.","total :: Root -> Integer","total (Root n) = n", "private :: Bool", "private = True"])
+    (sources,modules) <- inspectExports libdir ["."] [] ["Schema","Schema","Types"]
     unless (sort sources == ["Schema.hs","Types.hs"]) (fail ("Wrong schema closure: " ++ show sources))
-    let values = [(entry.exportName,entry.exportKind) | entry <- exports]
+    let exports = concatMap moduleExports modules
+        values = [(entry.exportName,entry.exportKind) | entry <- exports]
     unless (("Root",ExportType) `elem` values && ("Root",ExportConstructor) `elem` values && ("total",ExportValue) `elem` values)
       (fail ("Compiler export namespaces missing: " ++ show values))
     unless (all ((/= "private") . exportName) exports) (fail "Private implementation leaked into API")
+    unless (any (\entry -> entry.exportName == "total" &&
+      maybe False ("Count selected records." `Text.isInfixOf`) entry.exportDocumentation) exports)
+      (fail "GHC Haddock documentation missing")
+    unless (any (\entry -> entry.exportName == "Root" && entry.exportOrigin == "Types.Root") exports)
+      (fail "Re-export lost its defining origin")
+    unless (any (\selected -> selected.moduleName == "Types" &&
+      any ("Eq Root" `Text.isInfixOf`) selected.moduleInstances) modules)
+      (fail "Compiler-owned module instances missing")
     unless (any (\entry -> entry.exportName == "total" && "Integer" `Text.isInfixOf` entry.exportSignature) exports)
       (fail "Compiler signature missing")
-    (packageSources,packageExports) <- inspectExports libdir ["."] [] ["Data.Maybe"]
-    unless (null packageSources && any ((== "fromMaybe") . exportName) packageExports)
+    (packageSources,packageModules) <- inspectExports libdir ["."] [] ["Data.Maybe"]
+    unless (null packageSources && any ((== "fromMaybe") . exportName) (concatMap moduleExports packageModules))
       (fail "Locked library export inspection failed")
+    -- Force interface-only fields too: package ModuleInfo contains a partial
+    -- instance accessor even though its exports can be inspected successfully.
+    sum [Text.length text | m <- packageModules, text <- m.moduleInstances] `seq` pure ()
     writeFile "Main.hs" (unlines ["module Main (value) where","value :: Integer","value = 1"])
-    (_,mainExports) <- inspectExports libdir ["."] [] ["Main"]
-    unless (any ((== "value") . exportName) mainExports) (fail "Authored Main required an IO entry")
+    (_,mainModules) <- inspectExports libdir ["."] [] ["Main"]
+    unless (any ((== "value") . exportName) (concatMap moduleExports mainModules)) (fail "Authored Main required an IO entry")
+    writeFile "UsesBindings.hs" (unlines
+      ["module UsesBindings where", "import KyynQueryBindings", "selected = missing"])
+    uses <- needsRootBindings libdir ["."] [] ["UsesBindings"]
+    independent <- needsRootBindings libdir ["."] [] ["Schema","Data.Maybe"]
+    unless (uses && not independent) (fail "Root prepass selection ignored compiler dependency closure")
     writeFile "Broken.hs" (unlines ["module Broken where","bad :: Integer","bad = True"])
-    failed <- try (inspectExports libdir ["."] [] ["Broken"]) :: IO (Either SomeException ([FilePath],[ExportDescription]))
+    failed <- try (inspectExports libdir ["."] [] ["Broken"]) :: IO (Either SomeException ([FilePath],[ModuleDescription]))
     case failed of
       Left _ -> pure ()
       Right _ -> fail "Invalid authored source passed compiler inspection"

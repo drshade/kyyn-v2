@@ -1,14 +1,14 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
   ( GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
-  , QueryContracts(..), ExportDescription(..), ExportKind(..)
+  , QueryContracts(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
   , protocolIdentity, describeContract
   ) where
 
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=), (.:), withObject, withText)
 import Data.Text (Text)
 import Kyyn.Types.Contract
-import Kyyn.Types.Json (exactObject)
+import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 import Kyyn.Types.SchemaMetadata
 
 -- Protocol equality selects the current interface; there is no negotiation.
@@ -36,11 +36,17 @@ type EntryDescription = GuestEntry DescribedContract
 
 data ExportKind = ExportType | ExportConstructor | ExportValue | ExportCoercion deriving (Eq, Ord, Show)
 data ExportDescription = ExportDescription
-  { exportModule :: Text, exportName :: Text, exportSignature :: Text, exportSource :: Text, exportKind :: ExportKind
+  { exportName :: Text, exportSignature :: Text, exportOrigin :: Text
+  , exportDocumentation :: Maybe Text, exportKind :: ExportKind
+  } deriving (Eq, Show)
+
+data ModuleDescription = ModuleDescription
+  { moduleName :: Text, moduleSource :: Text, moduleDocumentation :: Maybe Text
+  , moduleInstances :: [Text], moduleExports :: [ExportDescription]
   } deriving (Eq, Show)
 
 data GuestDescription = GuestDescription
-  { protocol :: Text, entries :: [EntryDescription], exports :: [ExportDescription]
+  { protocol :: Text, entries :: [EntryDescription], modules :: [ModuleDescription]
   } deriving (Eq, Show)
 
 instance ToJSON DescribedContract where
@@ -80,20 +86,29 @@ instance FromJSON ExportKind where
     _ -> fail "Unknown export kind"
 
 instance ToJSON ExportDescription where
-  toJSON (ExportDescription moduleName name signature source kind) = object
-    ["exportModule" .= moduleName,"exportName" .= name,"exportSignature" .= signature,
-     "exportSource" .= source,"exportKind" .= kind]
+  toJSON (ExportDescription name signature origin documentation kind) = object
+    ["name" .= name,"signature" .= signature,"origin" .= origin,
+     "documentation" .= optionalValue documentation,"kind" .= kind]
 instance FromJSON ExportDescription where
-  parseJSON = exactObject "export" ["exportModule","exportName","exportSignature","exportSource","exportKind"] $ \fields ->
-    ExportDescription <$> fields .: "exportModule" <*> fields .: "exportName" <*> fields .: "exportSignature"
-      <*> fields .: "exportSource" <*> fields .: "exportKind"
+  parseJSON = exactObject "export" ["name","signature","origin","documentation","kind"] $ \fields ->
+    ExportDescription <$> fields .: "name" <*> fields .: "signature" <*> fields .: "origin"
+      <*> (fields .: "documentation" >>= parseOptionalValue) <*> fields .: "kind"
+
+instance ToJSON ModuleDescription where
+  toJSON (ModuleDescription name source documentation instances exports) = object
+    ["name" .= name,"source" .= source,"documentation" .= optionalValue documentation,
+     "instances" .= instances,"exports" .= exports]
+instance FromJSON ModuleDescription where
+  parseJSON = exactObject "module" ["name","source","documentation","instances","exports"] $ \fields ->
+    ModuleDescription <$> fields .: "name" <*> fields .: "source" <*> (fields .: "documentation" >>= parseOptionalValue)
+      <*> fields .: "instances" <*> fields .: "exports"
 
 instance ToJSON GuestDescription where
-  toJSON (GuestDescription selectedProtocol selectedEntries selectedExports) = object
-    ["protocol" .= selectedProtocol,"entries" .= selectedEntries,"exports" .= selectedExports]
+  toJSON (GuestDescription selectedProtocol selectedEntries selectedModules) = object
+    ["protocol" .= selectedProtocol,"entries" .= selectedEntries,"modules" .= selectedModules]
 instance FromJSON GuestDescription where
-  parseJSON = exactObject "guest description" ["protocol","entries","exports"] $ \fields ->
-    GuestDescription <$> fields .: "protocol" <*> fields .: "entries" <*> fields .: "exports"
+  parseJSON = exactObject "guest description" ["protocol","entries","modules"] $ \fields ->
+    GuestDescription <$> fields .: "protocol" <*> fields .: "entries" <*> fields .: "modules"
 
 describeContract :: Description -> SchemaMetadata -> [Text] -> DescribedContract
 describeContract description annotations sources = DescribedContract description annotations

@@ -98,9 +98,25 @@
             printf '%s\n' '{"selection":"schema"}' > "$out/.kyyn-build.json"
             printf '%s\n' 'module Queries where' 'unfinished =' > "$out/src/Queries.hs"
           '';
+          bindingApiSource = p.pkgs.runCommand "kyyn-binding-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"modules","modules":["Queries","KyynQueryBindings"]}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Evolution where' 'unfinished =' > "$out/src/Evolution.hs"
+          '';
+          apiSource = p.pkgs.runCommand "kyyn-api-discovery-source" { } ''
+            mkdir -p "$out/src"
+            printf '%s\n' '{"selection":"modules","modules":["Example","Data.Maybe","Kyyn.Optics"]}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
+            printf '%s\n' 'module Example (answer) where' 'answer :: Integer' 'answer = 42' 'private = True' > "$out/src/Example.hs"
+            printf '%s\n' 'module Broken where' 'unfinished =' > "$out/src/Broken.hs"
+          '';
         in {
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
+          guest-api = self.lib.mkGuest { inherit system; src = apiSource; };
+          guest-api-bindings = self.lib.mkGuest { inherit system; src = bindingApiSource; };
         });
       lib.mkGuest = { system, src, dependencies ? (h: [ ]),
         haskellPackages ? self.legacyPackages.${system} }:

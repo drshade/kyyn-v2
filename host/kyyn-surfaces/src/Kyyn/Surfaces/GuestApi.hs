@@ -1,12 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Surfaces.GuestApi (modulesResult, moduleResult, symbolResult, workspaceResult, availableCatalogue, withOrigins) where
 
-import Data.Aeson (Value(..), object, (.=))
+import Data.Aeson (Value(..), object, (.=), toJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Text as Text
-import Data.Char (isAlpha)
-import Data.List (intercalate, partition, isPrefixOf)
+import Data.List (partition, isPrefixOf)
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..))
 import Kyyn.Domain.GuestApi
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
@@ -19,7 +18,7 @@ withOrigins :: [ApiEntry] -> Response -> Response
 withOrigins entries (Response outcome (Object fields) messages diagnostics)
   | outcome == Succeeded = Response outcome (Object enriched) displayed diagnostics
   where
-    origins = [(name,label origin) | ApiEntry origin (ApiModule name _ _) <- entries]
+    origins = [(Text.unpack entry.moduleName,label origin) | ApiEntry origin entry <- entries]
     label SdkOrigin = "sdk" :: String
     label GeneratedOrigin = "generated"
     label KbOrigin = "kb"
@@ -36,7 +35,7 @@ availableCatalogue :: Bool -> [ApiModule] -> Response -> Response
 availableCatalogue listing modules response@(Response outcome _ _ diagnostics)
   | outcome == Succeeded = response
   | any missingSymbol diagnostics = response
-  | otherwise = case withOrigins (map (ApiEntry SdkOrigin) modules) (modulesResult (Right [name | ApiModule name _ _ <- modules])) of
+  | otherwise = case withOrigins (map (ApiEntry SdkOrigin) modules) (modulesResult (Right [Text.unpack selected.moduleName | selected <- modules])) of
       Response _ value messages _ -> Response (if listing then Succeeded else outcome) value messages
         (Diagnostic (if listing then Warning else Error) "guest.bindings-unavailable"
           "KB API inspection failed; the installed SDK catalogue is shown. Fix the reported problem and retry."
@@ -62,50 +61,26 @@ modulesResult :: Either [Diagnostic] [String] -> Response
 modulesResult = either refusal (\modules -> success (object ["modules" .= modules]) modules)
 
 moduleResult :: Either [Diagnostic] ApiModule -> Response
-moduleResult = either refusal (\(ApiModule name symbols instances) -> result name symbols instances)
+moduleResult = either refusal (\selected -> result (Text.unpack selected.moduleName)
+  selected.moduleDocumentation selected.moduleExports (map Text.unpack selected.moduleInstances))
 
 symbolResult :: Either [Diagnostic] (String,[ApiSymbol]) -> Response
-symbolResult = either refusal (\(name,symbols) -> result name symbols [])
+symbolResult = either refusal (\(name,symbols) -> result name Nothing symbols [])
 
-result :: String -> [ApiSymbol] -> [String] -> Response
-result name symbols instances = success (object
-  ["module" .= name, "symbols" .= map symbolJson symbols, "instances" .= instances])
-  ((("module " ++ name) : concatMap symbolText ordered) ++ instanceText)
+result :: String -> Maybe Text.Text -> [ApiSymbol] -> [String] -> Response
+result name documentation symbols instances = success (object
+  ["module" .= name, "documentation" .= documentation, "symbols" .= map toJSON symbols, "instances" .= instances])
+  ((("module " ++ name) : comments documentation ++ concatMap symbolText ordered) ++ instanceText)
   where
-    instanceText = if null instances then [] else ["", "-- Explicit instances declared here"] ++ instances
+    instanceText = if null instances then [] else ["", "-- Module instances"] ++ instances
     ordered | "Kyyn.Workspace." `isPrefixOf` name = let (local, exports) = partition definedHere symbols in local ++ exports
             | otherwise = symbols
-    definedHere (ApiSymbol _ _ origin _ _ _) = (name ++ ".") `isPrefixOf` origin
-
-symbolJson :: ApiSymbol -> Value
-symbolJson (ApiSymbol name namespace origin signature declaration documentation) = object
-  [ "name" .= name, "namespace" .= namespaceName namespace, "definedAs" .= origin
-  , "checkedSignature" .= signature, "declaration" .= declaration, "documentation" .= documentation ]
-
-namespaceName :: Namespace -> String
-namespaceName TypeNamespace = "type"
-namespaceName ValueNamespace = "value"
+    definedHere selected = (name ++ ".") `isPrefixOf` Text.unpack selected.exportOrigin
 
 symbolText :: ApiSymbol -> [String]
-symbolText (ApiSymbol name namespace origin signature declaration documentation) =
-  [""] ++ maybe [] (map comment . lines) documentation
-  ++ ["-- [Defined as " ++ displayOrigin name origin ++ "]"]
-  ++ maybe [prefix ++ signatureName name ++ " :: " ++ signature ++ "  -- [compiler signature]"] lines declaration
-  where
-    prefix = case namespace of TypeNamespace -> "type "; ValueNamespace -> ""
-    comment "" = "--"
-    comment text = "-- " ++ text
+symbolText selected = [""] ++ comments selected.exportDocumentation
+  ++ ["-- [Defined as " ++ Text.unpack selected.exportOrigin ++ "]"]
+  ++ lines (Text.unpack selected.exportSignature)
 
-signatureName :: String -> String
-signatureName name@(c:_) | isAlpha c || c `elem` ['_', '(', '['] = name
-signatureName name = "(" ++ name ++ ")"
-
-displayOrigin :: String -> String -> String
-displayOrigin name origin = case reverse (segments origin) of
-  field : _record : "get$" : owner@(_:_) | field == name ->
-    intercalate "." (reverse owner ++ [field])
-  _ -> origin
-  where
-    segments text = case break (== '.') text of
-      (part,[]) -> [part]
-      (part,_:rest) -> part : segments rest
+comments :: Maybe Text.Text -> [String]
+comments = maybe [] (map (\line -> "-- " ++ line) . lines . Text.unpack)

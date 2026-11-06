@@ -9,6 +9,7 @@ library
   hs-source-dirs: src
   exposed-modules: Kyyn.Plumbing.Interpreter.Failure Kyyn.Plumbing.Interpreter.ProcessExecution
     Kyyn.Plumbing.Interpreter.GuestExecution
+    Kyyn.Plumbing.Interpreter.ApiInspection
     Kyyn.Plumbing.Interpreter.SchemaInspection
     Kyyn.Plumbing.Interpreter.GuestInspection
     Kyyn.Plumbing.Interpreter.GuestCompilation
