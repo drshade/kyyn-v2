@@ -38,6 +38,7 @@
             overrides = final: prev:
               let
                 pinned = {
+                  filelock = { version = "0.1.1.8"; hash = "sha256-0qNcgMmZ6pl7oEUPROuuDo4MKoKzVGlrqBAfjoS5yvo="; };
                   aeson = { version = "2.2.5.0"; hash = "sha256-RooTSc8dZrcUiWFQDssKv1/l5OB/psUD7jbyWG/7VKQ="; };
                   effectful-core = { version = "2.6.1.0"; hash = "sha256-0UTeE7JnUkNx77QobyjKjQFpUVQsz6a1E55WEohJ+hI="; };
                   dhall = { version = "1.42.3"; hash = "sha256-/yOhbmlljlo8bpvlOCBQS0n6HbqcDy4DtIIwLShYlxE="; };
