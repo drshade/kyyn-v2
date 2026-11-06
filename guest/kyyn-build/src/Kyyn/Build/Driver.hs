@@ -84,7 +84,20 @@ buildRoot compiler libdir generated basePackages destination selection = do
         let name = "$acquisition." <> plugin.pluginName <> "." <> connector.name
             identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector.name ++ ")"
         pure (implementation,"acquisitionEntry " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack connector.fetch)
-  let pluginEntries = capturedEntries ++ acquisitionEntries
+  let ordinaryDeclarations = concat
+        [ (plugin,connector.name,"configuration","configurationEntry",connector.validateConfig) : case connector of
+            P.SourceConnector _ _ _ _ login ->
+              [(plugin,connector.name,"login","loginEntry",implementation) | Just implementation <- [login]]
+            P.SinkConnector _ _ publish defaults ->
+              [(plugin,connector.name,"sink","sinkEntry",publish),(plugin,connector.name,"sinkDefaults","sinkDefaultsEntry",defaults)]
+        | RegisteredPlugin plugin connectors <- registrations, connector <- connectors ]
+  ordinaryEntries <- forM ordinaryDeclarations $ \(plugin,connector,role,factory,reference) -> do
+    implementation <- either fail pure (qualifiedReference False reference)
+    (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
+    let name = "$" <> role <> "." <> plugin.pluginName <> "." <> connector
+        identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector ++ ")"
+    pure (implementation,factory ++ " " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack reference)
+  let pluginEntries = capturedEntries ++ acquisitionEntries ++ ordinaryEntries
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
   unless (selection /= RootEntries || (null manifest.tools && null manifest.outputs))
     (fail "Guest build: tool and output adapters are not implemented yet")

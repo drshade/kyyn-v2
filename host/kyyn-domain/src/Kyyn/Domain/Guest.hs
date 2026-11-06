@@ -33,8 +33,7 @@ checkGuest description = do
   entries <- traverse checkEntry description.entries
   let methods = [(m.pluginName,m.connectorName,m.methodName) | G.CapturedReadEntry _ m _ <- entries]
   ensure (length methods == length (nub methods)) "guest.methods" "Duplicate captured method identity"
-  let acquisitions = [connector | G.AcquisitionEntry _ connector _ <- entries]
-  ensure (length acquisitions == length (nub acquisitions)) "guest.connectors" "Duplicate acquisition connector"
+  checkConnectorContracts entries
   unique "module" (map G.moduleName description.modules)
   forM_ description.modules $ \selected -> do
     unless (Text.null selected.moduleSource) (void (source selected.moduleSource))
@@ -52,10 +51,20 @@ checkEntry entry = case entry of
     G.ValidatorEntry name <$> root selected
   G.QueryEntry name (G.QueryContracts rootContract arguments result) ->
     G.QueryEntry name <$> (G.QueryContracts <$> root rootContract <*> check arguments <*> check result)
+  G.ConfigurationEntry name connector config -> do
+    checkConnector connector
+    G.ConfigurationEntry name connector <$> check config
+  G.LoginEntry name connector config -> do
+    checkConnector connector
+    G.LoginEntry name connector <$> check config
+  G.SinkEntry name connector contracts -> do
+    checkConnector connector
+    G.SinkEntry name connector <$> traverse check contracts
+  G.SinkDefaultsEntry name connector options -> do
+    checkConnector connector
+    G.SinkDefaultsEntry name connector <$> check options
   G.AcquisitionEntry name connector contracts -> do
-    let nominal = either (Left . pure . errorDiagnostic "guest.connector") (const (Right ()))
-    nominal (Plugin.pluginName (Text.unpack connector.connectorPlugin))
-    nominal (Plugin.connectorTypeName (Text.unpack connector.connectorType))
+    checkConnector connector
     G.AcquisitionEntry name connector <$> traverse check contracts
   G.CapturedReadEntry name method contracts -> do
     let nominal = either (Left . pure . errorDiagnostic "guest.method") (const (Right ()))
@@ -75,6 +84,55 @@ checkEntry entry = case entry of
       ensure (contractFingerprint (contractId contract) == Text.unpack selected.identity)
         "guest.identity" "Guest contract fingerprint disagrees with its structure and metadata"
       pure (InspectedSchema contract sources)
+
+-- A connector's separate entry points must agree on its shared contracts.
+-- Completeness for a particular workflow is checked when preparing that workflow.
+checkConnectorContracts :: [CheckedEntry] -> Either [Diagnostic] ()
+checkConnectorContracts entries = do
+  let roles = concatMap role entries
+  ensure (length roles == length (nub roles)) "guest.connectors" "Duplicate connector entry role"
+  compatible "configuration" (concatMap configs entries)
+  compatible "payload" (concatMap payloads entries)
+  compatible "sink options" (concatMap options entries)
+  let sources = [connector | G.AcquisitionEntry _ connector _ <- entries]
+      sinks = [connector | G.SinkEntry _ connector _ <- entries]
+  ensure (null [connector | connector <- sources, connector `elem` sinks])
+    "guest.connectors" "A connector cannot be both a source and a sink"
+  where
+    role entry = case entry of
+      G.ConfigurationEntry _ connector _ -> [("configuration" :: String,connector)]
+      G.LoginEntry _ connector _ -> [("login",connector)]
+      G.AcquisitionEntry _ connector _ -> [("acquisition",connector)]
+      G.SinkEntry _ connector _ -> [("sink",connector)]
+      G.SinkDefaultsEntry _ connector _ -> [("defaults",connector)]
+      _ -> []
+    configs entry = case entry of
+      G.ConfigurationEntry _ connector config -> [(connector,config)]
+      G.LoginEntry _ connector config -> [(connector,config)]
+      G.AcquisitionEntry _ connector (G.StatelessContracts config _ _) -> [(connector,config)]
+      G.AcquisitionEntry _ connector (G.StatefulContracts config _ _ _ _) -> [(connector,config)]
+      G.SinkEntry _ connector (G.SinkContracts config _ _ _) -> [(connector,config)]
+      _ -> []
+    payloads entry = case entry of
+      G.AcquisitionEntry _ connector (G.StatelessContracts _ _ payload) -> [(connector,payload)]
+      G.AcquisitionEntry _ connector (G.StatefulContracts _ _ payload _ _) -> [(connector,payload)]
+      G.CapturedReadEntry _ method (G.CapturedContracts _ payload _) ->
+        [(G.ConnectorIdentity method.pluginName method.connectorName,payload)]
+      _ -> []
+    options entry = case entry of
+      G.SinkEntry _ connector (G.SinkContracts _ selected _ _) -> [(connector,selected)]
+      G.SinkDefaultsEntry _ connector selected -> [(connector,selected)]
+      _ -> []
+    compatible label values = forM_ values $ \(connector,selected) ->
+      forM_ [other | (identity,other) <- values, identity == connector] $ \other ->
+        ensure (contractId selected.contract == contractId other.contract) "guest.connector-contract"
+          ("Inconsistent " ++ label ++ " contracts for " ++ Text.unpack connector.connectorPlugin ++ "/" ++ Text.unpack connector.connectorType)
+
+checkConnector :: G.ConnectorIdentity -> Either [Diagnostic] ()
+checkConnector connector = do
+  let nominal = either (Left . pure . errorDiagnostic "guest.connector") (const (Right ()))
+  nominal (Plugin.pluginName (Text.unpack connector.connectorPlugin))
+  nominal (Plugin.connectorTypeName (Text.unpack connector.connectorType))
 
 source :: Text -> Either [Diagnostic] RelativePath
 source path = case relativePath (Text.unpack path) of

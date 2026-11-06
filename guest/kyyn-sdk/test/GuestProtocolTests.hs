@@ -15,7 +15,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..))
 import qualified Kyyn.Plugin as Plugin
-import Kyyn.Plugin.Host (Acquisition)
+import Kyyn.Plugin.Host (Acquisition, PluginLogin, LoginError)
+import Kyyn.Plugin.Sink (Sink, SinkError)
 import Kyyn.Runtime.PluginRegistration (encodeConnectors)
 import qualified Kyyn.Domain.Guest as Host
 import Data.Fixed (Fixed, E2)
@@ -54,10 +55,11 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
+    ["--plugin-guest"] -> pluginGuest
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
-    ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[])
+    ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
     ["--api-built",path] -> checkApi False (path,[])
@@ -67,6 +69,7 @@ main = do
       check (path,["--guest"])
       checkCaptured (path,["--captured-guest"])
       checkAcquisition (path,["--acquisition-guest"])
+      checkPlugin (path,["--plugin-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
 
 checkApi :: Bool -> (FilePath,[String]) -> IO ()
@@ -287,6 +290,18 @@ checkAcquisition executable = do
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
   unless (length [() | G.AcquisitionEntry{} <- description.entries] == 4) (fail "Missing acquisition shapes")
+  case [entry | entry@G.AcquisitionEntry{} <- description.entries] of
+    selected@(G.AcquisitionEntry _ connector (G.StatelessContracts _ _ payload)) : _ -> do
+      unless (isLeft (Host.checkGuest description { G.entries = selected { G.entryName = "duplicate" } : description.entries }))
+        (fail "Duplicate acquisition role accepted")
+      -- The replacement contract is valid by itself, but wrong for this config.
+      let mismatch = G.ConfigurationEntry "mismatch" connector payload
+          withoutConfig = [entry | entry <- description.entries, case entry of
+            G.ConfigurationEntry _ actual _ -> actual /= connector
+            _ -> True]
+      unless (isLeft (Host.checkGuest description { G.entries = mismatch : withoutConfig }))
+        (fail "Inconsistent connector configuration contracts accepted")
+    _ -> fail "Missing stateless acquisition fixture"
   let input = G.AcquisitionInvocation (String "10") Nothing Nothing "snapshot-1" 1
       context = G.AcquisitionContext "2026-11-06T12:00:00Z" (Just (String "7"))
       completed result = object ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= result]]
@@ -309,3 +324,42 @@ checkAcquisition executable = do
       (status,_,_) <- call executable (toJSON (G.Invoke name (toJSON arguments)))
       unless (status /= ExitSuccess) (fail "Malformed or inapplicable acquisition arguments accepted")
   putStrLn "All four acquisition shapes normalize and reject invalid arguments."
+
+pluginGuest :: IO ()
+pluginGuest = runGuest []
+  [configurationEntry "$configuration.local-file.Files" (G.ConnectorIdentity "local-file" "Files") [] validate,
+   loginEntry "$login.local-file.Files" (G.ConnectorIdentity "local-file" "Files") [] login,
+   configurationEntry "$configuration.local-file.Writer" (G.ConnectorIdentity "local-file" "Writer") [] validate,
+   sinkEntry "$sink.local-file.Writer" (G.ConnectorIdentity "local-file" "Writer") [] publish,
+   sinkDefaultsEntry "$sinkDefaults.local-file.Writer" (G.ConnectorIdentity "local-file" "Writer") [] (3 :: Integer)]
+  where
+    validate :: Integer -> ValidationReport
+    validate _ = ValidationReport []
+    login :: Integer -> PluginLogin (Either LoginError ())
+    login _ = pure (Right ())
+    publish :: Integer -> Integer -> Integer -> Sink (Either SinkError Integer)
+    publish config options input = pure (Right (config + options + input))
+
+checkPlugin :: (FilePath,[String]) -> IO ()
+checkPlugin executable = do
+  descriptionValue <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  let completed result = object ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= result]]
+  forM_ [("$configuration.local-file.Files",String "10",Array mempty),
+    ("$login.local-file.Files",toJSON (G.LoginInvocation (String "10")),completed (object [])),
+    ("$sinkDefaults.local-file.Writer",object [],String "3"),
+    ("$sink.local-file.Writer",toJSON (G.SinkInvocation (String "10") (String "3") (String "7")),completed (String "20"))] $
+      \(name,arguments,expected) -> do
+        result <- invoke executable (toJSON (G.Invoke name arguments))
+        unless (result == expected) (fail ("Wrong plugin result: " ++ show result))
+  forM_ [("$configuration.local-file.Files",String "bad"),
+    ("$login.local-file.Files",object []),
+    ("$login.local-file.Files",toJSON (G.LoginInvocation (String "bad"))),
+    ("$sinkDefaults.local-file.Writer",String "not unit"),
+    ("$sink.local-file.Writer",object []),
+    ("$sink.local-file.Writer",toJSON (G.SinkInvocation (String "10") (String "bad") (String "7")))] $
+      \(name,arguments) -> do
+        (status,_,_) <- call executable (toJSON (G.Invoke name arguments))
+        unless (status /= ExitSuccess) (fail "Malformed plugin invocation accepted")
+  putStrLn "Configuration, login, sink defaults and publication entries pass."
