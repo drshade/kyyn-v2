@@ -162,3 +162,12 @@ test-suite scalar-storage
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson ==2.2.5.0, text
+
+test-suite description-storage
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: DescriptionStorageTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson ==2.2.5.0

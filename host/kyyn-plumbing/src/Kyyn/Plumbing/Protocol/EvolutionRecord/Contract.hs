@@ -7,10 +7,10 @@ import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Types.SchemaMetadata
-import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataType)
+import Kyyn.Plumbing.Protocol.Description (descriptionShape, descriptionValue, parseDescription)
 
 snapshotShape :: Shape
-snapshotShape = Record [("fingerprint",text), ("types",dataTypeShape), ("metadata",metadata)]
+snapshotShape = Record [("fingerprint",text), ("types",descriptionShape), ("metadata",metadata)]
   where
     metadata = Record
       [("roles",List (Record [("name",text),("description",text),("affordance",Union
@@ -24,7 +24,7 @@ snapshotValue = checkedSnapshotValue . rootSchema
 
 checkedSnapshotValue :: CheckedContract -> Value
 checkedSnapshotValue schema = object ["fingerprint" .= contractFingerprint (contractId schema),
-  "types" .= dataTypeValue (rootType schema), "metadata" .= metadata]
+  "types" .= descriptionValue (descriptionOf schema), "metadata" .= metadata]
   where
     SchemaMetadata roles assignments collections = metadataOf schema
     metadata = object
@@ -41,7 +41,7 @@ restoreSnapshot value = fmap (>>= checkRootLayout) (restoreCheckedSnapshot value
 restoreCheckedSnapshot :: Value -> Parser (Either [Diagnostic] CheckedContract)
 restoreCheckedSnapshot = withObject "Contract snapshot" $ \record -> do
   fingerprint <- record .: "fingerprint"
-  root <- record .: "types" >>= parseDataType
+  root <- record .: "types" >>= parseDescription
   metadata <- record .: "metadata" >>= parseMetadata
   pure $ case checkContract root metadata of
     Right contract | contractFingerprint (contractId contract) == fingerprint -> Right contract

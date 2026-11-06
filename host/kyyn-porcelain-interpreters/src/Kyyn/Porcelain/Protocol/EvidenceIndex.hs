@@ -9,7 +9,7 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Blob (blobValue, parseBlob, sdkBlobRefType)
-import Kyyn.Domain.Contract (CheckedContract, rootType, checkContract, contractShape, contractId)
+import Kyyn.Domain.Contract (CheckedContract, descriptionOf, checkContract, contractShape, contractId)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..), shapeOf)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evidence
@@ -17,7 +17,7 @@ import Kyyn.Domain.EvidenceIndex
 import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorTypeName(..))
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeBinaryValue, decodeBinaryEnvelope)
-import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataType)
+import Kyyn.Plumbing.Protocol.Description (descriptionShape, descriptionValue, parseDescription)
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 
 data IndexDocument = IndexDocument PackageIdentity ConnectorTypeName CheckedContract
@@ -29,7 +29,7 @@ capturedIndex instanceRef (IndexDocument package _ contract (EvidenceState lates
     latest contract (Map.fromList [(key,value) | (EvidenceId key,value) <- values]) report
 
 headerShape :: Shape
-headerShape = Record [("producer",text),("connector",text),("payloadType",dataTypeShape),("positionType",Optional dataTypeShape),("reportType",Optional dataTypeShape)]
+headerShape = Record [("producer",text),("connector",text),("payloadType",descriptionShape),("positionType",Optional descriptionShape),("reportType",Optional descriptionShape)]
 
 bodyShape :: Maybe CheckedContract -> Maybe CheckedContract -> Shape
 bodyShape position report = Record
@@ -51,8 +51,8 @@ encodeIndex (IndexDocument (PackageIdentity producer) (ConnectorTypeName connect
     Right () -> do
       encoded <- encodeBinaryValue (Record [("header",headerShape),("body",bodyShape (fst <$> position) (reportContract <$> report))])
         (object ["header" .= object ["producer" .= producer,"connector" .= connector,
-          "payloadType" .= dataTypeValue (rootType contract),"positionType" .= optional (dataTypeValue . rootType . fst) position,
-          "reportType" .= optional (dataTypeValue . rootType . reportContract) report],
+          "payloadType" .= descriptionValue (descriptionOf contract),"positionType" .= optional (descriptionValue . descriptionOf . fst) position,
+          "reportType" .= optional (descriptionValue . descriptionOf . reportContract) report],
           "body" .= object ["latest" .= summaryValue summary,"values" .= map member values,
             "position" .= optional (\(_,CheckedValue _ value) -> value) position,
             "report" .= optional (\(FetchReport _ (CheckedValue _ value)) -> value) report]])
@@ -126,7 +126,7 @@ parseHeader = withObject "evidence header" $ \header -> (,,,,)
       either fail pure (validateReportContract contract)
       pure contract
     descriptor value = do
-      datatype <- parseDataType value
+      datatype <- parseDescription value
       either (fail . show) pure (checkContract datatype (SchemaMetadata [] [] []))
 
 summaryValue :: FetchSummary -> Value
