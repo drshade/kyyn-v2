@@ -1,5 +1,9 @@
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 module MicrosoftGraph.Calendar.Types where
+
+import GHC.Generics (Generic)
+import Kyyn.Contract (Contract)
 
 import Data.Text (Text)
 import MicrosoftGraph.Types (GraphAuth, Person)
@@ -11,15 +15,15 @@ data CalendarConfig = CalendarConfig
   , sharedCalendar :: Bool
   , windowStart :: Text
   , windowEnd :: Text
-  } deriving (Eq, Show)
+  } deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
 
-newtype CalendarPosition = CalendarPosition { deltaLink :: Text } deriving (Eq, Show)
+newtype CalendarPosition = CalendarPosition { deltaLink :: Text } deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
 
-data EventTime = EventTime { dateTime :: Text, timeZone :: Text } deriving (Eq, Show)
+data EventTime = EventTime { dateTime :: Text, timeZone :: Text } deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
 data ResponseStatus = ResponseStatus
-  { response :: Text, time :: Maybe Text } deriving (Eq, Show)
+  { response :: Text, time :: Maybe Text } deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
 data Attendee = Attendee
-  { name :: Text, address :: Text, status :: Maybe ResponseStatus } deriving (Eq, Show)
+  { name :: Text, address :: Text, status :: Maybe ResponseStatus } deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
 data Event = Event
   { subject :: Text, bodyPreview :: Text
   , start :: EventTime, end :: EventTime
@@ -28,5 +32,5 @@ data Event = Event
   , eventType :: Text, iCalUId :: Text
   , lastModifiedDateTime :: Text, webLink :: Text
   , responseStatus :: Maybe ResponseStatus
-  } deriving (Eq, Show)
+  } deriving stock (Eq, Show, Generic) deriving anyclass (Contract)
 type EventId = Text

@@ -93,21 +93,21 @@ fileRequest transport identity = executeExchange transport identity . fileExchan
 
 fileExchange :: FileRead a -> Exchange a
 fileExchange (ListFiles directory recursive) = metadataExchange "files" "list"
-  (record [("directory",encodeWith stringCodec directory),("recursive",encodeWith boolCodec recursive)])
-  (eitherCodec (listCodec stringCodec))
+  (record [("directory",encodeWith textCodec directory),("recursive",encodeWith boolCodec recursive)])
+  (eitherCodec (listCodec textCodec))
 fileExchange (ReadTextFile path) = metadataExchange "files" "read"
-  (record [("path",encodeWith stringCodec path)]) (eitherCodec capturedTextCodec)
+  (record [("path",encodeWith textCodec path)]) (eitherCodec capturedTextCodec)
 
 capturedTextCodec :: Codec CapturedText
 capturedTextCodec = Codec encode decode
   where
     encode (CapturedText contents (EvidenceFingerprint fingerprint) path) = record
-      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint),("path",encodeWith stringCodec path)]
+      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint),("path",encodeWith textCodec path)]
     decode value = do
       values <- fields ["contents","fingerprint","path"] value
       CapturedText <$> field "contents" textCodec values
         <*> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
-        <*> field "path" stringCodec values
+        <*> field "path" textCodec values
 
 evidenceRequest :: Transport -> Codec payload -> Integer -> EvidenceRead payload a -> IO a
 evidenceRequest transport payloadCodec identity = executeExchange transport identity . evidenceExchange payloadCodec

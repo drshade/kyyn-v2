@@ -5,5 +5,5 @@ import Data.Text (Text)
 
 data SinkError = SinkRejected Text | SinkUncertain Text deriving (Eq, Show)
 data FileWrite a where
-  WriteTextFile :: FilePath -> Text -> FileWrite (Either SinkError FilePath)
+  WriteTextFile :: Text -> Text -> FileWrite (Either SinkError Text)
 type SinkCalls = FileWrite

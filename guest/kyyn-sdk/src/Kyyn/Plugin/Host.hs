@@ -29,11 +29,11 @@ storeBlob = Program.request . inject . StoreBlob
 type PluginLogin = NetworkHost LoginInteraction
 
 -- | Enumerate paths relative to a directory, itself KB-relative or absolute.
-listFiles :: Member FileRead row => FilePath -> Bool -> Program row (Either FetchError [FilePath])
+listFiles :: Member FileRead row => Text -> Bool -> Program row (Either FetchError [Text])
 listFiles directory recursive = Program.request (inject (ListFiles directory recursive))
 
 -- | Capture source text and its fingerprint together.
-readTextFile :: Member FileRead row => FilePath -> Program row (Either FetchError CapturedText)
+readTextFile :: Member FileRead row => Text -> Program row (Either FetchError CapturedText)
 readTextFile path = Program.request (inject (ReadTextFile path))
 
 -- | Send a text request; the caller handles HTTP status codes and retry policy.

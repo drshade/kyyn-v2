@@ -18,7 +18,7 @@
           source = pkgs.lib.fileset.toSource {
             root = ./.;
             fileset = pkgs.lib.fileset.unions [
-              ./host ./guest ./shared ./vendor ./docs/guide.md
+              ./host ./guest ./shared ./plugins ./vendor ./docs/guide.md
             ];
           };
           localPackages = {

@@ -47,4 +47,4 @@ executeSink configCodec optionsCodec inputCodec resultCodec defaults publish = w
   where
     handler :: Transport -> Integer -> FileWrite a -> IO a
     handler transport identity (WriteTextFile path content) = exchange transport identity "files" "write"
-      (record [("path",encodeWith stringCodec path),("content",encodeWith textCodec content)]) (sinkResultCodec stringCodec)
+      (record [("path",encodeWith textCodec path),("content",encodeWith textCodec content)]) (sinkResultCodec textCodec)

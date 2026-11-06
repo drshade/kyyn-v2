@@ -2,7 +2,6 @@
 module LocalFile.Folder (fetch) where
 
 import Kyyn.Plugin
-import qualified Data.Text as Text
 import Kyyn.Plugin.Host
 import qualified LocalFile.Types as Schema
 
@@ -21,13 +20,13 @@ fetch (Schema.FolderConfig directory recursive) prior =
             pure $ do
               texts <- sequence contents
               let old = [(key,value) | (key,Just value) <- zip previousIds previous]
-                  current = [(EvidenceId (Text.pack path),Evidence token
-                    [Text.pack resolved] (Available (Schema.Document text))) | (path,CapturedText text token resolved) <- zip paths texts]
+                  current = [(EvidenceId path,Evidence token
+                    [resolved] (Available (Schema.Document text))) | (path,CapturedText text token resolved) <- zip paths texts]
                   changes = concatMap (changed old) current
                   removed = [RemovedEvidence key | key <- previousIds, key `notElem` map fst current]
               pure (changes ++ removed)
   where
-    fullPath path = directory ++ "/" ++ path
+    fullPath path = directory <> "/" <> path
     changed old (key,value) = case lookup key old of
       Nothing -> [NewEvidence key value]
       Just (Evidence token _ Truncated) | token == fingerprint value ->

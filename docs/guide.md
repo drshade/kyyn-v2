@@ -348,6 +348,10 @@ data Task = Task { title :: Text }
   deriving (Generic, Contract)
 ```
 
+Use `Text` for string fields in contract types, including paths. `String` and
+`FilePath` are lists of `Char` and do not have a supported contract. Path values
+are converted to filesystem paths at the host boundary.
+
 That single derivation supplies the
 structural contract interpreted by Kyyn's describe, storage and model codecs.
 Nonempty enums can also derive `Options`; custom labels and ordering use an

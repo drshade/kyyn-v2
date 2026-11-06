@@ -97,3 +97,23 @@ test-suite capabilities
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types
+
+test-suite plugin-contracts
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test, ../../plugins/local-file/src, ../../plugins/github/src,
+    ../../plugins/microsoft-graph/src, ../../plugins/salesforce/src
+  main-is: PluginContractTests.hs
+  other-modules: GitHub.Types
+    LocalFile.Types
+    MicrosoftGraph.Calendar.Types
+    MicrosoftGraph.Directory.Types
+    MicrosoftGraph.Files.Types
+    MicrosoftGraph.Mail.Types
+    MicrosoftGraph.Meetings.Types
+    MicrosoftGraph.Types
+    Salesforce.Query.Types
+    Salesforce.Types
+    LocalFile.Write
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-sdk, text
