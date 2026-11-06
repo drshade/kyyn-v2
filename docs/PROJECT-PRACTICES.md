@@ -57,6 +57,10 @@ nix develop
 nix build .#kyyn
 ```
 
+If Nix has not enabled flakes, use
+`nix --extra-experimental-features 'nix-command flakes'` in place of `nix` for
+these commands; no machine-wide configuration change is required.
+
 The flake supplies GHC, Cabal and the development/check tools. Cabal remains usable
 inside `nix develop`, including `cabal test SUITE --test-show-details=direct`.
 Node runs repository checks; it is not an installed Kyyn runtime dependency.
