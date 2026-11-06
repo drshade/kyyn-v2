@@ -4,6 +4,9 @@ module Kyyn.Types.Plugin
   ( Connector(..), CapturedMethod(..), ConnectorInstance(..), EvidenceSnapshot(..), FetchError(..), EvidenceRead(..), FileRead(..), CapturedText(..), FetchContext(..), FetchResult(..) ) where
 
 import Data.Text (Text)
+import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject)
+import qualified Data.Aeson.KeyMap as Keys
+import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 
 import Kyyn.Types.Evidence (EvidenceId, Evidence, EvidenceFingerprint)
 import Kyyn.Types.Evidence (EvidenceChange)
@@ -72,3 +75,29 @@ data CapturedText = CapturedText Text EvidenceFingerprint Text deriving (Eq, Sho
 data FileRead a where
   ListFiles :: Text -> Bool -> FileRead (Either FetchError [Text])
   ReadTextFile :: Text -> FileRead (Either FetchError CapturedText)
+
+-- A fixed private bootstrap evaluates these authored registrations in the
+-- selected compiler environment. Its transport shares this one strict codec.
+instance ToJSON Connector where
+  toJSON (SourceConnector name fetch validate methods login) = object
+    ["name" .= name,"fetch" .= fetch,"validateConfig" .= validate,"methods" .= methods,
+     "login" .= optionalValue login]
+  toJSON (SinkConnector name validate publish defaults) = object
+    ["name" .= name,"validateConfig" .= validate,"publish" .= publish,"defaultOptions" .= defaults]
+instance FromJSON Connector where
+  parseJSON value = withObject "connector" (\fields ->
+    if Keys.member "fetch" fields then
+      exactObject "source connector" ["name","fetch","validateConfig","methods","login"]
+        (\selected -> SourceConnector <$> selected .: "name" <*> selected .: "fetch"
+          <*> selected .: "validateConfig" <*> selected .: "methods"
+          <*> (selected .: "login" >>= parseOptionalValue)) value
+    else exactObject "sink connector" ["name","validateConfig","publish","defaultOptions"]
+      (\selected -> SinkConnector <$> selected .: "name" <*> selected .: "validateConfig"
+        <*> selected .: "publish" <*> selected .: "defaultOptions") value) value
+
+instance ToJSON CapturedMethod where
+  toJSON (CapturedMethod name description implementation) = object
+    ["name" .= name,"description" .= description,"implementation" .= implementation]
+instance FromJSON CapturedMethod where
+  parseJSON = exactObject "captured method" ["name","description","implementation"] $ \fields ->
+    CapturedMethod <$> fields .: "name" <*> fields .: "description" <*> fields .: "implementation"

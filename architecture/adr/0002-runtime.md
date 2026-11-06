@@ -140,6 +140,10 @@ data GuestExecution :: Effect where
     -> GuestExecution m (Bytes, ProcessExit)
 ```
 
+A prepared `CompiledEntry` pairs that immutable program with an entry from its
+checked description. Its constructor is private: brokers receive a verified entry,
+not a free-text dispatch name or a separately compiled adapter.
+
 Description takes no facts, secrets or capability grants. It returns build-derived
 structure and pure authored metadata, not query results. The host rejects malformed
 descriptions, unsupported shapes and an incompatible current protocol identity;

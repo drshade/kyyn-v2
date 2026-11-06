@@ -25,6 +25,7 @@ library
     Kyyn.Plumbing.Capability.GuestCompilation.Types
     Kyyn.Plumbing.Protocol.Validation
     Kyyn.Plumbing.Protocol.Query
+    Kyyn.Plumbing.Protocol.GuestInvocation
     Kyyn.Plumbing.Protocol.GuestApi
     Kyyn.Plumbing.Protocol.DataType Kyyn.Plumbing.Protocol.Description
     Kyyn.Plumbing.Protocol.Inspection

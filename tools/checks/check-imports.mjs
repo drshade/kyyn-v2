@@ -141,6 +141,7 @@ const domainModules = {
   'Kyyn.Domain.Evidence': ['Kyyn.Domain.DataType', 'Kyyn.Domain.Blob', 'Data.Text.Encoding', 'Data.ByteString', 'Numeric', 'Data.Text', 'Kyyn.Domain.Value', 'Control.Monad', 'Data.List', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evidence', 'Kyyn.Domain.Diagnostic'],
   'Kyyn.Domain.Plugin': ['Kyyn.Domain.DataType', 'Data.Char', 'Data.List', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Types.Plugin', 'System.FilePath'],
   'Kyyn.Domain.GuestApi': ['Kyyn.Types.Guest', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git'],
+  'Kyyn.Domain.CompiledEntry': ['Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Guest', 'Kyyn.Types.Guest'],
   'Kyyn.Domain.CompiledProgram': ['Data.ByteString', 'Kyyn.Domain.Path'],
   'Kyyn.Domain.Publication': ['Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evolution', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Workspace', 'Kyyn.Domain.KnowledgeBase'],
   'Kyyn.Domain.EvolutionReport': ['Kyyn.Domain.Recipe', 'Kyyn.Domain.Plugin', 'Kyyn.Domain.Path', 'Kyyn.Types.KnowledgeBase', 'Data.Aeson', 'Kyyn.Domain.Contract', 'Kyyn.Types.Evolution', 'Kyyn.Types.Fact'],
@@ -163,6 +164,7 @@ const domainModules = {
 };
 
 const plumbingModules = {
+  'Kyyn.Plumbing.Protocol.GuestInvocation': ['Data.Aeson', 'Data.ByteString', 'Data.ByteString.Lazy', 'Kyyn.Domain.CompiledEntry', 'Kyyn.Types.Guest'],
   'Kyyn.Plumbing.Capability.GuestInspection': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Guest'],
   'Kyyn.Plumbing.Protocol.Description': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.List', 'Data.Text', 'Kyyn.Types.Contract', 'Kyyn.Domain.DataType'],
   'Kyyn.Plumbing.Capability.ConcurrentExecution': ['Effectful', 'Effectful.Dispatch.Dynamic'],
@@ -202,7 +204,7 @@ const plumbingModules = {
   'Kyyn.Plumbing.Protocol.PluginRegistration': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.KeyMap',
     'Data.ByteString', 'Data.Foldable', 'Data.List', 'Data.Text', 'Data.Text.Encoding', 'Kyyn.Domain.Path',
     'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Types.Plugin'],
-  'Kyyn.Plumbing.Capability.GuestExecution': ['Kyyn.Plumbing.Protocol.Frame', 'Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Plumbing.Capability.ProcessExecution', 'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure'],
+  'Kyyn.Plumbing.Capability.GuestExecution': ['Data.Aeson', 'Data.Text', 'Kyyn.Domain.CompiledEntry', 'Kyyn.Types.Guest', 'Kyyn.Plumbing.Protocol.GuestInvocation', 'Kyyn.Plumbing.Protocol.Frame', 'Data.ByteString', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.CompiledProgram', 'Kyyn.Plumbing.Capability.ProcessExecution', 'Kyyn.Domain.Failure', 'Kyyn.Plumbing.Capability.Failure'],
   'Kyyn.Plumbing.Capability.FileAcquisition': ['Effectful', 'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Path',
     'Kyyn.Types.Plugin', 'Kyyn.Types.Evidence'],
   'Kyyn.Plumbing.Protocol.PluginMessages': ['Kyyn.Domain.Blob', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key',
@@ -335,7 +337,7 @@ const interpreterModules = {
   'Kyyn.Porcelain.Interpreter.EvidenceInspection': ['Kyyn.Porcelain.Protocol.CapturedBlobs', 'Kyyn.Domain.Value', 'Kyyn.Plumbing.Capability.BlobStorage', 'Control.Monad', 'Data.ByteString', 'Data.Coerce', 'Data.Text.Encoding', 'Numeric', 'Kyyn.Domain.EvidenceIndex', 'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.KnowledgeBase', 'Kyyn.Domain.Path', 'Kyyn.Domain.Plugin', 'Kyyn.Plumbing.Capability.DhallHandling', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.GuestCompilation.Types', 'Kyyn.Plumbing.Protocol.Plugin', 'Kyyn.Plumbing.Protocol.ConnectorConfig', 'Kyyn.Porcelain.Capability.RootStore', 'Control.Monad.Trans.Except', 'Effectful',
     'Effectful.Dispatch.Dynamic', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Evidence',
     'Kyyn.Porcelain.Capability.EvidenceStore', 'Kyyn.Porcelain.Capability.EvidenceInspection'],
-  'Kyyn.Runtime.PluginRegistration': ['Kyyn.Types.Plugin', 'Kyyn.Runtime.Json', 'Text.JSON.Types'],
+  'Kyyn.Runtime.PluginRegistration': ['Data.Aeson', 'Agentic.Aeson', 'Kyyn.Types.Plugin', 'Kyyn.Runtime.Contract', 'Kyyn.Runtime.Json'],
   'Kyyn.Porcelain.Interpreter.PluginPreparation': ['Kyyn.Domain.Evidence', 'GHC.Records', 'Data.Text', 'Kyyn.Types.SchemaMetadata', 'Control.Monad', 'Control.Monad.Trans.Except', 'Data.Aeson',
     'Kyyn.Plumbing.Capability.ProcessExecution',
     'Data.ByteString', 'Data.ByteString.Lazy', 'Data.List', 'Data.Coerce', 'Data.Text.Encoding', 'Numeric',

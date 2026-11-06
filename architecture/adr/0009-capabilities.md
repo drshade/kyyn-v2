@@ -447,7 +447,7 @@ executeAcquisition
   :: (GuestExecution :> es, EvidenceStore :> es, ContentDigest :> es,
       FileAcquisition :> es, HttpTransport :> es, BlobStorage :> es,
       SecretStore :> es, Waiting :> es, Failure :> es)
-  => CompiledProgram -> Value -> Maybe EvidenceIndex
+  => CompiledEntry -> Value -> Maybe EvidenceIndex
   -> Eff es (Either [Diagnostic] Value)
 ```
 

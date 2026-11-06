@@ -512,8 +512,10 @@ Distinguish installed package identity and selected method. Configuration is
 ordinary typed data, not another plugin-instance lifecycle:
 
 ```haskell
+data CompiledEntry -- private constructor; immutable program plus a checked entry
+
 data PreparedMethod = PreparedMethod
-  MethodName String CheckedContract CheckedContract CompiledProgram
+  MethodName String CheckedContract CheckedContract CompiledEntry
 -- Name, description, input contract, result contract and compiled entry.
 
 data PreparedConnector -- inspected source connector, contracts and compiled entries

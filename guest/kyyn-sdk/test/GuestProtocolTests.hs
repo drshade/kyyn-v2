@@ -10,6 +10,10 @@ import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString.Char8 as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Either (isLeft)
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
+import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..))
+import Kyyn.Runtime.PluginRegistration (encodeConnectors)
 import qualified Kyyn.Domain.Guest as Host
 import Data.Fixed (Fixed, E2)
 import Data.Functor.Identity (runIdentity)
@@ -85,6 +89,7 @@ checkSchema executable = do
 
 check :: (FilePath,[String]) -> IO ()
 check executable = do
+  checkRegistrations
   unsupported <- try (checkEntries
     [queryEntry @Root @() @Double "unsupported" (annotations,[])
       (SchemaMetadata [] [] [],[]) (SchemaMetadata [] [] [],[]) (const (pure 1.25))]) :: IO (Either SomeException ())
@@ -162,3 +167,20 @@ invoke executable value = do
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
+
+-- The bootstrap writer and build-side reader share the same registration codec.
+-- Missing/extra fields and JSON null must not weaken declaration checking.
+checkRegistrations :: IO ()
+checkRegistrations = do
+  let source = SourceConnector "Folder" "Folder.fetch" "Folder.validate"
+        [CapturedMethod "content" "Read café" "Folder.content"] Nothing
+      declarations = [source,SinkConnector "Write" "Writer.validate" "Writer.publish" "Writer.defaults"]
+  encoded <- right (encodeConnectors declarations)
+  decoded <- right (eitherDecodeStrict' (Text.encodeUtf8 (Text.pack encoded)) :: Either String [Connector])
+  unless (decoded == declarations) (fail "Registration bootstrap changed declaration values")
+  case toJSON source of
+    Object fields -> forM_ [Keys.insert "unknown" (String "extra") fields,Keys.delete "login" fields,
+        Keys.insert "login" Null fields] $ \malformed ->
+      unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode (Object malformed))) :: Either String Connector))
+        (fail "Malformed connector registration accepted")
+    _ -> fail "Connector registration is not an object"

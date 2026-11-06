@@ -4,9 +4,8 @@
 {-# LANGUAGE GHC2021, OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
-import Control.Monad (unless)
-import Data.Aeson (object, (.=), encode, eitherDecodeStrict', Value(..))
-import qualified Data.ByteString.Lazy as Lazy
+import Control.Monad (unless, forM_)
+import Data.Aeson (object, (.=), eitherDecodeStrict', Value(..))
 import Data.Either (isLeft)
 import Effectful (runEff)
 import System.Environment (getArgs)
@@ -15,11 +14,11 @@ import System.FilePath (takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Domain.Path
 import Kyyn.Domain.Guest (checkedEntries)
+import Kyyn.Domain.CompiledEntry (compiledEntries, entryProgram, entryDescription)
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.GuestExecution
 import Kyyn.Plumbing.Capability.GuestInspection
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Plumbing.Interpreter.GuestExecution
 import Kyyn.Plumbing.Interpreter.GuestInspection
 import Kyyn.Plumbing.Interpreter.FileSystem
@@ -44,26 +43,32 @@ main = do
   unless (isLeft (guestSources RootEntries [(path "flake.nix","{}")])) (fail "Missing lock accepted")
   unless (isLeft (guestSources RootEntries ((path ".kyyn-build.json","{}") : code))) (fail "Authored build selection accepted")
   arguments <- getArgs
-  executable <- case arguments of
-    [selected] -> canonicalizePath selected
-    _ -> fail "Expected a Nix-built guest executable"
+  (executable,schemaExecutable) <- case arguments of
+    [selected] -> (,) <$> canonicalizePath selected <*> pure Nothing
+    [selected,schema] -> (,) <$> canonicalizePath selected <*> (Just <$> canonicalizePath schema)
+    _ -> fail "Expected a Nix-built guest executable and optional schema-only executable"
   let output = takeDirectory (takeDirectory executable)
       program = CompiledProgram (BuildIdentity (sourceIdentity baseline) "x86_64-linux" "test.drv" output) executable ".build/nix-guest"
   withSystemTempDirectory "kyyn-native-host" $ \directory -> do
     scope <- right (directoryScope directory)
-    result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-      . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection $ do
-        description <- describeGuest program
-        invocation <- executeCompiled program (Lazy.toStrict (encode (object
-          ["operation" .= ("invoke" :: String),"entry" .= ("validate" :: String),
-           "argument" .= object ["items" .= ([] :: [Value])]])))
-        pure (description,invocation)
-    (description,(response,ProcessExit status errors)) <- right result
-    checked <- right description
+    let run action = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection $ action
+    checked <- run (describeGuest program) >>= right >>= right
     unless (map G.entryName (checkedEntries checked) == ["validate","total"]) (fail "Wrong checked native entries")
-    unless (status == 0) (fail (show errors))
+    validator <- case [entry | entry <- compiledEntries program checked,
+      G.ValidatorEntry{} <- [entryDescription entry]] of
+      [entry] -> pure entry
+      _ -> fail "No checked validator entry"
+    unless (entryProgram validator == program) (fail "Entry selection changed the immutable program")
+    response <- run (executeEntry validator (object ["items" .= ([] :: [Value])])) >>= right
     value <- right (eitherDecodeStrict' response :: Either String Value)
     unless (value == Array mempty) (fail "Native validator invocation failed")
+    forM_ schemaExecutable $ \selected -> do
+      let schemaOutput = takeDirectory (takeDirectory selected)
+          schemaProgram = CompiledProgram (BuildIdentity (sourceIdentity discovery) "x86_64-linux" "schema.drv" schemaOutput)
+            selected ".build/discovery-guests-3"
+      schema <- run (describeGuest schemaProgram) >>= right >>= right
+      unless (null (compiledEntries schemaProgram schema)) (fail "Description-only entry acquired an invocation handle")
   putStrLn "Native host source capture, description and invocation checks passed."
 
 right :: Show e => Either e a -> IO a

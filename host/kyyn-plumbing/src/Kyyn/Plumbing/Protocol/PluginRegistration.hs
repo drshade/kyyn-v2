@@ -2,12 +2,9 @@
 module Kyyn.Plumbing.Protocol.PluginRegistration (registrationSources, decodeConnectors, registrationFailure) where
 
 import Control.Monad (unless, forM)
-import Data.Aeson (eitherDecodeStrict, withArray, withObject, (.:))
-import Data.Aeson.Types (parseEither)
-import qualified Data.Aeson.KeyMap as Keys
+import Data.Aeson (eitherDecodeStrict)
 import qualified Data.ByteString as Bytes
-import Data.Foldable (toList)
-import Data.List (nub, sort, isInfixOf)
+import Data.List (nub, isInfixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Path (RelativePath, relativePath)
@@ -39,7 +36,7 @@ registrationSources entryModule sources = do
 
 decodeConnectors :: Bytes.ByteString -> Either String [ConnectorDeclaration]
 decodeConnectors bytes = do
-  declarations <- eitherDecodeStrict bytes >>= parseEither (withArray "connectors" (traverse connector . toList))
+  declarations <- eitherDecodeStrict bytes
   let names = map (\case SourceConnector name _ _ _ _ -> name; SinkConnector name _ _ _ -> name) declarations
   unless (length names == length (nub names)) (Left "Connector type names must be unique within a plugin")
   forM declarations $ \case
@@ -64,21 +61,3 @@ decodeConnectors bytes = do
       _ <- located (bindingModule implementation)
       pure (CapturedMethodDeclaration checkedMethod description implementation)
     pure (ConnectorDeclaration checkedName fetch validate checkedMethods login)
-  where
-    connector = withObject "connector" $ \fields -> case sort (Keys.keys fields) of
-     ["defaultOptions","name","publish","validateConfig"] -> SinkConnector <$> fields .: "name"
-        <*> fields .: "validateConfig" <*> fields .: "publish" <*> fields .: "defaultOptions"
-     ["fetch","login","methods","name","validateConfig"] -> SourceConnector <$> fields .: "name"
-        <*> fields .: "fetch" <*> fields .: "validateConfig" <*> (fields .: "methods" >>= traverse method)
-        <*> (fields .: "login" >>= optional)
-     _ -> fail "Unexpected or missing connector fields"
-    optional = withObject "optional export" $ \value -> do
-      tag <- value .: "tag"
-      case tag :: String of
-        "None" | Keys.keys value == ["tag"] -> pure Nothing
-        "Some" | sort (Keys.keys value) == ["tag","value"] -> Just <$> value .: "value"
-        _ -> fail "Invalid optional export"
-    method = withObject "captured method" $ \fields -> do
-      unless (sort (Keys.keys fields) == ["description","implementation","name"])
-        (fail "Unexpected or missing captured method fields")
-      CapturedMethod <$> fields .: "name" <*> fields .: "description" <*> fields .: "implementation"
