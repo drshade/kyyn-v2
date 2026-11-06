@@ -84,7 +84,8 @@ Preserve compiler messages and source locations where available.
 The SDK build owns checked-type extraction, generated binding modules, codecs and
 entry adapters (ADR 0005). It first checks the selected schema/export dependencies,
 generates the modules authored code imports, then compiles the selected program.
-These are stages inside one Nix derivation, not a host describe/codegen/rebuild
+Both stages use the same compiler, SDK and lock. They run inside one Nix
+derivation, not a host describe/codegen/rebuild
 round trip. Generated code and embedded descriptions come from the same lowering.
 An unsupported type or incompatible renderer/sink binding fails the build.
 
@@ -93,6 +94,9 @@ requested catalogue (ADR 0018). An incomplete evolution body must not prevent
 Before/After schema or generated-handle discovery. Root and evolution selections
 compile the corresponding runnable entries. Discovery builds do not establish
 that the full root or transformation compiles or passes semantic validation.
+When full compilation fails, source-only discovery can still report valid schema
+information separately from implementation diagnostics. Do not assume a failed
+Nix derivation publishes successful partial outputs.
 
 Dependency provisioning is explicit under ADR 0020. Check/accept may build from
 already provisioned inputs offline, but never fetch or resolve a different lock.
@@ -104,7 +108,12 @@ Nix identities cover compiler, SDK, library inputs and build options through the
 derivation. The capture digest also records selected source paths/bytes and entry
 selection. Fact values and invocation arguments are not compiler inputs. Retain
 an output through a Nix GC root for as long as a cached or in-flight CompiledProgram
-refers to it; release owned roots on cache removal. Never return a bare temporary
+refers to it; release owned roots on cache removal. Acceptance also retains the
+accepted revision's output/closure so subsequent offline evolution checks can
+describe the original Before under its own lock. Establish the new retention before
+publishing acceptance, and retain the previous output while any in-flight operation
+still references it. Failure to publish acceptance releases only newly unneeded
+retention; missing accepted closures require preparation rather than a bypass. Never return a bare temporary
 build-directory path. Cache deletion discards derived code, not accepted knowledge.
 
 ### Describe and invoke the same build
@@ -241,7 +250,7 @@ of trusted authored code.
 Verify fresh provisioning and offline rebuilds; source/lock/SDK/compiler changes
 invalidate derived code while fact-only changes reuse it. Exercise missing locks,
 missing outputs, failed builds, GC retention, cancellation and malformed describe
-responses. A changed description must not silently relabel stored facts: normal
+responses. A changed description must not silently relabel stored facts: accepted-source descriptions and normal
 contract checks and explicit evolution conversion still apply.
 
 Run a real GHC guest through discovery, runtime fact loading, validation, query,

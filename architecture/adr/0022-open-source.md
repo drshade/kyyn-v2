@@ -35,7 +35,7 @@ development.
 
 Review the actual sources included in native binaries, guest bundles, generated
 code, runtime tools and web assets. Preserve applicable notices and document local
-patches. Native-linked MicroHs compiler modules need this review as well as bundled
+patches. Guest build-tool compiler integration needs this review as well as distributed
 compiler/evaluator tools; their absence from the user-facing API does not remove
 them from the distributed software.
 

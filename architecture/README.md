@@ -15,7 +15,7 @@ and reconciliation follow [the SDLC](../docs/SDLC.md#5-significant-decisions-are
 | ADR | Decision |
 | --- | --- |
 | [0001](adr/0001-product.md) | Runtime and workbench for executable knowledge |
-| [0002](adr/0002-runtime.md) | GHC kernel, bundled MicroHs programs |
+| [0002](adr/0002-runtime.md) | Native host, KB-owned Nix guests |
 | [0003](adr/0003-effects.md) | Compile-visible porcelain/plumbing boundaries |
 | [0004](adr/0004-knowledge-base.md) | Distinguish KB, root, workspace, candidate |
 | [0005](adr/0005-contracts.md) | Haskell-authored schema, one checked algebra and generated bindings |
@@ -33,7 +33,7 @@ and reconciliation follow [the SDLC](../docs/SDLC.md#5-significant-decisions-are
 | [0017](adr/0017-outputs.md) | Multi-query renderers bound to typed plugin sinks |
 | [0018](adr/0018-surfaces.md) | CLI, MCP and web share typed operations |
 | [0019](adr/0019-failures.md) | Structured failures, cancellation, useful operational state |
-| [0020](adr/0020-distribution.md) | Agent-driven installation of the bundled execution toolchain |
+| [0020](adr/0020-distribution.md) | Native installation and explicit Nix guest provisioning |
 | [0021](adr/0021-quality.md) | Architecture checks and outcome-based implementation slices |
 | [0022](adr/0022-open-source.md) | Proprietary now; future licensing kept explicit |
 | [0023](adr/0023-interaction.md) | Equally important human and agent interfaces |

@@ -34,7 +34,7 @@ Build complete paths rather than empty packages or a native-Haskell stand-in for
 guest execution. Choose the next slice from a real user journey; implementation
 ordering belongs in issues, not a permanent roadmap in this decision.
 
-- Contracts/runtime: generated ADT codecs, exact values, actual MicroHs execution,
+- Contracts/runtime: generated ADT codecs, exact values, actual Nix-built guest execution,
   typed host requests and nested-call cancellation (ADRs 0005–0009).
 - Evolutions/acceptance: step reports, saved candidates, repair of invalid heads,
   inherited examples, deletion, Git races and checkout repair

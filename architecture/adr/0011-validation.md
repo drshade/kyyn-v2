@@ -109,7 +109,7 @@ runRootExecution
   :: (RootStore :> es, GuestCompilation :> es,
       GuestExecution :> es, PluginPreparation :> es, ToolPreparation :> es,
       SchemaInspection :> es, DhallHandling :> es, Failure :> es)
-  => FileTree -- explicitly installed SDK/runtime sources
+  => GuestSources -- captured source and locked build environment
   -> Eff (RootExecution : es) a -> Eff es a
 ```
 

@@ -143,7 +143,7 @@ data RootOpening :: Effect where
 
 runRootOpening
   :: (Git :> es, SchemaInspection :> es, RootStore :> es)
-  => FileTree -- installed SDK sources, with compiler-relative paths
+  => GuestSources -- captured source and locked build environment
   -> Eff (RootOpening : es) a -> Eff es a
 ```
 

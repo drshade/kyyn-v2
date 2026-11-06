@@ -12,6 +12,12 @@ the prototype's boundary problems on the other side of the pipe.
 
 ## Decision
 
+Capability rows specify supported SDK composition and host-mediated effects.
+Authors are trusted (ADR 0002): arbitrary guest libraries can perform direct I/O.
+Kyyn validates requests made through its protocol; it does not enforce that every
+network/file/model action uses that protocol. Role purity remains an authoring
+obligation, not a runtime sandbox guarantee.
+
 The capability row is the contract; role names are useful descriptions, not a
 separate product permission taxonomy. Retain these explicit boundaries:
 
@@ -56,7 +62,7 @@ Configured headless automation can call the same operations without human approv
 at each invocation. Query browsing does not pass through this output path.
 
 Use composable typed request algebras with a pure `Program capabilities a`-like
-representation in the guest. The exact MicroHs-compatible encoding is not
+representation in the guest. The exact guest encoding is not
 assumed to be host `effectful`. `PluginHost` and `KnowledgeBaseHost` can be aliases
 for selected capabilities, not an all-access record. A request's result type
 determines the continuation input; a raw wire value never reaches it unchecked.
@@ -86,7 +92,7 @@ The existential `x` links a request to exactly the value accepted by its
 continuation. `interpretProgram` is a pure fold into an explicit handler, not
 native IO hidden in the authored program. The generated transport handler uses
 private adapter IO; ordinary code builds `Program`. The shared implementation
-compiles unchanged under GHC and pinned MicroHs, including dependent continuations
+compiles in the host and selected guest builds, including dependent continuations
 whose read operations return different payload types.
 The continuation stays in the running guest and is never encoded on the wire.
 
@@ -289,7 +295,7 @@ from the same captured bytes. The SDK's `readTextFile` returns both together.
 The folder connector accepts both KB-relative and absolute directories using the
 same host path resolution as the file sink. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised
-under both compilers with recording responses. The native MicroHs broker additionally
+under host and guest builds with recording responses. The native guest broker additionally
 exercises live filesystem acquisition and EvidenceStore publication, including
 invocation-local reads and failed acquisitions that leave the previous head unchanged.
 
@@ -359,7 +365,7 @@ The concrete entry-point row selects the instance. No generated helper module or
 recursive sum-membership search is required. Reusable helpers may retain this
 constraint; registered entries supply concrete data contracts and the supported
 row under ADR 0015. The signature-registration proof compiles these instances and
-their helper use under both GHC and MicroHs, and rejects a registered entry that
+their helper use through the selected GHC guest build, and rejects a registered entry that
 leaves the helper's row/payload constraint unresolved.
 
 Native HTTP handles TLS and UTF-8 transport. HTTP status responses remain values
@@ -480,7 +486,7 @@ not speculative stubs for every possible integration.
 
 ## Verification
 
-Compile ordinary composition and examples with missing required capabilities under pinned MicroHs.
+Compile ordinary composition and examples with missing required capabilities in the selected GHC guest environment.
 Script host responses and test a live continuation across several requests.
 Reject an unexpected capability before dispatch. Prove a captured-read method call
 routes through the plugin's own context without granting acquisition capabilities

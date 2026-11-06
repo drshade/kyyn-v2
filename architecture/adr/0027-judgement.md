@@ -97,7 +97,7 @@ Record native SystemOne requests to prove explicit local credentials, missing an
 empty credential refusal, sanitized provider failure and cancellation propagation.
 Exercise upstream request/answer mapping without calling the live provider.
 
-Compile and execute a judgement workflow with GHC and MicroHs through actual
+Compile and execute a judgement workflow through the selected GHC guest build through actual
 guest frames. Cover mixed yes/no, choice and score questions, typed answer
 assembly, failure and malformed replies. Execute it through ordinary tools and
 closed-recipe preparation, proving they share the broker and produce ordinary

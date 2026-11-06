@@ -17,8 +17,8 @@ binding/codec generation, collection routing, JSON Schema, Dhall config types an
 generic presentation.
 It represents the supported shapes and their declared metadata. Each projection
 consumes this representation rather than independently interpreting authored
-source. This is an internal typed representation, not a new authored language,
-plugin interface or requirement to support multiple schema frontends.
+source. This is the host-checked description vocabulary, not a new authored language
+or a requirement to implement multiple compiler backends.
 
 The host needs a finite structural vocabulary, not arbitrary Haskell types hidden
 inside a generic JSON value. This selected algebra makes the lowering obligation
@@ -241,8 +241,10 @@ Compiler implementation objects do not cross the protocol.
 
 Description is build-derived and may be cached by immutable build identity. Do
 not commit a parallel description file requiring authors to synchronize it with
-source. Reading stored values still checks their recorded contract identity and
-shape against the selected description. A lock-only change that changes a
+source. Reading stored values checks their shape against the selected description;
+fact files do not persist an independent authoritative contract identity.
+Evolution checks obtain the original Before identity from the accepted revision's
+own locked build, then compare the target-build Before description (ADR 0010). A lock-only change that changes a
 contract must undergo explicit schema conversion; it cannot silently relabel facts.
 A CheckedValue proves structural conformity, not semantic validation of the KB.
 Its constructor remains private to checking code.
@@ -257,8 +259,8 @@ for storage, validation and surfaces. These remain separate implementations of
 mechanical projections from the shared contract vocabulary, checked by conformance
 tests; they do not duplicate authored business types.
 
-Projection functions consume the one checked representation. Their selected
-signatures describe pure generation, not filesystem writes or compiler execution:
+Host projection functions consume the one checked representation. Their selected
+signatures describe pure projection, not filesystem writes or compiler execution:
 
 ```haskell
 projectJsonSchema :: CheckedContract -> JsonSchema

@@ -1,139 +1,106 @@
 ---
 id: 0020
-title: 'One installation supplies the execution toolchain'
+title: 'Native host installation and KB-owned Nix provisioning'
 ---
-# One installation supplies the execution toolchain
+# Native host installation and KB-owned Nix provisioning
 
 ## Context
 
-“Works without a toolchain” must hold on an ordinary user's machine, not just
-with an engineer's Cabal cache and compiler executables nearby.
-Kyyn is for regular users, not only developers. The owner expects agents to do
-most setup initially; hiding toolchain work does not require a graphical installer.
+Authors need mature guest libraries without manually assembling compilers and
+package databases. Nix can provision the compiler and dependencies selected by a
+KB; Kyyn must distinguish that setup from checking or invoking accepted code.
+Agents should be able to diagnose setup on an ordinary user's machine.
 
 ## Decision
 
-Provide an agent-drivable install path yielding the native kernel, pinned MicroHs
-compiler and evaluator, `cpphs`, base/SDK libraries, chosen guest codecs, necessary native
-libraries, and web assets. Include dependency licenses/notices. Runtime package
-compilation uses these bundled tools and captured local source, not arbitrary
-system Cabal resolution or a network download during validation.
+Install the native host and browser assets, and locate a supported Nix installation
+and Git executable. Each KB's `flake.nix` and `flake.lock` own its guest build and
+dependencies under ADR 0002. GHC is supplied by that environment, not by a global
+Cabal setup or a MicroHs bundle shipped with the host. Authors may select arbitrary
+Haskell libraries, subject to their chosen compiler/SDK actually building them.
 
-The SDK's fact-editing dependencies ship as the small unmodified transformers
-source subset recorded in [vendored inputs](../../vendor/README.md), with its
-license. The guest compiler adapter selects its supported CPP branches; users
-do not install another package manager or fetch libraries to edit a fact.
+Nix is a user prerequisite on Linux, macOS and Windows through WSL2. This is not a
+native Windows execution promise. Installation may require OS permissions, daemon
+setup or authentication; report those requirements explicitly rather than changing
+host configuration silently. Resolve the Nix executable once through installation
+configuration and invoke its absolute path; an agent can use it without changing
+an existing terminal's PATH. Do not require users to understand compiler internals.
 
-The staged compiler is the GHC-built pinned MicroHs described in
-[ADR 0002](0002-runtime.md); GHC is needed to build it, not to execute KB code.
-Review native library dependencies and notices for distribution; compiler parity
-alone is not a clean-machine installation proof.
+### Provision, then check offline
 
-The development executable is temporarily named `kyyn-v2` to coexist with
-kyyn-v1's `kyyn`. The local installer deploys the staged bundle under the selected
-prefix's `lib/kyyn-v2` and links `bin/kyyn-v2` to it. Runtime discovery resolves
-that link before locating the bundled assets. Cabal's executable installation alone
-does not provision these assets; the development script reuses the complete
-staging build. The [user guide](../../docs/guide.md#install) owns installation
-commands; the [staging script](../../tools/stage-cli.sh) documents developer staging.
-This is a source-build convenience, not the cross-platform release installer.
+Provide an explicit guest preparation operation for a selected KB/evolution source
+capture. It may download the exact locked sources and dependency/build closures,
+use configured binary caches, and build the selected guest. It does not change
+the lock, accept an evolution or fetch evidence. Missing locks require an explicit
+author dependency-resolution step, not implicit resolution during preparation.
 
-Installing Kyyn itself may download and verify pinned release artifacts and
-required dependencies. This trusted toolchain distribution is distinct from
-installing a tap plugin: under ADR 0015, plugin installation vendors source and
-resolved source dependencies, then Kyyn compiles them locally. No tap-supplied
-executable or plugin attestation service is required.
-Make installation safe to rerun and provide a structured account
-of installed versions, resolved paths, missing requirements and next actions.
-The bootstrap supplies the initial command; documentation must not assume
-`kyyn install` already exists on a machine with no Kyyn. A readiness/doctor operation checks the environment and a small
-offline compile/execution without making unrelated changes.
+Checks and acceptance build/describe using only provisioned inputs and local build
+results. Invoke Nix offline with substitution disabled; no automatic lock update,
+remote fetch or dependency solver is allowed in those paths. Missing inputs yield
+an actionable setup diagnostic identifying the selected build and preparation
+needed. Cold preparation may be expensive; show provisioning/build progress and
+measure representative cold/warm workloads rather than promise a fixed latency.
 
-The result must tell an agent what is usable and what still needs attention,
-including partial setup. A selected value shape is sufficient; this is not a
-new persisted installation workflow:
+Nix's normal binary-cache facilities are permitted. Operating a Kyyn-specific
+cache is not a prerequisite for the first implementation. Cache configuration and
+trust are explicit installation choices; a cache miss must not select another
+compiler/library version. Offline readiness means the required build inputs are
+available, not merely that `nix --version` succeeds.
 
 ```haskell
 data SetupReport = SetupReport
-  { installed   :: [InstalledComponent]
+  { installed :: [InstalledComponent]
   , outstanding :: [SetupRequirement]
   }
 
 data SetupRequirement
   = MissingComponent ComponentName
+  | MissingGuestInputs BuildIdentity
   | PermissionRequired Text
   | AuthenticationRequired Text
   | UnsupportedConfiguration Text
 ```
 
-`InstalledComponent` records verified version and resolved location. A nonempty
-`outstanding` list is not success, and setup must not secretly satisfy a permission
-request by escalating privilege. Readiness uses the same report vocabulary but
-does not provision dependencies. Actual installation and readiness are distinct
-commands even if the CLI presents them under one command group.
+InstalledComponent records the verified version and resolved location. Readiness
+checks the selected source environment and a small describe/invoke journey without
+provisioning or unrelated writes. A nonempty outstanding list is not success.
+Setup and readiness remain separate operations, not a persisted approval workflow.
 
-Prefer unattended setup where possible. Required OS permissions or human
-authentication become explicit actionable needs-input results, not hidden prompts
-or assumed authority to install privileged packages. The human need not understand
-MicroHs, PATH or MCP configuration for their agent to get them to a working KB.
-Graphical installers, desktop launchers, self-update and automatic MCP client
-registration are not initial requirements. See ADR 0025 for the full journey.
+Changing a flake or lock is an ordinary reviewed KB source/configuration change.
+The host does not maintain compatibility readers, select historical SDKs or rewrite
+pins. An incompatible protocol produces a precise diagnostic; the author repairs
+the SDK pin/code and reprovisions. A host upgrade does not by itself rewrite a KB.
+SDK source revisions are external dependency pins, not a protocol-version matrix.
 
-Source/developer and release builds may use GHC, a C compiler and Node.js. These
-are build dependencies, not requirements on an ordinary plugin user's machine.
-Use Node.js tooling to build the Web UI into static HTML, CSS, JavaScript and other
-browser assets. Package the resulting assets with Kyyn and serve them through the
-native application. Browser JavaScript runs in the user's browser; the installed
-application needs no Node.js server, package manager, frontend build or development
-server. Embedding the assets versus shipping an accompanying asset directory is a
-packaging choice, not a different runtime architecture. The repository's build and
-packaging entry points are located by [ADR 0026](0026-repository-layout.md).
+### Distribution boundaries
 
-Alex-generated scanners or other generated dependency
-sources are release build inputs/artifacts, not automatically new user toolchains.
-Use absolute paths for bundled tools, including `MHSCPPHS`, rather than requiring
-PATH mutation. Adding cpphs to the prototype bootstrap is evidence of feasibility,
-not complete production wiring.
+Nix builds use captured source/configuration plus locked dependency inputs only.
+Never copy a whole live KB into the store: exclude facts, evidence, credentials,
+Git metadata and execution records. Facts and secrets remain host-managed runtime
+inputs. Build outputs and their dependency closures are retained through owned GC
+roots while in use (ADR 0002), and may be rebuilt after derived caches are removed.
 
-Separate selected vendored source/dependencies, disposable compiled caches,
-per-KB local secrets and authored KB files. Vendored source and remote-origin
-information travel with the KB; generated executables do not. Build identity under ADR 0006 includes
-source/contract/compiler/options/SDK/dependencies; changing runtime version
-invalidates binaries, not accepted facts. No claim that
-combinator artifacts are portable across arbitrary runtime versions/platforms.
-These are local build correctness rules, not plugin compatibility declarations.
-The first release uses the source-update/compiler/Git repair model in ADR 0015;
-shipping a release does not require introducing version pins or negotiation for
-plugins and their SDK expectations.
+Tap installation still vendors plugin source under ADR 0015. All adapters in a KB
+use the same selected SDK/environment; plugin installation does not secretly create
+an independent compiler environment. Nix may provide fixed compiled outputs from
+its caches; this is distinct from accepting arbitrary tap executable entry points.
+Keep build inputs/notices for distributable dependencies available under ADR 0022.
 
-Propose canonical Git plumbing through a tested Git executable behind the Git
-capability, avoiding maintenance of a libgit2 binding initially. Bundling is not
-settled: the installer may provision Git or locate and verify a compatible
-installation. Missing Git is an actionable installation requirement, never an
-undisclosed runtime surprise left for the ordinary user to diagnose.
-
-## Alternatives and consequences
-
-Reject “install the right compiler yourself”, dynamic online dependency resolution
-inside checking, and a toolchain per plugin language. Platform scope is decided,
-but MicroHs portability alone does not prove a working distribution. Work out
-native dependency packaging, platform launch/trust requirements, local secret store
-and license obligations for Linux, macOS and the Windows/WSL journey. Verify those
-details on the target systems before release claims. WSL acceptance does not
-create a promise of native Windows support on a particular roadmap.
+The development host executable remains `kyyn-v2` to coexist with v1. The user guide
+owns implemented installation commands; this ADR defines the required distribution
+contract, not a claim that a particular script already implements it. Native host
+and Web build tools are developer dependencies. Browser assets are built before
+installation; running Kyyn does not require a Node.js development server.
 
 ## Verification
 
-From published artifacts on each supported OS: create KB, install a tap, compile
-changed source, exchange Unicode/exact values, validate/evolve, accept/reopen and
-render without GHC/Node/Rust/Python or ambient cpphs. Open and use the packaged Web
-UI without rebuilding assets, contacting a development server or requiring Node.js.
-Repeat offline after explicit
-installation, including a rebuild after deleting disposable plugin artifacts.
-Test corrupted/missing packages and report repair rather than silently
-fetching different code. Fresh installation must not depend on this repository layout.
-Test install reruns and readiness failures as well as success. Windows coverage
-requires a Windows host exercising WSL launch, browser access, paths and the MCP
-client-to-process connection; a Linux CI build alone is not that test. Build and
-installation checks cover each supported execution target. Agent-managed MCP setup
-must name the client/configuration tested, not claim universal client compatibility.
+Verify a fresh install on Linux, macOS and WSL2, including Nix availability, Git,
+source-only KB initialization, locked dependency preparation, description, query,
+evolution, plugin calls and rendering. Repeat checks/invocations offline, and
+rebuild after deleting derived outputs while keeping provisioned build inputs.
+Check missing inputs, unsupported outputs, incompatible descriptions and permission
+failures. Test install reruns, cancellation and GC retention/release.
+
+Run actual Windows-to-WSL launch, paths, browser and MCP checks before claiming that
+journey. A Linux build alone is insufficient. A Nix build specification does not
+prove every dependency works on every platform or that cached binaries exist.

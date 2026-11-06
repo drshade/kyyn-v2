@@ -27,7 +27,7 @@ kyyn-v2/
 ├── architecture/                      ADRs, principles and field templates
 │
 ├── shared/
-│   └── kyyn-types/                    Pure vocabulary compiled by GHC and MicroHs
+│   └── kyyn-types/                    Pure vocabulary shared by host and guest
 │
 ├── host/
 │   ├── kyyn-domain/                   Pure host entities and result types
@@ -35,13 +35,13 @@ kyyn-v2/
 │   ├── kyyn-porcelain-interpreters/   Interpret porcelain through other capabilities
 │   ├── kyyn-plumbing/                 Plumbing capability definitions
 │   ├── kyyn-plumbing-interpreters/    Interpret plumbing through native IO
-│   ├── kyyn-microhs/                  Schema inspection and guest compilation interpreters
 │   ├── kyyn-surfaces/                 CLI, MCP and HTTP adapters
 │   └── kyyn/                          Executable entry point and execution composition
 │
 ├── guest/
 │   ├── kyyn-sdk/                      Public API for KB and plugin authors
-│   └── kyyn-runtime/                  Private guest transport and execution support
+│   ├── kyyn-runtime/                  Private guest transport and execution support
+│   └── kyyn-guest-build/              GHC inspection, bindings and Nix build helper
 │
 ├── web/                              Human-facing UI
 │
@@ -57,7 +57,7 @@ kyyn-v2/
 │   └── field-scenarios/               Prepared KBs, agent tasks and expectations
 │
 ├── vendor/
-│   └── MicroHs/                       Pinned upstream source used by native/guest builds
+│   └── …                             Explicit vendored upstream source where required
 │
 └── tools/                            Bootstrap, packaging and development scripts
 ```
@@ -69,8 +69,8 @@ to build them all in the first slice. Real user KBs remain separate repositories
 
 Each implemented Haskell package has its own Cabal file, `src/` and package-local
 `test/` where needed. `cabal.project` coordinates native builds; guest compilation
-must still be tested through the bundled MicroHs toolchain, not inferred from a
-successful GHC build. This layout does not require every guest dependency or plugin
+must still be tested through the KB flake and real guest protocol, not inferred
+from a successful host-linked SDK build. This layout does not require every guest dependency or plugin
 to become a native Cabal package.
 
 ### Shared source ownership
@@ -78,13 +78,13 @@ to become a native Cabal package.
 `shared/kyyn-types` holds genuinely shared pure vocabulary: fact identity/envelopes,
 diagnostics and validation reports, and schema metadata where both
 host and guest use the same definitions. Native packages and the guest SDK compile
-the same source with GHC and MicroHs respectively. The SDK may re-export this
+the same source in their independently pinned GHC builds. The SDK may re-export this
 vocabulary so authors need no separate knowledge of the repository arrangement.
 The shared package depends only on pure libraries supported by both toolchains,
 not host packages, effects, compiler internals or guest transport implementation.
-CI must exercise it under both compilers; source sharing is not proof of compatibility.
+CI must exercise it on both sides of the protocol; source sharing is not proof of compatibility.
 Shared modules carry any required language pragmas in their source rather than
-relying on Cabal defaults, and use features with matching semantics in both compilers.
+relying on Cabal defaults, and use features with matching semantics in the host and guest builds.
 
 Host `KnowledgeBase` and `Root` snapshot descriptors stay host-side. Guest-authored
 KB schemas stay in their KBs. Sharing a name or concept does not make these different
@@ -106,32 +106,17 @@ both capability APIs but cannot import native IO implementations. Format-specifi
 capability helpers with plumbing dependencies live there too, without becoming
 miscellaneous functions exported from interpreter modules.
 
-`kyyn-microhs` is a native plumbing implementation package. It owns compiler-specific
-integration, the `SchemaInspection` interpreter in [ADR 0005](0005-contracts.md)
-and the `GuestCompilation` interpreter in [ADR 0002](0002-runtime.md). Their effect
-definitions belong to `kyyn-plumbing`; compiler invocation details do not belong
-to porcelain interpreters. Only application composition and native plumbing
-interpreter packages may depend on it; ordinary operations, porcelain interpreters
-and surfaces use capability interfaces instead. Pure binding generation and contract
-projections belong with their capability helpers outside this compiler-specific
-package, following ADR 0005. Purity alone is not a reason to expose a native package
-to callers otherwise forbidden to import it.
+Native plumbing owns Nix provisioning/build invocation, process lifetime and
+protocol description decoding, using the capabilities in ADRs 0002 and 0005.
+The host links no guest compiler frontend. Porcelain selects the captured source,
+entry scope and semantic operation; it never assembles compiler/Nix shell commands.
 
-The build-only `kyyn-api-catalogue` executable lives in `host/kyyn-microhs/app/`;
-it generates the installed guest discovery catalogue specified in [ADR 0018](0018-surfaces.md).
-It inspects the staged runtime inputs from that directory using relative paths.
-
-The pinned upstream source lives at `vendor/MicroHs/` as an explicit build input.
-Native compiler integration and the bundled guest toolchain use that same selected
-revision. Its source and build integration must be available in a source build;
-do not rely on Cabal reaching an experiment checkout or an undocumented ignored
-download-cache path. Use a vendored source copy; a complete Git source archive
-includes it. Record the revision, archive digest and notices in `vendor/README.md`.
-Native Cabal packages build within that complete monorepo, not independently
-packaged adapter source tarballs. Release binary/toolchain packaging remains a
-separate proof. This is upstream dependency
-management, not an assumed compiler fork. Preserve upstream notices and follow the
-dependency review and distribution requirements in ADRs 0020 and 0022.
+`guest/kyyn-guest-build` owns GHC API integration, build-time schema extraction,
+generated bindings/codecs, the embedded description and API catalogue. It is built
+with the KB-selected GHC/SDK dependencies. Compiler ASTs stay inside that package.
+The runtime package implements describe/invoke framing, and the public SDK remains
+the authoring interface. Source and notices for locked dependencies are supplied
+through Nix or explicit vendoring; there is no mandatory vendored compiler tree.
 
 Constructor visibility must agree with package ownership. The implementation of
 `Validated` lives with checking in the porcelain package and exposes an abstract
@@ -199,17 +184,17 @@ When their implementations exist, use these explicit build/test entry points:
 | Location | Responsibility |
 | --- | --- |
 | `tools/test.sh` | Coordinate native tests and the applicable guest, integration and Web checks; do not equate host-only success with a complete test run |
-| `tools/test-guest.sh` | Compile and exercise shared types, SDK and private guest runtime with the bundled MicroHs toolchain |
+| `tools/test-guest.sh` | Compile and exercise shared types, SDK and private guest runtime through the selected Nix guest environment |
 | `tests/integration/guest/` | Guest build/execution fixtures, first-party plugins through normal vendoring, and example KBs instantiated into isolated repositories |
 | `tools/build-web.sh` | Use Node.js build tooling to produce static browser assets |
-| `tools/package.sh` | Include those assets with the native application and bundled runtime/toolchain |
+| `tools/package.sh` | Include those assets with the native application and guest provisioning support |
 
 These are the intended locations, not scripts claimed to exist already. Package-local
 GHC tests also cover the shared source. Guest/plugin failures must fail the full
 test entry point rather than be silently skipped behind a passing Cabal build.
 
 `tools/` contains operational build/bootstrap/packaging scripts, not an alternative
-implementation of domain workflows. `vendor/MicroHs/` is an upstream source input;
+implementation of domain workflows. Vendored dependencies are upstream source inputs;
 compiled tools, generated bindings and Web build outputs are derived artifacts,
 not additional independently authored source trees.
 

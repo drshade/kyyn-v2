@@ -11,6 +11,38 @@ must not be disconnected workflows. Evaluation must be useful without acceptance
 
 ## Decision
 
+### Dependency changes and the migration build
+
+An evolution captures the target `flake.nix`, `flake.lock` and local build inputs
+alongside its code/configuration. These changes are visible in review and installed
+on acceptance. Source-only changes still undergo the ordinary checks; facts are
+not silently re-encoded under a new contract merely because only a lock changed.
+
+The migration is one program containing Before and After types, compiled under
+the **target** locked environment. Its copied Before schema source and dependencies
+must compile there. An incompatible compiler/library change produces an actionable
+diagnostic; the author repairs the copied schema or splits the evolution while
+preserving the Before contract. Do not execute a historical SDK or combine two
+compiler universes in one program. Splitting changes is a possible author repair,
+not a guarantee that arbitrary old code becomes compatible.
+
+The original Before contract comes from describing the accepted revision built
+under its **own** lock, retained with that accepted build. Fact files do not carry
+a substitute authoritative schema hash. The host compares the copied Before
+schema compiled in the target environment against that original description;
+comparing two descriptions both derived under the target lock is invalid.
+An unavailable accepted build/closure during offline checking requires explicit
+preparation, never acceptance without the comparison. This does not promise
+execution of historical incompatible protocols: author repair remains available.
+A same-contract code/lock change
+may preserve data unchanged; an altered contract requires explicit conversion by
+the evolution. Describe is not semantic validation or permission to accept.
+
+Discovery and migration execution use the same target environment selection.
+Schema-only discovery excludes an unfinished transformation body; migration
+execution compiles it. Source capture excludes facts/secrets from Nix inputs and
+passes the required Before facts at runtime (ADR 0002).
+
 An evolution is one of the three KB entry-point kinds in ADR 0008. The authored
 entry is an ad hoc `Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)`
 or a recipe-based `RecipeEvolution Root State` value, as specified below.
@@ -226,16 +258,15 @@ unchanged. Standard `get`, `gets`, `put` and `modify` work on the focused state.
 The SDK owns a small standard van Laarhoven optics surface (`lens`, `view`, `set`,
 `over`, composition with `(.)`). Authors can write nested field lenses; only
 collection handles are generated. Pure set/over can change types; state zoom
-preserves its focused type. Full microlens requires MicroHs-unsupported machinery
-not needed for these operations. The small optics implementation and fact-aware
-combinators avoid that dependency; StateT/ReaderT use maintained transformers
-sources rather than a second custom monad implementation.
+preserves its focused type. Authors may use compatible optics libraries in their locked environment. The SDK
+keeps its focused fact-aware operations; StateT/ReaderT use maintained transformers
+rather than a second custom monad implementation.
 
 The guest `kyyn-sdk` package owns the pure composition implementation and private
 observation constructors. Its public `Kyyn.Evolution` module exposes no JSON types.
 The private encoding values use the existing JSON library; the guest runtime can
 consume them without the SDK depending on runtime transport. Pure binding generation
-lives with the host plumbing protocol helpers, outside compiler-specific code.
+lives in guest build tooling alongside the checked-type projection.
 An SDK output is not yet a host EvolutionReport: execution must check its chain
 and derive changes as described below.
 
@@ -473,7 +504,7 @@ adapter or independently selected schema descriptor. `ReadWorkspace` can capture
 and inspect those bytes without compiling them, including unfinished proposals.
 `CaptureEvolution` then prepares both source endpoints through RootOpening:
 the manifest selects schema/metadata exports, and inspection derives their checked
-contracts from captured modules plus installed SDK sources. A malformed or
+contracts from captured modules and the target flake environment. A malformed or
 unsupported target schema returns diagnostics before evaluation. A successfully
 captured evolution retains the prepared After, so execution does not inspect it again.
 Raw workspace review remains available when this preparation fails (ADR 0023).
@@ -799,7 +830,7 @@ data EvaluatedEvolution = EvaluatedEvolution
 runEvolutionExecution
   :: (RootStore :> es, GuestCompilation :> es, GuestExecution :> es,
       DhallHandling :> es, Failure :> es)
-  => FileTree -- installed SDK/runtime sources
+  => GuestSources -- captured source and target flake environment
   -> Eff (EvolutionExecution : es) a -> Eff es a
 
 applyEvolution
@@ -815,7 +846,7 @@ data PreviewRejection
 EvolutionExecution owns source/adapter preparation, entry/schema compilation and
 execution of the compiled transformation.
 It delegates compilation to [GuestCompilation](0002-runtime.md), not a locally
-assembled MicroHs command. GuestExecution invokes the compiled pure entry;
+assembled compiler/Nix command. GuestExecution invokes the compiled pure entry;
 native process lifetime and protocol remain below that plumbing boundary.
 The row is a lowering contract, not IO in porcelain. RootExecution in ADR 0011
 retains validation and snapshot queries without acquiring plugin/acquisition
@@ -1123,9 +1154,9 @@ the selected commit and the diff compares the result with that base, not the old
 root. Acceptance requires `Before.revision == local head` under ADR 0012.
 
 The SDK and generated-binding conformance test runs the same source under GHC
-and pinned MicroHs. It covers ordered per-step observations, associative composition,
+and the selected Nix-built guest. It covers ordered per-step observations, associative composition,
 identity, failed-step short-circuiting with no partial success, cancelling changes,
-schema changes and a same-type metadata-only transition. Both compilers reject
+schema changes and a same-type metadata-only transition. The checked build rejects
 wrong typed bindings and public construction of EvolutionOutput. The actual
 identity scaffold is compiled in this proof too. This establishes SDK composition
 and encoding. The proof also transports successful observations and structured
@@ -1134,7 +1165,7 @@ the three expected host step reports. Focused native tests check chain discontin
 unknown contracts, malformed intermediate values, duplicate IDs, metadata/schema
 changes, additions/deletions, cancelling edits and position-independent matching.
 The separate workspace execution proof uses the actual EvolutionExecution handler,
-RootOpening, schema inspection, MicroHs compilation/evaluation and Dhall stores.
+RootOpening, schema inspection, Nix guest build/execution and Dhall stores.
 Its recording Git handler supplies only the context's exact Before subtree. The
 handler evaluates a Before edit, schema migration and After edit, retaining
 the captured context; the test materializes and reopens exactly the checked After.

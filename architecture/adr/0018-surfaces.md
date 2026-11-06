@@ -246,10 +246,10 @@ not accepted facts or recipe state. Distinguish unfetched, incompatible producer
 publication conflict, malformed delta/storage and unavailable payload. Missing
 evidence does not claim upstream deletion. ADR 0014 owns these semantics.
 
-`guest module list/show` and `guest symbol show` describe the installed public SDK
+`guest module list/show` and `guest symbol show` describe the selected public SDK
 and, when a KB is selected, its generated public tool modules. Public modules come from kyyn-sdk's exposed
 facade declarations under [ADR 0008](0008-authoring.md), not the shared wire-profile
-package's exports; checked MicroHs exports determine symbol membership, including
+package's exports; checked guest-build exports determine symbol membership, including
 reexports and their defining module. Display authored signatures and type aliases
 when available, preserving useful names such as `Edit` and `Lens'`. Distinguish
 checked expanded signatures from source declarations rather than claiming they
@@ -313,12 +313,13 @@ candidate materialization, facts, semantic validation, query execution or readin
 In contrast, endpoint schemas and their metadata must be valid: the generated
 handles depend on their types and collection declarations. An invalid endpoint
 produces an actionable diagnostic, not a stale catalogue or placeholder types.
-The author can inspect the fixed installed SDK from a directory outside a KB.
-
-Workspace-scoped discovery is a runtime command: it loads the installed SDK source
-tree and native compiler integration, honours `--runtime`, and uses an
-ApiInspection interpreter in `kyyn-microhs`, alongside SchemaInspection.
-Discovery outside a KB remains catalogue-only.
+Outside a KB, the host may show its bundled reference SDK catalogue, clearly
+identified as reference documentation rather than the selected KB's environment.
+Within a KB/workspace, authoritative discovery uses the selected flake's SDK and
+captured source through the description protocol. The guest build tools generate
+the catalogue from compiler-checked public exports. ApiInspection consumes that
+build-derived catalogue; the host does not link a compiler frontend. Missing
+provisioned inputs produce setup diagnostics, not a fallback to the reference SDK.
 
 #### Tool authoring discovery
 
@@ -383,7 +384,7 @@ identify their kind and selected revision/evolution; human output remains concis
 For the accepted root and an evolution target, expose `Kyyn.Connectors`,
 `Kyyn.Agentic` and each generated `Kyyn.Plugins.P_*.*` facade in the same
 list/show/symbol commands. Omit internal request rows such as `KyynToolCalls`.
-Agentic's question vocabulary is available through the installed SDK catalogue.
+Agentic's question vocabulary is available through the selected SDK catalogue.
 
 Tool bindings are generated from the selected plugin declarations and configured
 instances, even before a tool is registered. Discovery inspects these bindings,
@@ -446,10 +447,10 @@ evaluation; it must not execute the evolution, validator or queries.
 
 Reuse `evolutionBindings` and the same schema-closure combination/collision rules
 as evolution execution. The compiler source set consists only of captured endpoint
-schema closures, installed SDK dependencies and those generated bindings. No new
+schema closures, target-locked SDK dependencies and those generated bindings. No new
 hand-maintained signatures, metadata inventory or discovery-specific combinator
-generator is introduced. ApiInspection is the plumbing adapter to the existing
-MicroHs export inspection; its handler manages temporary compilation files.
+generator is introduced. ApiInspection obtains compiler-derived exports through
+the guest description protocol; guest build tooling owns generation and inspection.
 Only the three selected public generated modules enter the workspace catalogue;
 codecs, entry adapters and private root bindings remain absent.
 
@@ -464,10 +465,10 @@ Generated public declarations spell their types in the facade vocabulary already
 presented by `guest module show` (`Collection`, `Edit`, `Evolution`, `Rationale`),
 using full schema module names and importing internals only for constructors.
 
-The composition root supplies the installed SDK catalogue and workspace catalogue
+The composition root supplies the selected SDK catalogue and workspace catalogue
 to the same navigation functions. It installs WorkspaceApi and its source/compiler
-handlers for selected-root/workspace discovery. Native inspection may reuse
-ADR 0005's disposable content-keyed cache; it does not write the workspace or Git
+handlers for selected-root/workspace discovery. Description inspection may reuse
+ADR 0005's build-identity cache; it does not write the workspace or Git
 refs, and does not save or check a candidate.
 Each invocation describes its captured inputs, not a snapshot promised to remain
 current after the command returns. Use the normal source-collision and diagnostic
@@ -725,6 +726,6 @@ The same request via CLI/MCP/web produces the same domain result and transition.
 Interface coverage follows user journeys, not mechanically identical buttons
 and endpoints. Web and MCP are designed and tested in each end-to-end slice,
 not bolted on after a CLI implementation has fixed the product's shape.
-Listing evolutions does not start MicroHs or plugins. A fresh agent can discover
+Listing evolutions does not build or start guests or plugins. A fresh agent can discover
 one relevant tool without receiving the entire installed catalog. A human can
 explain a report change without reading protocol envelopes or Haskell internals.

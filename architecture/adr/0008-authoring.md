@@ -12,7 +12,18 @@ The training-session helper should talk about sessions and people.
 
 ## Decision
 
-The authored surface consists of ordinary MicroHs schema/code modules, generated
+The KB owns `flake.nix` and Nix's `flake.lock`, including its compiler, Kyyn SDK
+and author-selected libraries. Dependencies are authored inputs to ordinary
+code/configuration evolutions; a second Kyyn dependency lock is not introduced.
+The guest build helper derives descriptions and generated bindings from checked
+exports before compiling their consumers (ADRs 0002 and 0005). Authors do not
+implement describe framing or maintain schema JSON. Private library types may be
+arbitrarily rich; only types crossing Kyyn's boundary must lower to its supported
+contract algebra. Trusted authors are responsible for the declared purity/effect
+roles; they are not a promise of runtime I/O confinement.
+
+
+The authored surface consists of ordinary Haskell schema/code modules, generated
 bindings, pure functions, and explicit host-capability operations. Under the
 selected Haskell schema authority in ADR 0005, bindings refer to authored
 domain types; generated declarations are only genuinely derived adapters or
@@ -286,7 +297,7 @@ agent or prescribe its steps. ADR 0028 owns explicit closed-flow execution.
 Pure calculations are reusable from validation, queries and views. Provide a
 small SDK for identified facts, diagnostics, selected existing exact-value library
 types/adapters and evolution composition. Do not create a Kyyn arithmetic library
-in place of evaluating existing Haskell/MicroHs implementations. Use standard
+in place of evaluating existing Haskell implementations. Use standard
 optics if compatible; do not expand the custom optics
 implementation as a substitute for evaluating dependencies. Keep `After` imports
 qualified in evolution scaffolds and generate record field optics mechanically.

@@ -25,6 +25,12 @@ Flows remain inspectable and testable with deterministic fixtures.
 
 ## Decision
 
+Host-call diagnostics and model-call accounting cover calls made through the
+supported SDK/protocol. Trusted authors may use other libraries directly; Kyyn
+neither prevents nor automatically audits those calls. Workflow-specific redaction
+must be composed by the author before dispatch; neither Nix nor the host guarantees
+that arbitrary guest code applies it.
+
 ### A flow belongs to the KB, not to an autonomous kernel
 
 Use the library's inspectable arrow structure with Kyyn's existing typed guest
@@ -150,10 +156,9 @@ contract over a container or applied generic type. This avoids competing with
 upstream's existing instances. Defining modules must not import their generated
 contracts, directly or through a flow; that would make inspection circular.
 
-Upstream supports explicit codecs under both GHC and MicroHs; Generic deriving
-of `Contract` and `Options` is GHC-only. It uses its own JSON-shaped `Value`.
-Kyyn generates explicit codecs and instances without requiring GHC metadata in the
-guest. Internal library tuples or floating-point
+Upstream supports explicit codecs and Generic deriving of `Contract` and
+`Options`. It uses its own JSON-shaped `Value`. Kyyn's guest build generates
+instances from the checked declarations shared with its description. Internal library tuples or floating-point
 values do not expand Kyyn's public schema vocabulary by accident.
 
 [ADR 0027](0027-judgement.md) owns the Jev-backed SystemOne integration.
@@ -324,7 +329,7 @@ adapters or recipe persistence.
 
 Exercise explicit record/sum contracts, typed tools, nested drafts, malformed
 output followed by correction, applicative judgements and flow descriptions under
-both GHC and MicroHs with scripted handlers. Test a generated-contract flow through
+host and built guest with scripted handlers. Test a generated-contract flow through
 Kyyn's real guest/host protocol, including cancellation and provider failures.
 
 A closed recipe must produce a reviewable frozen ordinary evolution. Verify typed request/state decoding, mandatory initial state, state-only proposals,
