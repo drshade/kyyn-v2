@@ -280,11 +280,11 @@ the defining symbol and retain it through reexports. Store the text with the
 catalogue and expose it in human and JSON output; ordinary implementation comments
 are not documentation. This does not promise full Haddock parsing or rendering.
 
-Generate this fixed catalogue from the staged SDK during the build and ship it
-as Dhall in the runtime bundle. Outside a KB (no `root/kb.dhall` at the selected path), discovery reads only the
+Generate the reference catalogue from the host release's SDK and ship it
+as Dhall with the host. Outside a KB (no `root/kb.dhall` at the selected path), discovery reads only the
 catalogue through filesystem and Dhall plumbing, without Git or guest compilation.
-Within a KB it adds generated modules from the accepted root, or the evolution
-target selected by `--evolution ID`.
+Within a KB, use the catalogue from its selected SDK/build, adding generated
+modules from the accepted root or the evolution target selected by `--evolution ID`.
 Human output supports selective exploration and `--json` returns the same symbols
 as structured data. A missing module or symbol is a refusal with a navigation hint.
 
@@ -393,13 +393,13 @@ prevent the author from learning the contract. Selected schema/plugin declaratio
 and configuration must be valid where the generated types depend on them.
 Use the same binding generator for discovery and execution.
 
-Looking up a fixed SDK module or symbol reads only the installed catalogue,
-including inside a KB or with `--evolution`. Listing adds generated modules when
-their source context is buildable. If generation fails, list still returns the
-fixed catalogue with `guest.bindings-unavailable` and the cause as diagnostics;
-it does not claim to be a complete list. Showing an unavailable generated module
-remains a refusal and includes the available catalogue for navigation. Broken
-schema or configuration must not hide the documentation needed to repair it.
+Looking up SDK modules uses the catalogue for the selected environment. Listing
+adds generated modules when their source context is buildable. If generated-module
+compilation fails, retain available SDK documentation with
+`guest.bindings-unavailable` and the cause; never claim a complete list or silently
+substitute the host reference SDK for the KB's selected one. Showing an unavailable
+generated module remains a refusal. SDK-only discovery may build separately so
+broken authored code does not hide the documentation needed to repair it.
 
 `Kyyn.Connectors.Tool` documentation states the entry signature
 `Input -> Tool (Either FetchError Result)`, its imports and manifest registration
@@ -606,15 +606,12 @@ follows the user's conversion settings. Configured hooks, including a global
 `core.hooksPath`, remain enabled and receive the same explicit process environment
 (empty PATH); their failures follow the Git publication/checkout outcomes.
 
-Runtime paths come from the
-installed layout, with `--runtime` and `--git` development overrides.
-Before installing compiler interpreters, the composition root configures the
-unpatched compiler's `MHSCPPHS` environment variable once from the resolved runtime;
-Kyyn's declaration reader uses that toolchain's preprocessor path directly.
-KB-scoped guest discovery loads the SDK and compiler integration; discovery
-outside a KB reads only the installed catalogue. Evolution listing,
-state changes, archived inspection, plugin installation and local readiness diagnosis do
-not load the SDK. Host configuration/path resolution and interpretation live in
+The composition root resolves the installed host assets, Git and Nix executables
+explicitly. Compiler, preprocessor and dependency paths belong to the KB flake's
+build, not host-installed compiler state. KB-scoped guest discovery describes the
+selected build; outside a KB it reads only the reference catalogue. Evolution
+listing, state changes, archived inspection and plugin source installation do not
+require compiling a guest. Host configuration/path resolution and interpretation live in
 `kyyn`; parsing and pure rendering live in `kyyn-surfaces`. Shared application
 workflows live in porcelain capabilities, reusable by CLI, MCP and Web.
 Surfaces do not compose root opening, validation or evolution execution themselves.

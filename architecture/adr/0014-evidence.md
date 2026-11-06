@@ -16,11 +16,6 @@ investigation, and let recipes explicitly own any processing state they need.
 
 ## Decision
 
-Evidence provenance and capture guarantees apply to acquisition performed through
-Kyyn's evidence/connector operations. Trusted guest authors can perform direct I/O;
-Kyyn does not discover or record those bypasses. Authors must use captured evidence
-for workflows claiming snapshot-based provenance (ADR 0002).
-
 ### One current captured value per evidence item
 
 Each configured connector instance has one latest captured evidence state, stored

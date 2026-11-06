@@ -20,23 +20,12 @@ not silently re-encoded under a new contract merely because only a lock changed.
 
 The migration is one program containing Before and After types, compiled under
 the **target** locked environment. Its copied Before schema source and dependencies
-must compile there. An incompatible compiler/library change produces an actionable
-diagnostic; the author repairs the copied schema or splits the evolution while
-preserving the Before contract. Do not execute a historical SDK or combine two
-compiler universes in one program. Splitting changes is a possible author repair,
-not a guarantee that arbitrary old code becomes compatible.
-
-The original Before contract comes from describing the accepted revision built
-under its **own** lock, retained with that accepted build. Fact files do not carry
-a substitute authoritative schema hash. The host compares the copied Before
-schema compiled in the target environment against that original description;
-comparing two descriptions both derived under the target lock is invalid.
-An unavailable accepted build/closure during offline checking requires explicit
-preparation, never acceptance without the comparison. This does not promise
-execution of historical incompatible protocols: author repair remains available.
-A same-contract code/lock change
-may preserve data unchanged; an altered contract requires explicit conversion by
-the evolution. Describe is not semantic validation or permission to accept.
+must compile there. Compiler errors are reported normally and the author decides
+how to repair them; lock changes do not require a special split or approval route.
+The host decodes the existing input facts using the build's Before contract and
+checks the resulting After through normal validation. Decode/type/validation
+failures are not silently ignored. No second build under the old lock, retained
+accepted-build registry or extra lock-drift test is required.
 
 Discovery and migration execution use the same target environment selection.
 Schema-only discovery excludes an unfinished transformation body; migration

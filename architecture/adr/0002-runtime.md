@@ -98,22 +98,19 @@ When full compilation fails, source-only discovery can still report valid schema
 information separately from implementation diagnostics. Do not assume a failed
 Nix derivation publishes successful partial outputs.
 
-Dependency provisioning is explicit under ADR 0020. Check/accept may build from
-already provisioned inputs offline, but never fetch or resolve a different lock.
-A Nix binary cache may supply the exact output; a cache miss may require a local
-build. Package availability and build success are verified per target, not inferred
-from Nix supporting that OS. No unmeasured build-latency promise is made.
+Checks may ask Nix to fetch or build the exact locked inputs and outputs (ADR
+0020). They never update the lock or resolve an alternative dependency version.
+Missing inputs, network/build failures and unavailable platform outputs are normal
+setup/build diagnostics. A binary cache may supply an exact output; a cache miss
+may require a local build. No unmeasured build-latency promise is made.
 
 Nix identities cover compiler, SDK, library inputs and build options through the
 derivation. The capture digest also records selected source paths/bytes and entry
 selection. Fact values and invocation arguments are not compiler inputs. Retain
-an output through a Nix GC root for as long as a cached or in-flight CompiledProgram
-refers to it; release owned roots on cache removal. Acceptance also retains the
-accepted revision's output/closure so subsequent offline evolution checks can
-describe the original Before under its own lock. Establish the new retention before
-publishing acceptance, and retain the previous output while any in-flight operation
-still references it. Failure to publish acceptance releases only newly unneeded
-retention; missing accepted closures require preparation rather than a bypass. Never return a bare temporary
+an output through ordinary Nix output retention for as long as an in-flight or
+cached CompiledProgram uses it; cache removal may release that retention. No
+accepted-revision closure registry or historical guest build is required.
+Never return a bare temporary
 build-directory path. Cache deletion discards derived code, not accepted knowledge.
 
 ### Describe and invoke the same build
@@ -247,11 +244,11 @@ tooling is maintained and tested against the compiler it selects. Type checking
 is not runtime isolation and the host description checks are not an attestation
 of trusted authored code.
 
-Verify fresh provisioning and offline rebuilds; source/lock/SDK/compiler changes
+Verify fresh builds and reuse of already available dependencies; source/lock/SDK/compiler changes
 invalidate derived code while fact-only changes reuse it. Exercise missing locks,
-missing outputs, failed builds, GC retention, cancellation and malformed describe
-responses. A changed description must not silently relabel stored facts: accepted-source descriptions and normal
-contract checks and explicit evolution conversion still apply.
+missing outputs, failed builds, output lifetime, cancellation and malformed describe
+responses. A changed description must not silently relabel stored facts: normal decoding, contract checks and explicit evolution conversion
+still apply.
 
 Run a real GHC guest through discovery, runtime fact loading, validation, query,
 plugin host calls, typed evolution and output publication. Test the actual guest

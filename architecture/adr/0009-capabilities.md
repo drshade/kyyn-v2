@@ -12,12 +12,6 @@ the prototype's boundary problems on the other side of the pipe.
 
 ## Decision
 
-Capability rows specify supported SDK composition and host-mediated effects.
-Authors are trusted (ADR 0002): arbitrary guest libraries can perform direct I/O.
-Kyyn validates requests made through its protocol; it does not enforce that every
-network/file/model action uses that protocol. Role purity remains an authoring
-obligation, not a runtime sandbox guarantee.
-
 The capability row is the contract; role names are useful descriptions, not a
 separate product permission taxonomy. Retain these explicit boundaries:
 

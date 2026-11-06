@@ -243,9 +243,10 @@ Description is build-derived and may be cached by immutable build identity. Do
 not commit a parallel description file requiring authors to synchronize it with
 source. Reading stored values checks their shape against the selected description;
 fact files do not persist an independent authoritative contract identity.
-Evolution checks obtain the original Before identity from the accepted revision's
-own locked build, then compare the target-build Before description (ADR 0010). A lock-only change that changes a
-contract must undergo explicit schema conversion; it cannot silently relabel facts.
+Evolution checks decode their existing input facts through the target build's
+Before contract, then validate the resulting After (ADR 0010). Ordinary decode,
+type and validation errors apply to lock changes too; no independent historical
+build or committed-description comparison is required.
 A CheckedValue proves structural conformity, not semantic validation of the KB.
 Its constructor remains private to checking code.
 

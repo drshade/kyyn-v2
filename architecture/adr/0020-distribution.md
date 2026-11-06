@@ -26,26 +26,23 @@ host configuration silently. Resolve the Nix executable once through installatio
 configuration and invoke its absolute path; an agent can use it without changing
 an existing terminal's PATH. Do not require users to understand compiler internals.
 
-### Provision, then check offline
+### Locked builds during ordinary operations
 
-Provide an explicit guest preparation operation for a selected KB/evolution source
-capture. It may download the exact locked sources and dependency/build closures,
-use configured binary caches, and build the selected guest. It does not change
-the lock, accept an evolution or fetch evidence. Missing locks require an explicit
-author dependency-resolution step, not implicit resolution during preparation.
+The host invokes Nix for the selected captured source and lock. A check may fetch
+locked sources or cached outputs and build missing dependencies. It never updates
+the lock or resolves an alternative version. There is no mandatory separate
+preparation lifecycle. Authors explicitly update missing/outdated locks as an
+ordinary source change; checking reports that need rather than doing it implicitly.
 
-Checks and acceptance build/describe using only provisioned inputs and local build
-results. Invoke Nix offline with substitution disabled; no automatic lock update,
-remote fetch or dependency solver is allowed in those paths. Missing inputs yield
-an actionable setup diagnostic identifying the selected build and preparation
-needed. Cold preparation may be expensive; show provisioning/build progress and
-measure representative cold/warm workloads rather than promise a fixed latency.
+Cold builds may be expensive. Show dependency/build progress and distinguish a
+cached execution from a fresh build. Measure representative cold/warm workloads;
+Nix installation alone does not establish that the selected package set builds.
+Offline execution/rebuild works when the necessary outputs/inputs are available;
+missing data or unavailable remote access produces ordinary actionable errors.
 
 Nix's normal binary-cache facilities are permitted. Operating a Kyyn-specific
-cache is not a prerequisite for the first implementation. Cache configuration and
-trust are explicit installation choices; a cache miss must not select another
-compiler/library version. Offline readiness means the required build inputs are
-available, not merely that `nix --version` succeeds.
+cache is not a prerequisite. Cache configuration and trust are installation
+choices; a cache miss never selects another compiler/library version.
 
 ```haskell
 data SetupReport = SetupReport
@@ -55,15 +52,14 @@ data SetupReport = SetupReport
 
 data SetupRequirement
   = MissingComponent ComponentName
-  | MissingGuestInputs BuildIdentity
   | PermissionRequired Text
   | AuthenticationRequired Text
   | UnsupportedConfiguration Text
 ```
 
 InstalledComponent records the verified version and resolved location. Readiness
-checks the selected source environment and a small describe/invoke journey without
-provisioning or unrelated writes. A nonempty outstanding list is not success.
+checks the installed tools without changing host configuration. A working guest build is
+checked through ordinary build/describe operations. A nonempty outstanding list is not success.
 Setup and readiness remain separate operations, not a persisted approval workflow.
 
 Changing a flake or lock is an ordinary reviewed KB source/configuration change.
@@ -95,9 +91,9 @@ installation; running Kyyn does not require a Node.js development server.
 ## Verification
 
 Verify a fresh install on Linux, macOS and WSL2, including Nix availability, Git,
-source-only KB initialization, locked dependency preparation, description, query,
+source-only KB initialization, locked dependency resolution, description, query,
 evolution, plugin calls and rendering. Repeat checks/invocations offline, and
-rebuild after deleting derived outputs while keeping provisioned build inputs.
+rebuild after deleting derived outputs while keeping provisioned build inputs. No separate preparation command is required.
 Check missing inputs, unsupported outputs, incompatible descriptions and permission
 failures. Test install reruns, cancellation and GC retention/release.
 

@@ -25,12 +25,6 @@ Flows remain inspectable and testable with deterministic fixtures.
 
 ## Decision
 
-Host-call diagnostics and model-call accounting cover calls made through the
-supported SDK/protocol. Trusted authors may use other libraries directly; Kyyn
-neither prevents nor automatically audits those calls. Workflow-specific redaction
-must be composed by the author before dispatch; neither Nix nor the host guarantees
-that arbitrary guest code applies it.
-
 ### A flow belongs to the KB, not to an autonomous kernel
 
 Use the library's inspectable arrow structure with Kyyn's existing typed guest
