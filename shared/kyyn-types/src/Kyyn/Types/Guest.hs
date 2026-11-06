@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
   ( GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
-  , QueryContracts(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
+  , QueryContracts(..), CapturedContracts(..), CapturedMethodIdentity(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
   , protocolIdentity, describeContract
   ) where
 
@@ -25,12 +25,28 @@ data DescribedContract = DescribedContract
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
+  | CapturedReadEntry { entryName :: Text, capturedMethod :: CapturedMethodIdentity, capturedContracts :: CapturedContracts contract }
   | ContractEntry { entryName :: Text, describedContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
 data QueryContracts contract = QueryContracts
   { rootContract :: contract, argumentContract :: contract, resultContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
+
+data CapturedMethodIdentity = CapturedMethodIdentity
+  { pluginName :: Text, connectorName :: Text, methodName :: Text, methodDescription :: Text }
+  deriving (Eq, Show)
+
+data CapturedContracts contract = CapturedContracts
+  { inputContract :: contract, payloadContract :: contract, outputContract :: contract }
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+
+instance ToJSON CapturedMethodIdentity where
+  toJSON (CapturedMethodIdentity plugin connector method description) = object
+    ["plugin" .= plugin,"connector" .= connector,"method" .= method,"description" .= description]
+instance FromJSON CapturedMethodIdentity where
+  parseJSON = exactObject "captured method" ["plugin","connector","method","description"] $ \fields ->
+    CapturedMethodIdentity <$> fields .: "plugin" <*> fields .: "connector" <*> fields .: "method" <*> fields .: "description"
 
 type EntryDescription = GuestEntry DescribedContract
 
@@ -60,6 +76,9 @@ instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
   toJSON (QueryEntry name (QueryContracts root arguments result)) = object
     ["entryName" .= name,"kind" .= String "query","root" .= root,"arguments" .= arguments,"result" .= result]
+  toJSON (CapturedReadEntry name method (CapturedContracts arguments payload result)) = object
+    ["entryName" .= name,"kind" .= String "capturedRead","method" .= method,
+     "arguments" .= arguments,"payload" .= payload,"result" .= result]
   toJSON (ContractEntry name value) = object ["entryName" .= name,"kind" .= String "contract","value" .= value]
 instance FromJSON contract => FromJSON (GuestEntry contract) where
   parseJSON value = withObject "guest entry" (\fields -> do
@@ -70,6 +89,9 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
       "query" -> exactObject "query entry" ["entryName","kind","root","arguments","result"]
         (\entry -> QueryEntry <$> entry .: "entryName" <*> (QueryContracts
           <$> entry .: "root" <*> entry .: "arguments" <*> entry .: "result")) value
+      "capturedRead" -> exactObject "captured read entry" ["entryName","kind","method","arguments","payload","result"]
+        (\entry -> CapturedReadEntry <$> entry .: "entryName" <*> entry .: "method" <*> (CapturedContracts
+          <$> entry .: "arguments" <*> entry .: "payload" <*> entry .: "result")) value
       "contract" -> exactObject "contract entry" ["entryName","kind","value"]
         (\entry -> ContractEntry <$> entry .: "entryName" <*> entry .: "value") value
       _ -> fail "Unknown guest entry kind") value

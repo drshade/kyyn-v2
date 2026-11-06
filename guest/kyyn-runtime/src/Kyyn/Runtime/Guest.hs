@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Runtime.Guest (Entry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
+module Kyyn.Runtime.Guest (Entry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
 import qualified Data.Aeson as Json
@@ -17,14 +17,14 @@ import Kyyn.Types.Guest
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Diagnostic (ValidationReport)
 import Kyyn.Types.Query (Query)
-import qualified Kyyn.Runtime.Json as Wire
-import Kyyn.Runtime.Contract (runtimeCodec, fromWire, toWire)
+import Kyyn.Runtime.Contract (runtimeCodec, fromWire)
+import Kyyn.Plugin (CapturedRead)
+import Kyyn.Types.Plugin (EvidenceSnapshot(..), FetchError)
+import Kyyn.Runtime.Plugin (executeCapturedReadAction)
 import Kyyn.Runtime.Query (executeQuery)
 import Kyyn.Runtime.Validation (encodeReportValue)
+import Kyyn.Runtime.Entry (Entry(..), pureEntry, writeReply)
 import Kyyn.Runtime.Transport
-
--- Generated adapters construct entries only after their contracts compile.
-data Entry = Entry EntryDescription (Json.Value -> Either String Json.Value)
 
 validationEntry :: forall root. Contract root => SchemaMetadata -> [Text]
   -> (root -> ValidationReport) -> Either ProjectionError Entry
@@ -35,7 +35,7 @@ validationEntry metadata sources validate = do
         root <- either (Left . Text.unpack) Right (compiled.codec.decode (fromAeson value))
         report <- encodeReportValue (validate root)
         pure (toAeson (fromWire report))
-  pure (Entry (ValidatorEntry "validate" description) run)
+  pure (pureEntry (ValidatorEntry "validate" description) run)
 
 queryEntry :: forall root args result. (Contract root, Contract args, Contract result)
   => Text -> (SchemaMetadata,[Text]) -> (SchemaMetadata,[Text]) -> (SchemaMetadata,[Text])
@@ -52,12 +52,33 @@ queryEntry name (rootMetadata,rootSources) (argumentMetadata,argumentSources) (r
         reply <- executeQuery (runtimeCodec root.codec) (runtimeCodec arguments.codec) (runtimeCodec result.codec)
           selected (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (Json.encode value))))
         pure (toAeson (fromWire reply))
+  pure (pureEntry description run)
+
+capturedReadEntry :: forall args payload result. (Contract args, Contract payload, Contract result)
+  => Text -> CapturedMethodIdentity -> [Text]
+  -> (args -> EvidenceSnapshot payload -> CapturedRead payload (Either FetchError result))
+  -> Either ProjectionError Entry
+capturedReadEntry name method sources selected = do
+  arguments <- compileContract (contract @args)
+  payload <- compileContract (contract @payload)
+  result <- compileContract (contract @result)
+  let describe compiled = describeContract compiled (SchemaMetadata [] [] []) sources
+      description = CapturedReadEntry name method (CapturedContracts
+        (describe arguments.description) (describe payload.description) (describe result.description))
+      run transport value = do
+        (input,snapshot) <- either fail pure (Json.parseEither
+          (Json.withObject "captured invocation" (\fields -> do
+            unless (sort (Keys.keys fields) == ["arguments","snapshot"]) (fail "Malformed captured invocation")
+            (,) <$> fields Json..: "arguments" <*> fields Json..: "snapshot")) value)
+        decoded <- either (fail . Text.unpack) pure (arguments.codec.decode (fromAeson input))
+        executeCapturedReadAction transport (runtimeCodec payload.codec) (runtimeCodec result.codec)
+          (selected decoded (EvidenceSnapshot snapshot))
   pure (Entry description run)
 
 describeEntry :: forall value. Contract value => Text -> SchemaMetadata -> [Text] -> Either ProjectionError Entry
 describeEntry name metadata sources = do
   compiled <- compileContract (contract @value)
-  pure (Entry (ContractEntry name (describeContract compiled.description metadata sources))
+  pure (pureEntry (ContractEntry name (describeContract compiled.description metadata sources))
     (const (Left "This entry describes a contract and cannot be invoked")))
 
 buildEntries :: [Either ProjectionError Entry] -> IO [Entry]
@@ -80,22 +101,19 @@ runGuest exports selected = do
     (metadata,body) <- readFrame transport
     unless (Bytes.null body) (fail "Unexpected invocation body")
     request <- either fail pure (Json.eitherDecodeStrict' metadata)
-    reply <- case request of
+    case request of
       Json.Object fields -> do
         operation <- either fail pure (Json.parseEither (Json..: "operation") fields)
         case operation :: Text of
           "describe" -> do
             unless (Keys.keys fields == ["operation"]) (fail "Description takes no arguments")
-            pure (Json.toJSON (GuestDescription protocolIdentity descriptions exports))
+            writeReply transport (Json.toJSON (GuestDescription protocolIdentity descriptions exports))
           "invoke" -> do
             unless (sort (Keys.keys fields) == ["argument","entry","operation"]) (fail "Malformed invocation")
             name <- either fail pure (Json.parseEither (Json..: "entry") fields)
             argument <- either fail pure (Json.parseEither (Json..: "argument") fields)
             case [run | Entry description run <- built, description.entryName == name] of
-              [run] -> either fail pure (run argument)
+              [run] -> run transport argument
               _ -> fail "Unknown guest entry"
           _ -> fail "Unknown guest operation"
       _ -> fail "Expected guest request object"
-    -- The wire profile is checked before emitting a frame.
-    encoded <- either fail pure (Wire.printValue (toWire (fromAeson reply)))
-    writeJson transport encoded

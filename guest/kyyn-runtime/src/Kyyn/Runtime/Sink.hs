@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs #-}
-module Kyyn.Runtime.Sink (executeSink, sinkResultCodec) where
+module Kyyn.Runtime.Sink (executeSink, executeSinkAction, sinkResultCodec) where
 
 import Kyyn.Types.Sink
 import Kyyn.Types.Program (Program)
@@ -43,7 +43,10 @@ executeSink configCodec optionsCodec inputCodec resultCodec defaults publish = w
       config <- either fail pure (field "config" configCodec members)
       options <- either fail pure (field "options" optionsCodec members)
       input <- either fail pure (field "input" inputCodec members)
-      execute transport (sinkResultCodec resultCodec) (handler transport) (publish config options input)
+      executeSinkAction transport resultCodec (publish config options input)
+
+executeSinkAction :: Transport -> Codec result -> Program SinkCalls (Either SinkError result) -> IO ()
+executeSinkAction channel resultCodec = execute channel (sinkResultCodec resultCodec) (handler channel)
   where
     handler :: Transport -> Integer -> FileWrite a -> IO a
     handler transport identity (WriteTextFile path content) = exchange transport identity "files" "write"

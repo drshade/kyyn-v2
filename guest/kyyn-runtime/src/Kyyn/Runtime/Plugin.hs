@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, fileExchange, evidenceExchange, identityCodec, evidenceCodec, changeCodec, blobCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, executeCapturedReadAction, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, fileExchange, evidenceExchange, identityCodec, evidenceCodec, changeCodec, blobCodec) where
 
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Kyyn.Runtime.Concurrent (Exchange, metadataExchange, executeExchange)
@@ -47,7 +47,11 @@ executeCapturedRead :: forall arguments payload result. Codec arguments -> Codec
   -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload :+: BlobRead) (Either FetchError result)) -> IO ()
 executeCapturedRead argumentCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
   (arguments, snapshot) <- input transport argumentCodec
-  execute transport (eitherCodec resultCodec) (handler transport) (selected arguments snapshot)
+  executeCapturedReadAction transport payloadCodec resultCodec (selected arguments snapshot)
+
+executeCapturedReadAction :: forall payload result. Transport -> Codec payload -> Codec result
+  -> Program (EvidenceRead payload :+: BlobRead) (Either FetchError result) -> IO ()
+executeCapturedReadAction channel payloadCodec resultCodec = execute channel (eitherCodec resultCodec) (handler channel)
   where
     handler :: Transport -> Integer -> (EvidenceRead payload :+: BlobRead) a -> IO a
     handler transport identity (InLeft call) = evidenceRequest transport payloadCodec identity call

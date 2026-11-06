@@ -1,5 +1,6 @@
 -- A real subprocess describes and invokes the same compiled fixture through the
--- host frame codec. Nix derivation/source capture is tested separately.
+-- host frame codec, including captured-read callbacks and response ID rejection.
+-- Nix derivation/source capture is tested separately.
 {-# LANGUAGE DeriveAnyClass, DerivingStrategies, DeriveGeneric, OverloadedStrings, TypeApplications, OverloadedRecordDot #-}
 module Main (main) where
 
@@ -13,6 +14,7 @@ import Data.Either (isLeft)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..))
+import qualified Kyyn.Plugin as Plugin
 import Kyyn.Runtime.PluginRegistration (encodeConnectors)
 import qualified Kyyn.Domain.Guest as Host
 import Data.Fixed (Fixed, E2)
@@ -51,12 +53,16 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
+    ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
     ["--api-built",path] -> checkApi False (path,[])
     ["--api-bindings-built",path] -> checkApi True (path,[])
-    [] -> getExecutablePath >>= \path -> check (path,["--guest"])
+    [] -> do
+      path <- getExecutablePath
+      check (path,["--guest"])
+      checkCaptured (path,["--captured-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
 
 checkApi :: Bool -> (FilePath,[String]) -> IO ()
@@ -184,3 +190,53 @@ checkRegistrations = do
       unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode (Object malformed))) :: Either String Connector))
         (fail "Malformed connector registration accepted")
     _ -> fail "Connector registration is not an object"
+
+-- Exercise a callback on the transport already opened for invocation. The
+-- supplied host response is consumed only after the guest emits its request.
+capturedGuest :: IO ()
+capturedGuest = runGuest [] [capturedReadEntry @() @Item @Integer "files.count"
+  (G.CapturedMethodIdentity "local-file" "Files" "count" "Count captured files") []
+  (\() snapshot -> fmap (fmap (toInteger . length)) (Plugin.listEvidenceIds snapshot))]
+
+checkCaptured :: (FilePath,[String]) -> IO ()
+checkCaptured executable@(path,args) = do
+  descriptionValue <- invoke executable (object ["operation" .= ("describe" :: String)])
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  case description.entries of
+    [G.CapturedReadEntry "files.count" method _] ->
+      unless (method.methodName == "count") (fail "Captured method identity changed")
+    _ -> fail "Missing captured read entry"
+  let rename entry = entry { G.entryName = "another.entry" }
+  unless (isLeft (Host.checkGuest description { G.entries = description.entries ++ map rename description.entries }))
+    (fail "Duplicate captured method identity accepted")
+  forM_ ["", "bad/plugin"] $ \bad -> do
+    let invalid entry = case entry of
+          G.CapturedReadEntry name method contracts ->
+            G.CapturedReadEntry name method { G.pluginName = bad } contracts
+          other -> other
+    unless (isLeft (Host.checkGuest description { G.entries = map invalid description.entries }))
+      (fail "Invalid plugin name in captured description accepted")
+  let invocation = object ["operation" .= ("invoke" :: String),"entry" .= ("files.count" :: String),
+        "argument" .= object ["arguments" .= object [],"snapshot" .= ("snapshot-1" :: String)]]
+      response identity = object ["tag" .= ("HostResponse" :: String),"id" .= (identity :: String),
+        "result" .= object ["tag" .= ("Right" :: String),"value" .= (["one","two"] :: [String])]]
+      frame value = Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))
+      run identity = Process.readProcess (Process.setStdin (Process.byteStringInput
+        (Lazy.fromStrict (frame invocation <> frame (response identity)))) (Process.proc path args))
+  (status,output,errors) <- run "1"
+  unless (status == ExitSuccess) (fail (show errors))
+  (Frame.Frame request _,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) (Lazy.toStrict output)))
+  requestValue <- right (eitherDecodeStrict' request)
+  unless (requestValue == object ["tag" .= ("HostRequest" :: String),"id" .= ("1" :: String),
+    "capability" .= ("evidence" :: String),"method" .= ("list" :: String),
+    "arguments" .= object ["snapshot" .= ("snapshot-1" :: String)]])
+    (fail "Captured invocation emitted the wrong callback")
+  (Frame.Frame completed body,remaining) <- right (runIdentity (Frame.readFrame (pure Nothing) rest))
+  result <- right (eitherDecodeStrict' completed)
+  unless (Bytes.null body && Bytes.null remaining && result == object
+    ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= ("2" :: String)]])
+    (fail "Captured callback did not complete on the same transport")
+  (badStatus,_,_) <- run "2"
+  unless (badStatus /= ExitSuccess) (fail "Mismatched callback response ID accepted")
+  putStrLn "Captured entry describes contracts and exchanges callbacks on the invocation transport."

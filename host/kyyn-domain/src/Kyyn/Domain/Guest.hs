@@ -9,6 +9,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Kyyn.Domain.Contract
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import qualified Kyyn.Domain.Plugin as Plugin
 import Kyyn.Domain.Path (RelativePath, relativePath)
 import qualified Kyyn.Types.Guest as G
 
@@ -30,6 +31,8 @@ checkGuest description = do
   ensure (description.protocol == G.protocolIdentity) "guest.protocol" "Unrecognized guest protocol"
   unique "entry" (map G.entryName description.entries)
   entries <- traverse checkEntry description.entries
+  let methods = [(m.pluginName,m.connectorName,m.methodName) | G.CapturedReadEntry _ m _ <- entries]
+  ensure (length methods == length (nub methods)) "guest.methods" "Duplicate captured method identity"
   unique "module" (map G.moduleName description.modules)
   forM_ description.modules $ \selected -> do
     unless (Text.null selected.moduleSource) (void (source selected.moduleSource))
@@ -47,6 +50,12 @@ checkEntry entry = case entry of
     G.ValidatorEntry name <$> root selected
   G.QueryEntry name (G.QueryContracts rootContract arguments result) ->
     G.QueryEntry name <$> (G.QueryContracts <$> root rootContract <*> check arguments <*> check result)
+  G.CapturedReadEntry name method contracts -> do
+    let nominal = either (Left . pure . errorDiagnostic "guest.method") (const (Right ()))
+    nominal (Plugin.pluginName (Text.unpack method.pluginName))
+    nominal (Plugin.connectorTypeName (Text.unpack method.connectorName))
+    nominal (Plugin.methodName (Text.unpack method.methodName))
+    G.CapturedReadEntry name method <$> traverse check contracts
   G.ContractEntry name selected -> G.ContractEntry name <$> check selected
   where
     root selected = do
