@@ -15,4 +15,4 @@ library
     Kyyn.Types.Blob Kyyn.Types.Scalar
   default-language: Haskell2010
   ghc-options: -Wall -Werror
-  build-depends: agentic ==0.2.1.0, base >=4.20 && <4.21, text, bytestring, aeson ==2.2.5.0, cryptohash-sha256 ==0.11.102.1
+  build-depends: deepseq, agentic ==0.2.1.0, base >=4.20 && <4.21, text, bytestring, aeson ==2.2.5.0, cryptohash-sha256 ==0.11.102.1

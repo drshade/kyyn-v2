@@ -7,24 +7,23 @@ module Kyyn.Types.Contract
   , qualifiedTypeName
   ) where
 
+import Control.DeepSeq (NFData)
 import Control.Monad (unless)
 import qualified Crypto.Hash.SHA256 as SHA256
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), encode, withArray)
-import qualified Data.Aeson.Key as Key
-import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Foldable (toList)
-import Data.List (nub, sortOn)
+import Data.List (nub)
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Numeric (showHex, readHex)
 import Text.Read (readMaybe)
-import Kyyn.Types.SchemaMetadata (SchemaMetadata)
+import Kyyn.Types.SchemaMetadata
 
 data TypeIdentity = TypeIdentity Text Text Text [TypeIdentity]
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, NFData)
 
 data FieldStyle = NamedFields | PositionalFields
   deriving (Eq, Show, Generic, ToJSON, FromJSON)
@@ -33,7 +32,7 @@ data ScalarKind
   = TextScalar | BoolScalar | IntegerScalar | IntScalar Integer Integer
   | NaturalScalar | DecimalScalar Integer | DateScalar | InstantScalar
   | ProbabilityScalar | FactIdScalar | BlobRefScalar
-  deriving (Eq, Show)
+  deriving (Eq, Show, Generic, NFData)
 
 instance ToJSON ScalarKind where
   toJSON value = toJSON $ case value of
@@ -87,16 +86,45 @@ data CaseDescription = CaseDescription Text Text FieldStyle [FieldDescription]
 
 newtype ContractId = ContractId Bytes.ByteString deriving (Eq, Ord, Show)
 
--- | Hash all declared structure and metadata. Object keys are sorted explicitly;
--- list order retains constructor, field, parameter and presentation declaration order.
+-- Fixed tags make identity independent of Haskell constructor names and Aeson's
+-- generic transport encoding. Declaration order remains significant.
 contractIdentity :: Description -> SchemaMetadata -> ContractId
 contractIdentity description metadata = ContractId . SHA256.hash . Lazy.toStrict . encode $
-  toJSON [String "kyyn-contract-1", canonical (toJSON description), canonical (toJSON metadata)]
+  toJSON [String "kyyn-contract-1", canonicalDescription description, canonicalMetadata metadata]
+
+canonicalType :: TypeIdentity -> Value
+canonicalType (TypeIdentity packageName moduleName name args) =
+  toJSON [String packageName, String moduleName, String name, toJSON (map canonicalType args)]
+
+canonicalDescription :: Description -> Value
+canonicalDescription description = toJSON $ case description of
+  ScalarDescription identity kind name parameters ->
+    [String "scalar", canonicalType identity, toJSON kind, String name, toJSON parameters]
+  NamedDescription identity inner -> [String "named", canonicalType identity, canonicalDescription inner]
+  RecordDescription name style fields -> [String "record", String name, styleValue style, toJSON (map fieldValue fields)]
+  SumDescription cases -> [String "sum", toJSON (map caseValue cases)]
+  ListDescription inner -> [String "list", canonicalDescription inner]
+  OptionalDescription inner -> [String "optional", canonicalDescription inner]
+  UnitDescription -> [String "unit"]
+  CheckedDescription label inner -> [String "checked", String label, canonicalDescription inner]
+  DocumentedDescription doc inner -> [String "documented", String doc, canonicalDescription inner]
   where
-    canonical (Object values) = toJSON [String "object", toJSON
-      [toJSON [String (Key.toText key), canonical value] | (key,value) <- sortOn fst (KeyMap.toList values)]]
-    canonical (Array values) = toJSON [String "array", toJSON (map canonical (toList values))]
-    canonical value = value
+    styleValue NamedFields = String "named"
+    styleValue PositionalFields = String "positional"
+    fieldValue (FieldDescription name doc inner) = toJSON [String name, String doc, canonicalDescription inner]
+    caseValue (CaseDescription name doc style fields) =
+      toJSON [String name, String doc, styleValue style, toJSON (map fieldValue fields)]
+
+canonicalMetadata :: SchemaMetadata -> Value
+canonicalMetadata (SchemaMetadata roles fields collections) = toJSON
+  [String "metadata",
+   toJSON [toJSON [String name, String doc, affordanceValue affordance] | RoleDecl name doc affordance <- roles],
+   toJSON [toJSON [record,field,role] | FieldRole record field role <- fields],
+   toJSON [toJSON [String name,String field,toJSON references] | CollectionDecl name field references <- collections]]
+  where
+    affordanceValue Title = String "title"
+    affordanceValue Timeline = String "timeline"
+    affordanceValue Badge = String "badge"
 
 fingerprint :: ContractId -> Text
 fingerprint (ContractId bytes) = T.pack (concatMap hex (Bytes.unpack bytes))

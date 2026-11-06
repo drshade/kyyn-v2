@@ -7,6 +7,7 @@ import qualified Agentic.Codec as C
 import Agentic.Value (Value(..))
 import qualified Data.Text as T
 import Kyyn.Types.Scalar (textual, integerText)
+import Data.List (sort)
 import Data.Text (Text)
 import Data.ByteString (ByteString)
 import Kyyn.Types.Plugin (FetchError)
@@ -35,12 +36,14 @@ data BlobRead a where
 -- | The caller supplies the structural optional codec so this leaf obeys the
 -- selected projection's null/tag policy without losing BlobRef's scalar identity.
 blobCodec :: Codec (Maybe Text) -> Codec BlobRef
-blobCodec optionalText = C.record "" $
-  BlobRef <$> C.requiredWith "sha256" Nothing digest (\(BlobRef x _ _ _) -> x)
+blobCodec optionalText = Codec fields.schema fields.encode $ \value -> case value of
+  Object values | sort (map fst values) == ["mediaType","name","sha256","size"] -> fields.decode value
+  _ -> Left "expected exactly the BlobRef fields: sha256, size, mediaType, name"
+  where
+    fields = C.record "" $ BlobRef <$> C.requiredWith "sha256" Nothing digest (\(BlobRef x _ _ _) -> x)
           <*> C.requiredWith "size" Nothing size (\(BlobRef _ x _ _) -> x)
           <*> C.requiredWith "mediaType" Nothing text (\(BlobRef _ _ x _) -> x)
           <*> C.requiredWith "name" Nothing optionalText (\(BlobRef _ _ _ x) -> x)
-  where
     text = textual id Right
     digest = textual id $ \t -> if T.length t == 64 && T.all (`elem` ("0123456789abcdef" :: String)) t
       then Right t else Left "expected a lowercase SHA-256 digest"

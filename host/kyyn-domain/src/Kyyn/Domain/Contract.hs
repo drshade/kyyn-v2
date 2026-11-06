@@ -1,39 +1,27 @@
 module Kyyn.Domain.Contract
   ( CheckedContract, ContractId, CollectionContract(..), checkContract
-  , rootType, metadataOf, contractShape, contractId, contractFingerprint, parseContractFingerprint, collectionContracts
+  , rootType, descriptionOf, metadataOf, contractShape, contractId, contractFingerprint, parseContractFingerprint, collectionContracts
   , RootContract, checkRootLayout, rootSchema, describeRootContract ) where
 
 import Control.Monad (unless, forM_)
 import Data.Coerce (coerce)
-import qualified Crypto.Hash.SHA256 as SHA256
-import Data.Aeson (Value, toJSON, encode)
-import qualified Data.ByteString as Bytes
-import qualified Data.ByteString.Lazy as Lazy
+import Data.Aeson (Value, toJSON)
 import Data.List (nub)
 import qualified Data.Text as Text
-import Numeric (showHex, readHex)
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Types.Contract (ContractId, Description)
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Types.SchemaMetadata
 
-newtype ContractId = ContractId Bytes.ByteString deriving (Eq, Show)
-
 parseContractFingerprint :: String -> Either String ContractId
-parseContractFingerprint value
-  | length value == 64 && all (`elem` ("0123456789abcdef" :: String)) value =
-      ContractId . Bytes.pack <$> pairs value
-  | otherwise = Left "Expected a 64-character lowercase hexadecimal contract fingerprint"
-  where
-    pairs [] = Right []
-    pairs (a:b:rest) = case readHex [a,b] of
-      [(byte,"")] -> (byte:) <$> pairs rest
-      _ -> Left "Invalid contract fingerprint"
-    pairs _ = Left "Invalid contract fingerprint"
+parseContractFingerprint = either (Left . Text.unpack) Right . D.parseFingerprint . Text.pack
+
 data CollectionContract = CollectionContract
   { collectionName :: String, rootFieldName :: String
   , payloadType :: DataType, payloadShape :: Shape
   } deriving (Eq, Show)
-data CheckedContract = CheckedContract DataType SchemaMetadata Shape [CollectionContract] ContractId
+data CheckedContract = CheckedContract Description DataType SchemaMetadata Shape [CollectionContract] ContractId
   deriving (Eq, Show)
 newtype RootContract = RootContract CheckedContract deriving (Eq, Show)
 
@@ -41,23 +29,26 @@ rootSchema :: RootContract -> CheckedContract
 rootSchema = coerce
 
 rootType :: CheckedContract -> DataType
-rootType (CheckedContract t _ _ _ _) = t
+rootType (CheckedContract _ t _ _ _ _) = t
 metadataOf :: CheckedContract -> SchemaMetadata
-metadataOf (CheckedContract _ m _ _ _) = m
+metadataOf (CheckedContract _ _ m _ _ _) = m
 contractShape :: CheckedContract -> Shape
-contractShape (CheckedContract _ _ s _ _) = s
+contractShape (CheckedContract _ _ _ s _ _) = s
 collectionContracts :: CheckedContract -> [CollectionContract]
-collectionContracts (CheckedContract _ _ _ cs _) = cs
+collectionContracts (CheckedContract _ _ _ _ cs _) = cs
 contractId :: CheckedContract -> ContractId
-contractId (CheckedContract _ _ _ _ i) = i
+contractId (CheckedContract _ _ _ _ _ i) = i
+
+descriptionOf :: CheckedContract -> Description
+descriptionOf (CheckedContract description _ _ _ _ _) = description
 
 contractFingerprint :: ContractId -> String
-contractFingerprint (ContractId bytes) = concatMap hex (Bytes.unpack bytes)
-  where
-    hex byte = let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits
+contractFingerprint = Text.unpack . D.fingerprint
 
-checkContract :: DataType -> SchemaMetadata -> Either [Diagnostic] CheckedContract
-checkContract root meta = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
+checkContract :: Description -> SchemaMetadata -> Either [Diagnostic] CheckedContract
+checkContract description meta = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
+  either (Left . Text.unpack) Right (D.validateDescription description)
+  let root = descriptionType description
   validateStructure root
   let rootFields = either (const []) id (recordFields root)
   let SchemaMetadata roles assignments declarations = meta
@@ -78,9 +69,8 @@ checkContract root meta = either (Left . pure . errorDiagnostic "schema.incohere
   let shape = case originalShape of
         Record fields -> Record [(n, maybe s id (lookup n collectionShapes)) | (n,s) <- fields]
         other -> other
-      identity = ContractId (SHA256.hash (Lazy.toStrict (encode
-        ("kyyn-contract-1" :: String, typeValue root, metadataValue meta))))
-  pure (CheckedContract root meta shape collections identity)
+      identity = D.contractIdentity description meta
+  pure (CheckedContract description root meta shape collections identity)
 
 checkRootLayout :: CheckedContract -> Either [Diagnostic] RootContract
 checkRootLayout contract = either (Left . pure . errorDiagnostic "schema.incoherent") Right $ do
@@ -176,18 +166,6 @@ collectionShape (CollectionContract _ _ _ payload) = do
 shortName :: String -> String
 shortName = reverse . takeWhile (/= '.') . reverse
 
-typeValue :: DataType -> Value
-typeValue StringType = toJSON ["text" :: String]
-typeValue TextType = toJSON ["packed-text" :: String]
-typeValue IntegerType = toJSON ["integer" :: String]
-typeValue ProbabilityType = toJSON ["probability-basis-points" :: String]
-typeValue BoolType = toJSON ["bool" :: String]
-typeValue UnitType = toJSON ["unit" :: String]
-typeValue (ListType t) = toJSON ("list" :: String, typeValue t)
-typeValue (OptionalType t) = toJSON ("optional" :: String, typeValue t)
-typeValue (Algebraic name args cs) = toJSON ("data" :: String, name, map typeValue args,
-  [(n, [(f,typeValue t) | (f,t) <- fs]) | Constructor n fs <- cs])
-
 metadataValue :: SchemaMetadata -> Value
 metadataValue (SchemaMetadata roles fields collections) = toJSON
   ([(n,d,tag a) | RoleDecl n d a <- roles],
@@ -200,4 +178,4 @@ metadataValue (SchemaMetadata roles fields collections) = toJSON
 
 describeRootContract :: RootContract -> Value
 describeRootContract root = let contract = rootSchema root in toJSON
-  (1 :: Int, contractFingerprint (contractId contract), typeValue (rootType contract), metadataValue (metadataOf contract))
+  (1 :: Int, contractFingerprint (contractId contract), toJSON (descriptionOf contract), metadataValue (metadataOf contract))

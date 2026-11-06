@@ -10,6 +10,8 @@ import Agentic.Questions (Probability, fromBasisPoints)
 import Control.Monad (unless, forM_)
 import qualified Data.Aeson as Json
 import qualified Kyyn.Types.Contract as D
+import qualified Kyyn.Domain.Contract as Host
+import qualified Kyyn.Domain.DataType as Host
 import Kyyn.Types.SchemaMetadata
 import Data.Either (isLeft)
 import Data.Fixed (Fixed(..), E2)
@@ -60,11 +62,24 @@ roundTrip name value = do
 
 main :: IO ()
 main = do
+  let rootMetadata = SchemaMetadata [] [] [CollectionDecl "items" "items" []]
+  rootCompiled <- either (fail . show) pure (compileContract (contract @Root))
+  hostRoot <- either (fail . show) pure (Host.checkContract rootCompiled.description rootMetadata >>= Host.checkRootLayout)
+  let hostContract = Host.rootSchema hostRoot
+  expect "host and guest contract identity" (Host.contractId hostContract == D.contractIdentity rootCompiled.description rootMetadata)
+  expect "host retains complete descriptor" (Host.descriptionOf hostContract == rootCompiled.description)
+  expect "host discovers fact payload" (length (Host.collectionContracts hostContract) == 1)
+  expect "host exact scalar projection" $ case Host.contractShape hostContract of
+    Host.Record [("items", Host.List (Host.Record [("id",_), ("value",Host.Record fields)]))] ->
+      lookup "amount" fields == Just (Host.Scalar (Host.ExactScalar (D.DecimalScalar 100)))
+    _ -> False
+  expect "host rejects undeclared collection" (isLeft (Host.checkContract rootCompiled.description (SchemaMetadata [] [] []) >>= Host.checkRootLayout))
   let item = Item (FactId "sample-1") (MkFixed 1234) (fromBasisPoints 8500)
   compiledItem <- either (fail . show) pure (compileContract (contract @Item))
   let description = compiledItem.description
       metadata = SchemaMetadata [] [] []
       identity = D.contractIdentity description metadata
+  expect "stable identity golden" (D.fingerprint (D.contractIdentity D.UnitDescription metadata) == "b7d9436b9428811f8400304bd59d0a3a7a04968a23ba3876cc414c503e759783")
   expect "description transport round trip" (Json.eitherDecode (Json.encode description) == Right description)
   expect "identity transport round trip" (D.parseFingerprint (D.fingerprint identity) == Right identity)
   expect "metadata participates in identity" (identity /= D.contractIdentity description
@@ -137,4 +152,11 @@ main = do
   roundTrip "instant" (UTCTime day (secondsToDiffTime 12345))
   let blob = BlobRef (T.replicate 64 "a") 12 "text/plain" (Just "notes.txt")
   roundTrip "blob identity and fields" blob
+  blobWire <- compiled @BlobRef
+  expect "blob rejects unknown fields" $ case blobWire.encode blob of
+    Object fields -> isLeft (blobWire.decode (Object (("extra",String "x"):fields)))
+    _ -> False
+  expect "blob rejects duplicate fields" $ case blobWire.encode blob of
+    Object fields -> isLeft (blobWire.decode (Object (("size",String "12"):fields)))
+    _ -> False
   putStrLn "Contract interpreter: exact scalars, structural codecs, discovery and failure checks passed."
