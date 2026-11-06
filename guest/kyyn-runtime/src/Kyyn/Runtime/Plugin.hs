@@ -6,7 +6,7 @@ import Kyyn.Runtime.Concurrent (Exchange, metadataExchange, executeExchange)
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 import Kyyn.Types.Plugin
-import Kyyn.Types.Blob
+import Kyyn.Types.Blob hiding (blobCodec)
 import Kyyn.Types.Program
 import Kyyn.Runtime.Transport
 import qualified Data.ByteString as B
@@ -26,8 +26,8 @@ withOptionsCodec configCodec optionsCodec = Codec encode decode
 withContextCodec :: Codec arguments -> Codec position -> Codec (arguments, FetchContext position)
 withContextCodec argumentsCodec positionCodec = Codec encode decode
   where
-    encode (arguments,FetchContext at prior) = record
-      [("input",encodeWith argumentsCodec arguments),("startedAt",encodeWith textCodec at),
+    encode (arguments,FetchContext startedAt prior) = record
+      [("input",encodeWith argumentsCodec arguments),("startedAt",encodeWith textCodec startedAt),
        ("priorPosition",encodeWith (optionalCodec positionCodec) prior)]
     decode value = do
       values <- fields ["input","startedAt","priorPosition"] value
@@ -159,14 +159,14 @@ evidenceCodec codec = Codec encode decode
   where
     encode (Evidence (EvidenceFingerprint fingerprint) references payload) = record
       [("fingerprint",encodeWith textCodec fingerprint),("externalReferences",encodeWith (listCodec textCodec) references),
-      ("payload",encodeWith (payloadCodec codec) payload)]
+      ("payload",encodeWith (evidencePayloadCodec codec) payload)]
     decode value = do
       values <- fields ["fingerprint","externalReferences","payload"] value
       Evidence <$> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
-        <*> field "externalReferences" (listCodec textCodec) values <*> field "payload" (payloadCodec codec) values
+        <*> field "externalReferences" (listCodec textCodec) values <*> field "payload" (evidencePayloadCodec codec) values
 
-payloadCodec :: Codec a -> Codec (EvidencePayload a)
-payloadCodec codec = Codec encode decode
+evidencePayloadCodec :: Codec a -> Codec (EvidencePayload a)
+evidencePayloadCodec codec = Codec encode decode
   where
     encode (Available value) = tagged "Available" (Just (encodeWith codec value))
     encode Truncated = tagged "Truncated" Nothing
@@ -185,7 +185,7 @@ changeCodec codec = Codec encode decode
     encode (RemovedEvidence key) = tagged "Removed" (Just (encodeWith identityCodec key))
     encode (SetEvidencePayload key (EvidenceFingerprint fingerprint) payload) = tagged "SetPayload" (Just (record
       [("id",encodeWith identityCodec key),("fingerprint",encodeWith textCodec fingerprint),
-       ("payload",encodeWith (payloadCodec codec) payload)]))
+       ("payload",encodeWith (evidencePayloadCodec codec) payload)]))
     item tag key evidence = tagged tag (Just (record [("id",encodeWith identityCodec key),
       ("evidence",encodeWith (evidenceCodec codec) evidence)]))
     decode value = do
@@ -198,7 +198,7 @@ changeCodec codec = Codec encode decode
           values <- fields ["id","fingerprint","payload"] entry
           SetEvidencePayload <$> field "id" identityCodec values
             <*> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
-            <*> field "payload" (payloadCodec codec) values
+            <*> field "payload" (evidencePayloadCodec codec) values
         _ -> Left "Unknown evidence change"
     entryValue constructor value = do
       values <- fields ["id","evidence"] value

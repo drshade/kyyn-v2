@@ -4,68 +4,32 @@ module Kyyn.Types.Contract
   ( TypeIdentity(..), FieldStyle(..), ScalarKind(..), Description(..)
   , FieldDescription(..), CaseDescription(..), ContractId
   , contractIdentity, fingerprint, parseFingerprint, validateDescription
-  , qualifiedTypeName
+  , qualifiedTypeName, descriptionShape, descriptionValue, parseDescription
   ) where
 
 import Control.DeepSeq (NFData)
-import Control.Monad (unless)
+import Control.Monad (unless, foldM)
 import qualified Crypto.Hash.SHA256 as SHA256
-import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), encode, withArray)
+import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), encode, object, (.=), withObject, (.:))
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
-import Data.Foldable (toList)
-import Data.List (nub)
+import Data.List (nub, elemIndex)
 import Data.Text (Text)
 import qualified Data.Text as T
 import GHC.Generics (Generic)
 import Numeric (showHex, readHex)
-import Text.Read (readMaybe)
+import Data.Aeson.Types (Parser)
+import Kyyn.Types.Json (exactObject)
+import Kyyn.Types.Contract.ScalarKind (ScalarKind(..))
+import qualified Kyyn.Types.Shape as Shape
 import Kyyn.Types.SchemaMetadata
 
 data TypeIdentity = TypeIdentity Text Text Text [TypeIdentity]
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, NFData)
+  deriving (Eq, Ord, Show, Generic, NFData)
 
 data FieldStyle = NamedFields | PositionalFields
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Show, Generic)
 
-data ScalarKind
-  = TextScalar | BoolScalar | IntegerScalar | IntScalar Integer Integer
-  | NaturalScalar | DecimalScalar Integer | DateScalar | InstantScalar
-  | ProbabilityScalar | FactIdScalar | BlobRefScalar
-  deriving (Eq, Show, Generic, NFData)
-
-instance ToJSON ScalarKind where
-  toJSON value = toJSON $ case value of
-    TextScalar -> ["text"]
-    BoolScalar -> ["bool"]
-    IntegerScalar -> ["integer"]
-    IntScalar lo hi -> ["bounded-integer", T.pack (show lo), T.pack (show hi)]
-    NaturalScalar -> ["natural"]
-    DecimalScalar resolution -> ["decimal", T.pack (show resolution)]
-    DateScalar -> ["date"]
-    InstantScalar -> ["instant"]
-    ProbabilityScalar -> ["probability"]
-    FactIdScalar -> ["fact-id"]
-    BlobRefScalar -> ["blob-ref"]
-
-instance FromJSON ScalarKind where
-  parseJSON = withArray "scalar descriptor" $ \values -> case toList values of
-    [String "text"] -> pure TextScalar
-    [String "bool"] -> pure BoolScalar
-    [String "integer"] -> pure IntegerScalar
-    [String "bounded-integer",String lo,String hi] -> IntScalar <$> number lo <*> number hi
-    [String "natural"] -> pure NaturalScalar
-    [String "decimal",String resolution] -> DecimalScalar <$> number resolution
-    [String "date"] -> pure DateScalar
-    [String "instant"] -> pure InstantScalar
-    [String "probability"] -> pure ProbabilityScalar
-    [String "fact-id"] -> pure FactIdScalar
-    [String "blob-ref"] -> pure BlobRefScalar
-    _ -> fail "unsupported scalar descriptor"
-    where
-      number text = case readMaybe (T.unpack text) of
-        Just n | T.pack (show (n :: Integer)) == text -> pure n
-        _ -> fail "expected a canonical integer in the scalar descriptor"
 
 data Description
   = ScalarDescription TypeIdentity ScalarKind Text [(Text,Text)]
@@ -77,12 +41,12 @@ data Description
   | UnitDescription
   | CheckedDescription Text Description
   | DocumentedDescription Text Description
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Show, Generic)
 
 data FieldDescription = FieldDescription Text Text Description
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Show, Generic)
 data CaseDescription = CaseDescription Text Text FieldStyle [FieldDescription]
-  deriving (Eq, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Show, Generic)
 
 newtype ContractId = ContractId Bytes.ByteString deriving (Eq, Ord, Show)
 
@@ -177,3 +141,146 @@ validateDescription description = case description of
     unique label names = do
       unless (all (not . T.null) names) (Left ("empty " <> label <> " name"))
       unless (length names == length (nub names)) (Left ("duplicate " <> label <> " names"))
+
+instance ToJSON Description where
+  toJSON = descriptionValue
+instance FromJSON Description where
+  parseJSON = parseDescription
+
+-- Dhall has no recursive data types. Store finite descriptions in dependency
+-- order and require every reference to point to an earlier node.
+descriptionShape :: Shape.Shape
+descriptionShape = Shape.Record
+  [("types",Shape.List (Shape.Record [("package",text),("module",text),("name",text),("arguments",Shape.List index)])),
+   ("nodes",Shape.List (Shape.Union
+     [("Scalar",Just (Shape.Record [("type",index),("kind",Shape.List text),("name",text),("parameters",Shape.List pair)])),
+      ("Named",Just (Shape.Record [("type",index),("inner",index)])),
+      ("Record",Just (Shape.Record [("name",text),("style",style),("fields",Shape.List field)])),
+      ("Sum",Just (Shape.List (Shape.Record [("name",text),("doc",text),("style",style),("fields",Shape.List field)]))),
+      ("List",Just index),("Optional",Just index),("Unit",Nothing),
+      ("Checked",Just annotation),("Documented",Just annotation)]))]
+  where
+    text = Shape.Scalar Shape.TextScalar
+    index = Shape.Scalar Shape.IntegerScalar
+    style = Shape.Union [("Named",Nothing),("Positional",Nothing)]
+    pair = Shape.Record [("name",text),("value",text)]
+    field = Shape.Record [("name",text),("doc",text),("inner",index)]
+    annotation = Shape.Record [("text",text),("inner",index)]
+
+descriptionValue :: Description -> Value
+descriptionValue root = object ["types" .= map typeValue types,"nodes" .= map nodeValue nodes]
+  where
+    nodes = nub (ordered root)
+    types = nub (concatMap identities nodes)
+    typeReference = reference types
+    nodeReference = reference nodes
+    typeValue (TypeIdentity packageName moduleName name arguments) = object
+      ["package" .= packageName,"module" .= moduleName,"name" .= name,"arguments" .= map typeReference arguments]
+    fieldValue (FieldDescription name doc inner) = object
+      ["name" .= name,"doc" .= doc,"inner" .= nodeReference inner]
+    caseValue (CaseDescription name doc style fields) = object
+      ["name" .= name,"doc" .= doc,"style" .= styleValue style,"fields" .= map fieldValue fields]
+    styleValue NamedFields = tagged "Named" Nothing
+    styleValue PositionalFields = tagged "Positional" Nothing
+    annotation text inner = object ["text" .= text,"inner" .= nodeReference inner]
+    nodeValue description = case description of
+      ScalarDescription identity kind name parameters -> tagged "Scalar" (Just (object
+        ["type" .= typeReference identity,"kind" .= kind,"name" .= name,
+         "parameters" .= [object ["name" .= key,"value" .= value] | (key,value) <- parameters]]))
+      NamedDescription identity inner -> tagged "Named" (Just (object
+        ["type" .= typeReference identity,"inner" .= nodeReference inner]))
+      RecordDescription name style fields -> tagged "Record" (Just (object
+        ["name" .= name,"style" .= styleValue style,"fields" .= map fieldValue fields]))
+      SumDescription cases -> tagged "Sum" (Just (toJSON (map caseValue cases)))
+      ListDescription inner -> tagged "List" (Just (nodeReference inner))
+      OptionalDescription inner -> tagged "Optional" (Just (nodeReference inner))
+      UnitDescription -> tagged "Unit" Nothing
+      CheckedDescription label inner -> tagged "Checked" (Just (annotation label inner))
+      DocumentedDescription doc inner -> tagged "Documented" (Just (annotation doc inner))
+
+parseDescription :: Value -> Parser Description
+parseDescription = exactObject "contract description" ["types","nodes"] $ \document -> do
+  typeNodes <- document .: "types" :: Parser [Value]
+  types <- foldM (\previous node -> do
+    next <- exactObject "resolved type" ["package","module","name","arguments"] (\fields -> TypeIdentity
+      <$> fields .: "package" <*> fields .: "module" <*> fields .: "name"
+      <*> (fields .: "arguments" >>= traverse (resolve previous))) node
+    pure (previous ++ [next])) [] typeNodes
+  input <- document .: "nodes" :: Parser [Value]
+  nodes <- foldM (\previous node -> do
+    next <- parseNode types previous node
+    pure (previous ++ [next])) [] input
+  case reverse nodes of
+    root:_ -> either (fail . T.unpack) (const (pure root)) (validateDescription root)
+    [] -> fail "No root contract description"
+  where
+    parseNode types previous value = do
+      record <- withObject "description node" pure value
+      tag <- record .: "tag" :: Parser Text
+      _ <- exactObject "description node" (if tag == "Unit" then ["tag"] else ["tag","value"]) pure value
+      let body action = record .: "value" >>= action
+          fieldsOf = traverse (exactObject "field" ["name","doc","inner"] (\field -> FieldDescription
+            <$> field .: "name" <*> field .: "doc" <*> (field .: "inner" >>= resolve previous)))
+          annotation constructor = body $ exactObject "annotation" ["text","inner"] $ \fields ->
+            constructor <$> fields .: "text" <*> (fields .: "inner" >>= resolve previous)
+      case tag of
+        "Scalar" -> body $ exactObject "scalar" ["type","kind","name","parameters"] $ \fields -> ScalarDescription
+          <$> (fields .: "type" >>= resolve types) <*> fields .: "kind" <*> fields .: "name"
+          <*> (fields .: "parameters" >>= traverse (exactObject "parameter" ["name","value"] (\pair -> (,)
+            <$> pair .: "name" <*> pair .: "value")))
+        "Named" -> body $ exactObject "named type" ["type","inner"] $ \fields -> NamedDescription
+          <$> (fields .: "type" >>= resolve types) <*> (fields .: "inner" >>= resolve previous)
+        "Record" -> body $ exactObject "record" ["name","style","fields"] $ \fields -> RecordDescription
+          <$> fields .: "name" <*> (fields .: "style" >>= parseStyle) <*> (fields .: "fields" >>= fieldsOf)
+        "Sum" -> body $ \casesValue -> SumDescription <$> (parseJSON casesValue >>= traverse
+          (exactObject "case" ["name","doc","style","fields"] (\fields -> CaseDescription
+            <$> fields .: "name" <*> fields .: "doc" <*> (fields .: "style" >>= parseStyle)
+            <*> (fields .: "fields" >>= fieldsOf))))
+        "List" -> body (fmap ListDescription . resolve previous)
+        "Optional" -> body (fmap OptionalDescription . resolve previous)
+        "Unit" -> pure UnitDescription
+        "Checked" -> annotation CheckedDescription
+        "Documented" -> annotation DocumentedDescription
+        _ -> fail "Unknown contract description node"
+    parseStyle = exactObject "field style" ["tag"] $ \fields -> do
+      tag <- fields .: "tag" :: Parser Text
+      case tag of
+        "Named" -> pure NamedFields
+        "Positional" -> pure PositionalFields
+        _ -> fail "Unknown field style"
+
+reference :: Eq a => [a] -> a -> Value
+reference values value = case elemIndex value values of
+  Just index -> toJSON (show index)
+  Nothing -> error "Description encoding omitted a dependency"
+
+resolve :: [a] -> Value -> Parser a
+resolve previous value = do
+  source <- parseJSON value
+  case reads source of
+    [(index,"")] | index >= (0 :: Integer), index < toInteger (length previous), show index == source ->
+      pure (previous !! fromInteger index)
+    _ -> fail "Description reference must identify an earlier node"
+
+ordered :: Description -> [Description]
+ordered description = concatMap ordered (children description) ++ [description]
+  where
+    children (NamedDescription _ inner) = [inner]
+    children (RecordDescription _ _ fields) = [inner | FieldDescription _ _ inner <- fields]
+    children (SumDescription cases) = [inner | CaseDescription _ _ _ fields <- cases, FieldDescription _ _ inner <- fields]
+    children (ListDescription inner) = [inner]
+    children (OptionalDescription inner) = [inner]
+    children (CheckedDescription _ inner) = [inner]
+    children (DocumentedDescription _ inner) = [inner]
+    children _ = []
+
+identities :: Description -> [TypeIdentity]
+identities (ScalarDescription identity _ _ _) = typeTree identity
+identities (NamedDescription identity _) = typeTree identity
+identities _ = []
+
+typeTree :: TypeIdentity -> [TypeIdentity]
+typeTree identity@(TypeIdentity _ _ _ arguments) = concatMap typeTree arguments ++ [identity]
+
+tagged :: Text -> Maybe Value -> Value
+tagged tag value = object (["tag" .= tag] ++ maybe [] (\v -> ["value" .= v]) value)

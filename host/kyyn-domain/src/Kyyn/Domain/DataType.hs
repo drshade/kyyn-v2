@@ -8,6 +8,7 @@ import qualified Data.Text as Text
 import qualified Kyyn.Types.Contract as D
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
+import Kyyn.Types.Shape (Shape(..), ScalarKind(..))
 
 -- Resolved data declarations only; a complete KB contract also needs metadata.
 data DataType
@@ -19,14 +20,6 @@ data DataType
 
 data Constructor = Constructor String [(Maybe String, DataType)]
   deriving (Eq, Show, Generic, NFData)
-
-data Shape
-  = Record [(String, Shape)] | List Shape | Optional Shape
-  | Union [(String, Maybe Shape)] | Scalar ScalarKind | Reference String
-  deriving (Eq, Show)
-
-data ScalarKind = TextScalar | IntegerScalar | NaturalScalar | BoolScalar | ProbabilityScalar
-  | ExactScalar D.ScalarKind deriving (Eq, Show)
 
 -- Constructor/module information binds this structural projection to authored code.
 shapeOf :: DataType -> Either String Shape

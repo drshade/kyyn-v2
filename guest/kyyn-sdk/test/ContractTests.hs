@@ -91,6 +91,10 @@ main = do
     Right decoded -> D.contractIdentity decoded metadata == identity
   expect "invalid decimal descriptor" (isLeft (D.validateDescription (D.ScalarDescription
     (D.TypeIdentity "pkg" "Module" "Decimal" []) (D.DecimalScalar 0) "decimal" [])))
+  expect "descriptor rejects unknown fields" (isLeft
+    (Json.eitherDecode "{\"types\":[],\"nodes\":[{\"tag\":\"Unit\",\"extra\":true}]}" :: Either String D.Description))
+  expect "metadata rejects unknown fields" (isLeft
+    (Json.eitherDecode "{\"roles\":[],\"fields\":[],\"collections\":[],\"extra\":true}" :: Either String SchemaMetadata))
   expect "invalid fingerprint" (isLeft (D.parseFingerprint "not-a-digest"))
   stored <- compiled @Item
   expect "record wire profile" $ stored.encode item == Object

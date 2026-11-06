@@ -6,14 +6,58 @@ copyright: All rights reserved.
 build-type: Simple
 
 library
+  reexported-modules: Kyyn.Contract,
+    Kyyn.Schema,
+    Kyyn.Validation,
+    Kyyn.Query,
+    Kyyn.Evolution,
+    Kyyn.Edit,
+    Kyyn.Optics,
+    Kyyn.Evolution.Proposal,
+    Kyyn.Recipe,
+    Kyyn.Plugin,
+    Kyyn.Plugin.Host,
+    Kyyn.Plugin.Sink
+  default-language: Haskell2010
+  build-depends: base >=4.20 && <4.21, kyyn-sdk:internal
+
+library internal
   hs-source-dirs: src
   exposed-modules: Kyyn.Contract Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Evolution.Proposal Kyyn.Recipe
     Kyyn.Plugin Kyyn.Plugin.Host Kyyn.Plugin.Sink
-  other-modules: Kyyn.Contract.Scalars Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
+     Kyyn.Contract.Scalars Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-types, agentic ==0.2.1.0, time, json ==0.11, transformers ==0.6.1.1, text, bytestring
+
+library runtime
+  visibility: public
+  hs-source-dirs: ../kyyn-runtime/src
+  exposed-modules: Kyyn.Runtime.Contract Kyyn.Runtime.Guest
+    Kyyn.Runtime.AgenticContract
+    Kyyn.Runtime.Concurrent
+    Kyyn.Runtime.Evolution
+    Kyyn.Runtime.Json
+    Kyyn.Runtime.Judgement
+    Kyyn.Runtime.JudgementWire
+    Kyyn.Runtime.Model
+    Kyyn.Runtime.ModelWire
+    Kyyn.Runtime.Plugin
+    Kyyn.Runtime.PluginHost
+    Kyyn.Runtime.PluginRegistration
+    Kyyn.Runtime.Probability
+    Kyyn.Runtime.Proposal
+    Kyyn.Runtime.Query
+    Kyyn.Runtime.Recipe
+    Kyyn.Runtime.SchemaMetadata
+    Kyyn.Runtime.Sink
+    Kyyn.Runtime.Transport
+    Kyyn.Runtime.Validation
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-types,
+    agentic ==0.2.1.0, agentic-aeson ==0.2.1.0, aeson ==2.2.5.0, json ==0.11, text, bytestring
 
 test-suite evolution-core
   type: exitcode-stdio-1.0
@@ -34,3 +78,14 @@ test-suite wire-contracts
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, kyyn-domain, agentic ==0.2.1.0, text, time, aeson ==2.2.5.0
+
+test-suite guest-protocol
+  type: exitcode-stdio-1.0
+  main-is: GuestProtocolTests.hs
+  hs-source-dirs: test ../../host/kyyn-plumbing/src
+  other-modules: Kyyn.Plumbing.Protocol.Frame
+  default-language: GHC2021
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
+    aeson ==2.2.5.0, bytestring, process, transformers

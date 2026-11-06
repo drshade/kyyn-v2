@@ -1,13 +1,8 @@
 module Kyyn.Plumbing.Capability.SchemaInspection.Metadata
   ( metadataAdapter, decodeMetadata, evaluateMetadata ) where
 
-import Control.Monad (unless)
-import Data.Aeson (Value, Object, eitherDecodeStrict, withObject, (.:))
-import Data.Aeson.Types (Parser, parseEither)
-import Data.Aeson.Key (Key)
-import qualified Data.Aeson.KeyMap as KeyMap
+import Data.Aeson (eitherDecodeStrict)
 import qualified Data.ByteString as Bytes
-import Data.List (sort)
 import Effectful (Eff, (:>))
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -27,32 +22,7 @@ metadataAdapter selected = do
       "main :: IO ()", "main = withTransport $ \\transport -> either fail (writeJson transport) (encodeMetadata " ++ selected ++ ")"])
 
 decodeMetadata :: Bytes.ByteString -> Either String SchemaMetadata
-decodeMetadata bytes = eitherDecodeStrict bytes >>= parseEither metadata
-  where
-    metadata = exact "SchemaMetadata" ["roles", "fieldRoles", "collections"] $ \o ->
-      SchemaMetadata <$> (o .: "roles" >>= mapM roleDecl)
-        <*> (o .: "fieldRoles" >>= mapM fieldRole)
-        <*> (o .: "collections" >>= mapM collectionDecl)
-    roleDecl = exact "RoleDecl" ["name", "description", "affordance"] $ \o ->
-      RoleDecl <$> o .: "name" <*> o .: "description" <*> (o .: "affordance" >>= affordanceValue)
-    affordanceValue = exact "Affordance" ["tag"] $ \o -> do
-      tag <- o .: "tag"
-      case tag :: String of
-        "Title" -> pure Title
-        "Timeline" -> pure Timeline
-        "Badge" -> pure Badge
-        _ -> fail ("unknown affordance: " ++ tag)
-    fieldRole = exact "FieldRole" ["recordType", "field", "role"] $ \o ->
-      FieldRole <$> o .: "recordType" <*> o .: "field" <*> o .: "role"
-    collectionDecl = exact "CollectionDecl" ["collection", "rootField", "references"] $ \o ->
-      CollectionDecl <$> o .: "collection" <*> o .: "rootField" <*> (o .: "references" >>= mapM reference)
-    reference = exact "Reference" ["field", "collection"] $ \o ->
-      (,) <$> o .: "field" <*> o .: "collection"
-
-exact :: String -> [Key] -> (Object -> Parser a) -> Value -> Parser a
-exact label expected parse = withObject label $ \o -> do
-  unless (sort (KeyMap.keys o) == sort expected) (fail (label ++ ": unexpected or missing fields"))
-  parse o
+decodeMetadata = eitherDecodeStrict
 
 evaluateMetadata
   :: (GuestCompilation :> es, GuestExecution :> es, Failure :> es)

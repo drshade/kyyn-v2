@@ -10,7 +10,7 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Kyyn.Types.PluginHost
-import Kyyn.Types.Blob
+import Kyyn.Types.Blob hiding (blobCodec)
 import Kyyn.Types.Plugin (EvidenceSnapshot, FileRead, EvidenceRead, FetchError)
 import Kyyn.Types.Program
 import Kyyn.Types.Evidence (EvidenceChange)
@@ -23,9 +23,9 @@ executeAcquisition configCodec payloadCodec = executeAcquisitionResult configCod
 executeAcquisitionResult :: forall config payload result. Codec config -> Codec payload -> Codec result
   -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload))))))
         (Either FetchError result)) -> IO ()
-executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
+executeAcquisitionResult configCodec payloadCodec selectedResultCodec selected = withTransport $ \transport -> do
   (config,snapshot,width) <- acquisitionInput transport configCodec
-  executeConcurrent transport width (eitherCodec resultCodec) handler (selected config snapshot)
+  executeConcurrent transport width (eitherCodec selectedResultCodec) handler (selected config snapshot)
   where
     handler :: (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))))) a -> Exchange a
     handler (InLeft call) = httpExchange call

@@ -32,7 +32,6 @@
             kyyn-surfaces = "host/kyyn-surfaces";
             kyyn = "host/kyyn";
             kyyn-sdk = "guest/kyyn-sdk";
-            json = "vendor/json";
           };
           haskell = pkgs.haskell.packages.ghc9103.override {
             overrides = final: prev:
