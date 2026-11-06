@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  ( RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
   , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
@@ -16,6 +16,29 @@ import Kyyn.Types.SchemaMetadata
 
 -- One request codec is used by the host and the executable it describes.
 data GuestRequest = Describe | Invoke Text Value deriving (Eq, Show)
+data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
+data RecipeInvocation = RunRecipe Value Value Value | RenderRecipe DescriptionFormat deriving (Eq, Show)
+instance ToJSON DescriptionFormat where
+  toJSON format = String (case format of Tree -> "tree"; Dot -> "dot"; Mermaid -> "mermaid")
+instance FromJSON DescriptionFormat where
+  parseJSON = withText "recipe description format" $ \format -> case format of
+    "tree" -> pure Tree
+    "dot" -> pure Dot
+    "mermaid" -> pure Mermaid
+    _ -> fail "Unknown recipe description format"
+instance ToJSON RecipeInvocation where
+  toJSON (RunRecipe root input state) = object ["operation" .= String "run","root" .= root,"input" .= input,"state" .= state]
+  toJSON (RenderRecipe format) = object ["operation" .= String "render","format" .= format]
+instance FromJSON RecipeInvocation where
+  parseJSON value = withObject "recipe invocation" (\fields -> do
+    operation <- fields .: "operation"
+    case operation :: Text of
+      "run" -> exactObject "recipe run" ["operation","root","input","state"]
+        (\request -> RunRecipe <$> request .: "root" <*> request .: "input" <*> request .: "state") value
+      "render" -> exactObject "recipe render" ["operation","format"]
+        (\request -> RenderRecipe <$> request .: "format") value
+      _ -> fail "Unknown recipe operation") value
+
 data QueryInvocation = QueryInvocation Value Value deriving (Eq, Show)
 instance ToJSON QueryInvocation where
   toJSON (QueryInvocation root arguments) = object ["root" .= root,"arguments" .= arguments]
@@ -138,6 +161,7 @@ data DescribedContract = DescribedContract
 -- contracts in the host. No optional or string-indexed bag of contracts exists.
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
+  | RecipeEntry { entryName :: Text, recipeName :: Text, recipeContracts :: RecipeContracts contract }
   | ToolEntry { entryName :: Text, toolName :: Text, toolDescription :: Text, toolContracts :: ToolContracts contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
   | ConnectorEntry { connectorIdentity :: ConnectorIdentity, connectorEntries :: ConnectorEntries contract }
@@ -212,6 +236,14 @@ data QueryContracts contract = QueryContracts
   { rootContract :: contract, argumentContract :: contract, resultContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
+data RecipeContracts contract = RecipeContracts contract contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance ToJSON contract => ToJSON (RecipeContracts contract) where
+  toJSON (RecipeContracts root input state) = object ["root" .= root,"input" .= input,"state" .= state]
+instance FromJSON contract => FromJSON (RecipeContracts contract) where
+  parseJSON = exactObject "recipe contracts" ["root","input","state"] $ \fields ->
+    RecipeContracts <$> fields .: "root" <*> fields .: "input" <*> fields .: "state"
+
 data ToolContracts contract = ToolContracts contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
@@ -263,6 +295,8 @@ instance FromJSON DescribedContract where
 
 instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
+  toJSON (RecipeEntry entry name contracts) = object
+    ["entryName" .= entry,"kind" .= String "recipe","name" .= name,"contracts" .= contracts]
   toJSON (ToolEntry entry name description (ToolContracts input result)) = object
     ["entryName" .= entry,"kind" .= String "tool","name" .= name,"description" .= description,
      "input" .= input,"result" .= result]
@@ -277,6 +311,8 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
     case kind :: Text of
       "validator" -> exactObject "validator entry" ["entryName","kind","root"]
         (\entry -> ValidatorEntry <$> entry .: "entryName" <*> entry .: "root") value
+      "recipe" -> exactObject "recipe entry" ["entryName","kind","name","contracts"]
+        (\entry -> RecipeEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "contracts") value
       "tool" -> exactObject "tool entry" ["entryName","kind","name","description","input","result"]
         (\entry -> ToolEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "description"
           <*> (ToolContracts <$> entry .: "input" <*> entry .: "result")) value

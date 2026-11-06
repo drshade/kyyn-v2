@@ -59,6 +59,7 @@ main = do
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
+    ["--recipe-built",path] -> checkRecipe (path,[])
     ["--tool-built",path] -> checkTool (path,[])
     ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
     ["--built",path] -> check (path,[])
@@ -130,6 +131,11 @@ check executable = do
   _ <- right (Host.checkGuest description)
   unless (isLeft (Host.checkGuest description { G.protocol = "unexpected" })) (fail "Unknown guest protocol accepted")
   unless (isLeft (Host.checkGuest description { G.entries = description.entries ++ description.entries })) (fail "Duplicate entries accepted")
+  let field signature = G.ExportDescription "value" signature "Records.value" Nothing G.ExportValue
+      exports = G.ModuleDescription "Records" "" Nothing [] [field "value :: First -> Integer",field "value :: Second -> Integer"]
+  _ <- right (Host.checkGuest description { G.modules = [exports] })
+  unless (isLeft (Host.checkGuest description { G.modules = [exports { G.moduleExports = exports.moduleExports ++ exports.moduleExports }] }))
+    (fail "Duplicate exported selectors accepted")
   let changeContracts change = description { G.entries = map (fmap change) description.entries }
   unless (isLeft (Host.checkGuest (changeContracts (\selected -> selected { G.identity = "incorrect" }))))
     (fail "Incorrect contract fingerprint accepted")
@@ -286,6 +292,14 @@ checkRequests = do
     object ["operation" .= ("invoke" :: String),"entry" .= True,"argument" .= object []]] $ \value ->
       unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestRequest))
         (fail "Malformed shared guest request accepted")
+  forM_ [G.RunRecipe (object []) (object []) (object []),G.RenderRecipe G.Tree,G.RenderRecipe G.Dot,G.RenderRecipe G.Mermaid] $ \request -> do
+    decoded <- right (eitherDecodeStrict' (Lazy.toStrict (encode request)))
+    unless (decoded == request) (fail "Shared recipe invocation changed")
+  forM_ [object [],object ["operation" .= String "run","root" .= object [],"input" .= object []],
+      object ["operation" .= String "render","format" .= String "unknown"],
+      object ["operation" .= String "render","format" .= String "tree","extra" .= True]] $ \value ->
+    unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.RecipeInvocation))
+      (fail "Malformed shared recipe invocation accepted")
   let query = G.QueryInvocation (object []) (object [])
   decodedQuery <- right (eitherDecodeStrict' (Lazy.toStrict (encode query)))
   unless (decodedQuery == query) (fail "Shared query invocation changed")
@@ -441,3 +455,47 @@ checkTool executable@(path,args) = do
     (bad,_,_) <- call executable (toJSON (G.Invoke entry (String "invalid")))
     unless (bad /= ExitSuccess) (fail "Invalid tool input accepted")
   putStrLn "Root-built tools invoke captured methods and evidence through the generated Calls algebra."
+
+-- The fixture's state is private and its flow calls a generated connector proxy.
+checkRecipe :: (FilePath,[String]) -> IO ()
+checkRecipe executable@(path,args) = do
+  described <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode described)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  entry <- case [name | G.RecipeEntry name "Flows.review" _ <- description.entries] of
+    [name] -> pure name
+    _ -> fail "Missing recipe description"
+  unless (all (`elem` [name | G.ContractEntry name _ <- description.entries]) ["$state.()","$state.Progress.State"])
+    (fail "Open recipe state contracts missing")
+  forM_ [G.Tree,G.Dot,G.Mermaid] $ \format -> do
+    rendered <- invoke executable (toJSON (G.Invoke entry (toJSON (G.RenderRecipe format))))
+    case rendered of
+      String value | not (Text.null value) -> pure ()
+      _ -> fail "Flow rendering did not return text"
+  let input = G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "4"])
+      invocation = toJSON (G.Invoke entry (toJSON input))
+      response = object ["tag" .= String "HostResponse","id" .= String "1",
+        "result" .= object ["tag" .= String "Right","value" .= String "2"]]
+      framed value = Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))
+  (status,output,errors) <- Process.readProcess (Process.setStdin (Process.byteStringInput
+    (Lazy.fromStrict (framed invocation <> framed response))) (Process.proc path args))
+  unless (status == ExitSuccess) (fail (show errors))
+  (Frame.Frame request body,rest) <- right (runIdentity (Frame.readFrame (pure Nothing) (Lazy.toStrict output)))
+  callback <- right (eitherDecodeStrict' request)
+  unless (Bytes.null body && callback == object ["tag" .= String "HostRequest","id" .= String "1",
+      "capability" .= String "plugin","method" .= String "read","arguments" .= object
+      ["plugin" .= String "local-file","connectorType" .= String "Files","instance" .= String "reader",
+       "method" .= String "count","input" .= object []]]) (fail ("Wrong recipe callback: " ++ show callback))
+  (Frame.Frame completed completedBody,remaining) <- right (runIdentity (Frame.readFrame (pure Nothing) rest))
+  result <- right (eitherDecodeStrict' completed)
+  let operation = object ["tag" .= String "Edit_items","value" .= object ["tag" .= String "Append","value" .= object
+        ["id" .= String "recipe-item","value" .= object ["amount" .= String "1"]]]]
+      proposal = object ["steps" .= [object ["rationale" .= object ["explanation" .= String "One recipe step","evidence" .= ([] :: [Value])],
+        "edits" .= [operation]]],"state" .= object ["runs" .= String "7"]]
+  unless (Bytes.null completedBody && Bytes.null remaining && result == object ["tag" .= String "Completed",
+    "result" .= object ["tag" .= String "Right","value" .= proposal]]) (fail ("Wrong recipe proposal: " ++ show result))
+  forM_ [object [],toJSON (G.RunRecipe (object []) (object []) (object ["runs" .= String "4"])),
+      toJSON (G.RunRecipe (object ["items" .= ([] :: [Value])]) (object []) (object ["runs" .= String "bad"]))] $ \malformed -> do
+    (bad,_,_) <- call executable (toJSON (G.Invoke entry malformed))
+    unless (bad /= ExitSuccess) (fail "Malformed recipe invocation accepted")
+  putStrLn "Recipe guest describes private state, renders flows, exchanges connector callbacks and returns typed fact edits."

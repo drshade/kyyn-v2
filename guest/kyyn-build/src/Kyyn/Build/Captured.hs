@@ -5,6 +5,7 @@ module Kyyn.Build.Captured (CapturedBinding(..), ConnectorBinding(..), capturedC
 
 import Control.Monad (forM)
 import Data.List (nub)
+import Kyyn.Build.Reification (expandSynonyms)
 import Language.Haskell.TH
 import Agentic.Contract (Contract)
 import Agentic.Questions (JudgeRequest, Answer)
@@ -116,39 +117,3 @@ capturedTypes signature = case signature of
 
 arrow :: Type -> Type -> Type
 arrow input output = AppT (AppT ArrowT input) output
-
--- Synonym expansion uses resolved compiler Names. In particular, Text and other
--- library types keep their actual identity without printing private module names
--- into imports or parsing pretty-printed signatures back into a type.
-expandSynonyms :: Type -> Q Type
-expandSynonyms value = do
-  let (headType,arguments) = applications value
-  expanded <- traverse expandSynonyms arguments
-  case headType of
-    ConT name -> reify name >>= \info -> case info of
-      TyConI (TySynD _ variables body) | length expanded >= length variables ->
-        expandSynonyms (foldl AppT (substitute (zip (map binderName variables) expanded) body)
-          (drop (length variables) expanded))
-      _ -> pure (foldl AppT headType expanded)
-    SigT inner _ -> expandSynonyms (foldl AppT inner expanded)
-    _ -> pure (foldl AppT headType expanded)
-
-applications :: Type -> (Type,[Type])
-applications = go []
-  where
-    go arguments (AppT function argument) = go (argument:arguments) function
-    go arguments value = (value,arguments)
-
-binderName :: TyVarBndr flag -> Name
-binderName (PlainTV name _) = name
-binderName (KindedTV name _ _) = name
-
-substitute :: [(Name,Type)] -> Type -> Type
-substitute bindings value = case value of
-  VarT name -> maybe value id (lookup name bindings)
-  AppT function argument -> AppT (substitute bindings function) (substitute bindings argument)
-  SigT inner kind -> SigT (substitute bindings inner) kind
-  ForallT variables context body ->
-    let remaining = filter ((`notElem` map binderName variables) . fst) bindings
-    in ForallT variables (map (substitute remaining) context) (substitute remaining body)
-  _ -> value

@@ -7,7 +7,7 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver Kyyn.Build.Captured Kyyn.Build.Plugins Kyyn.Build.ToolBindings Kyyn.Build.OutputBindings
+  exposed-modules: Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver Kyyn.Build.Captured Kyyn.Build.Plugins Kyyn.Build.ToolBindings Kyyn.Build.OutputBindings Kyyn.Build.Edits Kyyn.Build.Reification Kyyn.Build.RecipeBindings
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, ghc ==9.10.3, kyyn-types, template-haskell, agentic ==0.2.1.0,
@@ -38,3 +38,13 @@ test-suite captured-bindings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-types,
     template-haskell, text
+
+test-suite edit-bindings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: EditTests.hs
+  other-modules: EditProvider
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
+    agentic ==0.2.1.0, template-haskell, text, transformers

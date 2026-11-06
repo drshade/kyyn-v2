@@ -3,6 +3,7 @@ module Kyyn.Build.OutputBindings (writeOutputBindings) where
 
 import Control.Monad (forM, when)
 import Data.List (nub)
+import Data.Char (isAlphaNum)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 import System.Directory (doesFileExist)
@@ -38,9 +39,13 @@ writeOutputBindings generated roots plugins manifest
           [P.SinkConnector _ _ publish _] -> either problem pure (qualifiedReference False publish)
           [P.SourceConnector{}] -> problem "selected connector is a source"
           _ -> problem "unknown sink connector"
+        let bindingName = "output_" ++ map (\c -> if isAlphaNum c then c else '_') (Text.unpack name) ++ "_" ++ show index
         pure ([referenceModule query.queryImplementation,referenceModule publication],
-          ["-- Output " ++ show name,"binding" ++ show index ++ " :: ()",
-           "binding" ++ show index ++ " = matchOutput " ++ Text.unpack (referenceName query.queryImplementation) ++
+          ["-- kb.dhall output " ++ show name ++ ": query " ++ show queryName ++
+             " (" ++ Text.unpack (referenceName query.queryImplementation) ++ ") -> " ++
+             show pluginName ++ "/" ++ show instanceName ++ ".publish (" ++ Text.unpack (referenceName publication) ++ ")",
+           bindingName ++ " :: ()",
+           bindingName ++ " = matchOutput " ++ Text.unpack (referenceName query.queryImplementation) ++
              " " ++ Text.unpack (referenceName publication)])
       let imports = ["import qualified " ++ Text.unpack name | name <- nub (concatMap fst bindings)]
       writeFile (generated </> "KyynOutputBindings.hs") (unlines

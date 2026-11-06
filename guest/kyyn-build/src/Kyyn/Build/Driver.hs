@@ -12,6 +12,7 @@ import System.Directory (createDirectoryIfMissing, doesFileExist, doesPathExist,
 import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Process (callProcess, readProcess)
 import Kyyn.Build.Inspection
+import Kyyn.Build.RecipeBindings (writeRecipeBindings)
 import Kyyn.Build.OutputBindings (writeOutputBindings)
 import Kyyn.Build.ToolBindings (writeToolBindings)
 import Kyyn.Build.Plugins
@@ -64,6 +65,7 @@ buildGuest compiler source output = do
         finishGuest compiler generated pluginPackages destination
       RootEntries -> buildRoot compiler libdir generated basePackages destination selection
       DiscoveryEntries RootSchema -> buildRoot compiler libdir generated basePackages destination selection
+      RecipeEntries references -> buildRecipes compiler libdir generated basePackages destination references
       EvolutionEntry -> fail "Evolution guest build is not implemented yet"
 
 preparePlugins :: FilePath -> FilePath -> FilePath -> [String]
@@ -147,11 +149,43 @@ buildRoot compiler libdir generated basePackages destination selection = do
             | (q,arguments,results) <- querySources])
   finishGuest compiler generated packages destination
 
+buildRecipes :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> [RecipeReference] -> IO ()
+buildRecipes compiler libdir generated basePackages destination references = do
+  runtime <- runtimeOptions compiler
+  (roots,packages,plugins,registrations) <- preparePlugins compiler libdir generated (basePackages ++ runtime)
+  writeToolBindings generated roots registrations
+  manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
+  rootSources <- prepareRoot compiler libdir generated packages roots manifest
+  metadata <- Bytes.readFile (generated </> "metadata.json") >>= either fail pure . eitherDecodeStrict'
+  writeRecipeBindings generated roots manifest metadata
+  entries <- forM references $ \reference -> case reference of
+    OpenState "()" -> pure ([],"describeEntry @() \"$state.()\" (SchemaMetadata [] [] []) []")
+    OpenState name -> do
+      selected <- either (fail . (("Recipe state " ++ Text.unpack name ++ ": ") ++)) pure (qualifiedReference True name)
+      (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
+      pure ([Text.unpack (referenceModule selected)],"describeEntry @" ++ Text.unpack name ++ " " ++ show ("$state." <> name) ++
+        " (SchemaMetadata [] [] []) " ++ show sources)
+    ClosedFlow name -> do
+      selected <- either (fail . (("Recipe flow " ++ Text.unpack name ++ ": ") ++)) pure (qualifiedReference False name)
+      (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule selected)]
+      let render format = "Agentic.Describe." ++ format ++ " (Agentic.Describe.describe " ++ Text.unpack name ++ ")"
+      pure ([Text.unpack (referenceModule selected)],"recipeEntry @" ++ Text.unpack (referenceName manifest.schemaType) ++
+        " " ++ show name ++ " (" ++ Text.unpack (referenceName manifest.schemaMetadata) ++ "," ++ show rootSources ++ ") " ++ show sources ++
+        " KyynFactEditCodec.rootCodec KyynGuestDispatch.dispatch (Kyyn.Agentic.interpret " ++ Text.unpack name ++ ") " ++
+        "(\\format -> case format of Tree -> " ++ render "renderTree" ++ "; Dot -> " ++ render "dot" ++ "; Mermaid -> " ++ render "mermaid" ++ ")")
+  let modules = nub (map (Text.unpack . referenceModule) (manifest.schemaType : manifest.schemaMetadata : concatMap fst plugins)
+        ++ concatMap fst entries ++ ["KyynFactEditCodec","KyynGuestDispatch","Kyyn.Agentic","Agentic.Describe"])
+  (_,exports) <- inspectExports libdir (roots ++ [generated]) packages modules
+  let rootEntry = "describeEntry @" ++ Text.unpack (referenceName manifest.schemaType) ++ " \"root\" " ++
+        Text.unpack (referenceName manifest.schemaMetadata) ++ " " ++ show rootSources
+  writeGuest generated exports modules (rootEntry : map snd plugins ++ map snd entries)
+  finishGuest compiler generated packages destination
+
 writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
 writeGuest generated exports modules entries =
   writeFile (generated </> "KyynGuestEntry.hs") (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
-      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Contract (ProjectionError)",
+      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))", "import Kyyn.Contract (ProjectionError)",
       "import System.Environment (getArgs)"] ++ map ("import qualified " ++) modules ++
      ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
       "    [\"--check-build\"] -> checkEntries selected",
@@ -184,11 +218,16 @@ prepareRoot compiler libdir generated packages roots manifest = do
 finishGuest :: FilePath -> FilePath -> [String] -> FilePath -> IO ()
 finishGuest compiler generated packages destination = do
   -- Runtime is a public sublibrary, deliberately absent from the author SDK.
-  let packageTool = takeDirectory compiler </> "ghc-pkg"
-  runtime <- readProcess packageTool ["field","z-kyyn-sdk-z-runtime","id","--simple-output"] "" >>= singleLine "runtime package"
-  compile compiler generated "guest" (packages ++ ["-isrc", "-i" ++ generated,"-package-id",runtime])
+  runtime <- runtimeOptions compiler
+  compile compiler generated "guest" (packages ++ ["-isrc", "-i" ++ generated] ++ runtime)
     (generated </> "KyynGuestEntry.hs") destination
   callProcess destination ["--check-build"]
+
+runtimeOptions :: FilePath -> IO [String]
+runtimeOptions compiler = do
+  let packageTool = takeDirectory compiler </> "ghc-pkg"
+  runtime <- readProcess packageTool ["field","z-kyyn-sdk-z-runtime","id","--simple-output"] "" >>= singleLine "runtime package"
+  pure ["-package-id",runtime]
 
 compile :: FilePath -> FilePath -> String -> [String] -> FilePath -> FilePath -> IO ()
 compile compiler generated stage options entry output = do

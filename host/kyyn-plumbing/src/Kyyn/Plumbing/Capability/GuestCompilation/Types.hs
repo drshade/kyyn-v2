@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Capability.GuestCompilation.Types
   ( GuestSources, guestSources, sourceFiles, selectedBuild, sourceIdentity
-  , GuestSelection(..), DiscoverySelection(..), bindingModule
+  , GuestSelection(..), DiscoverySelection(..), RecipeReference(..), bindingModule
   ) where
 
 import Control.Monad (unless)
@@ -26,7 +26,8 @@ data GuestSources = GuestSources GuestSelection FileTree deriving (Eq, Show)
 -- Only source/configuration reaches Nix. Known KB runtime material and local
 -- build caches are excluded even if accidentally included by the caller.
 guestSources :: GuestSelection -> [(RelativePath, ByteString)] -> Either String GuestSources
-guestSources selection entries = do
+guestSources requested entries = do
+  let selection = canonicalSelection requested
   captured <- fileTree [(path,bytes) | (path,bytes) <- entries, permitted path]
   let contents = files captured
   unless (all (\name -> any ((== name) . relativeName . fst) contents) ["flake.nix","flake.lock"])

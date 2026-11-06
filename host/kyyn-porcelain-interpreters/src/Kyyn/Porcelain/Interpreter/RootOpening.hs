@@ -17,22 +17,22 @@ import qualified Kyyn.Plumbing.Capability.Git as Git
 import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening(..))
 import Kyyn.Porcelain.Capability.RootStore (RootStore, readRootDefinition, loadRootValueForChecking, readRootRecipes, readRecipeStates)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
-import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection)
 import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
 
 runRootOpening
-  :: (Schema.SchemaInspection :> es, Git.Git :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
-  => FileTree -> Eff (RootOpening : es) a -> Eff es a
-runRootOpening sdk = interpret $ \_ -> \case
+  :: (Schema.SchemaInspection :> es, Git.Git :> es, RootStore :> es, GuestCompilation :> es, GuestInspection :> es)
+  => Eff (RootOpening : es) a -> Eff es a
+runRootOpening = interpret $ \_ -> \case
   OpenCapturedSource tree -> openSource tree
   LoadSourceAt repository revision prefix -> do
     captured <- Git.readTreeExcluding repository revision prefix [factsLocation, recipesLocation, recipeStatesLocation]
     either (pure . Left) openSource captured
-  OpenCapturedRoot tree -> openTree sdk tree
+  OpenCapturedRoot tree -> openTree tree
   LoadRootAt repository revision prefix -> do
     captured <- Git.readTreeAt repository revision prefix
-    either (pure . Left) (openTree sdk) captured
+    either (pure . Left) (openTree) captured
   LoadRootMaterialAt repository revision prefix source@(SourceRoot contract code _ _) -> runExceptT $ do
     location <- checked (relativePath (case prefix of
       WholeTree -> relativeName factsLocation
@@ -62,31 +62,31 @@ runRootOpening sdk = interpret $ \_ -> \case
           path <- checked (relativePath (relativeName recipeStatesLocation ++ "/" ++ relativeName p))
           pure (path,b)) (files tree)
     recipeTree <- checked (fileTree (maybe [] (\bytes -> [(recipesLocation,bytes)]) recipeBytes ++ stateEntries))
-    recipes <- ExceptT (loadRecipes sdk source recipeTree)
+    recipes <- ExceptT (loadRecipes source recipeTree)
     pure (Root contract facts code recipes)
 
 openTree
-  :: (Schema.SchemaInspection :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
-  => FileTree -> FileTree -> Eff es (Either [Diagnostic] Root)
-openTree sdk tree = runExceptT $ do
-  (root,_) <- ExceptT (openInput sdk tree)
+  :: (Schema.SchemaInspection :> es, RootStore :> es, GuestCompilation :> es, GuestInspection :> es)
+  => FileTree -> Eff es (Either [Diagnostic] Root)
+openTree tree = runExceptT $ do
+  (root,_) <- ExceptT (openInput tree)
   _ <- ExceptT (loadRootValueForChecking root)
   pure root
 
 openInput
-  :: (Schema.SchemaInspection :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
-  => FileTree -> FileTree -> Eff es (Either [Diagnostic] (Root, [RelativePath]))
-openInput sdk tree = runExceptT $ do
+  :: (Schema.SchemaInspection :> es, RootStore :> es, GuestCompilation :> es, GuestInspection :> es)
+  => FileTree -> Eff es (Either [Diagnostic] (Root, [RelativePath]))
+openInput tree = runExceptT $ do
   source@(SourceRoot contract code _ closure) <- ExceptT (openSource tree)
   facts <- checked (fileTree [(p,b) | (p,b) <- files tree, isFactPath p])
-  recipes <- ExceptT (loadRecipes sdk source tree)
+  recipes <- ExceptT (loadRecipes source tree)
   pure (Root contract facts code recipes, closure)
 
-loadRecipes :: (Schema.SchemaInspection :> es, RootStore :> es, ToolPreparation :> es, PluginPreparation :> es)
-  => FileTree -> SourceRoot -> FileTree -> Eff es (Either [Diagnostic] [Fact StoredRecipe])
-loadRecipes sdk source tree = runExceptT $ do
+loadRecipes :: (Schema.SchemaInspection :> es, RootStore :> es, GuestCompilation :> es, GuestInspection :> es)
+  => SourceRoot -> FileTree -> Eff es (Either [Diagnostic] [Fact StoredRecipe])
+loadRecipes source tree = runExceptT $ do
   definitions <- ExceptT (readRootRecipes tree)
-  contracts <- ExceptT (inspectRecipeContracts sdk source definitions)
+  contracts <- ExceptT (inspectRecipeContracts source definitions)
   ExceptT (readRecipeStates contracts tree)
 
 openSource

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.GuestCompilation
   ( GuestCompilation(..), compileGuest
-  , GuestSources, guestSources, sourceFiles, selectedBuild, sourceIdentity, GuestSelection(..), DiscoverySelection(..)
+  , GuestSources, guestSources, sourceFiles, selectedBuild, sourceIdentity, GuestSelection(..), DiscoverySelection(..), RecipeReference(..)
   , BuildIdentity(..), CompiledProgram(..) ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))

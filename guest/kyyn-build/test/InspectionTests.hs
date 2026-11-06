@@ -39,6 +39,7 @@ rejectOutputMismatch compiler helper fixture = withSystemTempDirectory "kyyn-out
      "count :: Arguments -> Query Root Result", "count _ = pure (pack \"incompatible sink input\")"])
   (status,output,errors) <- readProcessWithExitCode helper [compiler,directory,directory </> "guest"] ""
   unless (status /= ExitSuccess && "KyynOutputBindings.hs" `Text.isInfixOf` Text.pack (output ++ errors)
+    && "output_snapshot_0" `Text.isInfixOf` Text.pack errors
     && "Integer" `Text.isInfixOf` Text.pack errors && "Text" `Text.isInfixOf` Text.pack errors)
     (fail ("Wrong outcome for incompatible query/sink types: " ++ output ++ errors))
   putStrLn "GHC rejects an incompatible query/sink binding in the selected guest environment."

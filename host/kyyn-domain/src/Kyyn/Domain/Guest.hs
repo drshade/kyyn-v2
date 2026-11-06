@@ -31,13 +31,17 @@ checkGuest description = do
   ensure (description.protocol == G.protocolIdentity) "guest.protocol" "Unrecognized guest protocol"
   unique "entry" (concatMap G.entryNames description.entries)
   entries <- traverse checkEntry description.entries
+  unique "recipe" [name | G.RecipeEntry _ name _ <- entries]
   unique "tool" [name | G.ToolEntry _ name _ _ <- entries]
   let connectors = [identity | G.ConnectorEntry identity _ <- entries]
   ensure (length connectors == length (nub connectors)) "guest.connectors" "Duplicate connector identity"
   unique "module" (map G.moduleName description.modules)
   forM_ description.modules $ \selected -> do
     unless (Text.null selected.moduleSource) (void (source selected.moduleSource))
-    let symbols = [(e.exportName,e.exportKind) | e <- selected.moduleExports]
+    -- DuplicateRecordFields may export several selectors with the same name
+    -- and namespace. GHC distinguishes them by their parent record type, which
+    -- is present in each compiler-rendered selector signature.
+    let symbols = [(e.exportName,e.exportKind,e.exportSignature) | e <- selected.moduleExports]
     ensure (length symbols == length (nub symbols)) "guest.exports" "Duplicate exported symbol"
     forM_ selected.moduleExports $ \exported ->
       ensure (all (not . Text.null) [exported.exportName,exported.exportSignature,exported.exportOrigin])
@@ -49,6 +53,9 @@ checkEntry entry = case entry of
   G.ValidatorEntry name selected -> do
     ensure (name == "validate") "guest.entry" "Validator must use the validate entry"
     G.ValidatorEntry name <$> root selected
+  G.RecipeEntry name reference (G.RecipeContracts rootContract arguments state) -> do
+    either (Left . pure . errorDiagnostic "guest.recipe") (const (Right ())) (Plugin.bindingModule (Text.unpack reference))
+    G.RecipeEntry name reference <$> (G.RecipeContracts <$> root rootContract <*> check arguments <*> check state)
   G.ToolEntry entryName name description contracts -> do
     either (Left . pure . errorDiagnostic "guest.tool") (const (Right ())) (Plugin.methodName (Text.unpack name))
     G.ToolEntry entryName name description <$> traverse check contracts
