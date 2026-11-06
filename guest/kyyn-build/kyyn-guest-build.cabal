@@ -7,10 +7,10 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver
+  exposed-modules: Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver Kyyn.Build.Captured
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, ghc ==9.10.3, kyyn-types,
+  build-depends: base >=4.20 && <4.21, ghc ==9.10.3, kyyn-types, template-haskell, agentic ==0.2.1.0,
     text, filepath, directory, transformers, process, aeson, bytestring, dhall ==1.42.3
 
 test-suite inspection
@@ -28,3 +28,13 @@ executable kyyn-guest-build
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-guest-build
+
+test-suite captured-bindings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: CapturedTests.hs
+  other-modules: CapturedProvider
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-types,
+    template-haskell, text
