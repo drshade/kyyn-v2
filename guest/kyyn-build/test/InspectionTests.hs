@@ -55,9 +55,16 @@ main = do
     unless (any ((== "value") . exportName) (concatMap moduleExports mainModules)) (fail "Authored Main required an IO entry")
     writeFile "UsesBindings.hs" (unlines
       ["module UsesBindings where", "import KyynQueryBindings", "selected = missing"])
-    uses <- needsRootBindings libdir ["."] [] ["UsesBindings"]
-    independent <- needsRootBindings libdir ["."] [] ["Schema","Data.Maybe"]
-    unless (uses && not independent) (fail "Root prepass selection ignored compiler dependency closure")
+    uses <- requiredBindings libdir ["."] [] ["UsesBindings"]
+    independent <- requiredBindings libdir ["."] [] ["Schema","Data.Maybe"]
+    unless (uses == BindingNeeds True False && independent == BindingNeeds False False) (fail "Root prepass selection ignored compiler dependency closure")
+    writeFile "UsesTools.hs" (unlines
+      ["module UsesTools where", "import Kyyn.Connectors", "import Kyyn.Plugins.P_local_file.Files", "selected = files"])
+    writeFile "Indirect.hs" (unlines ["module Indirect where", "import UsesTools", "other = selected"])
+    toolNeeds <- requiredBindings libdir ["."] [] ["Indirect"]
+    directNeeds <- requiredBindings libdir ["."] [] ["Kyyn.Connectors"]
+    unless (toolNeeds == BindingNeeds False True && directNeeds == toolNeeds)
+      (fail "Generated tool imports were lost from the partial compiler graph")
     writeFile "Broken.hs" (unlines ["module Broken where","bad :: Integer","bad = True"])
     failed <- try (inspectExports libdir ["."] [] ["Broken"]) :: IO (Either SomeException ([FilePath],[ModuleDescription]))
     case failed of

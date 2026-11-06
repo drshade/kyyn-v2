@@ -102,6 +102,14 @@
             chmod -R u+w "$out"
             cp -R ${./tools/fixtures/tool-guest}/. "$out/"
           '';
+          toolApiSource = p.pkgs.runCommand "kyyn-tool-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"modules","modules":["Tools","Kyyn.Connectors","Kyyn.Agentic","Kyyn.Plugins.P_local_file.Files","Kyyn.Plugins.P_local_file.Files.Evidence"]}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
+            printf '%s\n' 'module Main where' 'unfinished =' > "$out/src/Main.hs"
+          '';
           pluginsOnlySource = p.pkgs.runCommand "kyyn-plugins-only-source" { } ''
             mkdir -p "$out/plugins/packages/local-file/source" "$out/src"
             cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
@@ -134,6 +142,7 @@
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
           guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
+          guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };
           guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
           guest-api = self.lib.mkGuest { inherit system; src = apiSource; };

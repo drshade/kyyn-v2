@@ -44,8 +44,11 @@ buildGuest compiler source output = do
     case selection of
       DiscoveryEntries (ModuleExports modules) -> do
         let selectedModules = map Text.unpack modules
-        needsRoot <- needsRootBindings libdir roots packages selectedModules
-        when needsRoot $ do
+        needs <- requiredBindings libdir roots packages selectedModules
+        when needs.toolBindings $ do
+          (_,_,_,registrations) <- preparePlugins compiler libdir generated basePackages
+          writeToolBindings generated roots registrations
+        when needs.rootBindings $ do
           manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
           _ <- prepareRoot compiler libdir generated packages roots manifest
           pure ()

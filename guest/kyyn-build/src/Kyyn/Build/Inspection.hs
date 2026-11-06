@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Build.Inspection (inspectExports, needsRootBindings, packageOptions) where
+module Kyyn.Build.Inspection (inspectExports, BindingNeeds(..), requiredBindings, packageOptions) where
 
 import Control.Monad (forM, unless, filterM)
 import Control.Monad.IO.Class (liftIO)
-import Data.List (nub, sort)
+import Data.List (nub, sort, isPrefixOf)
 import Data.Maybe (catMaybes)
 import qualified Data.Text as Text
 import GHC
+import GHC.Driver.Make (depanalPartial)
 import GHC.Iface.Type (ShowSub(..), ShowHowMuch(..), ShowForAllFlag(..), AltPpr(..))
 import GHC.Types.Name (getOccString, nameModule_maybe)
 import GHC.Utils.Outputable (ppr)
@@ -71,16 +72,18 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
       pure (ModuleDescription (Text.pack name) (Text.pack source) documentation instances symbols)
     pure (sources,exports)
 
--- Dependency analysis can see which selected source closure imports generated
--- handles without first type-checking it or compiling an unrelated Root.
-needsRootBindings :: FilePath -> [FilePath] -> [String] -> [String] -> IO Bool
-needsRootBindings libdir roots options modules
-  | "KyynQueryBindings" `elem` modules = pure True
-  | otherwise = runGhc (Just libdir) $ do
-      _ <- configure roots options modules
-      graph <- depanal [mkModuleName "KyynQueryBindings"] False
-      pure (any ((== "KyynQueryBindings") . moduleNameString . unLoc . snd)
-        (concatMap (\summary -> ms_srcimps summary ++ ms_textual_imps summary) (mgModSummaries graph)))
+-- Dependency analysis reads imports before generated modules exist. The partial
+-- graph retains their consumers; the final load still reports every source error.
+data BindingNeeds = BindingNeeds { rootBindings :: Bool, toolBindings :: Bool }
+  deriving (Eq, Show)
+requiredBindings :: FilePath -> [FilePath] -> [String] -> [String] -> IO BindingNeeds
+requiredBindings libdir roots options modules = runGhc (Just libdir) $ do
+  _ <- configure roots options modules
+  (_,graph) <- depanalPartial [] False
+  let requested = modules ++ map (moduleNameString . unLoc . snd)
+        (concatMap (\summary -> ms_srcimps summary ++ ms_textual_imps summary) (mgModSummaries graph))
+      tools name = name `elem` ["Kyyn.Connectors","Kyyn.Agentic","KyynToolCalls"] || "Kyyn.Plugins." `isPrefixOf` name
+  pure (BindingNeeds ("KyynQueryBindings" `elem` requested) (any tools requested))
 
 configure :: [FilePath] -> [String] -> [String] -> Ghc DynFlags
 configure roots options modules = do

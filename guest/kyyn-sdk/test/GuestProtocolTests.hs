@@ -63,6 +63,7 @@ main = do
     ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
+    ["--api-tools-built",path] -> checkToolApi (path,[])
     ["--api-built",path] -> checkApi False (path,[])
     ["--api-bindings-built",path] -> checkApi True (path,[])
     [] -> do
@@ -86,6 +87,20 @@ checkApi withBindings executable = do
     (fail "Authored or installed-library exports missing")
   unless (all ((/= "private") . snd) symbols) (fail "Private implementation exported")
   putStrLn "API discovery inspects selected authored and locked library modules."
+
+checkToolApi :: (FilePath,[String]) -> IO ()
+checkToolApi executable = do
+  value <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  unless (null description.entries) (fail "Tool discovery produced invocable entries")
+  let symbols = [(m.moduleName,e.exportName) | m <- description.modules, e <- m.moduleExports]
+  unless (all (`elem` symbols) [("Tools","count"),("Kyyn.Connectors","Tool"),("Kyyn.Connectors","files"),
+    ("Kyyn.Agentic","interpret"),("Kyyn.Plugins.P_local_file.Files","count"),
+    ("Kyyn.Plugins.P_local_file.Files.Evidence","readEvidence")])
+    (fail "Generated tool API is incomplete")
+  unless (all ((/= "Main") . G.moduleName) description.modules) (fail "Tool API included unrelated Root")
+  putStrLn "Generated tool APIs inspect successfully with unfinished Root and manifest."
 
 checkSchema :: (FilePath,[String]) -> IO ()
 checkSchema executable = do
