@@ -81,13 +81,15 @@ check. A source/type rejection remains distinct from missing provisioning or an
 unavailable build/runtime process; do not parse compiler prose to decide control flow.
 Preserve compiler messages and source locations where available.
 
-The SDK build owns checked-type extraction, generated binding modules, codecs and
-entry adapters (ADR 0005). It first checks the selected schema/export dependencies,
-generates the modules authored code imports, then compiles the selected program.
-Both stages use the same compiler, SDK and lock. They run inside one Nix
-derivation, not a host describe/codegen/rebuild
-round trip. Generated code and embedded descriptions come from the same lowering.
-An unsupported type or incompatible renderer/sink binding fails the build.
+The SDK owns generic contract derivation, compiler-checked export inspection and
+private entry adapters (ADR 0005). Contract instances live with authored types;
+there is no generated-contract import cycle. A narrow Root-schema prepass produces
+collection/edit bindings for their consumers. After authored exports type-check,
+the build generates and compiles the private entry adapters. All stages use the
+same compiler, SDK and lock inside one Nix derivation, not a host
+describe/codegen/rebuild round trip. Codecs and embedded descriptions use the same
+SDK lowering. An unsupported contract shape or incompatible renderer/sink binding
+fails the build.
 
 Discovery selection compiles only the exports/schema dependencies needed for the
 requested catalogue (ADR 0018). An incomplete evolution body must not prevent
@@ -252,6 +254,5 @@ still apply.
 
 Run a real GHC guest through discovery, runtime fact loading, validation, query,
 plugin host calls, typed evolution and output publication. Test the actual guest
-protocol and dependency environment, not only host-linked SDK unit tests. Prove
-supported shape/codec identities against existing fixtures when replacing the
-compiler integration. Verify Linux, macOS and WSL2 distribution separately.
+protocol and dependency environment, not only host-linked SDK unit tests. Verify the decided contract shapes and exact-value semantics; existing MicroHs
+fixtures and KBs impose no compatibility or porting requirement. Verify Linux, macOS and WSL2 distribution separately.

@@ -1001,9 +1001,9 @@ An author requests a state handle by importing
 `Kyyn.Workspace.Before.RecipeTypes.<Module>.<Type>` or
 `Kyyn.Workspace.After.RecipeTypes.<Module>.<Type>`; each exports `recipeType`.
 Before uses the selected Git revision's source closure. After uses the captured
-target sources, including newly authored types. Defining modules stay independent
-of generated bindings. Resolve imports through compiler parsing as for
-Kyyn.Contracts; no extra type registration list. Ordinary aliases keep imports
+target sources, including newly authored types. A defining module must not import its own generated handle. Resolve these
+handle imports through guest-build compiler parsing; no extra type registration
+list or generated Contract instance is needed. Ordinary aliases keep imports
 readable. Unit uses the SDK's unitRecipeType, with its codec, instead of a
 fabricated authored declaration.
 

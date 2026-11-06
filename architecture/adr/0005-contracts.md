@@ -188,26 +188,36 @@ There is no `idField` metadata to keep consistent with a second identity model.
 
 ### Build-derived guest description
 
-The GHC guest SDK/build tooling extracts compiler-checked authored types and
-metadata and generates their adapters/codecs. The host has no linked guest compiler
-frontend. Extract from checked declarations, not pretty-printed GHCi text, field
-names guessed at runtime or a second authored schema.
+The GHC guest SDK derives contracts in the module defining the authored type,
+using ordinary `Generic` and `Contract` deriving. One SDK lowering supplies the
+checked structural description and value codecs, including the distinct storage
+and model projections. Authors do not import generated `Kyyn.Contracts.*` modules
+or maintain another structural schema. Applied types and containers can use
+compositional instances; supported contract shapes, not a monomorphic-only rule,
+determine eligibility. Aliases do not introduce a distinct instance identity.
 
-The build pipeline resolves the manifest-selected schema and input/result type
-exports before compiling code that imports generated bindings. This prepass does
-not require loading a query/flow body that already imports those bindings. The
-final compiler checks each registered implementation against the derived signature;
-a description is not published for a full build whose implementation fails that
-check. Schema/type modules must remain independent of their generated consumers. It generates `KyynQueryBindings`,
-workspace Before/After handles, FactEdits and `Kyyn.Contracts.*` inside the same
-Nix derivation, then compiles the executable with its embedded description. This
-breaks the binding dependency cycle without a host-generated-source round trip.
-The build helper owns compiler API integration and must support the chosen GHC;
-arbitrary libraries do not imply every compiler version works with every SDK.
+The host has no linked guest compiler frontend. Compiler-specific guest build
+tooling checks manifest exports and entry signatures. Entry adapters are private
+build outputs, never imports required by authored code: they are generated after
+the selected authored exports type-check, then compiled into the same executable
+and Nix derivation. Description and invocation use that executable's contracts.
+A full build does not publish a description if a registered implementation fails
+its signature check.
+
+Root-specific collection handles and edit bindings retain a narrow schema-only
+prepass. It derives `KyynQueryBindings`, workspace Before/After handles and
+FactEdits before compiling their consumers, in the same derivation and under the
+same dependencies. The Root schema must not import its own generated bindings;
+there is no general restriction separating type definitions from flows or other
+consumers. Root handles carry collection identity and typed update/edit operations;
+`HasField` alone supplies field reads, not that complete interface. This prepass
+is not used to generate Contract instances. The build helper owns compiler API
+integration and must support the chosen GHC; arbitrary libraries do not imply
+every compiler version works with every SDK.
 
 Pure schema metadata is evaluated with the fixed SDK metadata codec, independent
 of the KB contract being derived. It takes no facts, evidence, host capabilities
-or live inputs, and does not execute queries or validators. Generated description,
+or live inputs, and does not execute queries or validators. Derived description,
 codecs and method adapters share one checked lowering and selected dependencies.
 
 ```haskell

@@ -332,6 +332,10 @@ SystemTwo uses the configured OpenAI or Anthropic provider. Consult
 `Agentic`, `Agentic.Questions` and `Kyyn.Agentic` through API discovery before
 authoring a flow. Use record-dot access for upstream library records.
 
+The currently implemented MicroHs runtime requires the following generated-contract
+workflow. These are implementation restrictions, not the GHC authoring contract
+chosen in [ADR 0028](../architecture/adr/0028-agentic-workflows.md).
+
 Define model-facing data types in modules independent of flows/generated bindings.
 Import `Kyyn.Contracts.<defining module>.<type> ()` in a flow module to bring the
 generated contract into scope. Nonempty enums also get generated `Options`.

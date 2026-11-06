@@ -15,8 +15,10 @@ must not be disconnected workflows. Evaluation must be useful without acceptance
 
 An evolution captures the target `flake.nix`, `flake.lock` and local build inputs
 alongside its code/configuration. These changes are visible in review and installed
-on acceptance. Source-only changes still undergo the ordinary checks; facts are
-not silently re-encoded under a new contract merely because only a lock changed.
+on acceptance. Source-only changes still undergo the ordinary checks: existing
+facts are re-decoded and validated under the target build, including when only
+the dependency lock changes. Decode or validation failures are ordinary check
+failures; a source-only change cannot bypass fact validation.
 
 The migration is one program containing Before and After types, compiled under
 the **target** locked environment. Its copied Before schema source and dependencies
@@ -244,12 +246,13 @@ handle. `update` gives the action the payload, preserving its ID and list positi
 missing or ambiguous IDs fail before invoking that action. `current` leaves state
 unchanged. Standard `get`, `gets`, `put` and `modify` work on the focused state.
 
-The SDK owns a small standard van Laarhoven optics surface (`lens`, `view`, `set`,
-`over`, composition with `(.)`). Authors can write nested field lenses; only
-collection handles are generated. Pure set/over can change types; state zoom
-preserves its focused type. Authors may use compatible optics libraries in their locked environment. The SDK
-keeps its focused fact-aware operations; StateT/ReaderT use maintained transformers
-rather than a second custom monad implementation.
+The SDK uses the maintained `lens` library (`lens`, `view`, `set`, `over`,
+composition with `(.)`) and `generic-lens` for record-field lenses. Its optics
+facade re-exports these operations rather than maintaining a custom implementation.
+Only collection handles require Root-specific generation. Pure set/over can change
+types; state zoom preserves its focused type. The SDK keeps its focused fact-aware
+operations; StateT/ReaderT use maintained transformers rather than a second custom
+monad implementation.
 
 The guest `kyyn-sdk` package owns the pure composition implementation and private
 observation constructors. Its public `Kyyn.Evolution` module exposes no JSON types.
