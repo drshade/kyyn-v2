@@ -1,6 +1,6 @@
-{ schemaType = "Schema.Root"
-, schemaMetadata = "Schema.metadata"
-, validator = "Schema.validate"
+{ schemaType = "Main.Root"
+, schemaMetadata = "Main.metadata"
+, validator = "Main.validate"
 , queries =
   [ { name = "total", description = "Sum exact amounts"
     , implementation = "Queries.total"

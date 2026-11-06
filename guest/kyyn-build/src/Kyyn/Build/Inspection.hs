@@ -17,7 +17,7 @@ import GHC.Unit.Info (unitIsExposed, unitId)
 import GHC.Unit.Types (GenUnit(..), Definite(..), unitString)
 import System.FilePath (normalise, (</>), (<.>))
 import System.Directory (doesFileExist)
-import Kyyn.Types.Guest (ExportDescription(..))
+import Kyyn.Types.Guest (ExportDescription(..), ExportKind(..))
 
 -- Explicit exposure preserves all libraries selected by the Nix compiler while
 -- avoiding GHC's automatic hiding of sibling SDK components when runtime is
@@ -39,7 +39,7 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
     initial <- getSessionDynFlags
     logger <- getLogger
     (configured,remaining,_) <- parseDynamicFlags logger initial
-      (map noLoc ("-XGHC2021" : options))
+      (map noLoc (["-XGHC2021","-main-is","KyynGuestEntry.main"] ++ options))
     unless (null remaining) (liftIO (fail "Unsupported compiler options in guest build"))
     let flags = configured { importPaths = roots, backend = noBackend, ghcLink = NoLink }
     _ <- setSessionDynFlags flags
@@ -66,8 +66,8 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
           (Text.pack (showSDoc flags (pprTyThing (ShowSub ShowIface ShowForAllWhen) thing))) (Text.pack source) (kind thing))
     pure (sources,exports)
 
-kind :: TyThing -> Text.Text
-kind (AnId _) = "value"
-kind (AConLike _) = "constructor"
-kind (ATyCon _) = "type"
-kind (ACoAxiom _) = "coercion"
+kind :: TyThing -> ExportKind
+kind (AnId _) = ExportValue
+kind (AConLike _) = ExportConstructor
+kind (ATyCon _) = ExportType
+kind (ACoAxiom _) = ExportCoercion

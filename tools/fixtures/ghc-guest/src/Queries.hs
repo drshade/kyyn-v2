@@ -5,7 +5,7 @@ import Data.Fixed (Fixed, E2)
 import Kyyn.Schema
 import Kyyn.Query (readCollection)
 import KyynQueryBindings
-import Schema (Item(..))
+import Main (Item(..))
 
 -- These types deliberately live beside code that imports generated bindings.
 type Args = ()

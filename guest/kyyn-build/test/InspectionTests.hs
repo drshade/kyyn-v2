@@ -30,7 +30,7 @@ main = do
     (sources,exports) <- inspectExports libdir ["."] [] ["Schema","Schema"]
     unless (sort sources == ["Schema.hs","Types.hs"]) (fail ("Wrong schema closure: " ++ show sources))
     let values = [(entry.exportName,entry.exportKind) | entry <- exports]
-    unless (("Root","type") `elem` values && ("Root","constructor") `elem` values && ("total","value") `elem` values)
+    unless (("Root",ExportType) `elem` values && ("Root",ExportConstructor) `elem` values && ("total",ExportValue) `elem` values)
       (fail ("Compiler export namespaces missing: " ++ show values))
     unless (all ((/= "private") . exportName) exports) (fail "Private implementation leaked into API")
     unless (any (\entry -> entry.exportName == "total" && "Integer" `Text.isInfixOf` entry.exportSignature) exports)
@@ -38,6 +38,9 @@ main = do
     (packageSources,packageExports) <- inspectExports libdir ["."] [] ["Data.Maybe"]
     unless (null packageSources && any ((== "fromMaybe") . exportName) packageExports)
       (fail "Locked library export inspection failed")
+    writeFile "Main.hs" (unlines ["module Main (value) where","value :: Integer","value = 1"])
+    (_,mainExports) <- inspectExports libdir ["."] [] ["Main"]
+    unless (any ((== "value") . exportName) mainExports) (fail "Authored Main required an IO entry")
     writeFile "Broken.hs" (unlines ["module Broken where","bad :: Integer","bad = True"])
     failed <- try (inspectExports libdir ["."] [] ["Broken"]) :: IO (Either SomeException ([FilePath],[ExportDescription]))
     case failed of

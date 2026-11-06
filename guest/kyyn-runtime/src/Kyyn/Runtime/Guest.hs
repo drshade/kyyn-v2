@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Runtime.Guest (Entry, validationEntry, queryEntry, describeEntry, runGuest) where
+module Kyyn.Runtime.Guest (Entry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
 import qualified Data.Aeson as Json
@@ -35,7 +35,7 @@ validationEntry metadata sources validate = do
         root <- either (Left . Text.unpack) Right (compiled.codec.decode (fromAeson value))
         report <- encodeReportValue (validate root)
         pure (toAeson (fromWire report))
-  pure (Entry (EntryDescription "validate" "validator" [("root",description)] []) run)
+  pure (Entry (ValidatorEntry "validate" description) run)
 
 queryEntry :: forall root args result. (Contract root, Contract args, Contract result)
   => Text -> (SchemaMetadata,[Text]) -> (SchemaMetadata,[Text]) -> (SchemaMetadata,[Text])
@@ -44,10 +44,10 @@ queryEntry name (rootMetadata,rootSources) (argumentMetadata,argumentSources) (r
   root <- compileContract (contract @root)
   arguments <- compileContract (contract @args)
   result <- compileContract (contract @result)
-  let description = EntryDescription name "query"
-        [("root",describeContract root.description rootMetadata rootSources),
-         ("arguments",describeContract arguments.description argumentMetadata argumentSources),
-         ("result",describeContract result.description resultMetadata resultSources)] ["snapshot-read"]
+  let description = QueryEntry name (QueryContracts
+        (describeContract root.description rootMetadata rootSources)
+        (describeContract arguments.description argumentMetadata argumentSources)
+        (describeContract result.description resultMetadata resultSources))
       run value = do
         reply <- executeQuery (runtimeCodec root.codec) (runtimeCodec arguments.codec) (runtimeCodec result.codec)
           selected (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (Json.encode value))))
@@ -57,15 +57,25 @@ queryEntry name (rootMetadata,rootSources) (argumentMetadata,argumentSources) (r
 describeEntry :: forall value. Contract value => Text -> SchemaMetadata -> [Text] -> Either ProjectionError Entry
 describeEntry name metadata sources = do
   compiled <- compileContract (contract @value)
-  pure (Entry (EntryDescription name "contract" [("value",describeContract compiled.description metadata sources)] [])
+  pure (Entry (ContractEntry name (describeContract compiled.description metadata sources))
     (const (Left "This entry describes a contract and cannot be invoked")))
 
-runGuest :: [ExportDescription] -> [Either ProjectionError Entry] -> IO ()
-runGuest exports selected = do
+buildEntries :: [Either ProjectionError Entry] -> IO [Entry]
+buildEntries selected = do
   built <- either (fail . show) pure (sequence selected)
   let descriptions = [description | Entry description _ <- built]
       names = map entryName descriptions
   unless (length names == length (nub names)) (fail "Duplicate guest entry names")
+  pure built
+
+-- The build helper forces the same contracts before publishing its executable.
+checkEntries :: [Either ProjectionError Entry] -> IO ()
+checkEntries selected = buildEntries selected >> pure ()
+
+runGuest :: [ExportDescription] -> [Either ProjectionError Entry] -> IO ()
+runGuest exports selected = do
+  built <- buildEntries selected
+  let descriptions = [description | Entry description _ <- built]
   withTransport $ \transport -> do
     (metadata,body) <- readFrame transport
     unless (Bytes.null body) (fail "Unexpected invocation body")

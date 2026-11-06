@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveAnyClass, DerivingStrategies, DeriveGeneric, NoFieldSelectors, OverloadedStrings #-}
-module Schema (Root(..), Item(..), metadata, validate) where
+module Main (Root(..), Item(..), metadata, validate) where
 
 import Data.Fixed (Fixed, E2)
 import GHC.Generics (Generic)
