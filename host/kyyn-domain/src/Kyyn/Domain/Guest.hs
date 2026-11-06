@@ -33,6 +33,8 @@ checkGuest description = do
   entries <- traverse checkEntry description.entries
   let methods = [(m.pluginName,m.connectorName,m.methodName) | G.CapturedReadEntry _ m _ <- entries]
   ensure (length methods == length (nub methods)) "guest.methods" "Duplicate captured method identity"
+  let acquisitions = [connector | G.AcquisitionEntry _ connector _ <- entries]
+  ensure (length acquisitions == length (nub acquisitions)) "guest.connectors" "Duplicate acquisition connector"
   unique "module" (map G.moduleName description.modules)
   forM_ description.modules $ \selected -> do
     unless (Text.null selected.moduleSource) (void (source selected.moduleSource))
@@ -50,6 +52,11 @@ checkEntry entry = case entry of
     G.ValidatorEntry name <$> root selected
   G.QueryEntry name (G.QueryContracts rootContract arguments result) ->
     G.QueryEntry name <$> (G.QueryContracts <$> root rootContract <*> check arguments <*> check result)
+  G.AcquisitionEntry name connector contracts -> do
+    let nominal = either (Left . pure . errorDiagnostic "guest.connector") (const (Right ()))
+    nominal (Plugin.pluginName (Text.unpack connector.connectorPlugin))
+    nominal (Plugin.connectorTypeName (Text.unpack connector.connectorType))
+    G.AcquisitionEntry name connector <$> traverse check contracts
   G.CapturedReadEntry name method contracts -> do
     let nominal = either (Left . pure . errorDiagnostic "guest.method") (const (Right ()))
     nominal (Plugin.pluginName (Text.unpack method.pluginName))

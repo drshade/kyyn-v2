@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
+  ( AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
+  , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
   , QueryContracts(..), CapturedContracts(..), CapturedMethodIdentity(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
   , protocolIdentity, describeContract
   ) where
@@ -35,6 +36,64 @@ instance FromJSON CapturedInvocation where
   parseJSON = exactObject "captured invocation" ["arguments","snapshot"] $ \fields ->
     CapturedInvocation <$> fields .: "arguments" <*> fields .: "snapshot"
 
+data ConnectorIdentity = ConnectorIdentity
+  { connectorPlugin :: Text, connectorType :: Text } deriving (Eq, Show)
+
+data AcquisitionContext = AcquisitionContext
+  { acquisitionStartedAt :: Text, acquisitionPriorPosition :: Maybe Value } deriving (Eq, Show)
+
+data AcquisitionInvocation = AcquisitionInvocation
+  { acquisitionConfig :: Value, acquisitionOptions :: Maybe Value
+  , acquisitionContext :: Maybe AcquisitionContext, acquisitionSnapshot :: Text
+  , acquisitionConcurrency :: Int } deriving (Eq, Show)
+
+instance ToJSON ConnectorIdentity where
+  toJSON (ConnectorIdentity plugin connector) = object ["plugin" .= plugin,"connector" .= connector]
+instance FromJSON ConnectorIdentity where
+  parseJSON = exactObject "connector identity" ["plugin","connector"] $ \fields ->
+    ConnectorIdentity <$> fields .: "plugin" <*> fields .: "connector"
+instance ToJSON AcquisitionContext where
+  toJSON (AcquisitionContext startedAt prior) = object
+    ["startedAt" .= startedAt,"priorPosition" .= optionalValue prior]
+instance FromJSON AcquisitionContext where
+  parseJSON = exactObject "acquisition context" ["startedAt","priorPosition"] $ \fields ->
+    AcquisitionContext <$> fields .: "startedAt" <*> (fields .: "priorPosition" >>= parseOptionalValue)
+instance ToJSON AcquisitionInvocation where
+  toJSON (AcquisitionInvocation config options context snapshot width) = object
+    ["config" .= config,"options" .= optionalValue options,"context" .= optionalValue context,
+     "snapshot" .= snapshot,"concurrency" .= show width]
+instance FromJSON AcquisitionInvocation where
+  parseJSON = exactObject "acquisition invocation" ["config","options","context","snapshot","concurrency"] $ \fields -> do
+    width <- fields .: "concurrency"
+    selected <- maybe (fail "Host concurrency must be an integer string from 1 to 8") pure
+      (lookup width [(show n,n) | n <- [1..8]])
+    AcquisitionInvocation <$> fields .: "config" <*> (fields .: "options" >>= parseOptionalValue)
+      <*> (fields .: "context" >>= parseOptionalValue) <*> fields .: "snapshot" <*> pure selected
+
+-- State and report always occur together; optional fetch options are independent.
+data AcquisitionContracts contract
+  = StatelessContracts contract (Maybe contract) contract
+  | StatefulContracts contract (Maybe contract) contract contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+
+instance ToJSON contract => ToJSON (AcquisitionContracts contract) where
+  toJSON (StatelessContracts config options payload) = object
+    ["kind" .= String "stateless","config" .= config,"options" .= optionalValue options,"payload" .= payload]
+  toJSON (StatefulContracts config options payload position report) = object
+    ["kind" .= String "stateful","config" .= config,"options" .= optionalValue options,"payload" .= payload,
+     "position" .= position,"report" .= report]
+instance FromJSON contract => FromJSON (AcquisitionContracts contract) where
+  parseJSON value = withObject "acquisition contracts" (\fields -> do
+    kind <- fields .: "kind"
+    case kind :: Text of
+      "stateless" -> exactObject "stateless contracts" ["kind","config","options","payload"]
+        (\entry -> StatelessContracts <$> entry .: "config" <*> (entry .: "options" >>= parseOptionalValue)
+          <*> entry .: "payload") value
+      "stateful" -> exactObject "stateful contracts" ["kind","config","options","payload","position","report"]
+        (\entry -> StatefulContracts <$> entry .: "config" <*> (entry .: "options" >>= parseOptionalValue)
+          <*> entry .: "payload" <*> entry .: "position" <*> entry .: "report") value
+      _ -> fail "Unknown acquisition shape") value
+
 -- Protocol equality selects the current interface; there is no negotiation.
 protocolIdentity :: Text
 protocolIdentity = "kyyn-guest-1"
@@ -49,6 +108,7 @@ data DescribedContract = DescribedContract
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
+  | AcquisitionEntry { entryName :: Text, acquisitionConnector :: ConnectorIdentity, acquisitionContracts :: AcquisitionContracts contract }
   | CapturedReadEntry { entryName :: Text, capturedMethod :: CapturedMethodIdentity, capturedContracts :: CapturedContracts contract }
   | ContractEntry { entryName :: Text, describedContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
@@ -100,6 +160,8 @@ instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
   toJSON (QueryEntry name (QueryContracts root arguments result)) = object
     ["entryName" .= name,"kind" .= String "query","root" .= root,"arguments" .= arguments,"result" .= result]
+  toJSON (AcquisitionEntry name connector contracts) = object
+    ["entryName" .= name,"kind" .= String "acquisition","connector" .= connector,"contracts" .= contracts]
   toJSON (CapturedReadEntry name method (CapturedContracts arguments payload result)) = object
     ["entryName" .= name,"kind" .= String "capturedRead","method" .= method,
      "arguments" .= arguments,"payload" .= payload,"result" .= result]
@@ -113,6 +175,8 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
       "query" -> exactObject "query entry" ["entryName","kind","root","arguments","result"]
         (\entry -> QueryEntry <$> entry .: "entryName" <*> (QueryContracts
           <$> entry .: "root" <*> entry .: "arguments" <*> entry .: "result")) value
+      "acquisition" -> exactObject "acquisition entry" ["entryName","kind","connector","contracts"]
+        (\entry -> AcquisitionEntry <$> entry .: "entryName" <*> entry .: "connector" <*> entry .: "contracts") value
       "capturedRead" -> exactObject "captured read entry" ["entryName","kind","method","arguments","payload","result"]
         (\entry -> CapturedReadEntry <$> entry .: "entryName" <*> entry .: "method" <*> (CapturedContracts
           <$> entry .: "arguments" <*> entry .: "payload" <*> entry .: "result")) value

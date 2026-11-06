@@ -76,6 +76,15 @@ buildRoot compiler libdir generated basePackages destination selection = do
         identity = "(CapturedMethodIdentity " ++ unwords (map show
           [plugin.pluginName,connector,method.methodName,method.methodDescription]) ++ ")"
     pure (implementation,"capturedReadEntry " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack method.implementation)
+  acquisitionEntries <- forM
+    [(plugin,connector) | RegisteredPlugin plugin connectors <- registrations, connector@P.SourceConnector{} <- connectors] $
+      \(plugin,connector) -> do
+        implementation <- either fail pure (qualifiedReference False connector.fetch)
+        (sources,_) <- inspectExports libdir (roots ++ [generated]) packages [Text.unpack (referenceModule implementation)]
+        let name = "$acquisition." <> plugin.pluginName <> "." <> connector.name
+            identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector.name ++ ")"
+        pure (implementation,"acquisitionEntry " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack connector.fetch)
+  let pluginEntries = capturedEntries ++ acquisitionEntries
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
   unless (selection /= RootEntries || (null manifest.tools && null manifest.outputs))
     (fail "Guest build: tool and output adapters are not implemented yet")
@@ -86,7 +95,7 @@ buildRoot compiler libdir generated basePackages destination selection = do
   rootSources <- prepareRoot compiler libdir generated packages roots manifest
   let selectedModules = nub (rootModules ++ [moduleName manifest.validator | selection == RootEntries] ++ concat
         [[moduleName q.queryImplementation,moduleName q.inputType,moduleName q.inputMetadata,
-          moduleName q.resultType,moduleName q.resultMetadata] | q <- selectedQueries] ++ map (moduleName . fst) capturedEntries)
+          moduleName q.resultType,moduleName q.resultMetadata] | q <- selectedQueries] ++ map (moduleName . fst) pluginEntries)
   (_,exports) <- inspectExports libdir (roots ++ [generated]) packages selectedModules
   querySources <- forM selectedQueries $ \q -> do
     (arguments,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName q.inputType]
@@ -106,7 +115,7 @@ buildRoot compiler libdir generated basePackages destination selection = do
       "    _ -> fail \"Unexpected guest arguments\"",
       "selected :: [Either ProjectionError Entry]", "selected = [" ++
       intercalate ",\n  "
-        (rootEntry : map snd capturedEntries ++
+        (rootEntry : map snd pluginEntries ++
          ["queryEntry @" ++ name manifest.schemaType ++ " @" ++ name q.inputType ++ " @" ++ name q.resultType ++
           " " ++ show (Text.unpack q.queryName) ++
           " (" ++ name manifest.schemaMetadata ++ "," ++ show rootSources ++ ")" ++

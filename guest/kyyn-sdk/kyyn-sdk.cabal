@@ -54,7 +54,7 @@ library runtime
     Kyyn.Runtime.Sink
     Kyyn.Runtime.Transport
     Kyyn.Runtime.Validation
-  other-modules: Kyyn.Runtime.Entry
+  other-modules: Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-types,

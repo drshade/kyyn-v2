@@ -15,6 +15,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Kyyn.Types.Plugin (Connector(..), CapturedMethod(..))
 import qualified Kyyn.Plugin as Plugin
+import Kyyn.Plugin.Host (Acquisition)
 import Kyyn.Runtime.PluginRegistration (encodeConnectors)
 import qualified Kyyn.Domain.Guest as Host
 import Data.Fixed (Fixed, E2)
@@ -53,9 +54,10 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
+    ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
-    ["--captured-built",path] -> checkCaptured (path,[])
+    ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[])
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
     ["--api-built",path] -> checkApi False (path,[])
@@ -64,6 +66,7 @@ main = do
       path <- getExecutablePath
       check (path,["--guest"])
       checkCaptured (path,["--captured-guest"])
+      checkAcquisition (path,["--acquisition-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
 
 checkApi :: Bool -> (FilePath,[String]) -> IO ()
@@ -259,3 +262,50 @@ checkRequests = do
     object ["arguments" .= object [],"snapshot" .= ("id" :: String),"extra" .= True]] $ \value ->
       unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.CapturedInvocation))
         (fail "Malformed shared captured invocation accepted")
+
+acquisitionGuest :: IO ()
+acquisitionGuest = runGuest []
+  [acquisitionEntry "$acquisition.local-file.Files" (G.ConnectorIdentity "local-file" "Files") [] fetch,
+   acquisitionEntry "$acquisition.local-file.Options" (G.ConnectorIdentity "local-file" "Options") [] fetchOptions,
+   acquisitionEntry "$acquisition.local-file.State" (G.ConnectorIdentity "local-file" "State") [] fetchState,
+   acquisitionEntry "$acquisition.local-file.StateOptions" (G.ConnectorIdentity "local-file" "StateOptions") [] fetchStateOptions]
+  where
+    fetch :: Integer -> Plugin.EvidenceSnapshot Item -> Acquisition Item (Either Plugin.FetchError [Plugin.EvidenceChange Item])
+    fetch _ _ = pure (Right [])
+    fetchOptions :: Integer -> Maybe Integer -> Plugin.EvidenceSnapshot Item -> Acquisition Item (Either Plugin.FetchError [Plugin.EvidenceChange Item])
+    fetchOptions _ _ _ = pure (Right [])
+    fetchState :: Integer -> Plugin.FetchContext Integer -> Plugin.EvidenceSnapshot Item
+      -> Acquisition Item (Either Plugin.FetchError (Plugin.FetchResult Item Integer Integer))
+    fetchState config (Plugin.FetchContext _ prior) _ = pure (Right (Plugin.FetchResult [] (config + maybe 0 id prior) 5))
+    fetchStateOptions :: Integer -> Maybe Integer -> Plugin.FetchContext Integer -> Plugin.EvidenceSnapshot Item
+      -> Acquisition Item (Either Plugin.FetchError (Plugin.FetchResult Item Integer Integer))
+    fetchStateOptions config options = fetchState (config + maybe 0 id options)
+
+checkAcquisition :: (FilePath,[String]) -> IO ()
+checkAcquisition executable = do
+  descriptionValue <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  unless (length [() | G.AcquisitionEntry{} <- description.entries] == 4) (fail "Missing acquisition shapes")
+  let input = G.AcquisitionInvocation (String "10") Nothing Nothing "snapshot-1" 1
+      context = G.AcquisitionContext "2026-11-06T12:00:00Z" (Just (String "7"))
+      completed result = object ["tag" .= ("Completed" :: String),"result" .= object ["tag" .= ("Right" :: String),"value" .= result]]
+      state position = object ["changes" .= ([] :: [Value]),"position" .= (position :: String),"report" .= ("5" :: String)]
+  forM_ [("$acquisition.local-file.Files",input,Array mempty),
+    ("$acquisition.local-file.Options",input { G.acquisitionOptions = Just (String "3") },Array mempty),
+    ("$acquisition.local-file.State",input { G.acquisitionContext = Just context },state "17"),
+    ("$acquisition.local-file.StateOptions",input { G.acquisitionOptions = Just (String "3"),G.acquisitionContext = Just context },state "20")] $
+      \(name,arguments,expected) -> do
+        result <- invoke executable (toJSON (G.Invoke name (toJSON arguments)))
+        unless (result == completed expected) (fail ("Wrong normalized acquisition result: " ++ show result))
+  forM_ [("$acquisition.local-file.Files",input { G.acquisitionOptions = Just (String "3") }),
+    ("$acquisition.local-file.Files",input { G.acquisitionContext = Just context }),
+    ("$acquisition.local-file.State",input),
+    ("$acquisition.local-file.Files",input { G.acquisitionConfig = String "bad" }),
+    ("$acquisition.local-file.Options",input { G.acquisitionOptions = Just (String "bad") }),
+    ("$acquisition.local-file.State",input { G.acquisitionContext = Just (G.AcquisitionContext "now" (Just (String "bad"))) }),
+    ("$acquisition.local-file.Files",input { G.acquisitionConcurrency = 0 }),
+    ("$acquisition.local-file.Files",input { G.acquisitionConcurrency = 9 })] $ \(name,arguments) -> do
+      (status,_,_) <- call executable (toJSON (G.Invoke name (toJSON arguments)))
+      unless (status /= ExitSuccess) (fail "Malformed or inapplicable acquisition arguments accepted")
+  putStrLn "All four acquisition shapes normalize and reject invalid arguments."
