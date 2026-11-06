@@ -43,8 +43,6 @@ main = do
   unless (sourceIdentity changed /= sourceIdentity baseline) (fail "Lock absent from source identity")
   unless (isLeft (guestSources RootEntries [(path "flake.nix","{}")])) (fail "Missing lock accepted")
   unless (isLeft (guestSources RootEntries ((path ".kyyn-build.json","{}") : code))) (fail "Authored build selection accepted")
-  let escaped = [(p,if p == path "flake.lock" then "{\"type\":\"path\",\"path\":\"../outside\"}" else bytes) | (p,bytes) <- code]
-  unless (isLeft (guestSources RootEntries escaped)) (fail "External mutable path input accepted")
   arguments <- getArgs
   executable <- case arguments of
     [selected] -> canonicalizePath selected

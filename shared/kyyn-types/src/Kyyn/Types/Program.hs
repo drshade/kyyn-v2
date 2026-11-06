@@ -1,7 +1,20 @@
-{-# LANGUAGE GADTs, RankNTypes, TypeOperators #-}
-module Kyyn.Types.Program (Program(..), (:+:)(..), request, concurrently, concurrentlyE, interpretProgram) where
+{-# LANGUAGE GADTs, RankNTypes, TypeOperators, MultiParamTypeClasses, FlexibleInstances #-}
+module Kyyn.Types.Program (Program(..), (:+:)(..), Member(..), request, concurrently, concurrentlyE, interpretProgram) where
 
 data (left :+: right) a = InLeft (left a) | InRight (right a)
+infixr 5 :+:
+
+-- | Inject a capability into its selected request row. Helpers depend on the
+-- capability they need rather than the position of that capability in a sum.
+class Member effect row where
+  inject :: effect a -> row a
+
+instance {-# OVERLAPPING #-} Member effect effect where
+  inject = id
+instance {-# OVERLAPPING #-} Member effect (effect :+: rest) where
+  inject = InLeft
+instance {-# OVERLAPPABLE #-} Member effect rest => Member effect (other :+: rest) where
+  inject = InRight . inject
 
 -- | A result or a capability request with a continuation. Compose requests using do notation.
 data Program request a where

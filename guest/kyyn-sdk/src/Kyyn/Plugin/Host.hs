@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeOperators, DuplicateRecordFields #-}
+{-# LANGUAGE TypeOperators, DuplicateRecordFields, FlexibleContexts #-}
 module Kyyn.Plugin.Host
   ( NetworkHost, Acquisition, PluginLogin, HttpRequest(..), HttpResponse(..), HttpError(..), SecretError(..), LoginError(..)
   , sendHttp, getSecret, putSecret, waitSeconds, displayInstructions, listFiles, readTextFile
@@ -19,39 +19,39 @@ type NetworkHost rest = Program (Http :+: (Secrets :+: (Waiting :+: rest)))
 type Acquisition payload = NetworkHost (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))
 
 -- | Lowercase SHA-256 of each input's exact UTF-8 bytes, preserving list order.
-digestText :: [Text] -> Acquisition payload [Text]
-digestText = Program.request . InRight . InRight . InRight . InRight . InRight . InLeft . DigestText
+digestText :: Member ContentDigest row => [Text] -> Program row [Text]
+digestText = Program.request . inject . DigestText
 
 -- | Download directly into the selected instance's host-side blob store.
-storeBlob :: BlobDownload -> Acquisition payload (Either FetchError BlobResponse)
-storeBlob = Program.request . InRight . InRight . InRight . InRight . InLeft . StoreBlob
+storeBlob :: Member BlobAcquisition row => BlobDownload -> Program row (Either FetchError BlobResponse)
+storeBlob = Program.request . inject . StoreBlob
 -- | An explicit login program that can display instructions to the user.
 type PluginLogin = NetworkHost LoginInteraction
 
 -- | Enumerate paths relative to a directory, itself KB-relative or absolute.
-listFiles :: FilePath -> Bool -> Acquisition payload (Either FetchError [FilePath])
-listFiles directory recursive = Program.request (InRight (InRight (InRight (InLeft (ListFiles directory recursive)))))
+listFiles :: Member FileRead row => FilePath -> Bool -> Program row (Either FetchError [FilePath])
+listFiles directory recursive = Program.request (inject (ListFiles directory recursive))
 
 -- | Capture source text and its fingerprint together.
-readTextFile :: FilePath -> Acquisition payload (Either FetchError CapturedText)
-readTextFile path = Program.request (InRight (InRight (InRight (InLeft (ReadTextFile path)))))
+readTextFile :: Member FileRead row => FilePath -> Program row (Either FetchError CapturedText)
+readTextFile path = Program.request (inject (ReadTextFile path))
 
 -- | Send a text request; the caller handles HTTP status codes and retry policy.
-sendHttp :: HttpRequest -> Program (Http :+: rest) (Either HttpError HttpResponse)
-sendHttp = Program.request . InLeft . SendHttp
+sendHttp :: Member Http row => HttpRequest -> Program row (Either HttpError HttpResponse)
+sendHttp = Program.request . inject . SendHttp
 
 -- | Read a named secret from this KB's local store.
-getSecret :: Text -> Program (Http :+: (Secrets :+: rest)) (Either SecretError Text)
-getSecret = Program.request . InRight . InLeft . GetSecret
+getSecret :: Member Secrets row => Text -> Program row (Either SecretError Text)
+getSecret = Program.request . inject . GetSecret
 
 -- | Replace a named secret, including a rotated refresh token.
-putSecret :: Text -> Text -> Program (Http :+: (Secrets :+: rest)) ()
-putSecret key = Program.request . InRight . InLeft . PutSecret key
+putSecret :: Member Secrets row => Text -> Text -> Program row ()
+putSecret key = Program.request . inject . PutSecret key
 
 -- | Wait a nonnegative number of seconds. Cancellation interrupts the wait.
-waitSeconds :: Int -> Program (Http :+: (Secrets :+: (Waiting :+: rest))) ()
-waitSeconds = Program.request . InRight . InRight . InLeft . WaitSeconds
+waitSeconds :: Member Waiting row => Int -> Program row ()
+waitSeconds = Program.request . inject . WaitSeconds
 
 -- | Show instructions during an explicitly invoked login.
-displayInstructions :: Text -> PluginLogin ()
-displayInstructions = Program.request . InRight . InRight . InRight . DisplayInstructions
+displayInstructions :: Member LoginInteraction row => Text -> Program row ()
+displayInstructions = Program.request . inject . DisplayInstructions
