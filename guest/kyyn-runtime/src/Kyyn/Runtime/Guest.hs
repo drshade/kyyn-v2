@@ -4,10 +4,9 @@ module Kyyn.Runtime.Guest (Entry, capturedReadEntry, validationEntry, queryEntry
 import Control.Monad (unless)
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
-import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
-import Data.List (nub, sort)
+import Data.List (nub)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -66,10 +65,7 @@ capturedReadEntry name method sources selected = do
       description = CapturedReadEntry name method (CapturedContracts
         (describe arguments.description) (describe payload.description) (describe result.description))
       run transport value = do
-        (input,snapshot) <- either fail pure (Json.parseEither
-          (Json.withObject "captured invocation" (\fields -> do
-            unless (sort (Keys.keys fields) == ["arguments","snapshot"]) (fail "Malformed captured invocation")
-            (,) <$> fields Json..: "arguments" <*> fields Json..: "snapshot")) value)
+        CapturedInvocation input snapshot <- either fail pure (Json.parseEither Json.parseJSON value)
         decoded <- either (fail . Text.unpack) pure (arguments.codec.decode (fromAeson input))
         executeCapturedReadAction transport (runtimeCodec payload.codec) (runtimeCodec result.codec)
           (selected decoded (EvidenceSnapshot snapshot))
@@ -102,18 +98,7 @@ runGuest exports selected = do
     unless (Bytes.null body) (fail "Unexpected invocation body")
     request <- either fail pure (Json.eitherDecodeStrict' metadata)
     case request of
-      Json.Object fields -> do
-        operation <- either fail pure (Json.parseEither (Json..: "operation") fields)
-        case operation :: Text of
-          "describe" -> do
-            unless (Keys.keys fields == ["operation"]) (fail "Description takes no arguments")
-            writeReply transport (Json.toJSON (GuestDescription protocolIdentity descriptions exports))
-          "invoke" -> do
-            unless (sort (Keys.keys fields) == ["argument","entry","operation"]) (fail "Malformed invocation")
-            name <- either fail pure (Json.parseEither (Json..: "entry") fields)
-            argument <- either fail pure (Json.parseEither (Json..: "argument") fields)
-            case [run | Entry description run <- built, description.entryName == name] of
-              [run] -> run transport argument
-              _ -> fail "Unknown guest entry"
-          _ -> fail "Unknown guest operation"
-      _ -> fail "Expected guest request object"
+      Describe -> writeReply transport (Json.toJSON (GuestDescription protocolIdentity descriptions exports))
+      Invoke name argument -> case [run | Entry description run <- built, description.entryName == name] of
+        [run] -> run transport argument
+        _ -> fail "Unknown guest entry"

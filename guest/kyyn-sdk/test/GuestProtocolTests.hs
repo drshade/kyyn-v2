@@ -95,6 +95,7 @@ checkSchema executable = do
 
 check :: (FilePath,[String]) -> IO ()
 check executable = do
+  checkRequests
   checkRegistrations
   unsupported <- try (checkEntries
     [queryEntry @Root @() @Double "unsupported" (annotations,[])
@@ -217,8 +218,7 @@ checkCaptured executable@(path,args) = do
           other -> other
     unless (isLeft (Host.checkGuest description { G.entries = map invalid description.entries }))
       (fail "Invalid plugin name in captured description accepted")
-  let invocation = object ["operation" .= ("invoke" :: String),"entry" .= ("files.count" :: String),
-        "argument" .= object ["arguments" .= object [],"snapshot" .= ("snapshot-1" :: String)]]
+  let invocation = toJSON (G.Invoke "files.count" (toJSON (G.CapturedInvocation (object []) "snapshot-1")))
       response identity = object ["tag" .= ("HostResponse" :: String),"id" .= (identity :: String),
         "result" .= object ["tag" .= ("Right" :: String),"value" .= (["one","two"] :: [String])]]
       frame value = Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))
@@ -240,3 +240,21 @@ checkCaptured executable@(path,args) = do
   (badStatus,_,_) <- run "2"
   unless (badStatus /= ExitSuccess) (fail "Mismatched callback response ID accepted")
   putStrLn "Captured entry describes contracts and exchanges callbacks on the invocation transport."
+
+checkRequests :: IO ()
+checkRequests = do
+  let requests = [G.Describe,G.Invoke "files.count" (toJSON (G.CapturedInvocation (object []) "snapshot-1"))]
+  forM_ requests $ \request -> do
+    decoded <- right (eitherDecodeStrict' (Lazy.toStrict (encode request)))
+    unless (decoded == request) (fail "Shared guest request codec changed its value")
+  forM_ [object ["operation" .= ("unknown" :: String)],
+    object ["operation" .= ("describe" :: String),"extra" .= True],
+    object ["operation" .= ("invoke" :: String),"entry" .= ("files.count" :: String)],
+    object ["operation" .= ("invoke" :: String),"entry" .= True,"argument" .= object []]] $ \value ->
+      unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestRequest))
+        (fail "Malformed shared guest request accepted")
+  forM_ [object ["arguments" .= object []],
+    object ["arguments" .= object [],"snapshot" .= Null],
+    object ["arguments" .= object [],"snapshot" .= ("id" :: String),"extra" .= True]] $ \value ->
+      unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.CapturedInvocation))
+        (fail "Malformed shared captured invocation accepted")

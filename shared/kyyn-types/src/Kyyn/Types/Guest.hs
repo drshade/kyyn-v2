@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
+  ( GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
   , QueryContracts(..), CapturedContracts(..), CapturedMethodIdentity(..), ModuleDescription(..), ExportDescription(..), ExportKind(..)
   , protocolIdentity, describeContract
   ) where
@@ -10,6 +10,30 @@ import Data.Text (Text)
 import Kyyn.Types.Contract
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 import Kyyn.Types.SchemaMetadata
+
+-- One request codec is used by the host and the executable it describes.
+data GuestRequest = Describe | Invoke Text Value deriving (Eq, Show)
+data CapturedInvocation = CapturedInvocation
+  { capturedArguments :: Value, capturedSnapshot :: Text } deriving (Eq, Show)
+
+instance ToJSON GuestRequest where
+  toJSON Describe = object ["operation" .= String "describe"]
+  toJSON (Invoke entry argument) = object
+    ["operation" .= String "invoke","entry" .= entry,"argument" .= argument]
+instance FromJSON GuestRequest where
+  parseJSON value = withObject "guest request" (\fields -> do
+    operation <- fields .: "operation"
+    case operation :: Text of
+      "describe" -> exactObject "describe request" ["operation"] (const (pure Describe)) value
+      "invoke" -> exactObject "invoke request" ["operation","entry","argument"]
+        (\request -> Invoke <$> request .: "entry" <*> request .: "argument") value
+      _ -> fail "Unknown guest operation") value
+
+instance ToJSON CapturedInvocation where
+  toJSON (CapturedInvocation arguments snapshot) = object ["arguments" .= arguments,"snapshot" .= snapshot]
+instance FromJSON CapturedInvocation where
+  parseJSON = exactObject "captured invocation" ["arguments","snapshot"] $ \fields ->
+    CapturedInvocation <$> fields .: "arguments" <*> fields .: "snapshot"
 
 -- Protocol equality selects the current interface; there is no negotiation.
 protocolIdentity :: Text
