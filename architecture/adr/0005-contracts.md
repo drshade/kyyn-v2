@@ -193,8 +193,12 @@ metadata and generates their adapters/codecs. The host has no linked guest compi
 frontend. Extract from checked declarations, not pretty-printed GHCi text, field
 names guessed at runtime or a second authored schema.
 
-The build pipeline resolves schema and registered signature dependencies before
-compiling code that imports generated bindings. It generates `KyynQueryBindings`,
+The build pipeline resolves the manifest-selected schema and input/result type
+exports before compiling code that imports generated bindings. This prepass does
+not require loading a query/flow body that already imports those bindings. The
+final compiler checks each registered implementation against the derived signature;
+a description is not published for a full build whose implementation fails that
+check. Schema/type modules must remain independent of their generated consumers. It generates `KyynQueryBindings`,
 workspace Before/After handles, FactEdits and `Kyyn.Contracts.*` inside the same
 Nix derivation, then compiles the executable with its embedded description. This
 breaks the binding dependency cycle without a host-generated-source round trip.
