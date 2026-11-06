@@ -114,7 +114,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
       acceptedTree = tree (files beforeCode ++ files factFiles)
   result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
-    . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
+    . runRootStore . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
       SourceRoot selected codeFiles _ closure <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       prepared <- openCapturedSource target >>= either (error . show) pure
       evaluateEvolution (CapturedEvolution context (Root selected factFiles codeFiles initialRecipes) closure prepared)
@@ -151,7 +151,7 @@ main = withSystemTempDirectory "kyyn-workspace-evolution" $ \temporary -> do
     (fail "Recipe scaffold does not advertise the schema and collection imports")
   recipeResults <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
     . runDhallHandling . runSchemaInspectionIO toolchain Nothing . gitMock repository revision acceptedTree
-    . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
+    . runRootStore . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runEvolutionExecution sdk $ do
       source@(SourceRoot selected codeFiles _ closure) <- loadSourceAt repository revision (Subtree (path "nested/root")) >>= either (error . show) pure
       let captured context' = CapturedEvolution context' (Root selected factFiles codeFiles initialRecipes) closure source
       (,) <$> evaluateEvolution (captured recipeContext) <*> evaluateEvolution (captured identityContext)

@@ -185,7 +185,7 @@ main = withSystemTempDirectory "kyyn-registration-" $ \temporary -> do
   initial <- right initialRootFiles
   invalidCode <- right (fileTree (files initial ++ installed ++ [(configPath,configuration "")]))
   rootResult <- runEff (runFailure (runProcessExecutionIO (runFileSystemIO scope (runDhallHandling
-    (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runPluginPreparation sdk
+    (runGuestExecution toolchain $ runGuestCompilation toolchain Nothing (runSchemaInspectionIO toolchain Nothing (runRootStore (noGit (runPluginPreparation
       (runToolPreparation sdk (runRootOpening sdk . runRootExecution sdk $ do
         opened <- openCapturedRoot invalidCode
         either (pure . Rejected . ValidationReport) checkRoot opened))))))))))) >>= right
@@ -238,7 +238,7 @@ compileFirstParty directory sources = do
 
 runPreparation :: DirectoryScope -> GuestToolchain -> FileTree -> Eff Preparation a -> IO a
 runPreparation scope toolchain sdk = (>>= right) . runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-  . runDhallHandling . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runSchemaInspectionIO toolchain Nothing . runPluginPreparation sdk
+  . runDhallHandling . runGuestExecution toolchain . runGuestCompilation toolchain Nothing . runSchemaInspectionIO toolchain Nothing . runPluginPreparation
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
 assert :: String -> Bool -> IO ()

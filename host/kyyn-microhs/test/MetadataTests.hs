@@ -187,7 +187,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
   emptyRoot <- either (fail . show) pure
     (runPureEff (runDhallHandling (runRootStore (materializeRoot emptyContract emptyCode (KB.KnowledgeBase emptyValue [])))))
   emptyResponse <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
+    . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation . runToolPreparation sdk . runRootExecution sdk $ do
       prepared <- prepareRoot emptyRoot
       either (pure . Left) validateRoot prepared
   unless (emptyResponse == Right (Right (ValidationReport [])))
@@ -199,7 +199,7 @@ integration = withSystemTempDirectory "kyyn-metadata" $ \temporary -> do
     checkedFacts <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (checkRootValue rootContract factValue))))
     validationRoot <- either (fail . show) pure (runPureEff (runDhallHandling (runRootStore (materializeRoot rootContract validationCode (KB.KnowledgeBase checkedFacts [])))))
     response <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runGuestExecution toolchain . runGuestCompilation toolchain Nothing
-      . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk $ do
+      . runDhallHandling . runSchemaInspectionIO toolchain Nothing . runRootStore . runPluginPreparation . runToolPreparation sdk . runRootExecution sdk $ do
         prepared <- prepareRoot validationRoot
         either (pure . Left) validateRoot prepared
     report <- either (fail . show) (either (fail . show) pure) response

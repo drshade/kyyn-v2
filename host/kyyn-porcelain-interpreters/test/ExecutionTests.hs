@@ -40,7 +40,7 @@ executionTests contract facts = withSystemTempDirectory "kyyn-root-execution" $ 
       root = Root contract facts code []
       entry = fixtureProgram
       execute sdkFiles compilation selected = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-        . runFixtureExecution shell . compileMock compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparation sdkFiles . runToolPreparation sdkFiles . runRootExecution sdkFiles $ do
+        . runFixtureExecution shell . compileMock compilation . noInspection . runDhallHandling . runRootStore . runPluginPreparationFiles . runToolPreparation sdkFiles . runRootExecution sdkFiles $ do
           prepared <- prepareRoot selected
           either (pure . Left) validateRoot prepared
       unexpected = error "Invalid root reached compilation"

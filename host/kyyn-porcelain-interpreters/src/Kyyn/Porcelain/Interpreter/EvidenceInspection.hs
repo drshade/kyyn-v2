@@ -16,10 +16,9 @@ import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Git (TreePath(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (relativePath, relativeName)
-import Kyyn.Domain.Plugin (ConnectorName(..), pluginNameText, manifestName, entryModule)
+import Kyyn.Domain.Plugin (ConnectorName(..), pluginNameText, manifestName, packageIdentity)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, inferValue)
 import qualified Kyyn.Plumbing.Capability.Git as Git
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, packageIdentity)
 import Kyyn.Plumbing.Protocol.Plugin (decodeManifest)
 import Kyyn.Plumbing.Protocol.ConnectorConfig (decodeInstances)
 import Kyyn.Porcelain.Capability.RootStore (rootLocation)
@@ -41,9 +40,7 @@ runEvidenceInspection = interpret $ \_ request -> case request of
       (lookup manifestPath (files tree))
     manifest <- ExceptT (decodeManifest bytes)
     unless (manifestName manifest == plugin) (throwE [errorDiagnostic "plugin.manifest-name" "Installed plugin manifest name differs from its directory"])
-    entry <- checked (relativePath ("src/" ++ map (\c -> if c == '.' then '/' else c) (entryModule manifest) ++ ".hs"))
-    source <- checked (guestSources entry (files tree))
-    let identity = packageIdentity source
+    let identity = packageIdentity tree
     configPath <- checked (relativePath (base ++ "config/" ++ label ++ ".dhall"))
     configuration <- ExceptT (Git.readFileAt repository revision configPath) >>= maybe
       (throwE [errorDiagnostic "plugin.instance-unknown" "No instances configured for this plugin"]) pure

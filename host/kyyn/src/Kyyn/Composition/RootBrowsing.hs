@@ -26,7 +26,7 @@ import Kyyn.Types.Fact (Fact(..), FactId(..))
 dispatchSchema :: Host -> Cli.SchemaCommand -> SelectedKb -> IO Response
 dispatchSchema host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
   fmap (fmap (either refusal (browsingContext revision workspace))) $
-    runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+    runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk
       . runRootOpening sdk . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
       SourceRoot contract _ _ _ <- ExceptT (Root.sourceRootAt kb revision workspace)
       case command of
@@ -41,7 +41,7 @@ dispatchSchema host command (SelectedKb kb revision _) = withRuntime host $ \too
 dispatchCollection :: Host -> Cli.CollectionCommand -> SelectedKb -> IO Response
 dispatchCollection host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
   fmap (fmap (either refusal (browsingContext revision workspace))) $
-    runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+    runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk
       . runRootOpening sdk . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
       SourceRoot contract _ _ _ <- ExceptT (Root.sourceRootAt kb revision workspace)
       case command of
@@ -54,7 +54,7 @@ dispatchCollection host command (SelectedKb kb revision _) = withRuntime host $ 
 
 dispatchFacts :: Host -> Cli.FactCommand -> SelectedKb -> IO Response
 dispatchFacts host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
-  runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ do
+  runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ do
     checked <- Root.checkRootAt kb revision
     case checked of
       Rejected (ValidationReport diagnostics) -> pure (refusal diagnostics)

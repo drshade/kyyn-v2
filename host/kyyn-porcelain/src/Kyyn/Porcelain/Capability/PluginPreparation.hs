@@ -7,7 +7,7 @@ import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Data.Coerce (coerce)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
-import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.CompiledEntry (CompiledEntry)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic, ValidationReport, errorDiagnostic)
 import Kyyn.Domain.FileTree (FileTree)
@@ -18,32 +18,32 @@ data PreparedConnector = PreparedConnector
   { connectorType :: ConnectorTypeName
   , configContract :: CheckedContract
   , payloadContract :: CheckedContract
-  , fetchEntry :: CompiledProgram
-  , validationEntry :: CompiledProgram
+  , fetchEntry :: CompiledEntry
+  , validationEntry :: CompiledEntry
   , methods :: [PreparedMethod]
   , fetchOptionsContract :: Maybe CheckedContract
-  , loginEntry :: Maybe CompiledProgram
+  , loginEntry :: Maybe CompiledEntry
   , syncPositionContract :: Maybe CheckedContract
   , reportContract :: Maybe CheckedContract
   }
   | PreparedSinkConnector
   { connectorType :: ConnectorTypeName
   , configContract :: CheckedContract
-  , validationEntry :: CompiledProgram
+  , validationEntry :: CompiledEntry
   , sinkInputContract :: CheckedContract
   , sinkOptionsContract :: CheckedContract
   , sinkResultContract :: CheckedContract
-  , sinkEntry :: CompiledProgram
+  , sinkEntry :: CompiledEntry
   , sinkDefaultOptions :: CheckedValue
   }
   deriving (Eq, Show)
-data PreparedMethod = PreparedMethod MethodName String CheckedContract CheckedContract CompiledProgram deriving (Eq, Show)
+data PreparedMethod = PreparedMethod MethodName String CheckedContract CheckedContract CompiledEntry deriving (Eq, Show)
 data ConfiguredConnector = ConfiguredConnector ConnectorName BindingName PreparedConnector CheckedValue deriving (Eq, Show)
 data PreparedPackage = PreparedPackage PluginName PackageIdentity [PreparedConnector] deriving (Eq, Show)
 data PreparedPlugin = PreparedPlugin PreparedPackage [ConfiguredConnector] deriving (Eq, Show)
 
 sourceDetails :: PreparedConnector -> Either [Diagnostic]
-  (ConnectorTypeName,CheckedContract,CompiledProgram,[PreparedMethod],Maybe CheckedContract,Maybe CompiledProgram,Maybe CheckedContract,Maybe CheckedContract)
+  (ConnectorTypeName,CheckedContract,CompiledEntry,[PreparedMethod],Maybe CheckedContract,Maybe CompiledEntry,Maybe CheckedContract,Maybe CheckedContract)
 sourceDetails PreparedConnector {connectorType = kind,payloadContract = payload,fetchEntry = entry,methods = ms,
   fetchOptionsContract = options,loginEntry = login,syncPositionContract = position,reportContract = report} = Right (kind,payload,entry,ms,options,login,position,report)
 sourceDetails PreparedSinkConnector{} = Left [errorDiagnostic "plugin.source-required" "This operation requires a source connector, not a sink."]

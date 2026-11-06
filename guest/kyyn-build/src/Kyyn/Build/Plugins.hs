@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Build.Plugins
-  ( PluginSource(..), RegisteredPlugin(..), discoverPlugins, bootstrapPlugins ) where
+  ( PluginSource(..), RegisteredPlugin(..), installedPluginRoots, discoverPlugins, bootstrapPlugins ) where
 
 import Control.Monad (unless, forM, forM_, void)
 import Data.Aeson (eitherDecodeStrict')
@@ -20,6 +20,14 @@ data PluginSource = PluginSource
   { pluginName :: Text, entryModule :: Text, sourceRoot :: FilePath }
   deriving (Eq, Show)
 data RegisteredPlugin = RegisteredPlugin PluginSource [P.Connector] deriving (Eq, Show)
+
+installedPluginRoots :: IO [FilePath]
+installedPluginRoots = do
+  let packages = "plugins/packages"
+  exists <- doesDirectoryExist packages
+  if not exists then pure [] else do
+    names <- sort <$> listDirectory packages
+    pure [packages </> name </> "source/src" | name <- names]
 
 discoverPlugins :: IO [PluginSource]
 discoverPlugins = do

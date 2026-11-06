@@ -52,7 +52,7 @@ import Kyyn.Surfaces.Result (Response(..), refusal)
 type Discovery = Evolution.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host toolchain sdk = runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+runDiscovery host toolchain sdk = runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk
   . runRootOpening sdk . runWorkspaceStore . runEvolutionStore
 
 dispatchConnectors :: Host -> Cli.ConnectorCommand -> SelectedKb -> IO Response
@@ -60,7 +60,7 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
   Cli.LoginConnector plugin name -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runHttpTransportIO . runSecretStoreIO scope
-      . runWaitingIO . runLoginInteractionIO . runPluginPreparation sdk . runToolPreparation sdk
+      . runWaitingIO . runLoginInteractionIO . runPluginPreparation . runToolPreparation sdk
       . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginLogin $ runExceptT $ do
         ValidationReport warnings <- ExceptT (loginConfiguredConnector kb revision plugin name)
         let Response outcome result humanLines diagnostics = loginResult plugin name
@@ -87,7 +87,7 @@ dispatchConnectors host command (SelectedKb kb revision _) = withRuntime host $ 
   Cli.ExecuteConnectorMethod plugin name method inputText -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
-      . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginRead $ runExceptT $ do
+      . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runPluginRead $ runExceptT $ do
         (selection,payload,selected@(PreparedMethod _ _ input output _)) <-
           ExceptT (selectConnectorMethod kb revision Nothing plugin name method)
         value <- ExceptT (decodeValue (contractShape input) (Text.pack inputText))
@@ -113,7 +113,7 @@ dispatchEvidence host@(Host _ _ _ _ _ _ timings) command (SelectedKb kb revision
           Right scope -> respond $ runRuntime host toolchain . runDocumentPersistenceIO
             . runBlobStorageIO scope . observeBlobs sync . runEvidenceStore scope . observeEvidence sync . runFileAcquisitionIO
             . runHttpTransportIO . observeHttp sync . runSecretStoreIO scope . runWaitingIO . observeWaiting sync
-            . runContentDigest . runConcurrentExecutionObserved width (observeConcurrent sync) . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk
+            . runContentDigest . runConcurrentExecutionObserved width (observeConcurrent sync) . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk
             . runEvidenceAcquisition scope . observeAcquisition sync $ runExceptT $ do
               (snapshot,ValidationReport warnings) <- ExceptT (fetchConfiguredConnector kb revision plugin name options mode)
               let Response outcome result humanLines diagnostics = fetchResult snapshot

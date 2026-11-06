@@ -5,7 +5,7 @@ module Kyyn.Porcelain.Capability.Tool
 import Data.Aeson (Value)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.CompiledEntry (CompiledEntry)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Model (ModelConfiguration)
@@ -14,7 +14,7 @@ import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Blob (ResolvedBlob)
 import Kyyn.Porcelain.Capability.PluginPreparation (PreparedPlugin)
 
-data PreparedTool = PreparedTool ToolDescriptor CompiledProgram [PreparedPlugin] (Maybe ModelConfiguration) deriving (Eq, Show)
+data PreparedTool = PreparedTool ToolDescriptor CompiledEntry [PreparedPlugin] (Maybe ModelConfiguration) deriving (Eq, Show)
 
 data ToolPreparation :: Effect where
   PrepareTools :: FileTree -> [PreparedPlugin] -> ToolPreparation m (Either [Diagnostic] [PreparedTool])

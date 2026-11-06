@@ -1,5 +1,5 @@
 module Kyyn.Domain.Plugin
-  ( PluginName, pluginName, pluginNameText, PackageIdentity(..)
+  ( PluginName, pluginName, pluginNameText, PackageIdentity(..), packageIdentity
   , PluginSource(..), pluginSource, PluginManifest, pluginManifest, manifestName, entryModule
   , PluginRepository(..), PluginOrigin(..), InstalledPlugin(..)
   , PluginDescription(..), PluginGuide(..)
@@ -8,15 +8,34 @@ module Kyyn.Domain.Plugin
   , PluginEntryKind(..), PluginSignature(..), expectedPluginSignature, bindingModule
   ) where
 
+import qualified Crypto.Hash.SHA256 as SHA256
+import qualified Data.ByteString as Bytes
+import qualified Data.ByteString.Builder as Builder
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
+import Numeric (showHex)
+import Kyyn.Domain.FileTree (FileTree, files)
 import Data.Char (isAlphaNum, isUpper, isAsciiLower, isAsciiUpper, isDigit)
 import Data.List (isInfixOf, isPrefixOf, isSuffixOf)
 import Kyyn.Domain.Git (TreePath, GitRevision, GitUrl, gitUrl)
 import Kyyn.Domain.DataType (DataType)
-import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath)
+import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopePath, relativeName)
 import System.FilePath (isAbsolute, (</>))
 
 newtype PluginName = PluginName String deriving (Eq, Show)
 newtype PackageIdentity = PackageIdentity String deriving (Eq, Show)
+-- Installed package provenance is independent of the selected compiler entry.
+-- Build identity separately captures the complete KB source and locked environment.
+packageIdentity :: FileTree -> PackageIdentity
+packageIdentity tree = PackageIdentity (concatMap hex (Bytes.unpack digest))
+  where
+    digest = SHA256.hash . Lazy.toStrict . Builder.toLazyByteString $
+      Builder.byteString (Text.encodeUtf8 (Text.pack "kyyn-plugin-source\0")) <>
+      foldMap (\(path,bytes) -> framed (Text.encodeUtf8 (Text.pack (relativeName path))) <> framed bytes) (files tree)
+    framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes
+    hex byte = let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits
+
 newtype ConnectorTypeName = ConnectorTypeName String deriving (Eq, Show)
 newtype BindingName = BindingName String deriving (Eq, Show)
 newtype MethodName = MethodName String deriving (Eq, Show)

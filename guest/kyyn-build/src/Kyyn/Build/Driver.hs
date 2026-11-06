@@ -29,10 +29,12 @@ buildGuest compiler source output = do
     selection <- if hasSelection then Bytes.readFile ".kyyn-build.json" >>= either fail pure . eitherDecodeStrict'
       else pure RootEntries
     libdir <- readProcess compiler ["--print-libdir"] "" >>= singleLine "compiler libdir"
-    packages <- packageOptions libdir
-    let generated = ".kyyn-generated"
+    basePackages <- packageOptions libdir
+    roots <- ("src" :) <$> installedPluginRoots
+    let packages = basePackages ++ map ("-i" ++) roots
+        generated = ".kyyn-generated"
     occupied <- or <$> traverse doesFileExist
-      ["src" </> moduleName ++ extension | moduleName <- ["KyynQueryBindings","KyynGuestSchemaEntry","KyynGuestEntry","KyynGuestRegistrations"],
+      [root </> moduleName ++ extension | root <- roots, moduleName <- ["KyynQueryBindings","KyynGuestSchemaEntry","KyynGuestEntry","KyynGuestRegistrations"],
         extension <- [".hs",".lhs"]]
     unless (not occupied) (fail "Authored source collides with a generated guest module")
     existing <- doesPathExist generated
@@ -41,32 +43,31 @@ buildGuest compiler source output = do
     case selection of
       DiscoveryEntries (ModuleExports modules) -> do
         let selectedModules = map Text.unpack modules
-        needsRoot <- needsRootBindings libdir ["src"] packages selectedModules
+        needsRoot <- needsRootBindings libdir roots packages selectedModules
         when needsRoot $ do
           manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
-          _ <- prepareRoot compiler libdir generated packages ["src"] manifest
+          _ <- prepareRoot compiler libdir generated packages roots manifest
           pure ()
-        (_,exports) <- inspectExports libdir ["src",generated] packages selectedModules
-        writeFile (generated </> "KyynGuestEntry.hs") (unlines
-          ["{-# LANGUAGE OverloadedStrings #-}","module KyynGuestEntry where", "import Kyyn.Runtime.Guest",
-           "import Kyyn.Types.Guest", "import System.Environment (getArgs)",
-           "main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
-           "    [\"--check-build\"] -> checkEntries []",
-           "    [] -> runGuest " ++ showExports exports ++ " []",
-           "    _ -> fail \"Unexpected guest arguments\""])
+        (_,exports) <- inspectExports libdir (roots ++ [generated]) packages selectedModules
+        writeGuest generated exports [] []
         finishGuest compiler generated packages destination
-      RootEntries -> buildRoot compiler libdir generated packages destination selection
-      DiscoveryEntries RootSchema -> buildRoot compiler libdir generated packages destination selection
+      PluginEntries -> do
+        (_,pluginPackages,entries) <- preparePlugins compiler libdir generated basePackages
+        let modules = nub (map (Text.unpack . referenceModule . fst) entries)
+        (_,exports) <- inspectExports libdir (roots ++ [generated]) pluginPackages modules
+        writeGuest generated exports modules (map snd entries)
+        finishGuest compiler generated pluginPackages destination
+      RootEntries -> buildRoot compiler libdir generated basePackages destination selection
+      DiscoveryEntries RootSchema -> buildRoot compiler libdir generated basePackages destination selection
       EvolutionEntry -> fail "Evolution guest build is not implemented yet"
 
-buildRoot :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> GuestSelection -> IO ()
-buildRoot compiler libdir generated basePackages destination selection = do
+preparePlugins :: FilePath -> FilePath -> FilePath -> [String]
+  -> IO ([FilePath],[String],[(Reference,String)])
+preparePlugins compiler libdir generated basePackages = do
   plugins <- discoverPlugins
   let roots = "src" : map sourceRoot plugins
       packages = basePackages ++ map ("-i" ++) roots
-  registrations <- if selection == RootEntries
-    then bootstrapPlugins (\pluginRoots -> compile compiler generated "registrations" (basePackages ++ map ("-i" ++) pluginRoots)) generated plugins
-    else pure []
+  registrations <- bootstrapPlugins (\pluginRoots -> compile compiler generated "registrations" (basePackages ++ map ("-i" ++) pluginRoots)) generated plugins
   let captured = [(plugin,connector.name,method) | RegisteredPlugin plugin connectors <- registrations,
         connector@P.SourceConnector{} <- connectors, method <- connector.methods]
   capturedEntries <- forM captured $ \(plugin,connector,method) -> do
@@ -97,7 +98,15 @@ buildRoot compiler libdir generated basePackages destination selection = do
     let name = "$" <> role <> "." <> plugin.pluginName <> "." <> connector
         identity = "(ConnectorIdentity " ++ show plugin.pluginName ++ " " ++ show connector ++ ")"
     pure (implementation,factory ++ " " ++ show name ++ " " ++ identity ++ " " ++ show sources ++ " " ++ Text.unpack reference)
-  let pluginEntries = capturedEntries ++ acquisitionEntries ++ ordinaryEntries
+  pure (roots,packages,capturedEntries ++ acquisitionEntries ++ ordinaryEntries)
+
+buildRoot :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> GuestSelection -> IO ()
+buildRoot compiler libdir generated basePackages destination selection = do
+  roots <- ("src" :) <$> installedPluginRoots
+  let packages = basePackages ++ map ("-i" ++) roots
+  pluginEntries <- if selection == RootEntries
+    then do (_,_,entries) <- preparePlugins compiler libdir generated basePackages; pure entries
+    else pure []
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
   unless (selection /= RootEntries || (null manifest.tools && null manifest.outputs))
     (fail "Guest build: tool and output adapters are not implemented yet")
@@ -117,25 +126,26 @@ buildRoot compiler libdir generated basePackages destination selection = do
   let rootEntry = if selection == RootEntries
         then "validationEntry @" ++ name manifest.schemaType ++ " " ++ name manifest.schemaMetadata ++ " " ++ show rootSources ++ " " ++ name manifest.validator
         else "describeEntry @" ++ name manifest.schemaType ++ " \"root\" " ++ name manifest.schemaMetadata ++ " " ++ show rootSources
-  writeFile (generated </> "KyynGuestEntry.hs") (unlines
-    (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
-      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Contract (ProjectionError)",
-      "import System.Environment (getArgs)"] ++
-     map ("import qualified " ++) selectedModules ++
-     ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
-      "    [\"--check-build\"] -> checkEntries selected",
-      "    [] -> runGuest " ++ showExports exports ++ " selected",
-      "    _ -> fail \"Unexpected guest arguments\"",
-      "selected :: [Either ProjectionError Entry]", "selected = [" ++
-      intercalate ",\n  "
-        (rootEntry : map snd pluginEntries ++
+  writeGuest generated exports selectedModules (rootEntry : map snd pluginEntries ++
          ["queryEntry @" ++ name manifest.schemaType ++ " @" ++ name q.inputType ++ " @" ++ name q.resultType ++
           " " ++ show (Text.unpack q.queryName) ++
           " (" ++ name manifest.schemaMetadata ++ "," ++ show rootSources ++ ")" ++
           " (" ++ name q.inputMetadata ++ "," ++ show arguments ++ ")" ++
           " (" ++ name q.resultMetadata ++ "," ++ show results ++ ") " ++ name q.queryImplementation
-            | (q,arguments,results) <- querySources]) ++ "]"]))
+            | (q,arguments,results) <- querySources])
   finishGuest compiler generated packages destination
+
+writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
+writeGuest generated exports modules entries =
+  writeFile (generated </> "KyynGuestEntry.hs") (unlines
+    (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
+      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Contract (ProjectionError)",
+      "import System.Environment (getArgs)"] ++ map ("import qualified " ++) modules ++
+     ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
+      "    [\"--check-build\"] -> checkEntries selected",
+      "    [] -> runGuest " ++ showExports exports ++ " selected",
+      "    _ -> fail \"Unexpected guest arguments\"",
+      "selected :: [Either ProjectionError Entry]", "selected = [" ++ intercalate ",\n  " entries ++ "]"]))
 
 prepareRoot :: FilePath -> FilePath -> FilePath -> [String] -> [FilePath] -> Manifest -> IO [FilePath]
 prepareRoot compiler libdir generated packages roots manifest = do

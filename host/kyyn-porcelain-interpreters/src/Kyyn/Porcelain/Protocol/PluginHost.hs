@@ -1,10 +1,9 @@
 module Kyyn.Porcelain.Protocol.PluginHost (answerNetwork, answerLogin, executeAcquisition, executeLogin) where
 
-import Data.Aeson (Value, encode, toJSON, parseJSON)
+import Data.Aeson (Value, toJSON, parseJSON)
 import Data.Aeson.Types (Parser)
 import qualified Data.ByteString as Bytes
 import Control.Monad (unless)
-import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Kyyn.Plumbing.Capability.Failure (Failure)
@@ -17,9 +16,9 @@ import Kyyn.Plumbing.Protocol.PluginMessages (PluginFrame(..), decodeFrameWith, 
 import Kyyn.Plumbing.Protocol.Frame (Frame(..))
 import Kyyn.Porcelain.Protocol.PluginBroker (protocolFailure, conversationWithBody, conversationAcquisition, answerAcquisition)
 import Kyyn.Plumbing.Capability.ConcurrentExecution (ConcurrentExecution, concurrencyWidth)
-import Kyyn.Plumbing.Protocol.AcquisitionBatch (acquisitionInput)
+import Kyyn.Types.Guest (AcquisitionInvocation(..), AcquisitionContext, LoginInvocation(..))
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
-import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.CompiledEntry (CompiledEntry)
 import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evidence (ConnectorInstanceRef)
@@ -32,12 +31,12 @@ import Kyyn.Types.Plugin (FetchError(..))
 
 executeAcquisition :: (ConcurrentExecution :> es, EvidenceStore :> es, Digest.ContentDigest :> es, Blobs.BlobStorage :> es, GuestExecution :> es, FileAcquisition :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Failure :> es)
-  => DirectoryScope -> ConnectorInstanceRef -> CompiledProgram -> Value -> Maybe EvidenceIndex -> Eff es (Either [Diagnostic] Value)
-executeAcquisition base instanceRef program config prior = do
+  => DirectoryScope -> ConnectorInstanceRef -> CompiledEntry -> Value -> Maybe Value -> Maybe AcquisitionContext -> Maybe EvidenceIndex -> Eff es (Either [Diagnostic] Value)
+executeAcquisition base instanceRef program config options context prior = do
   width <- concurrencyWidth
   fmap (either
     (\(FetchError message) -> Left [errorDiagnostic "plugin.fetch-failed" (Text.unpack message)]) Right) $
-    conversationAcquisition width (decodeHostFrame decodeDigest) program (acquisitionInput width config)
+    conversationAcquisition width (decodeHostFrame decodeDigest) program (toJSON (AcquisitionInvocation config options context (Text.pack "selected") width))
     (either (fmap ((,Bytes.empty) . toJSON) . Digest.digestText)
       (either (fmap (\result -> (downloadResult result,Bytes.empty)) . Blobs.storeBlobAt instanceRef)
         (either (fmap (,Bytes.empty) . answerAcquisition base prior) answerNetwork)))
@@ -51,9 +50,9 @@ executeAcquisition base instanceRef program config prior = do
 
 executeLogin :: (GuestExecution :> es, Http.HttpTransport :> es, Secrets.SecretStore :> es,
     Interaction.Waiting :> es, Interaction.LoginInteraction :> es, Failure :> es)
-  => CompiledProgram -> Value -> Eff es (Either [Diagnostic] ())
+  => CompiledEntry -> Value -> Eff es (Either [Diagnostic] ())
 executeLogin program config = do
-  output <- conversationWithBody (decodeHostFrame decodePluginHostCall) program (Lazy.toStrict (encode config)) answerLogin
+  output <- conversationWithBody (decodeHostFrame decodePluginHostCall) program (toJSON (LoginInvocation config)) answerLogin
   case output of
     Left (FetchError message) -> pure (Left [errorDiagnostic "plugin.login-failed" (Text.unpack message)])
     Right value | value == unitResult -> pure (Right ())

@@ -42,7 +42,7 @@ import Kyyn.Surfaces.Result (Response, refusal)
 type Discovery = EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
 
 runDiscovery :: Host -> GuestToolchain -> FileTree -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host toolchain sdk = runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+runDiscovery host toolchain sdk = runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk
   . runRootOpening sdk . runWorkspaceStore . runEvolutionStore
 
 dispatchTools :: Host -> Cli.ToolCommand -> SelectedKb -> IO Response
@@ -60,7 +60,7 @@ dispatchTools host command (SelectedKb kb revision _) = withRuntime host $ \tool
     Right scope -> finish $ fmap (fmap (either refusal id)) $
       runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
         . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
-        . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runToolExecution $ runExceptT $ do
+        . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runToolExecution $ runExceptT $ do
           selected@(PreparedTool (ToolDescriptor _ _ input output) _ _ _) <- ExceptT (selectRootTool kb revision Nothing name)
           value <- ExceptT (decodeValue (contractShape input) (Text.pack arguments))
           (CheckedValue _ result,blobs) <- ExceptT (executeTool selected value)

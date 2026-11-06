@@ -13,7 +13,8 @@ import qualified Data.Text.Encoding as Text
 import qualified Data.ByteString as Bytes
 import Numeric (showHex)
 import Kyyn.Domain.Blob (ResolvedBlob, sdkBlobRefType)
-import Kyyn.Domain.DataType (reachableTypes)
+import Kyyn.Domain.DataType (DataType(..), reachableTypes)
+import Kyyn.Types.Contract (ScalarKind(..))
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Plugin (PluginName, PackageIdentity, pluginNameText)
 import Kyyn.Domain.Contract (ContractId, CheckedContract, rootType)
@@ -41,8 +42,11 @@ data EvidenceCapture = EvidenceCapture EvidenceSnapshotRef FetchSummary [(Eviden
 data FetchReport = FetchReport CheckedContract CheckedValue deriving (Eq, Show)
 
 validateReportContract :: CheckedContract -> Either String ()
-validateReportContract contract = unless (sdkBlobRefType `notElem` reachableTypes (rootType contract))
+validateReportContract contract = unless (not (any forbidden (reachableTypes (rootType contract))))
   (Left "Public report contracts cannot contain BlobRef")
+  where
+    forbidden (ScalarType _ BlobRefScalar) = True
+    forbidden value = value == sdkBlobRefType
 
 data EvidenceBatch = EvidenceBatch EvidenceSnapshotRef FetchSummary
   [(EvidenceId, Evidence CheckedValue, [ResolvedBlob])] (Maybe FetchReport) deriving (Eq, Show)

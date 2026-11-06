@@ -96,6 +96,13 @@
             cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
             cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
           '';
+          pluginsOnlySource = p.pkgs.runCommand "kyyn-plugins-only-source" { } ''
+            mkdir -p "$out/plugins/packages/local-file/source" "$out/src"
+            cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
+            printf '%s\n' '{"selection":"plugins"}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
+            printf '%s\n' 'module Main where' 'unfinished =' > "$out/src/Main.hs"
+          '';
           schemaSource = p.pkgs.runCommand "kyyn-schema-discovery-source" { } ''
             mkdir -p "$out"
             cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
@@ -120,6 +127,7 @@
         in {
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
+          guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
           guest-api = self.lib.mkGuest { inherit system; src = apiSource; };
           guest-api-bindings = self.lib.mkGuest { inherit system; src = bindingApiSource; };

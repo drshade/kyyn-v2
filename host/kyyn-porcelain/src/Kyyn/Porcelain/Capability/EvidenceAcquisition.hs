@@ -3,7 +3,7 @@ module Kyyn.Porcelain.Capability.EvidenceAcquisition (EvidenceAcquisition(..), f
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
-import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.CompiledEntry (CompiledEntry)
 import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (EvidenceSnapshotRef, SyncMode)
@@ -11,14 +11,14 @@ import Kyyn.Domain.EvidenceIndex (EvidenceSelection)
 import Kyyn.Domain.Value (CheckedValue)
 
 data EvidenceAcquisition :: Effect where
-  FetchEvidence :: EvidenceSelection -> CheckedContract -> CompiledProgram -> CheckedValue
+  FetchEvidence :: EvidenceSelection -> CheckedContract -> CompiledEntry -> CheckedValue
     -> Maybe CheckedContract -> Maybe CheckedContract -> Maybe CheckedContract -> SyncMode -> Maybe String
     -> EvidenceAcquisition m (Either [Diagnostic] EvidenceSnapshotRef)
 
 type instance DispatchOf EvidenceAcquisition = Dynamic
 
 fetchEvidence :: EvidenceAcquisition :> es
-  => EvidenceSelection -> CheckedContract -> CompiledProgram -> CheckedValue
+  => EvidenceSelection -> CheckedContract -> CompiledEntry -> CheckedValue
   -> Maybe CheckedContract -> Maybe CheckedContract -> Maybe CheckedContract -> SyncMode -> Maybe String
   -> Eff es (Either [Diagnostic] EvidenceSnapshotRef)
 fetchEvidence selection payload program config options position report mode = send . FetchEvidence selection payload program config options position report mode

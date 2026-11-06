@@ -24,7 +24,7 @@ import Kyyn.Surfaces.Result (Response, refusal)
 dispatchQueries :: Host -> Cli.QueryCommand -> SelectedKb -> IO Response
 dispatchQueries host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
   fmap (fmap (either refusal (browsingContext revision Nothing))) $
-  runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ runExceptT $ do
+  runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ runExceptT $ do
     prepared <- ExceptT (Root.prepareRootAt kb revision)
     let queries = preparedQueries prepared
         select name = case [q | q@(QueryDescriptor n _ _ _) <- queries, n == name] of

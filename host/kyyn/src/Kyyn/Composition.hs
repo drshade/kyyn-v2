@@ -103,15 +103,15 @@ runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
 runMetadata host = runBase host . runWorkspaceStore . runEvolutionStore
 
 runAuthoring :: Host -> GuestToolchain -> FileTree -> Eff Authoring a -> IO (Either OperationalFailure a)
-runAuthoring host toolchain sdk = runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk
+runAuthoring host toolchain sdk = runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk
   . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring
 
 runEvaluation :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Evaluation a -> IO (Either OperationalFailure a)
 runEvaluation host toolchain sdk scope = runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
-  . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
+  . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
 
 runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)
-runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation sdk . runToolPreparation sdk . runRootExecution sdk
+runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation . runToolPreparation sdk . runRootExecution sdk
 
 execute :: Cli.Invocation -> IO Response
 execute (Cli.Invocation _ _ Cli.Guide) = pure guideResponse
@@ -229,7 +229,7 @@ runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Disc
 runDiscovery host@(Host _ _ _ _ cache inspection timings) toolchain sdk catalogue = runBase host . runGuestApi catalogue
   . runGuestExecution toolchain . observeExecutions timings . runGuestCompilation toolchain cache . observeCompilations timings
   . runSchemaInspectionIO toolchain inspection . runApiInspectionIO toolchain inspection
-  . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk
+  . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk
   . runWorkspaceStore . runEvolutionStore . runWorkspaceApi sdk
 
 dispatchRootApi :: Host -> Cli.GuestCommand -> SelectedKb -> IO Response
@@ -278,7 +278,7 @@ executeInitialization host scope = do
       case metadata of
         Left response -> pure response
         Right commit -> withRuntime host $ \toolchain sdk -> finish $
-          runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
+          runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
             initializationResult <$> Initialization.initializeKnowledgeBase target commit
 
 dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
@@ -294,7 +294,7 @@ dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
   Cli.CheckRoot -> withRoot (checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision)
   where
     withRoot action = withRuntime host $ \toolchain sdk -> finish $
-      runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ action
+      runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ action
 dispatchEvolution :: Host -> Cli.EvolutionCommand -> SelectedKb -> IO Response
 dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case request of
     Cli.ListEvolutions selection -> finish $ runMetadata host $

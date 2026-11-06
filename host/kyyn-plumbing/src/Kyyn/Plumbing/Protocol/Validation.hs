@@ -1,4 +1,4 @@
-module Kyyn.Plumbing.Protocol.Validation (decodeReport, parseReport, validationSources) where
+module Kyyn.Plumbing.Protocol.Validation (decodeReport, parseReport) where
 
 import Control.Monad (unless)
 import Data.Aeson (Value, Object, eitherDecodeStrict, withObject, withArray, parseJSON, (.:))
@@ -7,34 +7,9 @@ import Data.Aeson.Key (Key)
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString as Bytes
 import Data.Foldable (toList)
-import Data.List (sort, nub)
+import Data.List (sort)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import Kyyn.Domain.Diagnostic
-import Kyyn.Domain.DataType (DataType(..), haskellType, typeModules)
-import Kyyn.Domain.Path (RelativePath, relativePath)
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (GuestSources, guestSources, bindingModule)
-import Kyyn.Plumbing.Capability.SchemaInspection.Codecs (generateCodecs)
-
-validationSources :: DataType -> String -> [(RelativePath, Bytes.ByteString)] -> Either String GuestSources
-validationSources root selected sources = do
-  moduleName <- bindingModule selected
-  codec <- generateCodecs "KyynValidationCodec" root
-  entryPath <- relativePath "KyynValidationEntry.hs"
-  codecPath <- relativePath "KyynValidationCodec.hs"
-  let entry = unlines $
-        ["module KyynValidationEntry where"] ++
-        ["import qualified " ++ name | name <- nub (moduleName : typeModules root)] ++
-        [
-         "import KyynValidationCodec", "import Kyyn.Runtime.Json",
-         "import Kyyn.Runtime.Validation", "import Kyyn.Types.Diagnostic (ValidationReport)",
-         "import Kyyn.Runtime.Transport (withTransport, readJson, writeJson)",
-         "validate :: " ++ haskellType root ++ " -> ValidationReport", "validate = " ++ selected,
-         "main :: IO ()", "main = withTransport $ \\transport -> do", "  input <- readJson transport",
-         "  value <- either fail pure (parseValue input >>= decodeWith rootCodec)",
-         "  output <- either fail pure (encodeReport (validate value))", "  writeJson transport output"]
-      utf8 = Text.encodeUtf8 . Text.pack
-  guestSources entryPath (sources ++ [(entryPath, utf8 entry), (codecPath, utf8 codec)])
 
 decodeReport :: Bytes.ByteString -> Either String ValidationReport
 decodeReport bytes = eitherDecodeStrict bytes >>= parseEither parseReport

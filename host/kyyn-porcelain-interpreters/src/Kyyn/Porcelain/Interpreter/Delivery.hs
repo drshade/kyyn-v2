@@ -1,9 +1,8 @@
 {-# LANGUAGE GADTs, LambdaCase, DataKinds #-}
 module Kyyn.Porcelain.Interpreter.Delivery (runDelivery) where
 
-import Data.Aeson (Value(..), encode, object, (.=))
+import Data.Aeson (Value(..), toJSON)
 import qualified Data.ByteString as Bytes
-import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, (:>))
@@ -11,6 +10,9 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.Error.Static (catchError)
 import Effectful.State.Static.Local (evalState, get, put)
 import System.FilePath ((</>), takeDirectory, takeFileName)
+import Kyyn.Domain.CompiledEntry (entryProgram)
+import Kyyn.Plumbing.Protocol.GuestInvocation (encodeInvocation)
+import Kyyn.Types.Guest (SinkInvocation(..))
 import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure)
@@ -63,8 +65,8 @@ runDelivery base = interpret $ \_ -> \case
                   pure (Just (jsonFrame (encodeResponse identity reply)))
               _ -> pure Nothing
         (do
-          (lastFrame,ProcessExit status stderr) <- executeGuest entry (jsonFrame (Lazy.toStrict
-            (encode (object ["config" .= config,"options" .= options,"input" .= input])))) respond
+          (lastFrame,ProcessExit status stderr) <- executeGuest (entryProgram entry) (jsonFrame (encodeInvocation entry
+            (toJSON (SinkInvocation config options input)))) respond
           if status /= 0 then uncertain ("Sink exited unsuccessfully: " ++ show stderr) else case decode lastFrame of
             Right (Completed result) -> case parseSinkResult result of
               Left problem -> uncertain problem

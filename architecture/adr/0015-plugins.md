@@ -320,16 +320,14 @@ Identifying the cited item is sufficient for provenance; citations need no versi
 or fingerprint. The separate operational fingerprint required for current evidence
 and refresh comparison belongs to ADR 0014, not the citation contract.
 
-The distributed plugin is an inspectable source directory with its declarations
-and dependencies, not a supplied WASM/native/combinator executable. Installation
-vendors plugin source and its source dependencies into the KB, remembering their
-remote origins so an explicit update can fetch them again. No dependency-version
-lock or compatibility solver is required. Keep those source files with the KB in
-Git so the human/agent can review the actual code, including dependencies, and
-another checkout can build it with its installed Kyyn toolchain. Plugins target
-the SDK/runtime supplied by that installation; ordinary users need no other compiler.
-Kyyn generates bindings and compiles that fixed source locally. Compiled artifacts
-are disposable local build products under ADR 0006, not a second imported authority.
+The distributed plugin is an inspectable source directory with its declarations,
+not a supplied native executable. Installation vendors plugin source into the KB,
+remembering its remote origin so an explicit update can fetch it again. Keep those
+files in Git for review. Plugin libraries and the SDK come from the KB's locked
+Nix environment as specified below; there is no independent plugin dependency
+solver. The guest build generates bindings and compiles that captured source in
+the selected environment. Compiled artifacts are disposable build products under
+ADR 0006, not a second imported authority.
 
 ### One plugin, several connectors
 

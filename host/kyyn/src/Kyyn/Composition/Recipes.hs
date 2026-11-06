@@ -38,7 +38,7 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
   Cli.ShowRecipe recipe -> finish $ runBase host . runRecipeStore $
     either refusal recipeResult <$> findRecipeAt kb revision recipe
   Cli.DescribeRecipe recipe format -> withRuntime host $ \toolchain sdk -> finish $
-    runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
+    runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk
       . runRootOpening sdk . runRecipeStore . runRecipeInspection $
         either refusal (recipeDescriptionResult revision recipe format) <$> describeRecipeAt kb revision recipe format
   Cli.RunRecipe recipe request -> case knowledgeBaseScope kb of
@@ -46,7 +46,7 @@ dispatchRecipes host command (SelectedKb kb revision _) = case command of
     Right scope -> withRuntime host $ \toolchain sdk -> finish $
       runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
       . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
-      . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
+      . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runRecipeExecution . runEvolutionAuthoring $ do
         result <- proposeFromRecipe kb revision recipe (Text.pack <$> request)
         pure $ case result of
           Left diagnostics -> refusal diagnostics
