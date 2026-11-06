@@ -1,45 +1,68 @@
 ---
 id: 0002
-title: 'Native Haskell kernel and bundled MicroHs execution'
+title: 'Native host and KB-owned Nix guest builds'
 ---
-# Native Haskell kernel and bundled MicroHs execution
+# Native host and KB-owned Nix guest builds
 
 ## Context
 
-KBs and plugins contain code written after Kyyn is installed. Requiring a
-different language toolchain for every plugin defeats a coherent distribution.
-The native kernel needs mature integration libraries; authored programs need a
-small, uniform typed runtime, not the kernel's full dependency graph.
+KB authors need ordinary Haskell libraries for calculations, rendering and
+integration without a host release for every dependency. Compiler-specific type
+inspection in the host couples that freedom to the host's compiler frontend.
+The host needs checked contracts and a managed executable, not the guest's
+compiler AST or a prescribed global library set.
 
 ## Decision
 
-Use a GHC-built Haskell kernel and pinned MicroHs compiler/evaluator for both
-KB-resident and tap-provided programs. Ship the compiler, evaluator, base/SDK
-libraries and required preprocessing tools, including `cpphs`.
-Tap plugins arrive as vendored source under ADR 0015 and are compiled locally
-with this toolchain. The bundled compiler/evaluator are release executables;
-third-party plugin executables are not an additional distribution contract.
+Keep the native GHC host. Each KB is a Nix flake: `flake.nix` declares its build
+and `flake.lock` pins external inputs, including the compiler, Kyyn guest SDK and
+libraries. Use Nix's existing lock file, not another dependency registry. GHC is
+the first guest compiler. Other implementations may satisfy the same build,
+description and invocation boundary; do not implement a second backend now.
 
-Stage the pinned MicroHs compiler using its upstream GHC-built `bin/gmhs` target,
-installed at the existing `bin/mhs` path; the self-hosted `make bin/mhs` remains
-the bootstrap/reference build. Both builds use the same compiler source and must
-produce equivalent bytecode for the conformance fixtures. Full integration checks
-this parity and the installed journey; the build choice is not a language fork.
+The KB author selects arbitrary libraries. Vendored tap plugins remain source
+under ADR 0015 and use the KB's selected SDK and dependency environment. Their
+adapters are built with that environment; no per-plugin compiler or SDK universe
+is resolved by the host. First-party libraries follow the same rule.
 
-Initially invoke a managed child process with a private typed protocol. A
-generated adapter retains the live continuation while requesting host effects.
-Only request/result data crosses that boundary. Process loss loses the current
-call, not accepted state. No serialization of closures or durable continuations.
-No in-process ABI or persistent worker pool until demonstrated needs justify it.
+Authors and dependencies are trusted. Neither Nix nor Kyyn promises to prevent
+direct guest I/O. The typed SDK states the supported role/capability discipline;
+the host checks effects requested through its protocol. Build purity and query
+purity are author obligations, not a security sandbox or an assurance about
+arbitrary native libraries. Build/describe must not read facts, secrets, live
+providers or the wall clock to determine contracts or generated code.
 
-The native side compiles code separately from loading fact values. Porcelain
-interpretation selects the source modules and prepares generated adapters from the
-captured code; it does not assemble MicroHs commands. Compilation is a plumbing
-capability whose inputs contain no KB/root layout or fact data:
+### Capture and build
+
+The host captures the selected source/configuration and the flake/lock bytes.
+Facts, evidence, credentials, `.git`, disposable caches and unrelated workspace
+files are excluded from Nix inputs: the Nix store is not a private KB data store.
+The flake must build from this explicit source tree and locked dependencies,
+without reading the mutable original checkout or ambient package databases.
+Local path dependencies are captured with the source; external inputs must be
+locked and available. Reject inputs outside that captured/locked closure.
+
+The conventional flake output is `packages.${system}.kyyn-guest`, containing
+`bin/kyyn-guest`. The SDK provides the build helper for this output. The host
+supplies a fixed build selection in the captured tree; it is a build input, not
+an ambient environment override. Exact internal build-request encoding is private.
 
 ```haskell
-data GuestSources  -- fixed module contents, generated adapters and selected entry
-data CompiledProgram  -- immutable bytecode and build identity; no launch configuration
+data GuestSelection
+  = RootEntries
+  | EvolutionEntry
+  | DiscoveryEntries DiscoverySelection
+
+data GuestSources -- captured source, manifests, flake/lock and build selection
+
+data BuildIdentity = BuildIdentity
+  { sourcesDigest :: Bytes
+  , targetSystem :: String
+  , derivationPath :: FilePath
+  , outputPath :: FilePath
+  }
+
+data CompiledProgram -- identity plus retained immutable output and entry point
 
 data GuestCompilation :: Effect where
   CompileGuest
@@ -51,68 +74,54 @@ compileGuest
   => GuestSources -> Eff es (Either [Diagnostic] CompiledProgram)
 ```
 
-`GuestSources` is a fixed compilation input, not the host's `CodeSnapshot` or a
-live workspace directory. Composition combines captured KB/generated modules with
-the installed SDK/runtime/dependency source bytes to form this input. It does not
-require vendoring the installed SDK into each KB repository. Its digest covers
-those bytes alongside authored sources, not an unrecorded SDK include directory.
-It includes the selected local dependency source closure;
-semantic preparation selects which captured files become source and which are
-runtime configuration, examples or data. Schema inspection and pure adapter
-generation retain their ownership in [ADR 0005](0005-contracts.md).
+The host selects the execution platform; the flake supplies that platform's build.
+An absent output, unlocked dependency, unsupported selection or missing executable
+is a diagnostic. No automatic lock update or backend fallback occurs during a
+check. A source/type rejection remains distinct from missing provisioning or an
+unavailable build/runtime process; do not parse compiler prose to decide control flow.
+Preserve compiler messages and source locations where available.
 
-The capability and its forwarding helper belong to `kyyn-plumbing`. Its interpreter
-belongs to `kyyn-microhs`, where compiler flags, `MHSDIR`, `cpphs` paths and compiled
-artifact layout are understood. The installed toolchain is supplied explicitly by
-application composition, not rediscovered from a caller's ambient PATH:
+The SDK build owns checked-type extraction, generated binding modules, codecs and
+entry adapters (ADR 0005). It first checks the selected schema/export dependencies,
+generates the modules authored code imports, then compiles the selected program.
+These are stages inside one Nix derivation, not a host describe/codegen/rebuild
+round trip. Generated code and embedded descriptions come from the same lowering.
+An unsupported type or incompatible renderer/sink binding fails the build.
 
-```haskell
-data GuestToolchain  -- resolved installed compiler/evaluator, preprocessor and SDK
+Discovery selection compiles only the exports/schema dependencies needed for the
+requested catalogue (ADR 0018). An incomplete evolution body must not prevent
+Before/After schema or generated-handle discovery. Root and evolution selections
+compile the corresponding runnable entries. Discovery builds do not establish
+that the full root or transformation compiles or passes semantic validation.
 
-runGuestCompilation
-  :: (FileSystem :> es, ProcessExecution :> es, Failure :> es)
-  => GuestToolchain -> Maybe DirectoryScope -> Eff (GuestCompilation : es) a -> Eff es a
-```
+Dependency provisioning is explicit under ADR 0020. Check/accept may build from
+already provisioned inputs offline, but never fetch or resolve a different lock.
+A Nix binary cache may supply the exact output; a cache miss may require a local
+build. Package availability and build success are verified per target, not inferred
+from Nix supporting that OS. No unmeasured build-latency promise is made.
 
-The interpreter writes source/build artifacts through FileSystem and invokes the
-compiler through ProcessExecution; it does not need ambient IO merely because its
-package also contains native compiler-library integration. Composition supplies
-the same selected toolchain to schema inspection and guest compilation. Inspection
-and compilation do not choose independent compiler revisions.
+Nix identities cover compiler, SDK, library inputs and build options through the
+derivation. The capture digest also records selected source paths/bytes and entry
+selection. Fact values and invocation arguments are not compiler inputs. Retain
+an output through a Nix GC root for as long as a cached or in-flight CompiledProgram
+refers to it; release owned roots on cache removal. Never return a bare temporary
+build-directory path. Cache deletion discards derived code, not accepted knowledge.
 
-The first interpreter compiles the captured files in a temporary filesystem scope
-and returns MicroHs `.comb` bytes. It does not ask MicroHs to generate a native
-executable, which would invoke a C compiler on the user's machine. The installed
-`mhseval` consumes these bytes. C remains a development/distribution build input
-for the bundled compiler and evaluator, not a KB-authoring dependency.
+### Describe and invoke the same build
 
-`GuestSources` checks duplicate paths, file/directory collisions and presence of
-the selected entry. Its source identity is SHA-256 over the selected entry and a
-sorted, length-delimited path/byte sequence. The captured file tree includes the
-generated adapters and required SDK/dependency source; it contains no fact values.
-The interpreter clears ambient source/package search paths and selects the bundled
-library explicitly. Its compiler environment selects `MHSDIR` and `MHSCPPHS` and
-has an empty `PATH`. Compilation currently has one supported mode: uncompressed
-combinators. No build-options type precedes a concrete second mode.
-The current locale selection is `C.UTF-8`, verified on Linux; the installed
-toolchain composition must establish the appropriate selection on other supported
-platforms before their release gates pass.
-Source-path collision checks currently compare names case-sensitively. Platforms
-with case-insensitive filesystems also need their filename collision behavior
-verified before the same source-tree contract can be claimed there.
-
-The returned artifact records its input identity:
+The host invokes the immutable executable's description entry through the framed
+protocol (ADR 0007), checks it under ADR 0005, and uses that same CompiledProgram
+for execution. It does not independently resolve a flake or latest workspace
+between describe and invoke. Descriptions may be cached by build identity, but
+are derived data, not an additional authored or committed schema authority.
 
 ```haskell
-data BuildIdentity = BuildIdentity
-  { toolchainRevision :: String
-  , sourcesDigest     :: Bytes
-  }
+data GuestDescription -- current protocol identity, contracts, entries and API exports
 
-data CompiledProgram = CompiledProgram
-  { identity :: BuildIdentity
-  , artifact :: (RelativePath, Bytes)
-  }
+data GuestInspection :: Effect where
+  DescribeGuest
+    :: CompiledProgram
+    -> GuestInspection m (Either [Diagnostic] GuestDescription)
 
 data GuestExecution :: Effect where
   ExecuteCompiled
@@ -121,69 +130,32 @@ data GuestExecution :: Effect where
   ExecuteGuest
     :: CompiledProgram -> Bytes -> (Bytes -> m (Maybe Bytes))
     -> GuestExecution m (Bytes, ProcessExit)
-
-executeCompiled
-  :: GuestExecution :> es
-  => CompiledProgram -> Bytes -> Eff es (Bytes, ProcessExit)
-
-executeCompiledEntry
-  :: (GuestExecution :> es, Failure :> es)
-  => String -> CompiledProgram -> Bytes -> Eff es Bytes
 ```
 
-The revision identifies the selected pinned MicroHs source; it is not an
-attestation of arbitrary installed binaries. The compilation interpreter reuses
-successful artifacts from a per-KB `.kyyn/compiled/<hash>.comb` cache. Composition
-supplies that directory for a selected KB; without a KB it supplies `Nothing`
-and compilation is uncached. No caller of `compileGuest` handles caching.
+Description takes no facts, secrets or capability grants. It returns build-derived
+structure and pure authored metadata, not query results. The host rejects malformed
+descriptions, unsupported shapes and an incompatible current protocol identity;
+there is no version negotiation or historical runtime. Different SDK revisions may
+implement the same current protocol. The author updates an incompatible pin through
+ordinary source repair; the host does not rewrite the lock automatically.
 
-The cache key hashes the existing `BuildIdentity` (pinned compiler revision and
-all captured source bytes/paths, including the selected entry), the exact compiler
-arguments (including fixed CPP defines) and explicit compiler environment. The
-bundled library/preprocessor are part of the pinned toolchain; replacing installed
-binaries or libraries in place without changing their revision is not supported.
-Fact values and invocation arguments are not compiler inputs. Hits return the
-same identity and bytes without materializing sources or starting the compiler.
-Misses compile normally and atomically publish successful bytes using a temporary
-file and rename. Rejections are not cached. The cache directory ignores its own
-contents in Git and has no eviction or invalidation mechanism: changed inputs
-select a different key.
+Invocations retain the existing typed entry contracts and capability requests.
+Only request/result data crosses the boundary; a generated adapter holds the live
+continuation. Process loss loses the current call, not accepted state. No closure
+serialization, persistent worker pool or in-process ABI is required.
 
-Missing or empty entries are misses. Unreadable entries and failed cache writes
-remain ordinary storage failures. Nonempty local artifacts are trusted, without
-a second checksum or bytecode-validation format; if corrupt, normal execution
-reports the failure. Deleting `.kyyn/compiled` is always safe and rebuilds it on
-demand. Native in-process schema/API inspection is not cached by this mechanism.
-Reuse the immutable `CompiledProgram` for multiple runtime inputs.
-Its representation belongs to the domain package so porcelain can carry prepared
-code without depending on plumbing. ExecuteCompiled materializes the artifact in
-a fresh temporary scope; its interpreter supplies the evaluator and launch
-configuration from the explicitly installed toolchain. Callers do not reconstruct
-flags or carry process configuration in domain values. The operation writes the
-supplied bytes, closes stdin, drains stdout and returns output plus exit status/stderr.
-The selected-entry helper turns a nonzero exit into RuntimeUnavailable; metadata
-decoding retains its specific diagnostic context using the raw result.
-Process startup/transport failures remain Failure. The build scope can disappear before any invocation, and the invocation
-scope is removed after process cleanup. No live build path is returned as the
-artifact. GuestCompilation only compiles; GuestExecution owns both one-shot
-input/output and framed conversations with host callbacks. Neither execution mode
-requires the compilation effect. Its `runGuestExecution` interpreter lives in
-`kyyn-microhs` and requires only FileSystem, ProcessExecution and Failure, just as
-the compilation interpreter does. Schema metadata, validation and pure query/evolution
-adapters use one-shot execution; plugin host calls use the conversational operation.
-The conversation's callback stays in the caller's effect row, not native IO.
-Both modes retain the same scoped process cleanup and explicit installed toolchain.
+Compilation and execution remain plumbing capabilities. The Nix build interpreter
+and native process interpreter live in host plumbing; compiler-specific inspection
+and adapter generation live in guest build tooling. Composition resolves Nix's
+absolute executable path and supplies it explicitly. It does not rediscover a
+compiler from PATH or an ambient Cabal environment on each invocation.
 
-Ordinary parse/type rejection returns diagnostics. The preview/checking caller
-maps them into its normal result channel; inability to start the compiler or a
-compiler crash uses Failure. A broken proposed module is not a broken installation.
-For the pinned command-line compiler, status 1 returns its UTF-8 diagnostic text
-under `guest.compiler-rejected`, without parsing prose for control flow or source
-locations. Other nonzero statuses (including signals) and malformed diagnostic
-encoding are operational failures. This does not distinguish an internal compiler
-error that itself exits with status 1 from other compiler rejection. Missing or
-unreadable artifacts fail at the filesystem boundary; an empty artifact is an
-operational failure, not successful compilation.
+Nix provisions/builds the executable and its runtime closure. Ordinary execution
+launches the selected store executable directly; it does not run a development
+shell, update dependencies or invoke Nix for every host call. Runtime facts and
+secrets travel only through their existing host operations.
+
+### Process ownership
 
 Process ownership belongs below the semantic runtime. A scoped plumbing primitive
 can express who releases the child without handing native `IO` to porcelain:
@@ -255,43 +227,25 @@ that ignore termination. Those are not capabilities required by the bundled gues
 ## Development diagnostics
 
 `KYYN_TIMINGS=1` emits timing events to stderr without changing normal/JSON
-results. Events distinguish inspection, compilation/cache hits, guest execution
-and command wall time. Durations are inclusive: nested guest calls must not be
-summed as independent costs. Other values leave timing disabled.
-
-Native schema/API inspection has a separate checkout-local Dhall cache keyed by
-captured sources, selection, compiler settings and the installed Kyyn build
-revision. The staging script embeds that revision; unidentified plain Cabal
-builds disable inspection caching. Corrupt cache diagnostics identify the entry
-to remove. Neither cache stores validation authority or replaces checking.
-
-## Boundaries and alternatives
-
-The native host must not import KB-specific types; it operates on checked
-contracts and opaque root/artifact handles. MicroHs-authored modules must not
-import host implementation libraries. A child process is a packaging/failure
-boundary, not a sandbox. Reject per-plugin native binaries as the primary model,
-and reject moving all host integrations into MicroHs merely to have one compiler.
+results. Distinguish dependency provisioning, guest build/cache reuse, description,
+execution and command wall time. Durations are inclusive; nested timings must not
+be summed as independent costs. Other values leave timing disabled.
 
 ## Consequences and verification
 
-Dependency/import tests prohibit MicroHs implementation imports and command
-construction in porcelain interpreters. Exercise GuestCompilation's diagnostics
-versus operational failures, and compilation through the same installed toolchain
-used by schema inspection. A fact-only change must reuse an unchanged code build;
-changed source, compiler, SDK or build options must not reuse an incompatible one.
+The host imports no KB types or guest compiler frontend. Compiler-specific build
+tooling is maintained and tested against the compiler it selects. Type checking
+is not runtime isolation and the host description checks are not an attestation
+of trusted authored code.
 
-MicroHs compatibility is a release gate, not inferred from valid GHC code.
-[Vendored inputs](../../vendor/README.md) own the selected compiler and dependency
-revisions. Updating them requires explicit compatibility evidence; bundled
-preprocessing does not imply support for arbitrary GHC language extensions.
+Verify fresh provisioning and offline rebuilds; source/lock/SDK/compiler changes
+invalidate derived code while fact-only changes reuse it. Exercise missing locks,
+missing outputs, failed builds, GC retention, cancellation and malformed describe
+responses. A changed description must not silently relabel stored facts: normal
+contract checks and explicit evolution conversion still apply.
 
-Before adopting this runtime for production, pass runtime-data decoding,
-heterogeneous-root evolution, cancellation and clean-install tests with the
-chosen SDK dependencies. If the bridge needs substantial compiler/library forks,
-reopen this ADR instead of concealing that cost inside an interpreter.
-Name the compatibility checks separately: compile the GADT/existential request
-tree and rank-N fold under pinned MicroHs; prove the higher-order `WithProcess`
-handler and cleanup under native GHC/effectful. The latter is not guest code.
-ADR 0005 owns checked-type extraction and Haskell schema authority. Schema-adapter
-conformance and maintenance remain distinct from runtime process compatibility.
+Run a real GHC guest through discovery, runtime fact loading, validation, query,
+plugin host calls, typed evolution and output publication. Test the actual guest
+protocol and dependency environment, not only host-linked SDK unit tests. Prove
+supported shape/codec identities against existing fixtures when replacing the
+compiler integration. Verify Linux, macOS and WSL2 distribution separately.

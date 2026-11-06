@@ -135,8 +135,7 @@ interpretation roles, not program capability grants.
 Authors attach roles through **pure Haskell data declarations alongside the
 schema**, in the schema module or a nearby imported metadata module. They do not
 maintain a JSON/RON sidecar as the rebuild's authoritative authoring surface.
-The shared declarations use positional constructors, avoiding different selector APIs
-between GHC and MicroHs:
+The shared declarations use positional constructors:
 
 ```haskell
 data Affordance = Title | Timeline | Badge
@@ -187,23 +186,28 @@ that checked type; identity is the envelope's `FactId`, not another selectable
 payload field. Reject a collection declaration on an incompatible root field.
 There is no `idField` metadata to keep consistent with a second identity model.
 
-Use the pinned MicroHs frontend linked into the native GHC host.
-Extract from checked types, not a debug pretty-printer or a new Haskell-subset parser. Keep the
-compiler coupling behind SchemaInspection, a plumbing capability; it exposes a
-checked algebra and binding information, not compiler ASTs throughout the kernel.
-`SchemaSource` identifies fixed source modules, captured local imports, the exported type
-and the named `SchemaMetadata` export. It is not a live source path.
-It refers to captured source, which may still be ill-typed; inspection establishes
-that separately. Workspace creation copies the selected root's source as described in
-[evolutions](0010-evolutions.md), before the author edits and captures a proposal.
+### Build-derived guest description
 
-Captured authored Haskell sources use `.hs`. Literate `.lhs` and hsc2hs `.hsc`
-inputs are out of scope and rejected with a source-format diagnostic before
-inspection or compilation. This avoids source-extension precedence and does not
-claim a hermetic preprocessing boundary for ordinary `.hs` sources.
+The GHC guest SDK/build tooling extracts compiler-checked authored types and
+metadata and generates their adapters/codecs. The host has no linked guest compiler
+frontend. Extract from checked declarations, not pretty-printed GHCi text, field
+names guessed at runtime or a second authored schema.
+
+The build pipeline resolves schema and registered signature dependencies before
+compiling code that imports generated bindings. It generates `KyynQueryBindings`,
+workspace Before/After handles, FactEdits and `Kyyn.Contracts.*` inside the same
+Nix derivation, then compiles the executable with its embedded description. This
+breaks the binding dependency cycle without a host-generated-source round trip.
+The build helper owns compiler API integration and must support the chosen GHC;
+arbitrary libraries do not imply every compiler version works with every SDK.
+
+Pure schema metadata is evaluated with the fixed SDK metadata codec, independent
+of the KB contract being derived. It takes no facts, evidence, host capabilities
+or live inputs, and does not execute queries or validators. Generated description,
+codecs and method adapters share one checked lowering and selected dependencies.
 
 ```haskell
-data SchemaSource
+data SchemaSource -- source/export selection within one captured guest build
 
 data InspectedSchema = InspectedSchema
   { contract :: CheckedContract
@@ -217,101 +221,46 @@ data SchemaInspection :: Effect where
 
 inspectSchema
   :: SchemaInspection :> es
-  => SchemaSource
-  -> Eff es (Either [Diagnostic] InspectedSchema)
+  => SchemaSource -> Eff es (Either [Diagnostic] InspectedSchema)
 
 data CheckedValue -- private constructor: checked contract identity and structural value
 ```
 
-`inspectSchema` reports unsupported/ill-typed source as diagnostics. Runtime or
-frontend infrastructure failure remains Failure. The contract's inspected datatype
-retains the qualified type/constructor names needed to generate codecs against real
-declarations; it does not erase them into wire shapes alone. `loadedSources` lists
-captured files loaded by the compiler while inspecting that type. It excludes the
-installed compiler library and metadata-evaluation-only imports. Build preparation
-uses this closure to select old schema dependencies; it is not another component
-of contract identity or a hand-maintained dependency registry. A `CheckedValue`
-establishes structural conformity to its recorded contract, not KB semantic
-validity. Keep its constructor private to checking code; callers cannot attach
-an arbitrary contract identity to unchecked contents. Shape-directed checking
-belongs to DhallHandling, with root-level identity/layout checking through
-RootStore's `CheckRootValue` in ADR 0006. Loading persisted values must recheck
-them rather than manufacture this wrapper from saved metadata. Whenever a
-different expected contract is supplied, compare identities or perform an explicit
-checked conversion; the wrapper alone does not establish that they match.
+The interpreter builds the selected source through GuestCompilation, describes
+that exact CompiledProgram through GuestInspection (ADR 0002), and checks the
+returned structural descriptors with `checkContract` and, for roots,
+`checkRootLayout`. The host recomputes contract identities; a guest-supplied hash
+alone is not a CheckedContract. Protocol/schema mismatch is a diagnostic before
+invocation, not a request to negotiate an older contract.
 
-Reading the metadata export requires **pure evaluation**, not just reading type
-tables. SchemaInspection checks the source and metadata export's SDK type, obtains
-the value through a fixed SDK metadata entry/codec, and checks its declarations
-against the extracted structure before returning `InspectedSchema`. This fixed
-codec does not depend on generating bindings for the KB contract it is helping
-construct. Metadata evaluation is deterministic and takes no root facts, live
-evidence or host capabilities. It does not execute validators or queries.
+The description retains resolved declaration names and local source dependencies.
+`loadedSources` identifies captured files needed by a schema, excluding external
+locked packages and metadata-only dependencies. Evolution preparation uses it to
+select Before source; it is neither a second lock nor a hand-authored registry.
+Compiler implementation objects do not cross the protocol.
 
-The native-library interpreter owns frontend initialization and exception
-translation, and uses GuestCompilation to compile the fixed metadata adapter and
-GuestExecution to evaluate it. These dependencies are explicit; do not smuggle
-evaluation into pure projection helpers or route it
-through RootExecution, which already depends on schema inspection:
+Description is build-derived and may be cached by immutable build identity. Do
+not commit a parallel description file requiring authors to synchronize it with
+source. Reading stored values still checks their recorded contract identity and
+shape against the selected description. A lock-only change that changes a
+contract must undergo explicit schema conversion; it cannot silently relabel facts.
+A CheckedValue proves structural conformity, not semantic validation of the KB.
+Its constructor remains private to checking code.
 
-```haskell
-runSchemaInspectionIO
-  :: (GuestCompilation :> es, GuestExecution :> es, FileSystem :> es,
-      DhallHandling :> es, IOE :> es, Failure :> es)
-  => GuestToolchain -> Maybe InspectionCache
-  -> Eff (SchemaInspection : es) a -> Eff es a
-```
+Schema-only/API discovery builds select the requested source closures without
+compiling an unfinished evolution body. Failure to build the selected schema
+returns diagnostics, never an older catalogue. Description parsing cannot invoke
+RootExecution or depend on runtime facts, avoiding a build/inspection cycle.
 
-The [runtime capability](0002-runtime.md) owns GuestCompilation and GuestToolchain.
-FileSystem supplies scoped source materialization; DhallHandling stores inspection
-cache entries. No build-directory handle is retained in the schema value.
-The metadata adapter uses its fixed SDK codec; compiling it must not call
-SchemaInspection again or require bindings derived from the KB contract being
-inspected. Composition supplies the same toolchain selection to both interpreters.
-
-`schemaSource` captures
-supplied module/dependency bytes, the selected type and named metadata export,
-adding a fixed metadata adapter. Duplicate paths and adapter-path collisions are
-rejected. `inspectSchema` returns a checked contract, whose retained `DataType`
-contains the names required by codec generation; do not maintain a second bindings
-registry. Native structural inspection materializes those
-same bytes in a temporary scope; metadata evaluation compiles that capture through
-GuestCompilation. It does not read a second live KB source tree. Unsupported or
-ill-typed source is diagnostic output; native frontend infrastructure failures use
-`CompilerUnavailable`. Async exceptions retain cancellation semantics.
-Source graphs and dependencies are supplied explicitly, not discovered through
-arbitrary ambient module paths inside the inspector. This does not establish
-preprocessor isolation or release packaging on every platform.
-
-The native schema and API interpreters reuse successful inspection results from
-checkout-local `.kyyn/inspected/<hash>.dhall` files. The key covers the Kyyn Git
-commit embedded by installation, every captured source path and byte, selected
-type or modules, inspection kind and effective compiler settings. The installed
-commit identifies the pinned compiler, bundled libraries and Kyyn's projection
-code.
-
-Structural entries contain only the raw `DataType` and captured relative closure;
-metadata evaluation and `checkContract` still run on every schema request. API
-entries contain the discovered declarations and documentation. Neither compiler
-state nor failed inspections are cached. Writes replace entries atomically;
-missing/empty entries are misses, malformed entries request cache deletion, and
-storage failures retain their operational failure category. Deleting this cache
-never deletes accepted knowledge.
-
-Builds without an embedded commit disable this reuse. Dirty development builds or
-manually replaced runtime files under the same commit may require deleting the
-cache; this is an accepted development convention.
-
-Under the [repository layout](0026-repository-layout.md), this native interpreter
-belongs to `kyyn-microhs`, behind the plumbing API. The pure projections below
-remain capability-owned helpers outside that native compiler integration package;
-callers do not import compiler implementation merely to project a checked contract.
+The SDK build owns Haskell binding/codec generation. The host owns projections
+for storage, validation and surfaces. These remain separate implementations of
+mechanical projections from the shared contract vocabulary, checked by conformance
+tests; they do not duplicate authored business types.
 
 Projection functions consume the one checked representation. Their selected
 signatures describe pure generation, not filesystem writes or compiler execution:
 
 ```haskell
-generateBindings  :: InspectedSchema -> GeneratedSources
 projectJsonSchema :: CheckedContract -> JsonSchema
 projectDhallType  :: CheckedContract -> DhallType
 ```
@@ -334,10 +283,10 @@ References are IDs, not recursive value embedding. Dates, instants and money
 must use reviewed library representations and semantic checks. No per-field
 byte/list bounds or universal map/type-level programming requirements.
 
-Reuse maintained Haskell/MicroHs numeric and date/time implementations rather
+Reuse maintained Haskell numeric and date/time implementations rather
 than create Kyyn-owned arithmetic or calendar types. A scalar adapter must select
 the library type, parameters, canonical encoding and semantic checks together.
-Its conformance tests cover both compilers, exact round trips, range limits and
+Its conformance tests cover the host and built guest, exact round trips, range limits and
 negative as well as positive amounts. Business rounding policy remains authored
 KB code, not something schema extraction infers.
 
@@ -378,7 +327,7 @@ format fallback or permission for a substantial compiler fork.
 Dhall-authored contracts were considered for their mature structural checking and
 contract/import semantics. Haskell was selected for authoring coherence after the
 compiler adapter demonstrated checked-type extraction. The tradeoff
-is maintaining a pinned compiler adapter and its conformance tests. Collection/ID/
+is maintaining guest build-time compiler integration and its conformance tests. Collection/ID/
 reference semantics still need explicit descriptors; a type declaration alone
 cannot infer them. Authoring ergonomics remain something to measure, not a claimed
 automatic improvement in agent error rates.
@@ -398,11 +347,11 @@ bindings against the original declarations. Reject unsupported shapes with
 diagnostics. Test guest compilation, host inspection and guest invocation without
 a development toolchain on PATH after installation.
 
-Compiler-internal coupling remains real: keep source capture, exception translation
-and maintained packaging under conformance tests when updating MicroHs.
+Compiler-internal coupling remains in guest build tooling: keep source capture,
+checked extraction and packaging under conformance tests when updating GHC or the SDK.
 Metadata evaluation consumes the captured source and returns `SchemaMetadata`;
 the pure contract checker combines that value with structural inspection. Test
-this through materialization, reopening and the generated real-MicroHs codec.
+this through materialization, reopening and the generated GHC guest codec.
 
 Coherence coverage includes missing or renamed fields, incompatible affordances,
 ambiguous role assignments and invalid reference targets. A role-only edit must
