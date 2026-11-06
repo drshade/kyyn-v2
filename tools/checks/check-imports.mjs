@@ -59,7 +59,7 @@ const allowed = {
     'Kyyn.Porcelain.Interpreter.RootPublication', 'Kyyn.Porcelain.Interpreter.RootStore',
     'Kyyn.Porcelain.Interpreter.WorkspaceStore', 'Kyyn.Surfaces.Cli',
     'Kyyn.Surfaces.Result', 'System.Directory', 'System.Environment', 'System.FilePath'],
-  'kyyn-types': ['Control.DeepSeq', 'Agentic.Contract', 'Agentic.Codec', 'Agentic.Schema', 'Agentic.Value', 'Control.Monad', 'Crypto.Hash.SHA256', 'Data.Aeson', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString.Lazy', 'Data.Foldable', 'GHC.Generics', 'Numeric', 'Text.Read', 'Type.Reflection', 'Kyyn.Types.Scalar', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Plugin', 'Kyyn.Types.PluginHost', 'Data.ByteString', 'Data.Text', 'Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
+  'kyyn-types': ['Agentic.Questions', 'Data.Fixed', 'Data.Proxy', 'Data.Time', 'Numeric.Natural', 'Control.DeepSeq', 'Agentic.Contract', 'Agentic.Codec', 'Agentic.Schema', 'Agentic.Value', 'Control.Monad', 'Crypto.Hash.SHA256', 'Data.Aeson', 'Data.Aeson.Key', 'Data.Aeson.KeyMap', 'Data.ByteString.Lazy', 'Data.Foldable', 'GHC.Generics', 'Numeric', 'Text.Read', 'Type.Reflection', 'Kyyn.Types.Scalar', 'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Plugin', 'Kyyn.Types.PluginHost', 'Data.ByteString', 'Data.Text', 'Data.List', 'Kyyn.Types.Fact', 'Kyyn.Types.Program', 'Kyyn.Types.Diagnostic', 'Kyyn.Types.Evidence'],
   'kyyn-sdk': ['Agentic.Contract', 'Agentic.Codec', 'Agentic.Schema', 'Agentic.Value', 'Agentic.Questions', 'Control.Monad', 'Data.Kind', 'Data.Fixed', 'Data.Proxy', 'Data.Time', 'Numeric.Natural', 'Text.Read', 'Type.Reflection', 'Kyyn.Contract', 'Kyyn.Contract.Scalars', 'Kyyn.Types.Contract', 'Kyyn.Types.Scalar', 'Kyyn.Types.Sink', 'Kyyn.Types.Blob', 'Data.ByteString', 'Data.Text.Encoding', 'Data.Text', 'Data.List', 'Kyyn.Recipe.Edit', 'Kyyn.Evolution.Proposal', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Evolution.KnowledgeBase', 'Kyyn.Types.KnowledgeBase', 'Kyyn.Types.Evolution', 'Kyyn.Types.Evidence', 'Kyyn.Evolution.Internal', 'Text.JSON.Types',
     'Kyyn.Recipe.Internal', 'Kyyn.Types.Plugin', 'Kyyn.Types.PluginHost', 'Kyyn.Types.Program',
     'Kyyn.Types.SchemaMetadata', 'Kyyn.Types.Query',
@@ -128,7 +128,7 @@ const allowed = {
 
 const domainModules = {
   'Kyyn.Domain.EvidenceIndex': ['Data.Map.Strict', 'Data.Text', 'Data.ByteString', 'Crypto.Hash.SHA256', 'Numeric', 'Kyyn.Domain.Blob', 'Kyyn.Domain.Contract', 'Kyyn.Domain.Evidence', 'Kyyn.Domain.Plugin'],
-  'Kyyn.Domain.Blob': ['Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.Text', 'Kyyn.Domain.DataType', 'Kyyn.Types.Blob'],
+  'Kyyn.Domain.Blob': ['Kyyn.Types.Contract', 'Control.Monad', 'Data.Aeson', 'Data.Aeson.Types', 'Data.Aeson.Key', 'Data.Foldable', 'Data.Text', 'Kyyn.Domain.DataType', 'Kyyn.Types.Blob'],
   'Kyyn.Domain.Recipe': ['Data.Aeson', 'Data.Text', 'Control.Monad', 'Data.List',
     'Kyyn.Domain.Recipe', 'Kyyn.Domain.Diagnostic', 'Kyyn.Domain.Plugin',
     'Kyyn.Domain.Contract', 'Kyyn.Domain.DataType', 'Kyyn.Domain.Value',
@@ -378,7 +378,7 @@ const interpreterModules = {
     'Data.Text', 'Data.Text.Encoding', 'Effectful', 'Effectful.Dispatch.Dynamic', 'Effectful.Error.Static',
     'Kyyn.Domain.FileTree', 'Kyyn.Domain.Git', 'Kyyn.Domain.Path', 'Kyyn.Domain.Failure', 'Kyyn.Domain.Diagnostic',
     'Kyyn.Plumbing.Capability.Failure', 'Kyyn.Plumbing.Capability.Git', 'Kyyn.Plumbing.Capability.ProcessExecution'],
-  'Kyyn.Plumbing.Interpreter.DhallHandling': ['Data.ByteString', 'Data.ByteString.Lazy', 'Dhall.Binary', 'Control.Monad', 'Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
+  'Kyyn.Plumbing.Interpreter.DhallHandling': ['Agentic.Value', 'Agentic.Contract', 'Data.Aeson.Types', 'Kyyn.Types.Contract', 'Kyyn.Types.Fact', 'Kyyn.Types.Scalar', 'Kyyn.Domain.Blob', 'Data.ByteString', 'Data.ByteString.Lazy', 'Dhall.Binary', 'Control.Monad', 'Data.Bifunctor', 'Data.Aeson', 'Data.Aeson.Key',
     'Data.Aeson.KeyMap', 'Data.List', 'Data.Sequence', 'Dhall.Pretty', 'Prettyprinter', 'Prettyprinter.Render.Text',
     'Data.Foldable', 'Data.Text', 'Data.Void', 'Dhall.Core', 'Dhall.Map', 'Dhall.Parser',
     'Dhall.Src', 'Dhall.TypeCheck', 'Effectful', 'Effectful.Dispatch.Dynamic',

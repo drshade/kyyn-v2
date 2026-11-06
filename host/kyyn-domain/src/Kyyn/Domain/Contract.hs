@@ -122,6 +122,8 @@ compatible a (OptionalType t) = compatible a t
 compatible Title StringType = True
 compatible Title TextType = True
 compatible Badge (Algebraic _ _ cs) = not (null cs) && all (\(Constructor _ fs) -> null fs) cs
+compatible Timeline (ScalarType _ D.DateScalar) = True
+compatible Timeline (ScalarType _ D.InstantScalar) = True
 compatible _ _ = False
 
 factPayload :: DataType -> Maybe DataType

@@ -153,3 +153,12 @@ test-suite concurrent-execution
   ghc-options: -Wall -Werror -threaded
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, async
+
+test-suite scalar-storage
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: ScalarStorageTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, aeson ==2.2.5.0, text

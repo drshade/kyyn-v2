@@ -152,7 +152,7 @@ validateDescription description = case description of
     unless (not (T.null name)) (Left "empty scalar identity")
     unique "scalar parameter" (map fst parameters)
     case kind of
-      DecimalScalar resolution -> unless (resolution > 0) (Left "decimal resolution must be positive")
+      DecimalScalar resolution -> unless (resolution `elem` [1,10,100,1000,1000000,1000000000,1000000000000]) (Left "unsupported fixed-point resolution")
       IntScalar lo hi -> unless (lo <= hi) (Left "invalid bounded integer range")
       _ -> Right ()
   NamedDescription identity inner -> validType identity >> validateDescription inner

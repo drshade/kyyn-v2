@@ -25,7 +25,7 @@ data Shape
   | Union [(String, Maybe Shape)] | Scalar ScalarKind | Reference String
   deriving (Eq, Show)
 
-data ScalarKind = TextScalar | IntegerScalar | BoolScalar | ProbabilityScalar
+data ScalarKind = TextScalar | IntegerScalar | NaturalScalar | BoolScalar | ProbabilityScalar
   | ExactScalar D.ScalarKind deriving (Eq, Show)
 
 -- Constructor/module information binds this structural projection to authored code.
@@ -40,7 +40,7 @@ shapeOf UnitType = Right (Record [])
 shapeOf (ListType t) = List <$> shapeOf t
 shapeOf (OptionalType t) = Optional <$> shapeOf t
 shapeOf t@(Algebraic "Kyyn.Types.Fact.FactId" _ _)
-  | t == sdkFactIdType = Right (Scalar TextScalar)
+  | t == sdkFactIdType = Right (Scalar (ExactScalar D.FactIdScalar))
   | otherwise = Left "unsupported SDK FactId representation"
 shapeOf t@(Algebraic "Kyyn.Types.Fact.Fact" _ _) = case sdkFactPayload t of
   Just p -> Record <$> sequence [(,) "id" <$> shapeOf sdkFactIdType, (,) "value" <$> shapeOf p]

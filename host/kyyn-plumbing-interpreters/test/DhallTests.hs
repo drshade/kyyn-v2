@@ -32,7 +32,7 @@ main = do
     encoded <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue shape value)))
     roundtrip <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue shape encoded)))
     unless (roundtrip == value) (fail "Inferred configuration changed during round trip")
-  forM_ ["env:KYYN_CONFIG_IMPORT_MUST_NOT_RESOLVE", "1.25", "10001", "True : Text"] $ \contents ->
+  forM_ ["env:KYYN_CONFIG_IMPORT_MUST_NOT_RESOLVE", "1.25", "True : Text"] $ \contents ->
     case runPureEff (runDhallHandling (inferValue contents)) of
       Left _ -> pure ()
       Right _ -> fail "Invalid or unsupported inferred value accepted"
