@@ -11,7 +11,7 @@ import System.Directory (withCurrentDirectory)
 import System.Process (readProcess)
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Build.Inspection
-import Kyyn.Build.Manifest (parseManifest)
+import Kyyn.Build.Manifest (parseManifest, parsePluginManifest)
 import Kyyn.Types.Guest
 
 main :: IO ()
@@ -64,6 +64,14 @@ main = do
       Left _ -> pure ()
       Right _ -> fail "Invalid authored source passed compiler inspection"
   putStrLn "GHC export inspection and source rejection checks passed."
+  unless (parsePluginManifest "{ name = \"local-file\", entryModule = \"Fixture.Plugin\" }" == Right ("local-file","Fixture.Plugin"))
+    (fail "Valid plugin manifest rejected")
+  mapM_ (\source -> case parsePluginManifest source of
+    Left _ -> pure ()
+    Right _ -> fail "Malformed plugin manifest accepted")
+    ["./outside.dhall", "{ name = \"../escape\", entryModule = \"Fixture.Plugin\" }",
+     "{ name = \"valid\", entryModule = \"Fixture; injected\" }",
+     "{ name = \"valid\", entryModule = \"Fixture.Plugin\", extra = True }"]
   let validManifest = Text.unlines
         ["{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Schema.validate\"",
          ", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }",

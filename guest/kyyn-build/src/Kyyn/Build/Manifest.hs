@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Build.Manifest
   ( Manifest(..), Query(..), Tool(..), Output(..), Reference, referenceName
-  , referenceModule, parseManifest
+  , referenceModule, parseManifest, parsePluginManifest, qualifiedReference
   ) where
 
 import Control.Monad (unless)
@@ -83,6 +83,22 @@ parseManifest source = do
       Output <$> textField "name" fields <*> textField "description" fields <*> textField "query" fields
         <*> textField "plugin" sink <*> textField "instanceName" sink <*> textField "method" sink
 
+-- Installed plugin manifests are captured source, so imports would make the
+-- selected build depend on paths outside that capture.
+parsePluginManifest :: Text -> Either String (Text, Text)
+parsePluginManifest source = do
+  parsed <- first show (Parser.exprFromText "kyyn-plugin.dhall" source)
+  closed <- traverse (const (Left "kyyn-plugin.dhall must be self-contained")) parsed
+  _ <- first show (TypeCheck.typeOf closed)
+  fields <- exact ["name","entryModule"] (D.normalize closed)
+  name <- textField "name" fields
+  entry <- textField "entryModule" fields
+  unless (not (Text.null name) && Text.all (\c -> c `elem` ['a'..'z'] || c `elem` ['0'..'9'] || c == '-') name
+    && not (Text.isPrefixOf "-" name || Text.isSuffixOf "-" name || Text.isInfixOf "--" name))
+    (Left "Invalid plugin name")
+  _ <- qualifiedReference False (entry <> ".connectors")
+  pure (name,entry)
+
 type Fields s = Map.Map Text (D.RecordField s Void)
 
 record :: D.Expr s Void -> Either String (Fields s)
@@ -107,13 +123,17 @@ textField name fields = field name fields >>= \value -> case value of
 refField :: Bool -> Text -> Fields s -> Either String Reference
 refField typeName name fields = do
   text <- textField name fields
+  first (("Manifest field " ++ Text.unpack name ++ ": ") ++) (qualifiedReference typeName text)
+
+qualifiedReference :: Bool -> Text -> Either String Reference
+qualifiedReference typeName text = do
   let parts = Text.splitOn "." text
       identifier start part = case Text.uncons part of
         Just (firstChar,rest) -> start firstChar && Text.all (\c -> isAlphaNum c || c == '_' || c == '\'') rest
         Nothing -> False
   unless (length parts >= 2 && all (identifier isUpper) (init parts)
     && identifier (if typeName then isUpper else \c -> isLower c || c == '_') (last parts))
-    (Left ("Expected a qualified Haskell name in " ++ Text.unpack name))
+    (Left "Expected a qualified Haskell name")
   pure (Reference text)
 
 list :: D.Expr s Void -> Either String [D.Expr s Void]

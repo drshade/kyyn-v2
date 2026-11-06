@@ -55,6 +55,7 @@ main = do
   case args of
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
+    ["--captured-built",path] -> checkCaptured (path,[])
     ["--built",path] -> check (path,[])
     ["--schema-built",path] -> checkSchema (path,[])
     ["--api-built",path] -> checkApi False (path,[])
@@ -195,7 +196,7 @@ checkRegistrations = do
 -- Exercise a callback on the transport already opened for invocation. The
 -- supplied host response is consumed only after the guest emits its request.
 capturedGuest :: IO ()
-capturedGuest = runGuest [] [capturedReadEntry @() @Item @Integer "files.count"
+capturedGuest = runGuest [] [capturedReadEntry @() @Item @Integer "local-file.Files.count"
   (G.CapturedMethodIdentity "local-file" "Files" "count" "Count captured files") []
   (\() snapshot -> fmap (fmap (toInteger . length)) (Plugin.listEvidenceIds snapshot))]
 
@@ -204,8 +205,8 @@ checkCaptured executable@(path,args) = do
   descriptionValue <- invoke executable (object ["operation" .= ("describe" :: String)])
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
-  case description.entries of
-    [G.CapturedReadEntry "files.count" method _] ->
+  case [entry | entry@G.CapturedReadEntry{} <- description.entries] of
+    [G.CapturedReadEntry "local-file.Files.count" method _] ->
       unless (method.methodName == "count") (fail "Captured method identity changed")
     _ -> fail "Missing captured read entry"
   let rename entry = entry { G.entryName = "another.entry" }
@@ -218,7 +219,7 @@ checkCaptured executable@(path,args) = do
           other -> other
     unless (isLeft (Host.checkGuest description { G.entries = map invalid description.entries }))
       (fail "Invalid plugin name in captured description accepted")
-  let invocation = toJSON (G.Invoke "files.count" (toJSON (G.CapturedInvocation (object []) "snapshot-1")))
+  let invocation = toJSON (G.Invoke "local-file.Files.count" (toJSON (G.CapturedInvocation (object []) "snapshot-1")))
       response identity = object ["tag" .= ("HostResponse" :: String),"id" .= (identity :: String),
         "result" .= object ["tag" .= ("Right" :: String),"value" .= (["one","two"] :: [String])]]
       frame value = Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))
@@ -243,13 +244,13 @@ checkCaptured executable@(path,args) = do
 
 checkRequests :: IO ()
 checkRequests = do
-  let requests = [G.Describe,G.Invoke "files.count" (toJSON (G.CapturedInvocation (object []) "snapshot-1"))]
+  let requests = [G.Describe,G.Invoke "local-file.Files.count" (toJSON (G.CapturedInvocation (object []) "snapshot-1"))]
   forM_ requests $ \request -> do
     decoded <- right (eitherDecodeStrict' (Lazy.toStrict (encode request)))
     unless (decoded == request) (fail "Shared guest request codec changed its value")
   forM_ [object ["operation" .= ("unknown" :: String)],
     object ["operation" .= ("describe" :: String),"extra" .= True],
-    object ["operation" .= ("invoke" :: String),"entry" .= ("files.count" :: String)],
+    object ["operation" .= ("invoke" :: String),"entry" .= ("local-file.Files.count" :: String)],
     object ["operation" .= ("invoke" :: String),"entry" .= True,"argument" .= object []]] $ \value ->
       unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestRequest))
         (fail "Malformed shared guest request accepted")

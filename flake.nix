@@ -91,6 +91,11 @@
       checks = forAllSystems (system:
         let
           p = project system;
+          capturedSource = p.pkgs.runCommand "kyyn-captured-plugin-source" { } ''
+            mkdir -p "$out/plugins/packages/local-file/source"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
+          '';
           schemaSource = p.pkgs.runCommand "kyyn-schema-discovery-source" { } ''
             mkdir -p "$out"
             cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
@@ -114,6 +119,7 @@
           '';
         in {
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
+          guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
           guest-api = self.lib.mkGuest { inherit system; src = apiSource; };
           guest-api-bindings = self.lib.mkGuest { inherit system; src = bindingApiSource; };
