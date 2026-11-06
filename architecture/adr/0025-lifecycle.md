@@ -56,8 +56,8 @@ or an assertion that it remains current head.
 Startup inspects identity/metadata without eagerly checking every root or compiling
 every plugin. A first operation that needs executable KB code may compile on a
 fresh clone; report that progress and any failure. Other cheap operations such as
-listing drafts must remain usable independently. Shared compiled-artifact caches
-publish complete entries as described in ADR 0006. Clients refresh persisted
+listing drafts must remain usable independently. Compiled guest outputs use Nix
+output retention and reuse as described in [ADR 0002](0002-runtime.md). Clients refresh persisted
 workspace/results to observe each other's work; collaborative editing or
 cross-process cancellation is not part of the initial contract.
 

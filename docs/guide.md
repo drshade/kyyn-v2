@@ -56,8 +56,9 @@ another KB.
 ## Understand what you are changing
 
 The accepted `root/` contains Haskell source, declarations in `kb.dhall`,
-materialized Dhall facts, recipe definitions/state, and vendored plugin source
-and configuration. Haskell types are authoritative; generated contracts and
+materialized Dhall facts, recipe definitions/state, vendored plugin source and
+configuration, and `flake.nix`/`flake.lock`. The flake declares the guest build;
+the lock pins its compiler, SDK and library inputs. Haskell types are authoritative; derived contracts and
 bindings describe those types rather than introducing another schema to maintain.
 
 An evolution workspace has three useful parts:
@@ -80,7 +81,9 @@ the accepted root.
 ## Create, check and accept an evolution
 
 For a new KB, `kb init` creates an empty root and its first commit using the
-configured Git identity. For an existing KB, inspect its facts, schema and
+configured Git identity. It writes a complete pre-locked flake from the host's
+repository revision, without resolving dependency versions. Its first check may
+fetch the locked inputs and build the guest. For an existing KB, inspect its facts, schema and
 relevant recipes first.
 
 ```sh
@@ -332,11 +335,27 @@ SystemTwo uses the configured OpenAI or Anthropic provider. Consult
 `Agentic`, `Agentic.Questions` and `Kyyn.Agentic` through API discovery before
 authoring a flow. Use record-dot access for upstream library records.
 
-Define model-facing data types in modules independent of flows/generated bindings.
-Import `Kyyn.Contracts.<defining module>.<type> ()` in a flow module to bring the
-generated contract into scope. Nonempty enums also get generated `Options`.
-Use monomorphic data/newtypes; wrap standalone compound types when needed. Do not
-also define a competing instance. No handwritten wire codec is needed.
+Define model-facing types with upstream Agentic's `Contract` and GHC `Generic`:
+
+```haskell
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+import Agentic.Contract (Contract)
+import Data.Text (Text)
+import GHC.Generics (Generic)
+
+data Task = Task { title :: Text }
+  deriving (Generic, Contract)
+```
+
+That single derivation supplies the
+structural contract interpreted by Kyyn's describe, storage and model codecs.
+Nonempty enums can also derive `Options`; custom labels and ordering use an
+ordinary instance. Types and flows may share a module. Applied types and containers
+use compositional instances where their shapes are supported; there is no blanket
+monomorphic-only or wrapper requirement. No generated contract import or handwritten
+wire codec is needed. Root-specific collection/edit bindings remain generated;
+the Root schema must not import its own bindings.
 
 ### Render and publish
 
@@ -369,13 +388,34 @@ CLI workflows need no daemon or built-in scheduler.
 
 ## Install
 
-For development source builds, run `bash tools/install-cli.sh` from the Kyyn
-repository; [build prerequisites](PROJECT-PRACTICES.md#development-setup) apply.
-It installs `~/.local/bin/kyyn-v2` and its runtime bundle. Installed users need
-Git, not the Haskell/Node/C toolchains. Plain `cabal install` does not install
-the runtime assets. Rerun the installer to update; KBs are left untouched.
-An executable update can make a KB's vendored plugin source incompatible with the
-new SDK; updating the executable does not update those plugins.
+Install Nix and Git, then install Kyyn from its repository flake:
+
+```sh
+nix profile install github:drshade/kyyn-v2
+```
+
+The flake builds the host executable `kyyn-v2`. Nix supports Linux, macOS and
+Windows through WSL2; it supplies the compiler and libraries rather than requiring
+a global Haskell toolchain. Contributors use `nix develop` and `nix build .#kyyn`
+in the repository; see [development setup](PROJECT-PRACTICES.md#development-setup).
+
+A KB has its own build environment inside its accepted root:
+
+```text
+root/
+  flake.nix       guest build and library dependencies
+  flake.lock      pinned compiler, SDK and external inputs
+  kb.dhall        schema, query and tool declarations
+  src/            authored Haskell
+  facts/          materialized facts
+```
+
+Initialization pins the SDK input to the host's repository revision. Add Haskell
+libraries through the KB's flake and update its lock explicitly as part of an
+evolution. Checks may fetch or build locked dependencies; they do not update pins.
+The guest build exports `packages.${system}.kyyn-guest`. Updating the installed
+host does not rewrite existing KB locks or plugin source. If a KB's description
+no longer matches the host protocol, repair its SDK pin/code and check it again.
 
 ### Explore a complete evidence capture
 

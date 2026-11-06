@@ -56,7 +56,7 @@ distinct stages, not conflicting classifications of the same call. Failed checki
 does not erase a saved candidate. Missing/crashed compiler or broken runtime
 execution remains operational Failure, never ordinary authored-code rejection.
 
-For MicroHs compiler errors, preserve the compiler's full source diagnostic,
+For guest compiler errors, preserve the compiler's full source diagnostic,
 including textual file/line/column and multi-line explanation, but remove the
 compiler's internal `CallStack (from HasCallStack)` and `HasCallStack backtrace`
 blocks. Operational failures retain their existing detail; this is not a general

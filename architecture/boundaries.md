@@ -6,7 +6,7 @@ Use this map to find the owning decision, not as a second interface specificatio
 | --- | --- |
 | Where do effects, native IO and interpreter composition belong? | [0003 — effects](adr/0003-effects.md) |
 | Which package owns a module? | [0026 — repository layout](adr/0026-repository-layout.md) |
-| How does the bundled guest execute? | [0002 — runtime](adr/0002-runtime.md), [0007 — wire](adr/0007-wire.md), [0009 — capabilities](adr/0009-capabilities.md) |
+| How is the KB-owned guest built and executed? | [0002 — runtime](adr/0002-runtime.md), [0007 — wire](adr/0007-wire.md), [0009 — capabilities](adr/0009-capabilities.md) |
 | What are KB, root, workspace and candidate? | [0004 — knowledge base](adr/0004-knowledge-base.md), [0010 — evolutions](adr/0010-evolutions.md) |
 | What can the schema-agnostic host inspect and persist? | [0005 — contracts](adr/0005-contracts.md), [0006 — storage](adr/0006-storage.md) |
 | What gets checked and accepted? | [0011 — validation](adr/0011-validation.md), [0012 — acceptance](adr/0012-acceptance.md), [0013 — collaboration](adr/0013-collaboration.md) |

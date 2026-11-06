@@ -116,7 +116,7 @@ authentication workflow.
 
 Source connectors can read and replace secrets through the guest request row;
 explicit connector login uses the same per-KB store. Graph client-secret and
-device-code flows must pass recording-provider tests under both GHC and MicroHs,
+device-code flows must pass recording-provider tests through the selected GHC guest build,
 with opt-in live verification of tenant consent/policy.
 
 ### Configuration remains ordinary typed root data

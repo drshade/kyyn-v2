@@ -12,7 +12,18 @@ The training-session helper should talk about sessions and people.
 
 ## Decision
 
-The authored surface consists of ordinary MicroHs schema/code modules, generated
+The KB owns `flake.nix` and Nix's `flake.lock`, including its compiler, Kyyn SDK
+and author-selected libraries. Dependencies are authored inputs to ordinary
+code/configuration evolutions; a second Kyyn dependency lock is not introduced.
+The guest build helper derives descriptions and generated bindings from checked
+exports before compiling their consumers (ADRs 0002 and 0005). Authors do not
+implement describe framing or maintain schema JSON. Private library types may be
+arbitrarily rich; only types crossing Kyyn's boundary must lower to its supported
+contract algebra. Trusted authors are responsible for the declared purity/effect
+roles; they are not a promise of runtime I/O confinement.
+
+
+The authored surface consists of ordinary Haskell schema/code modules, generated
 bindings, pure functions, and explicit host-capability operations. Under the
 selected Haskell schema authority in ADR 0005, bindings refer to authored
 domain types; generated declarations are only genuinely derived adapters or
@@ -174,11 +185,12 @@ can give scalar/list/optional contracts an exported name.
 
 The generated `KyynQueryBindings` module exports the KB-specific `Query a` alias
 and a typed binding for each collection, named after its Haskell root field while
-retaining its declared collection identity. Schema modules must not depend on
-this derived module: Kyyn first inspects the schema, then generates bindings for
-query modules. Source collisions with generated adapter modules are diagnostics,
+retaining its declared collection identity. The Root schema must not import its own
+derived bindings: a schema-only prepass generates them for query modules. This
+does not require other authored types to be separated from their consumers. Source collisions with generated adapter modules are diagnostics,
 not silent overwrites. Discovery inspects contracts without executing queries;
-the generated entry type-checks the chosen implementation at invocation.
+the final guest build type-checks the chosen implementation before publishing its
+description or invoking it.
 
 RootExecution takes structurally checked Root values so it can evaluate candidate
 examples. ADR 0011's checkRoot now produces Validated Root after code, semantic and
@@ -286,17 +298,19 @@ agent or prescribe its steps. ADR 0028 owns explicit closed-flow execution.
 Pure calculations are reusable from validation, queries and views. Provide a
 small SDK for identified facts, diagnostics, selected existing exact-value library
 types/adapters and evolution composition. Do not create a Kyyn arithmetic library
-in place of evaluating existing Haskell/MicroHs implementations. Use standard
-optics if compatible; do not expand the custom optics
-implementation as a substitute for evaluating dependencies. Keep `After` imports
-qualified in evolution scaffolds and generate record field optics mechanically.
+in place of evaluating existing Haskell implementations. Use the maintained `lens` library for optics and `generic-lens` for
+record-field lenses; `Kyyn.Optics` is a convenience re-export, not an independent
+optics implementation. Keep `After` imports qualified in evolution scaffolds.
 
 ## Alternatives and consequences
 
-Reject hand-maintained registries that duplicate structural schema, blanket Generic/Template-Haskell
-derivation assumptions, and a single stringly `invoke` API as the author surface.
-Some generated code is a deliberate maintenance cost, but the author edits one
-contract plus its implementation, not an encoder and a schema in parallel.
+Use GHC's Generic derivation and ordinary class instances for contracts in their
+defining modules. Template Haskell and DerivingVia are available when a library's
+API calls for them; these are guest implementation choices, not host protocol
+requirements. Reject hand-maintained registries that duplicate structural schema
+and a single stringly `invoke` API as the author surface. Generated Root bindings
+and private entry adapters remain deliberate build outputs; authors maintain one
+type definition plus implementation, not an encoder and a schema in parallel.
 Diagnostics should identify authored sources rather than generated boilerplate.
 Keep source positions when supplied by the compiler/inspector; when only compiler
 message text exists, display it with no structured location under ADR 0019. Do not

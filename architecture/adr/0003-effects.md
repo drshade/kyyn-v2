@@ -59,11 +59,11 @@ The [repository layout](0026-repository-layout.md) maps these responsibilities t
 
 Compilation and execution are distinct plumbing capabilities. A handler that prepares
 and invokes an adapter declares both; a caller executing an existing artifact needs
-only GuestExecution. [ADR 0005](0005-contracts.md) owns the concrete
-`runSchemaInspectionIO` row. Its IOE is for native compiler-library inspection,
-not guest execution. The
-GuestCompilation and GuestExecution interpreters themselves lower through FileSystem
-and ProcessExecution without IOE. Command composition installs those handlers where
+only GuestExecution. [ADR 0005](0005-contracts.md) owns description-based
+SchemaInspection, interpreted through GuestCompilation and GuestInspection. The
+host has no native compiler-library dependency. GuestCompilation, GuestInspection
+and GuestExecution lower through filesystem/process capabilities; only their native
+interpreters acquire IOE. Command composition installs those handlers where
 needed; EvidenceStore operations alone do not require either capability.
 
 For example, the plumbing filesystem accepts a caller-supplied scope and relative

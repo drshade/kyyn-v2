@@ -118,43 +118,32 @@ The known `Probability` scalar follows [ADR 0005's model and storage
 projections](0005-contracts.md): reuse its upstream model contract rather than
 generating a competing instance.
 
-Keep authored type definitions in modules independent of flows and generated
-contracts. A flow requests a generated instance through an ordinary import:
+Derive contracts in the authored defining module with ordinary GHC `Generic`
+and `Contract` instances. Flows may share that module; no generated contract
+imports or separate module rule is needed. Nonempty enums can derive `Options`,
+or supply ordinary instances for custom labels, descriptions and order.
 
-```haskell
-import Todos (Todo)
-import Kyyn.Contracts.Todos.Todo ()
+Upstream haskell-agentic's `Contract` is the single structural authority. Extend
+it upstream with an extensible scalar vocabulary so Kyyn can supply FactId,
+exact decimals and blob references without maintaining a competing contract class.
+Kyyn's describe, storage and model-codec interpreters all consume this same
+representation. Authors write exactly one `deriving (Generic, Contract)` per type;
+there is no additional Kyyn instance or model-facing DerivingVia clause.
 
-extractTodo :: Flow Text Todo
-extractTodo = draft "Extract the actionable task from this evidence."
-```
+This haskell-agentic extension is a required upstream dependency of the GHC guest
+implementation. Pin the upstream revision providing it through the repository's
+flake input. The scalar extension must preserve typed encoding/decoding and allow
+distinct storage and model projections under ADR 0005, rather than flattening
+custom scalars into unlabelled primitive shapes. Verify descriptions, storage
+round trips and model projections for each supported shape and scalar. Unsupported
+projections fail before execution or model calls.
 
-`Kyyn.Contracts.<Module>.<Type>` names the type at its defining module. The host
-parses authored imports with the compiler, inspects each requested type, and
-generates its codec plus `Contract` instance before compiling the authored flow.
-Imports in other authored helper modules count too; repeated imports select the
-same instance. Generated public modules are available through guest API discovery.
-For a nonempty enum (all constructors nullary), the same import also generates
-`Options`: constructor labels, declaration order and no optional descriptions.
-This supports `choice` and `score` without a handwritten instance. Payload-bearing
-sums and records receive only `Contract`. Authors needing custom option labels,
-descriptions or ordering own their instances instead of importing that generated
-module; generated and handwritten instances for the same class/type cannot coexist.
-There is no second registration list, handwritten structural contract, or generated
-flow. Agents and humans own the instructions, tool choices and flow composition.
-
-Initially generate instances for monomorphic `data`/`newtype` declarations at
-their defining names. A type alias is not a new instance identity: import the
-underlying nominal type's contract. Use a named wrapper for a standalone model
-contract over a container or applied generic type. This avoids competing with
-upstream's existing instances. Defining modules must not import their generated
-contracts, directly or through a flow; that would make inspection circular.
-
-Upstream supports explicit codecs under both GHC and MicroHs; Generic deriving
-of `Contract` and `Options` is GHC-only. It uses its own JSON-shaped `Value`.
-Kyyn generates explicit codecs and instances without requiring GHC metadata in the
-guest. Internal library tuples or floating-point
-values do not expand Kyyn's public schema vocabulary by accident.
+Applied generic types and containers use compositional instances when their
+shapes are supported. Type aliases are not new instance identities; wrappers are
+needed only for deliberately distinct semantics or instance selection, not as a
+blanket restriction on compound types. Internal library tuples or floating-point
+values do not expand Kyyn's public schema vocabulary by accident. Authors own the
+instructions, tool choices and flow composition.
 
 [ADR 0027](0027-judgement.md) owns the Jev-backed SystemOne integration.
 Agentic owns the question and answer types; Kyyn supplies credentials, wire
@@ -317,14 +306,14 @@ Production response caching or mandatory transcript retention is not selected.
 
 ## Verification
 
-Use the pinned unmodified library sources recorded in
-[vendored inputs](../../vendor/README.md). Core portability and Kyyn integration
-are separate obligations: the former does not prove generated codecs, provider
-adapters or recipe persistence.
+Use the haskell-agentic sources pinned by the flake lock, including the required
+upstream Contract extension. Library tests and Kyyn integration are separate
+obligations: the former does not prove derived codecs, provider adapters or recipe
+persistence.
 
 Exercise explicit record/sum contracts, typed tools, nested drafts, malformed
 output followed by correction, applicative judgements and flow descriptions under
-both GHC and MicroHs with scripted handlers. Test a generated-contract flow through
+host and built guest with scripted handlers. Test a generically derived contract flow through
 Kyyn's real guest/host protocol, including cancellation and provider failures.
 
 A closed recipe must produce a reviewable frozen ordinary evolution. Verify typed request/state decoding, mandatory initial state, state-only proposals,

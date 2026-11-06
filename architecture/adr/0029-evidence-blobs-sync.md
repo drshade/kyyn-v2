@@ -8,7 +8,7 @@ title: 'Evidence blobs and connector-owned sync positions'
 
 Mail attachments, meeting transcripts and drive files need captured bytes without
 embedding binaries in evidence payloads or sending downloads through
-the MicroHs process. Incremental providers also need a continuation position that
+the guest process. Incremental providers also need a continuation position that
 advances atomically with the evidence it describes. Plugins own provider-specific
 acquisition; the host supplies blob storage and position persistence.
 
@@ -309,7 +309,7 @@ plugin-authored text contains a secret. There is no automatic sanitization claim
 
 ## Consequences and verification
 
-Exercise the same generated guest API under GHC and MicroHs. Verify binary and
+Exercise the same generated guest API through the selected GHC guest build. Verify binary and
 large-text downloads without bytes in guest download replies, zero-byte content,
 status/header preservation, retry/cancellation and UTF-8 failure.
 Check reference discovery through nested contracts, hash/size integrity and refusal
@@ -322,7 +322,7 @@ without retaining history. Test surface file usability after method return until
 refresh or explicit instance clearing. Concurrent read/reclamation behavior is
 not a supported guarantee or a verification requirement.
 
-Check typed report derivation and dispatch under both GHC and MicroHs, including
+Check typed report derivation and dispatch through the selected GHC guest build, including
 nullary report/position types and stateless absence. Reject malformed report values
 and BlobRef-bearing report contracts before publication. Verify stored report
 contract reconstruction without guest execution, and corruption refusal.

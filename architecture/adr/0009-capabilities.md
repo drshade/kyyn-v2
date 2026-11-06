@@ -56,7 +56,7 @@ Configured headless automation can call the same operations without human approv
 at each invocation. Query browsing does not pass through this output path.
 
 Use composable typed request algebras with a pure `Program capabilities a`-like
-representation in the guest. The exact MicroHs-compatible encoding is not
+representation in the guest. The exact guest encoding is not
 assumed to be host `effectful`. `PluginHost` and `KnowledgeBaseHost` can be aliases
 for selected capabilities, not an all-access record. A request's result type
 determines the continuation input; a raw wire value never reaches it unchecked.
@@ -86,7 +86,7 @@ The existential `x` links a request to exactly the value accepted by its
 continuation. `interpretProgram` is a pure fold into an explicit handler, not
 native IO hidden in the authored program. The generated transport handler uses
 private adapter IO; ordinary code builds `Program`. The shared implementation
-compiles unchanged under GHC and pinned MicroHs, including dependent continuations
+compiles in the host and selected guest builds, including dependent continuations
 whose read operations return different payload types.
 The continuation stays in the running guest and is never encoded on the wire.
 
@@ -289,7 +289,7 @@ from the same captured bytes. The SDK's `readTextFile` returns both together.
 The folder connector accepts both KB-relative and absolute directories using the
 same host path resolution as the file sink. Enumeration failure is a typed error, never an empty
 directory. The generated adapters and request/response transport are exercised
-under both compilers with recording responses. The native MicroHs broker additionally
+under host and guest builds with recording responses. The native guest broker additionally
 exercises live filesystem acquisition and EvidenceStore publication, including
 invocation-local reads and failed acquisitions that leave the previous head unchanged.
 
@@ -331,36 +331,31 @@ type PluginLogin a =
 ```
 
 The SDK exposes the same evidence helper names in both acquisition and captured
-reads. A small class supplies their request injection, with two explicit instances:
+reads. A `Member`-style class supplies injection into a request sum:
 
 ```haskell
-class ReadsEvidence row payload where
-  injectEvidence :: EvidenceRead payload a -> row a
-
-instance ReadsEvidence (EvidenceRead payload :+: BlobRead) payload where
-  injectEvidence = InLeft
-
-instance ReadsEvidence (AcquisitionRequests payload) payload where
-  injectEvidence = InRight . InRight . InRight . InRight . InRight
+class Member request row where
+  inject :: request a -> row a
 
 listEvidenceIds
-  :: ReadsEvidence row payload
+  :: Member (EvidenceRead payload) row
   => EvidenceSnapshot payload -> Program row (Either FetchError [EvidenceId])
-listEvidenceIds = request . injectEvidence . ListEvidenceIds
+listEvidenceIds = request . inject . ListEvidenceIds
 
 readEvidence
-  :: ReadsEvidence row payload
+  :: Member (EvidenceRead payload) row
   => EvidenceSnapshot payload -> EvidenceId
   -> Program row (Either FetchError (Maybe (Evidence payload)))
-readEvidence snapshot key = request (injectEvidence (ReadEvidence snapshot key))
+readEvidence snapshot key = request (inject (ReadEvidence snapshot key))
 ```
 
-The concrete entry-point row selects the instance. No generated helper module or
-recursive sum-membership search is required. Reusable helpers may retain this
-constraint; registered entries supply concrete data contracts and the supported
-row under ADR 0015. The signature-registration proof compiles these instances and
-their helper use under both GHC and MicroHs, and rejects a registered entry that
-leaves the helper's row/payload constraint unresolved.
+The SDK provides compositional membership instances for the request sums. Authors
+do not write depth-specific `InLeft`/`InRight` chains or generate an instance for
+each acquisition row. Reusable helpers retain membership constraints; registered
+entries supply concrete supported rows and data contracts under ADR 0015. The
+compiler must resolve each helper's membership unambiguously. Duplicate members
+are not a mechanism for selecting different handlers; explicit capability types
+identify distinct operations.
 
 Native HTTP handles TLS and UTF-8 transport. HTTP status responses remain values
 for provider code to interpret; transport failures have sanitized diagnostics,
@@ -370,7 +365,8 @@ the host boundary using ADR 0016's existing rule. Waits require nonnegative
 durations and remain cancellable. No host OAuth implementation is introduced.
 
 Every source connector uses this one acquisition row, generated adapter and host
-dispatcher. Generated helpers hide sum injections and protocol codecs; a fetch can
+dispatcher. Membership helpers hide sum injections and private adapters own
+protocol codecs; a fetch can
 combine file, HTTP, streamed-blob, secret, waiting and evidence requests without another registration
 declaration. Acquisition can save a rotated credential and wait, but cannot display
 interactive instructions. Optional login uses its separate row and can guide a user
@@ -426,9 +422,9 @@ The generated signatures and installed handler rows must agree.
 
 ### Typed dispatch
 
-Generated ergonomic helpers perform the sum injections, so KB authors need not
-write `InLeft` or `InRight` at each call. Adding a row-membership library is an
-alternative implementation of this composition, not a different capability model.
+Membership-constrained helpers perform sum injections, so KB authors need not
+write `InLeft` or `InRight` at each call. Use compositional membership instances
+rather than generated injection boilerplate for each row.
 A request interpreter for `SnapshotRead` cannot accept `ReadEmail` by type. This
 does not establish an OS sandbox or prove two runtime snapshot IDs are equal.
 
@@ -480,7 +476,7 @@ not speculative stubs for every possible integration.
 
 ## Verification
 
-Compile ordinary composition and examples with missing required capabilities under pinned MicroHs.
+Compile ordinary composition and examples with missing required capabilities in the selected GHC guest environment.
 Script host responses and test a live continuation across several requests.
 Reject an unexpected capability before dispatch. Prove a captured-read method call
 routes through the plugin's own context without granting acquisition capabilities

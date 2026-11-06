@@ -23,8 +23,12 @@ Initialization uses `KnowledgeBaseInitialization`, not an evolution workspace or
 the evolution-history interpreter. Preparation is read-only and captures the
 requested directory, the nearest existing directory for Git/config lookup, and
 an optional existing KB location, checked-out branch and head. Identity is read
-before compilation; the pure empty scaffold then passes `OpenCapturedRoot` and
-the ordinary `checkRoot` path. Publication accepts only the resulting checked root:
+before compilation. The pure empty scaffold includes `flake.nix` and a complete,
+pre-locked `flake.lock` supplied from the host's repository revision. Initialization
+does not resolve dependency versions or update that lock. The scaffold then passes
+`OpenCapturedRoot` and the ordinary `checkRoot` path; this first check may fetch
+locked inputs and perform a cold Nix build. Publication accepts only the resulting
+checked root:
 
 ```haskell
 data KnowledgeBaseInitialization :: Effect where

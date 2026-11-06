@@ -40,7 +40,8 @@ data Root = Root
 owned by [contracts](0005-contracts.md). `FactSnapshot` and
 `CodeSnapshot` contain immutable file-tree values as defined in
 [storage](0006-storage.md), including vendored dependency source, executable
-examples and supporting non-secret config files alongside code. Loading reads
+examples, `flake.nix`, `flake.lock` and supporting non-secret config files
+alongside code. Loading reads
 the bytes into the value; subsequent reads do not resolve editable paths or
 require a store-specific handle service. The guest receives decoded domain values.
 Recipe definitions and their independently typed state follow

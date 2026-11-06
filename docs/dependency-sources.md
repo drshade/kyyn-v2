@@ -4,8 +4,8 @@ This inventory records the declared licenses and license files inspected in the
 exact Hackage source archives used for the initial effectful runtime/compilation
 work. It is source evidence, not distribution clearance or a complete transitive
 dependency audit. [ADR 0022](../architecture/adr/0022-open-source.md) owns licensing
-policy and distribution review; [vendored inputs](../vendor/README.md) have their
-own provenance and retained notices.
+policy and distribution review. Locked Nix inputs retain upstream provenance and
+required notices; inspect the selected revisions for each distribution.
 
 | Package | Inspected version | Declared license | Source archive |
 | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ own provenance and retained notices.
 | filelock | 0.1.1.8 | PublicDomain (Cabal declaration); LICENSE is CC0-1.0 | [source](https://hackage.haskell.org/package/filelock-0.1.1.8/filelock-0.1.1.8.tar.gz) |
 
 Each archive contains `LICENSE` (`LICENSE.md` for prettyprinter); its Cabal declaration and that file were inspected.
-These are native Cabal dependencies. Transformers also supplies the vendored
-guest subset documented in [vendored inputs](../vendor/README.md). The table does
-not pin the solver: Cabal files govern dependency constraints, and the resolved
-build plan must be reviewed for any distribution.
+These packages are ordinary host/guest dependencies where used. The table is
+license evidence, not the dependency lock: flake.lock pins external inputs and
+the selected Nix package set supplies the build plan. Review the actual resolved
+host and guest dependencies for each distribution.

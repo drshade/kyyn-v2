@@ -26,8 +26,8 @@ run. Reviewers do not routinely repeat the author's tests.
 | Entry point | Scope |
 | --- | --- |
 | `bash tools/test.sh` | Fast checks: docs/import boundaries, native build and focused native/pure tests |
-| `bash tools/test.sh --full` | Fast checks plus real MicroHs and installed-CLI integration |
-| `bash tools/test-installed.sh` | Disposable local installation, installed journeys and native/self-hosted compiler parity |
+| `bash tools/test.sh --full` | Fast checks plus real Nix-built GHC guests and installed-CLI integration |
+| `bash tools/test-installed.sh` | Disposable flake-built installation, installed journeys and host/guest protocol integration |
 
 The scripts own suite membership. Each test entry file's header comment describes
 its coverage, important exclusions and unusual setup or focused modes. Keep that
@@ -50,23 +50,25 @@ installed journey scripts accept the executable path (see their header/usage).
 
 ### Development setup
 
-Build tools: Bash 3.2+, Node.js 22+, GHC 9.10.3, Cabal 3.16.1.0, Make and a C
-compiler. Git is needed for repository operations. Fetch native dependencies with
-`cabal update` on a new machine. Node is build/test tooling, not an installed
-runtime dependency. See [the guide](guide.md#install) for local installation and
-[vendored inputs](../vendor/README.md) for guest libraries.
-
-Full integration stages the toolchain automatically. For a focused real-guest
-test, stage it once in a new directory and select it explicitly:
+Install Nix and Git, then enter the repository's pinned contributor environment:
 
 ```sh
-bash tools/stage-microhs.sh /tmp/kyyn-test-toolchain
-export KYYN_TEST_ROOT="$PWD"
-export KYYN_TEST_TOOLCHAIN=/tmp/kyyn-test-toolchain
-export MHSDIR="$KYYN_TEST_TOOLCHAIN"
-export MHSCPPHS="$KYYN_TEST_TOOLCHAIN/bin/cpphs"
-cabal test guest-api --test-show-details=direct
+nix develop
+nix build .#kyyn
 ```
+
+The flake supplies GHC, Cabal and the development/check tools. Cabal remains usable
+inside `nix develop`, including `cabal test SUITE --test-show-details=direct`.
+Node runs repository checks; it is not an installed Kyyn runtime dependency.
+See [the guide](guide.md#install) for installation. `flake.lock` pins upstream
+inputs, including haskell-agentic; package dependencies come from the selected
+Nix environment rather than staged compiler trees or global package databases.
+
+Real guest tests instantiate disposable KBs, build their `kyyn-guest` output
+through each KB's flake, and exercise describe/invoke through the host protocol.
+A host-linked SDK test alone does not establish guest integration. The full test
+entry point includes those KB builds and installed journeys; no separately staged
+compiler bundle is required.
 
 Do not silently skip a failing selected check. Record environmental limitations;
 some process tests require POSIX, and installed journeys need a writable disposable
@@ -116,7 +118,7 @@ results; a selected run still resolves, builds and tests its current inputs.
 
 ## Releases
 
-- **Published releases:** none. The CLI and bundled runtime are available as development source builds.
+- **Published releases:** none. The CLI and guest SDK are distributed through the repository flake.
 - **Release runbook:** not yet applicable. Establish and verify one before publishing
   a build; ADRs 0020 and 0022 own distribution and licensing decisions.
 - **Dependency evidence:** [native runtime source inventory](dependency-sources.md)

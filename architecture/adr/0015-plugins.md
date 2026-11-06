@@ -489,7 +489,7 @@ Verification must derive the local-file and Graph contracts without type-name
 declarations, exercise fetches with and without options, aliases and concrete
 instantiations of parameterised data, and reject wrong rows, arities, wrappers
 and inconsistent Config/Payload.
-Generated adapters must compile under GHC and MicroHs. Installed discovery must
+Generated adapters must compile in the selected GHC guest environment. Installed discovery must
 continue exposing exact schemas, and a mixed-capability fetch must still work.
 
 Native `MethodName` uses the same identifier rule as `BindingName`. Method names
@@ -593,6 +593,16 @@ generated bindings. Payload capture policy belongs to
 [ADR 0014](0014-evidence.md#microsoft-graph-mail-meeting-artifacts-and-files),
 and blob/sync mechanics to [ADR 0029](0029-evidence-blobs-sync.md).
 
+### One dependency environment per KB
+
+Vendored plugin packages share the KB flake's compiler and Kyyn SDK. Libraries
+needed by their source are declared in that environment and pinned by flake.lock;
+installation/update must expose missing dependency changes for author repair.
+There is no independent plugin SDK pin or second host-side compatibility solver.
+Plugin methods and registration descriptors are generated in the same guest build
+as their consumers. Separate protocol invocations may still isolate call lifetime;
+they select entries of the same immutable build, not independently resolved SDKs.
+
 ### Explicit updates, ordinary repair
 
 Repeat `plugin install --evolution ID` with an explicit source or tap-qualified
@@ -604,7 +614,7 @@ inspectable and repairable, not a reason to add a compatibility resolver.
 
 Fetch/vendor source dependencies during explicit installation or update, outside
 pure checking. Compilation and execution use captured local source and the
-installed SDK/runtime, never an implicit fetch from a live tap branch. Changed
+KB's locked SDK/dependency environment, never an implicit fetch from a live tap branch. Changed
 source or toolchain must not select old compiled artifacts; rebuilding is sufficient
 without a compatibility-version system. Generated bindings still identify their
 actual checked contracts under ADR 0005.
@@ -660,4 +670,4 @@ types, wrong methods and mismatched config contracts. Discover typed methods, ex
 update source from a remote, break a contract and repair a caller using compiler
 diagnostics and Git diffs. Preserve configuration/credentials and refuse destructive
 replacement of local source edits. No kernel rebuild, user-managed language toolchain
-or new connection-provider plugin is needed for ordinary MicroHs package changes.
+or new connection-provider plugin is needed for ordinary guest package changes.

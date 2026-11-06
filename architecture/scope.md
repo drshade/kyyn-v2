@@ -1,8 +1,7 @@
 # Outcomes that determine the architecture
 
-This is product scope, not a claim that every surface is implemented. The
-[current guide](../docs/guide.md) describes usable CLI workflows; ADRs own the
-architecture and issues own implementation work.
+This defines product scope. The [guide](../docs/guide.md) describes CLI workflows;
+ADRs own the architecture and issues own implementation work.
 
 ## Two representative systems, not two built-in verticals
 
@@ -27,7 +26,7 @@ curation records are legitimate KB models, not mandatory kernel lifecycles.
 | Journey | Observable result | Decisions |
 | --- | --- | --- |
 | Establish a model with an agent | Human understands types, examples, assumptions and an initial view | 0001, 0005, 0008, 0018 |
-| Install an external integration | First-/third-party code runs using the Kyyn distribution | 0002, 0015, 0016, 0020 |
+| Install an external integration | First-/third-party code runs in the KB's Nix environment | 0002, 0015, 0016, 0020 |
 | Ask an agent to install and open Kyyn | Readiness checked; human reaches their KB in a browser without toolchain knowledge | 0020, 0025 |
 | Connect the agent to a selected KB | Tested per-KB MCP invocation and discoverable typed methods | 0018, 0025 |
 | Examine source evidence | Typed discovery, useful source references | 0007–0009, 0014 |
@@ -39,7 +38,7 @@ curation records are legitimate KB models, not mandatory kernel lifecycles.
 | Repeat settled work | Reuse domain functions; do not compile facts or re-explain protocols | 0006, 0008, 0014 |
 | Update an external output | Render from a selected snapshot and invoke its sink; uncertainty is not reported as success | 0017, 0019 |
 | Repair an integration update | Refresh its contract, fix callers and refetch evidence | 0005, 0014, 0015 |
-| Run outside the developer's machine | No implicit compiler or credential dependency | 0020–0022 |
+| Run outside the developer's machine | Nix and the KB flake explicitly supply the compiler and dependencies; credentials remain explicit | 0020–0022 |
 | Stop, reopen and automate settled work | Drafts survive; CLI can check/accept/render without Web or MCP servers | 0012, 0019, 0025 |
 | Hand design/review work between human and agent | Shared snapshot, feedback and candidate identity across Web/MCP | 0018, 0023 |
 

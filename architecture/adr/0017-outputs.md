@@ -51,9 +51,11 @@ data SinkReference = SinkReference
 ```
 
 Resolve the sink from the same selected root's plugin declarations and configuration.
-Inspect the renderer's checked signature to derive its argument/result contracts.
-Inspect the sink's registered signature to derive its input contract, then generate
-an adapter that type-checks the renderer result against that input. Reject an
+The guest build inspects the renderer's checked signature to derive its
+argument/result contracts and the sink's registered signature to derive its input
+contract. It generates the adapter and GHC type-checks the renderer result against
+that input. The host validates the resulting guest description and contract
+identities before execution; it does not inspect GHC types itself. Reject an
 unknown entry, unsupported shape, mismatched type or source connector used as a
 sink; matching textual names alone does not establish compatibility.
 The manifest is the registration authority; generated adapters are disposable.
