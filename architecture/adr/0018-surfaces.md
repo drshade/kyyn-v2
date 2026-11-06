@@ -661,7 +661,7 @@ Recipe inspection shows instructions or flow plus typed state. Evolution review
 shows the selected recipe and actual fact/state changes, including state-only
 proposals. Reading evidence changes nothing in the accepted root and an empty
 capture does not declare a task complete. [ADR 0014](0014-evidence.md) owns this
-boundary. The [user guide](../../docs/guide.md) describes implemented workflows.
+boundary. The [user guide](../../docs/guide.md) describes the authoring workflows.
 [MCP tools](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
 
 Web is designed for human understanding, high-level design, exploration and

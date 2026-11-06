@@ -166,11 +166,12 @@ It selects declarations, not a second schema. Authored modules are under `src/`;
 RootStore's `ReadRootDefinition` decodes the manifest and strips that prefix,
 returning the selected exports and authored source tree. RootOpening and
 RootExecution share this operation, so neither interprets Dhall or duplicates the
-layout. Each caller appends the explicit SDK
-source tree. Duplicate compiler paths fail. The SDK is supplied by the installed
-runtime, not loaded from a KB-selected location, and participates in compilation
-identity under ADR 0002. ADR 0005 owns schema capture and inspection.
-`kb.dhall`, `src/`, `facts/`, `examples/` and `plugins/` are distinct reserved layout locations; the manifest
+layout. The selected root's `flake.nix` and `flake.lock` supply the SDK and
+dependencies to the guest build; callers do not append an installed host SDK tree.
+The locked SDK participates in compilation identity under ADR 0002. Duplicate
+compiler paths fail. ADR 0005 owns schema capture and inspection.
+`kb.dhall`, `flake.nix`, `flake.lock`, `src/`, `facts/`, `examples/` and `plugins/`
+are distinct reserved layout locations; the manifest
 is retained verbatim in the supporting-code snapshot alongside source and other
 supporting files. FileTree rejects overlapping file/directory paths.
 
@@ -320,6 +321,8 @@ Use one complete `root/` subtree for accepted executable knowledge:
 ```text
 root/
   kb.dhall                 selected schema and declaration exports
+  flake.nix                guest build and declared dependencies
+  flake.lock               locked compiler, SDK and external inputs
   src/                     current authored Haskell modules
   facts/<collection>/      identified Dhall fact files
   examples/                persistent executable assertions

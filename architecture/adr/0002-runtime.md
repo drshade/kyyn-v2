@@ -254,5 +254,5 @@ still apply.
 
 Run a real GHC guest through discovery, runtime fact loading, validation, query,
 plugin host calls, typed evolution and output publication. Test the actual guest
-protocol and dependency environment, not only host-linked SDK unit tests. Verify the decided contract shapes and exact-value semantics; existing MicroHs
+protocol and dependency environment, not only host-linked SDK unit tests. Verify the decided contract shapes and exact-value semantics; existing
 fixtures and KBs impose no compatibility or porting requirement. Verify Linux, macOS and WSL2 distribution separately.

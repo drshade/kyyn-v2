@@ -8,13 +8,12 @@ reviewable proposals in Git.
 
 The development CLI supports KB initialization, typed evolutions and acceptance,
 source plugins/taps, latest evidence, typed per-recipe state, model-assisted tools,
-closed recipes and API/fact browsing. Web and MCP surfaces are architectural goals,
-not shipped interfaces in this checkout.
+closed recipes and API/fact browsing.
 
 ## Use it
 
 ```sh
-bash tools/install-cli.sh
+nix profile install github:drshade/kyyn-v2
 kyyn-v2 --kb /path/to/my-kb kb init
 kyyn-v2 --kb /path/to/my-kb evolution new first-change
 ```

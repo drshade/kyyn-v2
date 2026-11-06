@@ -22,8 +22,9 @@ use it. Correctness requirements still apply to whatever we do implement.
 
 A KB is a hermetically sealed unit: its facts, code, configuration, vendored plugin
 source and evolution records describe themselves in the current types. Kyyn is
-likewise sealed: one SDK, one set of types, one current format for everything it
-reads and writes. Neither carries knowledge of the other's past: no version
+likewise sealed to one current host protocol and set of types. The KB's lock
+pins its SDK as an ordinary dependency, not as a compatibility declaration.
+Neither carries knowledge of the other's past: no version
 numbers, compatibility readers, defaults for missing fields, legacy detectors or
 migration hints.
 

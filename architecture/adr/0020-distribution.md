@@ -22,7 +22,6 @@ Install with:
 nix profile install github:drshade/kyyn-v2
 ```
 
-This replaces the separate `install-cli.sh` and `stage-cli.sh` installation path.
 Contributors use `nix develop` for the pinned toolchain; ordinary Cabal commands
 remain available inside that environment. KB templates pin their SDK input to
 the repository revision that built the host. Later dependency changes remain
@@ -30,7 +29,7 @@ explicit KB source changes, not automatic host-upgrade rewrites.
 
 Each KB's `flake.nix` and `flake.lock` own its guest build and
 dependencies under ADR 0002. GHC is supplied by that environment, not by a global
-Cabal setup or a MicroHs bundle shipped with the host. Authors may select arbitrary
+Cabal setup. Authors may select arbitrary
 Haskell libraries, subject to their chosen compiler/SDK actually building them.
 
 Nix is a user prerequisite on Linux, macOS and Windows through WSL2. This is not a
@@ -99,9 +98,8 @@ its caches; this is distinct from accepting arbitrary tap executable entry point
 Keep build inputs/notices for distributable dependencies available under ADR 0022.
 
 The development host executable remains `kyyn-v2` to coexist with v1. The user guide
-owns implemented installation commands; this ADR defines the required distribution
-contract, not a claim that the flake installation is already implemented. The Web
-UI has no implementation or package yet. Add its package when the UI exists;
+owns installation commands; this ADR defines the distribution contract.
+Add a Web UI package when its implementation exists;
 its build technology and packaging do not need to be chosen for this change.
 
 ## Verification

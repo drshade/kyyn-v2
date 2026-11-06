@@ -119,7 +119,7 @@ the authoring interface. Source and notices for locked dependencies are supplied
 through locked Nix dependencies. The haskell-agentic package family is a flake
 input; JSON and transformers libraries are ordinary package dependencies, with
 Aeson replacing the former JSON implementation where selected by ADR 0007.
-MicroHs is removed from the toolchain and dependency tree. Reserve `vendor/`
+The guest toolchain is GHC. Reserve `vendor/`
 only for genuinely patched upstream sources; there are none currently requiring
 that exception. Plugin source installed into a KB remains governed by ADR 0015,
 not this repository dependency policy.
