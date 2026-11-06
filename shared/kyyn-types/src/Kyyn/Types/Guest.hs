@@ -25,7 +25,7 @@ data EntryDescription = EntryDescription
   } deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
 data ExportDescription = ExportDescription
-  { exportModule :: Text, exportName :: Text, exportSignature :: Text, exportSource :: Text
+  { exportModule :: Text, exportName :: Text, exportSignature :: Text, exportSource :: Text, exportKind :: Text
   } deriving (Eq, Show, Generic, ToJSON, FromJSON)
 
 data GuestDescription = GuestDescription

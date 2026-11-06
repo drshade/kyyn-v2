@@ -38,15 +38,16 @@ validationEntry metadata sources validate = do
   pure (Entry (EntryDescription "validate" "validator" [("root",description)] []) run)
 
 queryEntry :: forall root args result. (Contract root, Contract args, Contract result)
-  => Text -> SchemaMetadata -> [Text] -> (args -> Query root result) -> Either ProjectionError Entry
-queryEntry name metadata sources selected = do
+  => Text -> (SchemaMetadata,[Text]) -> (SchemaMetadata,[Text]) -> (SchemaMetadata,[Text])
+  -> (args -> Query root result) -> Either ProjectionError Entry
+queryEntry name (rootMetadata,rootSources) (argumentMetadata,argumentSources) (resultMetadata,resultSources) selected = do
   root <- compileContract (contract @root)
   arguments <- compileContract (contract @args)
   result <- compileContract (contract @result)
-  let plain structure = describeContract structure (SchemaMetadata [] [] []) sources
-      description = EntryDescription name "query"
-        [("root",describeContract root.description metadata sources),
-         ("arguments",plain arguments.description),("result",plain result.description)] ["snapshot-read"]
+  let description = EntryDescription name "query"
+        [("root",describeContract root.description rootMetadata rootSources),
+         ("arguments",describeContract arguments.description argumentMetadata argumentSources),
+         ("result",describeContract result.description resultMetadata resultSources)] ["snapshot-read"]
       run value = do
         reply <- executeQuery (runtimeCodec root.codec) (runtimeCodec arguments.codec) (runtimeCodec result.codec)
           selected (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (Json.encode value))))

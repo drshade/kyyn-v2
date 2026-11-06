@@ -32,6 +32,7 @@
             kyyn-surfaces = "host/kyyn-surfaces";
             kyyn = "host/kyyn";
             kyyn-sdk = "guest/kyyn-sdk";
+            kyyn-guest-build = "guest/kyyn-build";
           };
           haskell = pkgs.haskell.packages.ghc9103.override {
             overrides = final: prev:
@@ -82,8 +83,33 @@
         let p = project system;
         in {
           kyyn = p.haskell.kyyn;
+          kyyn-sdk = p.haskell.kyyn-sdk;
+          kyyn-guest-build = p.haskell.kyyn-guest-build;
           default = self.packages.${system}.kyyn;
         });
+      legacyPackages = forAllSystems (system: (project system).haskell);
+      checks = forAllSystems (system: {
+        guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
+      });
+      lib.mkGuest = { system, src, dependencies ? (h: [ ]),
+        haskellPackages ? self.legacyPackages.${system} }:
+        let
+          p = project system;
+          compiler = haskellPackages.ghcWithPackages (h:
+            [ h.kyyn-sdk h.kyyn-types h.aeson h.bytestring h.text ] ++ dependencies h);
+        in p.pkgs.stdenv.mkDerivation {
+          name = "kyyn-guest";
+          inherit src;
+          nativeBuildInputs = [ compiler haskellPackages.kyyn-guest-build ];
+          dontConfigure = true;
+          dontInstall = true;
+          buildPhase = ''
+            runHook preBuild
+            mkdir -p "$out/bin"
+            kyyn-guest-build ${compiler}/bin/ghc . "$out/bin/kyyn-guest"
+            runHook postBuild
+          '';
+        };
       devShells = forAllSystems (system:
         let p = project system;
         in {

@@ -4,7 +4,7 @@ module Kyyn.Types.Contract
   ( TypeIdentity(..), FieldStyle(..), ScalarKind(..), Description(..)
   , FieldDescription(..), CaseDescription(..), ContractId
   , contractIdentity, fingerprint, parseFingerprint, validateDescription
-  , qualifiedTypeName, descriptionShape, descriptionValue, parseDescription
+  , qualifiedTypeName, descriptionValue, parseDescription
   ) where
 
 import Control.DeepSeq (NFData)
@@ -21,7 +21,6 @@ import Numeric (showHex, readHex)
 import Data.Aeson.Types (Parser)
 import Kyyn.Types.Json (exactObject)
 import Kyyn.Types.Contract.ScalarKind (ScalarKind(..))
-import qualified Kyyn.Types.Shape as Shape
 import Kyyn.Types.SchemaMetadata
 
 data TypeIdentity = TypeIdentity Text Text Text [TypeIdentity]
@@ -146,26 +145,6 @@ instance ToJSON Description where
   toJSON = descriptionValue
 instance FromJSON Description where
   parseJSON = parseDescription
-
--- Dhall has no recursive data types. Store finite descriptions in dependency
--- order and require every reference to point to an earlier node.
-descriptionShape :: Shape.Shape
-descriptionShape = Shape.Record
-  [("types",Shape.List (Shape.Record [("package",text),("module",text),("name",text),("arguments",Shape.List index)])),
-   ("nodes",Shape.List (Shape.Union
-     [("Scalar",Just (Shape.Record [("type",index),("kind",Shape.List text),("name",text),("parameters",Shape.List pair)])),
-      ("Named",Just (Shape.Record [("type",index),("inner",index)])),
-      ("Record",Just (Shape.Record [("name",text),("style",style),("fields",Shape.List field)])),
-      ("Sum",Just (Shape.List (Shape.Record [("name",text),("doc",text),("style",style),("fields",Shape.List field)]))),
-      ("List",Just index),("Optional",Just index),("Unit",Nothing),
-      ("Checked",Just annotation),("Documented",Just annotation)]))]
-  where
-    text = Shape.Scalar Shape.TextScalar
-    index = Shape.Scalar Shape.IntegerScalar
-    style = Shape.Union [("Named",Nothing),("Positional",Nothing)]
-    pair = Shape.Record [("name",text),("value",text)]
-    field = Shape.Record [("name",text),("doc",text),("inner",index)]
-    annotation = Shape.Record [("text",text),("inner",index)]
 
 descriptionValue :: Description -> Value
 descriptionValue root = object ["types" .= map typeValue types,"nodes" .= map nodeValue nodes]

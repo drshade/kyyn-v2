@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Types.SchemaMetadata
-  ( Affordance(..), RoleDecl(..), FieldRole(..), CollectionDecl(..), SchemaMetadata(..), metadataShape
+  ( Affordance(..), RoleDecl(..), FieldRole(..), CollectionDecl(..), SchemaMetadata(..)
   ) where
 
 import Data.Text (Text)
 import Data.Aeson (ToJSON(..), FromJSON(..), Value, object, (.=), (.:))
 import Data.Aeson.Types (Parser)
 import Kyyn.Types.Json (exactObject)
-import qualified Kyyn.Types.Shape as Shape
 
 -- | A host-understood presentation role: a title, timeline value or badge.
 data Affordance = Title | Timeline | Badge deriving (Eq, Show)
@@ -23,15 +22,6 @@ data CollectionDecl = CollectionDecl Text Text [(Text, Text)] deriving (Eq, Show
 
 -- | Schema annotations comprising role declarations, field roles and fact collections.
 data SchemaMetadata = SchemaMetadata [RoleDecl] [FieldRole] [CollectionDecl] deriving (Eq, Show)
-
-metadataShape :: Shape.Shape
-metadataShape = Shape.Record
-  [("roles",Shape.List (Shape.Record [("name",text),("description",text),("affordance",Shape.Union
-    [("Title",Nothing),("Timeline",Nothing),("Badge",Nothing)])])),
-   ("fields",Shape.List (Shape.Record [("type",text),("field",text),("role",text)])),
-   ("collections",Shape.List (Shape.Record [("name",text),("field",text),
-     ("references",Shape.List (Shape.Record [("field",text),("collection",text)]))]))]
-  where text = Shape.Scalar Shape.TextScalar
 
 instance ToJSON SchemaMetadata where
   toJSON (SchemaMetadata roles assignments collections) = object

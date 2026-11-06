@@ -6,8 +6,7 @@ import Data.Aeson.Types (Parser)
 import Kyyn.Domain.Contract
 import Kyyn.Domain.DataType
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Types.SchemaMetadata
-import Kyyn.Plumbing.Protocol.Description (descriptionShape, descriptionValue, parseDescription)
+import Kyyn.Plumbing.Protocol.Description (descriptionShape, metadataShape, descriptionValue, parseDescription)
 
 snapshotShape :: Shape
 snapshotShape = Record [("fingerprint",Scalar TextScalar),("types",descriptionShape),("metadata",metadataShape)]

@@ -8,7 +8,15 @@ import qualified Data.Text as Text
 import qualified Kyyn.Types.Contract as D
 import Control.DeepSeq (NFData)
 import GHC.Generics (Generic)
-import Kyyn.Types.Shape (Shape(..), ScalarKind(..))
+
+data Shape
+  = Record [(String, Shape)] | List Shape | Optional Shape
+  | Union [(String, Maybe Shape)] | Scalar ScalarKind | Reference String
+  deriving (Eq, Show)
+
+data ScalarKind = TextScalar | IntegerScalar | NaturalScalar | BoolScalar | ProbabilityScalar
+  | ExactScalar D.ScalarKind deriving (Eq, Show)
+
 
 -- Resolved data declarations only; a complete KB contract also needs metadata.
 data DataType

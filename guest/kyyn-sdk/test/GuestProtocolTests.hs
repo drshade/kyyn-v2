@@ -8,12 +8,14 @@ import Data.Aeson (Value(..), object, (.=), encode, eitherDecodeStrict')
 import qualified Data.Aeson.KeyMap as Keys
 import qualified Data.ByteString.Char8 as Bytes
 import qualified Data.ByteString.Lazy as Lazy
+import Data.Either (isLeft)
+import qualified Kyyn.Domain.Guest as Host
 import Data.Fixed (Fixed, E2)
 import Data.Functor.Identity (runIdentity)
 import GHC.Generics (Generic)
 import System.Environment (getArgs, getExecutablePath)
 import System.Exit (ExitCode(..))
-import System.Process (readProcessWithExitCode)
+import qualified System.Process.Typed as Process
 import Kyyn.Schema
 import Kyyn.Types.Query (Query, CollectionBinding(..), readCollection)
 import Kyyn.Types.Diagnostic (ValidationReport(..))
@@ -36,23 +38,40 @@ total () = do
 guest :: IO ()
 guest = runGuest []
   [validationEntry @Root annotations ["GuestProtocolTests.hs"] (const (ValidationReport [])),
-   queryEntry @Root "total" annotations ["GuestProtocolTests.hs"] total]
+   queryEntry @Root "total" (annotations,["GuestProtocolTests.hs"])
+     (SchemaMetadata [] [] [],[]) (SchemaMetadata [] [] [],[]) total]
 
 main :: IO ()
 main = do
   args <- getArgs
-  if args == ["--guest"] then guest else check
+  case args of
+    ["--guest"] -> guest
+    ["--built",path] -> check (path,[])
+    [] -> getExecutablePath >>= \path -> check (path,["--guest"])
+    _ -> fail "Expected --guest or --built EXECUTABLE"
 
-check :: IO ()
-check = do
-  executable <- getExecutablePath
+check :: (FilePath,[String]) -> IO ()
+check executable = do
   descriptionValue <- invoke executable (object ["operation" .= ("describe" :: String)])
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode descriptionValue)) :: Either String G.GuestDescription)
   unless (description.protocol == G.protocolIdentity) (fail "Wrong protocol identity")
+  _ <- right (Host.checkGuest description)
+  unless (isLeft (Host.checkGuest description { G.protocol = "unexpected" })) (fail "Unknown guest protocol accepted")
+  unless (isLeft (Host.checkGuest description { G.entries = description.entries ++ description.entries })) (fail "Duplicate entries accepted")
+  let changeContracts change = description { G.entries =
+        [entry { G.entryContracts = [(role,change selected) | (role,selected) <- entry.entryContracts] }
+          | entry <- description.entries] }
+  unless (isLeft (Host.checkGuest (changeContracts (\selected -> selected { G.identity = "incorrect" }))))
+    (fail "Incorrect contract fingerprint accepted")
+  unless (isLeft (Host.checkGuest (changeContracts (\selected -> selected { G.loadedSources = ["../outside.hs"] }))))
+    (fail "Source traversal accepted")
   unless (map G.entryName description.entries == ["validate","total"]) (fail "Wrong registered entries")
   forM_ description.entries $ \entry -> forM_ entry.entryContracts $ \(_,selected) ->
     unless (selected.identity == D.fingerprint (D.contractIdentity selected.structure selected.metadata))
       (fail "Guest description fingerprint disagrees")
+  forM_ [selected | entry <- description.entries, entry.entryKind == "query",
+       (role,selected) <- entry.entryContracts, role /= "root"] $ \selected ->
+    unless (selected.metadata == SchemaMetadata [] [] []) (fail "Root metadata leaked into query arguments or result")
   let root = object ["items" .= [fact "a" "12.34", fact "b" "-2.34"]]
       fact ident amount = object ["id" .= (ident :: String), "value" .= object ["amount" .= (amount :: String)]]
       request name argument = object ["operation" .= ("invoke" :: String), "entry" .= (name :: String), "argument" .= argument]
@@ -69,15 +88,16 @@ check = do
       unless (status /= ExitSuccess) (fail "Malformed invocation accepted")
   putStrLn "Compiled guest describe/invoke and rejection checks passed."
 
-call :: FilePath -> Value -> IO (ExitCode,String,String)
-call executable value = readProcessWithExitCode executable ["--guest"]
-  (Bytes.unpack (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value))))))
+call :: (FilePath,[String]) -> Value -> IO (ExitCode,Lazy.ByteString,Lazy.ByteString)
+call (executable,arguments) value = Process.readProcess (Process.setStdin (Process.byteStringInput
+  (Lazy.fromStrict (Bytes.concat (Frame.encodeFrame (Frame.jsonFrame (Lazy.toStrict (encode value)))))))
+  (Process.proc executable arguments))
 
-invoke :: FilePath -> Value -> IO Value
+invoke :: (FilePath,[String]) -> Value -> IO Value
 invoke executable value = do
   (status,output,errors) <- call executable value
-  unless (status == ExitSuccess) (fail errors)
-  (Frame.Frame metadata body,remaining) <- right (runIdentity (Frame.readFrame (pure Nothing) (Bytes.pack output)))
+  unless (status == ExitSuccess) (fail (show errors))
+  (Frame.Frame metadata body,remaining) <- right (runIdentity (Frame.readFrame (pure Nothing) (Lazy.toStrict output)))
   unless (Bytes.null body && Bytes.null remaining) (fail "Unexpected response bytes")
   right (eitherDecodeStrict' metadata)
 
