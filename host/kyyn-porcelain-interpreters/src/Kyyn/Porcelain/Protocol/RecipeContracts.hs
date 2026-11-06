@@ -5,8 +5,8 @@ import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
-import Kyyn.Domain.Contract (CheckedContract, rootSchema, rootType, contractId)
-import Kyyn.Domain.DataType (haskellType)
+import Kyyn.Domain.Contract (CheckedContract, rootSchema, descriptionOf, contractId)
+import Kyyn.Types.Contract (descriptionTypeName)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
@@ -40,7 +40,9 @@ inspectRecipeContracts (SourceRoot schema code _ _) definitions = runExceptT $ d
         [(root,contract)] -> do
           unless (contractId root == contractId (rootSchema schema)) (throwE
             [errorDiagnostic "recipe.root-type" "Recipe flow takes a different Root contract"])
-          pure (definition,haskellType (rootType contract),contract)
+          stateName <- either (throwE . pure . errorDiagnostic "recipe.state-type" . Text.unpack) pure
+            (descriptionTypeName (descriptionOf contract))
+          pure (definition,Text.unpack stateName,contract)
         _ -> missing (Text.unpack reference)) definitions
   where
     missing name = throwE [errorDiagnostic "recipe.description" ("Guest did not describe recipe reference " ++ name)]

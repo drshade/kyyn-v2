@@ -4,6 +4,8 @@ module KnowledgeBaseTests (main) where
 import Kyyn.Evolution
 import qualified Kyyn.Edit.Internal as Internal
 import Kyyn.Recipe.Internal (KnowledgeBase(..), RecipeType(..), StoredRecipe(..), storeRecipe)
+import qualified Kyyn.Types.Contract as Contract
+import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Text.JSON.Types (JSValue(..), toJSString, fromJSString)
@@ -22,6 +24,9 @@ main = do
       updateTask = do
         updateRecipe unitRecipeType ident changedDefinition Right
         modifying facts (+ 1)
+  case storeRecipe definition () of
+    StoredRecipe _ _ identity _ -> assert "unit recipe state uses the shared contract identity"
+      (identity == Contract.fingerprint (Contract.contractIdentity Contract.UnitDescription (SchemaMetadata [] [] [])))
   assert "append recipe preserves domain facts" (execute appendTask initial == Right withTask)
   assert "recipe/domain edits share one state action" (execute updateTask withTask == Right edited)
   assert "remove recipe preserves domain facts" (execute (removeRecipe ident) withTask == Right initial)

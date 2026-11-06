@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  ( EvolutionContracts(..), RecipeInvocation(..), DescriptionFormat(..), RecipeContracts(..), QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
   , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
@@ -161,6 +161,7 @@ data DescribedContract = DescribedContract
 -- contracts in the host. No optional or string-indexed bag of contracts exists.
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
+  | EvolutionEntry { entryName :: Text, evolutionContracts :: EvolutionContracts contract }
   | RecipeEntry { entryName :: Text, recipeName :: Text, recipeContracts :: RecipeContracts contract }
   | ToolEntry { entryName :: Text, toolName :: Text, toolDescription :: Text, toolContracts :: ToolContracts contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
@@ -236,6 +237,21 @@ data QueryContracts contract = QueryContracts
   { rootContract :: contract, argumentContract :: contract, resultContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
+data EvolutionContracts contract = AdHocContracts contract contract | RecipeEvolutionContracts contract contract
+  deriving (Eq, Show, Functor, Foldable, Traversable)
+instance ToJSON contract => ToJSON (EvolutionContracts contract) where
+  toJSON (AdHocContracts before after) = object ["kind" .= String "ad-hoc","before" .= before,"after" .= after]
+  toJSON (RecipeEvolutionContracts root state) = object ["kind" .= String "recipe","root" .= root,"state" .= state]
+instance FromJSON contract => FromJSON (EvolutionContracts contract) where
+  parseJSON value = withObject "evolution contracts" (\fields -> do
+    kind <- fields .: "kind"
+    case kind :: Text of
+      "ad-hoc" -> exactObject "ad-hoc evolution contracts" ["kind","before","after"]
+        (\entry -> AdHocContracts <$> entry .: "before" <*> entry .: "after") value
+      "recipe" -> exactObject "recipe evolution contracts" ["kind","root","state"]
+        (\entry -> RecipeEvolutionContracts <$> entry .: "root" <*> entry .: "state") value
+      _ -> fail "Unknown evolution kind") value
+
 data RecipeContracts contract = RecipeContracts contract contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 instance ToJSON contract => ToJSON (RecipeContracts contract) where
@@ -295,6 +311,7 @@ instance FromJSON DescribedContract where
 
 instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
+  toJSON (EvolutionEntry name contracts) = object ["kind" .= String "evolution","entryName" .= name,"contracts" .= contracts]
   toJSON (RecipeEntry entry name contracts) = object
     ["entryName" .= entry,"kind" .= String "recipe","name" .= name,"contracts" .= contracts]
   toJSON (ToolEntry entry name description (ToolContracts input result)) = object
@@ -311,6 +328,8 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
     case kind :: Text of
       "validator" -> exactObject "validator entry" ["entryName","kind","root"]
         (\entry -> ValidatorEntry <$> entry .: "entryName" <*> entry .: "root") value
+      "evolution" -> exactObject "evolution entry" ["entryName","kind","contracts"]
+        (\entry -> EvolutionEntry <$> entry .: "entryName" <*> entry .: "contracts") value
       "recipe" -> exactObject "recipe entry" ["entryName","kind","name","contracts"]
         (\entry -> RecipeEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "contracts") value
       "tool" -> exactObject "tool entry" ["entryName","kind","name","description","input","result"]

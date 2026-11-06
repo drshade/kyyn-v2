@@ -59,6 +59,8 @@ main = do
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
+    ["--evolution-api-built",path] -> checkEvolutionApi (path,[])
+    ["--evolution-built",path] -> checkEvolution (path,[])
     ["--recipe-built",path] -> checkRecipe (path,[])
     ["--tool-built",path] -> checkTool (path,[])
     ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
@@ -499,3 +501,41 @@ checkRecipe executable@(path,args) = do
     (bad,_,_) <- call executable (toJSON (G.Invoke entry malformed))
     unless (bad /= ExitSuccess) (fail "Malformed recipe invocation accepted")
   putStrLn "Recipe guest describes private state, renders flows, exchanges connector callbacks and returns typed fact edits."
+
+checkEvolution :: (FilePath,[String]) -> IO ()
+checkEvolution executable = do
+  described <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode described)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  (entry,before,after) <- case [(name,before,after) | G.EvolutionEntry name (G.AdHocContracts before after) <- description.entries] of
+    [selected] -> pure selected
+    _ -> fail "Missing evolution endpoints"
+  unless (before.loadedSources == [".kyyn-before/Before.hs"] && after.loadedSources == ["src/After.hs"])
+    (fail "Endpoint source closure includes metadata-only dependencies")
+  let fact payload = object ["id" .= String "one","value" .= payload]
+      knowledge payload = object ["facts" .= object ["items" .= [fact payload]],"recipes" .= ([] :: [Value])]
+      original = knowledge (object ["amount" .= String "7"])
+      migrated = knowledge (object ["amount" .= String "7","note" .= String "migrated"])
+      observed identity value = object ["contract" .= identity,"value" .= value]
+      expected = object ["tag" .= String "Succeeded","value" .= object ["after" .= migrated,"steps" .=
+        [object ["rationale" .= object ["explanation" .= String "Add notes","evidence" .= ([] :: [Value])],
+          "before" .= observed before.identity original,"after" .= observed after.identity migrated]]]]
+  actual <- invoke executable (toJSON (G.Invoke entry original))
+  unless (actual == expected) (fail ("Wrong evolution reply: " ++ show actual))
+  (status,_,_) <- call executable (toJSON (G.Invoke entry (knowledge (object ["amount" .= String "invalid"]))))
+  unless (status /= ExitSuccess) (fail "Evolution accepted invalid Before facts")
+  putStrLn "Evolution guest describes both endpoints, migrates facts and records target-built contract identities."
+
+checkEvolutionApi :: (FilePath,[String]) -> IO ()
+checkEvolutionApi executable = do
+  value <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  unless ([name | G.ContractEntry name _ <- description.entries] == ["$before","$after"])
+    (fail "Discovery did not describe both endpoints")
+  unless (all (`elem` map G.moduleName description.modules)
+    ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"])
+    (fail "Missing generated evolution API modules")
+  (status,_,_) <- call executable (toJSON (G.Invoke "Evolution.evolution" (object [])))
+  unless (status /= ExitSuccess) (fail "Discovery build exposed an unfinished migration")
+  putStrLn "Workspace API describes endpoint contracts and bindings despite an unfinished transformation body."

@@ -2,8 +2,9 @@
 module Kyyn.Build.Driver (buildGuest) where
 
 import Control.Monad (unless, forM, when)
-import Data.Aeson (eitherDecodeStrict')
+import Data.Aeson (eitherDecodeStrict', encode)
 import qualified Data.ByteString as Bytes
+import qualified Data.ByteString.Lazy as Lazy
 import Data.Char (isAlphaNum, isLower)
 import Data.List (nub, intercalate)
 import qualified Data.Text as Text
@@ -11,8 +12,9 @@ import qualified Data.Text.IO as Text
 import System.Directory (createDirectoryIfMissing, doesFileExist, doesPathExist, makeAbsolute, withCurrentDirectory)
 import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Process (callProcess, readProcess)
+import qualified Kyyn.Build.Sources as Sources
 import Kyyn.Build.Inspection
-import Kyyn.Build.RecipeBindings (writeRecipeBindings)
+import Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings)
 import Kyyn.Build.OutputBindings (writeOutputBindings)
 import Kyyn.Build.ToolBindings (writeToolBindings)
 import Kyyn.Build.Plugins
@@ -37,7 +39,7 @@ buildGuest compiler source output = do
     let packages = basePackages ++ map ("-i" ++) roots
         generated = ".kyyn-generated"
     occupied <- or <$> traverse doesFileExist
-      [root </> moduleName ++ extension | root <- roots, moduleName <- ["KyynQueryBindings","KyynGuestSchemaEntry","KyynGuestEntry","KyynGuestRegistrations"],
+      [root </> moduleName ++ extension | root <- roots, moduleName <- ["KyynQueryBindings","KyynGuestSchemaRoot","KyynGuestSchemaBefore","KyynGuestSchemaAfter","KyynGuestSchemaEntry","KyynGuestEntry","KyynGuestRegistrations"],
         extension <- [".hs",".lhs"]]
     unless (not occupied) (fail "Authored source collides with a generated guest module")
     existing <- doesPathExist generated
@@ -66,7 +68,7 @@ buildGuest compiler source output = do
       RootEntries -> buildRoot compiler libdir generated basePackages destination selection
       DiscoveryEntries RootSchema -> buildRoot compiler libdir generated basePackages destination selection
       RecipeEntries references -> buildRecipes compiler libdir generated basePackages destination references
-      EvolutionEntry -> fail "Evolution guest build is not implemented yet"
+      EvolutionEntries details -> buildEvolution compiler libdir generated basePackages destination details
 
 preparePlugins :: FilePath -> FilePath -> FilePath -> [String]
   -> IO ([FilePath],[String],[([Reference],String)],[RegisteredPlugin])
@@ -181,11 +183,52 @@ buildRecipes compiler libdir generated basePackages destination references = do
   writeGuest generated exports modules (rootEntry : map snd plugins ++ map snd entries)
   finishGuest compiler generated packages destination
 
+buildEvolution :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> EvolutionSelection -> IO ()
+buildEvolution compiler libdir generated basePackages destination (EvolutionSelection beforeType beforeAnnotations recipe discovery) = do
+  when (recipe /= Nothing) (fail "Recipe evolution bindings are not implemented yet")
+  before <- either fail pure (qualifiedReference True beforeType)
+  beforeMetadata <- either fail pure (qualifiedReference False beforeAnnotations)
+  manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
+  pluginRoots <- installedPluginRoots
+  runtime <- runtimeOptions compiler
+  let beforeRoots = ".kyyn-before" : pluginRoots
+      afterRoots = "src" : pluginRoots
+      packages roots = basePackages ++ runtime ++ map ("-i" ++) roots
+  (beforeSources,oldMetadata) <- inspectRoot compiler libdir generated "Before" (packages beforeRoots) beforeRoots before beforeMetadata
+  (afterSources,newMetadata) <- inspectRoot compiler libdir generated "After" (packages afterRoots) afterRoots manifest.schemaType manifest.schemaMetadata
+  authored <- concat <$> traverse Sources.sourceFiles afterRoots
+  changes <- Sources.sourceFiles ".kyyn-change"
+  let merged = generated </> "sources"
+  origins <- Sources.mergeSources libdir merged (beforeSources ++ authored ++ changes)
+  let roots = [merged]
+      selectedPackages = packages roots
+  writeEvolutionBindings generated roots (before,oldMetadata) (manifest.schemaType,newMetadata)
+  queryBindings <- either fail pure (bindings manifest newMetadata)
+  writeFile (generated </> "KyynQueryBindings.hs") queryBindings
+  let defaults = ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"]
+      modules = case discovery of
+        Nothing -> "Evolution" : defaults
+        Just [] -> defaults
+        Just selected -> map Text.unpack selected
+      name = Text.unpack . referenceName
+      oldDescription = "(" ++ show oldMetadata ++ "," ++ show beforeSources ++ ")"
+      newDescription = "(" ++ show newMetadata ++ "," ++ show afterSources ++ ")"
+      entries = case discovery of
+        Nothing -> ["evolutionEntry @" ++ name before ++ " @" ++ name manifest.schemaType ++ " " ++
+          oldDescription ++ " " ++ newDescription ++ " Evolution.evolution"]
+        Just _ -> ["describeEntry @" ++ name before ++ " \"$before\" (" ++ show oldMetadata ++ ") " ++ show beforeSources,
+                   "describeEntry @" ++ name manifest.schemaType ++ " \"$after\" (" ++ show newMetadata ++ ") " ++ show afterSources]
+  (_,exports) <- inspectExports libdir (roots ++ [generated]) selectedPackages modules
+  let original path = maybe path Text.pack (lookup (Text.unpack path) origins)
+      located = [entry { moduleSource = original entry.moduleSource } | entry <- exports]
+  writeGuest generated located (nub (modules ++ map (Text.unpack . referenceModule) [before,manifest.schemaType])) entries
+  finishGuest compiler generated selectedPackages destination
+
 writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
 writeGuest generated exports modules entries =
   writeFile (generated </> "KyynGuestEntry.hs") (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
-      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))", "import Kyyn.Contract (ProjectionError)",
+      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
       "import System.Environment (getArgs)"] ++ map ("import qualified " ++) modules ++
      ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
       "    [\"--check-build\"] -> checkEntries selected",
@@ -195,25 +238,38 @@ writeGuest generated exports modules entries =
 
 prepareRoot :: FilePath -> FilePath -> FilePath -> [String] -> [FilePath] -> Manifest -> IO [FilePath]
 prepareRoot compiler libdir generated packages roots manifest = do
+  (sources,metadata) <- inspectRoot compiler libdir generated "Root" packages roots manifest.schemaType manifest.schemaMetadata
+  generatedBindings <- either fail pure (bindings manifest metadata)
+  writeFile (generated </> "KyynQueryBindings.hs") generatedBindings
+  -- Also consumed by generated edit bindings in recipe builds.
+  Bytes.writeFile (generated </> "metadata.json") (Lazy.toStrict (encode metadata))
+  pure sources
+
+-- The metadata prepass is independent for each endpoint. Its dependency-only
+-- modules need not coexist with the migration's Before/After schema closures.
+inspectRoot :: FilePath -> FilePath -> FilePath -> String -> [String] -> [FilePath]
+  -> Reference -> Reference -> IO ([FilePath],SchemaMetadata)
+inspectRoot compiler libdir generated stage packages roots schema annotations = do
   let name = Text.unpack . referenceName
       moduleName = Text.unpack . referenceModule
-      rootModules = nub [moduleName manifest.schemaType,moduleName manifest.schemaMetadata]
-  (rootSources,_) <- inspectExports libdir roots packages [moduleName manifest.schemaType]
-  -- This prepass cannot see generated bindings: Root determines their types.
-  writeFile (generated </> "KyynGuestSchemaEntry.hs") (unlines
-    (["{-# LANGUAGE TypeApplications #-}","module KyynGuestSchemaEntry where",
+      rootModules = nub [moduleName schema,moduleName annotations]
+      entryName = "KyynGuestSchema" ++ stage
+      metadataPath = generated </> stage ++ "-metadata.json"
+      executable = generated </> stage ++ "-schema"
+      entry = generated </> entryName ++ ".hs"
+  (rootSources,_) <- inspectExports libdir roots packages [moduleName schema]
+  writeFile entry (unlines
+    (["{-# LANGUAGE TypeApplications #-}","module " ++ entryName ++ " where",
       "import Kyyn.Contract", "import qualified Data.Aeson as Json",
       "import qualified Data.ByteString.Lazy as Bytes"] ++
      map ("import qualified " ++) rootModules ++
-     ["main :: IO ()", "main = case compileContract (contract @" ++ name manifest.schemaType ++ ") of",
+     ["main :: IO ()", "main = case compileContract (contract @" ++ name schema ++ ") of",
       "  Left problem -> fail (show problem)",
-      "  Right _ -> Bytes.writeFile \".kyyn-generated/metadata.json\" (Json.encode " ++ name manifest.schemaMetadata ++ ")"]))
-  compile compiler generated "schema" (packages ++ ["-isrc"]) (generated </> "KyynGuestSchemaEntry.hs") (generated </> "schema-entry")
-  callProcess ("./" ++ generated </> "schema-entry") []
-  metadata <- Bytes.readFile (generated </> "metadata.json") >>= either fail pure . eitherDecodeStrict'
-  generatedBindings <- either fail pure (bindings manifest metadata)
-  writeFile (generated </> "KyynQueryBindings.hs") generatedBindings
-  pure rootSources
+      "  Right _ -> Bytes.writeFile " ++ show metadataPath ++ " (Json.encode " ++ name annotations ++ ")"]))
+  compile compiler generated (stage ++ "-schema-objects") packages entry executable
+  callProcess ("./" ++ executable) []
+  metadata <- Bytes.readFile metadataPath >>= either fail pure . eitherDecodeStrict'
+  pure (rootSources,metadata)
 
 finishGuest :: FilePath -> FilePath -> [String] -> FilePath -> IO ()
 finishGuest compiler generated packages destination = do

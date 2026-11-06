@@ -1,19 +1,33 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Types.GuestBuild (GuestSelection(..), DiscoverySelection(..), RecipeReference(..), canonicalSelection) where
+module Kyyn.Types.GuestBuild (GuestSelection(..), DiscoverySelection(..), RecipeReference(..), EvolutionSelection(..), canonicalSelection) where
 
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=), (.:), withObject)
 import Data.Text (Text)
 import Data.List (nub, sort)
-import Kyyn.Types.Json (exactObject)
+import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 
 -- Private build input captured with the KB, rather than an environment override.
-data GuestSelection = RootEntries | PluginEntries | RecipeEntries [RecipeReference] | EvolutionEntry | DiscoveryEntries DiscoverySelection deriving (Eq, Show)
+data GuestSelection = RootEntries | PluginEntries | RecipeEntries [RecipeReference] | EvolutionEntries EvolutionSelection | DiscoveryEntries DiscoverySelection deriving (Eq, Show)
 data DiscoverySelection = RootSchema | ModuleExports [Text] deriving (Eq, Show)
+
+-- Before source lives below .kyyn-before/ and transformation source below
+-- .kyyn-change/. No fact or recipe state values are build inputs.
+-- Nothing selects execution; Just modules selects discovery without the body.
+data EvolutionSelection = EvolutionSelection Text Text (Maybe RecipeReference) (Maybe [Text]) deriving (Eq, Show)
+instance ToJSON EvolutionSelection where
+  toJSON (EvolutionSelection schema metadata recipe modules) = object
+    ["beforeType" .= schema,"beforeMetadata" .= metadata,"recipe" .= optionalValue recipe,"modules" .= optionalValue modules]
+instance FromJSON EvolutionSelection where
+  parseJSON = exactObject "evolution selection details" ["beforeType","beforeMetadata","recipe","modules"] $ \fields ->
+    EvolutionSelection <$> fields .: "beforeType" <*> fields .: "beforeMetadata"
+      <*> (fields .: "recipe" >>= parseOptionalValue) <*> (fields .: "modules" >>= parseOptionalValue)
 
 -- Recipe data stays on the host. Only referenced code belongs to the build.
 data RecipeReference = OpenState Text | ClosedFlow Text deriving (Eq, Ord, Show)
 canonicalSelection :: GuestSelection -> GuestSelection
 canonicalSelection (RecipeEntries references) = RecipeEntries (sort (nub references))
+canonicalSelection (EvolutionEntries (EvolutionSelection schema metadata recipe modules)) =
+  EvolutionEntries (EvolutionSelection schema metadata recipe (sort . nub <$> modules))
 canonicalSelection selected = selected
 
 instance ToJSON RecipeReference where
@@ -31,7 +45,7 @@ instance ToJSON GuestSelection where
   toJSON RootEntries = object ["selection" .= String "root"]
   toJSON PluginEntries = object ["selection" .= String "plugins"]
   toJSON (RecipeEntries references) = object ["selection" .= String "recipes","references" .= sort (nub references)]
-  toJSON EvolutionEntry = object ["selection" .= String "evolution"]
+  toJSON (EvolutionEntries details) = object ["selection" .= String "evolution","details" .= details]
   toJSON (DiscoveryEntries RootSchema) = object ["selection" .= String "schema"]
   toJSON (DiscoveryEntries (ModuleExports modules)) = object ["selection" .= String "modules","modules" .= modules]
 instance FromJSON GuestSelection where
@@ -42,7 +56,8 @@ instance FromJSON GuestSelection where
       "plugins" -> exactObject "plugin selection" ["selection"] (const (pure PluginEntries)) value
       "recipes" -> exactObject "recipe selection" ["selection","references"]
         (\selected -> canonicalSelection . RecipeEntries <$> selected .: "references") value
-      "evolution" -> exactObject "evolution selection" ["selection"] (const (pure EvolutionEntry)) value
+      "evolution" -> exactObject "evolution selection" ["selection","details"]
+        (\selected -> canonicalSelection . EvolutionEntries <$> selected .: "details") value
       "schema" -> exactObject "schema selection" ["selection"] (const (pure (DiscoveryEntries RootSchema))) value
       "modules" -> exactObject "module selection" ["selection","modules"]
         (\selected -> DiscoveryEntries . ModuleExports <$> selected .: "modules") value

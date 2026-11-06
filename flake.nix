@@ -108,6 +108,13 @@
             chmod -R u+w "$out"
             cp -R ${./tools/fixtures/recipe-guest}/. "$out/"
           '';
+          evolutionApiSource = p.pkgs.runCommand "kyyn-evolution-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","recipe":{"tag":"None"},"modules":{"tag":"Some","value":[]}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Evolution where' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
+          '';
           outputSource = p.pkgs.runCommand "kyyn-output-source" { } ''
             mkdir -p "$out"
             cp -R ${toolSource}/. "$out/"
@@ -154,6 +161,8 @@
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
           guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
+          guest-evolution-api = self.lib.mkGuest { inherit system; src = evolutionApiSource; };
+          guest-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/evolution-guest; };
           guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };
           guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
           guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };

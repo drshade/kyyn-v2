@@ -53,6 +53,9 @@ checkEntry entry = case entry of
   G.ValidatorEntry name selected -> do
     ensure (name == "validate") "guest.entry" "Validator must use the validate entry"
     G.ValidatorEntry name <$> root selected
+  G.EvolutionEntry name contracts -> G.EvolutionEntry name <$> case contracts of
+    G.AdHocContracts before after -> G.AdHocContracts <$> root before <*> root after
+    G.RecipeEvolutionContracts domain state -> G.RecipeEvolutionContracts <$> root domain <*> check state
   G.RecipeEntry name reference (G.RecipeContracts rootContract arguments state) -> do
     either (Left . pure . errorDiagnostic "guest.recipe") (const (Right ())) (Plugin.bindingModule (Text.unpack reference))
     G.RecipeEntry name reference <$> (G.RecipeContracts <$> root rootContract <*> check arguments <*> check state)

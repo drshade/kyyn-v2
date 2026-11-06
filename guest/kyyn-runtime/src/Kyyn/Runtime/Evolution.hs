@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, EmptyDataDecls, EmptyCase #-}
-module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, encodeEvolutionReply, knowledgeBaseCodec) where
+module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, evolutionReplyValue, encodeEvolutionReply, knowledgeBaseCodec) where
 
 import Kyyn.Evolution.Internal (EvolutionOutput(..), StepObservation(..), RecordedRoot(..))
 import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))

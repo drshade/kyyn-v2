@@ -62,6 +62,13 @@ roundTrip name value = do
 
 main :: IO ()
 main = do
+  forM_ [(.description) <$> compileContract (contract @()),(.description) <$> compileContract (contract @Integer),
+      (.description) <$> compileContract (contract @Text),(.description) <$> compileContract (contract @[Label]),
+      (.description) <$> compileContract (contract @(Maybe Choice)),(.description) <$> compileContract (contract @(Box Integer))] $ \candidate -> do
+    description <- either (fail . show) pure candidate
+    name <- either (fail . T.unpack) pure (D.descriptionTypeName description)
+    expect "shared recipe state names match host declaration projection"
+      (T.unpack name == Host.haskellType (Host.descriptionType description))
   let rootMetadata = SchemaMetadata [] [] [CollectionDecl "items" "items" []]
   rootCompiled <- either (fail . show) pure (compileContract (contract @Root))
   hostRoot <- either (fail . show) pure (Host.checkContract rootCompiled.description rootMetadata >>= Host.checkRootLayout)

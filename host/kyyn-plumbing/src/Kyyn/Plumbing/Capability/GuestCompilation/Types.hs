@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Capability.GuestCompilation.Types
   ( GuestSources, guestSources, sourceFiles, selectedBuild, sourceIdentity
-  , GuestSelection(..), DiscoverySelection(..), RecipeReference(..), bindingModule
+  , GuestSelection(..), DiscoverySelection(..), RecipeReference(..), EvolutionSelection(..), bindingModule
   ) where
 
 import Control.Monad (unless)

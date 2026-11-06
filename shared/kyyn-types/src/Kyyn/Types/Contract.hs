@@ -4,7 +4,7 @@ module Kyyn.Types.Contract
   ( TypeIdentity(..), FieldStyle(..), ScalarKind(..), Description(..)
   , FieldDescription(..), CaseDescription(..), ContractId
   , contractIdentity, fingerprint, parseFingerprint, validateDescription
-  , qualifiedTypeName, descriptionValue, parseDescription
+  , qualifiedTypeName, descriptionTypeName, descriptionValue, parseDescription
   ) where
 
 import Control.DeepSeq (NFData)
@@ -263,3 +263,32 @@ typeTree identity@(TypeIdentity _ _ _ arguments) = concatMap typeTree arguments 
 
 tagged :: Text -> Maybe Value -> Value
 tagged tag value = object (["tag" .= tag] ++ maybe [] (\v -> ["value" .= v]) value)
+
+-- Stable source-facing state name shared by generated RecipeType handles and
+-- host persistence. It is descriptive data, never parsed into compiler types.
+descriptionTypeName :: Description -> Either Text Text
+descriptionTypeName description = case description of
+  ScalarDescription identity kind _ _ -> Right (case kind of
+    TextScalar -> "Data.Text.Text"
+    IntegerScalar -> "Integer"
+    BoolScalar -> "Bool"
+    ProbabilityScalar -> "Agentic.Questions.Probability"
+    FactIdScalar -> "Kyyn.Types.Fact.FactId"
+    _ -> applied identity)
+  NamedDescription identity inner | nominal inner -> Right (applied identity)
+                                  | otherwise -> descriptionTypeName inner
+  ListDescription inner -> (\name -> "[" <> name <> "]") <$> descriptionTypeName inner
+  OptionalDescription inner -> (\name -> "(Maybe " <> name <> ")") <$> descriptionTypeName inner
+  UnitDescription -> Right "()"
+  CheckedDescription _ inner -> descriptionTypeName inner
+  DocumentedDescription _ inner -> descriptionTypeName inner
+  _ -> Left "Recipe state contract has no named type identity"
+  where
+    applied identity@(TypeIdentity _ _ _ arguments)
+      | null arguments = qualifiedTypeName identity
+      | otherwise = "(" <> T.unwords (qualifiedTypeName identity : map applied arguments) <> ")"
+    nominal (RecordDescription _ _ _) = True
+    nominal (SumDescription _) = True
+    nominal (CheckedDescription _ inner) = nominal inner
+    nominal (DocumentedDescription _ inner) = nominal inner
+    nominal _ = False

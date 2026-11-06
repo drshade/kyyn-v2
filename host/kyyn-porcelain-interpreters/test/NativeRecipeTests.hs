@@ -24,6 +24,8 @@ import Kyyn.Domain.Plugin (packageIdentity, ConnectorTypeName(..))
 import Kyyn.Domain.Root (SourceRoot(..), CheckedValue(..))
 import qualified Kyyn.Domain.Recipe as R
 import Kyyn.Domain.FactProposal (FactProposal(..), FactProposalStep(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts)
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage)
@@ -90,13 +92,18 @@ main = do
       . unexpected @Judgement . unexpected @ModelTurn . unexpected @BlobStorage
       . capturedEvidence index . runPluginRead . runPluginPreparation . runRootStore
       . runRecipeInspection . runRecipeExecution $ do
+        contracts <- inspectRecipeContracts (SourceRoot rootContract code definition [])
+          [Fact (FactId "review") (R.ClosedRecipe (FlowEntryRef "Flows.review"))]
         rendered <- describeRecipe (SourceRoot rootContract code definition []) (FlowEntryRef "Flows.review") G.Tree
         stored <- materializeRoot rootContract code (R.KnowledgeBase (CheckedValue (contractId schema) (object ["items" .= ([] :: [Value])])) [])
         proposal <- case stored of
           Left errors -> pure (Left errors)
           Right root -> executeRecipeFlow root (FlowEntryRef "Flows.review") stateValue Nothing
-        pure (rendered,proposal)
-    (rendered,proposal) <- right result
+        pure (rendered,proposal,contracts)
+    (rendered,proposal,contracts) <- right result
+    states <- right contracts
+    unless (case states of [(_,"Flows.State",actual)] -> actual == state; _ -> False)
+      (fail "Private flow state contract/name differs from its guest descriptor")
     tree <- right rendered
     unless (not (Text.null tree)) (fail "Missing flow rendering")
     case proposal of

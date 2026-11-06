@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Runtime.Guest (Entry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
+module Kyyn.Runtime.Guest (Entry, evolutionEntry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
 import qualified Data.Aeson as Json
@@ -20,6 +20,7 @@ import Kyyn.Types.Plugin (EvidenceSnapshot(..), FetchError)
 import Kyyn.Runtime.Plugin (executeCapturedReadAction)
 import Kyyn.Runtime.Query (executeQuery)
 import Kyyn.Runtime.Validation (encodeReportValue)
+import Kyyn.Runtime.EvolutionEntry (evolutionEntry)
 import Kyyn.Runtime.RecipeEntry (recipeEntry)
 import Kyyn.Runtime.ToolEntry (toolEntry)
 import Kyyn.Runtime.PluginEntry (configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry)

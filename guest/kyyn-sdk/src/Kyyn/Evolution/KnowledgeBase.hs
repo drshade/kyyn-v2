@@ -13,6 +13,8 @@ import Kyyn.Types.KnowledgeBase (Recipe(OpenAgent))
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Evolution (EvolutionFailure(..))
+import qualified Kyyn.Types.Contract as Contract
+import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Edit (Edit)
 import Kyyn.Optics (Lens, lens)
@@ -35,7 +37,7 @@ openRecipe state instructions = RecipeDefinition (OpenAgent instructions) state
 -- | The state binding for a recipe that needs no remembered state.
 unitRecipeType :: RecipeType ()
 unitRecipeType = RecipeType "()"
-  "3c0bb1f1944c4350562a169eb26598527e566911796d0d1338741cba74ac78de"
+  (Contract.fingerprint (Contract.contractIdentity Contract.UnitDescription (SchemaMetadata [] [] [])))
   (\() -> JSObject (toJSObject [])) decode
   where
     decode (JSObject fields) | null (fromJSObject fields) = Right ()
