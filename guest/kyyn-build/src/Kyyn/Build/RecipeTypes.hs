@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Kyyn.Build.RecipeTypes (flowStateAlias, flowDefinition) where
+module Kyyn.Build.RecipeTypes (flowStateAlias, flowDefinition, flowDefinitions) where
 
 import Control.Monad (unless)
 import qualified Agentic as A
@@ -37,3 +37,9 @@ flowDefinition binding root implementation reference = do
   let selected = AppE (AppTypeE (VarE (mkName "Bindings.closedRecipe")) state) (LitE (StringL reference))
       body = AppE (AppE (AppE (VarE 'either) (InfixE (Just (VarE 'error)) (VarE '(.)) (Just (VarE 'show)))) (VarE 'id)) selected
   pure [SigD binding (AppT (ConT definition) state),ValD (VarP binding) (NormalB body) []]
+
+-- A module can export ordinary helpers alongside recipe flows. GHC reification
+-- determines eligible flows; printed signatures are never parsed for identity.
+flowDefinitions :: Name -> [(String,Name,String)] -> Q [Dec]
+flowDefinitions root candidates = concat <$> traverse
+  (\(binding,implementation,reference) -> recover (pure []) (flowDefinition (mkName binding) root implementation reference)) candidates

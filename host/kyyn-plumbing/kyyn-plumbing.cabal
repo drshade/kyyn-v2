@@ -41,7 +41,6 @@ library
     Kyyn.Plumbing.Protocol.FactEdits
     Kyyn.Plumbing.Protocol.FactProposal
     Kyyn.Plumbing.Protocol.Recipes
-    Kyyn.Plumbing.Protocol.RecipeTypes
     Kyyn.Plumbing.Protocol.EvolutionRecord
     Kyyn.Plumbing.Protocol.EvolutionRecord.Document
     Kyyn.Plumbing.Protocol.EvolutionRecord.Contract

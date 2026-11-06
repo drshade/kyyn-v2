@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Evolution where
+import qualified Kyyn.Workspace.Before.RecipeTypes.BeforeProgress.State
+import qualified Kyyn.Workspace.After.RecipeTypes.After.Item
+import qualified Kyyn.Workspace.After.RecipeFlows.AfterFlows
 import qualified Before
 import qualified After
 import Kyyn.Workspace.Evolution

@@ -6,7 +6,7 @@ import Data.Aeson (eitherDecodeStrict', encode)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Char (isAlphaNum, isLower)
-import Data.List (nub, intercalate)
+import Data.List (nub, intercalate, isPrefixOf, sortOn)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
 import System.Directory (createDirectoryIfMissing, doesFileExist, doesPathExist, makeAbsolute, withCurrentDirectory)
@@ -14,7 +14,8 @@ import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Process (callProcess, readProcess)
 import qualified Kyyn.Build.Sources as Sources
 import Kyyn.Build.Inspection
-import Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings)
+import Kyyn.Build.RecipeHandles (handleImports, handleModules, writeRecipeHandles)
+import Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings, writeRecipeEvolutionBindings)
 import Kyyn.Build.OutputBindings (writeOutputBindings)
 import Kyyn.Build.ToolBindings (writeToolBindings)
 import Kyyn.Build.Plugins
@@ -66,6 +67,7 @@ buildGuest compiler source output = do
         writeGuest generated exports modules (map snd entries)
         finishGuest compiler generated pluginPackages destination
       RootEntries -> buildRoot compiler libdir generated basePackages destination selection
+      DiscoveryEntries (RootApi selected) -> buildRootApi compiler libdir generated basePackages destination selected
       DiscoveryEntries RootSchema -> buildRoot compiler libdir generated basePackages destination selection
       RecipeEntries references -> buildRecipes compiler libdir generated basePackages destination references
       EvolutionEntries details -> buildEvolution compiler libdir generated basePackages destination details
@@ -151,6 +153,43 @@ buildRoot compiler libdir generated basePackages destination selection = do
             | (q,arguments,results) <- querySources])
   finishGuest compiler generated packages destination
 
+-- Inventory names come from compiler-parsed headers, not file-name guesses.
+-- Listing loads generated public bindings, leaving unfinished authored bodies
+-- alone until the caller explicitly selects their module or symbol.
+buildRootApi :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> Maybe Text.Text -> IO ()
+buildRootApi compiler libdir generated basePackages destination selected = do
+  runtime <- runtimeOptions compiler
+  (roots,packages,_,registrations) <- preparePlugins compiler libdir generated (basePackages ++ runtime)
+  writeToolBindings generated roots registrations
+  manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
+  _ <- prepareRoot compiler libdir generated packages roots manifest
+  metadata <- Bytes.readFile (generated </> "metadata.json") >>= either fail pure . eitherDecodeStrict'
+  writeRecipeBindings generated roots manifest metadata
+  authored <- concat <$> traverse Sources.sourceFiles roots
+  emitted <- Sources.sourceFiles generated
+  let public name = name `elem` ["KyynQueryBindings","Kyyn.Connectors","Kyyn.Agentic"] ||
+        any (`isPrefixOf` name) ["Kyyn.Workspace.","Kyyn.Plugins."]
+  inventory <- forM (authored ++ emitted) $ \path -> do
+    (name,_) <- Sources.moduleHeader libdir path
+    pure (name,path)
+  libraries <- packageModuleNames libdir
+  let sdk name = ("Agentic" `isPrefixOf` name || "Kyyn." `isPrefixOf` name) &&
+        not (any (`isPrefixOf` name) ["Kyyn.Build", "Kyyn.Runtime", "Kyyn.Types"]) &&
+        not (".Internal" `Text.isSuffixOf` Text.pack name)
+      requestedLibrary name = maybe False (\symbol -> name == Text.unpack symbol || (name ++ ".") `isPrefixOf` Text.unpack symbol) selected
+      names = [(name,path) | (name,path) <- inventory, path `elem` authored || public name] ++
+        [(name,"") | name <- libraries, sdk name || requestedLibrary name]
+      requested = case selected of
+        Nothing -> [name | (name,path) <- names, path `elem` emitted]
+        Just symbol -> take 1 (sortOn (negate . length)
+          [name | (name,_) <- names, name == Text.unpack symbol || (name ++ ".") `isPrefixOf` Text.unpack symbol])
+  (_,inspected) <- inspectExports libdir (roots ++ [generated]) packages requested
+  let described name path = case [entry | entry <- inspected, entry.moduleName == Text.pack name] of
+        [entry] -> entry
+        _ -> ModuleDescription (Text.pack name) (Text.pack path) Nothing [] []
+  writeGuest generated [described name path | (name,path) <- names] [] []
+  finishGuest compiler generated packages destination
+
 buildRecipes :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> [RecipeReference] -> IO ()
 buildRecipes compiler libdir generated basePackages destination references = do
   runtime <- runtimeOptions compiler
@@ -184,8 +223,7 @@ buildRecipes compiler libdir generated basePackages destination references = do
   finishGuest compiler generated packages destination
 
 buildEvolution :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> EvolutionSelection -> IO ()
-buildEvolution compiler libdir generated basePackages destination (EvolutionSelection beforeType beforeAnnotations recipe discovery) = do
-  when (recipe /= Nothing) (fail "Recipe evolution bindings are not implemented yet")
+buildEvolution compiler libdir generated basePackages destination (EvolutionSelection beforeType beforeAnnotations references recipe discovery) = do
   before <- either fail pure (qualifiedReference True beforeType)
   beforeMetadata <- either fail pure (qualifiedReference False beforeAnnotations)
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
@@ -196,17 +234,61 @@ buildEvolution compiler libdir generated basePackages destination (EvolutionSele
       packages roots = basePackages ++ runtime ++ map ("-i" ++) roots
   (beforeSources,oldMetadata) <- inspectRoot compiler libdir generated "Before" (packages beforeRoots) beforeRoots before beforeMetadata
   (afterSources,newMetadata) <- inspectRoot compiler libdir generated "After" (packages afterRoots) afterRoots manifest.schemaType manifest.schemaMetadata
+  -- Generated type dependencies are available while GHC selects Before state
+  -- closures. Only loaded Before source is copied into the migration namespace.
   authored <- concat <$> traverse Sources.sourceFiles afterRoots
   changes <- Sources.sourceFiles ".kyyn-change"
-  let merged = generated </> "sources"
-  origins <- Sources.mergeSources libdir merged (beforeSources ++ authored ++ changes)
-  let roots = [merged]
-      selectedPackages = packages roots
-  writeEvolutionBindings generated roots (before,oldMetadata) (manifest.schemaType,newMetadata)
+  imports <- concatMap snd <$> traverse (Sources.moduleHeader libdir) (authored ++ changes)
+  let handles = handleImports (imports ++ maybe [] (map Text.unpack) discovery)
+  importedModules <- either fail pure (handleModules handles)
+  let inspectionRoots = beforeRoots ++ afterRoots ++ [generated]
+  writeEvolutionBindings generated (beforeRoots ++ afterRoots) (before,oldMetadata) (manifest.schemaType,newMetadata)
   queryBindings <- either fail pure (bindings manifest newMetadata)
   writeFile (generated </> "KyynQueryBindings.hs") queryBindings
+  stateModules <- fmap concat $ forM references $ \reference -> case reference of
+    OpenState "()" -> pure []
+    OpenState selected -> pure . pure . Text.unpack . referenceModule =<< either fail pure (qualifiedReference True selected)
+    ClosedFlow selected -> pure . pure . Text.unpack . referenceModule =<< either fail pure (qualifiedReference False selected)
+  needs <- requiredBindings libdir inspectionRoots (packages inspectionRoots) (stateModules ++ importedModules)
+  when needs.toolBindings $ do
+    (_,_,_,registrations) <- preparePlugins compiler libdir generated (basePackages ++ runtime)
+    writeToolBindings generated (beforeRoots ++ afterRoots) registrations
+  (importedSources,importedBindings,importedEntries) <- writeRecipeHandles libdir generated
+    (packages inspectionRoots) beforeRoots afterRoots manifest.schemaType handles
+  states <- forM (zip [0 :: Int ..] references) $ \(index,reference) -> case reference of
+    OpenState "()" -> pure ([],[],"describeEntry @() \"$before.state.()\" (SchemaMetadata [] [] []) []")
+    OpenState selected -> do
+      state <- either fail pure (qualifiedReference True selected)
+      (closure,_) <- inspectExports libdir inspectionRoots (packages inspectionRoots) [Text.unpack (referenceModule state)]
+      pure (closure,[Text.unpack (referenceModule state)],"describeEntry @" ++ Text.unpack selected ++ " " ++
+        show ("$before.state." <> selected) ++ " (SchemaMetadata [] [] []) " ++ show closure)
+    ClosedFlow selected -> do
+      flow <- either fail pure (qualifiedReference False selected)
+      (closure,_) <- inspectExports libdir inspectionRoots (packages inspectionRoots) [Text.unpack (referenceModule flow)]
+      let moduleName = "KyynBeforeState" ++ show index
+      writeFile (generated </> moduleName ++ ".hs") (unlines
+        ["{-# LANGUAGE TemplateHaskell #-}","module " ++ moduleName ++ " where",
+         "import Language.Haskell.TH (mkName)","import Kyyn.Build.RecipeTypes (flowStateAlias)",
+         "import qualified Kyyn.Recipe as Recipe", "import qualified " ++ Text.unpack (referenceModule before),
+         "import qualified " ++ Text.unpack (referenceModule flow),
+         "$(flowStateAlias (mkName \"State\") ''" ++ Text.unpack beforeType ++ " '" ++ Text.unpack selected ++ ")"])
+      pure (closure,[moduleName],"describeEntry @" ++ moduleName ++ ".State " ++
+        show ("$before.flow." <> selected) ++ " (SchemaMetadata [] [] []) " ++ show closure)
+  selectedState <- case recipe of
+    Nothing -> pure Nothing
+    Just reference -> case [(index,closure,names) | (index,(actual,(closure,names,_))) <- zip [0 :: Int ..] (zip references states), actual == reference] of
+      [(index,closure,names)] -> do
+        let state = case reference of OpenState name -> Text.unpack name; ClosedFlow _ -> "KyynBeforeState" ++ show index ++ ".State"
+        writeRecipeEvolutionBindings generated before oldMetadata state names
+        pure (Just (state,closure))
+      _ -> fail "Selected recipe must have exactly one Before state descriptor"
+  let merged = generated </> "sources"
+      oldStateSources = [path | (closure,_,_) <- states, path <- closure, ".kyyn-before/" `isPrefixOf` path]
+  origins <- Sources.mergeSources libdir merged (beforeSources ++ oldStateSources ++ filter (isPrefixOf ".kyyn-before/") importedSources ++ authored ++ changes)
+  let roots = [merged]
+      selectedPackages = packages roots
   let defaults = ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"]
-      modules = case discovery of
+      selectedModules = case discovery of
         Nothing -> "Evolution" : defaults
         Just [] -> defaults
         Just selected -> map Text.unpack selected
@@ -214,14 +296,18 @@ buildEvolution compiler libdir generated basePackages destination (EvolutionSele
       oldDescription = "(" ++ show oldMetadata ++ "," ++ show beforeSources ++ ")"
       newDescription = "(" ++ show newMetadata ++ "," ++ show afterSources ++ ")"
       entries = case discovery of
-        Nothing -> ["evolutionEntry @" ++ name before ++ " @" ++ name manifest.schemaType ++ " " ++
-          oldDescription ++ " " ++ newDescription ++ " Evolution.evolution"]
+        Nothing -> case selectedState of
+          Nothing -> ["evolutionEntry @" ++ name before ++ " @" ++ name manifest.schemaType ++ " " ++
+            oldDescription ++ " " ++ newDescription ++ " Evolution.evolution"]
+          Just (state,closure) -> ["recipeEvolutionEntry @" ++ name before ++ " @" ++ state ++ " " ++
+            oldDescription ++ " " ++ show closure ++ " Evolution.evolution"]
         Just _ -> ["describeEntry @" ++ name before ++ " \"$before\" (" ++ show oldMetadata ++ ") " ++ show beforeSources,
                    "describeEntry @" ++ name manifest.schemaType ++ " \"$after\" (" ++ show newMetadata ++ ") " ++ show afterSources]
+      modules = nub (selectedModules ++ importedBindings ++ concat [names | (_,names,_) <- states])
   (_,exports) <- inspectExports libdir (roots ++ [generated]) selectedPackages modules
   let original path = maybe path Text.pack (lookup (Text.unpack path) origins)
       located = [entry { moduleSource = original entry.moduleSource } | entry <- exports]
-  writeGuest generated located (nub (modules ++ map (Text.unpack . referenceModule) [before,manifest.schemaType])) entries
+  writeGuest generated located (nub (modules ++ map (Text.unpack . referenceModule) [before,manifest.schemaType])) (entries ++ importedEntries ++ [entry | (_,_,entry) <- states])
   finishGuest compiler generated selectedPackages destination
 
 writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()

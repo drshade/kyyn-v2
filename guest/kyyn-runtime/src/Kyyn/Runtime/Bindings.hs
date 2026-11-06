@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
 -- Constructors used by compiler-generated modules, separate from the author SDK.
-module Kyyn.Runtime.Bindings (collection, contractCodec, RootBinding, rootBinding, recipeType, closedRecipe, evolve, edit) where
+module Kyyn.Runtime.Bindings (collection, contractCodec, RootBinding, rootBinding, recipeBinding, recipeCodec, recipeType, closedRecipe, evolve, edit) where
 
 import Data.Text (Text)
 import Kyyn.Contract
@@ -42,3 +42,19 @@ closedRecipe reference = do
   compiled <- compileContract (contract @state)
   name <- either (Left . ProjectionError []) Right (D.descriptionTypeName compiled.description)
   Recipe.RecipeDefinition (ClosedAgent (FlowEntryRef reference)) <$> recipeType @state name
+
+recipeCodec :: Wire.Codec root -> Wire.Codec state -> Wire.Codec (root,state)
+recipeCodec facts state = Wire.Codec encode decode
+  where
+    encode (root,value) = Wire.record [("facts",Wire.encodeWith facts root),("state",Wire.encodeWith state value)]
+    decode value = do
+      fields <- Wire.fields ["facts","state"] value
+      (,) <$> Wire.field "facts" facts fields <*> Wire.field "state" state fields
+
+recipeBinding :: forall root state. (Contract root, Contract state)
+  => SchemaMetadata -> Either ProjectionError (RootBinding (root,state))
+recipeBinding metadata = do
+  root <- compileContract (contract @root)
+  state <- compileContract (contract @state)
+  let description = describeContract root.description metadata []
+  pure (RootBinding description.identity (Wire.encodeWith (recipeCodec (runtimeCodec root.codec) (runtimeCodec state.codec))))

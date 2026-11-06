@@ -65,8 +65,8 @@ main = do
   assert "unit state can migrate to an authored state" (execute
     (updateRecipe unitRecipeType ident boolDefinition (\() -> Right True)) withTask ==
     Right (KnowledgeBase 7 [Fact key (storeRecipe boolDefinition True)]))
-  assert "same shape under a different type cannot decode selected state" (isFailure (execute
-    (updateRecipe (renamedType boolType) ident boolDefinition Right) both))
+  assert "an alias name with the same contract can decode selected state" (execute
+    (updateRecipe (renamedType boolType) ident boolDefinition Right) both == Right both)
   assert "changed contract with the same name refuses before decoding" (isFailure (execute
     (updateRecipe (changedContract boolType) ident boolDefinition Right) both))
   assert "failed migration returns no partial root" (execute

@@ -9,7 +9,7 @@ module Kyyn.Domain.Evolution
 import Data.Coerce (coerce)
 import Data.Char (isAsciiLower, toLower)
 import Data.List (intercalate)
-import Kyyn.Domain.Contract (RootContract)
+import Kyyn.Domain.Contract (RootContract, CheckedContract)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot, EvolutionState)
@@ -18,6 +18,7 @@ import Kyyn.Domain.Root (Root, SourceRoot)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Types.Fact (Fact)
 import Kyyn.Types.Evolution (EvolutionFailure)
 import qualified Kyyn.Domain.Recipe as Value
 
@@ -74,7 +75,8 @@ data EvolutionContext = EvolutionContext
   } deriving (Eq, Show)
 
 data PreparedEvolution = PreparedEvolution
-  { context :: EvolutionContext, beforeSource :: SourceRoot, afterSource :: SourceRoot }
+  { context :: EvolutionContext, beforeSource :: SourceRoot, afterSource :: SourceRoot
+  , beforeRecipeContracts :: [(Fact Value.RecipeDefinition,String,CheckedContract)] }
   deriving (Eq, Show)
 
 data CapturedEvolution = CapturedEvolution

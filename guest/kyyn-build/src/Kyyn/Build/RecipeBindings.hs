@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings) where
+module Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings, writeRecipeEvolutionBindings) where
 
 import Control.Monad (forM_, when)
 import Data.List (nub)
@@ -66,3 +66,33 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
       when occupied (fail ("Authored source collides with generated module " ++ name))
       createDirectoryIfMissing True (takeDirectory path)
       writeFile path source
+
+-- The same-schema facade exposes the compiler-resolved state, including private
+-- flow state aliases. Runtime codecs come from its ordinary Contract instance.
+writeRecipeEvolutionBindings :: FilePath -> Reference -> SchemaMetadata -> String -> [String] -> IO ()
+writeRecipeEvolutionBindings generated root metadata state imports = do
+  let selected = Text.unpack (referenceName root)
+      path = generated </> "Kyyn/Workspace/Evolution.hs"
+  writeFile path (unlines
+    (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}",
+      "module Kyyn.Workspace.Evolution (module Kyyn.Recipe, module Kyyn.Edit, Rationale(..), EvidenceRef(..), (>=>), identityEvolution, Root, RecipeState, recipeEdit) where",
+      "import Kyyn.Recipe", "import Kyyn.Edit", "import Kyyn.Evolution (Rationale(..), EvidenceRef(..), (>=>), identityEvolution)",
+      "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Bindings"] ++
+     ["import qualified " ++ name | name <- nub (Text.unpack (referenceModule root) : imports)] ++
+     ["type Root = " ++ selected, "type RecipeState = " ++ state,
+      "recipeEdit :: Rationale -> RecipeEdit Root RecipeState () -> RecipeEvolution Root RecipeState",
+      "recipeEdit = Bindings.edit (either (error . show) id (Bindings.recipeBinding @Root @RecipeState (" ++ show metadata ++ ")))"]))
+  writeFile (generated </> "KyynRecipeStateCodec.hs") (unlines
+    ["{-# LANGUAGE TypeApplications #-}","module KyynRecipeStateCodec (rootCodec) where",
+     "import Kyyn.Workspace.Evolution (RecipeState)","import qualified Kyyn.Runtime.Bindings as Bindings",
+     "import Kyyn.Runtime.Json (Codec)", "rootCodec :: Codec RecipeState",
+     "rootCodec = either (error . show) id (Bindings.contractCodec @RecipeState)"])
+  let SchemaMetadata _ _ collections = metadata
+  forM_ ["Before","After"] $ \endpoint -> do
+    let name = "Kyyn.Workspace." ++ endpoint
+    writeFile (generated </> "Kyyn/Workspace" </> endpoint ++ ".hs") (unlines
+      (["{-# LANGUAGE DataKinds, TypeApplications, OverloadedStrings #-}","module " ++ name ++ " where",
+        "import qualified " ++ Text.unpack (referenceModule root),
+        "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified Kyyn.Optics as Optics"] ++
+       [Text.unpack field ++ " = Bindings.collection " ++ show label ++ " (Optics.field @" ++ show field ++ " @" ++ selected ++ ")"
+        | CollectionDecl label field _ <- collections]))

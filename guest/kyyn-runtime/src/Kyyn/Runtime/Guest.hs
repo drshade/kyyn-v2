@@ -1,7 +1,8 @@
 {-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Runtime.Guest (Entry, evolutionEntry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
+module Kyyn.Runtime.Guest (Entry, recipeStateEntry, evolutionEntry, recipeEvolutionEntry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
+import Kyyn.Evolution (RecipeDefinition)
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
 import qualified Data.ByteString as Bytes
@@ -20,7 +21,7 @@ import Kyyn.Types.Plugin (EvidenceSnapshot(..), FetchError)
 import Kyyn.Runtime.Plugin (executeCapturedReadAction)
 import Kyyn.Runtime.Query (executeQuery)
 import Kyyn.Runtime.Validation (encodeReportValue)
-import Kyyn.Runtime.EvolutionEntry (evolutionEntry)
+import Kyyn.Runtime.EvolutionEntry (evolutionEntry, recipeEvolutionEntry)
 import Kyyn.Runtime.RecipeEntry (recipeEntry)
 import Kyyn.Runtime.ToolEntry (toolEntry)
 import Kyyn.Runtime.PluginEntry (configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry)
@@ -134,3 +135,6 @@ runGuest exports selected = do
       Invoke name argument -> case [run | (selectedName,run) <- concatMap entryActions built, selectedName == name] of
         [run] -> run transport argument
         _ -> fail "Unknown guest entry"
+
+recipeStateEntry :: forall state. Contract state => Text -> [Text] -> RecipeDefinition state -> Either ProjectionError Entry
+recipeStateEntry name sources _ = describeEntry @state name (SchemaMetadata [] [] []) sources

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Build.Inspection (inspectExports, BindingNeeds(..), requiredBindings, packageOptions) where
+module Kyyn.Build.Inspection (inspectExports, BindingNeeds(..), requiredBindings, packageOptions, packageModuleNames) where
 
 import Control.Monad (forM, unless, filterM)
 import Control.Monad.IO.Class (liftIO)
@@ -15,7 +15,7 @@ import GHC.Types.TyThing.Ppr (pprTyThing)
 import GHC.Driver.Ppr (showSDoc)
 import GHC.Driver.Env (hsc_units)
 import GHC.Unit.State (listUnitInfo, unwireUnit)
-import GHC.Unit.Info (unitIsExposed, unitId)
+import GHC.Unit.Info (unitIsExposed, unitId, unitExposedModules)
 import GHC.Unit.Types (GenUnit(..), Definite(..), unitString)
 import System.FilePath (normalise, (</>), (<.>))
 import System.Directory (doesFileExist)
@@ -31,6 +31,14 @@ packageOptions libdir = runGhc (Just libdir) $ do
   environment <- getSession
   pure ("-hide-all-packages" : concat
     [["-package-id",unitString (unwireUnit (hsc_units environment) (RealUnit (Definite (unitId unit))))] | unit <- listUnitInfo (hsc_units environment), unitIsExposed unit])
+
+packageModuleNames :: FilePath -> IO [String]
+packageModuleNames libdir = runGhc (Just libdir) $ do
+  flags <- getSessionDynFlags
+  _ <- setSessionDynFlags flags
+  environment <- getSession
+  pure (sort (nub [moduleNameString name | unit <- listUnitInfo (hsc_units environment), unitIsExposed unit,
+    (name,_) <- unitExposedModules unit]))
 
 -- Compiler internals stay in the selected guest build environment. The caller
 -- supplies that compiler's libdir and source roots, not an ambient package cache.

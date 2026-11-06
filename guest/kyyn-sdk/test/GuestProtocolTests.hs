@@ -60,6 +60,8 @@ main = do
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
     ["--evolution-api-built",path] -> checkEvolutionApi (path,[])
+    ["--root-api-built",path] -> checkRootApi (path,[])
+    ["--recipe-evolution-built",path] -> checkRecipeEvolution (path,[])
     ["--evolution-built",path] -> checkEvolution (path,[])
     ["--recipe-built",path] -> checkRecipe (path,[])
     ["--tool-built",path] -> checkTool (path,[])
@@ -510,6 +512,10 @@ checkEvolution executable = do
   (entry,before,after) <- case [(name,before,after) | G.EvolutionEntry name (G.AdHocContracts before after) <- description.entries] of
     [selected] -> pure selected
     _ -> fail "Missing evolution endpoints"
+  unless (all (`elem` [name | G.ContractEntry name _ <- description.entries])
+    ["$before.state.()","$before.state.BeforeProgress.State","$before.flow.BeforeFlows.review",
+     "$import.state.Before.BeforeProgress.State","$import.state.After.After.Item","$import.flow.AfterFlows.review"])
+    (fail "Before recipe state contracts were not described under the migration environment")
   unless (before.loadedSources == [".kyyn-before/Before.hs"] && after.loadedSources == ["src/After.hs"])
     (fail "Endpoint source closure includes metadata-only dependencies")
   let fact payload = object ["id" .= String "one","value" .= payload]
@@ -531,7 +537,7 @@ checkEvolutionApi executable = do
   value <- invoke executable (toJSON G.Describe)
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
-  unless ([name | G.ContractEntry name _ <- description.entries] == ["$before","$after"])
+  unless (all (`elem` [name | G.ContractEntry name _ <- description.entries]) ["$before","$after"])
     (fail "Discovery did not describe both endpoints")
   unless (all (`elem` map G.moduleName description.modules)
     ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"])
@@ -539,3 +545,36 @@ checkEvolutionApi executable = do
   (status,_,_) <- call executable (toJSON (G.Invoke "Evolution.evolution" (object [])))
   unless (status /= ExitSuccess) (fail "Discovery build exposed an unfinished migration")
   putStrLn "Workspace API describes endpoint contracts and bindings despite an unfinished transformation body."
+
+checkRecipeEvolution :: (FilePath,[String]) -> IO ()
+checkRecipeEvolution executable = do
+  described <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode described)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  (entry,root) <- case [(name,root) | G.EvolutionEntry name (G.RecipeEvolutionContracts root _) <- description.entries] of
+    [selected] -> pure selected
+    _ -> fail "Missing recipe evolution contracts"
+  let state = object ["reviewed" .= String "4"]
+      input = object ["facts" .= object ["items" .= ([] :: [Value])],"state" .= state]
+      output = object ["facts" .= object ["items" .= [object ["id" .= String "new","value" .= object ["amount" .= String "9"]]]],"state" .= state]
+      observed value = object ["contract" .= root.identity,"value" .= value]
+      expected = object ["tag" .= String "Succeeded","value" .= object ["after" .= output,"steps" .=
+        [object ["rationale" .= object ["explanation" .= String "Append a fact and preserve private state","evidence" .= ([] :: [Value])],
+          "before" .= observed input,"after" .= observed output]]]]
+  actual <- invoke executable (toJSON (G.Invoke entry input))
+  unless (actual == expected) (fail ("Wrong recipe evolution result: " ++ show actual))
+  (status,_,_) <- call executable (toJSON (G.Invoke entry (object ["facts" .= object ["items" .= ([] :: [Value])],"state" .= object []])))
+  unless (status /= ExitSuccess) (fail "Recipe evolution accepted invalid private state")
+  putStrLn "Recipe evolution edits facts through generated collections and preserves private state with checked contract identities."
+
+checkRootApi :: (FilePath,[String]) -> IO ()
+checkRootApi executable = do
+  value <- invoke executable (toJSON G.Describe)
+  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest description)
+  unless (null description.entries && all (\name -> any (\entry -> entry.moduleName == name && not (null entry.moduleExports)) description.modules)
+    ["Kyyn.Workspace.Evolution","Kyyn.Workspace.FactEdits","Kyyn.Connectors","Kyyn.Agentic","Kyyn.Plugins.P_local_file.Files"])
+    (fail "Root catalogue is missing generated API exports")
+  unless (any (\entry -> entry.moduleName == "Unfinished" && null entry.moduleExports && entry.moduleSource == "src/Unfinished.hs") description.modules)
+    (fail "Root inventory compiled unfinished authored source or lost its name")
+  putStrLn "Root API inventories authored modules and describes generated bindings without compiling unfinished bodies."

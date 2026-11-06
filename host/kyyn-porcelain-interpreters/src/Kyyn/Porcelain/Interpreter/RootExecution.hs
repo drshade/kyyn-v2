@@ -52,9 +52,9 @@ runRootExecution = interpret $ \_ -> \case
     _ <- ExceptT (readModelConfiguration code)
     states <- ExceptT (inspectRecipeContracts (SourceRoot contract code definition [])
       [Fact identity (recipeDefinition recipe) | Fact identity recipe <- recipes])
-    _ <- forM (zip recipes states) $ \(Fact identity (StoredRecipe _ name expected (CheckedValue fingerprint value)),
-      (Fact actual _,actualName,inspected)) -> do
-        unless (identity == actual && name == actualName && expected == inspected && fingerprint == contractId inspected)
+    _ <- forM (zip recipes states) $ \(Fact identity (StoredRecipe _ _ expected (CheckedValue fingerprint value)),
+      (Fact actual _,_,inspected)) -> do
+        unless (identity == actual && contractId expected == contractId inspected && fingerprint == contractId inspected)
           (throwE [errorDiagnostic "recipe.state-contract" "Recipe state no longer matches its authored contract"])
         ExceptT (checkRecipeValue inspected value)
     queries <- forM declarations $ \(QueryDefinition name documentation _ _ _ _ _) ->

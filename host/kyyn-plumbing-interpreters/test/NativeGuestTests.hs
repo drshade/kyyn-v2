@@ -45,13 +45,13 @@ main = do
   before <- right (fileTree [(path "Before.hs","module Before where")])
   target <- right (fileTree code)
   change <- right (fileTree [(path "Evolution.hs","module Evolution where")])
-  migration <- right (captureEvolutionSources (EvolutionSelection "Before.Root" "Before.metadata" Nothing Nothing) before target change)
+  migration <- right (captureEvolutionSources (EvolutionSelection "Before.Root" "Before.metadata" [] Nothing Nothing) before target change)
   unless (lookup (path "flake.lock") (sourceFiles migration) == Just "{}"
       && lookup (path ".kyyn-before/Before.hs") (sourceFiles migration) == Just "module Before where"
       && lookup (path ".kyyn-change/Evolution.hs") (sourceFiles migration) == Just "module Evolution where")
     (fail "Evolution lost target environment or endpoint source separation")
   conflicting <- right (fileTree ((path ".kyyn-before/Shadow.hs","shadow") : code))
-  unless (isLeft (captureEvolutionSources (EvolutionSelection "Before.Root" "Before.metadata" Nothing Nothing) before conflicting change))
+  unless (isLeft (captureEvolutionSources (EvolutionSelection "Before.Root" "Before.metadata" [] Nothing Nothing) before conflicting change))
     (fail "Target overwrote private Before source")
   discovery <- right (guestSources (DiscoveryEntries RootSchema) code)
   unless (sourceIdentity discovery /= sourceIdentity baseline) (fail "Build selection absent from identity")

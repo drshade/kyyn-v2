@@ -108,11 +108,28 @@
             chmod -R u+w "$out"
             cp -R ${./tools/fixtures/recipe-guest}/. "$out/"
           '';
+          recipeEvolutionSource = p.pkgs.runCommand "kyyn-recipe-evolution-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
+            chmod -R u+w "$out"
+            rm -rf "$out/src"
+            cp -R "$out/.kyyn-before" "$out/src"
+            cp -R ${./tools/fixtures/recipe-evolution-guest}/. "$out/"
+            sed -i 's/After.Root/Before.Root/g' "$out/kb.dhall"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"None"}}}' > "$out/.kyyn-build.json"
+          '';
+          rootApiSource = p.pkgs.runCommand "kyyn-root-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"rootApi","selected":{"tag":"None"}}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Unfinished where' 'unfinished =' > "$out/src/Unfinished.hs"
+          '';
           evolutionApiSource = p.pkgs.runCommand "kyyn-evolution-api-source" { } ''
             mkdir -p "$out"
             cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
             chmod -R u+w "$out"
-            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","recipe":{"tag":"None"},"modules":{"tag":"Some","value":[]}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"state","name":"()"},{"kind":"state","name":"BeforeProgress.State"},{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"None"},"modules":{"tag":"Some","value":[]}}}' > "$out/.kyyn-build.json"
             printf '%s\n' 'module Evolution where' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
           '';
           outputSource = p.pkgs.runCommand "kyyn-output-source" { } ''
@@ -161,6 +178,8 @@
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
           guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
+          guest-root-api = self.lib.mkGuest { inherit system; src = rootApiSource; };
+          guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };
           guest-evolution-api = self.lib.mkGuest { inherit system; src = evolutionApiSource; };
           guest-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/evolution-guest; };
           guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };

@@ -57,8 +57,7 @@ checkEvolutionReport stateContracts source input target (EvolutionObservation ou
         _ <- checkRecipeDefinitions [Fact ident (recipeDefinition recipe) | Fact ident recipe <- values]
         pure values
     checkRecipe (Fact ident (ProposedRecipe method name fingerprint value)) =
-      case nub [contract | (selected,contract) <- stateContracts,
-                 selected == name, contractId contract == fingerprint] of
+      case nub [contract | (_,contract) <- stateContracts, contractId contract == fingerprint] of
         [contract] -> fmap (fmap (Fact ident . StoredRecipe method name contract)) (checkRecipeValue contract value)
         _ -> pure (reject ("Recipe state names an unknown contract: " ++ name))
     contracts = nub [source, target]
