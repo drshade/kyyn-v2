@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, OverloadedStrings #-}
 module Kyyn.Types.Guest
-  ( Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
+  ( QueryInvocation(..), Invocation(..), ConnectorEntries(..), CapturedEntry(..), entryNames, SinkDefaultsInvocation(..)
   , LoginInvocation(..), SinkInvocation(..), SinkContracts(..)
   , AcquisitionInvocation(..), AcquisitionContext(..), ConnectorIdentity(..), AcquisitionContracts(..)
   , GuestRequest(..), CapturedInvocation(..), GuestDescription(..), DescribedContract(..), EntryDescription, GuestEntry(..)
@@ -16,6 +16,13 @@ import Kyyn.Types.SchemaMetadata
 
 -- One request codec is used by the host and the executable it describes.
 data GuestRequest = Describe | Invoke Text Value deriving (Eq, Show)
+data QueryInvocation = QueryInvocation Value Value deriving (Eq, Show)
+instance ToJSON QueryInvocation where
+  toJSON (QueryInvocation root arguments) = object ["root" .= root,"arguments" .= arguments]
+instance FromJSON QueryInvocation where
+  parseJSON = exactObject "query invocation" ["root","arguments"] $ \fields ->
+    QueryInvocation <$> fields .: "root" <*> fields .: "arguments"
+
 data CapturedInvocation = CapturedInvocation
   { capturedArguments :: Value, capturedSnapshot :: Text } deriving (Eq, Show)
 

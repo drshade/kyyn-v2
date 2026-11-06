@@ -5,18 +5,16 @@ import Control.Monad (unless)
 import qualified Data.Aeson as Json
 import qualified Data.Aeson.Types as Json
 import qualified Data.ByteString as Bytes
-import qualified Data.ByteString.Lazy as Lazy
 import Data.List (nub)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import Agentic.Aeson (toAeson, fromAeson)
 import Kyyn.Contract
 import Kyyn.Types.Guest
 import Kyyn.Types.SchemaMetadata
 import Kyyn.Types.Diagnostic (ValidationReport)
 import Kyyn.Types.Query (Query)
-import Kyyn.Runtime.Contract (runtimeCodec, fromWire)
+import Kyyn.Runtime.Contract (runtimeCodec, fromWire, toWire)
 import Kyyn.Plugin (CapturedRead)
 import Kyyn.Types.Plugin (EvidenceSnapshot(..), FetchError)
 import Kyyn.Runtime.Plugin (executeCapturedReadAction)
@@ -51,8 +49,9 @@ queryEntry name (rootMetadata,rootSources) (argumentMetadata,argumentSources) (r
         (describeContract arguments.description argumentMetadata argumentSources)
         (describeContract result.description resultMetadata resultSources))
       run value = do
+        QueryInvocation rootValue argumentsValue <- Json.parseEither Json.parseJSON value
         reply <- executeQuery (runtimeCodec root.codec) (runtimeCodec arguments.codec) (runtimeCodec result.codec)
-          selected (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (Json.encode value))))
+          selected (toWire (fromAeson rootValue)) (toWire (fromAeson argumentsValue))
         pure (toAeson (fromWire reply))
   pure (pureEntry description run)
 

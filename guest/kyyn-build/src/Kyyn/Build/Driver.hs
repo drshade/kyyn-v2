@@ -12,6 +12,7 @@ import System.Directory (createDirectoryIfMissing, doesFileExist, doesPathExist,
 import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Process (callProcess, readProcess)
 import Kyyn.Build.Inspection
+import Kyyn.Build.OutputBindings (writeOutputBindings)
 import Kyyn.Build.ToolBindings (writeToolBindings)
 import Kyyn.Build.Plugins
 import qualified Kyyn.Types.Plugin as P
@@ -105,22 +106,21 @@ buildRoot :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> GuestSe
 buildRoot compiler libdir generated basePackages destination selection = do
   roots <- ("src" :) <$> installedPluginRoots
   let packages = basePackages ++ map ("-i" ++) roots
-  pluginEntries <- if selection == RootEntries
+  (pluginEntries,registrations) <- if selection == RootEntries
     then do
       (_,_,entries,registrations) <- preparePlugins compiler libdir generated basePackages
       writeToolBindings generated roots registrations
-      pure entries
-    else pure []
+      pure (entries,registrations)
+    else pure ([],[])
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
-  unless (selection /= RootEntries || null manifest.outputs)
-    (fail "Guest build: output adapters are not implemented yet")
+  outputModules <- if selection == RootEntries then writeOutputBindings generated roots registrations manifest else pure []
   let name = Text.unpack . referenceName
       moduleName = Text.unpack . referenceModule
       rootModules = nub [moduleName manifest.schemaType,moduleName manifest.schemaMetadata]
       selectedQueries = if selection == RootEntries then manifest.queries else []
       selectedTools = if selection == RootEntries then manifest.tools else []
   rootSources <- prepareRoot compiler libdir generated packages roots manifest
-  let selectedModules = nub (rootModules ++ [moduleName manifest.validator | selection == RootEntries] ++ concat
+  let selectedModules = nub (outputModules ++ rootModules ++ [moduleName manifest.validator | selection == RootEntries] ++ concat
         [[moduleName q.queryImplementation,moduleName q.inputType,moduleName q.inputMetadata,
           moduleName q.resultType,moduleName q.resultMetadata] | q <- selectedQueries] ++
         concat [[moduleName implementation,moduleName input,moduleName result] | Tool _ _ implementation input result <- selectedTools] ++

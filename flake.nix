@@ -102,6 +102,12 @@
             chmod -R u+w "$out"
             cp -R ${./tools/fixtures/tool-guest}/. "$out/"
           '';
+          outputSource = p.pkgs.runCommand "kyyn-output-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/output-guest}/. "$out/"
+          '';
           toolApiSource = p.pkgs.runCommand "kyyn-tool-api-source" { } ''
             mkdir -p "$out"
             cp -R ${toolSource}/. "$out/"
@@ -142,6 +148,7 @@
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
           guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
+          guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
           guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };
           guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };

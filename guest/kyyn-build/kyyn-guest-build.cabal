@@ -7,7 +7,7 @@ build-type: Simple
 
 library
   hs-source-dirs: src
-  exposed-modules: Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver Kyyn.Build.Captured Kyyn.Build.Plugins Kyyn.Build.ToolBindings
+  exposed-modules: Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver Kyyn.Build.Captured Kyyn.Build.Plugins Kyyn.Build.ToolBindings Kyyn.Build.OutputBindings
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, ghc ==9.10.3, kyyn-types, template-haskell, agentic ==0.2.1.0,
@@ -20,7 +20,7 @@ test-suite inspection
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-types,
-    text, directory, process, temporary ==1.3
+    text, directory, filepath, process, temporary ==1.3
 
 executable kyyn-guest-build
   hs-source-dirs: app

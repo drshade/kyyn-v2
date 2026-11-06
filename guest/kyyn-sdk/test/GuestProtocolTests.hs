@@ -286,6 +286,12 @@ checkRequests = do
     object ["operation" .= ("invoke" :: String),"entry" .= True,"argument" .= object []]] $ \value ->
       unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestRequest))
         (fail "Malformed shared guest request accepted")
+  let query = G.QueryInvocation (object []) (object [])
+  decodedQuery <- right (eitherDecodeStrict' (Lazy.toStrict (encode query)))
+  unless (decodedQuery == query) (fail "Shared query invocation changed")
+  forM_ [object ["root" .= object []],object ["root" .= object [],"arguments" .= object [],"extra" .= True]] $ \value ->
+    unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.QueryInvocation))
+      (fail "Malformed shared query invocation accepted")
   forM_ [object ["arguments" .= object []],
     object ["arguments" .= object [],"snapshot" .= Null],
     object ["arguments" .= object [],"snapshot" .= ("id" :: String),"extra" .= True]] $ \value ->

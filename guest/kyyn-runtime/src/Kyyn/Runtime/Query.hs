@@ -6,11 +6,10 @@ import Kyyn.Types.Query (Query(..), ReadAccess(..), runLocally)
 import Text.JSON.Types (JSValue(..))
 
 executeQuery :: Codec root -> Codec args -> Codec result -> (args -> Query root result)
-  -> String -> Either String JSValue
-executeQuery rootCodec argumentCodec resultCodec selected input = do
-  values <- parseValue input >>= fields ["root", "arguments"]
-  root <- field "root" rootCodec values
-  arguments <- field "arguments" argumentCodec values
+  -> JSValue -> JSValue -> Either String JSValue
+executeQuery rootCodec argumentCodec resultCodec selected rootValue argumentValue = do
+  root <- decodeWith rootCodec rootValue
+  arguments <- decodeWith argumentCodec argumentValue
   let Query program = selected arguments
       (result, trace) = runLocally root program
   pure (record [("result", encodeWith resultCodec result),

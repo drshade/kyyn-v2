@@ -7,8 +7,11 @@ import Control.Exception (SomeException, try)
 import Control.Monad (unless)
 import Data.List (sort)
 import qualified Data.Text as Text
-import System.Directory (withCurrentDirectory)
-import System.Process (readProcess)
+import System.Directory (withCurrentDirectory, listDirectory, doesDirectoryExist, createDirectory, copyFile, removeFile)
+import System.Process (readProcess, readProcessWithExitCode)
+import System.Environment (getArgs)
+import System.Exit (ExitCode(..))
+import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Build.Inspection
 import Kyyn.Build.Manifest (parseManifest, parsePluginManifest, parseInstances, ConfiguredInstance(..))
@@ -16,6 +19,37 @@ import Kyyn.Types.Guest
 
 main :: IO ()
 main = do
+  arguments <- getArgs
+  case arguments of
+    ["--output-fixture",compiler,helper,fixture] -> rejectOutputMismatch compiler helper fixture
+    [] -> checkInspection
+    _ -> fail "Expected --output-fixture COMPILER BUILD_HELPER FIXTURE or no arguments"
+
+-- Use the exact Nix compiler/helper that built the positive output fixture.
+-- The changed query is valid by itself; only the sink binding is ill-typed.
+rejectOutputMismatch :: FilePath -> FilePath -> FilePath -> IO ()
+rejectOutputMismatch compiler helper fixture = withSystemTempDirectory "kyyn-output-mismatch" $ \directory -> do
+  copyTree fixture directory
+  let query = directory </> "src/OutputQueries.hs"
+  removeFile query
+  writeFile query (unlines
+    ["module OutputQueries where", "import Data.Text (Text, pack)",
+     "import Kyyn.Schema (SchemaMetadata(..))", "import Kyyn.Types.Query (Query)", "import Main (Root)",
+     "type Arguments = ()", "type Result = Text", "metadata = SchemaMetadata [] [] []",
+     "count :: Arguments -> Query Root Result", "count _ = pure (pack \"incompatible sink input\")"])
+  (status,output,errors) <- readProcessWithExitCode helper [compiler,directory,directory </> "guest"] ""
+  unless (status /= ExitSuccess && "KyynOutputBindings.hs" `Text.isInfixOf` Text.pack (output ++ errors)
+    && "Integer" `Text.isInfixOf` Text.pack errors && "Text" `Text.isInfixOf` Text.pack errors)
+    (fail ("Wrong outcome for incompatible query/sink types: " ++ output ++ errors))
+  putStrLn "GHC rejects an incompatible query/sink binding in the selected guest environment."
+  where
+    copyTree source target = listDirectory source >>= mapM_ (\name -> do
+      let from = source </> name; to = target </> name
+      directory <- doesDirectoryExist from
+      if directory then createDirectory to >> copyTree from to else copyFile from to)
+
+checkInspection :: IO ()
+checkInspection = do
   compilerOutput <- readProcess "ghc" ["--print-libdir"] ""
   libdir <- case lines compilerOutput of
     [path] -> pure path
