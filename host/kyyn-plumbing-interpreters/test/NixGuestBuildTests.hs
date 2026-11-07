@@ -47,8 +47,9 @@ main = do
     tree <- right captured
     sources <- right (guestSources RootEntries (files tree))
     let settings = GuestBuildEnvironment nix system environment cache
-        run action = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-          . runGuestExecution environment . runGuestInspection . runGuestCompilation settings . runSchemaInspection . runApiInspection $ action
+        runWith config action = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
+          . runGuestExecution environment . runGuestInspection . runGuestCompilation config . runSchemaInspection . runApiInspection $ action
+        run action = runWith settings action
     result <- run $ runExceptT $ do
       program <- ExceptT (compileGuest sources)
       description <- ExceptT (describeGuest program)
@@ -56,6 +57,8 @@ main = do
     (program,description) <- right result >>= right
     unless (map G.entryName (checkedEntries description) == ["validate","total"]) (fail "Wrong built entries")
     unless (program.identity.sourcesDigest == sourceIdentity sources) (fail "Capture identity changed")
+    reused <- runWith settings { nixExecutable = "/not-a-nix-executable" } (compileGuest sources) >>= right >>= right
+    unless (reused == program) (fail "Retained real Nix output was not reused across interpreter instances")
     retained <- doesPathExist program.retentionRoot
     unless retained (fail "Nix output is not retained")
     -- The compilation scope has already been removed; invocation uses its store output.
