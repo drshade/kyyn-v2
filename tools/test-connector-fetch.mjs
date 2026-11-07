@@ -132,7 +132,9 @@ fetch config (FetchContext started _) snapshot = do
   fs.writeFileSync(configPath, 'not valid Dhall');
   if (toolChecks) {
     const started = performance.now();
-    assert(cli(['--git', '/not-a-git-executable', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
+    // Evolution discovery captures the target guest environment through Git.
+    assert.equal(cli(['--git', '/not-a-git-executable', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id], 1).diagnostics[0].code, 'setup.git');
+    assert(cli(['guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
     console.log(`Fixed SDK discovery with broken plugin config: ${Math.round(performance.now() - started)} ms`);
     const partial = cli(['guest', 'module', 'list', '--evolution', draft.id]);
     assert(partial.result.modules.includes('Kyyn.Schema'));
@@ -157,14 +159,15 @@ fetch config (FetchContext started _) snapshot = do
     const bindings = cli(['guest', 'module', 'show', 'Kyyn.Connectors', '--evolution', draft.id]).result.symbols;
     for (const name of ['Tool', 'sales', 'support']) assert(bindings.some(symbol => symbol.name === name));
     const proxy = cli(['guest', 'module', 'show', 'Kyyn.Plugins.P_local_file.Folder', '--evolution', draft.id]).result.symbols;
-    assert(proxy.some(symbol => symbol.name === 'content' && /Instance/.test(symbol.declaration)));
+    assert(proxy.some(symbol => symbol.name === 'content' && /Instance/.test(symbol.signature)));
     const manifestPath = path.join(draft.path, 'target/kb.dhall');
     const manifest = fs.readFileSync(manifestPath, 'utf8');
     const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
     assert(manifest.includes(emptyTools));
     fs.writeFileSync(manifestPath, manifest.replace(emptyTools,
       '[{ name = "bulk", description = "Read captured folders", implementation = "Helpers.bulk", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));
-    fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `module Helpers where
+    fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Helpers where
 import Data.Text (Text)
 import Kyyn.Plugin (FetchError)
 import Kyyn.Connectors (Tool)
