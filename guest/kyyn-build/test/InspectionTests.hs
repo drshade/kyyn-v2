@@ -98,10 +98,13 @@ checkInspection = do
     let signatures = [entry.exportSignature | m <- migration, entry <- m.moduleExports, entry.exportName == "change"]
     unless (case signatures of [signature] -> all (`Text.isInfixOf` signature) ["Before.Root","After.Root"]; _ -> False)
       (fail ("Compiler signature obscures endpoint identity: " ++ show signatures))
-    writeFile "Internal.hs" "module Internal where\ndata Hidden = Hidden\n"
+    writeFile "Internal.hs" "module Internal where\ndata Hidden = HiddenConstructor\n"
     writeFile "Public.hs" "module Public (Hidden) where\nimport Internal\n"
+    (_,concrete) <- inspectExports libdir ["."] [] ["Internal"]
+    unless (any (Text.isInfixOf "HiddenConstructor" . exportSignature) (concatMap moduleExports concrete))
+      (fail "Exported constructors disappeared from compiler declarations")
     (_,abstract) <- inspectExports libdir ["."] [] ["Public"]
-    unless (all (not . Text.isInfixOf "Internal.Hidden" . exportSignature) (concatMap moduleExports abstract))
+    unless (all (not . Text.isInfixOf "HiddenConstructor" . exportSignature) (concatMap moduleExports abstract))
       (fail "Abstract exported type disclosed its hidden constructor")
     writeFile "Facade.hs" "module Facade (keep) where\nimport Public (Hidden)\nkeep :: Hidden -> Hidden\nkeep = id\n"
     (_,facade) <- inspectExports libdir ["."] [] ["Facade"]
