@@ -112,8 +112,13 @@ selection. Fact values and invocation arguments are not compiler inputs. Retain
 an output through ordinary Nix output retention for as long as an in-flight or
 cached CompiledProgram uses it; cache removal may release that retention. No
 accepted-revision closure registry or historical guest build is required.
-Never return a bare temporary
-build-directory path. Cache deletion discards derived code, not accepted knowledge.
+The host may reuse a retained output across commands by the capture digest and
+execution platform. Store the successful Nix build result beside its retention
+link; require both the retained executable and immutable output to exist before
+reuse. Missing or unreadable result data and missing outputs take the normal
+locked Nix build path. Never cache failed builds. This is disposable build data,
+not a second dependency lock or an accepted-revision registry.
+Never return a bare temporary build-directory path. Cache deletion discards derived code, not accepted knowledge.
 
 ### Describe and invoke the same build
 
