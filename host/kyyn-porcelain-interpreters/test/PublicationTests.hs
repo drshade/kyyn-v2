@@ -1,6 +1,6 @@
 -- Native application/store/Git publication with recording guest results: readiness,
 -- input/head races, separate drafts, staged/untracked preservation, post-ref-update
--- interruption and manual Git repair. Does not execute MicroHs or a CLI.
+-- interruption and manual Git repair. Does not build guests or invoke a CLI.
 
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, TypeApplications #-}
 module PublicationTests (publicationTests) where

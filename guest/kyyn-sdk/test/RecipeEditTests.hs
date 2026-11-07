@@ -1,5 +1,5 @@
 -- Pure recipe/fact state focusing and common evolution observation/failure laws.
--- Reused by the real GHC/MicroHs proof; no persistence or generated workspace API.
+-- Pure recipe edits; no persistence or generated workspace API.
 {-# LANGUAGE OverloadedStrings #-}
 module RecipeEditTests (main) where
 

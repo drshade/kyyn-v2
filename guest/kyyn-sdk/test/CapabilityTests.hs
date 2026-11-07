@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs, TypeOperators, OverloadedStrings #-}
 module Main (main) where
 
+import qualified QueryCore
 import Control.Monad (unless)
 import Data.Functor.Identity (Identity(..))
 import Kyyn.Plugin
@@ -46,6 +47,7 @@ acquisition = listEvidenceIds (EvidenceSnapshot "selected" :: EvidenceSnapshot I
 
 main :: IO ()
 main = do
+  QueryCore.main
   unless (runIdentity (interpretProgram handleReordered reordered) == Right response)
     (fail "HTTP helper depended on the first row position")
   unless (runIdentity (interpretProgram handleTerminal terminal) == Right response)

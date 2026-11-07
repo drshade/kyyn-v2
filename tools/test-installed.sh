@@ -10,6 +10,7 @@ nix --extra-experimental-features 'nix-command flakes' build .#kyyn --no-update-
 node tools/test-native-guest.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-guide.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-secrets.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-compiler-diagnostics.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-judgement.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-guest-api.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-closed-recipes.mjs "$journey_stage/install/bin/kyyn-v2"

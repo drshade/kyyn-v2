@@ -96,6 +96,7 @@ test-suite capabilities
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: CapabilityTests.hs
+  other-modules: QueryCore
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types

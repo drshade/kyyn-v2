@@ -1,7 +1,4 @@
 dist-newstyle/
 .build/
-vendor/MicroHs/bin/
-vendor/MicroHs/obj/
-vendor/MicroHs/mhs.conf
 *.hi
 *.o

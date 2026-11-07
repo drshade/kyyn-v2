@@ -1,6 +1,6 @@
 -- Root/store/application integration using real Dhall/filesystem/Git and recording
 -- schema/compiler/execution handlers. Includes capture, validation, candidate,
--- publication, checkout repair, recipes and discovery; not a real MicroHs journey.
+-- publication, checkout repair, recipes and discovery; not a real guest build journey.
 
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Main (main) where

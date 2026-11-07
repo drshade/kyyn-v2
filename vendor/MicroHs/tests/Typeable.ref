@@ -1,8 +1,0 @@
-Bool
-IO Bool
-(Char,Bool)
-Monad
-T
-P (P T)
-[Int]
-Int -> Int -> Int

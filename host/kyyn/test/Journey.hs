@@ -1,4 +1,4 @@
--- Installed real-Git/Dhall/MicroHs journey: schema-changing evaluation and acceptance
+-- Installed real-Git/Dhall/Nix guest journey: schema-changing evaluation and acceptance
 -- in separate processes, source/fact deletion, archive review without cache, and
 -- inherited required examples. Needs KYYN_TEST_ROOT and KYYN_TEST_CLI.
 
