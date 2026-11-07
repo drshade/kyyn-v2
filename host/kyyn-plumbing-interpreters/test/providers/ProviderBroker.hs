@@ -2,7 +2,7 @@
 -- executable is supplied by the first-party Nix fixture; entries are selected
 -- from its own description, not reconstructed names or compiler adapters.
 {-# LANGUAGE OverloadedStrings #-}
-module ProviderBroker (NativeProgram, nativeSource, nativeRead, nativeLogin, brokerWith, Scenario(..)) where
+module ProviderBroker (NativeProgram, nativeSource, nativeRead, nativeLogin, brokerWith, brokerRequest, Scenario(..)) where
 import Control.Monad (unless)
 import Data.Aeson (Value(..), eitherDecodeStrict, encode, object, (.=), (.:), toJSON)
 import qualified Data.Aeson.KeyMap as KeyMap

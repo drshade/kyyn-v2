@@ -267,3 +267,14 @@ test-suite graph-calendar
   ghc-options: -Wall -Werror -threaded
   build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing,
     aeson, bytestring, text, process
+
+test-suite guest-scheduler
+  type: exitcode-stdio-1.0
+  main-is: ConcurrentGuestTests.hs
+  hs-source-dirs: test/providers
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  default-extensions: OverloadedStrings
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-sdk:runtime, kyyn-plumbing,
+    aeson, bytestring, text, process

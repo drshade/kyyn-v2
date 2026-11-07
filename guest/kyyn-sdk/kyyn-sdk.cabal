@@ -119,3 +119,12 @@ test-suite plugin-contracts
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-sdk, text
+
+test-suite graph-retries
+  type: exitcode-stdio-1.0
+  main-is: GraphRetryTests.hs
+  hs-source-dirs: test, ../../plugins/microsoft-graph/src
+  other-modules: MicrosoftGraph.Http MicrosoftGraph.Json
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-sdk, kyyn-types, text, bytestring, json ==0.11
