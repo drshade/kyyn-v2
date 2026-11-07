@@ -197,3 +197,73 @@ test-suite nix-guest-build
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
     kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, aeson,
     directory, temporary ==1.3, transformers
+
+test-suite graph-directory
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GraphDirectoryTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, effectful-core ==2.6.1.0
+
+test-suite graph-files
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GraphFilesTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
+
+test-suite salesforce-query
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: SalesforceTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
+
+test-suite github
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GitHubTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
+
+test-suite graph-mail
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GraphMailTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
+
+test-suite graph-meetings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GraphMeetingsTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing, kyyn-plumbing-interpreters,
+    aeson, bytestring, text, process, containers, effectful-core ==2.6.1.0
+
+test-suite graph-calendar
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test/providers
+  main-is: GraphTests.hs
+  other-modules: ProviderBroker
+  default-language: GHC2021
+  ghc-options: -Wall -Werror -threaded
+  build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-plumbing,
+    aeson, bytestring, text, process

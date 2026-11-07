@@ -189,6 +189,14 @@
             printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
             printf '%s\n' 'module Main where' 'unfinished =' > "$out/src/Main.hs"
           '';
+          firstPartySource = p.pkgs.runCommand "kyyn-first-party-source" { } ''
+            mkdir -p "$out/plugins/packages"
+            ${builtins.concatStringsSep "\n" (map (name: ''
+              mkdir -p "$out/plugins/packages/${name}/source"
+              cp -R ${./plugins + "/${name}"}/. "$out/plugins/packages/${name}/source/"
+            '') [ "microsoft-graph" "salesforce" "github" ])}
+            printf '%s\n' '{"selection":"plugins"}' > "$out/.kyyn-build.json"
+          '';
           schemaSource = p.pkgs.runCommand "kyyn-schema-discovery-source" { } ''
             mkdir -p "$out"
             cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
@@ -222,6 +230,7 @@
           guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
           guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };
           guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };
+          guest-first-party = self.lib.mkGuest { inherit system; src = firstPartySource; };
           guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
           guest-api = self.lib.mkGuest { inherit system; src = apiSource; };
           guest-api-bindings = self.lib.mkGuest { inherit system; src = bindingApiSource; };
