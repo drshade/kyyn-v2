@@ -1,5 +1,6 @@
 -- GHC-owned export inspection: source closure, explicit exports, namespaces,
--- record fields without selectors, and source rejection before an adapter exists.
+-- record fields without selectors, dependency-only closure equivalence, and source
+-- rejection before an adapter exists.
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Main (main) where
 
@@ -64,6 +65,34 @@ checkInspection = do
        "-- | Count selected records.","total :: Root -> Integer","total (Root n) = n", "private :: Bool", "private = True"])
     (sources,modules) <- inspectExports libdir ["."] [] ["Schema","Schema","Types"]
     unless (sort sources == ["Schema.hs","Types.hs"]) (fail ("Wrong schema closure: " ++ show sources))
+    dependencies <- sourceDependencies libdir ["."] [] ["Schema","Schema","Types"]
+    unless (dependencies == sources) (fail "Dependency-only paths differ from checked closure")
+    schemaOnly <- sourceDependencies libdir ["."] [] ["Types"]
+    unless (schemaOnly == ["Types.hs"]) (fail "Unrelated inspected modules leaked into contract closure")
+    libraryOnly <- sourceDependencies libdir ["."] [] ["Data.Maybe"]
+    unless (null libraryOnly) (fail "Package module acquired authored source dependencies")
+    -- Dependencies must reflect current generated imports, not a previous phase.
+    writeFile "Generated.hs" "module Generated where\nimport Types\n"
+    firstClosure <- sourceDependencies libdir ["."] [] ["Generated"]
+    writeFile "Generated.hs" "module Generated where\nimport Schema\n"
+    nextClosure <- sourceDependencies libdir ["."] [] ["Generated"]
+    (checkedClosure,_) <- inspectExports libdir ["."] [] ["Generated"]
+    unless (firstClosure == ["Generated.hs","Types.hs"] && nextClosure == checkedClosure &&
+      nextClosure == ["Generated.hs","Schema.hs","Types.hs"])
+      (fail "Changed generated imports reused stale source dependencies")
+    writeFile "Conditional.hs" (unlines
+      ["{-# LANGUAGE CPP #-}", "module Conditional where", "#ifdef USE_SCHEMA",
+       "import Schema", "#else", "import Types", "#endif"])
+    let equivalent names options = do
+          (checked,_) <- inspectExports libdir ["."] options names
+          paths <- sourceDependencies libdir ["."] options names
+          unless (checked == paths) (fail ("Dependency closure differs for " ++ show names))
+    equivalent ["Conditional"] []
+    equivalent ["Conditional"] ["-DUSE_SCHEMA"]
+    writeFile "CycleA.hs-boot" "module CycleA where\ndata A\n"
+    writeFile "CycleA.hs" "module CycleA where\nimport CycleB\ndata A = A\nvalue = b\n"
+    writeFile "CycleB.hs" "module CycleB where\nimport {-# SOURCE #-} CycleA\nb :: Maybe A\nb = Nothing\n"
+    equivalent ["CycleA"] []
     let exports = concatMap moduleExports modules
         values = [(entry.exportName,entry.exportKind) | entry <- exports]
     unless (("Root",ExportType) `elem` values && ("Root",ExportConstructor) `elem` values && ("total",ExportValue) `elem` values)

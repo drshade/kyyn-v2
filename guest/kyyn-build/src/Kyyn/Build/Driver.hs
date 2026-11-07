@@ -162,13 +162,15 @@ buildRoot compiler libdir generated basePackages destination selection = do
         concat [[moduleName implementation,moduleName input,moduleName result] | Tool _ _ implementation input result <- selectedTools] ++
         map moduleName (concatMap fst pluginEntries))
   (_,exports) <- inspectExports libdir (roots ++ [generated]) packages selectedModules
+  -- All selected exports are checked above. Only their individual source
+  -- closures are needed here; re-typechecking each input/result repeats work.
   querySources <- forM selectedQueries $ \q -> do
-    (arguments,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName q.inputType]
-    (results,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName q.resultType]
+    arguments <- sourceDependencies libdir (roots ++ [generated]) packages [moduleName q.inputType]
+    results <- sourceDependencies libdir (roots ++ [generated]) packages [moduleName q.resultType]
     pure (q,arguments,results)
   toolEntries <- forM selectedTools $ \(Tool selectedName description implementation input result) -> do
-    (inputSources,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName input]
-    (resultSources,_) <- inspectExports libdir (roots ++ [generated]) packages [moduleName result]
+    inputSources <- sourceDependencies libdir (roots ++ [generated]) packages [moduleName input]
+    resultSources <- sourceDependencies libdir (roots ++ [generated]) packages [moduleName result]
     pure ("toolEntry @" ++ name input ++ " @" ++ name result ++ " " ++ show selectedName ++ " " ++ show description ++
       " " ++ show inputSources ++ " " ++ show resultSources ++ " KyynGuestDispatch.dispatch " ++ name implementation)
   let rootEntry = if selection == RootEntries
