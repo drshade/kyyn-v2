@@ -10,13 +10,13 @@ import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Data.Either (isLeft)
 import Effectful (runEff)
-import System.Directory (createDirectoryIfMissing, setPermissions, getPermissions, removeFile)
+import System.Directory (createDirectoryIfMissing, setPermissions, getPermissions, removeFile, createFileLink)
 import qualified System.Directory as Directory
 import System.Environment (getEnvironment)
 import System.FilePath (takeFileName)
 import System.IO.Temp (withSystemTempDirectory)
 import Kyyn.Domain.Path
-import Kyyn.Plumbing.Capability.GuestCompilation hiding (executable, targetSystem)
+import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Interpreter.GuestCompilation
 import Kyyn.Plumbing.Interpreter.FileSystem
 import Kyyn.Plumbing.Interpreter.ProcessExecution
@@ -84,11 +84,15 @@ main = withSystemTempDirectory "kyyn-compile-cache" $ \directory -> do
   removeFile (output ++ "/bin/kyyn-guest")
   _ <- build settings base >>= right >>= right
   expectCalls 10
+  removeFile (output ++ "/bin/kyyn-guest")
+  createFileLink (output ++ "/missing-target") (output ++ "/bin/kyyn-guest")
+  _ <- build settings base >>= right >>= right
+  expectCalls 11
   fresh <- source RootEntries "failure retry"
   rejected <- build settings { environment = ("KYYN_TEST_FAIL","1") : settings.environment } fresh >>= right
   unless (isLeft rejected) (fail "Failed build succeeded")
   _ <- build settings fresh >>= right >>= right
-  expectCalls 12
+  expectCalls 13
   putStrLn "Guest cache reuse, invalidation, retention recovery and retry checks passed."
   where
     path = either error id . relativePath

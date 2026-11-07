@@ -36,9 +36,9 @@ runGuestCompilation settings = interpret $ \_ (CompileGuest sources) -> do
         Right (derivation,output) -> case directoryScope output of
           Left _ -> pure Nothing
           Right outputScope -> do
-            exists <- entryExists outputScope (checkedPath "bin/kyyn-guest")
-            retained <- entryExists settings.cache (checkedPath (key ++ "/bin/kyyn-guest"))
-            pure $ if exists && retained then Just (CompiledProgram
+            size <- fileSize outputScope (checkedPath "bin/kyyn-guest")
+            retainedSize <- fileSize settings.cache (checkedPath (key ++ "/bin/kyyn-guest"))
+            pure $ if size /= Nothing && retainedSize /= Nothing then Just (CompiledProgram
               (BuildIdentity digest settings.targetSystem derivation output)
               (scopedPath outputScope (checkedPath "bin/kyyn-guest")) retention)
               else Nothing
