@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Validate where
 
 import qualified RootV1 as Schema

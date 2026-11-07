@@ -99,12 +99,13 @@ checkInspection = do
     unless (case signatures of [signature] -> all (`Text.isInfixOf` signature) ["Before.Root","After.Root"]; _ -> False)
       (fail ("Compiler signature obscures endpoint identity: " ++ show signatures))
     writeFile "Internal.hs" "module Internal where\ndata Hidden = HiddenConstructor\n"
-    writeFile "Public.hs" "module Public (Hidden) where\nimport Internal\n"
+    writeFile "Sibling.hs" "module Sibling where\ndata Other = HiddenConstructor\n"
+    writeFile "Public.hs" "module Public (Hidden, Other(..)) where\nimport Internal (Hidden)\nimport Sibling (Other(..))\n"
     (_,concrete) <- inspectExports libdir ["."] [] ["Internal"]
     unless (any (Text.isInfixOf "HiddenConstructor" . exportSignature) (concatMap moduleExports concrete))
       (fail "Exported constructors disappeared from compiler declarations")
     (_,abstract) <- inspectExports libdir ["."] [] ["Public"]
-    unless (all (not . Text.isInfixOf "HiddenConstructor" . exportSignature) (concatMap moduleExports abstract))
+    unless (all (not . Text.isInfixOf "HiddenConstructor" . exportSignature) ([entry | m <- abstract, entry <- m.moduleExports, entry.exportName == "Hidden"]))
       (fail "Abstract exported type disclosed its hidden constructor")
     writeFile "Facade.hs" "module Facade (keep) where\nimport Public (Hidden)\nkeep :: Hidden -> Hidden\nkeep = id\n"
     (_,facade) <- inspectExports libdir ["."] [] ["Facade"]

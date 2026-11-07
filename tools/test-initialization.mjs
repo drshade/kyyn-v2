@@ -147,7 +147,7 @@ evolution =
   const entryPath = path.join(created.path, 'change', 'Evolution.hs');
   const validValidator = fs.readFileSync(validatorPath, 'utf8');
   const updatedEntry = fs.readFileSync(entryPath, 'utf8').replace('First task', 'Updated task');
-  fs.writeFileSync(validatorPath, validValidator.replace('ValidationReport []',
+  fs.writeFileSync(validatorPath, '{-# LANGUAGE OverloadedStrings #-}\n' + validValidator.replace('ValidationReport []',
     'ValidationReport [Diagnostic Error "test.invalid" "Reject the new candidate" Nothing]'));
   fs.writeFileSync(entryPath, updatedEntry);
   const invalid = cli(kb, ['evolution', 'check', created.id], 1);

@@ -77,9 +77,12 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
         let documentation = case docs of
               Right (Just chunks,_) -> Just (Text.intercalate "\n" (map renderDoc chunks))
               _ -> Nothing
+            visibleChildren = [getOccName child | child <- modInfoExports info,
+              nameModule_maybe child == nameModule_maybe exported]
+            declaration = ShowSub (ShowSome (Just (`elem` visibleChildren)) (AltPpr Nothing)) ShowForAllWhen
             origin = maybe "" ((++ ".") . moduleNameString . moduleName) (nameModule_maybe exported) ++ getOccString exported
         pure (ExportDescription (Text.pack (getOccString exported))
-          (Text.pack (render (pprTyThing (ShowSub (ShowSome (Just (`elem` map getOccName (modInfoExports info))) (AltPpr Nothing)) ShowForAllWhen) thing)))
+          (Text.pack (render (pprTyThing declaration thing)))
           (Text.pack origin) documentation (kind thing))
       let documentation = renderDoc <$> (modInfoIface info >>= mi_docs >>= docs_mod_hdr)
           -- GHC's ModuleInfo instance accessor is deliberately undefined for
