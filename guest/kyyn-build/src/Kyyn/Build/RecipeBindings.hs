@@ -38,7 +38,7 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
     write ("Kyyn.Workspace." ++ endpoint) (unlines
       (header ("Kyyn.Workspace." ++ endpoint) ++
        ["import qualified " ++ Text.unpack (referenceModule (if endpoint == "Before" then before else after))] ++
-       ["import Kyyn.Evolution (KnowledgeBase, facts)", "import qualified Kyyn.Runtime.Bindings as Bindings",
+       ["import Kyyn.Edit (Collection)", "import Kyyn.Evolution (KnowledgeBase, facts)", "import qualified Kyyn.Runtime.Bindings as Bindings",
         "import qualified Kyyn.Optics as Optics"] ++
        ["-- | Collection " ++ Text.unpack name ++ ".\n" ++ Text.unpack field ++ " = Bindings.collection " ++ show name ++ " (facts . Optics.field @" ++ show field ++
         " @" ++ selected ++ ")" | CollectionDecl name field _ <- fields]))
@@ -51,7 +51,7 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
   write "Kyyn.Workspace.Evolution" (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}",
       "module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
-      "import Kyyn.Evolution", "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Internal"] ++ imports ++
+      "import Data.Text (Text)", "import Kyyn.Evolution", "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Internal"] ++ imports ++
      binding "beforeRoot" beforeRoot beforeMetadata ++ binding "afterRoot" root afterMetadata ++
      ["-- | Transform the facts in one recorded step.", "evolve :: Rationale -> (" ++ old ++ " -> Either EvolutionFailure " ++ new ++ ") -> Evolution " ++ old ++ " " ++ new,
       "evolve = Internal.evolve beforeRoot afterRoot",
@@ -77,7 +77,7 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
   writeFile path (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}",
       "module Kyyn.Workspace.Evolution (module Kyyn.Recipe, module Kyyn.Edit, Rationale(..), EvidenceRef(..), (>=>), identityEvolution, Root, RecipeState, recipeEdit) where",
-      "import Kyyn.Recipe", "import Kyyn.Edit", "import Kyyn.Evolution (Rationale(..), EvidenceRef(..), (>=>), identityEvolution)",
+      "import Data.Text (Text)", "import Kyyn.Recipe", "import Kyyn.Edit", "import Kyyn.Evolution (Rationale(..), EvidenceRef(..), (>=>), identityEvolution)",
       "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Bindings"] ++
      ["import qualified " ++ name | name <- nub (Text.unpack (referenceModule root) : imports)] ++
      ["type Root = " ++ selected, "type RecipeState = " ++ state,
@@ -94,6 +94,6 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
     writeFile (generated </> "Kyyn/Workspace" </> endpoint ++ ".hs") (unlines
       (["{-# LANGUAGE DataKinds, TypeApplications, OverloadedStrings #-}","module " ++ name ++ " where",
         "import qualified " ++ Text.unpack (referenceModule root),
-        "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified Kyyn.Optics as Optics"] ++
+        "import Kyyn.Edit (Collection)", "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified Kyyn.Optics as Optics"] ++
        [Text.unpack field ++ " = Bindings.collection " ++ show label ++ " (Optics.field @" ++ show field ++ " @" ++ selected ++ ")"
         | CollectionDecl label field _ <- collections]))

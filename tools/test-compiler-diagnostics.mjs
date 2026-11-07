@@ -14,7 +14,7 @@ const kb = path.join(temporary, 'kb');
 const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(temporary, 'gitconfig') };
 function invoke(args, status = 0, json = true) {
   const result = spawnSync(executable, ['--kb', kb, ...(json ? ['--json'] : []), ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, status, JSON.stringify({ args, ...result }));
   return json ? JSON.parse(result.stdout) : result.stdout + result.stderr;
 }

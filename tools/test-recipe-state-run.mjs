@@ -15,7 +15,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_AUTHOR_NAME: 'Recipe fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
   GIT_COMMITTER_NAME: 'Recipe fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function invoke(command, args, status = 0) {
-  const result = spawnSync(command, args, { cwd: temporary, env, encoding: 'utf8', timeout: 180000 });
+  const result = spawnSync(command, args, { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, status, JSON.stringify({ command, args, ...result }));
   return result.stdout;
 }
@@ -30,15 +30,17 @@ try {
   cli(['kb', 'init']);
   const setup = cli(['evolution', 'new', 'define-recipes']).result;
   rootLocation = path.relative(kb, path.join(setup.path, 'target'));
-  write('root/src/Review.hs', 'module Review where\ndata State = State { seen :: [String] }\n');
-  write('root/src/Flows.hs', `module Flows where
+  write('root/src/Review.hs', '{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}\nmodule Review where\nimport GHC.Generics (Generic)\nimport Agentic.Contract (Contract)\nimport Data.Text (Text)\ndata State = State { seen :: [Text] } deriving stock Generic deriving anyclass Contract\n');
+  write('root/src/Flows.hs', `{-# LANGUAGE OverloadedStrings #-}
+module Flows where
+import Data.Text (Text)
 import Control.Arrow (arr)
 import Kyyn.Agentic (Flow)
 import Kyyn.Recipe
 import Kyyn.Workspace.FactEdits (RootEdit)
 import qualified RootV1
 import qualified Review
-review :: Flow (RecipeInput RootV1.Root String Review.State) (RecipeProposal RootEdit Review.State)
+review :: Flow (RecipeInput RootV1.Root Text Review.State) (RecipeProposal RootEdit Review.State)
 review = arr (\\(RecipeInput _ request (Review.State seen)) ->
   if request == "explode" then error "Flow ran again" else RecipeProposal [] (Review.State (seen ++ [request])))
 unit :: Flow (RecipeInput RootV1.Root () ()) (RecipeProposal RootEdit ())

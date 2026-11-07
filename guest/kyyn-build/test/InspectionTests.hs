@@ -98,6 +98,12 @@ checkInspection = do
     let signatures = [entry.exportSignature | m <- migration, entry <- m.moduleExports, entry.exportName == "change"]
     unless (case signatures of [signature] -> all (`Text.isInfixOf` signature) ["Before.Root","After.Root"]; _ -> False)
       (fail ("Compiler signature obscures endpoint identity: " ++ show signatures))
+    writeFile "Internal.hs" "module Internal where\ndata Hidden = Hidden\n"
+    writeFile "Public.hs" "module Public (Hidden) where\nimport Internal\n"
+    writeFile "Facade.hs" "module Facade (keep) where\nimport Public (Hidden)\nkeep :: Hidden -> Hidden\nkeep = id\n"
+    (_,facade) <- inspectExports libdir ["."] [] ["Facade"]
+    unless (all (not . Text.isInfixOf "Internal." . exportSignature) (concatMap moduleExports facade))
+      (fail "Compiler signature ignores the authored public imports")
     writeFile "UsesBindings.hs" (unlines
       ["module UsesBindings where", "import KyynQueryBindings", "selected = missing"])
     uses <- requiredBindings libdir ["."] [] ["UsesBindings"]

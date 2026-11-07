@@ -138,6 +138,12 @@
             chmod -R u+w "$out"
             cp -R ${./tools/fixtures/tool-guest}/. "$out/"
           '';
+          modelSource = p.pkgs.runCommand "kyyn-model-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/model-guest}/. "$out/"
+          '';
           recipeSource = p.pkgs.runCommand "kyyn-recipe-source" { } ''
             mkdir -p "$out"
             cp -R ${toolSource}/. "$out/"
@@ -153,6 +159,14 @@
             cp -R ${./tools/fixtures/recipe-evolution-guest}/. "$out/"
             sed -i 's/After.Root/Before.Root/g' "$out/kb.dhall"
             printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"None"}}}' > "$out/.kyyn-build.json"
+          '';
+          frozenApiSource = p.pkgs.runCommand "kyyn-frozen-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${recipeEvolutionSource}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"Some","value":["KyynFrozenProposal"]}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'deliberately invalid proposal data; discovery must not decode it' > "$out/.kyyn-change/proposal.dhall"
+            printf '%s\n' 'module Evolution where' 'import KyynFrozenProposal' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
           '';
           rootApiSource = p.pkgs.runCommand "kyyn-root-api-source" { } ''
             mkdir -p "$out"
@@ -221,6 +235,8 @@
         in {
           guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
           guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
+          guest-frozen-api = self.lib.mkGuest { inherit system; src = frozenApiSource; };
+          guest-model = self.lib.mkGuest { inherit system; src = modelSource; };
           guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
           guest-root-api = self.lib.mkGuest { inherit system; src = rootApiSource; };
           guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };

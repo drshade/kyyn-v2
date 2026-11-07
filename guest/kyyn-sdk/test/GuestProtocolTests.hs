@@ -60,6 +60,7 @@ main = do
     ["--acquisition-guest"] -> acquisitionGuest
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
+    ["--frozen-api-built",path] -> checkFrozenApi (path,[])
     ["--evolution-api-built",path] -> checkEvolutionApi (path,[])
     ["--root-api-built",path] -> checkRootApi (path,[])
     ["--recipe-evolution-built",path] -> checkRecipeEvolution (path,[])
@@ -79,6 +80,24 @@ main = do
       checkAcquisition (path,["--acquisition-guest"])
       checkPlugin (path,["--plugin-guest"])
     _ -> fail "Expected --guest or --built EXECUTABLE"
+
+-- Broken proposal data and an unfinished transformation must not be read/run by
+-- discovery. Its compiler-owned facade has the real exports but no invocation.
+checkFrozenApi :: (FilePath,[String]) -> IO ()
+checkFrozenApi executable = do
+  value <- invoke executable (toJSON G.Describe)
+  described <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
+  _ <- right (Host.checkGuest described)
+  let exports = [e | m <- described.modules, m.moduleName == "KyynFrozenProposal", e <- m.moduleExports]
+  unless (all (`elem` map G.exportName exports) ["frozen","proposal"])
+    (fail "Frozen proposal facade exports missing")
+  unless (any (\entry -> entry.exportName == "frozen" && "RecipeEvolution" `Text.isInfixOf` entry.exportSignature) exports)
+    (fail "Frozen proposal signature missing")
+  unless (all (\entry -> case entry of G.EvolutionDescriptionEntry {} -> True; G.ContractEntry {} -> True; _ -> False) described.entries)
+    (fail "Discovery artifact contains runnable entries")
+  (status,_,_) <- call executable (toJSON (G.Invoke "frozen" (object [])))
+  unless (status /= ExitSuccess) (fail "Discovery facade was invocable")
+  putStrLn "Frozen proposal discovery exposes its typed facade without reading payloads or invoking it."
 
 checkApi :: Bool -> (FilePath,[String]) -> IO ()
 checkApi withBindings executable = do

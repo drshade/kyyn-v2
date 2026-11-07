@@ -16,7 +16,7 @@ try {
   fs.copyFileSync(fs.realpathSync(process.argv[2]), executable);
   fs.chmodSync(executable, 0o755);
   const invoke = (...args) => {
-    const result = spawnSync(executable, ['--kb', '/missing-kb', '--runtime', '/missing-runtime',
+    const result = spawnSync(executable, ['--kb', '/missing-kb', '--nix', '/missing-runtime',
       '--git', '/missing-git', ...args], { cwd: temporary, encoding: 'utf8',
       env: { ...process.env, PATH: '/no-tools' }, timeout: 10000 });
     assert.equal(result.status, 0, JSON.stringify(result));

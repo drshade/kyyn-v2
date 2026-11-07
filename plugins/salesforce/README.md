@@ -124,8 +124,8 @@ writes and automatic schema discovery are not part of this connector.
 
 ## Verification and provider documentation
 
-`salesforce-query` exercises generated fetch/login/read adapters under GHC and
-MicroHs with recorded providers. `tools/test-salesforce-install.mjs` installs the
+`salesforce-query` exercises generated fetch/login/read adapters in a Nix-built
+GHC guest with recorded providers. `tools/test-salesforce-install.mjs` installs the
 actual source through the CLI and checks configuration and method discovery.
 Neither test uses real Salesforce credentials or establishes live org access.
 

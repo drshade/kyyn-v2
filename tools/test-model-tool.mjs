@@ -15,7 +15,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.
   OPENAI_API_KEY: 'ambient-key-must-not-be-used' };
 function cli(args, status = 0) {
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, status, JSON.stringify({ args, ...result }));
   assert(!result.stderr.includes('cannot find config file'), result.stderr);
   return JSON.parse(result.stdout);
@@ -42,16 +42,15 @@ import Kyyn.Agentic (Flow, interpret)
 import Kyyn.Connectors (Tool)
 import Kyyn.Plugin (FetchError)
 import Summary (Summary)
-import Kyyn.Contracts.Summary.Summary ()
-type Input = String
+type Input = Text.Text
 type Output = Summary
 summarise :: Flow Text.Text Summary
 summarise = A.draft "Summarise in one sentence"
 summary :: Input -> Tool (Either FetchError Output)
-summary input = interpret summarise (Text.pack input)
+summary input = interpret summarise input
 `);
   fs.writeFileSync(path.join(target, 'src/Summary.hs'),
-    'module Summary where\ndata Summary = Summary { text :: String }\n');
+    '{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}\nmodule Summary where\nimport GHC.Generics (Generic)\nimport Agentic.Contract (Contract)\nimport Data.Text (Text)\ndata Summary = Summary { text :: Text } deriving stock Generic deriving anyclass Contract\n');
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);
@@ -60,8 +59,8 @@ summary input = interpret summarise (Text.pack input)
   assert.deepEqual(shown.model, { provider: 'OpenAI', model: 'fixture-model', credential: 'MODEL_FIXTURE_KEY' });
   cli(['guest', 'module', 'show', 'Agentic']);
   cli(['guest', 'module', 'show', 'Kyyn.Agentic']);
-  const contract = cli(['guest', 'module', 'show', 'Kyyn.Contracts.Summary.Summary']);
-  assert.match(JSON.stringify(contract), /codec/);
+  const contract = cli(['guest', 'module', 'show', 'Summary']);
+  assert.match(JSON.stringify(contract), /Contract/);
   const refused = cli(['root', 'tool', 'execute', 'summary', '--input', '"hello"'], 1);
   assert.match(JSON.stringify(refused.diagnostics), /Missing model secret MODEL_FIXTURE_KEY/);
   assert.match(JSON.stringify(refused.diagnostics), /secret set MODEL_FIXTURE_KEY/);

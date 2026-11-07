@@ -84,8 +84,8 @@ different `TMPDIR` for initialization tests.
 `.github/workflows/check.yml` is manual-dispatch only, with an optional full run.
 There are no automatic PR/push tests or remote-CI merge requirement during private
 development. After a reviewed merge, sync and continue. Do not configure the
-optional workflow as a required check. CI caches compiled dependencies, not test
-results; a selected run still resolves, builds and tests its current inputs.
+optional workflow as a required check. CI uses the locked Nix contributor environment and public binary cache; a
+selected run still builds and tests its current inputs.
 
 ## Review and merge
 

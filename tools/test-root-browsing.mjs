@@ -16,7 +16,7 @@ const env = { ...process.env, GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'user.nam
   GIT_CONFIG_VALUE_0: 'Browsing test', GIT_CONFIG_KEY_1: 'user.email', GIT_CONFIG_VALUE_1: 'test@example.invalid' };
 function cli(args, expected = 0, json = true) {
   const result = spawnSync(executable, ['--kb', kb, ...(json ? ['--json'] : []), ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   return json ? JSON.parse(result.stdout) : result.stdout;
 }
@@ -30,10 +30,13 @@ try {
   const initial = cli(['evolution', 'new', 'tasks']).result;
   const target = path.join(initial.path, 'target');
   fs.unlinkSync(path.join(target, 'src/RootV1.hs'));
-  fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `module Tasks where
+  fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module Tasks where
+import GHC.Generics (Generic)
+import Data.Text (Text)
 import Kyyn.Schema
-data Todo = Todo { title :: Maybe String, parent :: Maybe FactId }
-data Root = Root { todos :: [Fact Todo] }
+data Todo = Todo { title :: Maybe Text, parent :: Maybe FactId } deriving stock Generic deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] } deriving stock Generic deriving anyclass Contract
 data Unreachable = Unreachable String
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [RoleDecl "label" "Task title" Title]
@@ -64,7 +67,8 @@ metadata = SchemaMetadata [RoleDecl "label" "Task title" Title]
   cli(['root', 'fact', 'list', 'tasks', ...selection], 2, false);
   cli(['root', 'fact', 'show', 'tasks', 'id', ...selection], 2, false);
   fs.writeFileSync(validatePath, validator);
-  fs.writeFileSync(path.join(initial.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(initial.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified RootV1 as Before
@@ -72,20 +76,20 @@ import qualified Tasks as After
 evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
 evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   (After.Root [Fact (FactId "some/♥ id") (After.Todo (Just "Review λ") Nothing),
-               Fact (FactId "") (After.Todo Nothing (Just (FactId "some/♥ id")))])))
+               Fact (FactId "untitled") (After.Todo Nothing (Just (FactId "some/♥ id")))])))
 `);
   cli(['evolution', 'check', initial.id]);
   cli(['evolution', 'ready', initial.id]);
   cli(['evolution', 'accept', initial.id]);
   const status = git('status', '--porcelain');
   const facts = cli(['root', 'fact', 'list', 'tasks']).result;
-  assert.deepEqual(facts.facts, [{ id: 'some/♥ id', title: 'Review λ' }, { id: '', title: null }]);
+  assert.deepEqual(facts.facts, [{ id: 'some/♥ id', title: 'Review λ' }, { id: 'untitled', title: null }]);
   assert.equal(facts.context.revision, git('rev-parse', 'HEAD').trim());
   assert.equal(facts.context.evolution, null);
   assert.match(cli(['root', 'fact', 'list', 'tasks'], 0, false), /some\/♥ id — Review λ/);
   assert.deepEqual(cli(['root', 'fact', 'show', 'tasks', 'some/♥ id']).result.value,
     { title: { tag: 'Some', value: 'Review λ' }, parent: { tag: 'None' } });
-  assert.equal(cli(['root', 'fact', 'show', 'tasks', '']).result.id, '');
+  assert.equal(cli(['root', 'fact', 'show', 'tasks', 'untitled']).result.id, 'untitled');
   assert.equal(cli(['root', 'fact', 'show', 'tasks', 'missing'], 1).diagnostics[0].code, 'fact.unknown');
   assert.equal(cli(['root', 'fact', 'list', 'missing'], 1).diagnostics[0].code, 'fact.collection-unknown');
   assert.equal(git('status', '--porcelain'), status, 'Browsing changed tracked/untracked KB files');

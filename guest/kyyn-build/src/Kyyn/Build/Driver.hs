@@ -14,6 +14,7 @@ import System.FilePath ((</>), takeDirectory, takeBaseName)
 import System.Process (callProcess, readProcess)
 import qualified Kyyn.Build.Sources as Sources
 import Kyyn.Build.Inspection
+import Kyyn.Build.FrozenProposal (writeFrozenProposal)
 import Kyyn.Build.RecipeHandles (handleImports, handleModules, writeRecipeHandles)
 import Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings, writeRecipeEvolutionBindings)
 import Kyyn.Build.OutputBindings (writeOutputBindings)
@@ -280,12 +281,26 @@ buildEvolution compiler libdir generated basePackages destination (EvolutionSele
         writeRecipeEvolutionBindings generated before oldMetadata state names
         pure (Just (state,closure))
       _ -> fail "Selected recipe must have exactly one Before state descriptor"
+  hasProposal <- doesFileExist ".kyyn-change/proposal.dhall"
+  hasLowered <- doesFileExist ".kyyn-change/KyynFrozenProposal.json"
+  let frozen = case (selectedState,discovery) of
+        (Just _,Just _) -> hasProposal
+        (Just _,Nothing) -> hasLowered
+        _ -> False
+  when frozen $ do
+    occupied <- or <$> traverse doesFileExist
+      [root </> "KyynFrozenProposal" ++ extension | root <- beforeRoots ++ afterRoots ++ [".kyyn-change"], extension <- [".hs",".lhs"]]
+    when occupied (fail "Authored source collides with generated module KyynFrozenProposal")
+    proposal <- case discovery of
+      Just _ -> pure Nothing
+      Nothing -> Just <$> (Bytes.readFile ".kyyn-change/KyynFrozenProposal.json" >>= either fail pure . eitherDecodeStrict')
+    writeFrozenProposal generated proposal
   let merged = generated </> "sources"
       oldStateSources = [path | (closure,_,_) <- states, path <- closure, ".kyyn-before/" `isPrefixOf` path]
   origins <- Sources.mergeSources libdir merged (beforeSources ++ oldStateSources ++ filter (isPrefixOf ".kyyn-before/") importedSources ++ authored ++ changes)
   let roots = [merged]
       selectedPackages = packages roots
-  let defaults = ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"]
+  let defaults = ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"] ++ ["KyynFrozenProposal" | frozen]
       selectedModules = case discovery of
         Nothing -> "Evolution" : defaults
         Just [] -> defaults

@@ -15,8 +15,9 @@ const kb = path.join(temporary, 'kb');
 const env = { ...process.env, GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'user.name',
   GIT_CONFIG_VALUE_0: 'Proposal test', GIT_CONFIG_KEY_1: 'user.email', GIT_CONFIG_VALUE_1: 'proposal@example.invalid' };
 function cli(args, expected = 0) {
+  console.error(`Proposal journey: ${args.join(" ")}`);
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, expected, JSON.stringify(result));
   return JSON.parse(result.stdout);
 }
@@ -26,10 +27,13 @@ try {
   const initial = cli(['evolution', 'new', 'schema']).result;
   const target = path.join(initial.path, 'target');
   fs.unlinkSync(path.join(target, 'src/RootV1.hs'));
-  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `module RootV2 where
+  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module RootV2 where
+import GHC.Generics (Generic)
+import Data.Text (Text)
 import Kyyn.Schema
-data Todo = Todo { title :: String }
-data Root = Root { todos :: [Fact Todo] }
+data Todo = Todo { title :: Text } deriving stock Generic deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] } deriving stock Generic deriving anyclass Contract
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
@@ -46,7 +50,8 @@ import qualified RootV2
 sync :: Flow (RecipeInput RootV2.Root () ()) (RecipeProposal RootEdit ())
 sync = A.act (\\_ -> error "Manual frozen proposal must not execute the flow")
 `);
-  fs.writeFileSync(path.join(initial.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(initial.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks
@@ -73,7 +78,8 @@ in { steps = [ { rationale = { explanation = "Record useful work", evidence =
    , state = {=} }
 `;
   fs.writeFileSync(dataPath, proposal);
-  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import KyynFrozenProposal (frozen)
 import qualified RootV2

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Fixture.Plugin where
-import Kyyn.Plugin
+import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Network"

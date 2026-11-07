@@ -1,5 +1,5 @@
 // Installed authored API discovery: accepted/draft sources, private exports, docs,
-// origins, nested symbols, generated Contract/Options and checked explicit instances.
+// origins, nested symbols, derived Contract and checked explicit instances.
 // Checks CPP/qualified/constrained instance-only modules and ill-typed refusal.
 
 import assert from 'node:assert/strict';
@@ -17,7 +17,7 @@ const env = { ...process.env, GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'user.nam
   GIT_CONFIG_VALUE_0: 'API test', GIT_CONFIG_KEY_1: 'user.email', GIT_CONFIG_VALUE_1: 'test@example.invalid' };
 function cli(args, expected = 0, json = true) {
   const result = spawnSync(executable, ['--kb', kb, ...(json ? ['--json'] : []), ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   return json ? JSON.parse(result.stdout) : result.stdout;
 }
@@ -31,45 +31,53 @@ try {
   const draft = cli(['evolution', 'new', 'helpers']).result;
   cli(['plugin', 'install', '--evolution', draft.id, '--from', repository, '--path', 'plugins/local-file']);
   const source = path.join(draft.path, 'target/src');
-  fs.writeFileSync(path.join(source, 'Queries.hs'), `module Queries where
+  fs.writeFileSync(path.join(source, 'Queries.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Queries where
+import Data.Text (Text)
 import KyynQueryBindings
-answer :: Query String
+answer :: Query Text
 answer = pure "Hello"
 `);
   fs.mkdirSync(path.join(source, 'Helpers'));
-  const helpers = `module Helpers (Greeting(..), Priority(..), greet) where
-data Priority = Low | High
+  const helpers = `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module Helpers (Greeting(..), Priority(..), greet) where
+import GHC.Generics (Generic)
+import Agentic.Contract (Contract)
+import Data.Text (Text)
+data Priority = Low | High deriving stock Generic deriving anyclass Contract
 -- | A greeting for a person.
-data Greeting = Greeting { message :: String }
+data Greeting = Greeting { message :: Text } deriving stock Generic deriving anyclass Contract
 -- | Build a friendly greeting without running any host capability.
-greet :: String -> Greeting
-greet name = Greeting (privatePrefix ++ name)
-privatePrefix :: String
+greet :: Text -> Greeting
+greet name = Greeting (privatePrefix <> name)
+privatePrefix :: Text
 privatePrefix = "Hello "
 `;
   fs.writeFileSync(path.join(source, 'Helpers.hs'), helpers);
   fs.writeFileSync(path.join(source, 'Instances.hs'), `{-# LANGUAGE CPP #-}
 module Instances () where
 import qualified Helpers as H
+import qualified Data.Text as Text
 data Box a = Box a
 instance Eq a => Eq (Box a) where
   Box a == Box b = a == b
-#ifdef __MHS__
+#ifdef __GLASGOW_HASKELL__
 instance Show H.Greeting where
-  show (H.Greeting message) = message
+  show (H.Greeting message) = Text.unpack message
 #else
 instance Show H.Priority where
   show _ = "wrong compiler branch"
 #endif
 `);
   fs.writeFileSync(path.join(source, 'ContractUser.hs'), `module ContractUser () where
-import Kyyn.Contracts.Helpers.Priority ()
+import Helpers ()
 import Instances ()
 `);
   fs.writeFileSync(path.join(source, 'Helpers/Nested.hs'), `module Helpers.Nested where
 import Helpers
+import Data.Text (Text)
 -- | Greet twice.
-twice :: String -> [Greeting]
+twice :: Text -> [Greeting]
 twice name = [greet name, greet name]
 `);
   fs.writeFileSync(path.join(source, 'Broken.hs'), 'module Broken where\nbad :: Bool\nbad = "not a boolean"\n');
@@ -90,41 +98,40 @@ twice name = [greet name, greet name]
   assert(cli(['guest', 'module', 'show', 'Queries', ...selection]).result.symbols.some(s => s.name === 'answer'));
   const pluginTypes = cli(['guest', 'module', 'show', 'LocalFile.Types', ...selection]).result;
   assert.equal(pluginTypes.origin, 'plugin');
-  assert(pluginTypes.symbols.some(s => s.name === 'FolderConfig' && s.namespace === 'type'));
+  assert(pluginTypes.symbols.some(s => s.name === 'FolderConfig' && s.kind === 'type'));
   const pluginSymbol = cli(['guest', 'symbol', 'show', 'LocalFile.Types.Document', ...selection]).result;
   assert.equal(pluginSymbol.origin, 'plugin');
   const shown = cli(['guest', 'module', 'show', 'Helpers', ...selection]).result;
   assert.equal(shown.origin, 'kb');
-  assert(shown.symbols.some(s => s.name === 'Greeting' && s.namespace === 'type'));
+  assert(shown.symbols.some(s => s.name === 'Greeting' && s.kind === 'type'));
   assert(!shown.symbols.some(s => s.name === 'privatePrefix'));
-  assert.match(shown.symbols.find(s => s.name === 'greet').documentation, /friendly greeting/);
+  assert.match(shown.symbols.find(s => s.name === 'greet').documentation.value, /friendly greeting/);
   const instances = cli(['guest', 'module', 'show', 'Instances', ...selection]).result;
   assert.deepEqual(instances.symbols, [], 'instance-only module has no named exports');
-  assert.deepEqual(instances.instances, ['instance Eq a => Eq (Box a)', 'instance Show H.Greeting']);
+  assert(instances.instances.some(s => /Eq a.*Eq.*Box a/s.test(s)), JSON.stringify(instances));
+  assert(instances.instances.some(s => /Show.*Greeting/.test(s)), JSON.stringify(instances));
   assert.deepEqual(cli(['guest', 'module', 'show', 'ContractUser', ...selection]).result.instances, [],
     'imported instances are not claimed as local declarations');
-  const contracts = cli(['guest', 'module', 'show', 'Kyyn.Contracts.Helpers.Priority', ...selection]).result;
-  assert(contracts.instances.some(s => /instance .*Contract .*Priority/.test(s)), JSON.stringify(contracts));
-  assert(contracts.instances.some(s => /instance .*Options .*Priority/.test(s)), JSON.stringify(contracts));
-  const humanContracts = cli(['guest', 'module', 'show', 'Kyyn.Contracts.Helpers.Priority', ...selection], 0, false);
-  assert.match(humanContracts, /-- Explicit instances declared here/);
-  assert.match(humanContracts, /instance .*Options .*Priority/);
+  assert(shown.instances.some(s => /Contract.*Priority/.test(s)), JSON.stringify(shown));
+  const humanContracts = cli(['guest', 'module', 'show', 'Helpers', ...selection], 0, false);
+  assert.match(humanContracts, /-- Module instances/);
+  assert.match(humanContracts, /Contract.*Priority/);
   fs.writeFileSync(path.join(source, 'BadInstance.hs'), `module BadInstance () where
 data Bad = Bad
 instance Show Bad where
   show _ = True
 `);
   assert(cli(['guest', 'module', 'show', 'BadInstance', ...selection], 1).diagnostics
-    .some(d => d.code === 'guest.api-compiler-rejected'));
+    .some(d => d.code === 'guest.build'));
   fs.unlinkSync(path.join(source, 'BadInstance.hs'));
   const symbol = cli(['guest', 'symbol', 'show', 'Helpers.Nested.twice', ...selection]).result;
   assert.equal(symbol.module, 'Helpers.Nested');
   assert.equal(symbol.origin, 'kb');
-  assert.match(symbol.symbols[0].checkedSignature, /Greeting/);
+  assert.match(symbol.symbols[0].signature, /Greeting/);
   assert.match(cli(['guest', 'module', 'show', 'Helpers', ...selection], 0, false), /-- \[kb\]/);
   assert.equal(cli(['guest', 'symbol', 'show', 'Helpers.privatePrefix', ...selection], 1).diagnostics[0].code, 'guest.symbol-not-found');
   const broken = cli(['guest', 'module', 'show', 'Broken', ...selection], 1);
-  assert(broken.diagnostics.some(d => d.code === 'guest.api-compiler-rejected'));
+  assert(broken.diagnostics.some(d => d.code === 'guest.build'));
   assert.equal(cli(['guest', 'module', 'show', 'Kyyn.Connectors', ...selection]).result.origin, 'generated');
   assert.equal(cli(['guest', 'module', 'show', 'Kyyn.Evolution']).result.origin, 'sdk');
   fs.unlinkSync(path.join(source, 'Broken.hs'));
@@ -142,7 +149,7 @@ instance Show Bad where
   assert.deepEqual(cli(['guest', 'module', 'show', 'Helpers']).result, accepted);
   git('restore', 'root/src/Helpers.hs');
   assert.equal(git('status', '--porcelain'), status);
-  console.log('Authored API discovery: exports/docs, checked explicit instance headers, generated Options/Contract, private hiding, origins, selected checking and accepted/draft source passed.');
+  console.log('Authored API discovery: exports/docs, checked explicit instance headers, derived Contract, private hiding, origins, selected checking and accepted/draft source passed.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

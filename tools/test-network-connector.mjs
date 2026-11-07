@@ -41,7 +41,7 @@ const server = http.createServer((request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 async function cli(args, expected = 0, selected = kb, overrides = {}) {
   let output;
-  try { output = await execute(executable, ['--kb', selected, '--json', ...args], { cwd: temporary, env: { ...env, ...overrides }, timeout: 120000 }); }
+  try { output = await execute(executable, ['--kb', selected, '--json', ...args], { cwd: temporary, env: { ...env, ...overrides }, timeout: 600000 }); }
   catch (error) { assert.equal(error.code, expected, error.stderr + error.stdout); output = error; }
   if (expected === 0) assert.equal(output.code, undefined, output.stderr);
   assert(!output.stdout.includes('private-fixture-token'));

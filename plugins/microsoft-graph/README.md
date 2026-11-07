@@ -385,15 +385,15 @@ truncated artifact reports that its payload is unavailable.
 
 ## Verification and provider documentation
 
-The `graph-calendar` test compiles the actual adapters under GHC and MicroHs and
+The `graph-calendar` test invokes the actual adapters in the Nix-built GHC guest and
 uses a recording provider for authentication, token rotation, pagination, throttling,
 delta continuation, duplicate IDs, removals, resets and failed pages. Live Entra consent/tenant policy remains an opt-in
 test with the user's own app and account.
-The `graph-mail` test exercises recorded-provider acquisition under both compilers,
-including capture-once, attachment retries/failure, retention and fingerprint parity.
+The `graph-mail` test exercises recorded-provider acquisition through that guest,
+including capture-once, attachment retries/failure, retention and fingerprint stability.
 The `graph-meetings` test covers initial/overlap/backfill windows and independent 403 handling, recurring-meeting discovery,
 artifact identity, pagination, retention, capture-once, delegated identity, failure
-paths and captured reads under both compilers. Live tenant access is not established
+paths and captured reads through the guest protocol. Live tenant access is not established
 by these recorded-provider tests.
 
 - [Calendar delta synchronization](https://learn.microsoft.com/en-us/graph/api/event-delta?view=graph-rest-1.0)

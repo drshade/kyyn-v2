@@ -11,6 +11,7 @@ import GHC.Driver.Make (depanalPartial)
 import GHC.Iface.Type (ShowSub(..), ShowHowMuch(..), ShowForAllFlag(..), AltPpr(..))
 import GHC.Types.Name (getOccString, nameModule_maybe)
 import GHC.Utils.Outputable (ppr, PromotionTickContext(..))
+import GHC.Tc.Types (tcg_rdr_env)
 import GHC.Types.Name.Ppr (mkNamePprCtx)
 import GHC.Types.TyThing.Ppr (pprTyThing)
 import GHC.Driver.Ppr (showSDocForUser)
@@ -64,8 +65,12 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
       setContext [IIDecl (simpleImportDecl (mkModuleName name))]
       exportedNames <- getNamePprCtx
       environment <- getSession
-      let names = maybe exportedNames (mkNamePprCtx (PromTickCtx True False) (hsc_unit_env environment)) (modInfoRdrEnv info)
-          render = showSDocForUser flags (hsc_units environment) names
+      names <- case [summary | summary <- summaries, ms_mod summary == selected] of
+        summary:_ -> do
+          checked <- typecheckModule =<< parseModule summary
+          pure (mkNamePprCtx (PromTickCtx True False) (hsc_unit_env environment) (tcg_rdr_env (fst (tm_internals_ checked))))
+        [] -> pure exportedNames
+      let render = showSDocForUser flags (hsc_units environment) names
       symbols <- forM (modInfoExports info) $ \exported -> do
         thing <- lookupName exported >>= maybe (liftIO (fail ("No export information: " ++ getOccString exported))) pure
         docs <- getDocs exported

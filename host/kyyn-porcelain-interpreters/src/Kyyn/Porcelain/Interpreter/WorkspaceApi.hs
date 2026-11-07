@@ -42,4 +42,4 @@ runWorkspaceApi = interpret $ \_ operation -> case operation of
       | ".kyyn-generated/" `Text.isPrefixOf` path = GeneratedOrigin
       | "plugins/" `Text.isPrefixOf` path = PluginOrigin
       | otherwise = KbOrigin
-    public entry = "Kyyn.Workspace." `Text.isPrefixOf` entry.moduleName
+    public entry = "Kyyn.Workspace." `Text.isPrefixOf` entry.moduleName || entry.moduleName == "KyynFrozenProposal"

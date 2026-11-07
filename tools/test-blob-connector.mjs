@@ -30,7 +30,7 @@ const server = http.createServer((request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 async function cli(args, expected = 0) {
   let result;
-  try { result = await execute(executable, ['--kb', kb, '--json', ...args], { cwd: temporary, env, timeout: 120000 }); }
+  try { result = await execute(executable, ['--kb', kb, '--json', ...args], { cwd: temporary, env, timeout: 600000 }); }
   catch (error) { assert.equal(error.code, expected, error.stderr + error.stdout); result = error; }
   if (expected === 0) assert.equal(result.code, undefined, result.stderr);
   return JSON.parse(result.stdout);

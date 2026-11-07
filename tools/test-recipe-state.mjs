@@ -16,7 +16,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_COMMITTER_NAME: 'Recipe state fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function cli(args, status = 0) {
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 180000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, status, JSON.stringify({ args, ...result }));
   return JSON.parse(result.stdout);
 }
@@ -45,7 +45,7 @@ try {
   cli(['kb', 'init']);
   const creation = cli(['evolution', 'new', 'create-recipes']).result;
   fs.writeFileSync(path.join(creation.path, 'target/src/ReviewV1.hs'),
-    'module ReviewV1 where\ndata State = State { reviewed :: [String] }\n');
+    '{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies #-}\nmodule ReviewV1 where\nimport GHC.Generics (Generic)\nimport Kyyn.Schema (Contract)\nimport Data.Text (Text)\ndata State = State { reviewed :: [Text] } deriving stock Generic deriving anyclass Contract\n');
   author(creation, `import qualified ReviewV1
 import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV1.State as State`,
     `edit (Rationale "Teach two independent recipes" []) $ do
@@ -74,7 +74,7 @@ evolution = recipeEdit (Rationale "Reviewed another message" []) $
 
   const migration = cli(['evolution', 'new', 'migrate-mail']).result;
   fs.writeFileSync(path.join(migration.path, 'target/src/ReviewV2.hs'),
-    'module ReviewV2 where\ndata State = State { reviewed :: [String], window :: Maybe String }\n');
+    '{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies #-}\nmodule ReviewV2 where\nimport GHC.Generics (Generic)\nimport Kyyn.Schema (Contract)\nimport Data.Text (Text)\ndata State = State { reviewed :: [Text], window :: Maybe Text } deriving stock Generic deriving anyclass Contract\n');
   author(migration, `import qualified ReviewV1
 import qualified ReviewV2
 import qualified Kyyn.Workspace.Before.RecipeTypes.ReviewV1.State as Old

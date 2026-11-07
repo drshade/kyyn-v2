@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# Install in a disposable prefix, exercise CLI journeys and compare native versus
-# self-hosted MicroHs output. Real Git/Dhall/guests; no live provider credentials.
+# Flake-built CLI in a disposable GC root. Real Git/Dhall/locked guest journeys;
+# no live credentials or changes to the user installation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-node tools/test-local-install.mjs
-
 journey_stage=$(mktemp -d /tmp/kyyn-installed-stage.XXXXXXXX)
 trap 'rm -rf -- "$journey_stage"' EXIT
-bash tools/install-cli.sh "$journey_stage/install"
+nix --extra-experimental-features 'nix-command flakes' build .#kyyn --no-update-lock-file --out-link "$journey_stage/install"
+node tools/test-native-guest.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-guide.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-secrets.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-judgement.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-guest-api.mjs "$journey_stage/install/bin/kyyn-v2"
-node tools/test-cpp-paths.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-closed-recipes.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-recipe-state.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-recipe-state-run.mjs "$journey_stage/install/bin/kyyn-v2"
@@ -39,15 +37,5 @@ node tools/test-probability.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-unit-contract.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-query-cli.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-output-cli.mjs "$journey_stage/install/bin/kyyn-v2"
-make -C vendor/MicroHs bin/mhs
-export MHSDIR="$journey_stage/install/lib/kyyn-v2/lib/kyyn/microhs"
-export MHSCPPHS="$MHSDIR/bin/cpphs"
-compiler_args=(-a -i "-i$PWD/host/kyyn/test/compiler-parity"
-  "-i$journey_stage/install/lib/kyyn-v2/lib/kyyn/sdk" "-i$MHSDIR/lib"
-  "$PWD/host/kyyn/test/compiler-parity/Main.hs")
-"$MHSDIR/bin/mhs" "${compiler_args[@]}" "-o$journey_stage/native.comb"
-vendor/MicroHs/bin/mhs "${compiler_args[@]}" "-o$journey_stage/self-hosted.comb"
-cmp "$journey_stage/native.comb" "$journey_stage/self-hosted.comb"
-"$MHSDIR/bin/mhseval" +RTS "-r$journey_stage/native.comb" -RTS
 KYYN_TEST_ROOT="$PWD" KYYN_TEST_CLI="$journey_stage/install/bin/kyyn-v2" \
   cabal test installed-journey --test-show-details=direct

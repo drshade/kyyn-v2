@@ -45,7 +45,6 @@ main = do
         ("GIT_COMMITTER_NAME","Ignored override"),("GIT_COMMITTER_EMAIL","ignored@example.invalid")]
       fixtureEnvironment = identity ++ filter (\(key,_) -> key `notElem` map fst identity) environment
   withSystemTempDirectory "kyyn-installed-journey" $ \kb -> do
-    copyTree (repository </> "examples/todos") kb
     let root = kb </> "root"
         fixture = repository </> "host/kyyn/test/journey"
         git arguments = do
@@ -66,12 +65,14 @@ main = do
           identifier <- textAt ["result","id"] response
           workspace <- textAt ["result","path"] response
           pure (identifier,workspace)
-    writeUtf8 (root </> "kb.dhall") (manifest "TodoSchemaV1")
-    copyFile (fixture </> "Queries.hs") (root </> "src/Queries.hs")
-    saveExample root "receipts-title" "titleFor" (described @Text.Text) (String "todo-002") (String "Check receipts")
     void (git ["init","-b","main"])
     void (git ["config","user.name","Configured fixture λ"])
     void (git ["config","user.email","fixture@example.invalid"])
+    void (ok ["kb","init"])
+    copyTree (repository </> "examples/todos") kb
+    writeUtf8 (root </> "kb.dhall") (manifest "TodoSchemaV1")
+    copyFile (fixture </> "Queries.hs") (root </> "src/Queries.hs")
+    saveExample root "receipts-title" "titleFor" (described @Text.Text) (String "todo-002") (String "Check receipts")
     void (git ["add","."])
     void (git ["commit","-m","Initial todos with a required example"])
     before <- git ["rev-parse","HEAD"]
@@ -81,7 +82,7 @@ main = do
     assert "First evolution did not use a numbered slug" (first == "000001-simplify-todos")
     void (ok ["evolution","ready",first])
     void (git ["config","user.name",""])
-    missingIdentity <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    missingIdentity <- cli (ExitFailure 1) ["--nix",kb </> "missing-runtime","evolution","accept",first]
     assert "Missing identity did not refuse before runtime loading"
       (any (\diagnostic -> at ["code"] diagnostic == String "git.identity") (array (at ["diagnostics"] missingIdentity)))
     void (git ["config","user.name","Configured fixture λ"])
@@ -111,7 +112,7 @@ main = do
     assert "Acceptance ignored configured Git identity or used environment overrides"
       (actualIdentity == "Configured fixture λ <fixture@example.invalid>|Configured fixture λ <fixture@example.invalid>")
     void (git ["config","user.name",""])
-    retried <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    retried <- cli (ExitFailure 1) ["--nix",kb </> "missing-runtime","evolution","accept",first]
     assert "Accepted retry did not refuse before identity/runtime access"
       (any (\diagnostic -> at ["code"] diagnostic == String "acceptance.not-ready") (array (at ["diagnostics"] retried)))
     void (git ["config","user.name","Configured fixture λ"])
@@ -122,7 +123,7 @@ main = do
     assert "Schema replacement lost its archive or retained old current source" (not oldCurrent && oldArchived)
 
     renameDirectory (kb </> ".kyyn") (kb </> "discarded-cache")
-    archived <- ok ["--runtime",kb </> "missing-runtime","evolution","show",first]
+    archived <- ok ["--nix",kb </> "missing-runtime","evolution","show",first]
     assert "Archived rationale/report changed" (at ["result","report"] archived == report)
     reopened <- ok ["root","show"]
     assert "Wrong accepted facts" (at ["result","value"] reopened == expectedFacts)

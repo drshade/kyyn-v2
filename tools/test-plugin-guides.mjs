@@ -28,7 +28,7 @@ function commit(directory) {
   return git(directory, 'rev-parse', 'HEAD');
 }
 function cli(args, status = 0, human = false) {
-  const result = spawnSync(executable, ['--kb', kb, '--runtime', path.join(temporary, 'missing-runtime'),
+  const result = spawnSync(executable, ['--kb', kb, '--nix', path.join(temporary, 'missing-runtime'),
     ...(human ? [] : ['--json']), 'plugin', ...args], { env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.status, status, JSON.stringify(result));
   return human ? result.stdout : JSON.parse(result.stdout);

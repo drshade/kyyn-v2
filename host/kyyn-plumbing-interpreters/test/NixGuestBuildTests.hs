@@ -35,9 +35,9 @@ import Kyyn.Plumbing.Interpreter.Failure
 main :: IO ()
 main = do
   arguments <- getArgs
-  (fixture,nix) <- case arguments of
-    [source,compiler] -> (,) <$> right (directoryScope source) <*> pure compiler
-    _ -> fail "Expected LOCKED_FIXTURE_DIRECTORY NIX_EXECUTABLE"
+  (fixture,nix,system) <- case arguments of
+    [source,compiler,system] -> (,,) <$> right (directoryScope source) <*> pure compiler <*> pure system
+    _ -> fail "Expected LOCKED_FIXTURE_DIRECTORY NIX_EXECUTABLE SYSTEM"
   environment <- getEnvironment
   originalLock <- Bytes.readFile (scopePath fixture ++ "/flake.lock")
   withSystemTempDirectory "kyyn-host-nix-build" $ \directory -> do
@@ -46,7 +46,7 @@ main = do
     captured <- runEff . runFailure . runFileSystemIO scope $ FileSystem.readTree fixture
     tree <- right captured
     sources <- right (guestSources RootEntries (files tree))
-    let settings = GuestBuildEnvironment nix "x86_64-linux" environment cache
+    let settings = GuestBuildEnvironment nix system environment cache
         run action = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
           . runGuestExecution environment . runGuestInspection . runGuestCompilation settings . runSchemaInspection . runApiInspection $ action
     result <- run $ runExceptT $ do
