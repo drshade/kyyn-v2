@@ -118,7 +118,8 @@ link; require both the retained executable and immutable output to exist before
 reuse. Missing or unreadable result data and missing outputs take the normal
 locked Nix build path. Never cache failed builds. This is disposable build data,
 not a second dependency lock or an accepted-revision registry.
-Never return a bare temporary build-directory path. Cache deletion discards derived code, not accepted knowledge.
+Never return a bare temporary build-directory path. Cache deletion discards
+derived code, not accepted knowledge.
 
 ### Describe and invoke the same build
 
