@@ -85,7 +85,7 @@ lowerProposal before after selectedState change = runExceptT $ do
             ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where",
              "import Kyyn.Workspace.Evolution", "import Kyyn.Workspace.FactEdits (RootEdit, applyRootEdit)",
              "import qualified KyynFactEditCodec", "import qualified KyynRecipeStateCodec",
-             "import Kyyn.Evolution.Internal (Evolution(..))",
+             "import Kyyn.Runtime.Bindings (rejectEvolution)",
              "import Kyyn.Types.Evolution (EvolutionFailure(..))",
              "import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))",
              "import Kyyn.Runtime.Json", "import qualified Data.Text as Text", "import Kyyn.Runtime.Proposal (recipeProposalCodec)",
@@ -93,7 +93,7 @@ lowerProposal before after selectedState change = runExceptT $ do
              "frozen :: RecipeEvolution Root RecipeState",
              "frozen = case proposal of",
              "  Right (RecipeProposal steps state) -> foldr ((>=>) . step) (" ++ finalStep ++ ") steps",
-             "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing]))",
+             "  Left message -> rejectEvolution (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing])",
              "step (ProposedStep why operations) = recipeEdit why (editFacts (mapM_ applyRootEdit operations))",
              "proposal :: Either String (RecipeProposal RootEdit RecipeState)",
              "proposal = parseValue " ++ show json ++ " >>= decodeWith (recipeProposalCodec KyynFactEditCodec.rootCodec KyynRecipeStateCodec.rootCodec)"]

@@ -88,6 +88,16 @@ checkInspection = do
     writeFile "Main.hs" (unlines ["module Main (value) where","value :: Integer","value = 1"])
     (_,mainModules) <- inspectExports libdir ["."] [] ["Main"]
     unless (any ((== "value") . exportName) (concatMap moduleExports mainModules)) (fail "Authored Main required an IO entry")
+    -- Same-occurrence Before/After types must remain distinguishable to authors.
+    writeFile "Before.hs" "module Before where\ndata Root = Root\n"
+    writeFile "After.hs" "module After where\ndata Root = Root\n"
+    writeFile "Migration.hs" (unlines
+      ["module Migration (change) where", "import qualified Before", "import qualified After",
+       "change :: Before.Root -> After.Root", "change _ = After.Root"])
+    (_,migration) <- inspectExports libdir ["."] [] ["Migration"]
+    let signatures = [entry.exportSignature | m <- migration, entry <- m.moduleExports, entry.exportName == "change"]
+    unless (case signatures of [signature] -> all (`Text.isInfixOf` signature) ["Before.Root","After.Root"]; _ -> False)
+      (fail ("Compiler signature obscures endpoint identity: " ++ show signatures))
     writeFile "UsesBindings.hs" (unlines
       ["module UsesBindings where", "import KyynQueryBindings", "selected = missing"])
     uses <- requiredBindings libdir ["."] [] ["UsesBindings"]

@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, TypeApplications, OverloadedRecordDot #-}
 -- Constructors used by compiler-generated modules, separate from the author SDK.
-module Kyyn.Runtime.Bindings (collection, contractCodec, RootBinding, rootBinding, recipeBinding, recipeCodec, recipeType, closedRecipe, evolve, edit) where
+module Kyyn.Runtime.Bindings (collection, contractCodec, RootBinding, rootBinding, recipeBinding, recipeCodec, recipeType, closedRecipe, evolve, edit, rejectEvolution) where
 
 import Data.Text (Text)
 import Kyyn.Contract
@@ -13,7 +13,8 @@ import Kyyn.Evolution (KnowledgeBase, RecipeType, RecipeDefinition)
 import qualified Kyyn.Recipe.Internal as Recipe
 import Kyyn.Types.KnowledgeBase (Recipe(ClosedAgent), FlowEntryRef(..))
 import qualified Kyyn.Types.Contract as D
-import Kyyn.Evolution.Internal (RootBinding(..), evolve, edit)
+import Kyyn.Evolution.Internal (RootBinding(..), Evolution(..), evolve, edit)
+import Kyyn.Types.Evolution (EvolutionFailure)
 import Kyyn.Runtime.Contract (runtimeCodec)
 import Kyyn.Runtime.Evolution (knowledgeBaseCodec)
 import qualified Kyyn.Runtime.Json as Wire
@@ -58,3 +59,7 @@ recipeBinding metadata = do
   state <- compileContract (contract @state)
   let description = describeContract root.description metadata []
   pure (RootBinding description.identity (Wire.encodeWith (recipeCodec (runtimeCodec root.codec) (runtimeCodec state.codec))))
+
+-- Generated frozen proposals report decoding failures without exposing SDK internals.
+rejectEvolution :: EvolutionFailure -> Evolution before after
+rejectEvolution problem = Evolution (const (Left problem))

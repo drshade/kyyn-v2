@@ -10,10 +10,11 @@ import GHC
 import GHC.Driver.Make (depanalPartial)
 import GHC.Iface.Type (ShowSub(..), ShowHowMuch(..), ShowForAllFlag(..), AltPpr(..))
 import GHC.Types.Name (getOccString, nameModule_maybe)
-import GHC.Utils.Outputable (ppr)
+import GHC.Utils.Outputable (ppr, PromotionTickContext(..))
+import GHC.Types.Name.Ppr (mkNamePprCtx)
 import GHC.Types.TyThing.Ppr (pprTyThing)
-import GHC.Driver.Ppr (showSDoc)
-import GHC.Driver.Env (hsc_units)
+import GHC.Driver.Ppr (showSDocForUser)
+import GHC.Driver.Env (hsc_units, hsc_unit_env)
 import GHC.Unit.State (listUnitInfo, unwireUnit)
 import GHC.Unit.Info (unitIsExposed, unitId, unitExposedModules)
 import GHC.Unit.Types (GenUnit(..), Definite(..), unitString)
@@ -60,6 +61,11 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
       let source = case [file | summary <- summaries, ms_mod summary == selected, Just file <- [ml_hs_file (ms_location summary)]] of
             file:_ -> normalise file
             [] -> ""
+      setContext [IIDecl (simpleImportDecl (mkModuleName name))]
+      exportedNames <- getNamePprCtx
+      environment <- getSession
+      let names = maybe exportedNames (mkNamePprCtx (PromTickCtx True False) (hsc_unit_env environment)) (modInfoRdrEnv info)
+          render = showSDocForUser flags (hsc_units environment) names
       symbols <- forM (modInfoExports info) $ \exported -> do
         thing <- lookupName exported >>= maybe (liftIO (fail ("No export information: " ++ getOccString exported))) pure
         docs <- getDocs exported
@@ -68,15 +74,15 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
               _ -> Nothing
             origin = maybe "" ((++ ".") . moduleNameString . moduleName) (nameModule_maybe exported) ++ getOccString exported
         pure (ExportDescription (Text.pack (getOccString exported))
-          (Text.pack (showSDoc flags (pprTyThing (ShowSub (ShowSome Nothing (AltPpr Nothing)) ShowForAllWhen) thing)))
+          (Text.pack (render (pprTyThing (ShowSub (ShowSome Nothing (AltPpr Nothing)) ShowForAllWhen) thing)))
           (Text.pack origin) documentation (kind thing))
       let documentation = renderDoc <$> (modInfoIface info >>= mi_docs >>= docs_mod_hdr)
           -- GHC's ModuleInfo instance accessor is deliberately undefined for
           -- package modules. Their instances are available on the interface.
           instances
-            | not (null source) = [Text.pack (showSDoc flags (ppr entry)) | entry <- modInfoInstances info,
+            | not (null source) = [Text.pack (render (ppr entry)) | entry <- modInfoInstances info,
                 nameModule_maybe (getName entry) == Just selected]
-            | otherwise = maybe [] (map (Text.pack . showSDoc flags . ppr) . mi_insts) (modInfoIface info)
+            | otherwise = maybe [] (map (Text.pack . render . ppr) . mi_insts) (modInfoIface info)
       pure (ModuleDescription (Text.pack name) (Text.pack source) documentation instances symbols)
     pure (sources,exports)
 

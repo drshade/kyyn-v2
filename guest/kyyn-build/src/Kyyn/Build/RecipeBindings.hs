@@ -23,7 +23,7 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
       header name = ["{-# LANGUAGE TemplateHaskell, DeriveGeneric, DerivingStrategies, DeriveAnyClass, EmptyCase, DataKinds, TypeApplications, OverloadedStrings #-}",
         "module " ++ name ++ " where"]
   write "Kyyn.Workspace.FactEdits" (unlines
-    (header "Kyyn.Workspace.FactEdits" ++ imports ++
+    (header "Kyyn.Workspace.FactEdits" ++ ["import qualified " ++ Text.unpack (referenceModule after)] ++
      ["import Kyyn.Build.Edits (rootEdits)","import qualified Kyyn.Edit as Edit",
       "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified Kyyn.Optics as Optics",
       "import qualified Kyyn.Evolution.Proposal as Proposal",
@@ -36,10 +36,11 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
      else ["rootCodec = either (error . show) id (Bindings.contractCodec @RootEdit)"]))
   forM_ [("Before",beforeRoot,beforeMetadata),("After",root,afterMetadata)] $ \(endpoint,selected,SchemaMetadata _ _ fields) ->
     write ("Kyyn.Workspace." ++ endpoint) (unlines
-      (header ("Kyyn.Workspace." ++ endpoint) ++ imports ++
+      (header ("Kyyn.Workspace." ++ endpoint) ++
+       ["import qualified " ++ Text.unpack (referenceModule (if endpoint == "Before" then before else after))] ++
        ["import Kyyn.Evolution (KnowledgeBase, facts)", "import qualified Kyyn.Runtime.Bindings as Bindings",
         "import qualified Kyyn.Optics as Optics"] ++
-       [Text.unpack field ++ " = Bindings.collection " ++ show name ++ " (facts . Optics.field @" ++ show field ++
+       ["-- | Collection " ++ Text.unpack name ++ ".\n" ++ Text.unpack field ++ " = Bindings.collection " ++ show name ++ " (facts . Optics.field @" ++ show field ++
         " @" ++ selected ++ ")" | CollectionDecl name field _ <- fields]))
   let knowledge selected = "(KnowledgeBase " ++ selected ++ ")"
       old = knowledge beforeRoot
@@ -52,11 +53,11 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
       "module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
       "import Kyyn.Evolution", "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Internal"] ++ imports ++
      binding "beforeRoot" beforeRoot beforeMetadata ++ binding "afterRoot" root afterMetadata ++
-     ["evolve :: Rationale -> (" ++ old ++ " -> Either EvolutionFailure " ++ new ++ ") -> Evolution " ++ old ++ " " ++ new,
+     ["-- | Transform the facts in one recorded step.", "evolve :: Rationale -> (" ++ old ++ " -> Either EvolutionFailure " ++ new ++ ") -> Evolution " ++ old ++ " " ++ new,
       "evolve = Internal.evolve beforeRoot afterRoot",
-      "edit :: Rationale -> Edit " ++ new ++ " () -> Evolution " ++ new ++ " " ++ new,
+      "-- | Edit the After facts in one recorded step.", "edit :: Rationale -> Edit " ++ new ++ " () -> Evolution " ++ new ++ " " ++ new,
       "edit = Internal.edit afterRoot",
-      "editBefore :: Rationale -> Edit " ++ old ++ " () -> Evolution " ++ old ++ " " ++ old,
+      "-- | Edit the Before facts in one recorded step.", "editBefore :: Rationale -> Edit " ++ old ++ " () -> Evolution " ++ old ++ " " ++ old,
       "editBefore = Internal.edit beforeRoot"]))
   where
     write name source = do
