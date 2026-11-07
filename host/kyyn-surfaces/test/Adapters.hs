@@ -12,7 +12,7 @@ import Effectful (Eff, (:>), runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Effectful.State.Static.Local (State, modify, runState)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..))
@@ -53,7 +53,7 @@ main = do
         && messages == [expected ++ "local-file/sales"])
       (fail "Clear output did not distinguish existing and absent evidence"))
     [(True,"Cleared evidence for "),(False,"No cached evidence for ")]
-  let evidenceContract = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
+  let evidenceContract = either (error . show) id (checkContract textDescription (SchemaMetadata [] [] []))
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "sales")
         (EvidenceProducer (PackageIdentity "fixture") (contractId evidenceContract)) (FetchId "latest")
       latest = FetchSummary (FetchId "latest") "2026-10-07T00:00:00Z" 1 0 0 Nothing
@@ -79,7 +79,7 @@ main = do
         "id" .= ("notes.txt" :: String),"fingerprint" .= ("abc" :: String),"externalReferences" .= ["file:///notes.txt" :: String],"blobs" .= ([] :: [Value]),"payload" .= object ["tag" .= ("Available" :: String),"value" .= ("hello" :: String)]]
         && messages == [latestLine,"No connector report was supplied.","notes.txt  abc  Available","  Source: file:///notes.txt","\"hello\""])
       (fail "Current evidence inspection lost payload or source metadata")
-  let reportContract = either (error . show) id (checkContract (ListType TextType) (SchemaMetadata [] [] []))
+  let reportContract = either (error . show) id (checkContract (D.ListDescription textDescription) (SchemaMetadata [] [] []))
       reportValue = toJSON (["account-" ++ show n | n <- [1..13 :: Int]])
       publicReport = FetchReport reportContract (CheckedValue (contractId reportContract) reportValue)
   case evidenceListResult (EvidenceCapture snapshot latest [] (Just publicReport)) of
@@ -91,12 +91,12 @@ main = do
       unless (any (isInfixOf "3 omitted; use --json") messages && not (any (isInfixOf "account-13") messages))
         (fail "Human report failed to bound a long list")
     _ -> fail "Missing public report response"
-  let absentContract = either (error . show) id (checkContract (OptionalType TextType) (SchemaMetadata [] [] []))
+  let absentContract = either (error . show) id (checkContract (D.OptionalDescription textDescription) (SchemaMetadata [] [] []))
       absentReport = FetchReport absentContract (CheckedValue (contractId absentContract) (object ["tag" .= ("None" :: String)]))
   case evidenceListResult (EvidenceCapture snapshot latest [] (Just absentReport)) of
     Response _ _ messages _ -> unless (any (isInfixOf "None") messages)
       (fail "Human report hid an absent optional reference")
-  let unitContract = either (error . show) id (checkContract UnitType (SchemaMetadata [] [] []))
+  let unitContract = either (error . show) id (checkContract D.UnitDescription (SchemaMetadata [] [] []))
   case evidenceListResult (EvidenceCapture snapshot latest [] (Just (FetchReport unitContract (CheckedValue (contractId unitContract) (object []))))) of
     Response _ (Object fields) _ _ -> unless
       ((do Object header <- KeyMap.lookup "latest" fields; KeyMap.lookup "report" header) == Just (object []))
@@ -112,25 +112,23 @@ main = do
       hasInstance _ = False
       results = [evidenceListResult (EvidenceCapture snapshot latest [] Nothing)]
   mapM_ (\(Response _ payload _ _) -> unless (checkInstanceKeys payload) (fail "Evidence output mislabeled instance")) results
-  let render name namespace origin signature = case GuestApi.symbolResult
-        (Right ("Example", [Api.ApiSymbol name namespace origin signature Nothing Nothing])) of
+  let render name kind origin signature = case GuestApi.symbolResult
+        (Right ("Example", [Api.ExportDescription name signature origin Nothing kind])) of
         Response _ _ messages _ -> unlines messages
-  unless ("\n(>>=) :: " `isInfixOf` render ">>=" Api.ValueNamespace "Example.>>=" "a -> b")
-    (fail "Compiler operator signatures must be parenthesized")
-  unless ("\ntype Opaque :: Type  -- [compiler signature]" `isInfixOf`
-      render "Opaque" Api.TypeNamespace "Example.Opaque" "Type")
-    (fail "Kind fallback must retain type namespace")
+  unless ("\n(>>=) :: a -> b" `isInfixOf` render ">>=" Api.ExportValue "Example.>>=" "(>>=) :: a -> b")
+    (fail "Compiler operator signature was changed")
+  unless ("\ntype Opaque :: Type" `isInfixOf`
+      render "Opaque" Api.ExportType "Example.Opaque" "type Opaque :: Type")
+    (fail "Compiler kind signature was changed")
   unless ("Defined as Example.source" `isInfixOf`
-      render "source" Api.ValueNamespace "Example.get$.Record.source" "Record -> String")
-    (fail "Accessor origins must be readable")
-  unless ("Defined as Example.get$.Record.different" `isInfixOf`
-      render "source" Api.ValueNamespace "Example.get$.Record.different" "Record -> String")
-    (fail "Unrecognized compiler origins must be preserved")
+      render "source" Api.ExportValue "Example.source" "source :: Record -> Text")
+    (fail "Resolved compiler origin was lost")
   let right :: Show e => Either e a -> a
       right = either (error . show) id
       empty = right (fileTree [])
       schema = right (checkContract
-        (Algebraic "Example.Root" [] [Constructor "Example.Root" [(Just "title",StringType)]])
+        (D.NamedDescription (D.TypeIdentity "fixture" "Example" "Root" [])
+          (D.RecordDescription "Root" D.NamedFields [D.FieldDescription "title" "" textDescription]))
         (SchemaMetadata [] [] []) >>= checkRootLayout)
       root = Root schema empty empty []
       value = CheckedValue (contractId (rootSchema schema)) (object ["title" .= ("Unicode λ" :: String)])
@@ -173,31 +171,17 @@ main = do
   assert "Candidate check opened or evaluated an evolution"
     (candidateCalls == ["candidate","prepare","examples","validate"] && exitStatus candidateChecked == 0)
   assert "Missing candidate invoked validation" (missingCalls == ["candidate"] && exitStatus missing == 1)
-  let reexport = Api.ApiSymbol "append" Api.ValueNamespace "Kyyn.Edit.append" "a" (Just "append :: a") Nothing
-      local = Api.ApiSymbol "edit" Api.ValueNamespace "Kyyn.Workspace.Evolution.edit" "b" (Just "edit :: b") (Just "Edit this root.")
-      apiModule = Api.ApiModule "Kyyn.Workspace.Evolution" [reexport,local] ["instance Options Priority"]
+  let reexport = Api.ExportDescription "append" "append :: a" "Kyyn.Edit.append" Nothing Api.ExportValue
+      local = Api.ExportDescription "edit" "edit :: b" "Kyyn.Workspace.Evolution.edit" (Just "Edit this root.") Api.ExportValue
+      apiModule = Api.ModuleDescription "Kyyn.Workspace.Evolution" "" Nothing ["instance Options Priority"] [reexport,local]
       catalogue = Api.WorkspaceCatalogue workspace revision [apiModule]
       rendered = GuestApi.moduleResult (Right apiModule)
-      unavailable = refusal [errorDiagnostic "plugin.config" "Repair connector configuration"]
-  case GuestApi.availableCatalogue True [apiModule] unavailable of
-    Response outcome payload _ diagnostics -> do
-      assert "Unavailable bindings erased the fixed catalogue" (outcome == Succeeded &&
-        payload == object ["modules" .= (["Kyyn.Workspace.Evolution"] :: [String]),
-          "origins" .= object ["Kyyn.Workspace.Evolution" .= ("sdk" :: String)]])
-      assert "Partial catalogue lacks warning" (case diagnostics of
-        Diagnostic Warning "guest.bindings-unavailable" _ _ : Diagnostic Warning "plugin.config" _ _ : [] -> True
-        _ -> False)
-  assert "Unavailable requested module succeeded"
-    (exitStatus (GuestApi.availableCatalogue False [apiModule] unavailable) == 1)
-  let unknown = refusal [errorDiagnostic "guest.module-not-found" "Unknown module"]
-  assert "Unknown module misreported as broken bindings" (GuestApi.availableCatalogue False [apiModule] unknown == unknown)
-  assert "Successful discovery changed" (GuestApi.availableCatalogue True [apiModule] rendered == rendered)
   case rendered of
     Response _ payload messages _ -> do
       assert "Workspace local declarations precede reexports"
         (elemIndex "edit :: b" messages < elemIndex "append :: a" messages)
       assert "Instance headers rendered separately from exports"
-        ("-- Explicit instances declared here" `elem` messages && "instance Options Priority" `elem` messages)
+        ("-- Module instances" `elem` messages && "instance Options Priority" `elem` messages)
       assert "Instance headers in JSON" (case payload of
         Object fields -> KeyMap.lookup "instances" fields == Just (toJSON (["instance Options Priority"] :: [String]))
         _ -> False)
@@ -253,7 +237,7 @@ opening kb@(KnowledgeBase repository _) revision root = interpret $ \_ -> \case
 
 execution :: State [String] :> es => Eff (RootExecution : es) a -> Eff es a
 execution = interpret $ \_ -> \case
-  PrepareRoot root -> record "prepare" >> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] [] []))
+  PrepareRoot root -> record "prepare" >> pure (Right (PreparedRoot root "validator" (error "Unexpected guest execution") [] [] []))
   ValidateRoot _ -> record "validate" >> pure (Right (ValidationReport [warning]))
   _ -> error "Unexpected query execution"
 
@@ -267,3 +251,6 @@ candidates :: State [String] :> es => Maybe (Candidate Root) -> Eff (EvolutionSt
 candidates selected = interpret $ \_ -> \case
   LoadCandidate _ -> record "candidate" >> pure (Right selected)
   _ -> error "Unexpected evolution-store operation"
+
+textDescription :: D.Description
+textDescription = D.ScalarDescription (D.TypeIdentity "text" "Data.Text.Internal" "Text" []) D.TextScalar "text" []

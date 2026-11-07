@@ -256,12 +256,11 @@ buildEvolution compiler libdir generated basePackages destination (EvolutionSele
   (importedSources,importedBindings,importedEntries) <- writeRecipeHandles libdir generated
     (packages inspectionRoots) beforeRoots afterRoots manifest.schemaType handles
   states <- forM (zip [0 :: Int ..] references) $ \(index,reference) -> case reference of
-    OpenState "()" -> pure ([],[],"describeEntry @() \"$before.state.()\" (SchemaMetadata [] [] []) []")
+    OpenState "()" -> pure ([],[],"describeState @() []")
     OpenState selected -> do
       state <- either fail pure (qualifiedReference True selected)
       (closure,_) <- inspectExports libdir inspectionRoots (packages inspectionRoots) [Text.unpack (referenceModule state)]
-      pure (closure,[Text.unpack (referenceModule state)],"describeEntry @" ++ Text.unpack selected ++ " " ++
-        show ("$before.state." <> selected) ++ " (SchemaMetadata [] [] []) " ++ show closure)
+      pure (closure,[Text.unpack (referenceModule state)],"describeState @" ++ Text.unpack selected ++ " " ++ show closure)
     ClosedFlow selected -> do
       flow <- either fail pure (qualifiedReference False selected)
       (closure,_) <- inspectExports libdir inspectionRoots (packages inspectionRoots) [Text.unpack (referenceModule flow)]
@@ -272,8 +271,7 @@ buildEvolution compiler libdir generated basePackages destination (EvolutionSele
          "import qualified Kyyn.Recipe as Recipe", "import qualified " ++ Text.unpack (referenceModule before),
          "import qualified " ++ Text.unpack (referenceModule flow),
          "$(flowStateAlias (mkName \"State\") ''" ++ Text.unpack beforeType ++ " '" ++ Text.unpack selected ++ ")"])
-      pure (closure,[moduleName],"describeEntry @" ++ moduleName ++ ".State " ++
-        show ("$before.flow." <> selected) ++ " (SchemaMetadata [] [] []) " ++ show closure)
+      pure (closure,[moduleName],"describeState @" ++ moduleName ++ ".State " ++ show closure)
   selectedState <- case recipe of
     Nothing -> pure Nothing
     Just reference -> case [(index,closure,names) | (index,(actual,(closure,names,_))) <- zip [0 :: Int ..] (zip references states), actual == reference] of
@@ -301,20 +299,22 @@ buildEvolution compiler libdir generated basePackages destination (EvolutionSele
             oldDescription ++ " " ++ newDescription ++ " Evolution.evolution"]
           Just (state,closure) -> ["recipeEvolutionEntry @" ++ name before ++ " @" ++ state ++ " " ++
             oldDescription ++ " " ++ show closure ++ " Evolution.evolution"]
-        Just _ -> ["describeEntry @" ++ name before ++ " \"$before\" (" ++ show oldMetadata ++ ") " ++ show beforeSources,
-                   "describeEntry @" ++ name manifest.schemaType ++ " \"$after\" (" ++ show newMetadata ++ ") " ++ show afterSources]
+        Just _ -> []
+      description = "evolutionDescriptionEntry @" ++ name before ++ " @" ++ name manifest.schemaType ++ " " ++
+        oldDescription ++ " " ++ newDescription ++ " [" ++ intercalate ","
+          ["(" ++ show reference ++ "," ++ state ++ ")" | (reference,(_,_,state)) <- zip references states] ++ "]"
       modules = nub (selectedModules ++ importedBindings ++ concat [names | (_,names,_) <- states])
   (_,exports) <- inspectExports libdir (roots ++ [generated]) selectedPackages modules
   let original path = maybe path Text.pack (lookup (Text.unpack path) origins)
       located = [entry { moduleSource = original entry.moduleSource } | entry <- exports]
-  writeGuest generated located (nub (modules ++ map (Text.unpack . referenceModule) [before,manifest.schemaType])) (entries ++ importedEntries ++ [entry | (_,_,entry) <- states])
+  writeGuest generated located (nub (modules ++ map (Text.unpack . referenceModule) [before,manifest.schemaType])) (description : "describeEntry @() \"$import.unit\" (SchemaMetadata [] [] []) []" : entries ++ importedEntries)
   finishGuest compiler generated selectedPackages destination
 
 writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
 writeGuest generated exports modules entries =
   writeFile (generated </> "KyynGuestEntry.hs") (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}","module KyynGuestEntry where",
-      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
+      "import Kyyn.Runtime.Guest", "import Kyyn.Types.Guest", "import Kyyn.Types.GuestBuild (RecipeReference(..))", "import Kyyn.Types.SchemaMetadata", "import Kyyn.Contract (ProjectionError)",
       "import System.Environment (getArgs)"] ++ map ("import qualified " ++) modules ++
      ["main :: IO ()", "main = do", "  arguments <- getArgs", "  case arguments of",
       "    [\"--check-build\"] -> checkEntries selected",

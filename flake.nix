@@ -25,7 +25,6 @@
             kyyn-types = "shared/kyyn-types";
             kyyn-domain = "host/kyyn-domain";
             kyyn-plumbing = "host/kyyn-plumbing";
-            kyyn-microhs = "host/kyyn-microhs";
             kyyn-plumbing-interpreters = "host/kyyn-plumbing-interpreters";
             kyyn-porcelain = "host/kyyn-porcelain";
             kyyn-porcelain-interpreters = "host/kyyn-porcelain-interpreters";
@@ -34,6 +33,39 @@
             kyyn-sdk = "guest/kyyn-sdk";
             kyyn-guest-build = "guest/kyyn-build";
           };
+          # Initialization copies a standard, already locked KB flake. Published
+          # builds pin this repository revision; dirty contributor builds retain
+          # their immutable local source so installed tests need no remote commit.
+          guestInput = if self ? rev then {
+            type = "github"; owner = "drshade"; repo = "kyyn-v2"; rev = self.rev;
+          } else { type = "path"; path = toString self.outPath; };
+          guestUrl = if self ? rev then "github:drshade/kyyn-v2/${self.rev}" else "path:${self.outPath}";
+          repositoryLock = builtins.fromJSON (builtins.readFile ./flake.lock);
+          templateLock = repositoryLock // {
+            nodes = repositoryLock.nodes // {
+              kyyn = { inputs = repositoryLock.nodes.root.inputs;
+                original = guestInput;
+                locked = guestInput // { inherit (self) narHash; lastModified = self.lastModified or 0; };
+              };
+              root.inputs.kyyn = "kyyn";
+            };
+          };
+          template = pkgs.runCommand "kyyn-kb-template" { } ''
+            mkdir -p "$out"
+            cp ${pkgs.writeText "flake.nix" ''
+              {
+                description = "Kyyn knowledge base";
+                inputs.kyyn.url = "${guestUrl}";
+                outputs = { self, kyyn }: {
+                  packages = builtins.listToAttrs (map (system: {
+                    name = system;
+                    value.kyyn-guest = kyyn.lib.mkGuest { inherit system; src = self; };
+                  }) [ ${builtins.concatStringsSep " " (map builtins.toJSON systems)} ]);
+                };
+              }
+            ''} "$out/flake.nix"
+            cp ${pkgs.writeText "flake.lock" (builtins.toJSON templateLock)} "$out/flake.lock"
+          '';
           haskell = pkgs.haskell.packages.ghc9103.override {
             overrides = final: prev:
               let
@@ -73,6 +105,8 @@
                     src = source;
                     postUnpack = ''sourceRoot="$sourceRoot/${path}"'';
                     doCheck = false;
+                  } // pkgs.lib.optionalAttrs (name == "kyyn") {
+                    configureFlags = [ ''--ghc-option=-DKYYN_TEMPLATE_DIRECTORY="${template}"'' ];
                   })) localPackages;
           };
         in {

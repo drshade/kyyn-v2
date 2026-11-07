@@ -9,11 +9,10 @@ import Kyyn.Composition.Runtime
 import Kyyn.Domain.Contract (contractShape)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure)
-import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.KnowledgeBase (knowledgeBaseScope)
 import Kyyn.Domain.Tool (ToolDescriptor(..))
 import Kyyn.Domain.Value (CheckedValue(..))
-import Kyyn.MicroHs.Toolchain (GuestToolchain)
+import Kyyn.Plumbing.Interpreter.GuestCompilation (GuestBuildEnvironment)
 import Kyyn.Plumbing.Capability.DhallHandling (renderType, decodeValue, encodeValue)
 import Kyyn.Plumbing.Interpreter.DocumentPersistence (runDocumentPersistenceIO)
 import Kyyn.Plumbing.Interpreter.SecretStore (runSecretStoreIO)
@@ -41,16 +40,16 @@ import Kyyn.Surfaces.Result (Response, refusal)
 
 type Discovery = EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
 
-runDiscovery :: Host -> GuestToolchain -> FileTree -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host toolchain sdk = runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk
-  . runRootOpening sdk . runWorkspaceStore . runEvolutionStore
+runDiscovery :: Host -> GuestBuildEnvironment -> Eff Discovery a -> IO (Either OperationalFailure a)
+runDiscovery host settings = runRuntime host settings . runPluginPreparation . runToolPreparation
+  . runRootOpening . runWorkspaceStore . runEvolutionStore
 
 dispatchTools :: Host -> Cli.ToolCommand -> SelectedKb -> IO Response
-dispatchTools host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> case command of
+dispatchTools host command (SelectedKb kb revision _) = withRuntime host $ \settings -> case command of
   Cli.ListTools workspace -> finish $ fmap (fmap (either refusal (toolListResult . map descriptor))) $
-    runDiscovery host toolchain sdk (listRootTools kb revision workspace)
+    runDiscovery host settings (listRootTools kb revision workspace)
   Cli.ShowTool name workspace -> finish $ fmap (fmap (either refusal id)) $
-    runDiscovery host toolchain sdk $ runExceptT $ do
+    runDiscovery host settings $ runExceptT $ do
       PreparedTool (ToolDescriptor _ description input output) _ _ model <- ExceptT (selectRootTool kb revision workspace name)
       inputType <- ExceptT (Right <$> renderType (contractShape input))
       resultType <- ExceptT (Right <$> renderType (contractShape output))
@@ -58,9 +57,9 @@ dispatchTools host command (SelectedKb kb revision _) = withRuntime host $ \tool
   Cli.ExecuteTool name arguments -> case knowledgeBaseScope kb of
     Left message -> pure (refusal [errorDiagnostic "kb.path" message])
     Right scope -> finish $ fmap (fmap (either refusal id)) $
-      runRuntime host toolchain . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
+      runRuntime host settings . runSecretStoreIO scope . runJudgementIO . runModelTurnIO
         . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope) . runPluginRead
-        . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runToolExecution $ runExceptT $ do
+        . runPluginPreparation . runToolPreparation . runRootOpening . runWorkspaceStore . runEvolutionStore . runToolExecution $ runExceptT $ do
           selected@(PreparedTool (ToolDescriptor _ _ input output) _ _ _) <- ExceptT (selectRootTool kb revision Nothing name)
           value <- ExceptT (decodeValue (contractShape input) (Text.pack arguments))
           (CheckedValue _ result,blobs) <- ExceptT (executeTool selected value)

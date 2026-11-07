@@ -1,7 +1,7 @@
 -- Real Dhall schema/value conversion and validation at the format boundary.
 -- No guest compiler or repository operations.
 
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TypeApplications, ScopedTypeVariables, AllowAmbiguousTypes, DeriveGeneric, DeriveAnyClass, DerivingStrategies, NoFieldSelectors #-}
 module Main (main) where
 
 import Control.Monad (unless, forM_)
@@ -20,7 +20,12 @@ import Kyyn.Domain.DataType
 import Kyyn.Plumbing.Capability.DhallHandling
 import Kyyn.Domain.Contract
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
-import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue, parseDataType)
+import Kyyn.Plumbing.Protocol.Description (descriptionShape, descriptionValue, parseDescription)
+import qualified Kyyn.Types.Contract as D
+import qualified Kyyn.Contract as Guest
+import Kyyn.Types.Fact (Fact, FactId)
+import Agentic.Questions (Probability)
+import GHC.Generics (Generic)
 import Kyyn.Types.SchemaMetadata
 
 main :: IO ()
@@ -71,28 +76,26 @@ main = do
     case runPureEff (runDhallHandling (encodeValue probability (String value))) of
       Left _ -> pure ()
       Right _ -> fail "Invalid probability wire encoded"
-  forM_ [UnitType, OptionalType UnitType, ListType UnitType,
-      ProbabilityType, OptionalType ProbabilityType, ListType ProbabilityType] $ \datatype -> do
-    persisted <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue dataTypeShape (dataTypeValue datatype))))
-    restored <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue dataTypeShape persisted)))
-    unless (parseEither parseDataType restored == Right datatype) (fail "Type descriptor changed")
-  probabilityContract <- either (fail . show) pure (checkContract ProbabilityType (SchemaMetadata [] [] []))
-  integerContract <- either (fail . show) pure (checkContract IntegerType (SchemaMetadata [] [] []))
+  forM_ [(described @()), D.OptionalDescription (described @()), D.ListDescription (described @()),
+      (described @Probability), D.OptionalDescription (described @Probability), D.ListDescription (described @Probability)] $ \datatype -> do
+    persisted <- either (fail . show) pure (runPureEff (runDhallHandling (encodeValue descriptionShape (descriptionValue datatype))))
+    restored <- either (fail . show) pure (runPureEff (runDhallHandling (decodeValue descriptionShape persisted)))
+    unless (parseEither parseDescription restored == Right datatype) (fail "Type descriptor changed")
+  probabilityContract <- either (fail . show) pure (checkContract (described @Probability) (SchemaMetadata [] [] []))
+  integerContract <- either (fail . show) pure (checkContract (described @Integer) (SchemaMetadata [] [] []))
   unless (contractId probabilityContract /= contractId integerContract) (fail "Probability and Integer identities collided")
-  let choice = Algebraic "Query.Choice" []
-        [Constructor "Query.All" [], Constructor "Query.Named" [(Just "name", StringType)]]
-      fact = Algebraic "Kyyn.Types.Fact.Fact" [StringType]
-        [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,StringType)]]
-  forM_ [(UnitType, object []), (ListType UnitType, toJSON [object [], object []]),
-      (OptionalType UnitType, object ["tag" .= ("Some" :: Text), "value" .= object []]),
-      (StringType, String "München 🦋"), (IntegerType, String "9007199254740993123456789"),
-      (BoolType, Bool True), (ListType IntegerType, toJSON (["1", "-2"] :: [Text])),
-      (ListType StringType, toJSON ([] :: [Text])),
-      (OptionalType StringType, object ["tag" .= ("None" :: Text)]),
-      (OptionalType StringType, object ["tag" .= ("Some" :: Text), "value" .= ("name" :: Text)]),
+  let choice = described @Choice
+      fact = described @(Fact Text)
+  forM_ [((described @()), object []), (D.ListDescription (described @()), toJSON [object [], object []]),
+      (D.OptionalDescription (described @()), object ["tag" .= ("Some" :: Text), "value" .= object []]),
+      ((described @Text), String "München 🦋"), ((described @Integer), String "9007199254740993123456789"),
+      ((described @Bool), Bool True), (D.ListDescription (described @Integer), toJSON (["1", "-2"] :: [Text])),
+      (D.ListDescription (described @Text), toJSON ([] :: [Text])),
+      (D.OptionalDescription (described @Text), object ["tag" .= ("None" :: Text)]),
+      (D.OptionalDescription (described @Text), object ["tag" .= ("Some" :: Text), "value" .= ("name" :: Text)]),
       (choice, object ["tag" .= ("All" :: Text)]),
       (choice, object ["tag" .= ("Named" :: Text), "value" .= object ["name" .= ("todo" :: Text)]]),
-      (ListType fact, toJSON [object ["id" .= ("todo-001" :: Text), "value" .= ("task" :: Text)]])] $ \(valueType,value) -> do
+      (D.ListDescription fact, toJSON [object ["id" .= ("todo-001" :: Text), "value" .= ("task" :: Text)]])] $ \(valueType,value) -> do
     valueContract <- either (fail . show) pure (checkContract valueType (SchemaMetadata [] [] []))
     roundTrip valueContract value
   contract <- either (fail . show) pure (checkContract root (SchemaMetadata [] [] []))
@@ -156,13 +159,22 @@ set _ _ value = value
 badWire :: [Value]
 badWire = [Null, Number 1, String "not a root", object [], object ["extra" .= True]]
 
-root :: DataType
-root = Algebraic "Example.Root" [] [Constructor "Example.Root"
-  [(Just "title", StringType), (Just "count", IntegerType), (Just "active", BoolType)
-  ,(Just "note", OptionalType StringType), (Just "labels", ListType StringType)
-  ,(Just "status", Algebraic "Example.Status" []
-    [Constructor "Example.Open" [], Constructor "Example.Done" [(Nothing, IntegerType)]])
-  ,(Just "identity", sdkFactIdType)]]
+described :: forall a. Guest.Contract a => D.Description
+described = case Guest.compileContract (Guest.contract @a) of
+  Left problem -> error (show problem)
+  Right (Guest.CompiledContract description _) -> description
+
+data Choice = All | Named { name :: Text } deriving stock (Generic) deriving anyclass (Guest.Contract)
+data Status = Open | Done Integer deriving stock (Generic) deriving anyclass (Guest.Contract)
+data RecordRoot = RecordRoot
+  { title :: Text, count :: Integer, active :: Bool, note :: Maybe Text, labels :: [Text], status :: Status, identity :: FactId }
+  deriving stock (Generic) deriving anyclass (Guest.Contract)
+data CollectionRoot = CollectionRoot { items :: [Fact Payload] } deriving stock (Generic) deriving anyclass (Guest.Contract)
+data Payload = Payload { parent :: Maybe FactId, result :: Result } deriving stock (Generic) deriving anyclass (Guest.Contract)
+data Result = Pending | Ready { notes :: [Maybe Text] } deriving stock (Generic) deriving anyclass (Guest.Contract)
+
+root :: D.Description
+root = described @RecordRoot
 
 source :: Text
 source = "let title = \"héllo 🌍\" in { title = title, count = -9007199254740993123456789, active = True, note = Some \"ok\", labels = [\"a\", \"b\"], status = < Open | Done : Integer >.Done +42, identity = \"todo-001\" }"
@@ -182,15 +194,8 @@ invalid = ["{", "{ title = \"only one field\" }", "env:HOME", "./fact.dhall", "h
 emptyJson :: Text
 emptyJson = "{\"title\":\"\",\"count\":\"0\",\"active\":false,\"note\":{\"tag\":\"None\"},\"labels\":[],\"status\":{\"tag\":\"Open\"},\"identity\":\"todo-002\"}"
 
-collectionRoot :: DataType
-collectionRoot = Algebraic "Example.Root" [] [Constructor "Example.Root" [(Just "items", ListType fact)]]
-  where
-    fact = Algebraic "Kyyn.Types.Fact.Fact" [payload]
-      [Constructor "Kyyn.Types.Fact.Fact" [(Nothing, sdkFactIdType), (Nothing, payload)]]
-    payload = Algebraic "Example.Payload" [] [Constructor "Example.Payload"
-      [(Just "parent", OptionalType sdkFactIdType), (Just "result", result)]]
-    result = Algebraic "Example.Result" []
-      [Constructor "Example.Pending" [], Constructor "Example.Ready" [(Just "notes", ListType (OptionalType StringType))]]
+collectionRoot :: D.Description
+collectionRoot = described @CollectionRoot
 
 collectionSource :: Text
 collectionSource = "{ items = [{ id = \"one\", value = { parent = Some \"other\", result = < Pending | Ready : { notes : List (Optional Text) } >.Ready { notes = [Some \"hello\", None Text] } } }] }"

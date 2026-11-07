@@ -1,4 +1,4 @@
-packages: shared/kyyn-types host/kyyn-domain host/kyyn-plumbing host/kyyn-microhs host/kyyn-plumbing-interpreters
+packages: shared/kyyn-types host/kyyn-domain host/kyyn-plumbing host/kyyn-plumbing-interpreters
   host/kyyn-porcelain host/kyyn-porcelain-interpreters
   host/kyyn-surfaces host/kyyn
   guest/kyyn-sdk guest/kyyn-build

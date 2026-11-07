@@ -23,7 +23,6 @@ library
     Kyyn.Porcelain.Protocol.RecipeContracts
     Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Protocol.ToolBroker
-    Kyyn.Porcelain.Protocol.ToolBindings
     Kyyn.Porcelain.Protocol.OutputBindings
     Kyyn.Porcelain.Protocol.PluginHost
     Kyyn.Porcelain.Interpreter.PluginPreparation

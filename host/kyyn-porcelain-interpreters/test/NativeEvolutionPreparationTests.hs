@@ -73,18 +73,18 @@ main = do
     inspected <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection $ describeGuest program
     description <- right =<< right inspected
-    schema <- case [value.contract | G.ContractEntry "$before" value <- checkedEntries description] of
+    schema <- case [value.contract | G.EvolutionDescriptionEntry value _ _ <- checkedEntries description] of
       [selected] -> pure selected
       _ -> fail "Missing target-built Before contract"
     beforeRoot <- right (checkRootLayout schema)
-    let state entry = case [value.contract | G.ContractEntry name value <- checkedEntries description, name == entry] of
+    let state entry = case [value.contract | G.EvolutionDescriptionEntry _ _ states <- checkedEntries description, (reference,value) <- states, reference == entry] of
           [contract] -> contract
           _ -> error "Missing target-built Before recipe state"
         recipe key method name entry value = Fact (FactId key)
           (R.StoredRecipe method name (state entry) (CheckedValue (contractId (state entry)) value))
-        recipes = [recipe "unit" (OpenAgent "Review") "()" "$before.state.()" (object []),
-          recipe "progress" (OpenAgent "Review") "BeforeProgress.State" "$before.state.BeforeProgress.State" (object ["completed" .= String "3"]),
-          recipe "closed" (ClosedAgent (FlowEntryRef "BeforeFlows.review")) "BeforeFlows.State" "$before.flow.BeforeFlows.review" (object ["reviewed" .= String "4"])]
+        recipes = [recipe "unit" (OpenAgent "Review") "()" (OpenState "()") (object []),
+          recipe "progress" (OpenAgent "Review") "BeforeProgress.State" (OpenState "BeforeProgress.State") (object ["completed" .= String "3"]),
+          recipe "closed" (ClosedAgent (FlowEntryRef "BeforeFlows.review")) "BeforeFlows.State" (ClosedFlow "BeforeFlows.review") (object ["reviewed" .= String "4"])]
         facts = object ["items" .= ([] :: [Value])]
     stored <- right $ runPureEff . runDhallHandling . runRootStore $ runExceptT $ do
       Root _ values _ _ <- ExceptT (materializeRoot beforeRoot acceptedCode (R.KnowledgeBase (CheckedValue (contractId schema) facts) recipes))

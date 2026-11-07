@@ -11,7 +11,7 @@ import Kyyn.Runtime.Transport (Transport, writeJson)
 -- Private adapters receive the invocation's existing transport. Interactive
 -- entries may exchange capability requests before writing their final result.
 type Action = Transport -> Json.Value -> IO ()
-data Entry = Entry EntryDescription Action | ConnectorGroup EntryDescription [(Text,Action)]
+data Entry = Entry EntryDescription Action | DescriptionEntry EntryDescription | ConnectorGroup EntryDescription [(Text,Action)]
 data Adapter contract = Adapter (Invocation contract) Action
 data CapturedAdapter = CapturedAdapter Text Text (Adapter (CapturedContracts DescribedContract))
 
@@ -21,9 +21,11 @@ pureAdapter description run = Adapter description $ \transport argument ->
 
 entryDescriptor :: Entry -> EntryDescription
 entryDescriptor (Entry description _) = description
+entryDescriptor (DescriptionEntry description) = description
 entryDescriptor (ConnectorGroup description _) = description
 
 entryActions :: Entry -> [(Text,Action)]
+entryActions (DescriptionEntry _) = []
 entryActions (Entry description run) = [(entryName description,run)]
 entryActions (ConnectorGroup _ actions) = actions
 

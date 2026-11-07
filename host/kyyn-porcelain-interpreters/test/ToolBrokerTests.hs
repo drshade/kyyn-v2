@@ -9,9 +9,10 @@ import qualified Kyyn.Plumbing.Protocol.Frame as Wire
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, reinterpret, localSeqUnlift)
 import Effectful.State.Static.Local (runState, modify)
-import GuestFixture (fixtureProgram)
+import GuestFixture (fixtureProgram, fixtureTool, fixtureConnector, fixtureText)
+import Kyyn.Domain.CompiledEntry (CompiledConnector(..))
+import qualified Kyyn.Types.Guest as G
 import Kyyn.Domain.Contract (checkContract, contractId)
-import Kyyn.Domain.DataType (DataType(StringType))
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.EvidenceIndex (EvidenceIndex(EvidenceIndex))
 import Kyyn.Domain.Plugin
@@ -29,15 +30,22 @@ import Kyyn.Porcelain.Protocol.ToolBroker (executeToolProgram)
 
 toolBrokerTests :: IO ()
 toolBrokerTests = do
-  let contract = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
+  let contract = either (error . show) id (checkContract fixtureText (SchemaMetadata [] [] []))
       plugin = either error id (pluginName "files")
       instanceName = either error id (connectorName "documents")
       binding = either error id (bindingName "documents")
       kind = either error id (connectorTypeName "Folder")
       methodNameValue = either error id (methodName "content")
       program = fixtureProgram "not executed"
-      method = PreparedMethod methodNameValue "Read" contract contract program
-      connector = PreparedConnector kind contract contract program program [method] Nothing Nothing Nothing Nothing
+      attached = fixtureConnector program "files" "Folder"
+        (G.SourceEntries (G.Invocation "configure" contract)
+          (G.Invocation "acquire" (G.StatelessContracts contract Nothing contract)) Nothing
+          [G.CapturedEntry "content" "Read" (G.Invocation "content" (G.CapturedContracts contract contract contract))])
+      (acquire,configure,readContent) = case attached of
+        CompiledSource _ _ acquisition configuration _ [(_,content)] -> (acquisition,configuration,content)
+        _ -> error "Expected source fixture with one method"
+      method = PreparedMethod methodNameValue "Read" contract contract readContent
+      connector = PreparedConnector kind contract contract configure acquire [method] Nothing Nothing Nothing Nothing
       plugins = [PreparedPlugin (PreparedPackage plugin (PackageIdentity "package") [connector])
         [ConfiguredConnector instanceName binding connector (CheckedValue (contractId contract) (string "config"))]]
       snapshot = EvidenceSnapshotRef (ConnectorInstanceRef plugin "documents")
@@ -52,7 +60,7 @@ toolBrokerTests = do
           modify @Int (+ 1)
           pure (Right (Right (CheckedValue (contractId contract) (string "old contents"))))
       result = runPureEff . runFailure . noModel . noJudgement . noEvidence . recordReads . runConversation $
-        executeToolProgram program plugins Nothing [captured] (string "input")
+        executeToolProgram (fixtureTool program contract) plugins Nothing [captured] (string "input")
   case result of
     Right (Right value,2) | value == string "completed" -> pure ()
     other -> fail ("Pinned conversation failed: " ++ show other)

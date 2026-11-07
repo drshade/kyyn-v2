@@ -55,8 +55,8 @@ main = do
     forM_ [0 .. length args] $ \position ->
       succeeds (take position args ++ ["--json"] ++ drop position args)
         (Invocation selected Json cmd)
-  succeeds ["root","--kb","nested/kb","show","--git","/bin/git","--runtime","/opt/kyyn","--json"]
-    (Invocation (Selection "nested/kb" (Just "/bin/git") (Just "/opt/kyyn")) Json (Root ShowRoot))
+  succeeds ["root","--kb","nested/kb","show","--git","/bin/git","--nix","/opt/nix/bin/nix","--json"]
+    (Invocation (Selection "nested/kb" (Just "/bin/git") (Just "/opt/nix/bin/nix")) Json (Root ShowRoot))
   succeeds ["root","tool","execute","content","--input=--json"]
     (Invocation selected Human (Root (RootTool (ExecuteTool content "--json"))))
   succeeds ["evidence","show","local-file","sales","--","--json"]
@@ -184,9 +184,9 @@ main = do
     ["evidence","clear","local-file",""]] refuses
   succeeds ["root","check"] (Invocation selected Human (Root CheckRoot))
   succeeds ["--kb","knowledge/sales","--json","--git","/bin/git",
-    "--runtime","/opt/kyyn/lib/kyyn","evolution","list","--exclude-drafts"]
+    "--nix","/opt/nix/bin/nix","evolution","list","--exclude-drafts"]
     (Invocation (Selection "knowledge/sales"
-      (Just "/bin/git") (Just "/opt/kyyn/lib/kyyn")) Json (Evolution (ListEvolutions ExcludeDrafts)))
+      (Just "/bin/git") (Just "/opt/nix/bin/nix")) Json (Evolution (ListEvolutions ExcludeDrafts)))
   succeeds ["evolution","list"] (Invocation selected Human (Evolution (ListEvolutions AllEvolutions)))
   succeeds ["guest","module","list"] (Invocation selected Human (Guest Nothing ListGuestModules))
   succeeds ["guest","module","show","Kyyn.Edit"] (Invocation selected Human (Guest Nothing (ShowGuestModule "Kyyn.Edit")))
@@ -195,8 +195,8 @@ main = do
   forM_ [(["module","list"],ListGuestModules),
     (["module","show","Kyyn.Workspace.Evolution"],ShowGuestModule "Kyyn.Workspace.Evolution"),
     (["symbol","show","Kyyn.Workspace.After.todos"],ShowGuestSymbol "Kyyn.Workspace.After.todos")] $ \(args,request) -> do
-      succeeds (["--kb","nested/kb","--runtime","/runtime","--json","guest"] ++ args ++ ["--evolution","abc123"])
-        (Invocation (Selection "nested/kb" Nothing (Just "/runtime")) Json (Guest (Just identity) request))
+      succeeds (["--kb","nested/kb","--nix","/bin/nix","--json","guest"] ++ args ++ ["--evolution","abc123"])
+        (Invocation (Selection "nested/kb" Nothing (Just "/bin/nix")) Json (Guest (Just identity) request))
       refuses (["guest"] ++ args ++ ["--evolution","../invalid"])
   succeeds ["evolution","new","September"]
     (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing Nothing)))

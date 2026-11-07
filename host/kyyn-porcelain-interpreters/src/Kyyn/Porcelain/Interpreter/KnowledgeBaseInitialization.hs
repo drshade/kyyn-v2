@@ -25,9 +25,11 @@ runKnowledgeBaseInitialization :: (FS.FileSystem :> es, Git.Git :> es, Store.Roo
   => Eff (KnowledgeBaseInitialization : es) a -> Eff es a
 runKnowledgeBaseInitialization = interpret $ \_ -> \case
   PrepareKnowledgeBase scope -> prepare scope
-  PublishInitialRoot target@(InitializationTarget scope _ selected) metadata root -> runExceptT $ do
-    current <- ExceptT (prepare scope)
-    unless (current == target) (reject "kb.initialization-changed" "The target changed since initialization was prepared; retry kb init.")
+  PublishInitialRoot (InitializationTarget scope _ selected) metadata root -> runExceptT $ do
+    InitializationTarget currentScope _ currentSelection <- ExceptT (prepare scope)
+    -- A guest build may create .kyyn/compiled under a previously absent target.
+    -- The nearest directory used to read Git identity is not publication state.
+    unless (currentScope == scope && currentSelection == selected) (reject "kb.initialization-changed" "The target changed since initialization was prepared; retry kb init.")
     rootFiles <- ExceptT (Store.exportRootFiles root)
     (kb@(KnowledgeBase repository _), branch, parent) <- case selected of
       Just existing -> pure existing

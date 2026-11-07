@@ -14,6 +14,7 @@ import Control.Monad.Trans.State.Strict (execStateT)
 import qualified Kyyn.Optics as Optics
 import qualified Kyyn.Evolution.Proposal as Proposal
 import qualified EditProvider as Provider
+import EmptyEditProvider ()
 
 $(rootEdits ''Provider.Root [("facts-é","items")])
 

@@ -30,6 +30,8 @@ checkGuest :: G.GuestDescription -> Either [Diagnostic] CheckedGuest
 checkGuest description = do
   ensure (description.protocol == G.protocolIdentity) "guest.protocol" "Unrecognized guest protocol"
   unique "entry" (concatMap G.entryNames description.entries)
+  ensure (length [() | G.EvolutionDescriptionEntry{} <- description.entries] <= 1)
+    "guest.evolution-description" "Duplicate evolution description"
   entries <- traverse checkEntry description.entries
   unique "recipe" [name | G.RecipeEntry _ name _ <- entries]
   unique "tool" [name | G.ToolEntry _ name _ _ <- entries]
@@ -69,6 +71,9 @@ checkEntry entry = case entry of
     checked <- traverse check selected
     checkConnectorContracts checked
     pure (G.ConnectorEntry identity checked)
+  G.EvolutionDescriptionEntry before after states -> do
+    ensure (length (map fst states) == length (nub (map fst states))) "guest.recipe-states" "Duplicate Before recipe state reference"
+    G.EvolutionDescriptionEntry <$> root before <*> root after <*> traverse (\(reference,value) -> (reference,) <$> check value) states
   G.ContractEntry name selected -> G.ContractEntry name <$> check selected
   where
     root selected = do

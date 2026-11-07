@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Surfaces.GuestApi (modulesResult, moduleResult, symbolResult, workspaceResult, availableCatalogue, withOrigins) where
+module Kyyn.Surfaces.GuestApi (modulesResult, moduleResult, symbolResult, workspaceResult, withOrigins) where
 
 import Data.Aeson (Value(..), object, (.=), toJSON)
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.Text as Text
 import Data.List (partition, isPrefixOf)
-import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(..))
+import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.GuestApi
 import Kyyn.Domain.Evolution (EvolutionWorkspace(..), evolutionIdName)
 import Kyyn.Domain.Git (revisionName, Repository(..), TreePath(..))
@@ -30,20 +30,6 @@ withOrigins entries (Response outcome (Object fields) messages diagnostics)
     displayed | listing = [name ++ maybe "" (\origin -> "  -- [" ++ origin ++ "]") (lookup name origins) | name <- messages]
               | otherwise = maybe messages (\origin -> ("-- [" ++ origin ++ "]") : messages) selected
 withOrigins _ response = response
-
-availableCatalogue :: Bool -> [ApiModule] -> Response -> Response
-availableCatalogue listing modules response@(Response outcome _ _ diagnostics)
-  | outcome == Succeeded = response
-  | any missingSymbol diagnostics = response
-  | otherwise = case withOrigins (map (ApiEntry SdkOrigin) modules) (modulesResult (Right [Text.unpack selected.moduleName | selected <- modules])) of
-      Response _ value messages _ -> Response (if listing then Succeeded else outcome) value messages
-        (Diagnostic (if listing then Warning else Error) "guest.bindings-unavailable"
-          "KB API inspection failed; the installed SDK catalogue is shown. Fix the reported problem and retry."
-          Nothing : map severity diagnostics)
-  where
-    missingSymbol (Diagnostic _ code _ _) = code == "guest.module-not-found" || code == "guest.symbol-not-found"
-    severity (Diagnostic level code message location) =
-      Diagnostic (if listing then Warning else level) code message location
 
 workspaceResult :: WorkspaceCatalogue -> Response -> Response
 workspaceResult (WorkspaceCatalogue (EvolutionWorkspace (KnowledgeBase (Repository scope) prefix) identity) revision _) (Response outcome value text diagnostics) =

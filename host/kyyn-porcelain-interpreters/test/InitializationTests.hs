@@ -8,7 +8,7 @@ import Data.Aeson (object)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (checkContract, checkRootLayout)
-import Kyyn.Domain.DataType
+import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldStyle(..))
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.FileTree (fileTree, files)
 import Kyyn.Domain.Git
@@ -28,10 +28,11 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 
 initializationTests :: IO ()
 initializationTests = do
+  template <- either fail pure (fileTree [])
   initial <- either fail pure initialRootFiles
   code <- either fail pure (fileTree [(p,b) | (p,b) <- files initial, relativeName p `notElem` ["facts/root.dhall","recipes.dhall"]])
   contract <- either (fail . show) pure (checkContract
-    (Algebraic "RootV1.Root" [] [Constructor "RootV1.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
+    (NamedDescription (TypeIdentity "fixture" "RootV1" "Root" []) (RecordDescription "Root" PositionalFields [])) (SchemaMetadata [] [] []) >>= checkRootLayout)
   root <- either (fail . show) pure $ runPureEff . runDhallHandling . runRootStore $ do
     checked <- checkRootValue contract (object [])
     either (pure . Left) (\value -> materializeRoot contract code (KB.KnowledgeBase value [])) checked
@@ -43,7 +44,7 @@ initializationTests = do
       initialized = InitializedRoot revision (LocalBranch "main") (KnowledgeBase (Repository scope) WholeTree) WorkingTreeUpdated
       execute report = runPureEff . runDhallHandling . runRootStore
         . opening root . checking root report . publication target metadata root initialized report $
-          initializeKnowledgeBase target metadata
+          initializeKnowledgeBase template target metadata
       good = ValidationReport []
       bad = ValidationReport [errorDiagnostic "test.invalid" "Root is invalid"]
   unless (execute good == Passed initialized good) (fail "Valid initialization did not publish the checked root")

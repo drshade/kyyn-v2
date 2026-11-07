@@ -14,7 +14,7 @@ import Kyyn.Build.Reification (expandSynonyms, recordFields)
 -- so record fields and payload types need not have public selector exports.
 rootEdits :: Name -> [(String,String)] -> Q [Dec]
 rootEdits root collections = do
-  fields <- recordFields (ConT root)
+  fields <- if null collections then pure [] else recordFields (ConT root)
   unless (length (map snd collections) == length (nub (map snd collections)))
     (fail "Duplicate collection field in fact edit bindings")
   selected <- forM collections $ \(collection,field) -> do

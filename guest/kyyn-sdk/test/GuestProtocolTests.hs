@@ -29,6 +29,7 @@ import Kyyn.Schema
 import Kyyn.Types.Query (Query, CollectionBinding(..), readCollection)
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import qualified Kyyn.Types.Contract as D
+import Kyyn.Types.GuestBuild (RecipeReference(..))
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Runtime.Guest
 import qualified Kyyn.Plumbing.Protocol.Frame as Frame
@@ -512,10 +513,18 @@ checkEvolution executable = do
   (entry,before,after) <- case [(name,before,after) | G.EvolutionEntry name (G.AdHocContracts before after) <- description.entries] of
     [selected] -> pure selected
     _ -> fail "Missing evolution endpoints"
+  case [states | G.EvolutionDescriptionEntry _ _ states <- description.entries] of
+    [states] | all (`elem` map fst states) [OpenState "()",OpenState "BeforeProgress.State",ClosedFlow "BeforeFlows.review"] -> pure ()
+    _ -> fail "Before states are missing from the typed evolution description"
   unless (all (`elem` [name | G.ContractEntry name _ <- description.entries])
-    ["$before.state.()","$before.state.BeforeProgress.State","$before.flow.BeforeFlows.review",
-     "$import.state.Before.BeforeProgress.State","$import.state.After.After.Item","$import.flow.AfterFlows.review"])
-    (fail "Before recipe state contracts were not described under the migration environment")
+    ["$import.state.Before.BeforeProgress.State","$import.state.After.After.Item","$import.flow.AfterFlows.review"])
+    (fail "Imported recipe handles were not described")
+  let node = G.EvolutionDescriptionEntry before after [(OpenState "()",before)]
+      malformed = case toJSON node of Object fields -> Object (Keys.delete "beforeStates" fields); value -> value
+  unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode malformed)) :: Either String G.EntryDescription))
+    (fail "Partial evolution description accepted")
+  unless (isLeft (Host.checkGuest (description { G.entries = [G.EvolutionDescriptionEntry before after [(OpenState "()",before),(OpenState "()",before)]] })))
+    (fail "Duplicate typed Before references accepted")
   unless (before.loadedSources == [".kyyn-before/Before.hs"] && after.loadedSources == ["src/After.hs"])
     (fail "Endpoint source closure includes metadata-only dependencies")
   let fact payload = object ["id" .= String "one","value" .= payload]
@@ -537,8 +546,8 @@ checkEvolutionApi executable = do
   value <- invoke executable (toJSON G.Describe)
   description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
   _ <- right (Host.checkGuest description)
-  unless (all (`elem` [name | G.ContractEntry name _ <- description.entries]) ["$before","$after"])
-    (fail "Discovery did not describe both endpoints")
+  unless (length [() | G.EvolutionDescriptionEntry{} <- description.entries] == 1)
+    (fail "Discovery did not return one structured evolution description")
   unless (all (`elem` map G.moduleName description.modules)
     ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"])
     (fail "Missing generated evolution API modules")

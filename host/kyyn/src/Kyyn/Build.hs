@@ -1,9 +1,9 @@
 {-# LANGUAGE CPP #-}
-module Kyyn.Build (buildRevision) where
+module Kyyn.Build (guestTemplateDirectory) where
 
-buildRevision :: Maybe String
-#ifdef KYYN_BUILD_REVISION
-buildRevision = Just KYYN_BUILD_REVISION
+guestTemplateDirectory :: Maybe FilePath
+#ifdef KYYN_TEMPLATE_DIRECTORY
+guestTemplateDirectory = Just KYYN_TEMPLATE_DIRECTORY
 #else
-buildRevision = Nothing
+guestTemplateDirectory = Nothing
 #endif

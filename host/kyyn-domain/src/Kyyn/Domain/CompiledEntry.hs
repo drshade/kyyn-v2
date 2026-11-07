@@ -17,6 +17,7 @@ compiledEntries program guest = [CompiledEntry program entry (G.entryName entry)
   where
     runnable ConnectorEntry{} = False
     runnable ContractEntry{} = False
+    runnable EvolutionDescriptionEntry{} = False
     runnable _ = True
 
 entryProgram :: CompiledEntry -> CompiledProgram

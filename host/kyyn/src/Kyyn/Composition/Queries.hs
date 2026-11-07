@@ -22,9 +22,9 @@ import Kyyn.Surfaces.RootBrowsing (browsingContext)
 import Kyyn.Surfaces.Result (Response, refusal)
 
 dispatchQueries :: Host -> Cli.QueryCommand -> SelectedKb -> IO Response
-dispatchQueries host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
+dispatchQueries host command (SelectedKb kb revision _) = withRuntime host $ \settings -> finish $
   fmap (fmap (either refusal (browsingContext revision Nothing))) $
-  runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ runExceptT $ do
+  runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening . runRootExecution $ runExceptT $ do
     prepared <- ExceptT (Root.prepareRootAt kb revision)
     let queries = preparedQueries prepared
         select name = case [q | q@(QueryDescriptor n _ _ _) <- queries, n == name] of

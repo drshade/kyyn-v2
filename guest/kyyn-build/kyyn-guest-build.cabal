@@ -43,7 +43,7 @@ test-suite edit-bindings
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: EditTests.hs
-  other-modules: EditProvider
+  other-modules: EditProvider EmptyEditProvider
   default-language: GHC2021
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,

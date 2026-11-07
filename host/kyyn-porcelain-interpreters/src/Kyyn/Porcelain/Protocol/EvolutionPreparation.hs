@@ -4,7 +4,7 @@ module Kyyn.Porcelain.Protocol.EvolutionPreparation (prepareEvolution, prepareEv
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.Text as Text
-import Data.List (stripPrefix)
+import Data.List (stripPrefix, sort, nub)
 import Effectful (Eff, (:>))
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
 import Kyyn.Domain.Evolution
@@ -56,24 +56,21 @@ prepareEvolutionDescription location@(EvolutionWorkspace kb@(KnowledgeBase repos
     beforeCopy target change)
   program <- ExceptT (compileGuest source)
   guest <- ExceptT (describeGuest program)
-  let entries = checkedEntries guest
-      endpoint name = case [value | G.ContractEntry actual value <- entries, actual == name] of
-        [value] -> pure value
-        _ -> throwE [errorDiagnostic "evolution.description" ("Guest did not describe " ++ Text.unpack name)]
-  beforeSchema <- endpoint "$before"
-  afterSchema <- endpoint "$after"
+  (beforeSchema,afterSchema,states) <- case [(before,after,states) |
+      G.EvolutionDescriptionEntry before after states <- checkedEntries guest] of
+    [description] -> pure description
+    _ -> throwE [errorDiagnostic "evolution.description" "Expected one evolution description"]
+  unless (sort (map fst states) == sort (nub [reference recipe | Fact _ recipe <- definitions]))
+    (throwE [errorDiagnostic "evolution.description" "Evolution description differs from the selected Before state references"])
   beforeContract <- ExceptT (pure (checkRootLayout beforeSchema.contract))
   afterContract <- ExceptT (pure (checkRootLayout afterSchema.contract))
-  contracts <- traverse (\definition@(Fact _ recipe) -> do
-    let (entry,authoredName) = case recipe of
-          OpenRecipe _ name -> ("$before.state." <> Text.pack name,Just name)
-          ClosedRecipe (FlowEntryRef name) -> ("$before.flow." <> name,Nothing)
-    state <- endpoint entry
-    name <- case authoredName of
-      Just value -> pure value
-      Nothing -> Text.unpack <$> either (throwE . pure . errorDiagnostic "recipe.state-type" . Text.unpack) pure
+  contracts <- traverse (\(definition@(Fact _ recipe),state) -> do
+    name <- case recipe of
+      OpenRecipe _ authored -> pure authored
+      ClosedRecipe _ -> Text.unpack <$> either (throwE . pure . errorDiagnostic "recipe.state-type" . Text.unpack) pure
         (descriptionTypeName (descriptionOf state.contract))
-    pure (definition,name,state.contract)) definitions
+    pure (definition,name,state.contract))
+    [(definition,state) | definition@(Fact _ recipe) <- definitions, (stateReference,state) <- states, stateReference == reference recipe]
   closure <- traverse (\path -> checked (relativePath
     (maybe (relativeName path) id (stripPrefix ".kyyn-before/" (relativeName path))))) beforeSchema.loadedSources
   let before = SourceRoot beforeContract beforeCode beforeDefinition closure

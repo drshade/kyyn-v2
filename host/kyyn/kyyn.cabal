@@ -11,13 +11,13 @@ executable kyyn-v2
   main-is: Main.hs
   other-modules: Kyyn.Configuration Kyyn.Composition Kyyn.Composition.Runtime Kyyn.Composition.Connectors
     Kyyn.Composition.Tools Kyyn.Composition.Queries Kyyn.Composition.Outputs Kyyn.Composition.Recipes Kyyn.Composition.Taps
-    Kyyn.Composition.Secrets Kyyn.Composition.Timings Kyyn.Composition.SyncTimings Kyyn.Composition.RootBrowsing
+    Kyyn.Composition.Secrets Kyyn.Composition.Timings Kyyn.Composition.SyncTimings Kyyn.Composition.Timing Kyyn.Composition.RootBrowsing
     Kyyn.Build Kyyn.Guide
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror -threaded -rtsopts
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain, kyyn-porcelain-interpreters,
-    kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-microhs, kyyn-surfaces,
+    kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-surfaces,
     effectful-core ==2.6.1.0, directory, filepath, time, transformers, aeson, bytestring, text,
     optparse-applicative ==0.19.0.0, template-haskell
 
@@ -37,9 +37,9 @@ test-suite sync-timings
   type: exitcode-stdio-1.0
   main-is: SyncTimingsTests.hs
   hs-source-dirs: test src
-  other-modules: Kyyn.Composition.SyncTimings
+  other-modules: Kyyn.Composition.SyncTimings Kyyn.Composition.Timing
   default-language: GHC2021
   default-extensions: NoFieldSelectors OverloadedStrings
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-porcelain,
-    kyyn-plumbing, kyyn-plumbing-interpreters, kyyn-microhs, effectful-core ==2.6.1.0, text, bytestring, temporary ==1.3
+    kyyn-plumbing, kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, text, bytestring, temporary ==1.3

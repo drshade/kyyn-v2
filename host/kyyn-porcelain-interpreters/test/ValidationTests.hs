@@ -3,11 +3,12 @@ module ValidationTests (validationTests) where
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..))
+import qualified Data.Text as Text
 import Data.List (isPrefixOf, isSuffixOf)
 import Effectful (Eff, runPureEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Example
 import Kyyn.Domain.Failure
@@ -30,8 +31,8 @@ import Kyyn.Porcelain.Interpreter.RootStore
 validationTests :: RootContract -> FileTree -> IO ()
 validationTests contract facts = do
   let tree = either error id . fileTree
-      input = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
-      result = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
+      input = either (error . show) id (checkContract (scalar "Text" D.TextScalar) (SchemaMetadata [] [] []))
+      result = either (error . show) id (checkContract (scalar "Bool" D.BoolScalar) (SchemaMetadata [] [] []))
       descriptor = QueryDescriptor "isDone" "Done?" input result
       expectation name requirement expected = Example name descriptor
         (CheckedValue (contractId input) (String "todo-001")) (CheckedValue (contractId result) (Bool expected)) requirement "A completed todo"
@@ -83,12 +84,12 @@ validationTests contract facts = do
     Left [Diagnostic Error _ _ (Just (ExampleLocation "Done 🦋"))] -> pure ()
     _ -> fail "Changed query contract silently rebound the saved example"
   presentationChanged <- either (fail . show) pure
-    (checkContract BoolType (SchemaMetadata [RoleDecl "badge" "Changed presentation" Badge] [] []))
+    (checkContract (scalar "Bool" D.BoolScalar) (SchemaMetadata [RoleDecl "badge" "Changed presentation" Badge] [] []))
   case storage (readExamples root [QueryDescriptor "isDone" "" input presentationChanged]) of
     Left _ -> pure ()
     _ -> fail "Role-only query contract change bypassed the whole fingerprint"
   let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
-  changedRoot <- either (fail . show) pure (checkContract (rootType (rootSchema contract))
+  changedRoot <- either (fail . show) pure (checkContract (descriptionOf (rootSchema contract))
     (SchemaMetadata (RoleDecl "root-extra" "Unrelated root change" Title : roles) assignments collections) >>= checkRootLayout)
   unless (storage (readExamples (Root changedRoot facts encoded []) [descriptor]) == Right [example])
     (fail "Unchanged query contracts were incorrectly pinned to the whole root")
@@ -134,3 +135,6 @@ failingExecution failure = interpret $ \_ -> \case
   PrepareRoot root -> pure (Right (PreparedRoot root "validator" (error "Unexpected bytecode use") [] [] []))
   ValidateRoot _ -> raiseFailure failure
   ExecuteQuery _ _ _ -> error "Example ran after failed validation"
+
+scalar :: Text.Text -> D.ScalarKind -> D.Description
+scalar name kind = D.ScalarDescription (D.TypeIdentity "fixture" "Fixture" name []) kind name []

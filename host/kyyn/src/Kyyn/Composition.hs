@@ -1,10 +1,8 @@
 {-# LANGUAGE DataKinds, TypeOperators #-}
 module Kyyn.Composition (execute) where
 
-import Effectful (Eff, IOE, runEff, (:>))
-import Data.List (isPrefixOf)
+import Effectful (Eff, runEff, (:>))
 import Kyyn.Composition.Runtime
-import Kyyn.Composition.Timings
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
 import Kyyn.Composition.Queries (dispatchQueries)
@@ -21,12 +19,14 @@ import Kyyn.Porcelain.Interpreter.PluginDocumentation (runPluginDocumentation)
 import Kyyn.Surfaces.Plugins (pluginListResult, pluginDescriptionResult, pluginGuideResult)
 import Kyyn.Configuration
 import Kyyn.Guide (guideResponse)
+import Kyyn.Build (guestTemplateDirectory)
+import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..), EvolutionSummary(..), EvolutionName(..), evolutionIdName)
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
-import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
+import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ModuleDescription(moduleName), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
 import Kyyn.Surfaces.RootBrowsing (browsingContext)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBaseScope)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
@@ -39,21 +39,8 @@ import Kyyn.Domain.Path (DirectoryScope, directoryScope, scopedPath, relativePat
 import Kyyn.Domain.Plugin (PluginSource(..), pluginSource)
 import Kyyn.Domain.Publication (InitializationTarget(..), AcceptanceResult(..), AcceptanceProblem(..))
 import qualified Kyyn.Domain.Workspace as Workspace
-import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
-import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
-import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
-import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
-import Kyyn.MicroHs.Interpreter.ApiInspection (runApiInspectionIO)
-import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection)
+import Kyyn.Plumbing.Interpreter.GuestCompilation (GuestBuildEnvironment)
 import qualified Kyyn.Plumbing.Capability.Git as Git
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
-import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
-import Kyyn.Plumbing.Capability.Git (Git)
-import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
-import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
-import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
-import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -71,7 +58,6 @@ import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
-import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
 import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution)
@@ -84,15 +70,14 @@ import Kyyn.Porcelain.Interpreter.RootOpening (runRootOpening)
 import Kyyn.Porcelain.Interpreter.RootPublication (runRootPublication)
 import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Porcelain.Interpreter.WorkspaceStore (runWorkspaceStore)
-import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApi, runGuestApiFromCatalogue)
+import Kyyn.Porcelain.Interpreter.GuestApi (runGuestApiFromCatalogue)
 import Kyyn.Porcelain.Interpreter.WorkspaceApi (runWorkspaceApi)
 import qualified Kyyn.Porcelain.Capability.WorkspaceApi as WorkspaceApi
 import qualified Kyyn.Porcelain.Capability.GuestApi as Api
 import qualified Kyyn.Surfaces.GuestApi as ApiResult
 import qualified Kyyn.Surfaces.Cli as Cli
 import Kyyn.Surfaces.Result
-import System.Directory (getCurrentDirectory, doesFileExist)
-import System.FilePath ((</>))
+import System.Directory (getCurrentDirectory)
 
 type Metadata = Store.EvolutionStore ': WorkspaceStore ': Base
 type Authoring = Authoring.EvolutionAuthoring ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': ToolPreparation ': PluginPreparation ': Runtime
@@ -102,16 +87,16 @@ type Checking = RootExecution ': ToolPreparation ': PluginPreparation ': Store.E
 runMetadata :: Host -> Eff Metadata a -> IO (Either OperationalFailure a)
 runMetadata host = runBase host . runWorkspaceStore . runEvolutionStore
 
-runAuthoring :: Host -> GuestToolchain -> FileTree -> Eff Authoring a -> IO (Either OperationalFailure a)
-runAuthoring host toolchain sdk = runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk
+runAuthoring :: Host -> GuestBuildEnvironment -> Eff Authoring a -> IO (Either OperationalFailure a)
+runAuthoring host settings = runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening
   . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring
 
-runEvaluation :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Evaluation a -> IO (Either OperationalFailure a)
-runEvaluation host toolchain sdk scope = runRuntime host toolchain . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
-  . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution sdk
+runEvaluation :: Host -> GuestBuildEnvironment -> DirectoryScope -> Eff Evaluation a -> IO (Either OperationalFailure a)
+runEvaluation host settings scope = runRuntime host settings . runDocumentPersistenceIO . (runBlobStorageIO scope . runEvidenceStore scope)
+  . runPluginPreparation . runToolPreparation . runRootOpening . runWorkspaceStore . runEvolutionStore . runEvolutionAuthoring . runEvolutionExecution
 
-runChecking :: Host -> GuestToolchain -> FileTree -> Eff Checking a -> IO (Either OperationalFailure a)
-runChecking host toolchain sdk = runRuntime host toolchain . runWorkspaceStore . runEvolutionStore . runPluginPreparation . runToolPreparation sdk . runRootExecution sdk
+runChecking :: Host -> GuestBuildEnvironment -> Eff Checking a -> IO (Either OperationalFailure a)
+runChecking host settings = runRuntime host settings . runWorkspaceStore . runEvolutionStore . runPluginPreparation . runToolPreparation . runRootExecution
 
 execute :: Cli.Invocation -> IO Response
 execute (Cli.Invocation _ _ Cli.Guide) = pure guideResponse
@@ -131,36 +116,19 @@ execute (Cli.Invocation selection _ command) = do
         Cli.Evidence request -> selectKnowledgeBase host scope >>= either pure (dispatchEvidence host request)
 
 executeGuest :: Cli.Selection -> Maybe EvolutionId -> Cli.GuestCommand -> IO Response
-executeGuest selection@(Cli.Selection path _ runtimeOverride) workspace request = do
-  runtime <- runtimeDirectory runtimeOverride
-  case directoryScope runtime of
-    Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
-    Right catalogue -> do
-      installed <- runEff . runFailure . runFileSystemIO catalogue . runDhallHandling . runGuestApi catalogue $ Api.readCatalogue
-      case installed of
-        Left failure -> pure (operationalFailure failure)
-        Right (Left diagnostics) -> pure (refusal diagnostics)
-        Right (Right modules) -> do
-          hasKb <- doesFileExist (path </> "root/kb.dhall")
-          let fixed = case request of
-                Cli.ListGuestModules -> False
-                Cli.ShowGuestModule name -> any (\(ApiModule moduleName _ _) -> name == moduleName) modules
-                Cli.ShowGuestSymbol name -> any (\(ApiModule moduleName _ _) -> isPrefixOf (moduleName ++ ".") name) modules
-              static = runEff (catalogueResult request (map (ApiEntry SdkOrigin) modules))
-          if fixed || (not hasKb && workspace == Nothing) then static else do
-            configured <- configure selection
-            result <- case configured of
-              Left response -> pure response
-              Right (host,scope) -> case workspace of
-                Nothing -> selectKnowledgeBase host scope >>= either pure (dispatchRootApi host request)
-                Just identity -> do
-                  discovered <- runGitIO host (Git.discoverRepository scope)
-                  case discovered of
-                    Left failure -> pure (operationalFailure failure)
-                    Right (Left diagnostics) -> pure (refusal diagnostics)
-                    Right (Right (repository,prefix)) ->
-                      dispatchWorkspaceApi host (EvolutionWorkspace (KnowledgeBase repository prefix) identity) request
-            pure (ApiResult.availableCatalogue (request == Cli.ListGuestModules) modules result)
+executeGuest selection workspace request = do
+  configured <- configure selection
+  case configured of
+    Left response -> pure response
+    Right (host,scope) -> case workspace of
+      Nothing -> selectKnowledgeBase host scope >>= either pure (dispatchRootApi host request)
+      Just identity -> do
+        discovered <- runGitIO host (Git.discoverRepository scope)
+        case discovered of
+          Left failure -> pure (operationalFailure failure)
+          Right (Left diagnostics) -> pure (refusal diagnostics)
+          Right (Right (repository,prefix)) ->
+            dispatchWorkspaceApi host (EvolutionWorkspace (KnowledgeBase repository prefix) identity) request
 
 dispatchPlugin :: Host -> Cli.PluginCommand -> SelectedKb -> IO Response
 dispatchPlugin host (Cli.Connector command) kb = dispatchConnectors host command kb
@@ -223,52 +191,43 @@ catalogueResult :: Cli.GuestCommand -> [ApiEntry] -> Eff es Response
 catalogueResult request entries = ApiResult.withOrigins entries <$>
   runGuestApiFromCatalogue (Right [m | ApiEntry _ m <- entries]) (guestResult request)
 
-type Discovery = '[WorkspaceApi.WorkspaceApi, Store.EvolutionStore, WorkspaceStore, RootOpening, ToolPreparation, PluginPreparation, ApiInspection, SchemaInspection, GuestCompilation, GuestExecution, Api.GuestApi, RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
+type Discovery = WorkspaceApi.WorkspaceApi ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
 
-runDiscovery :: Host -> GuestToolchain -> FileTree -> DirectoryScope -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host@(Host _ _ _ _ cache inspection timings) toolchain sdk catalogue = runBase host . runGuestApi catalogue
-  . runGuestExecution toolchain . observeExecutions timings . runGuestCompilation toolchain cache . observeCompilations timings
-  . runSchemaInspectionIO toolchain inspection . runApiInspectionIO toolchain inspection
-  . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk
-  . runWorkspaceStore . runEvolutionStore . runWorkspaceApi sdk
+runDiscovery :: Host -> GuestBuildEnvironment -> Eff Discovery a -> IO (Either OperationalFailure a)
+runDiscovery host settings = runRuntime host settings . runRootOpening
+  . runWorkspaceStore . runEvolutionStore . runWorkspaceApi
 
 dispatchRootApi :: Host -> Cli.GuestCommand -> SelectedKb -> IO Response
-dispatchRootApi host@(Host _ _ _ runtime _ _ _) request (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk ->
-  case directoryScope runtime of
-    Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
-    Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do
-      installed <- Api.readCatalogue
-      source <- Root.sourceRootAt kb revision Nothing
-      generated <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
-      case (installed,generated) of
-        (Left diagnostics,_) -> pure (refusal diagnostics)
-        (_,Left diagnostics) -> pure (refusal diagnostics)
-        (Right modules,Right bindings) -> browsingContext revision Nothing <$>
-          catalogueResult request (map (ApiEntry SdkOrigin) modules ++ bindings)
+dispatchRootApi host request (SelectedKb kb revision _) = withRuntime host $ \settings ->
+  finish $ runDiscovery host settings $ do
+    source <- Root.sourceRootAt kb revision Nothing
+    generated <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
+    either (pure . refusal) (fmap (browsingContext revision Nothing) . catalogueResult request) generated
 
 dispatchWorkspaceApi :: Host -> EvolutionWorkspace -> Cli.GuestCommand -> IO Response
-dispatchWorkspaceApi host@(Host _ _ _ runtime _ _ _) workspace request = withRuntime host $ \toolchain sdk ->
-  case directoryScope runtime of
-    Left message -> pure (refusal [errorDiagnostic "setup.runtime" message])
-    Right catalogue -> finish $ runDiscovery host toolchain sdk catalogue $ do
-      installed <- Api.readCatalogue
-      case installed of
-        Left diagnostics -> pure (refusal diagnostics)
-        Right modules -> do
-          inspected <- WorkspaceApi.inspectWorkspaceApi workspace
-          case inspected of
-            Left diagnostics -> pure (refusal diagnostics)
-            Right context@(WorkspaceCatalogue _ revision generated) -> do
-              let EvolutionWorkspace kb identity = workspace
-              source <- Root.sourceRootAt kb revision (Just identity)
-              tools <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
-              case tools of
-                Left diagnostics -> pure (refusal diagnostics)
-                Right bindings -> ApiResult.workspaceResult context <$>
-                  catalogueResult request (map (ApiEntry SdkOrigin) modules ++ map (ApiEntry GeneratedOrigin) generated ++ bindings)
+dispatchWorkspaceApi host workspace@(EvolutionWorkspace kb identity) request = withRuntime host $ \settings ->
+  finish $ runDiscovery host settings $ do
+    inspected <- WorkspaceApi.inspectWorkspaceApi workspace
+    case inspected of
+      Left diagnostics -> pure (refusal diagnostics)
+      Right context@(WorkspaceCatalogue _ revision generated) -> do
+        source <- Root.sourceRootAt kb revision (Just identity)
+        tools <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
+        case tools of
+          Left diagnostics -> pure (refusal diagnostics)
+          Right bindings -> ApiResult.workspaceResult context <$>
+            catalogueResult request (map (ApiEntry GeneratedOrigin) generated ++
+              [entry | entry@(ApiEntry _ selected) <- bindings, moduleName selected `notElem` map moduleName generated])
 
 executeInitialization :: Host -> DirectoryScope -> IO Response
-executeInitialization host scope = do
+executeInitialization host scope = case guestTemplateDirectory >>= either (const Nothing) Just . directoryScope of
+  Nothing -> pure (refusal [errorDiagnostic "setup.template" "This development executable has no KB template; build Kyyn with its Nix flake to initialize a KB"])
+  Just directory -> do
+    loaded <- runBase host (FS.readTree directory)
+    either (pure . operationalFailure) (initializeWithTemplate host scope) loaded
+
+initializeWithTemplate :: Host -> DirectoryScope -> FileTree -> IO Response
+initializeWithTemplate host scope template = do
   prepared <- runBase host . runKnowledgeBaseInitialization $ Initialization.prepareKnowledgeBase scope
   case prepared of
     Left failure -> pure (operationalFailure failure)
@@ -277,9 +236,9 @@ executeInitialization host scope = do
       metadata <- commitMetadata host (Repository lookupScope) "Initialize knowledge base\n"
       case metadata of
         Left response -> pure response
-        Right commit -> withRuntime host $ \toolchain sdk -> finish $
-          runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk . runKnowledgeBaseInitialization $
-            initializationResult <$> Initialization.initializeKnowledgeBase target commit
+        Right commit -> withRuntime host $ \settings -> finish $
+          runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening . runRootExecution . runKnowledgeBaseInitialization $
+            initializationResult <$> Initialization.initializeKnowledgeBase template target commit
 
 dispatchRoot :: Host -> Cli.RootCommand -> SelectedKb -> IO Response
 dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
@@ -293,8 +252,8 @@ dispatchRoot host request selected@(SelectedKb kb revision _) = case request of
   Cli.ShowRoot -> withRoot (inspectionCheckResult revision <$> Root.inspectRootAt kb revision)
   Cli.CheckRoot -> withRoot (checkResult ("Root at " ++ revisionName revision) <$> Root.checkRootAt kb revision)
   where
-    withRoot action = withRuntime host $ \toolchain sdk -> finish $
-      runRuntime host toolchain . runPluginPreparation . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ action
+    withRoot action = withRuntime host $ \settings -> finish $
+      runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening . runRootExecution $ action
 dispatchEvolution :: Host -> Cli.EvolutionCommand -> SelectedKb -> IO Response
 dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) _) revision branch) = case request of
     Cli.ListEvolutions selection -> finish $ runMetadata host $
@@ -305,7 +264,7 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
       either refusal (const (stateResult identity Workspace.Ready)) <$> Store.markReady (workspace identity)
     Cli.DraftEvolution identity -> finish $ runMetadata host $
       either refusal (const (stateResult identity Workspace.Draft)) <$> Store.markDraft (workspace identity)
-    Cli.NewEvolution name before recipe -> withRuntime host $ \toolchain sdk -> finish $ runAuthoring host toolchain sdk $ do
+    Cli.NewEvolution name before recipe -> withRuntime host $ \settings -> finish $ runAuthoring host settings $ do
       created <- Authoring.createEvolution kb name (maybe revision id before) (maybe Workspace.AdHoc Workspace.RecipeBased recipe)
       pure $ case created of
         Left diagnostics -> refusal diagnostics
@@ -314,8 +273,8 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
           Right path -> workspaceResult value (maybe revision id before) (scopedPath scope path)
     Cli.CheckEvolution identity -> case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])
-      Right kbScope -> withRuntime host $ \toolchain sdk -> finish $
-        runEvaluation host toolchain sdk kbScope . runRootExecution sdk $
+      Right kbScope -> withRuntime host $ \settings -> finish $
+        runEvaluation host settings kbScope . runRootExecution $
           evolutionCheckResult identity <$> checkEvolution (workspace identity)
     Cli.AcceptEvolution identity -> case branch of
       Nothing -> pure detached
@@ -330,8 +289,8 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
                 metadata <- commitMetadata host (Repository scope) ("Accept evolution " ++ name ++ " (" ++ evolutionIdName identity ++ ")\n")
                 case metadata of
                   Left response -> pure response
-                  Right commit -> withRuntime host $ \toolchain sdk -> finish $
-                    runChecking host toolchain sdk . runRootPublication $
+                  Right commit -> withRuntime host $ \settings -> finish $
+                    runChecking host settings . runRootPublication $
                       acceptanceResult <$> acceptStoredEvolution selected commit (workspace identity)
   where
     workspace = EvolutionWorkspace kb

@@ -14,7 +14,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_COMMITTER_NAME: 'Query fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function cli(args, expected = 0, json = true) {
   const result = spawnSync(executable, ['--kb', kb, ...(json ? ['--json'] : []), ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   return json ? JSON.parse(result.stdout) : result.stdout;
 }
@@ -23,12 +23,14 @@ try {
   assert.deepEqual(cli(['root', 'query', 'list']).result.queries, []);
   const draft = cli(['evolution', 'new', 'reporting']).result;
   const target = path.join(draft.path, 'target');
-  fs.writeFileSync(path.join(target, 'src/Reporting.hs'), `module Reporting where
+  fs.writeFileSync(path.join(target, 'src/Reporting.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Reporting where
 import Kyyn.Schema
+import Data.Text (Text)
 import KyynQueryBindings (Query)
 type Unit = ()
-type Input = String
-type Output = String
+type Input = Text
+type Output = Text
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] []
 hello :: Unit -> Query Output

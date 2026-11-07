@@ -7,9 +7,10 @@ import qualified Data.ByteString.Lazy as Lazy
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, localSeqUnlift)
 import Effectful.State.Static.Local (State, runState, modify)
-import GuestFixture (fixtureProgram)
+import GuestFixture (fixtureProgram, fixtureConnector, fixtureText)
+import Kyyn.Domain.CompiledEntry (CompiledConnector(..))
+import qualified Kyyn.Types.Guest as G
 import Kyyn.Domain.Contract (checkContract, contractId)
-import Kyyn.Domain.DataType (DataType(StringType))
 import Kyyn.Domain.Output (PublicationOutcome(..))
 import Kyyn.Domain.Path (directoryScope, scopedPath)
 import Kyyn.Domain.Plugin (ConnectorName(..), ConnectorTypeName(..), BindingName(..))
@@ -27,10 +28,16 @@ import Kyyn.Porcelain.Interpreter.Delivery (runDelivery)
 
 deliveryTests :: IO ()
 deliveryTests = do
-  let contract = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
+  let contract = either (error . show) id (checkContract fixtureText (SchemaMetadata [] [] []))
       value = CheckedValue (contractId contract) (String "text")
       program = fixtureProgram "not executed"
-      sink = PreparedSinkConnector (ConnectorTypeName "File") contract program contract contract contract program value
+      attached = fixtureConnector program "files" "File"
+        (G.SinkEntries (G.Invocation "configure" contract)
+          (G.Invocation "publish" (G.SinkContracts contract contract contract contract)) (G.Invocation "defaults" contract))
+      (publish,configure) = case attached of
+        CompiledSink _ _ publication configuration _ -> (publication,configuration)
+        _ -> error "Expected sink fixture"
+      sink = PreparedSinkConnector (ConnectorTypeName "File") contract configure contract contract contract publish value
       configured = ConfiguredConnector (ConnectorName "file") (BindingName "file") sink value
       scope = either error id (directoryScope "/kb")
       execute write exitCode result = runPureEff . runFailure . runDhallHandling . runState ([] :: [FilePath]) . files . guest write exitCode result $
