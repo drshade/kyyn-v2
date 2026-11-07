@@ -2,6 +2,7 @@
 module Kyyn.Composition (execute) where
 
 import Effectful (Eff, runEff, (:>))
+import qualified Data.Text as Text
 import Kyyn.Composition.Runtime
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
@@ -26,7 +27,7 @@ import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..), EvolutionSumm
 import Kyyn.Domain.Failure (OperationalFailure)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), revisionName)
-import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ModuleDescription(moduleName), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
+import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ModuleDescription(moduleName, moduleSource), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
 import Kyyn.Surfaces.RootBrowsing (browsingContext)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..), knowledgeBaseScope)
 import Kyyn.Plumbing.Capability.DocumentPersistence (DocumentPersistence)
@@ -58,6 +59,9 @@ import qualified Kyyn.Porcelain.Capability.EvolutionStore as Store
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening)
+import Kyyn.Porcelain.Capability.RootStore (rootLocation)
+import Kyyn.Domain.Root (factsLocation, recipesLocation, recipeStatesLocation)
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
 import Kyyn.Porcelain.Capability.WorkspaceStore (WorkspaceStore)
 import Kyyn.Porcelain.Interpreter.EvolutionAuthoring (runEvolutionAuthoring)
 import Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution)
@@ -191,33 +195,43 @@ catalogueResult :: Cli.GuestCommand -> [ApiEntry] -> Eff es Response
 catalogueResult request entries = ApiResult.withOrigins entries <$>
   runGuestApiFromCatalogue (Right [m | ApiEntry _ m <- entries]) (guestResult request)
 
-type Discovery = WorkspaceApi.WorkspaceApi ': Store.EvolutionStore ': WorkspaceStore ': RootOpening ': Runtime
+type Discovery = WorkspaceApi.WorkspaceApi ': Store.EvolutionStore ': WorkspaceStore ': Runtime
 
 runDiscovery :: Host -> GuestBuildEnvironment -> Eff Discovery a -> IO (Either OperationalFailure a)
-runDiscovery host settings = runRuntime host settings . runRootOpening
+runDiscovery host settings = runRuntime host settings
   . runWorkspaceStore . runEvolutionStore . runWorkspaceApi
 
 dispatchRootApi :: Host -> Cli.GuestCommand -> SelectedKb -> IO Response
-dispatchRootApi host request (SelectedKb kb revision _) = withRuntime host $ \settings ->
+dispatchRootApi host request (SelectedKb kb@(KnowledgeBase repository _) revision _) = withRuntime host $ \settings ->
   finish $ runDiscovery host settings $ do
-    source <- Root.sourceRootAt kb revision Nothing
+    source <- case rootLocation kb of
+      Left message -> pure (Left [errorDiagnostic "kb.path" message])
+      Right location -> Git.readTreeExcluding repository revision (Subtree location) [factsLocation, recipesLocation, recipeStatesLocation]
     generated <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
     either (pure . refusal) (fmap (browsingContext revision Nothing) . catalogueResult request) generated
 
 dispatchWorkspaceApi :: Host -> EvolutionWorkspace -> Cli.GuestCommand -> IO Response
-dispatchWorkspaceApi host workspace@(EvolutionWorkspace kb identity) request = withRuntime host $ \settings ->
+dispatchWorkspaceApi host workspace request = withRuntime host $ \settings ->
   finish $ runDiscovery host settings $ do
-    inspected <- WorkspaceApi.inspectWorkspaceApi workspace
+    inspected <- WorkspaceApi.inspectWorkspaceApi workspace (apiSelection request)
     case inspected of
       Left diagnostics -> pure (refusal diagnostics)
-      Right context@(WorkspaceCatalogue _ revision generated) -> do
-        source <- Root.sourceRootAt kb revision (Just identity)
-        tools <- either (pure . Left) (\code -> WorkspaceApi.inspectRootApi code (apiSelection request)) source
-        case tools of
-          Left diagnostics -> pure (refusal diagnostics)
-          Right bindings -> ApiResult.workspaceResult context <$>
-            catalogueResult request (map (ApiEntry GeneratedOrigin) generated ++
-              [entry | entry@(ApiEntry _ selected) <- bindings, moduleName selected `notElem` map moduleName generated])
+      Right context@(WorkspaceCatalogue _ _ generated) -> case request of
+        Cli.ListGuestModules -> do
+          source <- Store.readWorkspace workspace
+          tools <- either (pure . Left) (\(WorkspaceSnapshot _ _ code _ _) -> WorkspaceApi.inspectRootApi code ListApiModules) source
+          case tools of
+            Left diagnostics -> pure (refusal diagnostics)
+            Right bindings -> ApiResult.workspaceResult context <$>
+              catalogueResult request (map (ApiEntry GeneratedOrigin) generated ++
+                [entry | entry@(ApiEntry _ selected) <- bindings, moduleName selected `notElem` map moduleName generated])
+        _ -> ApiResult.workspaceResult context <$> catalogueResult request [ApiEntry (origin entry) entry | entry <- generated]
+  where
+    origin entry
+      | Text.null (moduleSource entry) = SdkOrigin
+      | Text.pack ".kyyn-generated/" `Text.isPrefixOf` moduleSource entry = GeneratedOrigin
+      | Text.pack "plugins/" `Text.isPrefixOf` moduleSource entry = PluginOrigin
+      | otherwise = KbOrigin
 
 executeInitialization :: Host -> DirectoryScope -> IO Response
 executeInitialization host scope = case guestTemplateDirectory >>= either (const Nothing) Just . directoryScope of

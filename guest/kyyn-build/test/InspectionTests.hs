@@ -100,6 +100,9 @@ checkInspection = do
       (fail ("Compiler signature obscures endpoint identity: " ++ show signatures))
     writeFile "Internal.hs" "module Internal where\ndata Hidden = Hidden\n"
     writeFile "Public.hs" "module Public (Hidden) where\nimport Internal\n"
+    (_,abstract) <- inspectExports libdir ["."] [] ["Public"]
+    unless (all (not . Text.isInfixOf "Internal.Hidden" . exportSignature) (concatMap moduleExports abstract))
+      (fail "Abstract exported type disclosed its hidden constructor")
     writeFile "Facade.hs" "module Facade (keep) where\nimport Public (Hidden)\nkeep :: Hidden -> Hidden\nkeep = id\n"
     (_,facade) <- inspectExports libdir ["."] [] ["Facade"]
     unless (all (not . Text.isInfixOf "Internal." . exportSignature) (concatMap moduleExports facade))
@@ -108,14 +111,18 @@ checkInspection = do
       ["module UsesBindings where", "import KyynQueryBindings", "selected = missing"])
     uses <- requiredBindings libdir ["."] [] ["UsesBindings"]
     independent <- requiredBindings libdir ["."] [] ["Schema","Data.Maybe"]
-    unless (uses == BindingNeeds True False && independent == BindingNeeds False False) (fail "Root prepass selection ignored compiler dependency closure")
+    unless (uses == BindingNeeds True False False && independent == BindingNeeds False False False) (fail "Root prepass selection ignored compiler dependency closure")
     writeFile "UsesTools.hs" (unlines
       ["module UsesTools where", "import Kyyn.Connectors", "import Kyyn.Plugins.P_local_file.Files", "selected = files"])
     writeFile "Indirect.hs" (unlines ["module Indirect where", "import UsesTools", "other = selected"])
     toolNeeds <- requiredBindings libdir ["."] [] ["Indirect"]
     directNeeds <- requiredBindings libdir ["."] [] ["Kyyn.Connectors"]
-    unless (toolNeeds == BindingNeeds False True && directNeeds == toolNeeds)
+    unless (toolNeeds == BindingNeeds False True False && directNeeds == toolNeeds)
       (fail "Generated tool imports were lost from the partial compiler graph")
+    writeFile "UsesWorkspace.hs" "module UsesWorkspace where\nimport Kyyn.Workspace.After\nunfinished =\n"
+    workspaceNeeds <- requiredBindings libdir ["."] [] ["UsesWorkspace"]
+    unless (workspaceNeeds == BindingNeeds False False True)
+      (fail "Dependency-scoped discovery lost generated workspace imports")
     writeFile "Broken.hs" (unlines ["module Broken where","bad :: Integer","bad = True"])
     failed <- try (inspectExports libdir ["."] [] ["Broken"]) :: IO (Either SomeException ([FilePath],[ModuleDescription]))
     case failed of

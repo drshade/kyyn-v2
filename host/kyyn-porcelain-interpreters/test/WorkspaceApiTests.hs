@@ -82,7 +82,7 @@ workspaceApiTests = do
           . interpret (\_ -> \case
               Store.ReadWorkspace selected | selected == workspace -> record "workspace" >> pure (Right material)
               _ -> error "Discovery accessed candidates, lifecycle or persistence")
-          . runDhallHandling . runRootStore . runWorkspaceApi $ inspectWorkspaceApi workspace
+          . runDhallHandling . runRootStore . runWorkspaceApi $ inspectWorkspaceApi workspace ListApiModules
         events <- readIORef trace
         pure (result,events)
   let expectedTrace = ["workspace","before","build","describe"]

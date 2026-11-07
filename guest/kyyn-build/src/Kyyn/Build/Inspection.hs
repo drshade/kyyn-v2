@@ -79,7 +79,7 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
               _ -> Nothing
             origin = maybe "" ((++ ".") . moduleNameString . moduleName) (nameModule_maybe exported) ++ getOccString exported
         pure (ExportDescription (Text.pack (getOccString exported))
-          (Text.pack (render (pprTyThing (ShowSub (ShowSome Nothing (AltPpr Nothing)) ShowForAllWhen) thing)))
+          (Text.pack (render (pprTyThing (ShowSub (ShowSome (Just (`elem` map getOccName (modInfoExports info))) (AltPpr Nothing)) ShowForAllWhen) thing)))
           (Text.pack origin) documentation (kind thing))
       let documentation = renderDoc <$> (modInfoIface info >>= mi_docs >>= docs_mod_hdr)
           -- GHC's ModuleInfo instance accessor is deliberately undefined for
@@ -93,7 +93,7 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
 
 -- Dependency analysis reads imports before generated modules exist. The partial
 -- graph retains their consumers; the final load still reports every source error.
-data BindingNeeds = BindingNeeds { rootBindings :: Bool, toolBindings :: Bool }
+data BindingNeeds = BindingNeeds { rootBindings :: Bool, toolBindings :: Bool, workspaceBindings :: Bool }
   deriving (Eq, Show)
 requiredBindings :: FilePath -> [FilePath] -> [String] -> [String] -> IO BindingNeeds
 requiredBindings libdir roots options modules = runGhc (Just libdir) $ do
@@ -102,7 +102,8 @@ requiredBindings libdir roots options modules = runGhc (Just libdir) $ do
   let requested = modules ++ map (moduleNameString . unLoc . snd)
         (concatMap (\summary -> ms_srcimps summary ++ ms_textual_imps summary) (mgModSummaries graph))
       tools name = name `elem` ["Kyyn.Connectors","Kyyn.Agentic","KyynToolCalls"] || "Kyyn.Plugins." `isPrefixOf` name
-  pure (BindingNeeds ("KyynQueryBindings" `elem` requested) (any tools requested))
+      workspace name = "Kyyn.Workspace." `isPrefixOf` name || name == "KyynFrozenProposal"
+  pure (BindingNeeds ("KyynQueryBindings" `elem` requested) (any tools requested) (any workspace requested))
 
 configure :: [FilePath] -> [String] -> [String] -> Ghc DynFlags
 configure roots options modules = do

@@ -136,9 +136,8 @@ fetch config (FetchContext started _) snapshot = do
     assert.equal(cli(['--git', '/not-a-git-executable', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id], 1).diagnostics[0].code, 'setup.git');
     assert(cli(['guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
     console.log(`Fixed SDK discovery with broken plugin config: ${Math.round(performance.now() - started)} ms`);
-    const partial = cli(['guest', 'module', 'list', '--evolution', draft.id]);
-    assert(partial.result.modules.includes('Kyyn.Schema'));
-    assert(partial.diagnostics.some(diagnostic => diagnostic.code === 'guest.bindings-unavailable'));
+    const inventory = cli(['guest', 'module', 'list', '--evolution', draft.id], 1);
+    assert(inventory.diagnostics.some(diagnostic => diagnostic.code === 'guest.build'));
   }
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'local-file', '--evolution', draft.id]).result.schema;
   assert.match(schema, /directory/);

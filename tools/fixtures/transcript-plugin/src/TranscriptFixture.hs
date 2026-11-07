@@ -1,14 +1,16 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module TranscriptFixture where
 
 import Data.Text (Text)
+import GHC.Generics (Generic)
+import Agentic.Contract (Contract)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import Kyyn.Validation
 import MicrosoftGraph.Meetings.Types (MeetingArtifact(..), MeetingRef(..))
 import qualified MicrosoftGraph.Plugin as Graph
 
-newtype Config = Config { endpoint :: Text }
+newtype Config = Config { endpoint :: Text } deriving stock Generic deriving anyclass Contract
 validate :: Config -> ValidationReport
 validate _ = ValidationReport []
 

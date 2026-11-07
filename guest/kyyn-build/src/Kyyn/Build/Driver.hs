@@ -38,8 +38,7 @@ buildGuest compiler source output = do
     libdir <- readProcess compiler ["--print-libdir"] "" >>= singleLine "compiler libdir"
     basePackages <- packageOptions libdir
     roots <- ("src" :) <$> installedPluginRoots
-    let packages = basePackages ++ map ("-i" ++) roots
-        generated = ".kyyn-generated"
+    let generated = ".kyyn-generated"
     occupied <- or <$> traverse doesFileExist
       [root </> moduleName ++ extension | root <- roots, moduleName <- ["KyynQueryBindings","KyynGuestSchemaRoot","KyynGuestSchemaBefore","KyynGuestSchemaAfter","KyynGuestSchemaEntry","KyynGuestEntry","KyynGuestRegistrations"],
         extension <- [".hs",".lhs"]]
@@ -48,19 +47,8 @@ buildGuest compiler source output = do
     unless (not existing) (fail "Guest build requires a fresh .kyyn-generated directory")
     createDirectoryIfMissing True generated
     case selection of
-      DiscoveryEntries (ModuleExports modules) -> do
-        let selectedModules = map Text.unpack modules
-        needs <- requiredBindings libdir roots packages selectedModules
-        when needs.toolBindings $ do
-          (_,_,_,registrations) <- preparePlugins compiler libdir generated basePackages
-          writeToolBindings generated roots registrations
-        when needs.rootBindings $ do
-          manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
-          _ <- prepareRoot compiler libdir generated packages roots manifest
-          pure ()
-        (_,exports) <- inspectExports libdir (roots ++ [generated]) packages selectedModules
-        writeGuest generated exports [] []
-        finishGuest compiler generated packages destination
+      DiscoveryEntries (ModuleExports modules) ->
+        buildModules compiler libdir generated basePackages destination (map Text.unpack modules)
       PluginEntries -> do
         (_,pluginPackages,entries,_) <- preparePlugins compiler libdir generated basePackages
         let modules = nub (map (Text.unpack . referenceModule) (concatMap fst entries))
@@ -72,6 +60,47 @@ buildGuest compiler source output = do
       DiscoveryEntries RootSchema -> buildRoot compiler libdir generated basePackages destination selection
       RecipeEntries references -> buildRecipes compiler libdir generated basePackages destination references
       EvolutionEntries details -> buildEvolution compiler libdir generated basePackages destination details
+
+-- Resolve symbols against compiler module headers and the locked package set.
+-- Generated workspace handles are namespaced by their imported type/module.
+resolveModules :: FilePath -> [FilePath] -> [String] -> IO [String]
+resolveModules libdir roots requested = do
+  let prefixes value = [intercalate "." (take count parts) | count <- [1 .. length parts]]
+        where parts = map Text.unpack (Text.splitOn "." (Text.pack value))
+  authored <- fmap concat $ forM (nub (concatMap prefixes requested)) $ \name ->
+    fmap concat $ forM roots $ \root -> do
+      let path = root </> map (\c -> if c == '.' then '/' else c) name ++ ".hs"
+      present <- doesFileExist path
+      if present then pure . pure . fst =<< Sources.moduleHeader libdir path else pure []
+  libraries <- packageModuleNames libdir
+  let fixed = ["KyynQueryBindings","Kyyn.Connectors","Kyyn.Agentic","KyynFrozenProposal",
+        "Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.Evolution","Kyyn.Workspace.FactEdits"]
+      candidates = authored ++ libraries ++ fixed
+      choose value = case sortOn (negate . length)
+        [name | name <- candidates, name == value || (name ++ ".") `isPrefixOf` value] of
+        name:_ | not (any (`isPrefixOf` value) ["Kyyn.Plugins.","Kyyn.Workspace.Before.RecipeTypes.","Kyyn.Workspace.After.RecipeTypes.","Kyyn.Workspace.After.RecipeFlows."]) -> name
+        _ -> intercalate "." (takeWhile (\part -> case part of first:_ -> not (isLower first); [] -> False) (map Text.unpack (Text.splitOn "." (Text.pack value))))
+  pure (nub (map choose requested))
+
+buildModules :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> [String] -> IO ()
+buildModules compiler libdir generated basePackages destination requested = do
+  roots <- ("src" :) <$> installedPluginRoots
+  runtime <- runtimeOptions compiler
+  let packages = basePackages ++ runtime ++ map ("-i" ++) roots
+  selected <- resolveModules libdir roots requested
+  needs <- requiredBindings libdir roots packages selected
+  when needs.toolBindings $ do
+    (_,_,_,registrations) <- preparePlugins compiler libdir generated basePackages
+    writeToolBindings generated roots registrations
+  when (needs.rootBindings || needs.workspaceBindings) $ do
+    manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
+    _ <- prepareRoot compiler libdir generated packages roots manifest
+    when needs.workspaceBindings $ do
+      metadata <- Bytes.readFile (generated </> "metadata.json") >>= either fail pure . eitherDecodeStrict'
+      writeRecipeBindings generated roots manifest metadata
+  (_,exports) <- inspectExports libdir (roots ++ [generated]) packages selected
+  writeGuest generated exports [] []
+  finishGuest compiler generated packages destination
 
 preparePlugins :: FilePath -> FilePath -> FilePath -> [String]
   -> IO ([FilePath],[String],[([Reference],String)],[RegisteredPlugin])
@@ -158,7 +187,9 @@ buildRoot compiler libdir generated basePackages destination selection = do
 -- Listing loads generated public bindings, leaving unfinished authored bodies
 -- alone until the caller explicitly selects their module or symbol.
 buildRootApi :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> Maybe Text.Text -> IO ()
-buildRootApi compiler libdir generated basePackages destination selected = do
+buildRootApi compiler libdir generated basePackages destination (Just selected) =
+  buildModules compiler libdir generated basePackages destination [Text.unpack selected]
+buildRootApi compiler libdir generated basePackages destination Nothing = do
   runtime <- runtimeOptions compiler
   (roots,packages,_,registrations) <- preparePlugins compiler libdir generated (basePackages ++ runtime)
   writeToolBindings generated roots registrations
@@ -177,13 +208,9 @@ buildRootApi compiler libdir generated basePackages destination selected = do
   let sdk name = ("Agentic" `isPrefixOf` name || "Kyyn." `isPrefixOf` name) &&
         not (any (`isPrefixOf` name) ["Kyyn.Build", "Kyyn.Runtime", "Kyyn.Types"]) &&
         not (".Internal" `Text.isSuffixOf` Text.pack name)
-      requestedLibrary name = maybe False (\symbol -> name == Text.unpack symbol || (name ++ ".") `isPrefixOf` Text.unpack symbol) selected
       names = [(name,path) | (name,path) <- inventory, path `elem` authored || public name] ++
-        [(name,"") | name <- libraries, sdk name || requestedLibrary name]
-      requested = case selected of
-        Nothing -> [name | (name,path) <- names, path `elem` emitted]
-        Just symbol -> take 1 (sortOn (negate . length)
-          [name | (name,_) <- names, name == Text.unpack symbol || (name ++ ".") `isPrefixOf` Text.unpack symbol])
+        [(name,"") | name <- libraries, sdk name]
+      requested = [name | (name,path) <- names, path `elem` emitted]
   (_,inspected) <- inspectExports libdir (roots ++ [generated]) packages requested
   let described name path = case [entry | entry <- inspected, entry.moduleName == Text.pack name] of
         [entry] -> entry
@@ -224,7 +251,20 @@ buildRecipes compiler libdir generated basePackages destination references = do
   finishGuest compiler generated packages destination
 
 buildEvolution :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> EvolutionSelection -> IO ()
-buildEvolution compiler libdir generated basePackages destination (EvolutionSelection beforeType beforeAnnotations references recipe discovery) = do
+buildEvolution compiler libdir generated basePackages destination (EvolutionSelection before annotations references recipe (Just requested))
+  | not (null requested) = do
+      roots <- ("src" :) <$> installedPluginRoots
+      selected <- resolveModules libdir roots (map Text.unpack requested)
+      needs <- requiredBindings libdir roots (basePackages ++ map ("-i" ++) roots) selected
+      if needs.workspaceBindings then
+        buildEvolutionFull compiler libdir generated basePackages destination
+          (EvolutionSelection before annotations references recipe (Just (map Text.pack selected)))
+      else buildModules compiler libdir generated basePackages destination selected
+buildEvolution compiler libdir generated basePackages destination details =
+  buildEvolutionFull compiler libdir generated basePackages destination details
+
+buildEvolutionFull :: FilePath -> FilePath -> FilePath -> [String] -> FilePath -> EvolutionSelection -> IO ()
+buildEvolutionFull compiler libdir generated basePackages destination (EvolutionSelection beforeType beforeAnnotations references recipe discovery) = do
   before <- either fail pure (qualifiedReference True beforeType)
   beforeMetadata <- either fail pure (qualifiedReference False beforeAnnotations)
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest

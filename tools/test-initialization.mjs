@@ -108,7 +108,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   assert.match(handle.signature, /Collection\s+\(KnowledgeBase RootV2.Root\)\s+RootV2.Todo/);
   assert(handle.documentation.value?.includes('todos'));
   for (const symbol of [...bindings, handle]) {
-    assert(!symbol.signature?.includes('.Internal.'), JSON.stringify(symbol));
+    assert.doesNotMatch(symbol.signature, /Kyyn\.[\w.]*Internal\b|kyyn-sdk[^:\s]*:internal:|Kyyn\.(?:Runtime|Build)\./, JSON.stringify(symbol));
   }
   fs.unlinkSync(draftEntry);
   discover('symbol', 'show', 'Kyyn.Workspace.Evolution.edit');
