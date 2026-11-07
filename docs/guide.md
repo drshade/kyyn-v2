@@ -102,11 +102,18 @@ This complete example starts from a newly initialized empty KB. In the draft,
 replace `target/src/RootV1.hs` with `target/src/RootV2.hs`:
 
 ```haskell
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
 module RootV2 where
+import Data.Text (Text)
+import GHC.Generics (Generic)
 import Kyyn.Schema
 
-data Todo = Todo { title :: String } deriving (Eq, Show)
-data Root = Root { todos :: [Fact Todo] } deriving (Eq, Show)
+data Todo = Todo { title :: Text }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass Contract
 
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
@@ -119,6 +126,7 @@ and replace `target/src/Validate.hs` with:
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 module Validate where
+import qualified Data.Text as Text
 import RootV2
 import Kyyn.Schema
 import Kyyn.Validation
@@ -126,7 +134,7 @@ import Kyyn.Validation
 validate :: Root -> ValidationReport
 validate (Root todos) = ValidationReport
   [ errorDiagnostic "todo.title" "Todo title must not be empty"
-  | Fact _ (Todo name) <- todos, null name
+  | Fact _ (Todo name) <- todos, Text.null name
   ]
 ```
 
