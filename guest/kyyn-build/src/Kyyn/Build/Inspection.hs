@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Build.Inspection (inspectExports, BindingNeeds(..), requiredBindings, packageOptions, packageModuleNames) where
+module Kyyn.Build.Inspection (inspectExports, sourceDependencies, BindingNeeds(..), requiredBindings, packageOptions, packageModuleNames) where
 
 import Control.Monad (forM, unless, filterM)
 import Control.Monad.IO.Class (liftIO)
@@ -93,6 +93,16 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
             | otherwise = maybe [] (map (Text.pack . render . ppr) . mi_insts) (modInfoIface info)
       pure (ModuleDescription (Text.pack name) (Text.pack source) documentation instances symbols)
     pure (sources,exports)
+
+-- | Dependency paths only, for modules whose exports have already been checked
+-- in this build phase. GHC resolves imports/CPP/boot files; this does not establish
+-- type correctness and must not replace export inspection or final compilation.
+sourceDependencies :: FilePath -> [FilePath] -> [String] -> [String] -> IO [FilePath]
+sourceDependencies libdir roots options modules = runGhc (Just libdir) $ do
+  _ <- configure roots options modules
+  graph <- depanal [] False
+  pure (sort (nub (map normalise (catMaybes
+    [ml_hs_file (ms_location summary) | summary <- mgModSummaries graph]))))
 
 -- Dependency analysis reads imports before generated modules exist. The partial
 -- graph retains their consumers; the final load still reports every source error.
