@@ -9,7 +9,7 @@ test('pure dependencies are permitted', () => {
 test('CLI adapters cannot acquire native IO or interpreter dependencies', () => {
   assert.deepEqual(checkImports('kyyn-surfaces', 'import Options.Applicative'), []);
   for (const name of ['System.IO', 'System.Directory', 'Kyyn.Plumbing.Capability.Git',
-    'Kyyn.Porcelain.Interpreter.EvolutionStore', 'Kyyn.MicroHs.Inspection',
+    'Kyyn.Porcelain.Interpreter.EvolutionStore', 'Kyyn.Build.Inspection',
     'Kyyn.Porcelain.Capability.Validation', 'Kyyn.Porcelain.Capability.RootOpening',
     'Kyyn.Porcelain.Capability.EvolutionExecution', 'Effectful']) {
     assert.deepEqual(checkImports('kyyn-surfaces', `import ${name}`), [name]);
@@ -72,7 +72,7 @@ test('publication cannot import validation, source loading or native effects', (
   assert.deepEqual(checkImports('kyyn-porcelain-interpreters', header + 'import Kyyn.Plumbing.Capability.Git'), []);
 });
 test('native compiler and IO cannot enter pure generation', () => {
-  for (const name of ['MicroHs.Expr', 'Kyyn.MicroHs.Inspection', 'System.IO', 'System.IO.Unsafe', 'Data.Text.IO']) {
+  for (const name of ['GHC.Types.TyThing', 'Kyyn.Build.Inspection', 'System.IO', 'System.IO.Unsafe', 'Data.Text.IO']) {
     assert.deepEqual(checkImports('kyyn-plumbing', `import qualified ${name} as X`), [name]);
   }
 });
@@ -110,11 +110,11 @@ test('prepared root constructors stay behind the capability', () => {
   assert.deepEqual(checkImports('kyyn-porcelain-interpreters', 'module Kyyn.Porcelain.Interpreter.RootExecution where\n' + internal), []);
 });
 
-test('compiler internals stay native and guest transport stays private', () => {
-  assert.deepEqual(checkImports('kyyn-microhs', 'import MicroHs.Expr'), []);
+test('compiler internals stay in the guest builder and transport stays private', () => {
+  assert.deepEqual(checkImports('kyyn-guest-build', 'import GHC'), []);
   assert.deepEqual(checkImports('kyyn-runtime', 'import Text.JSON.Types'), []);
-  assert.deepEqual(checkImports('kyyn-runtime', 'import Kyyn.MicroHs.Inspection'), ['Kyyn.MicroHs.Inspection']);
-  assert.deepEqual(checkImports('kyyn-microhs', 'import Kyyn.Porcelain.Capability.RootStore'), ['Kyyn.Porcelain.Capability.RootStore']);
+  assert.deepEqual(checkImports('kyyn-runtime', 'import GHC'), ['GHC']);
+  assert.deepEqual(checkImports('kyyn-guest-build', 'import Kyyn.Porcelain.Capability.RootStore'), ['Kyyn.Porcelain.Capability.RootStore']);
 });
 
 test('effect APIs do not grant IO to capabilities or pure codec generation', () => {
@@ -126,17 +126,17 @@ test('effect APIs do not grant IO to capabilities or pure codec generation', () 
   assert.deepEqual(checkImports('kyyn-plumbing', 'import Effectful (Eff)'), ['Effectful']);
   assert.deepEqual(checkImports('kyyn-plumbing', header + 'import System.Process.Typed'), ['System.Process.Typed']);
   assert.deepEqual(checkImports('kyyn-plumbing-interpreters', 'import System.Process.Typed'), []);
-  assert.deepEqual(checkImports('kyyn-plumbing-interpreters', 'import MicroHs.Expr'), ['MicroHs.Expr']);
+  assert.deepEqual(checkImports('kyyn-plumbing-interpreters', 'import GHC.Types.TyThing'), ['GHC.Types.TyThing']);
 });
 
-test('guest compilation and execution lower only through plumbing despite their native package', () => {
+test('guest compilation and execution use only process and filesystem capabilities', () => {
   for (const module of ['GuestCompilation', 'GuestExecution']) {
-    const header = `module Kyyn.MicroHs.Interpreter.${module} where\n`;
-    for (const name of ['System.IO', 'System.Process', 'MicroHs.Compile', 'Control.Exception']) {
-      assert.deepEqual(checkImports('kyyn-microhs', header + `import ${name}`), [name]);
+    const header = `module Kyyn.Plumbing.Interpreter.${module} where\n`;
+    for (const name of ['System.IO', 'System.Process', 'GHC', 'Control.Exception']) {
+      assert.deepEqual(checkImports('kyyn-plumbing-interpreters', header + `import ${name}`), [name]);
     }
-    assert.match(checkImports('kyyn-microhs', header + 'import Effectful (Eff, IOE)').join(), /API-only/);
-    assert.deepEqual(checkImports('kyyn-microhs', header + 'import Kyyn.Plumbing.Capability.FileSystem'), []);
+    assert.match(checkImports('kyyn-plumbing-interpreters', header + 'import Effectful (Eff, IOE)').join(), /API-only/);
+    assert.deepEqual(checkImports('kyyn-plumbing-interpreters', header + 'import Kyyn.Plumbing.Capability.FileSystem'), []);
   }
   const types = 'module Kyyn.Plumbing.Capability.GuestCompilation.Types where\n';
   assert.deepEqual(checkImports('kyyn-plumbing', types + 'import Effectful'), ['Effectful']);

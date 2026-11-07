@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 module Kyyn.Runtime.Transport
   ( Transport, withTransport, readFrame, writeFrame, readJson, writeJson, writeValue, writeValueFrame ) where
 
@@ -14,15 +13,10 @@ import Text.JSON.Types (JSValue)
 data Transport = Transport Handle Handle
 
 withTransport :: (Transport -> IO a) -> IO a
-#ifdef __MHS__
-withTransport action = withBinaryFile "/dev/stdin" ReadMode $ \input ->
-  withBinaryFile "/dev/stdout" WriteMode $ \output -> action (Transport input output)
-#else
 withTransport action = do
   hSetBinaryMode stdin True
   hSetBinaryMode stdout True
   action (Transport stdin stdout)
-#endif
 
 readFrame :: Transport -> IO (B.ByteString, B.ByteString)
 readFrame (Transport input _) = (,) <$> section <*> section

@@ -8,9 +8,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-if (process.argv.length < 3 || process.argv.length > 4) throw new Error('Usage: node tools/test-initialization.mjs EXECUTABLE [RUNTIME]');
+if (process.argv.length < 3 || process.argv.length > 4) throw new Error('Usage: node tools/test-initialization.mjs EXECUTABLE [NIX]');
 const executable = path.resolve(process.argv[2]);
-const runtime = process.argv[3] ? ['--runtime', path.resolve(process.argv[3])] : [];
+const runtime = process.argv[3] ? ['--nix', path.resolve(process.argv[3])] : [];
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kyyn-initialization-'));
 const home = path.join(temporary, 'home');
 fs.mkdirSync(home);
@@ -21,8 +21,9 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 function cli(kb, args, expected = 0, options = runtime) {
+  console.error(`Initialization journey: ${args.join(" ")}`);
   const result = spawnSync(executable, ['--kb', kb, ...options, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, expected, JSON.stringify(result));
   return JSON.parse(result.stdout);
 }
@@ -71,10 +72,13 @@ try {
   git(kb, 'switch', 'kb-test');
   const target = path.join(created.path, 'target');
   fs.unlinkSync(path.join(target, 'src', 'RootV1.hs'));
-  write(path.join(target, 'src', 'RootV2.hs'), `module RootV2 where
+  write(path.join(target, 'src', 'RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module RootV2 where
+import GHC.Generics (Generic)
+import Data.Text (Text)
 import Kyyn.Schema
-data Todo = Todo { title :: String } deriving (Eq, Show)
-data Root = Root { todos :: [Fact Todo] } deriving (Eq, Show)
+data Todo = Todo { title :: Text } deriving stock (Eq, Show, Generic) deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] } deriving stock (Eq, Show, Generic) deriving anyclass Contract
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
@@ -85,30 +89,31 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   const schemaPath = path.join(target, 'src', 'RootV2.hs');
   const validSchema = fs.readFileSync(schemaPath, 'utf8');
   fs.writeFileSync(schemaPath, 'module RootV2 where\nthis is invalid\n');
-  const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id]);
-  assert.equal(badSchema.outcome, 'Succeeded');
-  assert(badSchema.diagnostics.some(diagnostic => diagnostic.code === 'guest.bindings-unavailable'));
-  assert(badSchema.diagnostics.some(diagnostic => diagnostic.code === 'schema.compiler-rejected'));
-  assert(badSchema.result.modules.includes('Kyyn.Evolution'));
-  assert(!badSchema.result.modules.some(name => name.startsWith('Kyyn.Workspace.')));
+  // Discovery omits the unfinished transformation, but both Root contracts must
+  // compile under the target lock (ADR 0010). There is no host SDK fallback.
+  const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id], 1);
+  assert.equal(badSchema.outcome, 'Refused');
+  assert(badSchema.diagnostics.some(diagnostic => diagnostic.code === 'guest.build'));
+  assert(badSchema.diagnostics.some(diagnostic => diagnostic.message.includes('RootV2.hs')));
   fs.writeFileSync(schemaPath, validSchema);
   const bindings = discover('module', 'show', 'Kyyn.Workspace.Evolution').symbols;
   for (const name of ['edit', 'evolve', 'editBefore']) {
     const symbol = bindings.find(s => s.name === name);
     assert(symbol, name);
-    assert(symbol.documentation.includes('recorded step'), JSON.stringify(symbol));
-    assert(symbol.declaration.includes('RootV'), JSON.stringify(symbol));
+    assert(symbol.documentation.value?.includes('recorded step'), JSON.stringify(symbol));
+    assert(symbol.signature.includes('RootV'), JSON.stringify(symbol));
   }
   assert(!bindings.some(s => ['beforeRoot', 'afterRoot', 'evaluateEvolution'].includes(s.name)));
   const handle = discover('symbol', 'show', 'Kyyn.Workspace.After.todos').symbols[0];
-  assert.match(handle.declaration, /Collection \(KnowledgeBase RootV2.Root\) RootV2.Todo/);
-  assert(handle.documentation.includes('todos'));
+  assert.match(handle.signature, /Collection\s+\(KnowledgeBase RootV2.Root\)\s+RootV2.Todo/);
+  assert(handle.documentation.value?.includes('todos'));
   for (const symbol of [...bindings, handle]) {
-    assert(!symbol.declaration?.includes('.Internal.'), JSON.stringify(symbol));
+    assert.doesNotMatch(symbol.signature, /Kyyn\.[\w.]*Internal\b|kyyn-sdk[^:\s]*:internal:|Kyyn\.(?:Runtime|Build)\./, JSON.stringify(symbol));
   }
   fs.unlinkSync(draftEntry);
   discover('symbol', 'show', 'Kyyn.Workspace.Evolution.edit');
-  write(path.join(created.path, 'change', 'Evolution.hs'), `module Evolution where
+  write(path.join(created.path, 'change', 'Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified RootV1 as Before
@@ -142,7 +147,7 @@ evolution =
   const entryPath = path.join(created.path, 'change', 'Evolution.hs');
   const validValidator = fs.readFileSync(validatorPath, 'utf8');
   const updatedEntry = fs.readFileSync(entryPath, 'utf8').replace('First task', 'Updated task');
-  fs.writeFileSync(validatorPath, validValidator.replace('ValidationReport []',
+  fs.writeFileSync(validatorPath, '{-# LANGUAGE OverloadedStrings #-}\n' + validValidator.replace('ValidationReport []',
     'ValidationReport [Diagnostic Error "test.invalid" "Reject the new candidate" Nothing]'));
   fs.writeFileSync(entryPath, updatedEntry);
   const invalid = cli(kb, ['evolution', 'check', created.id], 1);
@@ -207,7 +212,7 @@ evolution =
   cli(residue, ['kb', 'init'], 1);
   assert.equal(fs.existsSync(path.join(residue, '.git')), false);
   const failed = path.join(temporary, 'failed');
-  cli(failed, ['kb', 'init'], 3, ['--runtime', path.join(temporary, 'missing-runtime')]);
+  cli(failed, ['kb', 'init'], 1, ['--nix', path.join(temporary, 'missing-runtime')]);
   assert.equal(fs.existsSync(failed), false);
   git(temporary, 'config', '--global', 'user.name', '');
   const unidentified = path.join(temporary, 'no-identity');

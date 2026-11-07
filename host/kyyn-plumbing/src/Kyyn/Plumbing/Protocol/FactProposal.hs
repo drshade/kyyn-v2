@@ -77,27 +77,12 @@ lowerProposal before after selectedState change = runExceptT $ do
       source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
       value <- ExceptT (decodeValue shape source)
       FactProposal _ next <- checked (parseEither (parseProposal state) value)
-      generated <- checked (relativePath "KyynFrozenProposal.hs")
-      let json = Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode value)))
-          finalStep = if next == previous then "identityEvolution"
-            else "recipeEdit (Rationale \"Update recipe state\" []) (putRecipeState state)"
-          moduleSource = unlines
-            ["{-# LANGUAGE OverloadedStrings #-}", "module KyynFrozenProposal (frozen, proposal) where",
-             "import Kyyn.Workspace.Evolution", "import Kyyn.Workspace.FactEdits (RootEdit, applyRootEdit)",
-             "import qualified KyynFactEditCodec", "import qualified KyynRecipeStateCodec",
-             "import Kyyn.Evolution.Internal (Evolution(..))",
-             "import Kyyn.Types.Evolution (EvolutionFailure(..))",
-             "import Kyyn.Types.Diagnostic (Diagnostic(..), Severity(..))",
-             "import Kyyn.Runtime.Json", "import qualified Data.Text as Text", "import Kyyn.Runtime.Proposal (recipeProposalCodec)",
-             "-- | Apply the captured proposal without invoking its recipe again.",
-             "frozen :: RecipeEvolution Root RecipeState",
-             "frozen = case proposal of",
-             "  Right (RecipeProposal steps state) -> foldr ((>=>) . step) (" ++ finalStep ++ ") steps",
-             "  Left message -> Evolution (\\_ -> Left (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing]))",
-             "step (ProposedStep why operations) = recipeEdit why (editFacts (mapM_ applyRootEdit operations))",
-             "proposal :: Either String (RecipeProposal RootEdit RecipeState)",
-             "proposal = parseValue " ++ show json ++ " >>= decodeWith (recipeProposalCodec KyynFactEditCodec.rootCodec KyynRecipeStateCodec.rootCodec)"]
-      checked (fileTree ((generated,Text.encodeUtf8 (Text.pack moduleSource)) : filter ((/= path) . fst) (files change)))
+      generated <- checked (relativePath "KyynFrozenProposal.json")
+      -- The guest compiler owns the Haskell facade; the host supplies validated
+      -- proposal data and whether the selected recipe state actually changed.
+      let payload = Lazy.toStrict (encode (value, next /= previous))
+      checked (fileTree ((generated,payload) : filter ((/= path) . fst) (files change)))
+
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "proposal.invalid") pure

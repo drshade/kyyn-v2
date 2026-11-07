@@ -2,7 +2,8 @@
 module Kyyn.Porcelain.Interpreter.EvidenceAcquisition (runEvidenceAcquisition) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.Aeson (object, (.=), (.:))
+import Data.Aeson ((.:))
+import Kyyn.Types.Guest (AcquisitionContext(..))
 import Data.Aeson.Types (parseEither, withObject)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
@@ -33,25 +34,21 @@ runEvidenceAcquisition :: (ConcurrentExecution :> es, ContentDigest :> es, BlobS
     DhallHandling :> es, Failure :> es) => DirectoryScope -> Eff (EvidenceAcquisition : es) a -> Eff es a
 runEvidenceAcquisition baseDirectory = interpret $ \_ (FetchEvidence selection@(EvidenceSelection instanceRef _ _) payload program config optionsContract positionContract reportContract mode supplied) -> runExceptT $ do
   let CheckedValue _ configValue = config
-  (arguments,optionsText) <- case (optionsContract,supplied) of
-    (Nothing,Nothing) -> pure (configValue,Nothing)
+  (decodedOptions,optionsText) <- case (optionsContract,supplied) of
+    (Nothing,Nothing) -> pure (Nothing,Nothing)
     (Nothing,Just _) -> throwE [errorDiagnostic "plugin.fetch-options-unsupported" "This connector does not accept fetch options."]
     (Just options,input) -> do
       decoded <- traverse (ExceptT . decodeValue (contractShape options) . Text.pack) input
       rendered <- traverse (ExceptT . encodeValue (contractShape options)) decoded
-      let optional = maybe (object ["tag" .= ("None" :: String)])
-            (\v -> object ["tag" .= ("Some" :: String),"value" .= v]) decoded
-      pure (object ["config" .= configValue,"options" .= optional],Text.unpack <$> rendered)
+      pure (decoded,Text.unpack <$> rendered)
   Store.FetchBaseline startedAt base prior position <- ExceptT
     (fmap (either (Left . problem) Right) (Store.beginFetch selection payload positionContract))
-  let input = case positionContract of
-        Nothing -> arguments
-        Just _ -> object ["input" .= arguments,"startedAt" .= startedAt,"priorPosition" .=
-          maybe (object ["tag" .= ("None" :: String)])
-            (\(CheckedValue _ value) -> object ["tag" .= ("Some" :: String),"value" .= value])
-            (case mode of ContinueSync -> position; RestartSync -> Nothing)]
+  let context = case positionContract of
+        Nothing -> Nothing
+        Just _ -> Just (AcquisitionContext (Text.pack startedAt)
+          ((\(CheckedValue _ value) -> value) <$> case mode of ContinueSync -> position; RestartSync -> Nothing))
   ExceptT $ withBlobDownloads instanceRef (Store.discardFetchBlobs instanceRef base) $ runExceptT $ do
-    result <- ExceptT (executeAcquisition baseDirectory instanceRef program input prior)
+    result <- ExceptT (executeAcquisition baseDirectory instanceRef program configValue decodedOptions context prior)
     (delta,savedPosition,savedReport) <- case (positionContract,reportContract) of
       (Nothing,Nothing) -> do
         _ <- ExceptT (encodeValue (changesShape (contractShape payload)) result)

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Blobs.Plugin where
-import Kyyn.Plugin
+import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 connectors :: [Connector]
 connectors = [SourceConnector
   { name = "Files", fetch = "Blobs.Source.fetch", validateConfig = "Blobs.Source.validate"

@@ -19,12 +19,12 @@ import Effectful (Eff, IOE, runEff, runPureEff, (:>), UnliftStrategy(..))
 import Effectful.Dispatch.Dynamic (interpret, localLiftUnlift, interpose, passthrough)
 import qualified Effectful.State.Static.Local as State
 import Kyyn.Domain.Contract
-import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue, sdkBlobRefType)
-import Kyyn.Domain.DataType (DataType(..))
+import Kyyn.Domain.Blob (BlobRef(..), ResolvedBlob(..), blobValue)
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.EvidenceIndex (EvidenceSelection(..), EvidenceIndex(EvidenceIndex), PayloadLocation(..), payloadLocation, indexState)
 import Kyyn.Domain.Path (DirectoryScope, directoryScope, relativeName, relativePath)
-import Kyyn.Domain.Plugin (pluginName, PackageIdentity(..), ConnectorTypeName(..), ConnectorName(..))
+import Kyyn.Domain.Plugin (pluginName, packageIdentity, PackageIdentity(..), ConnectorTypeName(..), ConnectorName(..))
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
@@ -45,7 +45,6 @@ import Kyyn.Porcelain.Interpreter.EvidenceStore (runEvidenceStore)
 import Kyyn.Porcelain.Interpreter.PluginRead (runPluginRead)
 import Kyyn.Porcelain.Capability.PluginRead (resolveCapturedBlobs, loadCapturedInput)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (guestSources, packageIdentity)
 import Kyyn.Plumbing.Interpreter.BlobStorage (runBlobStorageIO)
 import Kyyn.Plumbing.Capability.BlobStorage (BlobStorage(..))
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -62,7 +61,7 @@ right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
 
 contract :: CheckedContract
-contract = either (error . show) id (checkContract StringType (SchemaMetadata [] [] []))
+contract = either (error . show) id (checkContract (D.ScalarDescription (D.TypeIdentity "text" "Data.Text.Internal" "Text" []) D.TextScalar "Text" []) (SchemaMetadata [] [] []))
 
 producer :: EvidenceProducer
 producer = EvidenceProducer (PackageIdentity "package-contents-one") (contractId contract)
@@ -257,7 +256,7 @@ main = do
     invalidPayload <- run (publishFixture instanceA producer contract (Just (key f2)) Nothing
       [UpdatedEvidence itemA (Evidence (EvidenceFingerprint "invalid-payload") [] (Available (CheckedValue (contractId contract) (Bool True))))])
     assert "forged checked-value shape accepted" (isLeft invalidPayload)
-    let boolContract = either (error . show) id (checkContract BoolType (SchemaMetadata [] [] []))
+    let boolContract = either (error . show) id (checkContract (D.ScalarDescription (D.TypeIdentity "base" "GHC.Types" "Bool" []) D.BoolScalar "Bool" []) (SchemaMetadata [] [] []))
     wrongContract <- run (loadCurrentEvidence instanceA producer boolContract)
     assert "evidence decoded under wrong contract" (wrongContract == Left ProducerContractChanged)
     guestContract <- run (noGuestExecution (runPluginRead (loadCapturedInput (selectionFor instanceA producer) boolContract)))
@@ -425,7 +424,8 @@ recordingProof = do
 blobPublicationProof :: IO ()
 blobPublicationProof = withSystemTempDirectory "kyyn-blob-publication-" $ \directory -> do
   scope <- right (directoryScope directory)
-  payload <- right (checkContract sdkBlobRefType (SchemaMetadata [] [] []))
+  payload <- right (checkContract (D.ScalarDescription (D.TypeIdentity "kyyn-types" "Kyyn.Types.Blob" "BlobRef" []) D.BlobRefScalar "BlobRef" []) (SchemaMetadata [] [] []))
+  assert "BlobRef scalar accepted in public report" (isLeft (validateReportContract payload))
   let owner = EvidenceProducer (PackageIdentity "blob-fixture") (contractId payload)
       ref = BlobRef "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" 0 "application/test" Nothing
       blobDirectory = directory </> ".kyyn/evidence" </> instancePath instanceA </> "blobs"
@@ -566,8 +566,7 @@ selectionProof = do
       selectionResult = runPureEff . runDhallHandling . git . noBlobs . noStore . runEvidenceInspection $
         Inspection.selectEvidence kb revision plugin (ConnectorName "sales")
   EvidenceSelection ref kind (PackageIdentity identity) <- right selectionResult
-  captured <- right (guestSources source [(manifest,"{ name = \"folder\", entryModule = \"Folder\" }"),(source,"module Folder where\n")])
-  assert "compiler-free selection differs from preparation package identity" (PackageIdentity identity == packageIdentity captured)
+  assert "compiler-free selection differs from preparation package identity" (PackageIdentity identity == packageIdentity tree)
   assert "lightweight selection changed connector identity"
     (ref == ConnectorInstanceRef plugin "sales" && kind == ConnectorTypeName "Folder" && length identity == 64)
 

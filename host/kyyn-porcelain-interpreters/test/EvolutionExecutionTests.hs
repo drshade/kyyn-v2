@@ -7,7 +7,10 @@ module EvolutionExecutionTests (evolutionExecutionTests) where
 
 
 import Control.Monad (unless, forM_)
-import qualified Data.ByteString as Bytes
+import Data.Aeson (encode, object, (.=), Value(..))
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
 import Effectful (Eff, IOE, liftIO, runEff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
@@ -26,10 +29,12 @@ import Kyyn.Types.Evolution (EvolutionFailure(..))
 import qualified Kyyn.Domain.Recipe as KB
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..), RoleDecl(..), Affordance(..))
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
-import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles)
+import Kyyn.Plumbing.Capability.GuestCompilation.Types (sourceFiles, selectedBuild, GuestSelection(..), EvolutionSelection(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import GuestFixture
-import Kyyn.Plumbing.Capability.SchemaInspection
+import Kyyn.Plumbing.Capability.GuestInspection
+import Kyyn.Domain.Guest (checkGuest)
+import qualified Kyyn.Types.Guest as G
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
@@ -50,10 +55,9 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   let path = either error id . relativePath
       tree = either error id . fileTree . map (\(p,b) -> (path p,b))
       kb = KnowledgeBase (Repository scope) (Subtree (path "nested"))
-      sdk = tree [("Sdk.hs","installed SDK")]
       before = tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","old checks")]
-      code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks")]
-      target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks")]
+      code = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","old checks"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
+      target = tree [("kb.dhall",manifest),("src/Example.hs","schema"),("src/Helper.hs","helper"),("src/Checks.hs","new checks"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
       root = Root contract facts code []
       prepared = SourceRoot contract target (RootDefinition "Example.Root" "Example.metadata" "Checks.validate" [] []
         (tree [("Example.hs","schema"),("Helper.hs","helper"),("Checks.hs","new checks")]) []) []
@@ -64,17 +68,20 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
       execute compilation source (CapturedEvolution context _ closure after) = do
         count <- newIORef 0
         result <- runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope
-          . runFixtureExecution shell . compileMock compilation . schemaMock count contract . runDhallHandling
-          . runRootStore . noRecipePreparation . runEvolutionExecution sdk $ evaluateEvolution (CapturedEvolution context source closure after)
+          . runFixtureExecution shell . compileMock compilation . descriptionMock count contract . runDhallHandling
+          . runRootStore . runEvolutionExecution $ evaluateEvolution (CapturedEvolution context source closure after)
         inspections <- readIORef count
         case result of
-          Right (Right _) -> unless (inspections == 0)
-            (fail "Execution must consume the prepared target without inspecting again")
+          Right (Right _) -> unless (inspections == 1)
+            (fail "Execution must describe its retained artifact exactly once")
           _ -> pure ()
         pure result
-      identityEntry = Right (entry "printf '{\"tag\":\"Succeeded\",\"value\":{\"after\":%s,\"steps\":[]}}' \"$input\"")
       captured = capture target
-  expected <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
+  expected@(CheckedValue _ inputValue) <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
+  let response = object ["tag" .= ("Succeeded" :: String),"value" .= object
+        ["after" .= object ["facts" .= inputValue,"recipes" .= ([] :: [Value])],"steps" .= ([] :: [Value])]]
+      quote text = "'" ++ concatMap (\c -> if c == '\'' then "'\\''" else [c]) text ++ "'"
+      identityEntry = Right (entry ("printf '%s' " ++ quote (Text.unpack (Text.decodeUtf8 (Lazy.toStrict (encode response))))))
   result <- execute identityEntry root captured
   unless (result == Right (Right (EvaluatedEvolution captured (After contract) (KB.KnowledgeBase expected []) (EvolutionReport [] []))))
     (fail ("Execution lost selected Before or captured context: " ++ show result))
@@ -103,7 +110,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   unreadable <- execute unexpected (Root selected (tree []) selectedCode []) captured
   case unreadable of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail (show unreadable)
   let SchemaMetadata roles assignments collections = metadataOf (rootSchema contract)
-  different <- right (checkContract (rootType (rootSchema contract))
+  different <- right (checkContract (descriptionOf (rootSchema contract))
     (SchemaMetadata (RoleDecl "extra" "Changed" Title : roles) assignments collections) >>= checkRootLayout)
   mismatch <- execute unexpected (Root different facts code []) captured
   case mismatch of Right (Left (ProposedCodeRejected _)) -> pure (); _ -> fail "Loaded contract mismatch reached execution"
@@ -114,31 +121,21 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
   where
     manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.metadata\", validator = \"Checks.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
-schemaMock :: IOE :> es => IORef Int -> RootContract -> Eff (SchemaInspection : es) a -> Eff es a
-schemaMock count contract = interpret $ \_ -> \case
-  InspectImports {} -> pure (Right [])
-  InspectType {} -> error "Unexpected plain type inspection"
-  InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
-  InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
-  InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
-  InspectSchema source -> do
-    liftIO (modifyIORef' count (+1))
-    pure $ if selectedType source == "Example.Root"
-      then Right (InspectedSchema (rootSchema contract) [path "Example.hs",path "Helper.hs"])
-      else Left [errorDiagnostic "schema.compiler-rejected" "Missing intermediate export"]
-  where path = either error id . relativePath
+descriptionMock :: IOE :> es => IORef Int -> RootContract -> Eff (GuestInspection : es) a -> Eff es a
+descriptionMock count contract = interpret $ \_ (DescribeGuest _) -> do
+  liftIO (modifyIORef' count (+1))
+  let described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) []
+  pure (checkGuest (G.GuestDescription G.protocolIdentity
+    [G.EvolutionEntry "evolve" (G.AdHocContracts described described)] []))
 
 compileMock :: Either [Diagnostic] CompiledProgram -> Eff (GuestCompilation : es) a -> Eff es a
-compileMock result = interpret $ \_ -> \case
-  CompileGuest sources -> do
-    let entries = [(relativeName p,b) | (p,b) <- sourceFiles sources]
-    unless (lookup "Checks.hs" entries == Just "new checks" && lookup "Helper.hs" entries == Just "helper" &&
-      lookup "Evolution.hs" entries == Just "captured entry" &&
-      maybe False (Bytes.isInfixOf "selected = pure . evaluateEvolution Evolution.evolution") (lookup "KyynEvolutionEntry.hs" entries) &&
-      maybe False (Bytes.isInfixOf "Program NoRequests") (lookup "KyynEvolutionEntry.hs" entries) &&
-      maybe False (Bytes.isInfixOf "edit = Internal.edit afterRoot") (lookup "Kyyn/Workspace/Evolution.hs" entries))
-      (error "Execution sources did not preserve target/helpers/generated steps or included old checks")
-    pure result
+compileMock result = interpret $ \_ (CompileGuest sources) -> do
+  let entries = [(relativeName p,b) | (p,b) <- sourceFiles sources]
+  unless (selectedBuild sources == EvolutionEntries (EvolutionSelection "Example.Root" "Example.metadata" [] Nothing Nothing)
+    && lookup "src/Checks.hs" entries == Just "new checks" && lookup "src/Helper.hs" entries == Just "helper"
+    && lookup ".kyyn-before/Example.hs" entries == Just "schema" && lookup "flake.lock" entries == Just "recorded lock")
+    (error "Execution did not preserve target, Before source and target lock")
+  pure result
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure

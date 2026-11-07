@@ -10,7 +10,7 @@ import qualified Data.ByteString.Char8 as Bytes
 import qualified Data.ByteString.Lazy as Lazy
 import Effectful (runPureEff)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType
+import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldStyle(..), FieldDescription(..), ScalarKind(..))
 import Kyyn.Domain.Recipe (RecipeId(..))
 import Kyyn.Domain.FileTree (files, fileTree)
 import Kyyn.Domain.Path (RelativePath, relativePath)
@@ -26,9 +26,9 @@ import Kyyn.Plumbing.Protocol.RecipeEvolution (decodeRecipeEvolutionReply)
 
 main :: IO ()
 main = do
-  state <- right (checkContract (Algebraic "Review.State" []
-    [Constructor "Review.State" [(Just "seen",ListType StringType)]]) (SchemaMetadata [] [] []))
-  unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  state <- right (checkContract (NamedDescription (TypeIdentity "fixture" "Review" "State" [])
+    (RecordDescription "State" NamedFields [FieldDescription "seen" "" (ListDescription textDescription)])) (SchemaMetadata [] [] []))
+  unit <- right (checkContract UnitDescription (SchemaMetadata [] [] []))
   let first = RecipeId "mail"
       second = RecipeId "calendar"
       third = RecipeId "stateless"
@@ -110,3 +110,6 @@ assert label condition = unless condition (fail label)
 isFailure :: Either e a -> Bool
 isFailure (Left _) = True
 isFailure (Right _) = False
+
+textDescription :: Description
+textDescription = ScalarDescription (TypeIdentity "text" "Data.Text.Internal" "Text" []) TextScalar "text" []

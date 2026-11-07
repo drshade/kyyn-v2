@@ -8,9 +8,9 @@ import Data.Aeson (object)
 import Effectful (Eff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Contract (checkContract, checkRootLayout)
-import Kyyn.Domain.DataType
+import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldStyle(..))
 import Kyyn.Domain.Diagnostic
-import Kyyn.Domain.FileTree (fileTree, files)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Git
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path
@@ -28,10 +28,11 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 
 initializationTests :: IO ()
 initializationTests = do
-  initial <- either fail pure initialRootFiles
+  marker <- either fail pure (relativePath "template.fixture")
+  initial <- either fail pure (fileTree [(marker,"caller-owned scaffold")])
   code <- either fail pure (fileTree [(p,b) | (p,b) <- files initial, relativeName p `notElem` ["facts/root.dhall","recipes.dhall"]])
   contract <- either (fail . show) pure (checkContract
-    (Algebraic "RootV1.Root" [] [Constructor "RootV1.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
+    (NamedDescription (TypeIdentity "fixture" "RootV1" "Root" []) (RecordDescription "Root" PositionalFields [])) (SchemaMetadata [] [] []) >>= checkRootLayout)
   root <- either (fail . show) pure $ runPureEff . runDhallHandling . runRootStore $ do
     checked <- checkRootValue contract (object [])
     either (pure . Left) (\value -> materializeRoot contract code (KB.KnowledgeBase value [])) checked
@@ -42,17 +43,17 @@ initializationTests = do
       metadata = CommitMetadata identity identity "Initialize"
       initialized = InitializedRoot revision (LocalBranch "main") (KnowledgeBase (Repository scope) WholeTree) WorkingTreeUpdated
       execute report = runPureEff . runDhallHandling . runRootStore
-        . opening root . checking root report . publication target metadata root initialized report $
-          initializeKnowledgeBase target metadata
+        . opening initial root . checking root report . publication target metadata root initialized report $
+          initializeKnowledgeBase initial target metadata
       good = ValidationReport []
       bad = ValidationReport [errorDiagnostic "test.invalid" "Root is invalid"]
   unless (execute good == Passed initialized good) (fail "Valid initialization did not publish the checked root")
   unless (execute bad == Rejected bad) (fail "Invalid initialization was published")
   putStrLn "Initialization workflow requires successful root validation before publication."
 
-opening :: Root -> Eff (RootOpening : es) a -> Eff es a
-opening root = interpret $ \_ -> \case
-  OpenCapturedRoot actual | Right actual == initialRootFiles -> pure (Right root)
+opening :: FileTree -> Root -> Eff (RootOpening : es) a -> Eff es a
+opening template root = interpret $ \_ -> \case
+  OpenCapturedRoot actual | actual == template -> pure (Right root)
   _ -> error "Initialization did not open its pure scaffold"
 
 checking :: Root -> ValidationReport -> Eff (RootExecution : es) a -> Eff es a

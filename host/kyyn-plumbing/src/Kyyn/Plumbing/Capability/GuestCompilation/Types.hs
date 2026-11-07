@@ -1,49 +1,55 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Plumbing.Capability.GuestCompilation.Types
-  ( GuestSources, guestSources, sourceFiles, selectedEntry, sourceIdentity
-  , packageIdentity, bindingModule ) where
+  ( GuestSources, guestSources, sourceFiles, selectedBuild, sourceIdentity
+  , GuestSelection(..), DiscoverySelection(..), RecipeReference(..), EvolutionSelection(..), bindingModule
+  ) where
 
+import Control.Monad (unless)
 import qualified Crypto.Hash.SHA256 as SHA256
+import Data.Aeson (encode)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as Lazy
-import Data.List (sortOn, nub, isPrefixOf, isSuffixOf)
+import Data.List (isPrefixOf)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
+import System.FilePath (splitDirectories)
 import Kyyn.Domain.Path
-import Kyyn.Domain.Plugin (PackageIdentity(..), bindingModule)
-import Numeric (showHex)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
+import Kyyn.Domain.Plugin (bindingModule)
+import Kyyn.Domain.Root (isRootMaterial)
+import Kyyn.Types.GuestBuild
 
-data GuestSources = GuestSources RelativePath [(RelativePath, ByteString)] deriving (Eq, Show)
+data GuestSources = GuestSources GuestSelection FileTree deriving (Eq, Show)
 
-guestSources :: RelativePath -> [(RelativePath, ByteString)] -> Either String GuestSources
-guestSources entry files
-  | entry `notElem` paths = Left "selected entry is absent from captured sources"
-  | length (nub paths) /= length paths = Left "duplicate captured source path"
-  | or [ (relativeName a ++ "/") `isPrefixOf` relativeName b | a <- paths, b <- paths ] =
-      Left "captured source file/directory collision"
-  | path : _ <- unsupported = Left ("unsupported Haskell source format; use .hs: " ++ path)
-  | otherwise = Right (GuestSources entry (sortOn fst files))
+-- Only source/configuration reaches Nix. Known KB runtime material and local
+-- build caches are excluded even if accidentally included by the caller.
+guestSources :: GuestSelection -> [(RelativePath, ByteString)] -> Either String GuestSources
+guestSources requested entries = do
+  let selection = canonicalSelection requested
+  captured <- fileTree [(path,bytes) | (path,bytes) <- entries, permitted path]
+  let contents = files captured
+  unless (all (\name -> any ((== name) . relativeName . fst) contents) ["flake.nix","flake.lock"])
+    (Left "Guest source requires flake.nix and flake.lock; update the KB lock explicitly before checking")
+  unless (all ((/= ".kyyn-build.json") . relativeName . fst) contents)
+    (Left ".kyyn-build.json is reserved for the host's fixed build selection")
+  request <- relativePath ".kyyn-build.json"
+  selected <- fileTree ((request,Lazy.toStrict (encode selection)) : contents)
+  pure (GuestSources selection selected)
   where
-    paths = map fst files
-    unsupported = [name | p <- paths, let name = relativeName p,
-      any (`isSuffixOf` name) [".lhs",".hsc"]]
+    permitted path = not (isRootMaterial path) && all allowed (splitDirectories (relativeName path))
+    allowed component = component `notElem` [".git",".kyyn",".kyyn-generated",".build","dist-newstyle",".stack-work","result"]
+      && component /= ".env" && not (".env." `isPrefixOf` component)
 
 sourceFiles :: GuestSources -> [(RelativePath, ByteString)]
-sourceFiles (GuestSources _ files) = files
+sourceFiles (GuestSources _ tree) = files tree
 
-packageIdentity :: GuestSources -> PackageIdentity
-packageIdentity = PackageIdentity . concatMap hex . Bytes.unpack . sourceIdentity
-  where hex byte = let digits = showHex byte "" in replicate (2 - length digits) '0' ++ digits
-
-selectedEntry :: GuestSources -> RelativePath
-selectedEntry (GuestSources entry _) = entry
+selectedBuild :: GuestSources -> GuestSelection
+selectedBuild (GuestSources selection _) = selection
 
 sourceIdentity :: GuestSources -> ByteString
-sourceIdentity (GuestSources entry files) = SHA256.hash . Lazy.toStrict . Builder.toLazyByteString $
-  Builder.byteString "kyyn-guest-sources\0" <> path entry <>
-  foldMap (\(name, bytes) -> path name <> framed bytes) files
-  where
-    path = framed . Text.encodeUtf8 . Text.pack . relativeName
-    framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes
+sourceIdentity sources = SHA256.hash . Lazy.toStrict . Builder.toLazyByteString $
+  Builder.byteString "kyyn-nix-guest-sources\0" <>
+  foldMap (\(name,bytes) -> framed (Text.encodeUtf8 (Text.pack (relativeName name))) <> framed bytes) (sourceFiles sources)
+  where framed bytes = Builder.word64BE (fromIntegral (Bytes.length bytes)) <> Builder.byteString bytes

@@ -39,7 +39,7 @@ function packageAt(directory, name) {
 }
 function invoke(args, status = 0, { cwd = temporary, json = true, selected = evolution } = {}) {
   const result = spawnSync(executable,
-    ['--kb', kb, '--runtime', path.join(temporary, 'no-runtime'), ...(json ? ['--json'] : []), 'plugin', 'install',
+    ['--kb', kb, '--nix', path.join(temporary, 'no-runtime'), ...(json ? ['--json'] : []), 'plugin', 'install',
       ...(selected === null ? [] : ['--evolution', selected]), ...args],
     { cwd, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.status, status, JSON.stringify(result));

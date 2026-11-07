@@ -1,9 +1,12 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Porcelain.Capability.RootOpening (RootOpening(..), openCapturedRoot, loadRootAt, loadRootMaterialAt, openCapturedSource, loadSourceAt) where
+module Kyyn.Porcelain.Capability.RootOpening (RootOpening(..), openCapturedRoot, loadRootAt, loadRootMaterialAt, loadRootMaterialWithContracts, openCapturedSource, loadSourceAt) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic (Diagnostic)
+import Kyyn.Types.Fact (Fact)
+import Kyyn.Domain.Recipe (RecipeDefinition)
+import Kyyn.Domain.Contract (CheckedContract)
 import Kyyn.Domain.Root (Root, SourceRoot)
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Git (Repository, GitRevision, TreePath)
@@ -14,6 +17,8 @@ data RootOpening :: Effect where
   OpenCapturedRoot :: FileTree -> RootOpening m (Either [Diagnostic] Root)
   LoadRootAt :: Repository -> GitRevision -> TreePath -> RootOpening m (Either [Diagnostic] Root)
   LoadRootMaterialAt :: Repository -> GitRevision -> TreePath -> SourceRoot -> RootOpening m (Either [Diagnostic] Root)
+  LoadRootMaterialWithContracts :: Repository -> GitRevision -> TreePath -> SourceRoot
+    -> [(Fact RecipeDefinition,String,CheckedContract)] -> RootOpening m (Either [Diagnostic] Root)
 
 type instance DispatchOf RootOpening = Dynamic
 
@@ -32,3 +37,8 @@ loadRootAt repository revision = send . LoadRootAt repository revision
 loadRootMaterialAt :: RootOpening :> es => Repository -> GitRevision -> TreePath -> SourceRoot
   -> Eff es (Either [Diagnostic] Root)
 loadRootMaterialAt repository revision location = send . LoadRootMaterialAt repository revision location
+
+-- Evolution preparation already checked these contracts in its target build.
+loadRootMaterialWithContracts :: RootOpening :> es => Repository -> GitRevision -> TreePath -> SourceRoot
+  -> [(Fact RecipeDefinition,String,CheckedContract)] -> Eff es (Either [Diagnostic] Root)
+loadRootMaterialWithContracts repository revision location source = send . LoadRootMaterialWithContracts repository revision location source

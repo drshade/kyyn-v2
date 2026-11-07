@@ -1,7 +1,9 @@
-{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE NoFieldSelectors, DeriveGeneric, DerivingStrategies, DeriveAnyClass #-}
 module Kyyn.Evolution.Proposal
   ( FactEdit(..), ProposedStep(..), RecipeProposal(..), applyFactEdit ) where
 
+import GHC.Generics (Generic)
+import Agentic.Contract (Contract)
 import Kyyn.Edit (CollectionEdit, append, update, put, remove)
 import Kyyn.Types.Fact (Fact, FactId)
 import Kyyn.Types.Evolution (Rationale)
@@ -11,7 +13,8 @@ data FactEdit a
   = Append (Fact a)
   | Replace { factId :: FactId, replacement :: a }
   | Remove FactId
-  deriving (Eq, Show)
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass (Contract)
 
 -- | Ordered changes sharing one explanation and its evidence citations.
 data ProposedStep edits = ProposedStep Rationale [edits] deriving (Eq, Show)

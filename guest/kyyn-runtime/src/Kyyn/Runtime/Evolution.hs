@@ -1,16 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, EmptyDataDecls, EmptyCase #-}
-module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, encodeEvolutionReply, knowledgeBaseCodec) where
+module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, evolutionReplyValue, encodeEvolutionReply, knowledgeBaseCodec) where
 
 import Kyyn.Evolution.Internal (EvolutionOutput(..), StepObservation(..), RecordedRoot(..))
 import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
-import Kyyn.Types.Evidence (EvidenceId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
-import Kyyn.Types.Program (Program(..))
+import Kyyn.Types.Program (Program, interpretProgram)
+import Data.Functor.Identity (runIdentity)
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Validation (encodeReportValue)
 import Text.JSON.Types (JSValue(JSArray))
@@ -63,9 +63,7 @@ executeEvolution :: Codec a -> Codec b
   -> String -> Either String JSValue
 executeEvolution beforeCodec afterCodec selected input = do
   before <- parseValue input >>= decodeWith beforeCodec
-  case selected before of
-    Pure result -> evolutionReplyValue afterCodec result
-    Request operation _ -> case operation of {}
+  evolutionReplyValue afterCodec (runIdentity (interpretProgram (\operation -> case operation of {}) (selected before)))
 
 encodeEvolutionReply :: Codec a -> Either EvolutionFailure (EvolutionOutput a) -> Either String String
 encodeEvolutionReply codec result = evolutionReplyValue codec result >>= printValue

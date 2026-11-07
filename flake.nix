@@ -3,7 +3,12 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-  outputs = { self, nixpkgs }:
+  inputs.agentic = {
+    url = "github:drshade/haskell-agentic/043604a28ceb7d2ebba0921856b719b5f5d661b3";
+    flake = false;
+  };
+
+  outputs = { self, nixpkgs, agentic }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
@@ -13,27 +18,56 @@
           source = pkgs.lib.fileset.toSource {
             root = ./.;
             fileset = pkgs.lib.fileset.unions [
-              ./host ./guest ./shared ./vendor ./docs/guide.md
+              ./host ./guest ./shared ./plugins ./docs/guide.md
             ];
           };
           localPackages = {
             kyyn-types = "shared/kyyn-types";
             kyyn-domain = "host/kyyn-domain";
             kyyn-plumbing = "host/kyyn-plumbing";
-            kyyn-microhs = "host/kyyn-microhs";
             kyyn-plumbing-interpreters = "host/kyyn-plumbing-interpreters";
             kyyn-porcelain = "host/kyyn-porcelain";
             kyyn-porcelain-interpreters = "host/kyyn-porcelain-interpreters";
             kyyn-surfaces = "host/kyyn-surfaces";
             kyyn = "host/kyyn";
             kyyn-sdk = "guest/kyyn-sdk";
-            json = "vendor/json";
-            agentic = "vendor/agentic";
-            agentic-aeson = "vendor/agentic-aeson";
-            agentic-openai = "vendor/agentic-openai";
-            agentic-anthropic = "vendor/agentic-anthropic";
-            agentic-jev = "vendor/agentic-jev";
+            kyyn-guest-build = "guest/kyyn-build";
           };
+          # Initialization copies a standard, already locked KB flake. Published
+          # builds pin this repository revision; dirty contributor builds retain
+          # their immutable local source so installed tests need no remote commit.
+          guestInput = if self ? rev then {
+            type = "github"; owner = "drshade"; repo = "kyyn-v2"; rev = self.rev;
+          } else { type = "path"; path = toString self.outPath; };
+          guestUrl = if self ? rev then "github:drshade/kyyn-v2/${self.rev}" else "path:${self.outPath}";
+          repositoryLock = builtins.fromJSON (builtins.readFile ./flake.lock);
+          templateLock = repositoryLock // {
+            nodes = repositoryLock.nodes // {
+              kyyn = { inputs = repositoryLock.nodes.root.inputs;
+                original = guestInput;
+                locked = guestInput // { inherit (self) narHash; lastModified = self.lastModified or 0; };
+              };
+              root.inputs.kyyn = "kyyn";
+            };
+          };
+          template = pkgs.runCommand "kyyn-kb-template" { } ''
+            mkdir -p "$out"
+            cp -R ${./templates/kb}/. "$out/"
+            chmod -R u+w "$out"
+            cp ${pkgs.writeText "flake.nix" ''
+              {
+                description = "Kyyn knowledge base";
+                inputs.kyyn.url = "${guestUrl}";
+                outputs = { self, kyyn }: {
+                  packages = builtins.listToAttrs (map (system: {
+                    name = system;
+                    value.kyyn-guest = kyyn.lib.mkGuest { inherit system; src = self; };
+                  }) [ ${builtins.concatStringsSep " " (map builtins.toJSON systems)} ]);
+                };
+              }
+            ''} "$out/flake.nix"
+            cp ${pkgs.writeText "flake.lock" (builtins.toJSON templateLock)} "$out/flake.lock"
+          '';
           haskell = pkgs.haskell.packages.ghc9103.override {
             overrides = final: prev:
               let
@@ -57,18 +91,24 @@
                   url = "https://hackage-content.haskell.org/package/${name}-${pin.version}.tar.gz";
                   inherit (pin) hash;
                 }) { })) pinned
-              // builtins.mapAttrs (name: path:
-                pkgs.haskell.lib.overrideCabal
-                  (final.callCabal2nix name (self + "/${path}")
+              // builtins.listToAttrs (map (name: {
+                inherit name;
+                value = pkgs.haskell.lib.dontCheck
+                  (final.callCabal2nix name (agentic + "/${name}")
                     (pkgs.lib.optionalAttrs
                       (builtins.elem name [ "agentic-openai" "agentic-anthropic" "agentic-jev" ])
-                      # These providers mention agentic-io only in disabled tests.
-                      { agentic-io = null; }))
+                      { agentic-io = null; }));
+              }) [ "agentic" "agentic-aeson" "agentic-openai" "agentic-anthropic" "agentic-jev" ])
+              // builtins.mapAttrs (name: path:
+                pkgs.haskell.lib.overrideCabal
+                  (final.callCabal2nix name (self + "/${path}") { })
                   (_: {
                     # Some packages share source and guide files across directories.
                     src = source;
                     postUnpack = ''sourceRoot="$sourceRoot/${path}"'';
                     doCheck = false;
+                  } // pkgs.lib.optionalAttrs (name == "kyyn") {
+                    configureFlags = [ ''--ghc-option=-DKYYN_TEMPLATE_DIRECTORY="${template}"'' ];
                   })) localPackages;
           };
         in {
@@ -79,8 +119,157 @@
         let p = project system;
         in {
           kyyn = p.haskell.kyyn;
+          kyyn-sdk = p.haskell.kyyn-sdk;
+          kyyn-guest-build = p.haskell.kyyn-guest-build;
           default = self.packages.${system}.kyyn;
         });
+      legacyPackages = forAllSystems (system: (project system).haskell);
+      checks = forAllSystems (system:
+        let
+          p = project system;
+          capturedSource = p.pkgs.runCommand "kyyn-captured-plugin-source" { } ''
+            mkdir -p "$out/plugins/packages/local-file/source"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
+          '';
+          toolSource = p.pkgs.runCommand "kyyn-tool-source" { } ''
+            mkdir -p "$out"
+            cp -R ${capturedSource}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/tool-guest}/. "$out/"
+          '';
+          modelSource = p.pkgs.runCommand "kyyn-model-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/model-guest}/. "$out/"
+          '';
+          recipeSource = p.pkgs.runCommand "kyyn-recipe-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/recipe-guest}/. "$out/"
+          '';
+          recipeEvolutionSource = p.pkgs.runCommand "kyyn-recipe-evolution-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
+            chmod -R u+w "$out"
+            rm -rf "$out/src"
+            cp -R "$out/.kyyn-before" "$out/src"
+            cp -R ${./tools/fixtures/recipe-evolution-guest}/. "$out/"
+            sed -i 's/After.Root/Before.Root/g' "$out/kb.dhall"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"None"}}}' > "$out/.kyyn-build.json"
+          '';
+          frozenApiSource = p.pkgs.runCommand "kyyn-frozen-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${recipeEvolutionSource}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"Some","value":["KyynFrozenProposal"]}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'deliberately invalid proposal data; discovery must not decode it' > "$out/.kyyn-change/proposal.dhall"
+            printf '%s\n' 'module Evolution where' 'import KyynFrozenProposal' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
+          '';
+          rootApiSource = p.pkgs.runCommand "kyyn-root-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"rootApi","selected":{"tag":"None"}}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Unfinished where' 'unfinished =' > "$out/src/Unfinished.hs"
+          '';
+          evolutionApiSource = p.pkgs.runCommand "kyyn-evolution-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"state","name":"()"},{"kind":"state","name":"BeforeProgress.State"},{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"None"},"modules":{"tag":"Some","value":[]}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Evolution where' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
+          '';
+          outputSource = p.pkgs.runCommand "kyyn-output-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            cp -R ${./tools/fixtures/output-guest}/. "$out/"
+          '';
+          toolApiSource = p.pkgs.runCommand "kyyn-tool-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${toolSource}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"modules","modules":["Tools","Kyyn.Connectors","Kyyn.Agentic","Kyyn.Plugins.P_local_file.Files","Kyyn.Plugins.P_local_file.Files.Evidence"]}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
+            printf '%s\n' 'module Main where' 'unfinished =' > "$out/src/Main.hs"
+          '';
+          pluginsOnlySource = p.pkgs.runCommand "kyyn-plugins-only-source" { } ''
+            mkdir -p "$out/plugins/packages/local-file/source" "$out/src"
+            cp -R ${./tools/fixtures/captured-plugin}/. "$out/plugins/packages/local-file/source/"
+            printf '%s\n' '{"selection":"plugins"}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
+            printf '%s\n' 'module Main where' 'unfinished =' > "$out/src/Main.hs"
+          '';
+          firstPartySource = p.pkgs.runCommand "kyyn-first-party-source" { } ''
+            mkdir -p "$out/plugins/packages"
+            ${builtins.concatStringsSep "\n" (map (name: ''
+              mkdir -p "$out/plugins/packages/${name}/source"
+              cp -R ${./plugins + "/${name}"}/. "$out/plugins/packages/${name}/source/"
+            '') [ "microsoft-graph" "salesforce" "github" ])}
+            printf '%s\n' '{"selection":"plugins"}' > "$out/.kyyn-build.json"
+          '';
+          schemaSource = p.pkgs.runCommand "kyyn-schema-discovery-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"schema"}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Queries where' 'unfinished =' > "$out/src/Queries.hs"
+          '';
+          bindingApiSource = p.pkgs.runCommand "kyyn-binding-api-source" { } ''
+            mkdir -p "$out"
+            cp -R ${./tools/fixtures/ghc-guest}/. "$out/"
+            chmod -R u+w "$out"
+            printf '%s\n' '{"selection":"modules","modules":["Queries","KyynQueryBindings"]}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'module Evolution where' 'unfinished =' > "$out/src/Evolution.hs"
+          '';
+          apiSource = p.pkgs.runCommand "kyyn-api-discovery-source" { } ''
+            mkdir -p "$out/src"
+            printf '%s\n' '{"selection":"modules","modules":["Example","Data.Maybe","Kyyn.Optics"]}' > "$out/.kyyn-build.json"
+            printf '%s\n' 'unfinished manifest' > "$out/kb.dhall"
+            printf '%s\n' 'module Example (answer) where' 'answer :: Integer' 'answer = 42' 'private = True' > "$out/src/Example.hs"
+            printf '%s\n' 'module Broken where' 'unfinished =' > "$out/src/Broken.hs"
+          '';
+        in {
+          guest = self.lib.mkGuest { inherit system; src = ./tools/fixtures/ghc-guest; };
+          guest-captured = self.lib.mkGuest { inherit system; src = capturedSource; };
+          guest-frozen-api = self.lib.mkGuest { inherit system; src = frozenApiSource; };
+          guest-model = self.lib.mkGuest { inherit system; src = modelSource; };
+          guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
+          guest-root-api = self.lib.mkGuest { inherit system; src = rootApiSource; };
+          guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };
+          guest-evolution-api = self.lib.mkGuest { inherit system; src = evolutionApiSource; };
+          guest-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/evolution-guest; };
+          guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };
+          guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
+          guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };
+          guest-plugins = self.lib.mkGuest { inherit system; src = pluginsOnlySource; };
+          guest-first-party = self.lib.mkGuest { inherit system; src = firstPartySource; };
+          guest-schema = self.lib.mkGuest { inherit system; src = schemaSource; };
+          guest-api = self.lib.mkGuest { inherit system; src = apiSource; };
+          guest-api-bindings = self.lib.mkGuest { inherit system; src = bindingApiSource; };
+        });
+      lib.mkGuest = { system, src, dependencies ? (h: [ ]),
+        haskellPackages ? self.legacyPackages.${system} }:
+        let
+          p = project system;
+          compiler = haskellPackages.ghcWithPackages (h:
+            [ h.kyyn-sdk h.kyyn-types h.kyyn-guest-build h.aeson h.bytestring h.text ] ++ dependencies h);
+        in p.pkgs.stdenv.mkDerivation {
+          name = "kyyn-guest";
+          inherit src;
+          nativeBuildInputs = [ compiler haskellPackages.kyyn-guest-build ];
+          dontConfigure = true;
+          dontInstall = true;
+          buildPhase = ''
+            runHook preBuild
+            mkdir -p "$out/bin"
+            kyyn-guest-build ${compiler}/bin/ghc . "$out/bin/kyyn-guest"
+            runHook postBuild
+          '';
+        };
       devShells = forAllSystems (system:
         let p = project system;
         in {

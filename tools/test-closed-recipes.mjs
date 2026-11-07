@@ -18,7 +18,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_COMMITTER_NAME: 'Recipe fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function cli(args, status = 0, json = true) {
   const result = spawnSync(executable, ['--kb', kb, ...(json ? ['--json'] : []), ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, status, JSON.stringify({ args, ...result }));
   return json ? JSON.parse(result.stdout) : result.stdout;
 }
@@ -27,10 +27,13 @@ try {
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'teach-recipe']).result;
   const target = path.join(draft.path, 'target');
-  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `module RootV2 where
+  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module RootV2 where
+import GHC.Generics (Generic)
+import Data.Text (Text)
 import Kyyn.Schema
-data Todo = Todo { title :: String }
-data Root = Root { todos :: [Fact Todo] }
+data Todo = Todo { title :: Text } deriving stock Generic deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] } deriving stock Generic deriving anyclass Contract
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
@@ -38,7 +41,8 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     const file = path.join(target, name);
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV1', 'RootV2'));
   }
-  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified RootV1 as Before
@@ -57,11 +61,11 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
     'import Kyyn.Workspace.Evolution\nimport qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks').replace('evolution = identityEvolution',
     'evolution = edit (Rationale "Use the authored flow" []) (updateRecipe unitRecipeType (RecipeId "sync") Tasks.reconcile Right)'));
   let rejected = cli(['evolution', 'check', closed.id], 1);
-  assert.match(JSON.stringify(rejected), /compiler-rejected|recipe.signature/);
+  assert.match(JSON.stringify(rejected), /guest.build|recipe.signature/);
   const flowFile = path.join(closed.path, 'target/src/Tasks.hs');
   fs.writeFileSync(flowFile, 'module Tasks where\nreconcile :: String\nreconcile = "wrong type"\n');
   rejected = cli(['evolution', 'check', closed.id], 1);
-  assert.match(JSON.stringify(rejected), /compiler-rejected|recipe.signature/);
+  assert.match(JSON.stringify(rejected), /guest.build|recipe.signature/);
   fs.writeFileSync(flowFile, `module Tasks where
 import qualified Agentic as A
 import qualified Data.Text as T
@@ -100,7 +104,7 @@ reconcile = A.note (T.pack "Read λ notes") (T.pack "Inspect captured notes") (A
     assert.equal(raw.trimEnd(), result.description.trimEnd(), 'Human stdout must contain only upstream rendering');
   }
   cli(['root', 'recipe', 'describe', 'sync', '--dot', '--mermaid'], 2, false);
-  const noRuntime = ['--runtime', path.join(temporary, 'absent')];
+  const noRuntime = ['--nix', path.join(temporary, 'absent')];
   assert.deepEqual(cli([...noRuntime, 'root', 'recipe', 'show', 'sync']).result.recipe,
     { kind: 'ClosedAgent', flow: 'Tasks.reconcile' });
   assert.match(JSON.stringify(cli([...noRuntime, 'evolution', 'show', closed.id])), /Tasks.reconcile/);
@@ -108,19 +112,23 @@ reconcile = A.note (T.pack "Read λ notes") (T.pack "Inspect captured notes") (A
   const changedTarget = path.join(changed.path, 'target');
   const oldSchema = fs.readFileSync(path.join(changedTarget, 'src/RootV2.hs'), 'utf8');
   fs.writeFileSync(path.join(changedTarget, 'src/RootV3.hs'), oldSchema.replaceAll('RootV2', 'RootV3')
-    .replace('title :: String', 'title :: String, done :: Bool'));
-  for (const name of ['kb.dhall', 'src/Validate.hs', 'src/Tasks.hs']) {
+    .replace('title :: Text', 'title :: Text, done :: Bool'));
+  for (const name of ['kb.dhall', 'src/Validate.hs']) {
     const file = path.join(changedTarget, name);
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV2', 'RootV3'));
   }
+  // Before and After share one module namespace: version changed flows too.
+  fs.writeFileSync(path.join(changedTarget, 'src/TasksV2.hs'),
+    fs.readFileSync(path.join(changedTarget, 'src/Tasks.hs'), 'utf8')
+      .replace('module Tasks where', 'module TasksV2 where').replaceAll('RootV2', 'RootV3'));
   const targetScope = ['--evolution', changed.id];
   const recipeApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.FactEdits', ...targetScope]).result;
-  assert.match(recipeApi.symbols.find(s => s.name === 'applyRootEdit').declaration, /RootV3.Root/);
-  assert.doesNotMatch(recipeApi.symbols.find(s => s.name === 'applyRootEdit').declaration, /RootV2.Root/);
-  assert(cli(['guest', 'module', 'show', 'Tasks', ...targetScope]).result.symbols.some(s => s.name === 'reconcile'));
+  assert.match(recipeApi.symbols.find(s => s.name === 'applyRootEdit').signature, /RootV3.Root/);
+  assert.doesNotMatch(recipeApi.symbols.find(s => s.name === 'applyRootEdit').signature, /RootV2.Root/);
+  assert(cli(['guest', 'module', 'show', 'TasksV2', ...targetScope]).result.symbols.some(s => s.name === 'reconcile'));
   const evolutionApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Evolution', ...targetScope]).result;
-  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /RootV2.Root/);
-  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').declaration, /RootV3.Root/);
+  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').signature, /RootV2.Root/);
+  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').signature, /RootV3.Root/);
   fs.writeFileSync(path.join(kb, 'root/src/Validate.hs'), 'module Validate where\nvalidate :: Bool\nvalidate = "wrong type"\n');
   fs.writeFileSync(path.join(kb, 'root/facts/root.dhall'), 'False');
   for (const args of [['add', 'root/src/Validate.hs', 'root/facts/root.dhall'], ['commit', '-m', 'Broken validation fixture']]) {

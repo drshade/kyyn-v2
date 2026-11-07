@@ -1,101 +1,49 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, OverloadedRecordDot, OverloadedStrings #-}
 module Kyyn.Porcelain.Interpreter.WorkspaceApi (runWorkspaceApi) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
-import Data.List (stripPrefix, isPrefixOf, sortOn)
+import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
+import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.Git (TreePath(..))
-import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ApiModule(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
-import Kyyn.Domain.Path (relativeName)
-import Kyyn.Domain.Root (Root(..), SourceRoot(..), RootDefinition(..))
-import qualified Kyyn.Domain.KnowledgeBase as KB
-import Kyyn.Domain.Recipe (StoredRecipe(..))
-import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionKind(..))
-import Kyyn.Types.KnowledgeBase (RecipeId(..))
-import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Plumbing.Capability.ApiInspection (ApiInspection, inspectApiModules)
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
-import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
-import Kyyn.Plumbing.Protocol.Query (queryBindings)
-import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, mergeEvolutionSources)
-import Kyyn.Plumbing.Protocol.RecipeEvolution (recipeEvolutionBindings)
-import Kyyn.Plumbing.Protocol.FactProposal (lowerProposal)
-import Kyyn.Porcelain.Capability.EvolutionPreparation (prepareEvolution)
+import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.Guest (checkedModules)
+import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ModuleDescription(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
+import Kyyn.Plumbing.Capability.Git (Git)
+import Kyyn.Plumbing.Capability.GuestCompilation
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection, describeGuest)
+import Kyyn.Porcelain.Protocol.EvolutionPreparation (prepareEvolutionDescription, prepareEvolutionApi)
 import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore)
-import Kyyn.Porcelain.Capability.RootOpening (RootOpening, loadRootMaterialAt)
-import Kyyn.Porcelain.Capability.RootStore (rootLocation)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareToolBindings)
-import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins)
+import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Capability.WorkspaceApi (WorkspaceApi(..))
-import Kyyn.Porcelain.Protocol.RecipeBindings (prepareRecipeTypes)
 
-runWorkspaceApi :: (EvolutionStore :> es, RootOpening :> es, ApiInspection :> es, SchemaInspection :> es, ToolPreparation :> es, PluginPreparation :> es, DhallHandling :> es)
-  => FileTree -> Eff (WorkspaceApi : es) a -> Eff es a
-runWorkspaceApi sdk = interpret $ \_ operation -> case operation of
-  InspectRootApi (SourceRoot contract code _ _) selection -> runExceptT $ do
-    plugins <- ExceptT (preparePlugins code)
-    (toolSources,toolNames) <- ExceptT (prepareToolBindings code plugins)
-    let names = toolNames ++ ["Kyyn.Workspace.FactEdits", "KyynQueryBindings"]
-    recipeBindings <- checked (evolutionBindings contract contract)
-    query <- checked (queryBindings contract >>= fileTree . pure)
-    sources <- checked (mergeEvolutionSources [toolSources,recipeBindings,query])
-    let moduleName local = reverse <$> stripPrefix "sh." (reverse local)
-        dotted = map (\c -> if c == '/' then '.' else c)
-        authored = sortOn id [dotted name | (path,_) <- files code,
-          Just local <- [stripPrefix "src/" (relativeName path)], Just name <- [moduleName local]]
-        pluginModules = sortOn id [dotted name | (path,_) <- files code,
-          Just package <- [stripPrefix "plugins/packages/" (relativeName path)],
-          Just local <- [stripPrefix "/source/src/" (dropWhile (/= '/') package)], Just name <- [moduleName local]]
-        public = authored ++ pluginModules
-        selected = case selection of
-          ListApiModules -> []
-          InspectApiModule name -> [name | name `elem` public]
-          InspectApiSymbol symbol -> take 1 (sortOn (negate . length)
-            [name | name <- public, (name ++ ".") `isPrefixOf` symbol])
-        requested = case selection of
-          ListApiModules -> names
-          InspectApiModule name -> [name | name `elem` names] ++ selected
-          InspectApiSymbol symbol -> take 1 (sortOn (negate . length)
-            [name | name <- names, (name ++ ".") `isPrefixOf` symbol]) ++ selected
-    inspected <- if null requested then pure [] else ExceptT (inspectApiModules sources requested)
-    let entry origin name = ApiEntry origin (case [m | m@(ApiModule actual _ _) <- inspected, actual == name] of
-          [m] -> m
-          _ -> ApiModule name [] [])
-    pure (map (entry GeneratedOrigin) names ++ map (entry KbOrigin) authored ++ map (entry PluginOrigin) pluginModules)
-  InspectWorkspaceApi workspace -> runExceptT $ do
-    PreparedEvolution (EvolutionContext kb@(KB.KnowledgeBase repository _) _ (Before revision _)
-      (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) _ _ change _))
-      beforeSource@(SourceRoot before _ (RootDefinition _ _ _ _ _ beforeSources _) closure)
-      afterSource@(SourceRoot after _ (RootDefinition _ _ _ _ _ afterSources _) afterClosure) <- ExceptT (prepareEvolution workspace)
-    (recipeBindings,recipeClosure,_,recipeNames) <- ExceptT (prepareRecipeTypes sdk beforeSources afterSource change)
-    old <- checked (fileTree [(p,b) | (p,b) <- files beforeSources, p `elem` (closure ++ recipeClosure)])
-    new <- checked (fileTree [(p,b) | (p,b) <- files afterSources, p `elem` afterClosure])
-    (bindings,stateSources,stateContract) <- case kind of
-      AdHoc -> do
-        generated <- checked (evolutionBindings before after)
-        empty <- checked (fileTree [])
-        pure (generated,empty,Nothing)
-      RecipeBased (RecipeId selected) -> do
-        rootPath <- checked (rootLocation kb)
-        Root _ _ _ recipes <- ExceptT (loadRootMaterialAt repository revision (Subtree rootPath) beforeSource)
-        state <- checked $ case [(contract,value) | Fact (FactId name) (StoredRecipe _ _ contract value) <- recipes, name == selected] of
-          [pair] -> Right pair
-          _ -> Left "The selected recipe must exist in Before"
-        generated <- checked (recipeEvolutionBindings before (fst state))
-        pure (generated,beforeSources,Just state)
-    lowered <- ExceptT (lowerProposal before after stateContract change)
-    let hasProposal = any ((== "proposal.dhall") . relativeName . fst) (files change)
-    frozen <- checked (fileTree [(p,b) | (p,b) <- files lowered,
-      hasProposal, relativeName p == "KyynFrozenProposal.hs"])
-    sources <- checked (mergeEvolutionSources [old,new,afterSources,stateSources,sdk,bindings,recipeBindings,frozen])
-    modules <- ExceptT (inspectApiModules sources
-      (["Kyyn.Workspace.Evolution", "Kyyn.Workspace.Before", "Kyyn.Workspace.After"]
-        ++ recipeNames ++ ["KyynFrozenProposal" | not (null (files frozen))]))
-    pure (WorkspaceCatalogue workspace revision modules)
-
-checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
-checked = either (throwE . pure . errorDiagnostic "guest.workspace-sources") pure
+runWorkspaceApi :: (EvolutionStore :> es, RootStore :> es, Git :> es, GuestCompilation :> es, GuestInspection :> es)
+  => Eff (WorkspaceApi : es) a -> Eff es a
+runWorkspaceApi = interpret $ \_ operation -> case operation of
+  InspectRootApi code selection -> runExceptT $ do
+    let selected = case selection of
+          ListApiModules -> Nothing
+          InspectApiModule name -> Just (Text.pack name)
+          InspectApiSymbol name -> Just (Text.pack name)
+    source <- either (throwE . pure . errorDiagnostic "guest.workspace-sources") pure
+      (guestSources (DiscoveryEntries (RootApi selected)) (files code))
+    program <- ExceptT (compileGuest source)
+    described <- ExceptT (describeGuest program)
+    pure [ApiEntry (origin entry.moduleSource) entry | entry <- checkedModules described]
+  InspectWorkspaceApi workspace selection -> runExceptT $ case selection of
+    ListApiModules -> do
+      (PreparedEvolution (EvolutionContext _ _ (Before revision _) _) _ _ _,described) <-
+        ExceptT (prepareEvolutionDescription workspace)
+      pure (WorkspaceCatalogue workspace revision (filter public (checkedModules described)))
+    _ -> do
+      let selected = case selection of InspectApiModule name -> name; InspectApiSymbol name -> name
+      (revision,described) <- ExceptT (prepareEvolutionApi workspace [Text.pack selected])
+      pure (WorkspaceCatalogue workspace revision (checkedModules described))
+  where
+    origin path
+      | Text.null path = SdkOrigin
+      | ".kyyn-generated/" `Text.isPrefixOf` path = GeneratedOrigin
+      | "plugins/" `Text.isPrefixOf` path = PluginOrigin
+      | otherwise = KbOrigin
+    public entry = "Kyyn.Workspace." `Text.isPrefixOf` entry.moduleName || entry.moduleName == "KyynFrozenProposal"

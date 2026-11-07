@@ -28,7 +28,7 @@ data Invocation = Invocation
 data Selection = Selection
   { kb :: FilePath
   , git :: Maybe FilePath
-  , runtime :: Maybe FilePath
+  , nix :: Maybe FilePath
   } deriving (Eq, Show)
 
 data OutputMode = Human | Json deriving (Eq, Show)
@@ -215,8 +215,8 @@ selectionParser = Selection
       <> help "KB directory (may be inside a larger Git repository)")
   <*> optional (strOption (long "git" <> metavar "EXECUTABLE"
       <> help "Git executable override (default: locate Git on PATH)"))
-  <*> optional (strOption (long "runtime" <> metavar "DIRECTORY"
-      <> help "Bundled runtime directory override"))
+  <*> optional (strOption (long "nix" <> metavar "EXECUTABLE"
+      <> help "Nix executable override"))
 
 rootParser :: Parser RootCommand
 rootParser = hsubparser

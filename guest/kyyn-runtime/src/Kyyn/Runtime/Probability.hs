@@ -19,7 +19,7 @@ probabilitySchema :: Schema
 probabilitySchema = let A.Codec schema _ _ = upstream in schema
 
 upstream :: A.Codec Probability
-upstream = A.contract
+upstream = either (error . show) id (A.compileModel A.contract)
 
 -- | Numeric model values use the upstream Probability contract, not stored units.
 modelProbabilityCodec :: Codec Probability

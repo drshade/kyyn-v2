@@ -9,13 +9,12 @@ import Data.Text (Text)
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.FactProposal (FactProposal)
 import Kyyn.Types.KnowledgeBase (FlowEntryRef)
-import Kyyn.Porcelain.Capability.PluginPreparation (PreparedPlugin)
 
 data RecipeExecution :: Effect where
-  ExecuteRecipeFlow :: Root -> [PreparedPlugin] -> FlowEntryRef -> CheckedValue
+  ExecuteRecipeFlow :: Root -> FlowEntryRef -> CheckedValue
     -> Maybe Text -> RecipeExecution m (Either [Diagnostic] FactProposal)
 type instance DispatchOf RecipeExecution = Dynamic
 
-executeRecipeFlow :: RecipeExecution :> es => Root -> [PreparedPlugin] -> FlowEntryRef -> CheckedValue
+executeRecipeFlow :: RecipeExecution :> es => Root -> FlowEntryRef -> CheckedValue
   -> Maybe Text -> Eff es (Either [Diagnostic] FactProposal)
-executeRecipeFlow root plugins entry state = send . ExecuteRecipeFlow root plugins entry state
+executeRecipeFlow root entry state = send . ExecuteRecipeFlow root entry state

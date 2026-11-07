@@ -17,7 +17,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_AUTHOR_NAME: 'Recipe fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
   GIT_COMMITTER_NAME: 'Recipe fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function invoke(command, args, status = 0) {
-  const result = spawnSync(command, args, { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+  const result = spawnSync(command, args, { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, status, JSON.stringify({ command, args, ...result }));
   return result.stdout;
 }
@@ -43,10 +43,13 @@ try {
   fs.mkdirSync(path.dirname(config), { recursive: true });
   fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >
 in [${['documents', 'prices'].map(name => `{ name = "${name}", binding = "${name}", connector = Connector.Folder { directory = ${JSON.stringify(folder)}, recursive = False } }`).join(', ')}]`);
-  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `module RootV2 where
+  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
+module RootV2 where
+import GHC.Generics (Generic)
+import Data.Text (Text)
 import Kyyn.Schema
-data Todo = Todo { title :: String }
-data Root = Root { todos :: [Fact Todo] }
+data Todo = Todo { title :: Text } deriving stock Generic deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] } deriving stock Generic deriving anyclass Contract
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 `);
@@ -70,9 +73,9 @@ import qualified Kyyn.Connectors as Connectors
 import qualified Kyyn.Plugins.P_local_file.Folder.Evidence as Evidence
 import qualified LocalFile.Types as Local
 import qualified RootV2
-reconcile :: Flow (RecipeInput RootV2.Root String Integer) (RecipeProposal RootEdit Integer)
+reconcile :: Flow (RecipeInput RootV2.Root Text.Text Integer) (RecipeProposal RootEdit Integer)
 reconcile = A.act reconcileStep
-reconcileStep :: RecipeInput RootV2.Root String Integer -> Step (RecipeProposal RootEdit Integer)
+reconcileStep :: RecipeInput RootV2.Root Text.Text Integer -> Step (RecipeProposal RootEdit Integer)
 reconcileStep (RecipeInput (RootV2.Root facts) mode runs) = do
   if mode == "failFlow" then throwE (FetchError "Authored refusal") else pure ()
   if mode == "needsModel" then do
@@ -88,7 +91,7 @@ reconcileStep (RecipeInput (RootV2.Root facts) mode runs) = do
   captured <- mapM (\\key -> liftTool (Evidence.readEvidence Connectors.documents key) >>= either throwE pure) ids
   missing <- liftTool (Evidence.readEvidence Connectors.documents (EvidenceId "absent.txt")) >>= either throwE pure
   case missing of Just _ -> throwE (FetchError "Missing ID resolved"); Nothing -> pure ()
-  let texts = [Text.unpack text | Just (Evidence _ _ (Available (Local.Document text))) <- captured]
+  let texts = [text | Just (Evidence _ _ (Available (Local.Document text))) <- captured]
       citations = [EvidenceRef "local-file" "documents" key refs |
         (EvidenceId key, Just (Evidence _ refs _)) <- zip ids captured]
       edits = case texts of

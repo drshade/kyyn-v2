@@ -1,0 +1,68 @@
+cabal-version: 3.0
+name: kyyn-guest-build
+version: 0.1.0.0
+license: NONE
+copyright: All rights reserved.
+build-type: Simple
+
+library
+  hs-source-dirs: src
+  exposed-modules: Kyyn.Build.FrozenProposal Kyyn.Build.Inspection Kyyn.Build.Manifest Kyyn.Build.Driver Kyyn.Build.Captured Kyyn.Build.Plugins Kyyn.Build.ToolBindings Kyyn.Build.OutputBindings Kyyn.Build.Edits Kyyn.Build.Reification Kyyn.Build.RecipeBindings Kyyn.Build.Sources Kyyn.Build.RecipeTypes Kyyn.Build.RecipeHandles
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, ghc ==9.10.3, kyyn-types, template-haskell, agentic ==0.2.1.0,
+    text, filepath, directory, transformers, process, aeson, bytestring, dhall ==1.42.3
+
+test-suite inspection
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: InspectionTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-types,
+    text, directory, filepath, process, temporary ==1.3
+
+executable kyyn-guest-build
+  hs-source-dirs: app
+  main-is: Main.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build
+
+test-suite captured-bindings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: CapturedTests.hs
+  other-modules: CapturedProvider
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-types,
+    template-haskell, text
+
+test-suite edit-bindings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: EditTests.hs
+  other-modules: EditProvider EmptyEditProvider
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
+    agentic ==0.2.1.0, template-haskell, text, transformers
+
+test-suite source-merging
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: SourceTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, directory, filepath, process, temporary ==1.3
+
+test-suite recipe-bindings
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: RecipeTypeTests.hs
+  other-modules: RecipeTypeProvider
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-sdk:runtime,
+    agentic ==0.2.1.0, template-haskell

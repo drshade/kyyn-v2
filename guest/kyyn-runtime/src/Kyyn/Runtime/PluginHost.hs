@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GADTs, TypeOperators, ScopedTypeVariables #-}
-module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeAcquisitionResult, executeLogin) where
+module Kyyn.Runtime.PluginHost (httpRequest, secretRequest, waitingRequest, loginRequest, executeAcquisition, executeAcquisitionResult, executeAcquisitionAction, executeLogin, executeLoginAction) where
 
+import Kyyn.Plugin.Host (Acquisition, PluginLogin)
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Plugin (exchange, execute, eitherCodec, changeCodec, fileExchange, evidenceExchange, blobCodec)
 import Kyyn.Runtime.Concurrent
@@ -10,7 +11,7 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Kyyn.Types.PluginHost
-import Kyyn.Types.Blob
+import Kyyn.Types.Blob hiding (blobCodec)
 import Kyyn.Types.Plugin (EvidenceSnapshot, FileRead, EvidenceRead, FetchError)
 import Kyyn.Types.Program
 import Kyyn.Types.Evidence (EvidenceChange)
@@ -23,9 +24,14 @@ executeAcquisition configCodec payloadCodec = executeAcquisitionResult configCod
 executeAcquisitionResult :: forall config payload result. Codec config -> Codec payload -> Codec result
   -> (config -> EvidenceSnapshot payload -> Program (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload))))))
         (Either FetchError result)) -> IO ()
-executeAcquisitionResult configCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
+executeAcquisitionResult configCodec payloadCodec selectedResultCodec selected = withTransport $ \transport -> do
   (config,snapshot,width) <- acquisitionInput transport configCodec
-  executeConcurrent transport width (eitherCodec resultCodec) handler (selected config snapshot)
+  executeAcquisitionAction transport width payloadCodec selectedResultCodec (selected config snapshot)
+
+executeAcquisitionAction :: forall payload result. Transport -> Int -> Codec payload -> Codec result
+  -> Acquisition payload (Either FetchError result) -> IO ()
+executeAcquisitionAction transport width payloadCodec selectedResultCodec =
+  executeConcurrent transport width (eitherCodec selectedResultCodec) handler
   where
     handler :: (Http :+: (Secrets :+: (Waiting :+: (FileRead :+: (BlobAcquisition :+: (ContentDigest :+: EvidenceRead payload)))))) a -> Exchange a
     handler (InLeft call) = httpExchange call
@@ -61,7 +67,10 @@ executeLogin :: Codec config
 executeLogin configCodec selected = withTransport $ \transport -> do
   line <- readJson transport
   config <- either fail pure (parseValue line >>= decodeWith configCodec)
-  execute transport (resultCodec loginErrorCodec unitCodec) (handler transport) (selected config)
+  executeLoginAction transport (selected config)
+
+executeLoginAction :: Transport -> PluginLogin (Either LoginError ()) -> IO ()
+executeLoginAction channel = execute channel (resultCodec loginErrorCodec unitCodec) (handler channel)
   where
     handler :: Transport -> Integer -> (Http :+: (Secrets :+: (Waiting :+: LoginInteraction))) a -> IO a
     handler transport identity (InLeft call) = httpRequest transport identity call

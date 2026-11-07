@@ -14,7 +14,7 @@ const kb = path.join(temporary, 'kb');
 const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: path.join(temporary, 'gitconfig') };
 function invoke(args, status = 0, json = true) {
   const result = spawnSync(executable, ['--kb', kb, ...(json ? ['--json'] : []), ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, status, JSON.stringify({ args, ...result }));
   return json ? JSON.parse(result.stdout) : result.stdout + result.stderr;
 }
@@ -32,11 +32,11 @@ try {
     assert(text.includes(`Error [${code}]`), text);
     assert(text.includes(filename), text);
     assert.match(text, /line \d+, col \d+|:\d+:\d+/);
-    assert.match(text, /Cannot satisfy constraint|Type mismatch/);
+    assert.match(text, /Couldn.t match|No instance for/);
     assert.doesNotMatch(text, /CallStack|backtrace:|called at .* in /);
     return text;
   };
-  check('schema.compiler-rejected', 'RootV1.hs');
+  check('guest.build', 'RootV1.hs');
   fs.writeFileSync(schemaPath, schema);
   const manifest = path.join(target, 'kb.dhall');
   const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
@@ -45,17 +45,18 @@ try {
   fs.writeFileSync(manifest, source.replace(emptyTools,
     '[{ name = "assess", description = "Stale tool", implementation = "Tools.assess", inputType = "Tools.Input", resultType = "Tools.Output" }]'));
   fs.writeFileSync(path.join(target, 'src/Tools.hs'), `module Tools where
+import Data.Text (Text, pack)
 import Kyyn.Plugin (FetchError)
 import Kyyn.Connectors (Tool)
 import Agentic.Questions (YesNo(..))
-type Input = String
-type Output = String
+type Input = Text
+type Output = Text
 stale :: Double
 stale = case YesNo 0.95 of YesNo p -> p
 assess :: Input -> Tool (Either FetchError Output)
-assess _ = pure (Right (show stale))
+assess _ = pure (Right (pack (show stale)))
 `);
-  const tool = check('tool.compiler-rejected', 'Tools.hs');
+  const tool = check('guest.build', 'Tools.hs');
   assert.match(tool, /Probability/);
   assert.match(tool, /Double/);
   assert.doesNotMatch(tool, /schema.compiler-rejected/);

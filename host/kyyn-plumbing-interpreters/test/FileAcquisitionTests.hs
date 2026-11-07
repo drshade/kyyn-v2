@@ -26,7 +26,7 @@ main = withSystemTempDirectory "kyyn-file-acquisition-" $ \directory -> do
   unless (repeated == first) (fail "Stable file capture changed")
   case first of
     Right (CapturedText "abc" (EvidenceFingerprint token) resolved)
-      | resolved == directory </> "source.txt" && Text.length token == 64 && Text.all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
+      | resolved == Text.pack (directory </> "source.txt") && Text.length token == 64 && Text.all (`elem` ("0123456789abcdef" :: String)) token -> pure ()
     _ -> fail "Expected captured content and lowercase SHA-256 fingerprint"
   Bytes.writeFile (directory </> "other.txt") "abc"
   moved <- runEff (runFileAcquisitionIO (readSourceText scope (either error id (relativePath "other.txt"))))

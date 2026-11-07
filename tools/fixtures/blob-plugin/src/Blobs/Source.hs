@@ -1,11 +1,13 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module Blobs.Source where
 import Data.Text (Text)
+import GHC.Generics (Generic)
+import Kyyn.Schema (Contract)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import Kyyn.Validation
 
-newtype Config = Config { endpoint :: Text }
+newtype Config = Config { endpoint :: Text } deriving stock Generic deriving anyclass Contract
 validate :: Config -> ValidationReport
 validate _ = ValidationReport []
 

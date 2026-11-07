@@ -9,5 +9,5 @@ type Sink a = Program SinkCalls a
 
 -- | Write UTF-8 text, creating parents and atomically replacing the destination.
 -- Relative paths are relative to the KB. Returns the absolute destination.
-writeTextFile :: FilePath -> Text -> Sink (Either SinkError FilePath)
+writeTextFile :: Text -> Text -> Sink (Either SinkError Text)
 writeTextFile path = request . WriteTextFile path

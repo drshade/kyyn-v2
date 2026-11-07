@@ -20,7 +20,7 @@ import qualified Data.Text.Encoding as Text
 import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType
+import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldStyle(..), FieldDescription(..), CaseDescription(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
@@ -154,9 +154,9 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   Bytes.writeFile factPath missingBytes
   value <- runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root
   checked <- right value
-  let migrationType = case rootType (rootSchema schema) of
-        Algebraic _ args [Constructor _ fields] -> Algebraic "Migrated.Root" args
-          [Constructor "Migrated.Root" (fields ++ [(Just "confirmed",BoolType)])]
+  let migrationType = case descriptionOf (rootSchema schema) of
+        NamedDescription _ (RecordDescription _ style fields) -> NamedDescription (TypeIdentity "fixture" "Migrated" "Root" [])
+          (RecordDescription "Root" style (fields ++ [FieldDescription "confirmed" "" (scalar "Bool" BoolScalar)]))
         _ -> error "Expected record root fixture"
   migratedSchema <- right (checkContract migrationType (metadataOf (rootSchema schema)) >>= checkRootLayout)
   migratedId <- right (evolutionId "e002")
@@ -286,16 +286,21 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
 
 contractDescriptions :: RootContract -> IO ()
 contractDescriptions baseline = do
-  let status = Algebraic "Saved.Status" [] [Constructor "Saved.Open" [], Constructor "Saved.Done" []]
-      payload = Algebraic "Saved.Payload" [StringType]
-        [Constructor "Saved.Named" [(Just "label",StringType)], Constructor "Saved.Number" [(Nothing,IntegerType)]]
-      todo = Algebraic "Saved.Todo" [] [Constructor "Saved.Todo"
-        [(Just "title",StringType), (Just "status",status), (Just "parent",OptionalType sdkFactIdType)]]
-      fact = Algebraic "Kyyn.Types.Fact.Fact" [todo]
-        [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,todo)]]
-      rootType' = Algebraic "Saved.Root" [] [Constructor "Saved.Root"
-        [(Just "todos",ListType fact),(Just "count",IntegerType),(Just "enabled",BoolType),
-         (Just "optional",OptionalType StringType),(Just "payloads",ListType payload)]]
+  let typeIdentity name = TypeIdentity "fixture" "Saved" name []
+      named name = NamedDescription (typeIdentity name)
+      field name kind = FieldDescription name "" kind
+      text = scalar "Text" TextScalar
+      integer = scalar "Integer" IntegerScalar
+      status = named "Status" (SumDescription [CaseDescription "Open" "" PositionalFields [], CaseDescription "Done" "" PositionalFields []])
+      payload = named "Payload" (SumDescription
+        [CaseDescription "Named" "" NamedFields [field "label" text], CaseDescription "Number" "" PositionalFields [field "value" integer]])
+      todo = named "Todo" (RecordDescription "Todo" NamedFields
+        [field "title" text, field "status" status, field "parent" (OptionalDescription (scalar "FactId" FactIdScalar))])
+      fact = NamedDescription (TypeIdentity "kyyn-types" "Kyyn.Types.Fact" "Fact" [typeIdentity "Todo"])
+        (RecordDescription "Fact" NamedFields [field "id" (scalar "FactId" FactIdScalar),field "value" todo])
+      rootType' = named "Root" (RecordDescription "Root" NamedFields
+        [field "todos" (ListDescription fact),field "count" integer,field "enabled" (scalar "Bool" BoolScalar),
+         field "optional" (OptionalDescription text),field "payloads" (ListDescription payload)])
       metadata = SchemaMetadata
         [RoleDecl "name" "Readable name" Title, RoleDecl "badge" "Status" Badge, RoleDecl "time" "Unused timeline" Timeline]
         [FieldRole "Saved.Todo" "title" "name", FieldRole "Saved.Todo" "status" "badge"]
@@ -342,7 +347,7 @@ contractDescriptions baseline = do
 
 unitRecipe :: KB.Recipe -> Value.StoredRecipe
 unitRecipe method = Value.StoredRecipe method "()" contract (CheckedValue (contractId contract) (object []))
-  where contract = either (error . show) id (checkContract UnitType (SchemaMetadata [] [] []))
+  where contract = either (error . show) id (checkContract UnitDescription (SchemaMetadata [] [] []))
 
 noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Candidate operation read Git"
@@ -391,3 +396,6 @@ right = either (fail . show) pure
 storageRejected :: Show a => Either OperationalFailure a -> IO ()
 storageRejected (Left (StorageUnavailable _)) = pure ()
 storageRejected other = fail ("Expected storage failure: " ++ show other)
+
+scalar :: Text.Text -> ScalarKind -> Description
+scalar name kind = ScalarDescription (TypeIdentity "fixture" "Fixture" name []) kind name []

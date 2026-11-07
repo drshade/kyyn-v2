@@ -8,7 +8,7 @@ import Kyyn.Plugin (FetchError(..))
 import MicrosoftGraph.Json (form)
 
 send :: HttpRequest -> NetworkHost rest (Either Text HttpResponse)
-send request@(HttpRequest method _ _ _) = go 0 0
+send request@(HttpRequest method _ _ _) = go (0 :: Int) (0 :: Int)
   where
     go timeouts throttles = do
       result <- sendHttp request
@@ -29,7 +29,7 @@ download :: BlobDownload -> Acquisition payload (Either Text BlobRef)
 download request = fmap (>>= maybe (Left "Attachment download returned HTTP 403") Right) (downloadOptional request)
 
 downloadOptional :: BlobDownload -> Acquisition payload (Either Text (Maybe BlobRef))
-downloadOptional request@(BlobDownload (HttpRequest method _ _ _) _ _) = go 0
+downloadOptional request@(BlobDownload (HttpRequest method _ _ _) _ _) = go (0 :: Int)
   where
     go throttles = do
       result <- storeBlob request

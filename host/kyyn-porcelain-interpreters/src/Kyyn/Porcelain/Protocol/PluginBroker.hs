@@ -8,7 +8,9 @@ import qualified Data.Text.Encoding as Text
 import qualified Data.Map.Strict as Map
 import Effectful (Eff, (:>), raise)
 import Effectful.State.Static.Local (evalState, get, put)
-import Kyyn.Domain.CompiledProgram (CompiledProgram)
+import Kyyn.Domain.CompiledEntry (CompiledEntry, entryProgram)
+import Kyyn.Plumbing.Protocol.GuestInvocation (encodeInvocation)
+import Kyyn.Types.Guest (CapturedInvocation(..))
 import Kyyn.Domain.Contract (CheckedContract, contractShape)
 import Kyyn.Domain.Diagnostic (Diagnostic)
 import Kyyn.Domain.Evidence (EvidenceSnapshotRef(..))
@@ -43,12 +45,12 @@ answerAcquisition base prior call = case call of
   other -> answerEvidence prior other
 
 executeCapturedRead :: (EvidenceStore :> es, Blobs.BlobStorage :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
-  => CompiledProgram -> CheckedValue -> EvidenceIndex -> CheckedContract
+  => CompiledEntry -> CheckedValue -> EvidenceIndex -> CheckedContract
   -> Eff es (Either [Diagnostic] (Either FetchError Value))
 executeCapturedRead program (CheckedValue _ arguments) current@(EvidenceIndex (EvidenceSnapshotRef instanceRef _ _) _ _ _ _) result = do
   let refs = indexBlobs current
   output <- conversationWithBody (\(Frame bytes body) -> if Bytes.null body then decodeFrame bytes else Left "Unexpected raw body")
-    program (initialInput arguments) $ \call -> case call of
+    program (toJSON (CapturedInvocation arguments (Text.pack "selected"))) $ \call -> case call of
       ReadBlob ref | ref `elem` refs -> do
         bytes <- Blobs.readBlobAt instanceRef ref
         pure $ either (\(FetchError message) -> (failure (Text.unpack message),Bytes.empty))
@@ -77,17 +79,17 @@ answerEvidence prior call = case call of
                      | otherwise = protocolFailure "Unknown evidence snapshot handle"
 
 conversation :: (GuestExecution :> es, Failure :> es)
-  => (ByteString -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  => (ByteString -> Either String (PluginFrame call)) -> CompiledEntry -> Value
   -> (call -> Eff es Value) -> Eff es (Either FetchError Value)
 conversation decode program arguments respond = do
   conversationWithBody (\(Frame bytes body) -> if Bytes.null body then decode bytes else Left "Unexpected raw body")
     program arguments (\call -> (,) <$> respond call <*> pure Bytes.empty)
 
 conversationWithBody :: (GuestExecution :> es, Failure :> es)
-  => (Frame -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  => (Frame -> Either String (PluginFrame call)) -> CompiledEntry -> Value
   -> (call -> Eff es (Value,ByteString)) -> Eff es (Either FetchError Value)
 conversationWithBody decode program arguments respond = do
-  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program (jsonFrame arguments) $ \bytes -> do
+  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest (entryProgram program) (jsonFrame (encodeInvocation program arguments)) $ \bytes -> do
     frame <- either protocolFailure pure (decode bytes)
     case frame of
       HostRequest identity call -> do
@@ -99,10 +101,10 @@ conversationWithBody decode program arguments respond = do
   finishConversation decode output status stderr
 
 conversationAcquisition :: (ConcurrentExecution :> es, GuestExecution :> es, Failure :> es)
-  => Int -> (Frame -> Either String (PluginFrame call)) -> CompiledProgram -> ByteString
+  => Int -> (Frame -> Either String (PluginFrame call)) -> CompiledEntry -> Value
   -> (call -> Eff es (Value,ByteString)) -> Eff es (Either FetchError Value)
 conversationAcquisition width decode program arguments respond = do
-  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest program (jsonFrame arguments) $ \bytes -> do
+  (output,ProcessExit status stderr) <- evalState (1 :: Integer) $ executeGuest (entryProgram program) (jsonFrame (encodeInvocation program arguments)) $ \bytes -> do
     frame <- either protocolFailure pure (decodeAcquisitionFrame width decode bytes)
     let checkId identity = do
           expected <- get

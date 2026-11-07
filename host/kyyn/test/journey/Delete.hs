@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 
 import Kyyn.Workspace.Evolution

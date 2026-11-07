@@ -1,9 +1,13 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
-module Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..), executeGuest, executeCompiled, executeCompiledEntry) where
+module Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..), executeGuest, executeCompiled, executeCompiledEntry, executeEntry) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Data.ByteString (ByteString)
+import Data.Aeson (Value)
+import qualified Data.Text as Text
+import Kyyn.Domain.CompiledEntry (CompiledEntry, entryProgram, invocationName)
+import Kyyn.Plumbing.Protocol.GuestInvocation (encodeInvocation)
 import Kyyn.Domain.CompiledProgram (CompiledProgram)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExit(..))
 import Kyyn.Domain.Failure (OperationalFailure(..), ProcessDiagnostic(..), ProcessOperation(..))
@@ -33,3 +37,9 @@ executeCompiledEntry selected entry input = do
     then raiseFailure (RuntimeUnavailable (ProcessDiagnostic WaitForExit
       (selected ++ " exited " ++ show status ++ ": " ++ show diagnostics)))
     else pure output
+
+-- Select only an entry obtained from the checked description of this build.
+executeEntry :: (GuestExecution :> es, Failure :> es)
+  => CompiledEntry -> Value -> Eff es ByteString
+executeEntry entry argument = executeCompiledEntry (Text.unpack (invocationName entry))
+  (entryProgram entry) (encodeInvocation entry argument)

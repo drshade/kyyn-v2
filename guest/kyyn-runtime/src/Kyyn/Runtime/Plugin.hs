@@ -1,12 +1,12 @@
 {-# LANGUAGE GADTs, TypeOperators, RankNTypes, ScopedTypeVariables #-}
-module Kyyn.Runtime.Plugin (executeCapturedRead, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, fileExchange, evidenceExchange, identityCodec, evidenceCodec, changeCodec, blobCodec) where
+module Kyyn.Runtime.Plugin (executeCapturedRead, executeCapturedReadAction, execute, exchange, exchangeBody, eitherCodec, withOptionsCodec, withContextCodec, fetchResultCodec, input, fileRequest, evidenceRequest, fileExchange, evidenceExchange, identityCodec, evidenceCodec, changeCodec, blobCodec) where
 
 import Data.IORef (newIORef, readIORef, writeIORef)
 import Kyyn.Runtime.Concurrent (Exchange, metadataExchange, executeExchange)
 import Kyyn.Runtime.Json
 import Kyyn.Types.Evidence (EvidenceId(..), EvidenceFingerprint(..), EvidencePayload(..), Evidence(..), EvidenceChange(..))
 import Kyyn.Types.Plugin
-import Kyyn.Types.Blob
+import Kyyn.Types.Blob hiding (blobCodec)
 import Kyyn.Types.Program
 import Kyyn.Runtime.Transport
 import qualified Data.ByteString as B
@@ -26,8 +26,8 @@ withOptionsCodec configCodec optionsCodec = Codec encode decode
 withContextCodec :: Codec arguments -> Codec position -> Codec (arguments, FetchContext position)
 withContextCodec argumentsCodec positionCodec = Codec encode decode
   where
-    encode (arguments,FetchContext at prior) = record
-      [("input",encodeWith argumentsCodec arguments),("startedAt",encodeWith textCodec at),
+    encode (arguments,FetchContext startedAt prior) = record
+      [("input",encodeWith argumentsCodec arguments),("startedAt",encodeWith textCodec startedAt),
        ("priorPosition",encodeWith (optionalCodec positionCodec) prior)]
     decode value = do
       values <- fields ["input","startedAt","priorPosition"] value
@@ -47,7 +47,11 @@ executeCapturedRead :: forall arguments payload result. Codec arguments -> Codec
   -> (arguments -> EvidenceSnapshot payload -> Program (EvidenceRead payload :+: BlobRead) (Either FetchError result)) -> IO ()
 executeCapturedRead argumentCodec payloadCodec resultCodec selected = withTransport $ \transport -> do
   (arguments, snapshot) <- input transport argumentCodec
-  execute transport (eitherCodec resultCodec) (handler transport) (selected arguments snapshot)
+  executeCapturedReadAction transport payloadCodec resultCodec (selected arguments snapshot)
+
+executeCapturedReadAction :: forall payload result. Transport -> Codec payload -> Codec result
+  -> Program (EvidenceRead payload :+: BlobRead) (Either FetchError result) -> IO ()
+executeCapturedReadAction channel payloadCodec resultCodec = execute channel (eitherCodec resultCodec) (handler channel)
   where
     handler :: Transport -> Integer -> (EvidenceRead payload :+: BlobRead) a -> IO a
     handler transport identity (InLeft call) = evidenceRequest transport payloadCodec identity call
@@ -93,21 +97,21 @@ fileRequest transport identity = executeExchange transport identity . fileExchan
 
 fileExchange :: FileRead a -> Exchange a
 fileExchange (ListFiles directory recursive) = metadataExchange "files" "list"
-  (record [("directory",encodeWith stringCodec directory),("recursive",encodeWith boolCodec recursive)])
-  (eitherCodec (listCodec stringCodec))
+  (record [("directory",encodeWith textCodec directory),("recursive",encodeWith boolCodec recursive)])
+  (eitherCodec (listCodec textCodec))
 fileExchange (ReadTextFile path) = metadataExchange "files" "read"
-  (record [("path",encodeWith stringCodec path)]) (eitherCodec capturedTextCodec)
+  (record [("path",encodeWith textCodec path)]) (eitherCodec capturedTextCodec)
 
 capturedTextCodec :: Codec CapturedText
 capturedTextCodec = Codec encode decode
   where
     encode (CapturedText contents (EvidenceFingerprint fingerprint) path) = record
-      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint),("path",encodeWith stringCodec path)]
+      [("contents",encodeWith textCodec contents),("fingerprint",encodeWith textCodec fingerprint),("path",encodeWith textCodec path)]
     decode value = do
       values <- fields ["contents","fingerprint","path"] value
       CapturedText <$> field "contents" textCodec values
         <*> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
-        <*> field "path" stringCodec values
+        <*> field "path" textCodec values
 
 evidenceRequest :: Transport -> Codec payload -> Integer -> EvidenceRead payload a -> IO a
 evidenceRequest transport payloadCodec identity = executeExchange transport identity . evidenceExchange payloadCodec
@@ -159,14 +163,14 @@ evidenceCodec codec = Codec encode decode
   where
     encode (Evidence (EvidenceFingerprint fingerprint) references payload) = record
       [("fingerprint",encodeWith textCodec fingerprint),("externalReferences",encodeWith (listCodec textCodec) references),
-      ("payload",encodeWith (payloadCodec codec) payload)]
+      ("payload",encodeWith (evidencePayloadCodec codec) payload)]
     decode value = do
       values <- fields ["fingerprint","externalReferences","payload"] value
       Evidence <$> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
-        <*> field "externalReferences" (listCodec textCodec) values <*> field "payload" (payloadCodec codec) values
+        <*> field "externalReferences" (listCodec textCodec) values <*> field "payload" (evidencePayloadCodec codec) values
 
-payloadCodec :: Codec a -> Codec (EvidencePayload a)
-payloadCodec codec = Codec encode decode
+evidencePayloadCodec :: Codec a -> Codec (EvidencePayload a)
+evidencePayloadCodec codec = Codec encode decode
   where
     encode (Available value) = tagged "Available" (Just (encodeWith codec value))
     encode Truncated = tagged "Truncated" Nothing
@@ -185,7 +189,7 @@ changeCodec codec = Codec encode decode
     encode (RemovedEvidence key) = tagged "Removed" (Just (encodeWith identityCodec key))
     encode (SetEvidencePayload key (EvidenceFingerprint fingerprint) payload) = tagged "SetPayload" (Just (record
       [("id",encodeWith identityCodec key),("fingerprint",encodeWith textCodec fingerprint),
-       ("payload",encodeWith (payloadCodec codec) payload)]))
+       ("payload",encodeWith (evidencePayloadCodec codec) payload)]))
     item tag key evidence = tagged tag (Just (record [("id",encodeWith identityCodec key),
       ("evidence",encodeWith (evidenceCodec codec) evidence)]))
     decode value = do
@@ -198,7 +202,7 @@ changeCodec codec = Codec encode decode
           values <- fields ["id","fingerprint","payload"] entry
           SetEvidencePayload <$> field "id" identityCodec values
             <*> (EvidenceFingerprint <$> field "fingerprint" textCodec values)
-            <*> field "payload" (payloadCodec codec) values
+            <*> field "payload" (evidencePayloadCodec codec) values
         _ -> Left "Unknown evidence change"
     entryValue constructor value = do
       values <- fields ["id","evidence"] value

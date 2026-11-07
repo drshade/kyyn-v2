@@ -10,7 +10,7 @@ import Data.Aeson (Value(..), object, (.=), encode)
 import qualified Data.ByteString.Lazy as Lazy
 import Effectful (runPureEff)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType
+import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldStyle(..), FieldDescription(..), ScalarKind(..))
 import Kyyn.Domain.EvolutionReport
 import Kyyn.Domain.Evolution (evolutionId)
 import Kyyn.Plumbing.Protocol.Recipes (knowledgeBaseValue)
@@ -30,9 +30,9 @@ import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvol
 
 main :: IO ()
 main = do
-  old <- contract "V1" "Todos" [(Just "title",StringType)] ["todos"]
-  renamed <- contract "V1" "Renamed" [(Just "title",StringType)] ["todos"]
-  new <- contract "V2" "Todos" [(Just "title",StringType),(Just "done",BoolType)] ["todos"]
+  old <- contract "V1" "Todos" [("title",textDescription)] ["todos"]
+  renamed <- contract "V1" "Renamed" [("title",textDescription)] ["todos"]
+  new <- contract "V2" "Todos" [("title",textDescription),("done",boolDescription)] ["todos"]
   let input = root [fact "a" "First",fact "b" "Second"]
       edited = root [fact "c" "New",fact "a" "Changed"]
       rationale = Rationale "Reconcile todos" [EvidenceRef "graph" "work" "email-id" ["https://example.test/email"]]
@@ -85,7 +85,7 @@ main = do
     , check old (root [fact "a" "First",fact "a" "Second"]) old [] (root [fact "a" "First",fact "a" "Second"])
     , check old input new [step old input new input] input
     ] rejected
-  two <- contract "Two" "Todos" [(Just "title",StringType)] ["todos","other"]
+  two <- contract "Two" "Todos" [("title",textDescription)] ["todos","other"]
   let both = object ["todos" .= [fact "a" "First"],"other" .= [fact "a" "Second"]]
       moved = object ["todos" .= ([] :: [Value]),"other" .= [fact "a" "Second"]]
   (_,scoped) <- right (check two both two [step two both two moved] moved)
@@ -98,9 +98,9 @@ main = do
 
 stateTests :: RootContract -> Value -> IO ()
 stateTests domain input = do
-  state <- right (checkContract (Algebraic "Review.State" []
-    [Constructor "Review.State" [(Just "seen",ListType StringType)]]) (SchemaMetadata [] [] []))
-  unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  state <- right (checkContract (NamedDescription (TypeIdentity "fixture" "Review" "State" [])
+    (RecordDescription "State" NamedFields [FieldDescription "seen" "" (ListDescription textDescription)])) (SchemaMetadata [] [] []))
+  unit <- right (checkContract UnitDescription (SchemaMetadata [] [] []))
   ident <- right (evolutionId "000001-review")
   let stored ids = KB.StoredRecipe (OpenAgent "Review") "Review.State" state
         (CheckedValue (contractId state) (object ["seen" .= (ids :: [String])]))
@@ -137,7 +137,7 @@ stateTests domain input = do
 
 recipeTests :: RootContract -> RootContract -> Value -> Value -> IO ()
 recipeTests beforeContract afterContract input migrated = do
-  unit <- right (checkContract UnitType (SchemaMetadata [] [] []))
+  unit <- right (checkContract UnitDescription (SchemaMetadata [] [] []))
   let stored method = KB.StoredRecipe method "()" unit (CheckedValue (contractId unit) (object []))
       first = stored (OpenAgent "Read todos")
       updated = stored (OpenAgent "Read todos and explain changes")
@@ -218,14 +218,21 @@ root facts = object ["todos" .= facts]
 fact :: String -> String -> Value
 fact identifier title = object ["id" .= identifier,"value" .= object ["title" .= title]]
 
-contract :: String -> String -> [(Maybe String,DataType)] -> [String] -> IO RootContract
+contract :: String -> String -> [(String,Description)] -> [String] -> IO RootContract
 contract namespace label fields collections = right (checkContract schema metadata >>= checkRootLayout)
   where
-    payload = Algebraic (namespace ++ ".Todo") [] [Constructor (namespace ++ ".Todo") fields]
-    envelope = Algebraic "Kyyn.Types.Fact.Fact" [payload]
-      [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,payload)]]
-    schema = Algebraic (namespace ++ ".Root") [] [Constructor (namespace ++ ".Root") [(Just name,ListType envelope) | name <- collections]]
+    identity name = TypeIdentity "fixture" (Text.pack namespace) name []
+    payload = NamedDescription (identity "Todo") (RecordDescription "Todo" NamedFields
+      [FieldDescription (Text.pack name) "" kind | (name,kind) <- fields])
+    factId = ScalarDescription (TypeIdentity "kyyn-types" "Kyyn.Types.Fact" "FactId" []) FactIdScalar "fact-id" []
+    envelope = NamedDescription (TypeIdentity "kyyn-types" "Kyyn.Types.Fact" "Fact" [identity "Todo"])
+      (RecordDescription "Fact" NamedFields [FieldDescription "id" "" factId,FieldDescription "value" "" payload])
+    schema = NamedDescription (identity "Root") (RecordDescription "Root" NamedFields
+      [FieldDescription (Text.pack name) "" (ListDescription envelope) | name <- collections])
     metadata = SchemaMetadata [RoleDecl "title" (Text.pack label) Title] [] [CollectionDecl (Text.pack name) (Text.pack name) [] | name <- collections]
+
+boolDescription :: Description
+boolDescription = ScalarDescription (TypeIdentity "base" "GHC.Types" "Bool" []) BoolScalar "bool" []
 
 right :: Show e => Either e a -> IO a
 right = either (fail . show) pure
@@ -236,3 +243,6 @@ rejected (Right value) = fail ("Expected rejection, received " ++ show value)
 
 assert :: Bool -> String -> IO ()
 assert condition message = unless condition (fail message)
+
+textDescription :: Description
+textDescription = ScalarDescription (TypeIdentity "text" "Data.Text.Internal" "Text" []) TextScalar "text" []

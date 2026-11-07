@@ -16,7 +16,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_COMMITTER_NAME: 'Output fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function cli(args, expected = 0) {
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 180000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   return JSON.parse(result.stdout);
 }
@@ -97,10 +97,10 @@ in [{ name = "website", binding = "website", connector = Connector.File { path =
   console.log(`Warm query with source+sink plugin and output binding (ms): ${timings.join(', ')}`);
   const invalidDraft = cli(['evolution', 'new', 'wrong-output-type']).result;
   const wrongModule = path.join(invalidDraft.path, 'target/src/Reporting.hs');
-  fs.writeFileSync(wrongModule, fs.readFileSync(wrongModule, 'utf8').replace('type Output = Text', 'type Output = String')
-    .replace('page title = pure ("<!doctype html><title>" <> title <> "</title><h1>雪</h1>")', 'page _ = pure "wrong representation"'));
+  fs.writeFileSync(wrongModule, fs.readFileSync(wrongModule, 'utf8').replace('type Output = Text', 'type Output = Integer')
+    .replace('page title = pure ("<!doctype html><title>" <> title <> "</title><h1>雪</h1>")', 'page _ = pure 42'));
   const wrongResult = cli(['evolution', 'check', invalidDraft.id], 1);
-  assert(wrongResult.diagnostics.some(d => d.code === 'guest.compiler-rejected'));
+  assert(wrongResult.diagnostics.some(d => d.code === 'guest.build'));
   assert.equal(fs.readFileSync(publication.result, 'utf8'), before);
   console.log('Installed output contracts, preview, UTF-8 publication, overrides and rejection passed.');
 } finally {

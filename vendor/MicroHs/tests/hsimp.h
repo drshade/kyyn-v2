@@ -1,1 +1,0 @@
-int hsimp(int);

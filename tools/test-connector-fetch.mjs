@@ -43,7 +43,7 @@ function git(directory, ...args) {
 function cli(args, expected = 0) {
   const fetching = args[0] === 'evidence' && args[1] === 'fetch';
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env: { ...env, KYYN_TIMINGS: fetching ? '1' : '0' }, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env: { ...env, KYYN_TIMINGS: fetching ? '1' : '0' }, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   if (fetching) {
     assert.match(result.stderr, /\[kyyn timing\] sync-command /);
@@ -82,12 +82,12 @@ try {
     const declaration = path.join(source, 'src/LocalFile/Plugin.hs');
     fs.writeFileSync(declaration, fs.readFileSync(declaration, 'utf8')
       .replace('fetchOptionsType = Nothing', 'fetchOptionsType = Just "LocalFile.Types.FetchOptions"'));
-    fs.appendFileSync(path.join(source, 'src/LocalFile/Types.hs'), '\ndata FetchOptions = FetchOptions { skip :: Bool }\n');
+    fs.appendFileSync(path.join(source, 'src/LocalFile/Types.hs'), '\ndata FetchOptions = FetchOptions { skip :: Bool } deriving stock Generic deriving anyclass Contract\n');
     const implementation = path.join(source, 'src/LocalFile/Folder.hs');
     fs.writeFileSync(implementation, fs.readFileSync(implementation, 'utf8')
       .replace('fetch ::', 'fetchDefault ::').replace('fetch (Schema.', 'fetchDefault (Schema.') + `
 fetch :: Schema.FolderConfig -> Maybe Schema.FetchOptions -> EvidenceSnapshot Schema.Document
-  -> Acquisition (Either FetchError [EvidenceChange Schema.Document])
+  -> Acquisition Schema.Document (Either FetchError [EvidenceChange Schema.Document])
 fetch config options snapshot = case options of
   Just (Schema.FetchOptions True) -> pure (Right [])
   _ -> fetchDefault config snapshot
@@ -96,14 +96,15 @@ fetch config options snapshot = case options of
   if (reportSmoke) {
     const implementation = path.join(source, 'src/LocalFile/Folder.hs');
     fs.writeFileSync(implementation, fs.readFileSync(implementation, 'utf8')
-      .replace('module LocalFile.Folder (fetch)', 'module LocalFile.Folder (fetch, Report(..))')
+      .replace('{-# LANGUAGE OverloadedStrings #-}', '{-# LANGUAGE OverloadedStrings, DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}')
+      .replace('module LocalFile.Folder (fetch) where', 'module LocalFile.Folder (fetch, Report(..)) where\nimport GHC.Generics (Generic)\nimport Kyyn.Schema (Contract)\nimport Data.Text (Text)')
       .replace('fetch ::', 'fetchDefault ::').replace('fetch (Schema.', 'fetchDefault (Schema.') + `
-data Report = Report { changed :: Integer, notes :: [String] }
-fetch :: Schema.FolderConfig -> FetchContext String -> EvidenceSnapshot Schema.Document
-  -> Acquisition Schema.Document (Either FetchError (FetchResult Schema.Document String Report))
+data Report = Report { changed :: Integer, notes :: [Text] } deriving stock Generic deriving anyclass Contract
+fetch :: Schema.FolderConfig -> FetchContext Text -> EvidenceSnapshot Schema.Document
+  -> Acquisition Schema.Document (Either FetchError (FetchResult Schema.Document Text Report))
 fetch config (FetchContext started _) snapshot = do
   result <- fetchDefault config snapshot
-  pure (fmap (\\changes -> FetchResult changes ("private-resume:" ++ Text.unpack started)
+  pure (fmap (\\changes -> FetchResult changes ("private-resume:" <> started)
     (Report (fromIntegral (length changes)) ["fixture partial coverage"])) result)
 `);
   }
@@ -131,11 +132,12 @@ fetch config (FetchContext started _) snapshot = do
   fs.writeFileSync(configPath, 'not valid Dhall');
   if (toolChecks) {
     const started = performance.now();
-    assert(cli(['--git', '/not-a-git-executable', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
+    // Evolution discovery captures the target guest environment through Git.
+    assert.equal(cli(['--git', '/not-a-git-executable', 'guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id], 1).diagnostics[0].code, 'setup.git');
+    assert(cli(['guest', 'module', 'show', 'Kyyn.Schema', '--evolution', draft.id]).result.symbols.length > 0);
     console.log(`Fixed SDK discovery with broken plugin config: ${Math.round(performance.now() - started)} ms`);
-    const partial = cli(['guest', 'module', 'list', '--evolution', draft.id]);
-    assert(partial.result.modules.includes('Kyyn.Schema'));
-    assert(partial.diagnostics.some(diagnostic => diagnostic.code === 'guest.bindings-unavailable'));
+    const inventory = cli(['guest', 'module', 'list', '--evolution', draft.id], 1);
+    assert(inventory.diagnostics.some(diagnostic => diagnostic.code === 'guest.build'));
   }
   const schema = cli(['plugin', 'connector', 'schema', 'show', 'local-file', '--evolution', draft.id]).result.schema;
   assert.match(schema, /directory/);
@@ -156,14 +158,15 @@ fetch config (FetchContext started _) snapshot = do
     const bindings = cli(['guest', 'module', 'show', 'Kyyn.Connectors', '--evolution', draft.id]).result.symbols;
     for (const name of ['Tool', 'sales', 'support']) assert(bindings.some(symbol => symbol.name === name));
     const proxy = cli(['guest', 'module', 'show', 'Kyyn.Plugins.P_local_file.Folder', '--evolution', draft.id]).result.symbols;
-    assert(proxy.some(symbol => symbol.name === 'content' && /Instance/.test(symbol.declaration)));
+    assert(proxy.some(symbol => symbol.name === 'content' && /Instance/.test(symbol.signature)));
     const manifestPath = path.join(draft.path, 'target/kb.dhall');
     const manifest = fs.readFileSync(manifestPath, 'utf8');
     const emptyTools = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
     assert(manifest.includes(emptyTools));
     fs.writeFileSync(manifestPath, manifest.replace(emptyTools,
       '[{ name = "bulk", description = "Read captured folders", implementation = "Helpers.bulk", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));
-    fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `module Helpers where
+    fs.writeFileSync(path.join(draft.path, 'target/src/Helpers.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Helpers where
 import Data.Text (Text)
 import Kyyn.Plugin (FetchError)
 import Kyyn.Connectors (Tool)
@@ -282,7 +285,7 @@ bulk ids = do
     assert(fs.existsSync(path.join(kb, '.kyyn/evidence')));
     assert(!fs.existsSync(path.join(checkout, '.kyyn/evidence')));
     assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
-    const clear = ['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales'];
+    const clear = ['--nix', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales'];
     assert.equal(cli(clear).result.cleared, true);
     assert.equal(cli(clear).result.cleared, false);
     console.log('Installed nested-KB bad-config refusal, repair, acceptance, fetch and snapshot scope smoke passed.');
@@ -294,7 +297,7 @@ bulk ids = do
     fs.renameSync(sales, sales + '-offline');
     const args = ['root', 'tool', 'execute', 'bulk', '--input', '["updated.txt", "unchanged.txt"]'];
     assert.deepEqual(cli(args).result, ['Original sales evidence Ω', 'Stable sales evidence', 'Independent support evidence']);
-    const human = spawnSync(executable, ['--kb', kb, ...args], { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    const human = spawnSync(executable, ['--kb', kb, ...args], { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
     assert.equal(human.status, 0, JSON.stringify(human));
     assert.match(human.stdout, /Original sales evidence Ω/);
     assert.match(human.stdout, /Independent support evidence/);
@@ -332,7 +335,7 @@ bulk ids = do
     assert.equal(content('sales', 'updated.txt').result, 'Changed sales evidence λ');
     assert.equal(content('sales', 'removed.txt', 1).diagnostics[0].code, 'plugin.read-failed');
     const human = spawnSync(executable, ['--kb', kb, 'plugin', 'connector', 'method', 'execute',
-      'local-file', 'support', 'content', '--input', '"ticket.txt"'], { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+      'local-file', 'support', 'content', '--input', '"ticket.txt"'], { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
     assert.equal(human.status, 0, JSON.stringify(human));
     assert.equal(human.stdout.trim(), '"Independent support evidence"');
     assert.equal(git(checkout, 'rev-parse', 'HEAD'), accepted);
@@ -376,9 +379,9 @@ bulk ids = do
   const invalid = cli(['evidence', 'list', 'local-file', 'sales'], 1);
   assert.equal(invalid.diagnostics[0].code, 'evidence.invalid-data');
   assert.match(invalid.diagnostics[0].message, /clear.*fetch/i);
-  assert.equal(cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, true);
+  assert.equal(cli(['--nix', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, true);
   assert(!fs.existsSync(path.dirname(salesState)));
-  assert.equal(cli(['--runtime', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, false);
+  assert.equal(cli(['--nix', path.join(temporary, 'missing-runtime'), 'evidence', 'clear', 'local-file', 'sales']).result.cleared, false);
   assert.equal(current('support').selection.fetch, other);
   assert.equal(cli(['evidence', 'list', 'local-file', 'sales'], 1).diagnostics[0].code, 'evidence.not-fetched');
   const refetched = fetch('sales');

@@ -6,24 +6,24 @@ import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=))
 import qualified Data.Text as Text
 import Effectful (runPureEff)
-import Kyyn.Domain.Blob (sdkBlobRefType)
 import Data.Either (isLeft)
 import Kyyn.Domain.Contract (checkContract, contractId)
-import Kyyn.Domain.DataType (DataType(..), Constructor(..), Shape(..), ScalarKind(..))
+import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Evidence
 import Kyyn.Domain.EvidenceIndex
 import Kyyn.Domain.Plugin (PackageIdentity(..), ConnectorTypeName(..), pluginName)
 import Kyyn.Domain.Value (CheckedValue(..))
 import Kyyn.Plumbing.Capability.DhallHandling (encodeBinaryValue)
-import Kyyn.Plumbing.Protocol.DataType (dataTypeShape, dataTypeValue)
+import Kyyn.Plumbing.Protocol.Description (descriptionShape, descriptionValue)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Porcelain.Protocol.EvidenceIndex
 import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
 
 main :: IO ()
 main = do
-  contract <- either (fail . show) pure (checkContract TextType (SchemaMetadata [] [] []))
-  position <- either (fail . show) pure (checkContract IntegerType (SchemaMetadata [] [] []))
+  contract <- either (fail . show) pure (checkContract textDescription (SchemaMetadata [] [] []))
+  position <- either (fail . show) pure (checkContract integerDescription (SchemaMetadata [] [] []))
   plugin <- either (fail . show) pure (pluginName "fixture")
   let summary = FetchSummary (FetchId "first") "2026-10-08T00:00:00Z" 2 0 0 Nothing
       item = (EvidenceId "mail-雪",Evidence (EvidenceFingerprint "opaque") ["https://example.test/mail"]
@@ -61,8 +61,9 @@ main = do
   mapM_ (\shape -> do
     reportContract <- either (fail . show) pure (checkContract shape (SchemaMetadata [] [] []))
     unless (isLeft (validateReportContract reportContract)) (fail "Nested report BlobRef accepted"))
-    [sdkBlobRefType,ListType sdkBlobRefType,OptionalType sdkBlobRefType,
-      Algebraic "Fixture.Report" [] [Constructor "Fixture.Report" [(Just "file",sdkBlobRefType)]]]
+    [blobDescription,D.ListDescription blobDescription,D.OptionalDescription blobDescription,
+      D.NamedDescription (D.TypeIdentity "fixture" "Fixture" "Report" [])
+        (D.RecordDescription "Report" D.NamedFields [D.FieldDescription "file" "" blobDescription])]
   -- Produce valid binary Dhall with deliberately inconsistent descriptor/value pairs.
   -- This bypasses encodeIndex's guards and exercises the untrusted stored-input path.
   let scalar = Scalar TextScalar
@@ -70,8 +71,8 @@ main = do
       optionalValue :: Maybe Value -> Value
       optionalValue Nothing = object ["tag" .= ("None" :: String)]
       optionalValue (Just v) = object ["tag" .= ("Some" :: String), "value" .= v]
-      header legacy = Record ([("producer",scalar),("connector",scalar),("payloadType",dataTypeShape),
-        ("positionType",Optional dataTypeShape)] ++ [("reportType",Optional dataTypeShape) | not legacy])
+      header legacy = Record ([("producer",scalar),("connector",scalar),("payloadType",descriptionShape),
+        ("positionType",Optional descriptionShape)] ++ [("reportType",Optional descriptionShape) | not legacy])
       latest = Record [("identity",scalar),("fetchedAt",scalar),("added",natural),("updated",natural),("removed",natural),("options",Optional scalar)]
       location = Record [("sha256",scalar),("size",natural),("blobs",List (Record
         [("sha256",scalar),("size",natural),("mediaType",scalar),("name",Optional scalar)]))]
@@ -82,18 +83,26 @@ main = do
         (Record [("header",header legacy),("body",Record [("latest",latest),("values",List entry),
           ("position",Optional natural),("report",Optional reportShape)])])
         (object ["header" .= object (["producer" .= ("source" :: String),"connector" .= ("Mail" :: String),
-          "payloadType" .= dataTypeValue TextType,"positionType" .= optionalValue (Just (dataTypeValue IntegerType))] ++
+          "payloadType" .= descriptionValue textDescription,"positionType" .= optionalValue (Just (descriptionValue integerDescription))] ++
           ["reportType" .= optionalValue reportDescriptor | not legacy]),
           "body" .= object ["latest" .= object ["identity" .= ("first" :: String),"fetchedAt" .= ("now" :: String),
             "added" .= ("0" :: String),"updated" .= ("0" :: String),"removed" .= ("0" :: String),"options" .= optionalValue Nothing],
             "values" .= ([] :: [Value]),"position" .= optionalValue (Just (String "42")),"report" .= optionalValue reportBody]])
-  validRaw <- either (fail . show) pure (raw (Just (dataTypeValue TextType)) scalar (Just (String "report")))
+  validRaw <- either (fail . show) pure (raw (Just (descriptionValue textDescription)) scalar (Just (String "report")))
   _ <- either (fail . show) pure (decode validRaw)
   mapM_ (\encoded -> do
     invalidBytes <- either (fail . show) pure encoded
     unless (isLeft (decode invalidBytes)) (fail "Malformed stored report descriptor/value accepted"))
-    [rawWith True (Just (dataTypeValue TextType)) scalar (Just (String "report")),
-     raw (Just (dataTypeValue TextType)) scalar Nothing,
+    [rawWith True (Just (descriptionValue textDescription)) scalar (Just (String "report")),
+     raw (Just (descriptionValue textDescription)) scalar Nothing,
      raw Nothing (Record []) (Just (object [])),
-     raw (Just (dataTypeValue TextType)) (Scalar BoolScalar) (Just (Bool True))]
+     raw (Just (descriptionValue textDescription)) (Scalar BoolScalar) (Just (Bool True))]
   putStrLn "Evidence index: descriptor/position/metadata round trip and identity validation passed."
+
+textDescription, integerDescription, blobDescription :: D.Description
+textDescription = scalarDescription "Text" D.TextScalar
+integerDescription = scalarDescription "Integer" D.IntegerScalar
+blobDescription = scalarDescription "BlobRef" D.BlobRefScalar
+
+scalarDescription :: Text.Text -> D.ScalarKind -> D.Description
+scalarDescription name kind = D.ScalarDescription (D.TypeIdentity "fixture" "Fixture" name []) kind name []

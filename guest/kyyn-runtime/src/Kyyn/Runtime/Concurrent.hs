@@ -23,8 +23,8 @@ metadataExchange capability method arguments codec = Exchange
     if Bytes.null body then decodeWith codec value else Left "Unexpected raw body"
 
 executeExchange :: Transport -> Integer -> Exchange a -> IO a
-executeExchange transport identity (Exchange request decode) = do
-  replies <- exchangeRound transport False [(identity,request)]
+executeExchange transport identity (Exchange operation decode) = do
+  replies <- exchangeRound transport False [(identity,operation)]
   case replies of
     [reply] -> either fail pure (decode reply)
     _ -> fail "Missing host response"
@@ -124,7 +124,7 @@ executeConcurrent transport width codec handle program = do
 
 exchangeRound :: Transport -> Bool -> [(Integer,WireRequest)] -> IO [Reply]
 exchangeRound transport grouped requests = do
-  let parts = [requestPart grouped identity request | (identity,request) <- requests]
+  let parts = [requestPart grouped identity operation | (identity,operation) <- requests]
       message = if grouped then record [("tag",encodeWith stringCodec "HostBatch"),("requests",encodeWith (listCodec identityCodec) parts)]
         else case parts of [part] -> part; _ -> error "Invalid singleton exchange"
       body = Bytes.concat [raw | (_,WireRequest _ _ _ raw) <- requests]

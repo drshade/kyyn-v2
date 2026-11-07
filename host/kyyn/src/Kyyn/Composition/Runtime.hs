@@ -2,25 +2,26 @@
 module Kyyn.Composition.Runtime (Base, Runtime, runBase, runRuntime, withRuntime, finish) where
 
 import Effectful (Eff, IOE, runEff)
-import System.Environment (setEnv)
-import System.FilePath ((</>))
+import System.Directory (findExecutable, canonicalizePath)
+import qualified Data.ByteString.Char8 as Bytes
 import Kyyn.Configuration (Host(..))
 import Kyyn.Composition.Timings
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Failure (OperationalFailure)
-import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Path (directoryScope)
-import Kyyn.MicroHs.Toolchain (GuestToolchain(..))
-import Kyyn.MicroHs.Interpreter.GuestCompilation (runGuestCompilation)
-import Kyyn.MicroHs.Interpreter.GuestExecution (runGuestExecution)
-import Kyyn.MicroHs.Interpreter.SchemaInspection (runSchemaInspectionIO)
+import Kyyn.Domain.Path (scopePath)
+import Kyyn.Plumbing.Interpreter.GuestCompilation (GuestBuildEnvironment(..), runGuestCompilation)
+import Kyyn.Plumbing.Interpreter.GuestExecution (runGuestExecution)
+import Kyyn.Plumbing.Interpreter.SchemaInspection (runSchemaInspection)
+import Kyyn.Plumbing.Interpreter.GuestInspection (runGuestInspection)
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection)
 import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure)
-import Kyyn.Plumbing.Capability.FileSystem (FileSystem, readTree)
+import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution)
 import Kyyn.Plumbing.Capability.ProcessExecution (ProcessExecution)
+import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 import Kyyn.Plumbing.Capability.SchemaInspection (SchemaInspection)
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -32,26 +33,36 @@ import Kyyn.Porcelain.Interpreter.RootStore (runRootStore)
 import Kyyn.Surfaces.Result (Response, operationalFailure, refusal)
 
 type Base = '[RootStore, DhallHandling, Git, FileSystem, ProcessExecution, Failure, IOE]
-type Runtime = SchemaInspection ': GuestCompilation ': GuestExecution ': Base
+type Runtime = SchemaInspection ': GuestInspection ': GuestCompilation ': GuestExecution ': Base
 
 runBase :: Host -> Eff Base a -> IO (Either OperationalFailure a)
-runBase (Host executable environment temp _ _ _ timings) = runEff . runFailure . runProcessExecutionIO . observeProcesses timings
+runBase (Host executable environment temp _ _ _ _) = runEff . runFailure . runProcessExecutionIO
   . runFileSystemIO temp . runGit executable environment . runDhallHandling . runRootStore
 
-runRuntime :: Host -> GuestToolchain -> Eff Runtime a -> IO (Either OperationalFailure a)
-runRuntime host@(Host _ _ _ _ cache inspection timings) toolchain = runBase host
-  . runGuestExecution toolchain . observeExecutions timings
-  . runGuestCompilation toolchain cache . observeCompilations timings . runSchemaInspectionIO toolchain inspection
+runRuntime :: Host -> GuestBuildEnvironment -> Eff Runtime a -> IO (Either OperationalFailure a)
+runRuntime host@(Host _ _ _ _ _ environment timings) settings = runBase host
+  . runGuestExecution environment . observeExecutions timings
+  . runGuestCompilation settings . observeCompilations timings . runGuestInspection . runSchemaInspection
 
 finish :: IO (Either OperationalFailure Response) -> IO Response
 finish action = either operationalFailure id <$> action
 
-withRuntime :: Host -> (GuestToolchain -> FileTree -> IO Response) -> IO Response
-withRuntime (Host _ _ temp runtime _ _ _) action = case (directoryScope (runtime </> "microhs"), directoryScope (runtime </> "sdk")) of
-  (Right toolchain,Right sdkScope) -> do
-    setEnv "MHSCPPHS" (runtime </> "microhs/bin/cpphs")
-    loaded <- runEff . runFailure . runFileSystemIO temp $ readTree sdkScope
-    case loaded of
-      Left failure -> pure (operationalFailure failure)
-      Right sdk -> action (GuestToolchain toolchain) sdk
-  _ -> pure (refusal [errorDiagnostic "setup.runtime" "Runtime must resolve to an absolute directory"])
+withRuntime :: Host -> (GuestBuildEnvironment -> IO Response) -> IO Response
+withRuntime host@(Host _ _ temp override cache environment _) action = do
+  located <- findExecutable (maybe "nix" id override)
+  case located of
+    Nothing -> pure (refusal [errorDiagnostic "setup.nix" "Nix was not found; install Nix or supply --nix EXECUTABLE"])
+    Just path -> do
+      executable <- canonicalizePath path
+      result <- runBase host $ Process.withProcess
+        (Process.ProcessSpec executable ["--extra-experimental-features","nix-command flakes","eval","--impure","--raw","--expr","builtins.currentSystem"]
+          (scopePath temp) environment) $ do
+          Process.closeStdin
+          output <- Process.collectStdout
+          status <- Process.awaitExit
+          pure (output,status)
+      case result of
+        Left failure -> pure (operationalFailure failure)
+        Right (output,Process.ProcessExit 0 _) | not (Bytes.null output) ->
+          action (GuestBuildEnvironment executable (Bytes.unpack output) environment cache)
+        Right (_,Process.ProcessExit _ errors) -> pure (refusal [errorDiagnostic "setup.nix" (Bytes.unpack errors)])

@@ -31,9 +31,9 @@ import Kyyn.Surfaces.RootBrowsing (browsingContext)
 import Kyyn.Surfaces.Result (Response(..), Outcome(..), success, refusal)
 
 dispatchOutputs :: Host -> Cli.OutputCommand -> SelectedKb -> IO Response
-dispatchOutputs host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk ->
+dispatchOutputs host command (SelectedKb kb revision _) = withRuntime host $ \settings ->
   let run action = finish $ fmap (fmap (either refusal (browsingContext revision Nothing))) $
-        runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ runExceptT action
+        runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening . runRootExecution $ runExceptT action
   in case command of
     Cli.PublishOutput name supplied suppliedOptions -> case knowledgeBaseScope kb of
       Left message -> pure (refusal [errorDiagnostic "kb.path" message])

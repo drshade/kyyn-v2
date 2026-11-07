@@ -7,14 +7,18 @@ module Main (main) where
 import Control.Monad (unless)
 import Data.Either (isLeft, isRight)
 import Kyyn.Domain.Contract (checkContract)
-import Kyyn.Domain.DataType (DataType(..), Constructor(..))
+import Kyyn.Types.Contract
 import Kyyn.Types.SchemaMetadata
 
 main :: IO ()
 main = do
-  let status = Algebraic "Schema.Status" [] [Constructor "Schema.Open" [],Constructor "Schema.Done" []]
-      record = Algebraic "Schema.Todo" [] [Constructor "Schema.Todo"
-        [(Just "name",StringType),(Just "otherName",StringType),(Just "status",status),(Just "priority",status)]]
+  let named name = NamedDescription (TypeIdentity "test" "Schema" name [])
+      text = ScalarDescription (TypeIdentity "text" "Data.Text.Internal" "Text" []) TextScalar "Text" []
+      fieldType name value = FieldDescription name "" value
+      status = named "Status" (SumDescription
+        [CaseDescription "Open" "" PositionalFields [], CaseDescription "Done" "" PositionalFields []])
+      record = named "Todo" (RecordDescription "Todo" NamedFields
+        [fieldType "name" text,fieldType "otherName" text,fieldType "status" status,fieldType "priority" status])
       roles = [RoleDecl "name" "Name" Title,RoleDecl "other-name" "Other name" Title,
         RoleDecl "status" "Status" Badge,RoleDecl "priority" "Priority" Badge]
       field name role = FieldRole "Schema.Todo" name role

@@ -24,10 +24,10 @@ import Kyyn.Surfaces.Result (Response(..), refusal)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 
 dispatchSchema :: Host -> Cli.SchemaCommand -> SelectedKb -> IO Response
-dispatchSchema host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
+dispatchSchema host command (SelectedKb kb revision _) = withRuntime host $ \settings -> finish $
   fmap (fmap (either refusal (browsingContext revision workspace))) $
-    runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
-      . runRootOpening sdk . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
+    runRuntime host settings . runPluginPreparation . runToolPreparation
+      . runRootOpening . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
       SourceRoot contract _ _ _ <- ExceptT (Root.sourceRootAt kb revision workspace)
       case command of
         Cli.ListSchemas _ -> pure (schemaListResult contract)
@@ -39,10 +39,10 @@ dispatchSchema host command (SelectedKb kb revision _) = withRuntime host $ \too
   where workspace = case command of Cli.ListSchemas target -> target; Cli.ShowSchema _ target -> target
 
 dispatchCollection :: Host -> Cli.CollectionCommand -> SelectedKb -> IO Response
-dispatchCollection host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
+dispatchCollection host command (SelectedKb kb revision _) = withRuntime host $ \settings -> finish $
   fmap (fmap (either refusal (browsingContext revision workspace))) $
-    runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk
-      . runRootOpening sdk . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
+    runRuntime host settings . runPluginPreparation . runToolPreparation
+      . runRootOpening . runWorkspaceStore . runEvolutionStore $ runExceptT $ do
       SourceRoot contract _ _ _ <- ExceptT (Root.sourceRootAt kb revision workspace)
       case command of
         Cli.ListCollections _ -> pure (collectionListResult contract)
@@ -53,8 +53,8 @@ dispatchCollection host command (SelectedKb kb revision _) = withRuntime host $ 
   where workspace = case command of Cli.ListCollections target -> target; Cli.ShowCollection _ target -> target
 
 dispatchFacts :: Host -> Cli.FactCommand -> SelectedKb -> IO Response
-dispatchFacts host command (SelectedKb kb revision _) = withRuntime host $ \toolchain sdk -> finish $
-  runRuntime host toolchain . runPluginPreparation sdk . runToolPreparation sdk . runRootOpening sdk . runRootExecution sdk $ do
+dispatchFacts host command (SelectedKb kb revision _) = withRuntime host $ \settings -> finish $
+  runRuntime host settings . runPluginPreparation . runToolPreparation . runRootOpening . runRootExecution $ do
     checked <- Root.checkRootAt kb revision
     case checked of
       Rejected (ValidationReport diagnostics) -> pure (refusal diagnostics)

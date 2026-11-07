@@ -1,5 +1,0 @@
-start Unmasked
-catch start Unmasked
-unintr start MaskedUninterruptible
-handler MaskedInterruptible
-end Unmasked

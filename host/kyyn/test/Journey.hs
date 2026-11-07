@@ -1,7 +1,8 @@
--- Installed real-Git/Dhall/MicroHs journey: schema-changing evaluation and acceptance
+-- Installed real-Git/Dhall/Nix guest journey: schema-changing evaluation and acceptance
 -- in separate processes, source/fact deletion, archive review without cache, and
 -- inherited required examples. Needs KYYN_TEST_ROOT and KYYN_TEST_CLI.
 
+{-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications #-}
 module Main (main) where
 
 import Control.Monad (forM_, unless, void)
@@ -15,7 +16,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runPureEff)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType (DataType(..))
+import qualified Kyyn.Contract as Guest
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Example
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path (relativeName)
@@ -43,7 +45,6 @@ main = do
         ("GIT_COMMITTER_NAME","Ignored override"),("GIT_COMMITTER_EMAIL","ignored@example.invalid")]
       fixtureEnvironment = identity ++ filter (\(key,_) -> key `notElem` map fst identity) environment
   withSystemTempDirectory "kyyn-installed-journey" $ \kb -> do
-    copyTree (repository </> "examples/todos") kb
     let root = kb </> "root"
         fixture = repository </> "host/kyyn/test/journey"
         git arguments = do
@@ -64,12 +65,14 @@ main = do
           identifier <- textAt ["result","id"] response
           workspace <- textAt ["result","path"] response
           pure (identifier,workspace)
-    writeUtf8 (root </> "kb.dhall") (manifest "TodoSchemaV1")
-    copyFile (fixture </> "Queries.hs") (root </> "src/Queries.hs")
-    saveExample root "receipts-title" "titleFor" StringType (String "todo-002") (String "Check receipts")
     void (git ["init","-b","main"])
     void (git ["config","user.name","Configured fixture λ"])
     void (git ["config","user.email","fixture@example.invalid"])
+    void (ok ["kb","init"])
+    copyTree (repository </> "examples/todos") kb
+    writeUtf8 (root </> "kb.dhall") (manifest "TodoSchemaV1")
+    copyFile (fixture </> "Queries.hs") (root </> "src/Queries.hs")
+    saveExample root "receipts-title" "titleFor" (described @Text.Text) (String "todo-002") (String "Check receipts")
     void (git ["add","."])
     void (git ["commit","-m","Initial todos with a required example"])
     before <- git ["rev-parse","HEAD"]
@@ -79,7 +82,7 @@ main = do
     assert "First evolution did not use a numbered slug" (first == "000001-simplify-todos")
     void (ok ["evolution","ready",first])
     void (git ["config","user.name",""])
-    missingIdentity <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    missingIdentity <- cli (ExitFailure 1) ["--nix",kb </> "missing-runtime","evolution","accept",first]
     assert "Missing identity did not refuse before runtime loading"
       (any (\diagnostic -> at ["code"] diagnostic == String "git.identity") (array (at ["diagnostics"] missingIdentity)))
     void (git ["config","user.name","Configured fixture λ"])
@@ -91,7 +94,7 @@ main = do
       source <- Text.unpack . Text.decodeUtf8 <$> Bytes.readFile (target </> "src" </> name)
       writeUtf8 (target </> "src" </> name) (replace "TodoSchemaV1" "TodoSchemaV2" source)
     writeUtf8 (target </> "kb.dhall") (manifest "TodoSchemaV2")
-    saveExample target "report-done" "isDone" BoolType (String "todo-001") (Bool True)
+    saveExample target "report-done" "isDone" (described @Bool) (String "todo-001") (Bool True)
     copyFile (fixture </> "Migrate.hs") (workspace </> "change/Evolution.hs")
     evaluated <- ok ["evolution","check",first]
     let report = at ["result","report"] evaluated
@@ -109,7 +112,7 @@ main = do
     assert "Acceptance ignored configured Git identity or used environment overrides"
       (actualIdentity == "Configured fixture λ <fixture@example.invalid>|Configured fixture λ <fixture@example.invalid>")
     void (git ["config","user.name",""])
-    retried <- cli (ExitFailure 1) ["--runtime",kb </> "missing-runtime","evolution","accept",first]
+    retried <- cli (ExitFailure 1) ["--nix",kb </> "missing-runtime","evolution","accept",first]
     assert "Accepted retry did not refuse before identity/runtime access"
       (any (\diagnostic -> at ["code"] diagnostic == String "acceptance.not-ready") (array (at ["diagnostics"] retried)))
     void (git ["config","user.name","Configured fixture λ"])
@@ -120,7 +123,7 @@ main = do
     assert "Schema replacement lost its archive or retained old current source" (not oldCurrent && oldArchived)
 
     renameDirectory (kb </> ".kyyn") (kb </> "discarded-cache")
-    archived <- ok ["--runtime",kb </> "missing-runtime","evolution","show",first]
+    archived <- ok ["--nix",kb </> "missing-runtime","evolution","show",first]
     assert "Archived rationale/report changed" (at ["result","report"] archived == report)
     reopened <- ok ["root","show"]
     assert "Wrong accepted facts" (at ["result","value"] reopened == expectedFacts)
@@ -152,9 +155,9 @@ main = do
     assert "Wrong facts after deletion" (at ["result","value"] final == finalFacts)
     putStrLn "Installed CLI schema migration, archive/cache independence, inherited-example refusal and deliberate deletion passed."
 
-saveExample :: FilePath -> String -> String -> DataType -> Value -> Value -> IO ()
+saveExample :: FilePath -> String -> String -> D.Description -> Value -> Value -> IO ()
 saveExample destination name query resultType arguments expected = do
-  input <- right (checkContract StringType (SchemaMetadata [] [] []))
+  input <- right (checkContract (described @Text.Text) (SchemaMetadata [] [] []))
   result <- right (checkContract resultType (SchemaMetadata [] [] []))
   tree <- right (runPureEff (runDhallHandling (runRootStore (encodeExample
     (Example name (QueryDescriptor query "" input result)
@@ -222,3 +225,8 @@ replace old new input
   | take (length old) input == old = new ++ replace old new (drop (length old) input)
 replace old new (x:xs) = x : replace old new xs
 replace _ _ [] = []
+
+described :: forall a. Guest.Contract a => D.Description
+described = case Guest.compileContract (Guest.contract @a) of
+  Left problem -> error (show problem)
+  Right (Guest.CompiledContract description _) -> description

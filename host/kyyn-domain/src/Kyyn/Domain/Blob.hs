@@ -8,6 +8,7 @@ import Data.Aeson.Types (Parser, parseEither, withObject, withArray)
 import qualified Data.Aeson.Key
 import Data.Foldable (toList)
 import qualified Data.Text as Text
+import qualified Kyyn.Types.Contract as Contract
 import Kyyn.Domain.DataType
 import Kyyn.Types.Blob (BlobRef(..))
 
@@ -52,6 +53,7 @@ blobReferences :: DataType -> Value -> Either String [BlobRef]
 blobReferences datatype = parseEither (walk datatype)
   where
     walk t _ | not (any nominal (reachableTypes t)) = pure []
+    walk (ScalarType _ Contract.BlobRefScalar) value = pure <$> parseBlob value
     walk t value | t == sdkBlobRefType = pure <$> parseBlob value
     walk (Algebraic "Kyyn.Types.Blob.BlobRef" _ _) _ = fail "Unsupported SDK BlobRef representation"
     walk (ListType t) value = concat <$> withArray "list" (mapM (walk t) . toList) value
@@ -75,5 +77,6 @@ blobReferences datatype = parseEither (walk datatype)
       (\(name,t) -> o .: fromString name >>= walk t) [(name,t) | (Just name,t) <- fields]
     short = reverse . takeWhile (/= '.') . reverse
     fromString = Data.Aeson.Key.fromString
+    nominal (ScalarType _ Contract.BlobRefScalar) = True
     nominal (Algebraic "Kyyn.Types.Blob.BlobRef" _ _) = True
     nominal _ = False

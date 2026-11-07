@@ -10,7 +10,6 @@ import Kyyn.Domain.DataType (DataType(..), reachableTypes, haskellType)
 import Kyyn.Domain.Plugin (MethodName(..))
 import Kyyn.Domain.Tool (ToolDescriptor(..))
 import Kyyn.Porcelain.Capability.Tool (ToolPreparation, PreparedTool(..), prepareTools)
-import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins)
 import Kyyn.Domain.Evolution (EvolutionId, EvolutionWorkspace(..))
 import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..))
@@ -58,14 +57,13 @@ sourceCodeAt kb@(KnowledgeBase repository _) revision workspace = runExceptT $ c
     WorkspaceSnapshot _ _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
     pure code
 
-listRootTools :: (ToolPreparation :> es, PluginPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)
+listRootTools :: (ToolPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> Eff es (Either [Diagnostic] [PreparedTool])
 listRootTools kb revision workspace = runExceptT $ do
   code <- ExceptT (sourceCodeAt kb revision workspace)
-  plugins <- ExceptT (preparePlugins code)
-  ExceptT (prepareTools code plugins)
+  ExceptT (prepareTools code)
 
-selectRootTool :: (ToolPreparation :> es, PluginPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)
+selectRootTool :: (ToolPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)
   => KnowledgeBase -> GitRevision -> Maybe EvolutionId -> MethodName -> Eff es (Either [Diagnostic] PreparedTool)
 selectRootTool kb revision workspace name = runExceptT $ do
   tools <- ExceptT (listRootTools kb revision workspace)

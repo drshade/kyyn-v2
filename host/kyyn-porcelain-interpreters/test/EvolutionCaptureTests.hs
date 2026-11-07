@@ -11,11 +11,16 @@ import qualified Data.ByteString.Char8 as Char8
 import Data.IORef (IORef, newIORef, modifyIORef', readIORef)
 import Effectful (Eff, IOE, (:>), runEff, liftIO)
 import Effectful.Dispatch.Dynamic (interpret)
-import Kyyn.Domain.Contract (RootContract)
+import Kyyn.Domain.Contract (RootContract, rootSchema, descriptionOf, metadataOf)
+import Kyyn.Domain.Guest (checkGuest)
+import qualified Kyyn.Types.Guest as G
+import GuestFixture (fixtureProgram, noGuest)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection(..))
 import Kyyn.Domain.Diagnostic (Diagnostic(..), Severity(Error), errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(WriteFile))
-import Kyyn.Domain.FileTree (FileTree, fileTree)
+import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Git (Repository(..), GitRevision, TreePath(..), gitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (directoryScope, relativePath)
@@ -43,7 +48,7 @@ import System.Directory (createDirectoryIfMissing, removeFile, listDirectory)
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
-type TestEffects = '[EvolutionAuthoring, EvolutionStore, RootOpening, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
+type TestEffects = '[EvolutionAuthoring, EvolutionStore, RootOpening, GuestCompilation, GuestInspection, Git.Git, WorkspaceStore, RootStore, DhallHandling, FileSystem, Failure, IOE]
 
 evolutionCaptureTests :: RootContract -> IO ()
 evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture" $ \directory -> do
@@ -67,9 +72,17 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   sourceTree <- tree [("Schema.hs", "selected source"), ("Helpers.hs", "selected helper")]
   sourceCode <- tree [("kb.dhall", "{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"), ("src/Schema.hs", "selected source"),
     ("src/Helpers.hs", "selected helper"), ("examples/check.dhall", "selected example"),
-    ("plugins/config/provider.dhall", "selected config")]
+    ("plugins/config/provider.dhall", "selected config"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
   expectedClosure <- traverse (right . relativePath) ["Schema.hs", "Helpers.hs"]
-  let source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] sourceTree []) expectedClosure
+  let initialManifest = maybe (error "Missing fixture manifest") id (lookup (either error id (relativePath "kb.dhall")) (files sourceCode))
+      described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) [".kyyn-before/Schema.hs",".kyyn-before/Helpers.hs"]
+      guest = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+        [G.EvolutionDescriptionEntry described described []] []))
+      compiled :: Eff (GuestCompilation : es) a -> Eff es a
+      compiled operation = interpret (\_ (CompileGuest _) -> pure (Right (fixtureProgram "not executed"))) operation
+      inspected :: Eff (GuestInspection : es) a -> Eff es a
+      inspected operation = interpret (\_ (DescribeGuest _) -> pure (Right guest)) operation
+      source = SourceRoot contract sourceCode (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] sourceTree []) expectedClosure
   forM_ [Nothing, Just "examples/sales"] $ \prefixName -> do
     prefix <- maybe (pure WholeTree) (fmap Subtree . right . relativePath) prefixName
     rootPath <- Subtree <$> right (relativePath (maybe "root" (++ "/root") prefixName))
@@ -85,7 +98,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
         execute selected answer action = do
           count <- newIORef 0
           result <- runEff . runFailure . runFileSystemIO (case repo of Repository scope -> scope)
-            . runDhallHandling . runRootStore . runWorkspaceStore . noGit . openingMock count repo selected rootPath answer
+            . runDhallHandling . runRootStore . runWorkspaceStore . captureGit repo selected rootPath answer . inspected . compiled . openingMock count repo selected rootPath answer
             . runEvolutionStore . runEvolutionAuthoring $ action
           opens <- readIORef count
           unless (opens <= 1) (fail "Capture reopened Before within one operation")
@@ -118,7 +131,9 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "manifest.dhall" (manifest 'a' "Draft")
     write "before/Schema.hs" "selected source"
     write "before/Helpers.hs" "selected helper"
-    write "target/kb.dhall" "unfinished target manifest"
+    write "target/kb.dhall" initialManifest
+    write "target/flake.nix" "recorded fixture"
+    write "target/flake.lock" "recorded lock"
     write "target/src/Schema.hs" "unfinished target source"
     write "change/Evolution.hs" "unfinished entry"
     write "notes/review.md" "original note"
@@ -127,7 +142,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
       success (captureEvolution location) >>= right >>= right
     unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision && actualContract == contract && before == sourceTree)
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
-    expectedTarget <- tree [("kb.dhall", "unfinished target manifest"), ("src/Schema.hs", "unfinished target source")]
+    expectedTarget <- tree [("kb.dhall", initialManifest), ("src/Schema.hs", "unfinished target source"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
     emptyFacts <- tree []
     unless (input == Root contract emptyFacts sourceCode [] && closure == expectedClosure) (fail "Capture lost its input root or closure")
     unless (target == expectedTarget) (fail "Capture changed proposed target bytes")
@@ -182,11 +197,11 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   rootPath <- Subtree <$> right (relativePath "root")
   count <- newIORef 0
   failedWrite <- runEff . runFailure . creationFiles True failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
-    . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
+    . noGuest . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Write failure") revision AdHoc
   unless (failedWrite == Left failure) (fail "Failed creation write returned a successful workspace")
   collided <- runEff . runFailure . creationFiles False failure . runDhallHandling . runRootStore . runWorkspaceStore . noGit
-    . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
+    . noGuest . openingMock count repo revision rootPath (Right (Right source)) . runEvolutionStore . runEvolutionAuthoring $
       createEvolution (KnowledgeBase repo WholeTree) (EvolutionName "Collision") revision AdHoc
   case collided of
     Right (Left [Diagnostic Error "evolution.exists" _ _]) -> pure ()
@@ -200,6 +215,13 @@ creationFiles available failure = interpret $ \_ -> \case
   FS.CreateDirectory _ -> pure available
   FS.WriteBytes {} -> raiseFailure failure
   _ -> error "Creation unexpectedly read files or used a temporary scope"
+
+captureGit :: Failure :> es => Repository -> GitRevision -> TreePath
+  -> Either OperationalFailure (Either [Diagnostic] SourceRoot) -> Eff (Git.Git : es) a -> Eff es a
+captureGit expectedRepo expectedRevision expectedPath answer = interpret $ \_ -> \case
+  Git.ReadTreeAt repo revision path _ | (repo,revision,path) == (expectedRepo,expectedRevision,expectedPath) ->
+    either raiseFailure (pure . fmap (\(SourceRoot _ code _ _) -> code)) answer
+  _ -> error "Capture requested unexpected Git operation"
 
 noGit :: Eff (Git.Git : es) a -> Eff es a
 noGit = interpret $ \_ _ -> error "Capture bypassed RootOpening for Git"
@@ -216,7 +238,7 @@ openingMock count expectedRepo expectedRevision expectedPath answer = interpret 
         either raiseFailure pure answer
     OpenCapturedSource target -> either raiseFailure (pure . fmap (\(SourceRoot schema _ definition closure) ->
       SourceRoot schema target definition closure)) answer
-    LoadRootMaterialAt repo revision path (SourceRoot schema code _ _)
+    LoadRootMaterialWithContracts repo revision path (SourceRoot schema code _ _) []
       | (repo, revision, path) == (expectedRepo, expectedRevision, expectedPath) ->
         pure (Right (Root schema (either error id (fileTree [])) code []))
     _ -> error "Capture opened the wrong source revision/path or tried to decode facts"

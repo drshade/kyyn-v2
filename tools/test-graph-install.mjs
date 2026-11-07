@@ -22,7 +22,7 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 function cli(args, expected = 0) {
-  const result = spawnSync(executable, ['--kb', kb, '--json', ...args], { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+  const result = spawnSync(executable, ['--kb', kb, '--json', ...args], { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   return JSON.parse(result.stdout);
 }

@@ -23,24 +23,28 @@ import Kyyn.Plumbing.Protocol.FactProposal (proposalChange)
 import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import Kyyn.Plumbing.Protocol.RecipeEvolution (identityRecipeEvolutionSource)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring(..))
-import Kyyn.Porcelain.Capability.EvolutionPreparation (prepareEvolution)
+import Kyyn.Porcelain.Protocol.EvolutionPreparation (prepareEvolution)
 import qualified Kyyn.Porcelain.Capability.EvolutionStore as EvolutionStore
 import qualified Kyyn.Porcelain.Capability.RootOpening as RootOpening
-import Kyyn.Porcelain.Capability.RootStore (rootLocation)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation)
+import Kyyn.Plumbing.Capability.Git (Git)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection)
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 
 runEvolutionAuthoring
-  :: (EvolutionStore.EvolutionStore :> es, RootOpening.RootOpening :> es,
+  :: (RootStore :> es, Git :> es, GuestCompilation :> es, GuestInspection :> es,
+      EvolutionStore.EvolutionStore :> es, RootOpening.RootOpening :> es,
       WorkspaceStore.WorkspaceStore :> es, FileSystem.FileSystem :> es, DhallHandling :> es)
   => Eff (EvolutionAuthoring : es) a -> Eff es a
 runEvolutionAuthoring = interpret $ \_ -> \case
   CreateEvolution kb name revision kind -> create kb name revision kind Nothing
   CreateFactProposal kb name revision recipe proposal -> create kb name revision (RecipeBased recipe) (Just proposal)
   CaptureEvolution location@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) -> runExceptT $ do
-    PreparedEvolution context@(EvolutionContext _ _ (Before revision _) _) before@(SourceRoot _ _ _ closure) after <-
+    PreparedEvolution context@(EvolutionContext _ _ (Before revision _) _) before@(SourceRoot _ _ _ closure) after contracts <-
       ExceptT (prepareEvolution location)
     rootPath <- checked (rootLocation kb)
-    input <- ExceptT (RootOpening.loadRootMaterialAt repository revision (Subtree rootPath) before)
+    input <- ExceptT (RootOpening.loadRootMaterialWithContracts repository revision (Subtree rootPath) before contracts)
     pure (CapturedEvolution context input closure after)
 
 create :: (RootOpening.RootOpening :> es, WorkspaceStore.WorkspaceStore :> es,

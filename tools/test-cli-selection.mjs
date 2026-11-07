@@ -31,21 +31,21 @@ try {
   git(['init', '-q', '-b', 'main']);
   git(['add', '.']);
   git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Initial']);
-  const unavailableRuntime = ['--runtime', path.join(temporary, 'missing-runtime')];
+  const unavailableNix = ['--nix', path.join(temporary, 'missing-nix')];
   for (const directory of [kb, other]) {
-    assert.deepEqual(cli(['--kb', directory, ...unavailableRuntime, '--json', 'evolution', 'list'], 0).result, { evolutions: [] });
-    assert.deepEqual(cli([...unavailableRuntime, '--json', 'evolution', 'list'], 0, directory).result, { evolutions: [] });
+    assert.deepEqual(cli(['--kb', directory, ...unavailableNix, '--json', 'evolution', 'list'], 0).result, { evolutions: [] });
+    assert.deepEqual(cli([...unavailableNix, '--json', 'evolution', 'list'], 0, directory).result, { evolutions: [] });
   }
   const linked = path.join(temporary, 'linked-kb');
   fs.symlinkSync(kb, linked);
-  assert.equal(cli(['--kb', linked, ...unavailableRuntime, '--json', 'evolution', 'list'], 0).outcome, 'Succeeded');
+  assert.equal(cli(['--kb', linked, ...unavailableNix, '--json', 'evolution', 'list'], 0).outcome, 'Succeeded');
   for (const [directory, code] of [[repo, 'kb.not-found'], [temporary, 'git.no-working-tree'], [path.join(temporary, 'absent'), 'kb.directory']]) {
     const response = cli(['--kb', directory, '--json', 'evolution', 'list'], 1);
     assert.equal(response.diagnostics[0].code, code);
   }
   const head = spawnSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { env, encoding: 'utf8' }).stdout.trim();
   git(['checkout', '--detach', '-q', head]);
-  assert.equal(cli(['--kb', kb, ...unavailableRuntime, '--json', 'evolution', 'accept', 'abc'], 1).diagnostics[0].code, 'git.detached-head');
+  assert.equal(cli(['--kb', kb, ...unavailableNix, '--json', 'evolution', 'accept', 'abc'], 1).diagnostics[0].code, 'git.detached-head');
   const help = spawnSync(executable, ['--help'], { cwd: temporary, env, encoding: 'utf8' });
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--kb PATH/);
@@ -60,7 +60,7 @@ try {
     assert.match(result.stderr, /Available commands:/);
     for (const command of commands) assert.match(result.stderr, new RegExp(`^  ${command} +`, 'm'));
   }
-  console.log('CLI selection passed: nested/multiple KBs, cwd default, symlink, missing runtime, selection diagnostics and detached acceptance.');
+  console.log('CLI selection passed: nested/multiple KBs, cwd default, symlink, missing Nix, selection diagnostics and detached acceptance.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

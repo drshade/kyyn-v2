@@ -1,48 +1,48 @@
+{-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Porcelain.Protocol.RecipeContracts (inspectRecipeContracts) where
 
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import qualified Data.Text as Text
 import Effectful (Eff, (:>))
-import Kyyn.Domain.Contract (CheckedContract, rootSchema, rootType, checkContract)
-import Kyyn.Domain.DataType (DataType(UnitType), haskellType)
+import Kyyn.Domain.Contract (CheckedContract, rootSchema, descriptionOf, contractId)
+import Kyyn.Types.Contract (descriptionTypeName)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.Plugin (qualifiedTypeName)
-import Kyyn.Domain.Recipe (RecipeDefinition(..), RecipeSignature(..), checkRecipeDefinitions)
-import Kyyn.Domain.Root (SourceRoot(..), RootDefinition(..))
+import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.Guest (InspectedSchema(..), checkedEntries)
+import Kyyn.Domain.Recipe (RecipeDefinition(..), checkRecipeDefinitions)
+import Kyyn.Domain.Root (SourceRoot(..))
 import Kyyn.Types.Fact (Fact(..))
 import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
-import Kyyn.Types.SchemaMetadata (SchemaMetadata(..))
-import qualified Kyyn.Plumbing.Capability.SchemaInspection as Schema
-import Kyyn.Plumbing.Protocol.Evolution (evolutionBindings, mergeEvolutionSources)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation, prepareToolBindings)
-import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation, preparePlugins)
+import qualified Kyyn.Types.Guest as G
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, guestSources, GuestSelection(..), RecipeReference(..))
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection, describeGuest)
 
-inspectRecipeContracts :: (Schema.SchemaInspection :> es, ToolPreparation :> es, PluginPreparation :> es)
-  => FileTree -> SourceRoot -> [Fact RecipeDefinition]
+inspectRecipeContracts :: (GuestCompilation :> es, GuestInspection :> es)
+  => SourceRoot -> [Fact RecipeDefinition]
   -> Eff es (Either [Diagnostic] [(Fact RecipeDefinition, String, CheckedContract)])
-inspectRecipeContracts sdk (SourceRoot schema code (RootDefinition _ _ _ _ _ authored _) _) definitions = runExceptT $ do
+inspectRecipeContracts (SourceRoot schema code _ _) definitions = runExceptT $ do
   _ <- ExceptT (pure (checkRecipeDefinitions definitions))
-  base <- checked (fileTree (files authored ++ files sdk))
-  flowSources <- if null [() | Fact _ (ClosedRecipe _) <- definitions] then pure base else do
-    plugins <- ExceptT (preparePlugins code)
-    (sources,_) <- ExceptT (prepareToolBindings code plugins)
-    bindings <- checked (evolutionBindings schema schema)
-    checked (mergeEvolutionSources [sources,bindings])
-  traverse (\definition@(Fact _ method) -> case method of
-    OpenRecipe _ "()" -> do
-      contract <- ExceptT (pure (checkContract UnitType (SchemaMetadata [] [] [])))
-      pure (definition,"()",contract)
-    OpenRecipe _ name -> do
-      selected <- checked (qualifiedTypeName name)
-      Schema.InspectedSchema contract _ <- ExceptT (Schema.inspectType base selected)
-      pure (definition,name,contract)
-    ClosedRecipe (FlowEntryRef entry) -> do
-      RecipeSignature root _ state <- ExceptT (Schema.inspectRecipeFunction flowSources (Text.unpack entry))
-      unless (root == rootType (rootSchema schema)) (throwE
-        [errorDiagnostic "recipe.root-type" "Recipe flow takes a different root type"])
-      contract <- ExceptT (pure (checkContract state (SchemaMetadata [] [] [])))
-      pure (definition,haskellType state,contract)) definitions
+  if null definitions then pure [] else do
+    let references = [case definition of
+          OpenRecipe _ name -> OpenState (Text.pack name)
+          ClosedRecipe (FlowEntryRef name) -> ClosedFlow name | Fact _ definition <- definitions]
+    source <- either (throwE . pure . errorDiagnostic "recipe.sources") pure (guestSources (RecipeEntries references) (files code))
+    program <- ExceptT (compileGuest source)
+    description <- ExceptT (describeGuest program)
+    traverse (\definition@(Fact _ method) -> case method of
+      OpenRecipe _ name -> case [selected.contract | G.ContractEntry actual selected <- checkedEntries description,
+          actual == "$state." <> Text.pack name] of
+        [contract] -> pure (definition,name,contract)
+        _ -> missing name
+      ClosedRecipe (FlowEntryRef reference) -> case [(root.contract,state.contract) |
+          G.RecipeEntry _ actual (G.RecipeContracts root _ state) <- checkedEntries description, actual == reference] of
+        [(root,contract)] -> do
+          unless (contractId root == contractId (rootSchema schema)) (throwE
+            [errorDiagnostic "recipe.root-type" "Recipe flow takes a different Root contract"])
+          stateName <- either (throwE . pure . errorDiagnostic "recipe.state-type" . Text.unpack) pure
+            (descriptionTypeName (descriptionOf contract))
+          pure (definition,Text.unpack stateName,contract)
+        _ -> missing (Text.unpack reference)) definitions
   where
-    checked = either (throwE . pure . errorDiagnostic "recipe.state-contract") pure
+    missing name = throwE [errorDiagnostic "recipe.description" ("Guest did not describe recipe reference " ++ name)]

@@ -15,13 +15,13 @@ import Kyyn.Domain.Plugin (qualifiedTypeName, bindingModule, bindingName)
 import Kyyn.Domain.Contract (CheckedContract, ContractId, contractId)
 import Kyyn.Domain.DataType (DataType)
 import Kyyn.Domain.Value (CheckedValue(..))
+import Kyyn.Types.Guest (DescriptionFormat(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
 
 recipeId :: String -> Either String RecipeId
 recipeId value = either (Left . ("Invalid recipe name: " ++)) (const (Right (RecipeId (Text.pack value)))) (bindingName value)
 
-data DescriptionFormat = Tree | Dot | Mermaid deriving (Eq, Show)
 
 data RecipeSignature = RecipeSignature
   { rootType :: DataType, inputType :: DataType, stateType :: DataType }

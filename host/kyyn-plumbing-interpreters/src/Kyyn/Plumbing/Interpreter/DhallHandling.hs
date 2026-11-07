@@ -1,7 +1,14 @@
-{-# LANGUAGE GADTs, LambdaCase, OverloadedStrings #-}
+{-# LANGUAGE GADTs, LambdaCase, OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling) where
 
 import Data.Bifunctor (first)
+import qualified Agentic.Value as Agentic
+import Agentic.Contract (Codec(..))
+import Data.Aeson.Types (parseEither)
+import qualified Kyyn.Types.Contract as Contract
+import Kyyn.Types.Fact (parseFactId)
+import Kyyn.Types.Scalar (dayText, instantText, validateDecimalText)
+import Kyyn.Domain.Blob (parseBlob)
 import Control.Monad (unless)
 import Data.Aeson (Value(..), object, (.=), toJSON)
 import qualified Data.Aeson.Key as Key
@@ -70,7 +77,7 @@ inferredShape :: D.Expr Src Void -> Either String Shape
 inferredShape D.Text = Right (Scalar TextScalar)
 inferredShape D.Integer = Right (Scalar IntegerScalar)
 inferredShape D.Bool = Right (Scalar BoolScalar)
-inferredShape D.Natural = Right (Scalar ProbabilityScalar)
+inferredShape D.Natural = Right (Scalar NaturalScalar)
 inferredShape (D.App D.List element) = List <$> inferredShape element
 inferredShape (D.App D.Optional element) = Optional <$> inferredShape element
 inferredShape (D.Record fields) = Record <$> traverse
@@ -93,7 +100,13 @@ checkedExpression contract value = do
 
 fromWire :: Shape -> Value -> Either String (D.Expr Src Void)
 fromWire (Scalar TextScalar) (String text) = Right (D.TextLit (D.Chunks [] text))
-fromWire (Reference _) value = fromWire (Scalar TextScalar) value
+fromWire (Reference _) value = fromWire (Scalar (ExactScalar Contract.FactIdScalar)) value
+fromWire (Scalar (ExactScalar kind)) value = do
+  validateScalar kind value
+  fromWire (scalarShape kind) value
+fromWire (Scalar NaturalScalar) (String text) = case reads (Text.unpack text) of
+  [(n, "")] | n >= (0 :: Integer), Text.pack (show n) == text -> Right (D.NaturalLit (fromInteger n))
+  _ -> Left "Expected canonical nonnegative integer string"
 fromWire (Scalar IntegerScalar) (String text) = case reads (Text.unpack text) of
   [(n, "")] | Text.pack (show (n :: Integer)) == text -> Right (D.IntegerLit n)
   _ -> Left "Expected canonical integer string"
@@ -149,6 +162,8 @@ variant _ = Left "Expected tagged object"
 project :: Shape -> D.Expr Src Void
 project (Scalar TextScalar) = D.Text
 project (Scalar IntegerScalar) = D.Integer
+project (Scalar NaturalScalar) = D.Natural
+project (Scalar (ExactScalar kind)) = project (scalarShape kind)
 project (Scalar BoolScalar) = D.Bool
 project (Scalar ProbabilityScalar) = D.Natural
 project (Reference _) = D.Text
@@ -178,7 +193,12 @@ checkedValue contract closed = do
 
 toWire :: Shape -> D.Expr Src Void -> Either String Value
 toWire (Scalar TextScalar) (D.TextLit (D.Chunks [] text)) = Right (toJSON text)
-toWire (Reference _) value = toWire (Scalar TextScalar) value
+toWire (Reference _) value = toWire (Scalar (ExactScalar Contract.FactIdScalar)) value
+toWire (Scalar NaturalScalar) (D.NaturalLit n) = Right (toJSON (show n))
+toWire (Scalar (ExactScalar kind)) expression = do
+  value <- toWire (scalarShape kind) expression
+  validateScalar kind value
+  pure value
 toWire (Scalar IntegerScalar) (D.IntegerLit n) = Right (toJSON (show n))
 toWire (Scalar BoolScalar) (D.BoolLit b) = Right (toJSON b)
 toWire (Scalar ProbabilityScalar) (D.NaturalLit n)
@@ -208,3 +228,32 @@ toWire _ _ = Left "Unexpected normalized Dhall value for checked shape"
 tagged :: Text -> Maybe Value -> Value
 tagged name Nothing = object ["tag" .= name]
 tagged name (Just value) = object ["tag" .= name, "value" .= value]
+
+scalarShape :: Contract.ScalarKind -> Shape
+scalarShape kind = case kind of
+  Contract.IntegerScalar -> Scalar IntegerScalar
+  Contract.IntScalar _ _ -> Scalar IntegerScalar
+  Contract.NaturalScalar -> Scalar NaturalScalar
+  Contract.BoolScalar -> Scalar BoolScalar
+  Contract.ProbabilityScalar -> Scalar ProbabilityScalar
+  Contract.BlobRefScalar -> Record [("sha256",text),("size",Scalar IntegerScalar),("mediaType",text),("name",Optional text)]
+  _ -> text
+  where text = Scalar TextScalar
+
+validateScalar :: Contract.ScalarKind -> Value -> Either String ()
+validateScalar kind value = case (kind,value) of
+  (Contract.IntScalar lo hi, String text) -> case reads (Text.unpack text) of
+    [(n,"")] | lo <= n && n <= hi && Text.pack (show n) == text -> Right ()
+    _ -> Left "Integer outside declared bounds"
+  (Contract.DecimalScalar resolution, String text) -> first Text.unpack (validateDecimalText resolution text)
+  (Contract.DateScalar, String text) -> first Text.unpack (() <$ dayText.decode (Agentic.String text))
+  (Contract.InstantScalar, String text) -> first Text.unpack (() <$ instantText.decode (Agentic.String text))
+  (Contract.FactIdScalar, String text) -> first Text.unpack (() <$ parseFactId text)
+  (Contract.BlobRefScalar, _) -> () <$ parseEither parseBlob value
+  -- The base shape validates the remaining scalar representations.
+  (Contract.TextScalar, _) -> Right ()
+  (Contract.IntegerScalar, _) -> Right ()
+  (Contract.NaturalScalar, _) -> Right ()
+  (Contract.BoolScalar, _) -> Right ()
+  (Contract.ProbabilityScalar, _) -> Right ()
+  _ -> Left "Value does not match the declared scalar"

@@ -85,6 +85,8 @@ configured Git identity. It writes a complete pre-locked flake from the host's
 repository revision, without resolving dependency versions. Its first check may
 fetch the locked inputs and build the guest. For an existing KB, inspect its facts, schema and
 relevant recipes first.
+The initial source and Dhall files live in [the KB template](../templates/kb/);
+the repository flake adds its pinned `flake.nix` and `flake.lock` at build time.
 
 ```sh
 kyyn-v2 evolution new first-collection
@@ -100,11 +102,18 @@ This complete example starts from a newly initialized empty KB. In the draft,
 replace `target/src/RootV1.hs` with `target/src/RootV2.hs`:
 
 ```haskell
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
 module RootV2 where
+import Data.Text (Text)
+import GHC.Generics (Generic)
 import Kyyn.Schema
 
-data Todo = Todo { title :: String } deriving (Eq, Show)
-data Root = Root { todos :: [Fact Todo] } deriving (Eq, Show)
+data Todo = Todo { title :: Text }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass Contract
+data Root = Root { todos :: [Fact Todo] }
+  deriving stock (Eq, Show, Generic)
+  deriving anyclass Contract
 
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
@@ -117,6 +126,7 @@ and replace `target/src/Validate.hs` with:
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 module Validate where
+import qualified Data.Text as Text
 import RootV2
 import Kyyn.Schema
 import Kyyn.Validation
@@ -124,7 +134,7 @@ import Kyyn.Validation
 validate :: Root -> ValidationReport
 validate (Root todos) = ValidationReport
   [ errorDiagnostic "todo.title" "Todo title must not be empty"
-  | Fact _ (Todo name) <- todos, null name
+  | Fact _ (Todo name) <- todos, Text.null name
   ]
 ```
 
@@ -347,6 +357,10 @@ import GHC.Generics (Generic)
 data Task = Task { title :: Text }
   deriving (Generic, Contract)
 ```
+
+Use `Text` for string fields in contract types, including paths. `String` and
+`FilePath` are lists of `Char` and do not have a supported contract. Path values
+are converted to filesystem paths at the host boundary.
 
 That single derivation supplies the
 structural contract interpreted by Kyyn's describe, storage and model codecs.

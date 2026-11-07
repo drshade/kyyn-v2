@@ -1,6 +1,7 @@
-{-# LANGUAGE RankNTypes, OverloadedStrings #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, DataKinds, TypeApplications, DeriveGeneric #-}
 module EditTests (main) where
 
+import GHC.Generics (Generic)
 import Kyyn.Evolution
 import qualified Data.Text as Text
 import Kyyn.Edit.Internal (Collection(..), execStateT)
@@ -9,17 +10,17 @@ import Kyyn.Types.Diagnostic (Diagnostic(Diagnostic), Severity(Error), Diagnosti
 import Kyyn.Types.Fact
 import Text.JSON.Types (JSValue(..))
 
-data Todo = Todo { title :: String, priority :: Integer } deriving (Eq, Show)
-data Root = Root { todos :: [Fact Todo], notes :: [Fact String], label :: String } deriving (Eq, Show)
+data Todo = Todo { title :: String, priority :: Integer } deriving (Eq, Show, Generic)
+data Root = Root { todos :: [Fact Todo], notes :: [Fact String], label :: String } deriving (Eq, Show, Generic)
 
 todoCollection :: Collection Root Todo
-todoCollection = Collection "work-items" (lens todos (\r v -> r { todos = v }))
+todoCollection = Collection "work-items" (field @"todos")
 
 noteCollection :: Collection Root String
-noteCollection = Collection "notes" (lens notes (\r v -> r { notes = v }))
+noteCollection = Collection "notes" (field @"notes")
 
 priorityLens :: Lens' Todo Integer
-priorityLens = lens priority (\t v -> t { priority = v })
+priorityLens = field @"priority"
 
 main :: IO ()
 main = do

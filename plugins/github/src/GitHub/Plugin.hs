@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module GitHub.Plugin (connectors) where
-import Kyyn.Plugin
+import Kyyn.Plugin (Connector(..), CapturedMethod(..))
 
 connectors :: [Connector]
 connectors = [SourceConnector

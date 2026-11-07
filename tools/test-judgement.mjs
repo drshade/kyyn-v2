@@ -1,4 +1,5 @@
 // Installed judgement discovery and ordinary registered-tool missing-secret refusal.
+// Type checks preserve query/validator isolation and applicative-only questions.
 // No live Jev call.
 
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1',
   GIT_AUTHOR_EMAIL: 'fixture@example.invalid', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function cli(args, status = 0) {
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(result.status, status, JSON.stringify({ args, ...result }));
   return JSON.parse(result.stdout);
 }
@@ -51,13 +52,13 @@ import qualified Data.Text as Text
 import Kyyn.Agentic (Flow, interpret)
 import Kyyn.Connectors (Tool)
 import Kyyn.Plugin (FetchError)
-type Input = String
+type Input = Text.Text
 type Output = Integer
 assessment :: Flow Text.Text Integer
 assessment = A.judge (yesNo "Does this require a reply?")
   >>> arr (\\(YesNo p) -> toInteger (basisPoints p))
 assess :: Input -> Tool (Either FetchError Output)
-assess = interpret assessment . Text.pack
+assess = interpret assessment
 `);
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
@@ -69,6 +70,21 @@ assess = interpret assessment . Text.pack
   assert.match(JSON.stringify(missing), /secret set/);
   assert.equal(git('rev-parse', 'HEAD'), head);
   assert.equal(git('status', '--porcelain'), '');
+  // The valid tool above is the positive control for these compiler refusals.
+  const invalid = cli(['evolution', 'new', 'invalid-effects']).result;
+  const helper = path.join(invalid.path, 'target/src/Helpers.hs');
+  const validSource = fs.readFileSync(helper, 'utf8')
+    .replace('import Control.Arrow', 'import qualified Agentic.Questions as Q\nimport qualified Kyyn.Types.Query as Query\nimport Control.Arrow');
+  for (const [label,body,diagnostic] of [
+    ['query', 'invalid :: Query.Query () Integer\ninvalid = interpret assessment "x"', /Query|Tool/],
+    ['validator', 'invalid :: () -> Integer\ninvalid _ = interpret assessment "x"', /Integer|Tool/],
+    ['dependent question', 'invalid :: Q.Questions Q.YesNo\ninvalid = Q.yesNo "q" >>= pure', /Monad/],
+  ]) {
+    fs.writeFileSync(helper, validSource + '\n' + body + '\n');
+    const refused = cli(['evolution', 'check', invalid.id], 1);
+    assert.match(JSON.stringify(refused), /guest.build/, label);
+    assert.match(JSON.stringify(refused), diagnostic, label);
+  }
   console.log('Installed Agentic judgement tool: discovery, compile without credentials, missing-key refusal, unchanged root. No live provider contacted.');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });

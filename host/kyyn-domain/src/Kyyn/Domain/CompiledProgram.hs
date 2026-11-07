@@ -1,14 +1,18 @@
 module Kyyn.Domain.CompiledProgram (BuildIdentity(..), CompiledProgram(..)) where
 
 import Data.ByteString (ByteString)
-import Kyyn.Domain.Path (RelativePath)
 
+-- Nix owns the compiler/library/build-option identity; source capture also
+-- includes the fixed entry selection. No mutable checkout is resolved at invoke.
 data BuildIdentity = BuildIdentity
-  { toolchainRevision :: String
-  , sourcesDigest :: ByteString
+  { sourcesDigest :: ByteString
+  , targetSystem :: String
+  , derivationPath :: FilePath
+  , outputPath :: FilePath
   } deriving (Eq, Show)
 
 data CompiledProgram = CompiledProgram
   { identity :: BuildIdentity
-  , artifact :: (RelativePath, ByteString)
+  , executable :: FilePath
+  , retentionRoot :: FilePath
   } deriving (Eq, Show)

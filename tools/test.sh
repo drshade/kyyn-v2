@@ -16,60 +16,28 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 node -e 'if (Number(process.versions.node.split(".")[0]) < 22) { console.error("Node.js 22+ is required for the development gate."); process.exit(1); }'
 
-bash -n tools/test.sh
-bash -n tools/test-guest.sh
-bash -n tools/stage-cli.sh
-bash -n tools/stage-microhs.sh
-bash -n tools/install-cli.sh
-bash -n tools/test-installed.sh
-node --check tools/checks/check-docs.mjs
-node --check tools/checks/check-docs.test.mjs
-node --check tools/test-local-install.mjs
-node --check tools/test-guest-api.mjs
+for script in tools/test.sh tools/test-guest.sh tools/test-installed.sh; do bash -n "$script"; done
+for script in tools/test-*.mjs tools/checks/*.mjs; do node --check "$script"; done
 node tools/checks/check-docs.test.mjs
 node tools/checks/check-docs.mjs
-node tools/checks/check-toolchain-pin.mjs
 node tools/checks/check-plugin-catalogue.mjs
 node --test tools/checks/check-imports.test.mjs
 node tools/checks/check-imports.mjs
 cabal build all
-cabal test sync-timings --test-show-details=direct
-cabal test cli-arguments --test-show-details=direct
-cabal test cli-adapters --test-show-details=direct
-cabal test guest-catalogue --test-show-details=direct
+cabal test sync-timings cli-arguments cli-adapters guest-catalogue \
+  processes frames concurrent-execution dhall-values roots git-snapshots file-trees \
+  plugin-packages evidence-store blob-storage document-persistence file-acquisition \
+  secret-store judgement-provider model-turn-provider contract-roles plugin-installation \
+  evolution-core evolution-reports recipe-state evidence-index plugin-host scalar-storage \
+  description-storage inspection captured-bindings edit-bindings source-merging recipe-bindings \
+  wire-contracts guest-protocol capabilities plugin-contracts graph-retries guest-scheduler \
+  --test-show-details=direct
+node tools/test-framing.mjs
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"
-node --check tools/test-initialization.mjs
-node --check tools/test-recipe-state.mjs
-node --check tools/test-recipe-state-run.mjs
-node --check tools/test-plugin-install.mjs
-cabal test processes --test-show-details=direct
-cabal test frames --test-show-details=direct
-cabal test concurrent-execution --test-show-details=direct
-cabal test dhall-values --test-show-details=direct
-cabal test roots --test-show-details=direct
-cabal test git-snapshots --test-show-details=direct
-cabal test file-trees --test-show-details=direct
-cabal test plugin-packages --test-show-details=direct
-cabal test evidence-store --test-show-details=direct
-cabal test blob-storage --test-show-details=direct
-cabal test document-persistence --test-show-details=direct
-cabal test file-acquisition --test-show-details=direct
-cabal test secret-store --test-show-details=direct
-cabal test judgement-provider --test-show-details=direct
-cabal test model-turn-provider --test-show-details=direct
-cabal test contract-roles --test-show-details=direct
-cabal test compilation-cache --test-show-details=direct
-cabal test plugin-installation --test-show-details=direct
-cabal test metadata --test-options=--codec-only --test-show-details=direct
-cabal test queries --test-options=--pure --test-show-details=direct
-cabal test evolution-core --test-show-details=direct
-cabal test evolution-reports --test-show-details=direct
-cabal test recipe-state --test-show-details=direct
-cabal test evolutions --test-options=--pure --test-show-details=direct
 if [[ "${1:-}" == --full ]]; then
   bash tools/test-guest.sh
   bash tools/test-installed.sh
-  echo "Full check passed, including real MicroHs integration tests."
+  echo "Full check passed, including real Nix/GHC guest integration tests."
 else
   echo "Fast check passed: documentation, import boundaries, native build and process/filesystem tests."
 fi

@@ -30,7 +30,7 @@ function commit(directory) {
   return git(directory, 'rev-parse', 'HEAD');
 }
 function cli(args, status = 0, selected = kb) {
-  const r = spawnSync(exe, ['--kb', selected, '--runtime', path.join(temp, 'absent'), '--json', ...args], { env, encoding: 'utf8', timeout: 30000 });
+  const r = spawnSync(exe, ['--kb', selected, '--nix', path.join(temp, 'absent'), '--json', ...args], { env, encoding: 'utf8', timeout: 30000 });
   assert.equal(r.status, status, JSON.stringify(r)); return JSON.parse(r.stdout);
 }
 function packageAt(directory, name, guide) {

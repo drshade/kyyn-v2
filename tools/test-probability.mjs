@@ -15,7 +15,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_AUTHOR_NAME: 'Probability fixture', GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
   GIT_COMMITTER_NAME: 'Probability fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function invoke(command, args, status = 0) {
-  const result = spawnSync(command, args, { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+  const result = spawnSync(command, args, { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, status, JSON.stringify({ command, args, ...result }));
   return result.stdout;
 }
@@ -24,15 +24,20 @@ try {
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'probabilities']).result;
   const target = path.join(draft.path, 'target');
-  fs.writeFileSync(path.join(target, 'src/Results.hs'), `module Results where
+  fs.writeFileSync(path.join(target, 'src/Results.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module Results where
+import GHC.Generics (Generic)
 import Agentic.Questions (Probability)
-data Result = Result { confidence :: Probability, alternatives :: [Probability] }
+import Kyyn.Schema (Contract)
+data Result = Result { confidence :: Probability, alternatives :: [Probability] } deriving stock Generic deriving anyclass Contract
 `);
-  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `module RootV2 where
+  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module RootV2 where
+import GHC.Generics (Generic)
 import Kyyn.Schema
 import Agentic.Questions (Probability)
 import Results (Result)
-data Root = Root { estimates :: [Fact Result], probabilities :: [Fact Probability] }
+data Root = Root { estimates :: [Fact Result], probabilities :: [Fact Probability] } deriving stock Generic deriving anyclass Contract
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "estimates" "estimates" [], CollectionDecl "probabilities" "probabilities" []]
 `);
@@ -43,7 +48,6 @@ import qualified Data.Text as Text
 import Kyyn.Agentic (Flow)
 import Kyyn.Connectors (Tool)
 import Kyyn.Plugin (FetchError)
-import Kyyn.Contracts.Results.Result ()
 import Results (Result)
 type Input = Probability
 type Output = Probability
@@ -62,7 +66,8 @@ draft = A.draft (A.Instruction (Text.pack "Estimate confidence"))
   assert(original.includes(empty));
   fs.writeFileSync(manifest, original.replace(empty,
     '[{ name = "echo", description = "Echo probability", implementation = "Tools.echo", inputType = "Tools.Input", resultType = "Tools.Output" }]'));
-  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import Results (Result(..))
@@ -76,7 +81,7 @@ evolution = evolve (Rationale "Store confidence" []) (onFacts (\\Before.Root -> 
   const selection = ['--evolution', draft.id];
   assert.match(cli(['root', 'schema', 'show', 'Results.Result', ...selection]).result.dhallType, /Natural/);
   cli(['root', 'tool', 'show', 'echo', ...selection]);
-  assert.match(JSON.stringify(cli(['guest', 'module', 'show', 'Kyyn.Contracts.Results.Result', ...selection])), /codec/);
+  assert.match(JSON.stringify(cli(['guest', 'module', 'show', 'Results', ...selection])), /Result/);
   cli(['evolution', 'check', draft.id]);
   cli(['evolution', 'ready', draft.id]);
   cli(['evolution', 'accept', draft.id]);

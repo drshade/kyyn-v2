@@ -15,7 +15,7 @@ const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev
   GIT_COMMITTER_NAME: 'Unit fixture', GIT_COMMITTER_EMAIL: 'fixture@example.invalid' };
 function cli(args, expected = 0) {
   const result = spawnSync(executable, ['--kb', kb, '--json', ...args],
-    { cwd: temporary, env, encoding: 'utf8', timeout: 120000 });
+    { cwd: temporary, env, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024 });
   assert.equal(result.status, expected, JSON.stringify({ args, ...result }));
   return JSON.parse(result.stdout);
 }
@@ -23,9 +23,11 @@ try {
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'unit values']).result;
   const target = path.join(draft.path, 'target');
-  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `module RootV2 where
+  fs.writeFileSync(path.join(target, 'src/RootV2.hs'), `{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies, OverloadedStrings #-}
+module RootV2 where
+import GHC.Generics (Generic)
 import Kyyn.Schema
-data Root = Root { markers :: [Fact ()] }
+data Root = Root { markers :: [Fact ()] } deriving stock Generic deriving anyclass Contract
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] [CollectionDecl "markers" "markers" []]
 `);
@@ -46,7 +48,8 @@ echo = pure . Right
   assert(original.includes(empty));
   fs.writeFileSync(manifest, original.replace(empty,
     '[{ name = "echo", description = "Echo unit", implementation = "Tools.echo", inputType = "Tools.Unit", resultType = "Tools.Unit" }]'));
-  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `module Evolution where
+  fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
+module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified RootV1 as Before

@@ -1,13 +1,15 @@
 -- Native application/store/Git publication with recording guest results: readiness,
 -- input/head races, separate drafts, staged/untracked preservation, post-ref-update
--- interruption and manual Git repair. Does not execute MicroHs or a CLI.
+-- interruption and manual Git repair. Does not build guests or invoke a CLI.
 
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings, TypeApplications #-}
 module PublicationTests (publicationTests) where
 
-import GuestFixture (noRecipePreparation)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
-import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
+import GuestFixture (fixtureProgram)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation(..))
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection(..))
+import Kyyn.Domain.Guest (checkGuest)
+import qualified Kyyn.Types.Guest as G
 
 import Control.Exception (AsyncException(..), throwIO, try)
 import qualified Kyyn.Domain.Recipe as KB
@@ -70,7 +72,7 @@ import System.FilePath ((</>), takeDirectory)
 import System.IO.Temp (withSystemTempDirectory)
 
 type Effects = '[EvidenceStore, RootPublication, RootExecution, EvolutionExecution, EvolutionAuthoring, EvolutionStore,
-  RootOpening, ToolPreparation, PluginPreparation, Schema.SchemaInspection, WorkspaceStore, RootStore, DhallHandling,
+  RootOpening, GuestCompilation, GuestInspection, Schema.SchemaInspection, WorkspaceStore, RootStore, DhallHandling,
   Git.Git, Git.Git, Process.ProcessExecution, FileSystem, Failure, IOE]
 
 publicationTests :: Root -> IO ()
@@ -89,7 +91,14 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
         pluginFile = "plugins/packages/existing/source/src/Plugin.hs"
         pluginBytes = "module Plugin where\n"
         code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
-          (path pluginFile,pluginBytes)]
+          (path pluginFile,pluginBytes),(path "flake.nix","recorded fixture"),(path "flake.lock","recorded lock")]
+        described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) []
+        guest = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
+          [G.EvolutionDescriptionEntry described described []] []))
+        compiled :: Eff (GuestCompilation : es) a -> Eff es a
+        compiled operation = interpret (\_ (CompileGuest _) -> pure (Right (fixtureProgram "not executed"))) operation
+        inspected :: Eff (GuestInspection : es) a -> Eff es a
+        inspected operation = interpret (\_ (DescribeGuest _) -> pure (Right guest)) operation
         initialRoot = Root contract facts code []
         output = object ["description" .= ("accepted" :: String), "todos" .= ([] :: [Value])]
         write name bytes = do
@@ -114,7 +123,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
           result <- runEff . runFailure . runFileSystemIO scope . runProcessExecutionIO
             . runGit executable [] . gitHook hook . runDhallHandling . runRootStore
             . runWorkspaceStore . schemaMock contract
-            . noRecipePreparation . (if opening then runRootOpening (tree []) else noOpening)
+            . inspected . compiled . (if opening then runRootOpening else noOpening)
             . runEvolutionStore . runEvolutionAuthoring . evaluationMock output . validationMock validation
             . runRootPublication . noEvidence $ action
           either (fail . show) pure result
@@ -329,11 +338,6 @@ noEvidence = interpret $ \_ _ -> error "Publication read evidence"
 
 schemaMock :: RootContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
-  Schema.InspectImports {} -> error "Unexpected import inspection"
-  Schema.InspectType {} -> error "Unexpected plain type inspection"
-  Schema.InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
-  Schema.InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
-  Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
   Schema.InspectSchema _ -> pure (Right (Schema.InspectedSchema (rootSchema contract) []))
 
 evaluationMock :: (RootOpening :> es, RootStore :> es) => Value -> Eff (EvolutionExecution : es) a -> Eff es a

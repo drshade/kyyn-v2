@@ -966,6 +966,9 @@ For open recipes the persisted definition includes the selected state type name.
 For closed recipes it contains the flow name instead; inspection derives both
 request and state types from that signature. StoredRecipe.stateType above is the
 resolved in-memory projection, not an additional closed-recipe declaration.
+State decoding and typed state handles match by contract identity. Type names
+provide source references for open recipes and descriptive labels for closed
+recipes; aliases do not introduce another identity check.
 
 Persist definitions in `root/recipes.dhall` and each state's hermetic Dhall at
 `root/recipes/<recipe-id>/state.dhall`. The selected authored state type determines

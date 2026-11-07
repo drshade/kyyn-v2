@@ -12,7 +12,7 @@ import Effectful.Dispatch.Dynamic (interpose, passthrough)
 import qualified Effectful.Exception as Exception
 import GHC.Clock (getMonotonicTimeNSec)
 import Kyyn.Plumbing.Interpreter.ConcurrentExecution (ConcurrentEvent(..))
-import Kyyn.MicroHs.Timing (emitTiming)
+import Kyyn.Composition.Timing (emitTiming)
 import qualified Kyyn.Plumbing.Capability.HttpTransport as Http
 import qualified Kyyn.Plumbing.Capability.BlobStorage as Blobs
 import qualified Kyyn.Plumbing.Capability.PluginInteraction as Interaction
