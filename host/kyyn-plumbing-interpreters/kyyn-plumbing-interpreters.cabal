@@ -278,3 +278,13 @@ test-suite guest-scheduler
   ghc-options: -Wall -Werror -threaded
   build-depends: base >=4.20 && <4.21, kyyn-types, kyyn-sdk:runtime, kyyn-plumbing,
     aeson, bytestring, text, process
+
+test-suite guest-compilation-cache
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is: GuestCompilationCacheTests.hs
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types, kyyn-plumbing,
+    kyyn-plumbing-interpreters, effectful-core ==2.6.1.0, bytestring, aeson,
+    directory, filepath, temporary ==1.3
