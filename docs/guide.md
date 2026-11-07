@@ -85,6 +85,8 @@ configured Git identity. It writes a complete pre-locked flake from the host's
 repository revision, without resolving dependency versions. Its first check may
 fetch the locked inputs and build the guest. For an existing KB, inspect its facts, schema and
 relevant recipes first.
+The initial source and Dhall files live in [the KB template](../templates/kb/);
+the repository flake adds its pinned `flake.nix` and `flake.lock` at build time.
 
 ```sh
 kyyn-v2 evolution new first-collection

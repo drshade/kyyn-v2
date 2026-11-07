@@ -1,16 +1,16 @@
 {-# LANGUAGE DataKinds, TypeFamilies, OverloadedStrings #-}
 module Kyyn.Porcelain.Capability.KnowledgeBaseInitialization
   ( KnowledgeBaseInitialization(..), prepareKnowledgeBase, publishInitialRoot
-  , initializeKnowledgeBase, initialRootFiles ) where
+  , initializeKnowledgeBase ) where
 
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
 import Effectful.Dispatch.Dynamic (send)
 import Kyyn.Domain.Diagnostic
-import Kyyn.Domain.FileTree (FileTree, fileTree, files)
-import Kyyn.Domain.Path (DirectoryScope, relativePath, relativeName)
+import Kyyn.Domain.FileTree (FileTree)
+import Kyyn.Domain.Path (DirectoryScope)
 import Kyyn.Domain.Git (CommitMetadata)
 import Kyyn.Domain.Publication (InitializationTarget, InitializationResult)
-import Kyyn.Domain.Root (Root, factsLocation)
+import Kyyn.Domain.Root (Root)
 import Kyyn.Porcelain.Validated (Validated)
 import Kyyn.Porcelain.Capability.RootOpening (RootOpening, openCapturedRoot)
 import Kyyn.Porcelain.Capability.RootExecution (RootExecution)
@@ -34,7 +34,7 @@ publishInitialRoot target metadata = send . PublishInitialRoot target metadata
 initializeKnowledgeBase :: (KnowledgeBaseInitialization :> es, RootOpening :> es, RootExecution :> es, RootStore :> es)
   => FileTree -> InitializationTarget -> CommitMetadata -> Eff es (CheckResult InitializationResult)
 initializeKnowledgeBase template target metadata = do
-  opened <- either (pure . Left . pure . errorDiagnostic "kb.scaffold") openCapturedRoot (initialRootFiles >>= \initial -> fileTree (files initial ++ files template))
+  opened <- openCapturedRoot template
   case opened of
     Left diagnostics -> pure (Rejected (ValidationReport diagnostics))
     Right root -> do
@@ -44,12 +44,3 @@ initializeKnowledgeBase template target metadata = do
         Passed validated report@(ValidationReport warnings) -> do
           published <- publishInitialRoot target metadata validated
           pure $ either (Rejected . ValidationReport . (warnings ++)) (`Passed` report) published
-
-initialRootFiles :: Either String FileTree
-initialRootFiles = traverse (\(name,bytes) -> (,) <$> relativePath name <*> pure bytes)
-  [ ("kb.dhall", "{ schemaType = \"RootV1.Root\", schemaMetadata = \"RootV1.metadata\", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }, outputs = [] : List { name : Text, description : Text, query : Text, sink : { plugin : Text, instanceName : Text, method : Text } } }\n")
-  , ("src/RootV1.hs", "{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}\nmodule RootV1 where\n\nimport Kyyn.Schema\nimport GHC.Generics (Generic)\n\ndata Root = Root deriving stock (Eq, Show, Generic) deriving anyclass (Contract)\n\nmetadata :: SchemaMetadata\nmetadata = SchemaMetadata [] [] []\n")
-  , ("src/Validate.hs", "module Validate where\n\nimport qualified RootV1 as Schema\nimport Kyyn.Validation\n\nvalidate :: Schema.Root -> ValidationReport\nvalidate _ = ValidationReport []\n")
-  , (relativeName factsLocation ++ "/root.dhall", "{=}\n")
-  , ("recipes.dhall", "[] : List { id : Text, value : < OpenAgent : { instructions : Text, stateType : Text } | ClosedAgent : { flow : Text } > }\n")
-  ] >>= fileTree

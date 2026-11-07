@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, LambdaCase #-}
-module GuestFixture (fixtureProgram, fixtureTool, fixtureConnector, fixtureText, runFixtureExecution, noRecipePreparation) where
+module GuestFixture (fixtureProgram, fixtureTool, fixtureConnector, fixtureText, noGuest, runFixtureExecution, noRecipePreparation) where
 
 import Kyyn.Domain.CompiledEntry (CompiledEntry, CompiledConnector, compiledEntries, compiledConnectors)
 import Kyyn.Domain.Guest (checkGuest)
@@ -10,6 +10,8 @@ import qualified Data.Text as Text
 import Data.ByteString (ByteString)
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution(..))
 import Kyyn.Domain.CompiledProgram (CompiledProgram(..), BuildIdentity(..))
 import Kyyn.Plumbing.Capability.ProcessExecution
@@ -64,3 +66,11 @@ fixtureConnector program plugin kind roles = case compiledConnectors program che
     describe contract = G.describeContract (descriptionOf contract) (metadataOf contract) []
     checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
       [G.ConnectorEntry (G.ConnectorIdentity plugin kind) (fmap describe roles)] []))
+
+noGuest :: Eff (GuestCompilation : GuestInspection : es) a -> Eff es a
+noGuest = noInspection . noCompilation
+  where
+    noCompilation :: Eff (GuestCompilation : es) a -> Eff es a
+    noCompilation = interpret $ \_ _ -> error "Fixture unexpectedly built a guest"
+    noInspection :: Eff (GuestInspection : es) a -> Eff es a
+    noInspection = interpret $ \_ _ -> error "Fixture unexpectedly described a guest"

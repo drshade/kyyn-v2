@@ -52,6 +52,8 @@
           };
           template = pkgs.runCommand "kyyn-kb-template" { } ''
             mkdir -p "$out"
+            cp -R ${./templates/kb}/. "$out/"
+            chmod -R u+w "$out"
             cp ${pkgs.writeText "flake.nix" ''
               {
                 description = "Kyyn knowledge base";

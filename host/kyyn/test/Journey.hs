@@ -2,6 +2,7 @@
 -- in separate processes, source/fact deletion, archive review without cache, and
 -- inherited required examples. Needs KYYN_TEST_ROOT and KYYN_TEST_CLI.
 
+{-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications #-}
 module Main (main) where
 
 import Control.Monad (forM_, unless, void)
@@ -15,7 +16,8 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (runPureEff)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType (DataType(..))
+import qualified Kyyn.Contract as Guest
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Example
 import Kyyn.Domain.FileTree (files)
 import Kyyn.Domain.Path (relativeName)
@@ -66,7 +68,7 @@ main = do
           pure (identifier,workspace)
     writeUtf8 (root </> "kb.dhall") (manifest "TodoSchemaV1")
     copyFile (fixture </> "Queries.hs") (root </> "src/Queries.hs")
-    saveExample root "receipts-title" "titleFor" StringType (String "todo-002") (String "Check receipts")
+    saveExample root "receipts-title" "titleFor" (described @Text.Text) (String "todo-002") (String "Check receipts")
     void (git ["init","-b","main"])
     void (git ["config","user.name","Configured fixture λ"])
     void (git ["config","user.email","fixture@example.invalid"])
@@ -91,7 +93,7 @@ main = do
       source <- Text.unpack . Text.decodeUtf8 <$> Bytes.readFile (target </> "src" </> name)
       writeUtf8 (target </> "src" </> name) (replace "TodoSchemaV1" "TodoSchemaV2" source)
     writeUtf8 (target </> "kb.dhall") (manifest "TodoSchemaV2")
-    saveExample target "report-done" "isDone" BoolType (String "todo-001") (Bool True)
+    saveExample target "report-done" "isDone" (described @Bool) (String "todo-001") (Bool True)
     copyFile (fixture </> "Migrate.hs") (workspace </> "change/Evolution.hs")
     evaluated <- ok ["evolution","check",first]
     let report = at ["result","report"] evaluated
@@ -152,9 +154,9 @@ main = do
     assert "Wrong facts after deletion" (at ["result","value"] final == finalFacts)
     putStrLn "Installed CLI schema migration, archive/cache independence, inherited-example refusal and deliberate deletion passed."
 
-saveExample :: FilePath -> String -> String -> DataType -> Value -> Value -> IO ()
+saveExample :: FilePath -> String -> String -> D.Description -> Value -> Value -> IO ()
 saveExample destination name query resultType arguments expected = do
-  input <- right (checkContract StringType (SchemaMetadata [] [] []))
+  input <- right (checkContract (described @Text.Text) (SchemaMetadata [] [] []))
   result <- right (checkContract resultType (SchemaMetadata [] [] []))
   tree <- right (runPureEff (runDhallHandling (runRootStore (encodeExample
     (Example name (QueryDescriptor query "" input result)
@@ -222,3 +224,8 @@ replace old new input
   | take (length old) input == old = new ++ replace old new (drop (length old) input)
 replace old new (x:xs) = x : replace old new xs
 replace _ _ [] = []
+
+described :: forall a. Guest.Contract a => D.Description
+described = case Guest.compileContract (Guest.contract @a) of
+  Left problem -> error (show problem)
+  Right (Guest.CompiledContract description _) -> description

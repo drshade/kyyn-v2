@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
 module RootExportTests (rootExportTests) where
 
-import GuestFixture (noRecipePreparation)
+import GuestFixture (noGuest)
 
 import Kyyn.Porcelain.Protocol.RecipePersistence (encodeRecipes)
 import Control.Monad (unless)
@@ -123,7 +123,7 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
   decodedRecord <- either fail pure (runPureEff (runDhallHandling (decodeEvolutionRecord recordBytes))) >>= either (fail . show) pure
   unless (decodedRecord == (workspaceId,contract,contract,report)) (fail "Committed record changed contracts/report")
   opened <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . schemaMock (rootSchema contract)
-    . runDhallHandling . runRootStore . noRecipePreparation . runRootOpening (tree []) $ openCapturedRoot reopened
+    . runDhallHandling . runRootStore . noGuest . runRootOpening $ openCapturedRoot reopened
   unless (opened == Right (Right (validatedValue checked))) (fail "Reopened Root differs from the validated input")
   contents <- process ["show",revisionName revision ++ ":outside"]
   unless (contents == "committed outside") (fail "Commit included unrelated staged or working changes")
@@ -153,11 +153,4 @@ checkingMock expected = interpret $ \_ -> \case
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
-  Schema.InspectImports {} -> error "Unexpected import inspection"
-  Schema.InspectType {} -> error "Unexpected plain type inspection"
-  Schema.InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
-  Schema.InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
-  Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
-  Schema.InspectSchema source -> do
-    unless (Schema.selectedType source == "Example.Root") (error "Reopening selected a different schema")
-    pure (Right (Schema.InspectedSchema contract []))
+  Schema.InspectSchema _ -> pure (Right (Schema.InspectedSchema contract []))

@@ -5,9 +5,9 @@
 {-# LANGUAGE DataKinds, GADTs, LambdaCase #-}
 module Main (main) where
 
-import GuestFixture (noRecipePreparation)
-import Kyyn.Porcelain.Capability.Tool (ToolPreparation)
-import Kyyn.Porcelain.Capability.PluginPreparation (PluginPreparation)
+import GuestFixture (noGuest, fixtureText)
+import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation)
+import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection)
 
 import qualified Kyyn.Domain.Recipe as KB
 
@@ -30,7 +30,7 @@ import EvolutionExecutionTests (evolutionExecutionTests)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Git (Repository(..), TreePath(..), gitRevision)
 import Kyyn.Domain.Contract
-import Kyyn.Domain.DataType
+import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Path
 import Kyyn.Domain.Root
 import Kyyn.Domain.FileTree
@@ -60,7 +60,7 @@ main = do
   initializationTests
   workspaceApiTests
   emptyContract <- right (checkContract
-    (Algebraic "Empty.Root" [] [Constructor "Empty.Root" []]) (SchemaMetadata [] [] []) >>= checkRootLayout)
+    (D.NamedDescription (D.TypeIdentity "fixture" "Empty" "Root" []) (D.RecordDescription "Root" D.NamedFields [])) (SchemaMetadata [] [] []) >>= checkRootLayout)
   emptyCode <- tree []
   emptyChecked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue emptyContract (object [])))))
   emptyRoot@(Root _ emptySnapshot _ _) <- right
@@ -71,16 +71,17 @@ main = do
   contract <- right (checkContract schema metadata >>= checkRootLayout)
   recipeInspectionTests contract
   other <- right (checkContract schema (SchemaMetadata [RoleDecl "label" "Changed metadata" Title] [] declarations) >>= checkRootLayout)
-  code <- tree [("src/Schema.hs", "authored code"), ("kb.dhall", "selected schema")]
+  code <- tree [("src/Schema.hs", "authored code"), ("kb.dhall", "selected schema"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
   checked <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract value))))
   root@(Root _ snapshot savedCode _) <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code (KB.KnowledgeBase checked [])))))
   unless (savedCode == code) (fail "Code snapshot changed")
   unless ("facts/todos/a.dhall" `elem` map (relativeName . fst) (files snapshot)) (fail "Ordinary ID path is not readable")
   pathValue <- right (runPureEff (runDhallHandling (runRootStore (checkRootValue contract
-    (rootValue [(name,"path test") | name <- ["todo-001", "A", "a", "index", "con", "com1", "~41", "", "../", "x.y", "🌍"]])))))
+    (rootValue [(name,"path test") | name <- ["todo-001", "A", "a", "index", "con", "com1", "~41", "../", "x.y", "🌍"]])))))
   pathsRoot <- right (runPureEff (runDhallHandling (runRootStore (materializeRoot contract code (KB.KnowledgeBase pathValue [])))))
   pathReloaded <- right (runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking pathsRoot))))
   unless (pathReloaded == pathValue) (fail "Escaped names collided or changed IDs")
+  rejected (runPureEff (runDhallHandling (runRootStore (checkRootValue contract (rootValue [("","invalid")])))))
   let reopen r = runPureEff (runDhallHandling (runRootStore (loadRootValueForChecking r)))
   reopenedFiles <- right (fileTree (files snapshot))
   reopened <- right (reopen (Root contract reopenedFiles code []))
@@ -133,69 +134,60 @@ main = do
 openingTests :: RootContract -> FileTree -> IO ()
 openingTests contract factFiles = do
   authored <- tree [("src/Example.hs","authored source"),("kb.dhall",manifest),
-    ("examples/retained.txt","required-example material"),("support.dhall","auxiliary code")]
+    ("examples/retained.txt","required-example material"),("support.dhall","auxiliary code"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
   captured <- right (fileTree (files authored ++ files factFiles))
-  sdk <- tree [("Kyyn/Types/Fact.hs","installed SDK")]
-  let execute :: FileTree -> Eff '[RootOpening, ToolPreparation, PluginPreparation, RootStore, Git.Git, Schema.SchemaInspection, DhallHandling] a -> a
-      execute sdkFiles action = runPureEff (runDhallHandling (schemaMock (rootSchema contract) (gitMock captured
-        (runRootStore (noRecipePreparation (runRootOpening sdkFiles action))))))
-  opened <- right (execute sdk (openCapturedRoot captured))
+  let execute :: Eff '[RootOpening, GuestCompilation, GuestInspection, RootStore, Git.Git, Schema.SchemaInspection, DhallHandling] a -> a
+      execute action = runPureEff (runDhallHandling (schemaMock (rootSchema contract) (gitMock captured
+        (runRootStore (noGuest (runRootOpening action))))))
+  opened <- right (execute (openCapturedRoot captured))
   unless (opened == Root contract factFiles authored []) (fail "Opening changed the selected files")
   definition <- right (runPureEff (runDhallHandling (runRootStore (readRootDefinition authored))))
-  source <- right (execute sdk (openCapturedSource captured))
+  source <- right (execute (openCapturedSource captured))
   unless (source == SourceRoot contract authored definition []) (fail "Source opening changed schema/code/definition")
-  sourceWithoutFacts <- right (execute sdk (openCapturedSource authored))
+  sourceWithoutFacts <- right (execute (openCapturedSource authored))
   unless (sourceWithoutFacts == source) (fail "Source opening depends on facts")
   corrupt <- tree [("facts/root.dhall", "not Dhall"), ("facts/unknown.bin", Bytes.pack [255,0])]
   withCorruptFacts <- right (fileTree (files authored ++ files corrupt))
-  corruptSource <- right (execute sdk (openCapturedSource withCorruptFacts))
+  corruptSource <- right (execute (openCapturedSource withCorruptFacts))
   unless (corruptSource == source) (fail "Source opening decoded corrupt facts")
-  rejected (execute sdk (openCapturedRoot withCorruptFacts))
+  rejected (execute (openCapturedRoot withCorruptFacts))
   repo <- Repository <$> right (directoryScope "/unused-test-repository")
   revision <- right (gitRevision (replicate 40 'a'))
   prefix <- right (relativePath "root")
-  fromGit <- right (execute sdk (loadRootAt repo revision (Subtree prefix)))
+  fromGit <- right (execute (loadRootAt repo revision (Subtree prefix)))
   unless (fromGit == opened) (fail "Git opening differs from captured opening")
-  sourceFromGit <- right (execute sdk (loadSourceAt repo revision (Subtree prefix)))
+  sourceFromGit <- right (execute (loadSourceAt repo revision (Subtree prefix)))
   unless (sourceFromGit == source) (fail "Source loading differs from captured source opening")
-  input <- right (execute sdk (loadRootMaterialAt repo revision (Subtree prefix) sourceFromGit))
+  input <- right (execute (loadRootMaterialAt repo revision (Subtree prefix) sourceFromGit))
   unless (input == opened) (fail "Input capture changed prepared source or root bytes")
   let undecoded = runPureEff . runDhallHandling . schemaMock (rootSchema contract)
-        . gitMock withCorruptFacts . runRootStore . noRecipePreparation . runRootOpening sdk $
+        . gitMock withCorruptFacts . runRootStore . noGuest . runRootOpening $
           loadRootMaterialAt repo revision (Subtree prefix) sourceFromGit
   corruptInput <- right undecoded
   unless (corruptInput == Root contract corrupt authored []) (fail "Input capture decoded or changed malformed facts")
   otherRevision <- right (gitRevision (replicate 40 'b'))
-  rejected (execute sdk (loadSourceAt repo otherRevision (Subtree prefix)))
-  rejected (execute sdk (loadSourceAt repo revision WholeTree))
-  forM_ ["kb.dhall", "src/Example.hs"] $ \missing -> do
+  rejected (execute (loadSourceAt repo otherRevision (Subtree prefix)))
+  rejected (execute (loadSourceAt repo revision WholeTree))
+  forM_ ["kb.dhall", "src/Example.hs", "flake.nix", "flake.lock"] $ \missing -> do
     incomplete <- right (fileTree (filter ((/= missing) . relativeName . fst) (files authored)))
-    rejected (execute sdk (openCapturedSource incomplete))
+    rejected (execute (openCapturedSource incomplete))
   forM_ [filter ((/= "kb.dhall") . relativeName . fst) (files captured),
     [(p,if relativeName p == "kb.dhall" then "True" else b) | (p,b) <- files captured],
     [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Missing.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
     [(p,if relativeName p == "kb.dhall" then "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.otherMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }" else b) | (p,b) <- files captured],
     filter ((/= "facts/root.dhall") . relativeName . fst) (files captured)] $ \entries -> do
       bad <- right (fileTree entries)
-      rejected (execute sdk (openCapturedRoot bad))
-  collision <- tree [("Example.hs","SDK collision")]
-  rejected (execute collision (openCapturedRoot captured))
-  rejected (execute sdk (loadRootAt repo revision WholeTree))
+      rejected (execute (openCapturedRoot bad))
+  rejected (execute (loadRootAt repo revision WholeTree))
   where
     manifest = "{ schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\" , queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
 
 schemaMock :: CheckedContract -> Eff (Schema.SchemaInspection : es) a -> Eff es a
 schemaMock contract = interpret $ \_ -> \case
-  Schema.InspectRecipeFunction {} -> error "Unexpected recipe signature inspection"
-  Schema.InspectRecipeExports {} -> error "Unexpected recipe exports inspection"
-  Schema.InspectPluginFunction {} -> error "Unexpected plugin signature inspection"
-  Schema.InspectImports {} -> error "Unexpected import inspection"
-  Schema.InspectType {} -> error "Unexpected plain type inspection"
   Schema.InspectSchema source ->
     let entries = [(relativeName p,b) | (p,b) <- Sources.sourceFiles (Schema.schemaSources source)]
-    in pure $ if Schema.selectedType source == "Example.Root" &&
-         lookup "Example.hs" entries == Just "authored source" && lookup "Kyyn/Types/Fact.hs" entries == Just "installed SDK" &&
-         maybe False (Bytes.isInfixOf "Example.schemaMetadata") (lookup "KyynMetadataEntry.hs" entries)
+    in pure $ if lookup "src/Example.hs" entries == Just "authored source" && lookup "flake.lock" entries == Just "recorded lock" &&
+         maybe False (\bytes -> "Example.Root" `Bytes.isInfixOf` bytes && "Example.schemaMetadata" `Bytes.isInfixOf` bytes) (lookup "kb.dhall" entries)
        then Right (Schema.InspectedSchema contract []) else Left [errorDiagnostic "test.schema" "Incorrect source capture"]
 
 gitMock :: FileTree -> Eff (Git.Git : es) a -> Eff es a
@@ -258,10 +250,13 @@ declarations = [CollectionDecl "todos" "todos" []]
 metadata :: SchemaMetadata
 metadata = SchemaMetadata [] [] declarations
 
-schema :: DataType
-schema = Algebraic "Example.Root" [] [Constructor "Example.Root"
-  [(Just "description",StringType),(Just "todos", ListType fact)]]
+schema :: D.Description
+schema = D.NamedDescription (D.TypeIdentity "fixture" "Example" "Root" []) (D.RecordDescription "Root" D.NamedFields
+  [D.FieldDescription "description" "" fixtureText,D.FieldDescription "todos" "" (D.ListDescription fact)])
   where
-    fact = Algebraic "Kyyn.Types.Fact.Fact" [payload]
-      [Constructor "Kyyn.Types.Fact.Fact" [(Nothing,sdkFactIdType),(Nothing,payload)]]
-    payload = Algebraic "Example.Todo" [] [Constructor "Example.Todo" [(Just "title",StringType)]]
+    payloadIdentity = D.TypeIdentity "fixture" "Example" "Todo" []
+    fact = D.NamedDescription (D.TypeIdentity "kyyn-types" "Kyyn.Types.Fact" "Fact" [payloadIdentity])
+      (D.RecordDescription "Fact" D.NamedFields
+        [D.FieldDescription "id" "" (D.ScalarDescription (D.TypeIdentity "kyyn-types" "Kyyn.Types.Fact" "FactId" []) D.FactIdScalar "fact-id" []),
+         D.FieldDescription "value" "" payload])
+    payload = D.NamedDescription payloadIdentity (D.RecordDescription "Todo" D.NamedFields [D.FieldDescription "title" "" fixtureText])
