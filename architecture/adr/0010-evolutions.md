@@ -206,7 +206,9 @@ rename require an existing source. `putField` explicitly creates or replaces a
 target field and records either addition or replacement; it is not an implicit
 default. Missing target residual fields are errors even for Optional or list
 fields: supply `Nothing`, `[]` or another value explicitly. Remaining undeclared
-source fields must be removed or renamed explicitly.
+source fields must be removed or renamed explicitly. Collections have a defined
+zero-member starting point; residual fields carry domain meaning, so even an empty
+list or absent Optional requires an explicit choice through `putField`.
 
 Independent field operations allow arbitrary restructuring without reconstructing
 old Root metadata: read the needed old fields, write their new target fields,
@@ -217,7 +219,8 @@ and explicitly remove the superseded ones. All writes remain typed and observed.
 Preparation can replace a definition and transform its state without inspecting
 or executing the old flow. Definition handles and target state types come only
 from target/helper source. Ordinary typed creation/removal/update after preparation
-remain owned by ADR 0014.
+remain owned by ADR 0014. `migrateRecipe` converts stored input into the target
+shape; `updateRecipe` operates target-to-target after that boundary.
 
 ```haskell
 readRecipeState :: Contract input => RecipeId -> Preparation root input
@@ -439,9 +442,12 @@ editFacts :: Edit root a -> RecipeEdit root state a
 getRecipeState :: RecipeEdit root state state
 putRecipeState :: state -> RecipeEdit root state ()
 modifyRecipeState :: (state -> state) -> RecipeEdit root state ()
-(>=>) :: RecipeEvolution root state -> RecipeEvolution root state
-      -> RecipeEvolution root state
+instance Semigroup (RecipeEvolution root state)
+instance Monoid (RecipeEvolution root state)
 ```
+
+Like `TargetEdits`, `RecipeEvolution` composes ordered steps with `(<>)` and uses
+`mempty` for an empty sequence, preserving each step's rationale.
 
 Ad hoc work can migrate data, change source/configuration and create/update/remove
 recipes. Recipe-based work selects one existing recipe and preserves domain schema,

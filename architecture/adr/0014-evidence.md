@@ -984,7 +984,9 @@ authored input type and installs a target definition plus converted state togeth
 preserved, but every retained definition/state must resolve and decode under the
 target before typed editing starts. Missing state is never initialized implicitly.
 
-After preparation the existing typed recipe operations apply:
+After preparation the typed recipe operations apply. `updateRecipe` is a
+target-to-target change; stored state requiring conversion before target decoding
+uses `migrateRecipe` instead:
 
 ```haskell
 data RecipeType state        -- generated target/helper type reference and codec
