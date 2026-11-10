@@ -54,13 +54,10 @@ sync = A.act (\\_ -> error "Manual frozen proposal must not execute the flow")
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
-import qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks
-import qualified RootV1 as Before
+import qualified Kyyn.Workspace.Target.RecipeFlows.Tasks as Tasks
 import qualified RootV2 as After
-evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
-evolution = evolve (Rationale "Start tracking tasks" [])
-  (onFacts (\\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Teach recipe" []) (createRecipe (RecipeId "sync") Tasks.sync ())
+evolution :: Evolution After.Root
+evolution = prepare (pure ()) $ edit (Rationale "Teach recipe" []) (createRecipe (RecipeId "sync") Tasks.sync ())
 `);
   cli(['evolution', 'check', initial.id]);
   accept(initial.id);

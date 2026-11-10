@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances, OverloadedStrings #-}
 module Kyyn.Evolution.Internal
   ( RootBinding(..), RecordedRoot(..), StepObservation(..), EvolutionOutput(..), Evolution(..), evolve, edit, evaluateEvolution ) where
 
@@ -16,6 +16,15 @@ data StepObservation = StepObservation Rationale RecordedRoot RecordedRoot deriv
 data EvolutionOutput a = EvolutionOutput a [StepObservation] deriving (Eq, Show)
 -- | A transformation between root types that records its steps or returns diagnostics.
 newtype Evolution a b = Evolution (a -> Either EvolutionFailure (EvolutionOutput b))
+
+instance Semigroup (Evolution a a) where
+  Evolution first <> Evolution second = Evolution $ \before -> do
+    EvolutionOutput middle earlier <- first before
+    EvolutionOutput after later <- second middle
+    pure (EvolutionOutput after (earlier ++ later))
+
+instance Monoid (Evolution a a) where
+  mempty = Evolution (\value -> Right (EvolutionOutput value []))
 
 evaluateEvolution :: Evolution a b -> a -> Either EvolutionFailure (EvolutionOutput b)
 evaluateEvolution (Evolution transform) = transform

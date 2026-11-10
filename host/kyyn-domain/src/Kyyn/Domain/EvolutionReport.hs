@@ -4,6 +4,7 @@ module Kyyn.Domain.EvolutionReport
   , EvolutionReport(..), PluginChange(..), StepReport(..), Change(..), RecordedFact(..)
   ) where
 
+import Kyyn.Domain.SnapshotReport (SnapshotStep)
 import Data.Aeson (Value)
 import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Plugin (PluginName, PluginOrigin)
@@ -16,7 +17,8 @@ data ObservedRoot = ObservedRoot String (KnowledgeBase Value ProposedRecipe) der
 data StepObservation = StepObservation Rationale ObservedRoot ObservedRoot deriving (Eq, Show)
 data EvolutionObservation = EvolutionObservation (KnowledgeBase Value ProposedRecipe) [StepObservation] deriving (Eq, Show)
 
-data EvolutionReport = EvolutionReport [PluginChange] [StepReport] deriving (Eq, Show)
+data EvolutionReport = EvolutionReport [PluginChange] [StepReport]
+  | StoredEvolutionReport [PluginChange] [SnapshotStep] deriving (Eq, Show)
 data PluginChange = PluginChange PluginName (Maybe PluginOrigin) (Maybe PluginOrigin) [RelativePath]
   deriving (Eq, Show)
 data StepReport = StepReport

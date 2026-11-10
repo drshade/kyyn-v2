@@ -16,5 +16,7 @@ evolution = prepare (do
   putField reason Fields.total 1
   migrateRecipe reason (RecipeId "weekly") Recipes.review
     (\(Input.State count) -> Right (Flows.State count True))
-  retireRecipe reason (RecipeId "obsolete")) mempty
+  retireRecipe reason (RecipeId "obsolete")
+  retireRecipe reason (RecipeId "notAFlow")
+  retireRecipe reason (RecipeId "noContract")) mempty
   where reason = Rationale "Target-only migration" []

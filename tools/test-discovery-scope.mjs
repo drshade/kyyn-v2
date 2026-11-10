@@ -25,7 +25,7 @@ function inspect(flags) {
   assert.equal(selected.length, 1);
   assert.match(selected[0].signature, /Text.*Text/s);
   assert.equal(cli(['guest', 'module', 'list', ...flags], 1).outcome, 'Refused');
-  assert.equal(cli(['guest', 'module', 'show', 'Kyyn.Workspace.After', ...flags], 1).diagnostics[0].code, 'guest.build');
+  assert.equal(cli(['guest', 'module', 'show', 'Kyyn.Workspace.Target', ...flags], 1).diagnostics[0].code, 'guest.build');
 }
 try {
   cli(['kb', 'init']);
@@ -39,7 +39,7 @@ try {
   fs.writeFileSync(path.join(draft.path, 'change/Evolution.hs'), 'module Evolution where\nunfinished =\n');
   inspect(['--evolution', draft.id]);
   fs.writeFileSync(path.join(target, 'kb.dhall'), manifest);
-  const refused = cli(['guest', 'module', 'show', 'Kyyn.Workspace.After', '--evolution', draft.id], 1);
+  const refused = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Target', '--evolution', draft.id], 1);
   assert.match(JSON.stringify(refused), /RootV1/);
   for (const [name,bytes] of [['src/Helpers.hs', helper], ['src/RootV1.hs', 'module RootV1 where\nunfinished =\n'], ['kb.dhall', 'unfinished manifest']])
     fs.writeFileSync(path.join(kb, 'root', name), bytes);

@@ -8,6 +8,7 @@ journey_stage=$(mktemp -d /tmp/kyyn-installed-stage.XXXXXXXX)
 trap 'rm -rf -- "$journey_stage"' EXIT
 nix --extra-experimental-features 'nix-command flakes' build .#kyyn --no-update-lock-file --out-link "$journey_stage/install"
 node tools/test-native-guest.mjs "$journey_stage/install/bin/kyyn-v2"
+node tools/test-stored-evolution.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-guide.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-secrets.mjs "$journey_stage/install/bin/kyyn-v2"
 node tools/test-compiler-diagnostics.mjs "$journey_stage/install/bin/kyyn-v2"

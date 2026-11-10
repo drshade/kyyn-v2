@@ -49,16 +49,16 @@ unit = arr (\\_ -> RecipeProposal [] ())
   write(path.relative(kb, path.join(setup.path, 'change/Evolution.hs')), `{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
-import qualified Kyyn.Workspace.After.RecipeFlows.Flows as Flows
+import qualified Kyyn.Workspace.Target.RecipeFlows.Flows as Flows
 import qualified RootV1
 import qualified Review
-evolution :: Evolution (KnowledgeBase RootV1.Root) (KnowledgeBase RootV1.Root)
-evolution = edit (Rationale "Teach review recipes" []) $ do
+evolution :: Evolution RootV1.Root
+evolution = prepare (pure ()) $ edit (Rationale "Teach review recipes" []) $ do
   createRecipe (RecipeId "review") Flows.review (Review.State [])
   createRecipe (RecipeId "unit") Flows.unit ()
 `);
   console.log('Creating closed recipes through generated definition handles');
-  const handle = cli(['guest', 'module', 'show', 'Kyyn.Workspace.After.RecipeFlows.Flows', '--evolution', setup.id]);
+  const handle = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Target.RecipeFlows.Flows', '--evolution', setup.id]);
   assert.match(JSON.stringify(handle), /RecipeDefinition/);
   cli(['evolution', 'check', setup.id]);
   cli(['evolution', 'ready', setup.id]);

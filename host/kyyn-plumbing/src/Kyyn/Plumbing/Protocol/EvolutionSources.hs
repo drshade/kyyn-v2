@@ -1,5 +1,6 @@
-module Kyyn.Plumbing.Protocol.EvolutionSources (captureEvolutionSources) where
+module Kyyn.Plumbing.Protocol.EvolutionSources (captureEvolutionSources, captureStoredEvolutionSources) where
 
+import qualified Data.Text
 import Control.Monad (unless)
 import Data.List (isPrefixOf)
 import Kyyn.Domain.FileTree (FileTree, files)
@@ -19,3 +20,10 @@ captureEvolutionSources selection before target change = do
   where
     reserved path = any (\name -> path == name || (name ++ "/") `isPrefixOf` path) [".kyyn-before",".kyyn-change"]
     prefix directory tree = traverse (\(path,bytes) -> (,bytes) <$> relativePath (directory ++ relativeName path)) (files tree)
+
+captureStoredEvolutionSources :: [RecipeReference] -> Maybe [Data.Text.Text] -> FileTree -> FileTree -> Either String GuestSources
+captureStoredEvolutionSources references discovery target change = do
+  unless (all (\(path,_) -> not (any (`isPrefixOf` relativeName path) [".kyyn-before/",".kyyn-change/"])) (files target))
+    (Left "Target source uses a reserved evolution input directory")
+  transformation <- traverse (\(path,bytes) -> (,bytes) <$> relativePath (".kyyn-change/" ++ relativeName path)) (files change)
+  guestSources (TargetEvolutionEntries references discovery) (files target ++ transformation)

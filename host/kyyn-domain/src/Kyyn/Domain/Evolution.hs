@@ -1,6 +1,6 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evolution
-  ( EvolutionId, evolutionId, evolutionIdName, nextEvolutionId, EvolutionName(..), EvolutionWorkspace(..), Before(..)
+  ( EvolutionId, evolutionId, evolutionIdName, nextEvolutionId, EvolutionName(..), EvolutionWorkspace(..), Before(..), beforeRevision
   , EvolutionContext(..), PreparedEvolution(..), CapturedEvolution(..)
   , After(..), EvaluatedEvolution(..), PreviewRejection(..), Candidate(..)
   , EvolutionFilter(..), EvolutionSummary(..)
@@ -15,6 +15,8 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot, EvolutionState)
 import Kyyn.Domain.Value (CheckedValue)
 import Kyyn.Domain.Root (Root, SourceRoot)
+import Kyyn.Domain.StoredSnapshot (StoredSnapshot)
+import Kyyn.Domain.FileTree (FileTree)
 import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
@@ -65,7 +67,11 @@ data EvolutionWorkspace = EvolutionWorkspace
 data Before = Before
   { revision :: GitRevision
   , schema :: RootContract
-  } deriving (Eq, Show)
+  } | StoredBefore GitRevision deriving (Eq, Show)
+
+beforeRevision :: Before -> GitRevision
+beforeRevision (Before revision _) = revision
+beforeRevision (StoredBefore revision) = revision
 
 data EvolutionContext = EvolutionContext
   { knowledgeBase :: KnowledgeBase
@@ -81,6 +87,7 @@ data PreparedEvolution = PreparedEvolution
 
 data CapturedEvolution = CapturedEvolution
   { context :: EvolutionContext, input :: Root, sourceClosure :: [RelativePath], preparedAfter :: SourceRoot }
+  | CapturedStoredEvolution EvolutionContext StoredSnapshot FileTree
   deriving (Eq, Show)
 
 data Candidate a = Candidate

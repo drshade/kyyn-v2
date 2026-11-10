@@ -15,7 +15,7 @@ import System.Process (callProcess, readProcess)
 import qualified Kyyn.Build.Sources as Sources
 import Kyyn.Build.Inspection
 import Kyyn.Build.FrozenProposal (writeFrozenProposal)
-import Kyyn.Build.RecipeHandles (handleImports, handleModules, writeRecipeHandles)
+import Kyyn.Build.RecipeHandles (handleImports, handleImportsWithStored, handleModules, writeRecipeHandles)
 import Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings, writeRecipeEvolutionBindings, writeTargetEvolutionBindings)
 import Kyyn.Build.OutputBindings (writeOutputBindings)
 import Kyyn.Build.ToolBindings (writeToolBindings)
@@ -75,11 +75,11 @@ resolveModules libdir roots requested = do
       if present then pure . pure . fst =<< Sources.moduleHeader libdir path else pure []
   libraries <- packageModuleNames libdir
   let fixed = ["KyynQueryBindings","Kyyn.Connectors","Kyyn.Agentic","KyynFrozenProposal",
-        "Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.Evolution","Kyyn.Workspace.FactEdits"]
+        "Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.Target","Kyyn.Workspace.Target.Fields","Kyyn.Workspace.Evolution","Kyyn.Workspace.FactEdits"]
       candidates = authored ++ libraries ++ fixed
       choose value = case sortOn (negate . length)
         [name | name <- candidates, name == value || (name ++ ".") `isPrefixOf` value] of
-        name:_ | not (any (`isPrefixOf` value) ["Kyyn.Plugins.","Kyyn.Workspace.Before.RecipeTypes.","Kyyn.Workspace.After.RecipeTypes.","Kyyn.Workspace.After.RecipeFlows."]) -> name
+        name:_ | not (any (`isPrefixOf` value) ["Kyyn.Plugins.","Kyyn.Workspace.Before.RecipeTypes.","Kyyn.Workspace.After.RecipeTypes.","Kyyn.Workspace.After.RecipeFlows.","Kyyn.Workspace.Target.RecipeTypes.","Kyyn.Workspace.Target.RecipeFlows."]) -> name
         _ -> intercalate "." (takeWhile (\part -> case part of first:_ -> not (isLower first); [] -> False) (map Text.unpack (Text.splitOn "." (Text.pack value))))
   pure (nub (map choose requested))
 
@@ -372,7 +372,20 @@ buildEvolutionFull compiler libdir generated basePackages destination (Evolution
 -- are candidate names only; absent names do not import historical implementations.
 buildTargetEvolution :: FilePath -> FilePath -> FilePath -> [String] -> FilePath
   -> [RecipeReference] -> Maybe [Text.Text] -> IO ()
-buildTargetEvolution compiler libdir generated basePackages destination references discovery = do
+buildTargetEvolution compiler libdir generated basePackages destination references (Just requested)
+  | not (null requested) = do
+      roots <- ("src" :) <$> installedPluginRoots
+      selected <- resolveModules libdir (".kyyn-change" : roots) (map Text.unpack requested)
+      needs <- requiredBindings libdir (".kyyn-change" : roots) (basePackages ++ map ("-i" ++) roots) selected
+      if needs.workspaceBindings then
+        buildTargetEvolutionFull compiler libdir generated basePackages destination references (Just (map Text.pack selected))
+      else buildModules compiler libdir generated basePackages destination selected
+buildTargetEvolution compiler libdir generated basePackages destination references discovery =
+  buildTargetEvolutionFull compiler libdir generated basePackages destination references discovery
+
+buildTargetEvolutionFull :: FilePath -> FilePath -> FilePath -> [String] -> FilePath
+  -> [RecipeReference] -> Maybe [Text.Text] -> IO ()
+buildTargetEvolutionFull compiler libdir generated basePackages destination references discovery = do
   manifest <- Text.readFile "kb.dhall" >>= either fail pure . parseManifest
   pluginRoots <- installedPluginRoots
   runtime <- runtimeOptions compiler
@@ -395,9 +408,11 @@ buildTargetEvolution compiler libdir generated basePackages destination referenc
   when needs.toolBindings $ do
     (_,_,_,registrations) <- preparePlugins compiler libdir generated (basePackages ++ runtime)
     writeToolBindings generated roots registrations
+  (_,namedExports) <- if null namedModules then pure ([],[]) else
+    inspectExports libdir (roots ++ [generated]) packages namedModules
   resolved <- fmap concat $ forM namedModules $ \name -> do
-    (_,exports) <- inspectExports libdir (roots ++ [generated]) packages [name]
-    let symbols = [(symbol.exportName,symbol.exportKind) | entry <- exports, symbol <- entry.moduleExports]
+    let symbols = [(symbol.exportName,symbol.exportKind) | entry <- namedExports,
+          entry.moduleName == Text.pack name, symbol <- entry.moduleExports]
     pure [case reference of
       OpenState stateName -> "Kyyn.Workspace.Target.RecipeTypes." ++ Text.unpack stateName
       ClosedFlow _ -> "Kyyn.Workspace.Target.RecipeFlows." ++ name
@@ -407,7 +422,7 @@ buildTargetEvolution compiler libdir generated basePackages destination referenc
         Text.unpack (referenceModule parsed) == name,
         let symbol = Text.takeWhileEnd (/= '.') selected,
         (symbol,case reference of OpenState _ -> ExportType; ClosedFlow _ -> ExportValue) `elem` symbols]
-  let handles = handleImports (imports ++ resolved)
+  let handles = handleImportsWithStored imports resolved
   (_,importedModules,importedEntries,recipeBindings) <- writeRecipeHandles libdir generated packages roots roots manifest.schemaType handles
   let defaults = ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Target","Kyyn.Workspace.Target.Fields","Kyyn.Workspace.FactEdits"]
       selected = case discovery of Nothing -> "Evolution" : defaults; Just [] -> defaults; Just names -> map Text.unpack names

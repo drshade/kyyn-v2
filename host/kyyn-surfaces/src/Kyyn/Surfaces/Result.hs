@@ -6,7 +6,7 @@ module Kyyn.Surfaces.Result
   , validationResult, checkResult, inspectionCheckResult, acceptanceResult, stateResult, initializationResult, pluginResult
   ) where
 
-import Data.Aeson (Value(..), object, (.=), encode)
+import Data.Aeson (Value(..), object, (.=), encode, toJSON)
 import qualified Data.ByteString.Lazy as Bytes
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
@@ -14,6 +14,9 @@ import Kyyn.Domain.Contract (describeRootContract)
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
+import Kyyn.Domain.SnapshotReport
+import qualified Kyyn.Domain.StoredSnapshot as Stored
+import qualified Kyyn.Domain.Recipe as Recipe
 import Kyyn.Domain.Failure
 import Kyyn.Domain.Git (GitRevision, revisionName, LocalBranch(..), Repository(..), TreePath(..), gitUrlText)
 import Kyyn.Domain.Plugin (InstalledPlugin(..), PluginOrigin(..), PluginRepository(..), pluginNameText)
@@ -138,8 +141,8 @@ inspectionResult (summary, report) = success
   ([summaryText summary] ++ maybe ["No saved report."] reportText report)
 
 candidateResult :: Candidate Root -> Response
-candidateResult (Candidate (EvolutionContext _ identity (Before revision _) _) report (Root schema _ _ _)) = success
-  (object ["id" .= evolutionIdName identity, "beforeRevision" .= revisionName revision,
+candidateResult (Candidate (EvolutionContext _ identity selectedBefore _) report (Root schema _ _ _)) = success
+  (object ["id" .= evolutionIdName identity, "beforeRevision" .= revisionName (beforeRevision selectedBefore),
     "schema" .= describeRootContract schema, "report" .= reportJson report])
   (["Saved candidate for " ++ evolutionIdName identity] ++ reportText report)
 
@@ -201,6 +204,12 @@ summaryText (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName nam
   evolutionIdName identity ++ "  " ++ show state ++ "  " ++ name
 
 reportJson :: EvolutionReport -> Value
+reportJson (StoredEvolutionReport plugins steps) = object
+  ["steps" .= map snapshotStepJson steps, "plugins" .= map pluginJson plugins]
+  where
+    pluginJson (PluginChange name old new paths) = object
+      ["name" .= pluginNameText name, "before" .= fmap originJson old,
+       "after" .= fmap originJson new, "files" .= map relativeName paths]
 reportJson (EvolutionReport plugins steps) = object
   ["steps" .= map step steps,
    "plugins" .= [object ["name" .= pluginNameText name, "before" .= fmap originJson old,
@@ -221,6 +230,12 @@ reportJson (EvolutionReport plugins steps) = object
       ["producer" .= producer, "instance" .= connector, "source" .= source, "externalReferences" .= references]
 
 reportText :: EvolutionReport -> [String]
+reportText (StoredEvolutionReport plugins steps) = reportText (EvolutionReport plugins []) ++ concatMap step steps
+  where
+    step value@(SnapshotStep origin (Rationale explanation evidence) _) =
+      [show origin ++ ": " ++ Text.unpack explanation]
+      ++ ["  Declared citations: " ++ show evidence | not (null evidence)]
+      ++ ["  " ++ jsonText (snapshotStepJson value)]
 reportText (EvolutionReport plugins steps) = concatMap pluginLines plugins ++ concatMap step steps
   where
     pluginLines (PluginChange name old new paths) =
@@ -244,6 +259,31 @@ reportText (EvolutionReport plugins steps) = concatMap pluginLines plugins ++ co
     methodText (OpenAgent instructions) = "Open agent: " ++ Text.unpack instructions
     methodText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ Text.unpack entry
     value (RecordedFact _ contents) = jsonText contents
+
+snapshotStepJson :: SnapshotStep -> Value
+snapshotStepJson (SnapshotStep origin (Rationale explanation evidence) changes) = object
+  ["origin" .= show origin, "explanation" .= explanation,
+   "evidence" .= [object ["producer" .= producer,"instance" .= connector,"source" .= source,
+     "externalReferences" .= references] | EvidenceRef producer connector source references <- evidence],
+   "changes" .= map change changes]
+  where
+    change (SnapshotFactChange collection (FactId identity) before after) = object
+      ["kind" .= String "Fact","collection" .= collection,"id" .= identity,
+       "before" .= fmap recorded before,"after" .= fmap recorded after]
+    change (SnapshotFieldChange name before after) = object
+      ["kind" .= String "Field","name" .= name,"before" .= fmap recorded before,"after" .= fmap recorded after]
+    change (SnapshotMembershipChange collection before after) = object
+      ["kind" .= String "Membership","collection" .= collection,
+       "before" .= fmap (map (\(FactId identity) -> identity)) before,
+       "after" .= fmap (map (\(FactId identity) -> identity)) after]
+    change (SnapshotRecipeChange (FactId identity) before after) = object
+      ["kind" .= String "Recipe","id" .= identity,"before" .= fmap recipe before,"after" .= fmap recipe after]
+    recorded (Stored.RecordedValue shape value) = object
+      ["shape" .= either (String . Text.pack) toJSON (Stored.storageShape shape),"value" .= value]
+    recipe (Stored.RecordedRecipe definition state) = object ["definition" .= method definition,"state" .= recorded state]
+    method (Recipe.OpenRecipe instructions name) = object
+      ["kind" .= String "OpenAgent","instructions" .= instructions,"stateType" .= name]
+    method (Recipe.ClosedRecipe (FlowEntryRef name)) = object ["kind" .= String "ClosedAgent","flow" .= name]
 
 originJson :: PluginOrigin -> Value
 originJson (PluginOrigin repository path revision) = object

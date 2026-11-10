@@ -79,8 +79,8 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
       path = generated </> "Kyyn/Workspace/Evolution.hs"
   writeFile path (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}",
-      "module Kyyn.Workspace.Evolution (module Kyyn.Recipe, module Kyyn.Edit, Rationale(..), EvidenceRef(..), (>=>), identityEvolution, Root, RecipeState, recipeEdit) where",
-      "import Data.Text (Text)", "import Kyyn.Recipe", "import Kyyn.Edit", "import Kyyn.Evolution (Rationale(..), EvidenceRef(..), (>=>), identityEvolution)",
+      "module Kyyn.Workspace.Evolution (module Kyyn.Recipe, module Kyyn.Edit, Rationale(..), EvidenceRef(..), identityEvolution, Root, RecipeState, recipeEdit) where",
+      "import Data.Text (Text)", "import Kyyn.Recipe", "import Kyyn.Edit", "import Kyyn.Evolution (Rationale(..), EvidenceRef(..), identityEvolution)",
       "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Bindings"] ++
      ["import qualified " ++ name | name <- nub (Text.unpack (referenceModule root) : imports)] ++
      ["type Root = " ++ selected, "type RecipeState = " ++ state,
@@ -120,5 +120,15 @@ writeTargetEvolutionBindings generated roots manifest metadata@(SchemaMetadata _
   writeFile (directory </> "Evolution.hs") (unlines
     ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, module Preparation, Evolution, TargetEdits, prepare, edit, identityEvolution) where",
      "import Kyyn.Evolution hiding (Evolution, identityEvolution, (>=>))",
-     "import Kyyn.Runtime.TargetEvolution (Evolution, TargetEdits, prepare, edit, identityEvolution)",
-     "import Kyyn.Runtime.TargetEvolution as Preparation (Preparation, TargetField, readCollection, migrateCollection, renameCollection, removeCollection, removeFact, readField, migrateField, putField, renameField, removeField, readRecipeState, migrateRecipe, retireRecipe)"])
+     "import Kyyn.Runtime.TargetEvolution (Evolution, TargetEdits)",
+     "import qualified Kyyn.Runtime.TargetEvolution as TargetEvolution",
+     "import Kyyn.Runtime.TargetEvolution as Preparation (Preparation, TargetField, readCollection, migrateCollection, renameCollection, removeCollection, removeFact, readField, migrateField, putField, renameField, removeField, readRecipeState, migrateRecipe, retireRecipe)",
+     "import qualified " ++ rootModule,
+     "-- | Prepare stored data and then apply recorded target edits.",
+     "prepare :: Preparation " ++ root ++ " () -> TargetEdits " ++ root ++ " -> Evolution " ++ root,
+     "prepare = TargetEvolution.prepare",
+     "-- | Change the target KB in one recorded step.",
+     "edit :: Rationale -> Edit (KnowledgeBase " ++ root ++ ") () -> TargetEdits " ++ root,
+     "edit = TargetEvolution.edit",
+     "identityEvolution :: Evolution " ++ root,
+     "identityEvolution = TargetEvolution.identityEvolution"])

@@ -89,7 +89,7 @@ twice name = [greet name, greet name]
   }
   assert.equal(listing.origins['Kyyn.Evolution'], 'sdk');
   assert.equal(listing.origins['Kyyn.Connectors'], 'generated');
-  assert.equal(listing.origins['Kyyn.Workspace.After'], 'generated');
+  assert.equal(listing.origins['Kyyn.Workspace.Target'], 'generated');
   assert.equal(listing.origins['KyynQueryBindings'], 'generated');
   assert.equal(listing.origins['LocalFile.Types'], 'plugin');
   assert(!listing.modules.includes('KyynToolCalls'));

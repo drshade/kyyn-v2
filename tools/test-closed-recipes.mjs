@@ -45,11 +45,9 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
-import qualified RootV1 as Before
 import qualified RootV2 as After
-evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
-evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Teach recipe" []) (createRecipe (RecipeId "sync") (openRecipe unitRecipeType "Review tasks") ())
+evolution :: Evolution After.Root
+evolution = prepare (pure ()) $ edit (Rationale "Teach recipe" []) (createRecipe (RecipeId "sync") (openRecipe unitRecipeType "Review tasks") ())
 `);
   cli(['evolution', 'check', draft.id]);
   accept(draft.id);
@@ -58,8 +56,8 @@ evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
   const closed = cli(['evolution', 'new', 'close-recipe']).result;
   const source = path.join(closed.path, 'change/Evolution.hs');
   fs.writeFileSync(source, fs.readFileSync(source, 'utf8').replace('import Kyyn.Workspace.Evolution',
-    'import Kyyn.Workspace.Evolution\nimport qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks').replace('evolution = identityEvolution',
-    'evolution = edit (Rationale "Use the authored flow" []) (updateRecipe unitRecipeType (RecipeId "sync") Tasks.reconcile Right)'));
+    'import Kyyn.Workspace.Evolution\nimport qualified Kyyn.Workspace.Target.RecipeFlows.Tasks as Tasks').replace('evolution = identityEvolution',
+    'evolution = prepare (pure ()) $ edit (Rationale "Use the authored flow" []) (updateRecipe unitRecipeType (RecipeId "sync") Tasks.reconcile Right)'));
   let rejected = cli(['evolution', 'check', closed.id], 1);
   assert.match(JSON.stringify(rejected), /guest.build|recipe.signature/);
   const flowFile = path.join(closed.path, 'target/src/Tasks.hs');

@@ -224,7 +224,8 @@ dispatchWorkspaceApi host workspace request = withRuntime host $ \settings ->
             Left diagnostics -> pure (refusal diagnostics)
             Right bindings -> ApiResult.workspaceResult context <$>
               catalogueResult request (map (ApiEntry GeneratedOrigin) generated ++
-                [entry | entry@(ApiEntry _ selected) <- bindings, moduleName selected `notElem` map moduleName generated])
+                [entry | entry@(ApiEntry _ selected) <- bindings, moduleName selected `notElem` map moduleName generated,
+                  not (Text.pack "Kyyn.Workspace." `Text.isPrefixOf` moduleName selected)])
         _ -> ApiResult.workspaceResult context <$> catalogueResult request [ApiEntry (origin entry) entry | entry <- generated]
   where
     origin entry
@@ -278,8 +279,8 @@ dispatchEvolution host request (SelectedKb kb@(KnowledgeBase (Repository scope) 
       either refusal (const (stateResult identity Workspace.Ready)) <$> Store.markReady (workspace identity)
     Cli.DraftEvolution identity -> finish $ runMetadata host $
       either refusal (const (stateResult identity Workspace.Draft)) <$> Store.markDraft (workspace identity)
-    Cli.NewEvolution name before recipe -> withRuntime host $ \settings -> finish $ runAuthoring host settings $ do
-      created <- Authoring.createEvolution kb name (maybe revision id before) (maybe Workspace.AdHoc Workspace.RecipeBased recipe)
+    Cli.NewEvolution name before recipe inputTypes -> withRuntime host $ \settings -> finish $ runAuthoring host settings $ do
+      created <- Authoring.createEvolutionWithInputTypes kb name (maybe revision id before) (maybe Workspace.AdHoc Workspace.RecipeBased recipe) inputTypes
       pure $ case created of
         Left diagnostics -> refusal diagnostics
         Right value -> case Store.workspaceLocation value of

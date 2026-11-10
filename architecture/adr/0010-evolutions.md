@@ -324,7 +324,7 @@ data RecordedValue -- inferred storage shape plus exact value, readable without 
 
 data Change
   = FactChange Text FactId (Maybe RecordedValue) (Maybe RecordedValue)
-  | MembershipChange Text [FactId] [FactId]
+  | MembershipChange Text (Maybe [FactId]) (Maybe [FactId])
   | FieldChange Text (Maybe RecordedValue) (Maybe RecordedValue)
   | RecipeChange RecipeId (Maybe RecordedRecipe) (Maybe RecordedRecipe)
 data RecordedRecipe -- method, state storage shape and exact state value
@@ -352,7 +352,9 @@ target Haskell module name changed. Historical semantic metadata cannot be
 recovered without old code and is not manufactured for the report.
 
 Reports can retain whole boundary values during checking and before/after values
-for each changed record in the archive. No incremental-memory or archive-size
+for each changed record in the archive. Changed values are archived as a union
+over that report's inferred shapes; alternative names are local to that report.
+No incremental-memory or archive-size
 promise is made. Measure these costs rather than adding a history database or
 reconstruction service. A report proves data continuity and captures declared
 rationale; it does not prove that a rationale or evidence citation is true.

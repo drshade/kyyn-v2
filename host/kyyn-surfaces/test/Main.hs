@@ -199,11 +199,11 @@ main = do
         (Invocation (Selection "nested/kb" Nothing (Just "/bin/nix")) Json (Guest (Just identity) request))
       refuses (["guest"] ++ args ++ ["--evolution","../invalid"])
   succeeds ["evolution","new","September"]
-    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing Nothing)))
+    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing Nothing False)))
   succeeds ["evolution","new","September","--before",replicate 40 'a']
-    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") (Just revision) Nothing)))
+    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") (Just revision) Nothing False)))
   succeeds ["evolution","new","September","--recipe","mail"]
-    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing (Just (RecipeId "mail")))))
+    (Invocation selected Human (Evolution (NewEvolution (EvolutionName "September") Nothing (Just (RecipeId "mail")) False)))
   refuses ["evolution","new","September","--recipe","../mail"]
   forM_ [("show",ShowEvolution),("check",CheckEvolution),
     ("ready",ReadyEvolution),("draft",DraftEvolution),("accept",AcceptEvolution)] $

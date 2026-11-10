@@ -71,10 +71,9 @@ module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import Results (Result(..))
-import qualified RootV1 as Before
 import qualified RootV2 as After
-evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
-evolution = evolve (Rationale "Store confidence" []) (onFacts (\\Before.Root -> Right
+evolution :: Evolution After.Root
+evolution = prepare (pure ()) $ edit (Rationale "Store confidence" []) (zoom facts (put
   (After.Root [Fact (FactId "estimate") (Result 0.85 [0, 1])]
     [Fact (FactId "direct") 0.85])))
 `);

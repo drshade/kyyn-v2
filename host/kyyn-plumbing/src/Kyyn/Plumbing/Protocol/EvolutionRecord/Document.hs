@@ -27,6 +27,7 @@ import Kyyn.Types.Fact (FactId(..))
 
 recordDocument :: EvolutionId -> RootContract -> RootContract -> EvolutionReport
   -> Either [Diagnostic] (Shape, Value)
+recordDocument _ _ _ StoredEvolutionReport{} = Left [errorDiagnostic "evolution.report-format" "Structural reports require the snapshot archive format"]
 recordDocument identity before after (EvolutionReport plugins steps) = do
   encoded <- traverse step steps
   pure (recordShape stateContracts before after,

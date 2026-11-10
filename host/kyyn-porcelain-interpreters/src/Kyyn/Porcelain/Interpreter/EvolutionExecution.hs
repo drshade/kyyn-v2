@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, OverloadedStrings, OverloadedRecordDot #-}
+{-# LANGUAGE LambdaCase, GADTs, OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Porcelain.Interpreter.EvolutionExecution (runEvolutionExecution) where
 
 import Control.Monad (unless)
@@ -10,6 +10,9 @@ import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic, compilerContext)
 import Kyyn.Domain.Evolution
+import qualified Kyyn.Domain.StoredSnapshot as Stored
+import Kyyn.Types.Evolution (Rationale(..))
+import Kyyn.Porcelain.Protocol.StoredEvolution (executeStoredEvolution)
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..), PluginChange(..))
 import qualified Kyyn.Domain.EvolutionReport as Report
 import Kyyn.Domain.Contract (contractId, rootSchema)
@@ -30,7 +33,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import qualified Kyyn.Plumbing.Protocol.Plugin as Plugin
 import Kyyn.Plumbing.Capability.GuestCompilation (GuestCompilation, compileGuest, EvolutionSelection(..), RecipeReference(..))
 import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection, describeGuest)
-import Kyyn.Plumbing.Protocol.EvolutionSources (captureEvolutionSources)
+import Kyyn.Plumbing.Protocol.EvolutionSources (captureEvolutionSources, captureStoredEvolutionSources)
 import Kyyn.Plumbing.Capability.GuestExecution (GuestExecution, executeEntry)
 import Kyyn.Plumbing.Protocol.Evolution (decodeEvolutionReply)
 import Kyyn.Plumbing.Protocol.FactProposal (lowerProposal)
@@ -45,69 +48,87 @@ runEvolutionExecution
   :: (RootStore :> es, GuestInspection :> es,
       GuestCompilation :> es, GuestExecution :> es, Failure :> es, DhallHandling :> es)
   => Eff (EvolutionExecution : es) a -> Eff es a
-runEvolutionExecution = interpret $ \_ (EvaluateEvolution captured@(CapturedEvolution
+runEvolutionExecution = interpret $ \_ -> \case
+  EvaluateEvolution captured@(CapturedStoredEvolution
+      (EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ _ explanation _ _) _ target change _))
+      stored@(Stored.StoredSnapshot _ _ recipes) accepted) -> runExceptT $ do
+    let reference (Stored.RecordedRecipe definition _) = case definition of
+          Value.OpenRecipe _ name -> OpenState (Text.pack name)
+          Value.ClosedRecipe (FlowEntryRef name) -> ClosedFlow name
+    source <- checked "evolution.capture" (captureStoredEvolutionSources
+      [reference recipe | Fact _ recipe <- recipes] Nothing target change)
+    compiled <- proposed (compileGuest source)
+    described <- proposed (describeGuest compiled)
+    (root@(Root schema _ _ states),steps) <- proposed
+      (executeStoredEvolution compiled described target (Rationale (Text.pack explanation) []) stored)
+    value <- proposed (loadRootValueForChecking root)
+    plugins <- proposed (pluginChanges accepted target)
+    pure (EvaluatedEvolution captured (After schema) (Value.KnowledgeBase value states) (StoredEvolutionReport plugins steps))
+  EvaluateEvolution captured@(CapturedEvolution
     (EvolutionContext _ _ (Before _ expected)
       (WorkspaceSnapshot (WorkspaceManifest _ _ _ _ kind) before target change _)) source@(Root actual _ acceptedCode recipes) _
-      targetSource@(SourceRoot after preparedCode (RootDefinition _ _ _ _ _ _ _) _))) -> runExceptT $ do
-  unless (actual == expected) (reject "evolution.before-contract" "Captured input does not match Before's contract")
-  RootDefinition beforeType beforeMetadata _ _ _ acceptedSources _ <- proposed (readRootDefinition acceptedCode)
-  unless (before == acceptedSources) (reject "evolution.before-source" "Captured input does not match Before's source")
-  unless (target == preparedCode) (reject "evolution.after-source" "Prepared After does not match the captured target")
-  selectedRecipe <- case kind of
-    AdHoc -> pure Nothing
-    RecipeBased ident@(RecipeId name) -> do
-      unless (expected == after && acceptedCode == preparedCode)
-        (reject "recipe.artifacts-changed" "Recipe-based evolutions preserve schema, source and configuration; use an ad hoc evolution to change them")
-      case [recipe | Fact (FactId actualName) recipe <- recipes, name == actualName] of
-        [recipe] -> pure (Just (ident,recipe))
-        _ -> reject "recipe.unknown" "The selected recipe must exist in Before"
-  CheckedValue _ input <- proposed (loadRootValueForChecking source)
-  lowered <- proposed (lowerProposal expected after
-    (fmap (\(_,Value.StoredRecipe _ _ state value) -> (state,value)) selectedRecipe) change)
-  let reference (Value.StoredRecipe method name _ _) = case method of
-        OpenAgent _ -> OpenState (Text.pack name)
-        ClosedAgent (FlowEntryRef flow) -> ClosedFlow flow
-      selection = EvolutionSelection (Text.pack beforeType) (Text.pack beforeMetadata)
-        [reference value | Fact _ value <- recipes] (reference . snd <$> selectedRecipe) Nothing
-  prepared <- checked "evolution.prepare" (captureEvolutionSources selection before target lowered)
-  compiled <- proposed (first (map (compilerContext "evolution")) <$> compileGuest prepared)
-  described <- proposed (describeGuest compiled)
-  entry <- case [(handle,contracts) | handle <- compiledEntries compiled described,
-      G.EvolutionEntry _ contracts <- [entryDescription handle]] of
-    [(handle,G.AdHocContracts old new)] | selectedRecipe == Nothing -> do
-      unless (contractId old.contract == contractId (rootSchema expected) && contractId new.contract == contractId (rootSchema after))
-        (reject "evolution.endpoint-contract" "Execution guest endpoints differ from the prepared contracts")
-      pure handle
-    [(handle,G.RecipeEvolutionContracts root state)] | Just (_,Value.StoredRecipe _ _ expectedState _) <- selectedRecipe -> do
-      unless (contractId root.contract == contractId (rootSchema expected) && contractId state.contract == contractId expectedState)
-        (reject "evolution.endpoint-contract" "Execution guest recipe contracts differ from the prepared contracts")
-      pure handle
-    _ -> reject "evolution.description" "Expected one matching evolution entry"
-  let importedContracts = [(Text.unpack name,state.contract) | G.ContractEntry name state <- checkedEntries described]
-  let knowledge = Value.KnowledgeBase input [Fact ident (Value.proposedRecipe recipe) | Fact ident recipe <- recipes]
-      argument = case selectedRecipe of
-        Nothing -> knowledgeBaseValue knowledge
-        Just (_,recipe) -> recipeEvolutionInput input recipe
-  output <- ExceptT (Right <$> executeEntry entry argument)
-  reply <- case (case selectedRecipe of
-      Nothing -> decodeEvolutionReply output
-      Just (ident,_) -> decodeRecipeEvolutionReply ident recipes output) of
-    Left message -> ExceptT (raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput
-      ("Evolution.evolution: " ++ message))))
-    Right (Left failure) -> throwE (EvolutionRejected failure)
-    Right (Right result) -> pure result
-  let Report.EvolutionObservation (Value.KnowledgeBase _ returnedRecipes) _ = reply
-  targetContracts <- proposed (inspectRecipeContracts targetSource
-    [Fact ident (Value.proposedDefinition recipe) | Fact ident recipe <- returnedRecipes])
-  unless (and [ident == expectedIdent && identity == contractId contract |
-    (Fact ident (Value.ProposedRecipe _ _ identity _), (Fact expectedIdent _,_,contract)) <- zip returnedRecipes targetContracts])
-    (reject "recipe.state-contract" "Returned recipe state does not match its target definition")
-  let knownStates = importedContracts ++ [(name,contract) | Fact _ (Value.StoredRecipe _ name contract _) <- recipes]
-        ++ [(name,contract) | (_,name,contract) <- targetContracts]
-  result <- proposed (checkEvolutionReport knownStates expected knowledge after reply)
-  plugins <- proposed (pluginChanges acceptedCode preparedCode)
-  let (value,EvolutionReport _ steps) = result
-  pure (EvaluatedEvolution captured (After after) value (EvolutionReport plugins steps))
+      targetSource@(SourceRoot after preparedCode (RootDefinition _ _ _ _ _ _ _) _)) -> runExceptT $ do
+    unless (actual == expected) (reject "evolution.before-contract" "Captured input does not match Before's contract")
+    RootDefinition beforeType beforeMetadata _ _ _ acceptedSources _ <- proposed (readRootDefinition acceptedCode)
+    unless (before == acceptedSources) (reject "evolution.before-source" "Captured input does not match Before's source")
+    unless (target == preparedCode) (reject "evolution.after-source" "Prepared After does not match the captured target")
+    selectedRecipe <- case kind of
+      AdHoc -> pure Nothing
+      RecipeBased ident@(RecipeId name) -> do
+        unless (expected == after && acceptedCode == preparedCode)
+          (reject "recipe.artifacts-changed" "Recipe-based evolutions preserve schema, source and configuration; use an ad hoc evolution to change them")
+        case [recipe | Fact (FactId actualName) recipe <- recipes, name == actualName] of
+          [recipe] -> pure (Just (ident,recipe))
+          _ -> reject "recipe.unknown" "The selected recipe must exist in Before"
+    CheckedValue _ input <- proposed (loadRootValueForChecking source)
+    lowered <- proposed (lowerProposal expected after
+      (fmap (\(_,Value.StoredRecipe _ _ state value) -> (state,value)) selectedRecipe) change)
+    let reference (Value.StoredRecipe method name _ _) = case method of
+          OpenAgent _ -> OpenState (Text.pack name)
+          ClosedAgent (FlowEntryRef flow) -> ClosedFlow flow
+        selection = EvolutionSelection (Text.pack beforeType) (Text.pack beforeMetadata)
+          [reference value | Fact _ value <- recipes] (reference . snd <$> selectedRecipe) Nothing
+    prepared <- checked "evolution.prepare" (captureEvolutionSources selection before target lowered)
+    compiled <- proposed (first (map (compilerContext "evolution")) <$> compileGuest prepared)
+    described <- proposed (describeGuest compiled)
+    entry <- case [(handle,contracts) | handle <- compiledEntries compiled described,
+        G.EvolutionEntry _ contracts <- [entryDescription handle]] of
+      [(handle,G.AdHocContracts old new)] | selectedRecipe == Nothing -> do
+        unless (contractId old.contract == contractId (rootSchema expected) && contractId new.contract == contractId (rootSchema after))
+          (reject "evolution.endpoint-contract" "Execution guest endpoints differ from the prepared contracts")
+        pure handle
+      [(handle,G.RecipeEvolutionContracts root state)] | Just (_,Value.StoredRecipe _ _ expectedState _) <- selectedRecipe -> do
+        unless (contractId root.contract == contractId (rootSchema expected) && contractId state.contract == contractId expectedState)
+          (reject "evolution.endpoint-contract" "Execution guest recipe contracts differ from the prepared contracts")
+        pure handle
+      _ -> reject "evolution.description" "Expected one matching evolution entry"
+    let importedContracts = [(Text.unpack name,state.contract) | G.ContractEntry name state <- checkedEntries described]
+    let knowledge = Value.KnowledgeBase input [Fact ident (Value.proposedRecipe recipe) | Fact ident recipe <- recipes]
+        argument = case selectedRecipe of
+          Nothing -> knowledgeBaseValue knowledge
+          Just (_,recipe) -> recipeEvolutionInput input recipe
+    output <- ExceptT (Right <$> executeEntry entry argument)
+    reply <- case (case selectedRecipe of
+        Nothing -> decodeEvolutionReply output
+        Just (ident,_) -> decodeRecipeEvolutionReply ident recipes output) of
+      Left message -> ExceptT (raiseFailure (RuntimeUnavailable (ProcessDiagnostic ReadOutput
+        ("Evolution.evolution: " ++ message))))
+      Right (Left failure) -> throwE (EvolutionRejected failure)
+      Right (Right result) -> pure result
+    let Report.EvolutionObservation (Value.KnowledgeBase _ returnedRecipes) _ = reply
+    targetContracts <- proposed (inspectRecipeContracts targetSource
+      [Fact ident (Value.proposedDefinition recipe) | Fact ident recipe <- returnedRecipes])
+    unless (and [ident == expectedIdent && identity == contractId contract |
+      (Fact ident (Value.ProposedRecipe _ _ identity _), (Fact expectedIdent _,_,contract)) <- zip returnedRecipes targetContracts])
+      (reject "recipe.state-contract" "Returned recipe state does not match its target definition")
+    let knownStates = importedContracts ++ [(name,contract) | Fact _ (Value.StoredRecipe _ name contract _) <- recipes]
+          ++ [(name,contract) | (_,name,contract) <- targetContracts]
+    result <- proposed (checkEvolutionReport knownStates expected knowledge after reply)
+    plugins <- proposed (pluginChanges acceptedCode preparedCode)
+    case result of
+      (value,EvolutionReport _ steps) -> pure (EvaluatedEvolution captured (After after) value (EvolutionReport plugins steps))
+      _ -> reject "evolution.report" "Legacy execution returned a structural report"
+  EvaluateEvolution _ -> pure (Left (ProposedCodeRejected [errorDiagnostic "evolution.context" "Inconsistent captured evolution context"]))
 
 pluginChanges :: DhallHandling :> es => FileTree -> FileTree -> Eff es (Either [Diagnostic] [PluginChange])
 pluginChanges before after = runExceptT $ traverse change changed

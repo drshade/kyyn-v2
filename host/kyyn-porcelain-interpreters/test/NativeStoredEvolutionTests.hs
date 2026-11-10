@@ -46,6 +46,8 @@ main = do
       . runGuestExecution [("LC_ALL","C.UTF-8")] . runGuestInspection . runRootStore . runExceptT $ do
         definitions <- ExceptT (encodeRecipes
           [Fact (FactId "weekly") (ClosedRecipe (FlowEntryRef "Flows.review")),
+           Fact (FactId "notAFlow") (ClosedRecipe (FlowEntryRef "Flows.oldFlow")),
+           Fact (FactId "noContract") (OpenRecipe "Obsolete" "Flows.OldState"),
            Fact (FactId "obsolete") (ClosedRecipe (FlowEntryRef "Missing.obsolete"))])
         let stored = either error id (fileTree
               [(path "facts/root.dhall","{=}"),
@@ -54,13 +56,15 @@ main = do
                (path "recipes.dhall",definitions),
                (path "recipes/weekly/state.dhall","{ count = +4 }"),
                (path "recipes/obsolete/state.dhall","{=}"),
+               (path "recipes/notAFlow/state.dhall","{=}"),
+               (path "recipes/noContract/state.dhall","{=}"),
                (path "src/Schema.hs","this old application does not compile")])
         input <- ExceptT (readStoredSnapshot stored)
         guest <- ExceptT (describeGuest program)
         ExceptT (executeStoredEvolution program guest code (Rationale "Native target migration" []) input)
     (Root _ _ _ recipes,steps) <- right result >>= right
-    unless (length recipes == 1 && length steps == 5) (fail "Wrong recipe or observation membership")
-    unless ([origin | SnapshotStep origin _ _ <- steps] == [Authored,Authored,Authored,Authored,TargetProjection])
+    unless (length recipes == 1 && length steps == 7) (fail "Wrong recipe or observation membership")
+    unless ([origin | SnapshotStep origin _ _ <- steps] == [Authored,Authored,Authored,Authored,Authored,Authored,TargetProjection])
       (fail "Lost the target projection boundary")
   putStrLn "Native stored evolution and independent target projection verification passed"
 right :: Show e => Either e a -> IO a

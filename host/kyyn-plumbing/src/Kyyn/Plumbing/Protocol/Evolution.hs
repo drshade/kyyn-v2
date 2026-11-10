@@ -1,5 +1,5 @@
 module Kyyn.Plumbing.Protocol.Evolution
-  ( identityEvolutionSource, decodeEvolutionReply, decodeEvolutionReplyWith ) where
+  ( identityEvolutionSource, identityTargetEvolutionSource, decodeEvolutionReply, decodeEvolutionReplyWith ) where
 
 import Control.Monad (unless)
 import Data.List (sort)
@@ -36,6 +36,17 @@ identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
   where
     selectedModule = definingModule selected
     aliased name = name ++ "." ++ drop (length selectedModule + 1) selected
+
+identityTargetEvolutionSource :: String -> ByteString
+identityTargetEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
+  [ "module Evolution where"
+  , "import Kyyn.Workspace.Evolution"
+  , "import qualified " ++ definingModule selected
+  , "import qualified Kyyn.Workspace.Target as Target"
+  , ""
+  , "evolution :: Evolution " ++ selected
+  , "evolution = identityEvolution"
+  ]))
 
 decodeEvolutionReply :: ByteString -> Either String (Either EvolutionFailure EvolutionObservation)
 decodeEvolutionReply = decodeEvolutionReplyWith parseKnowledgeBase

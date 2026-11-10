@@ -26,6 +26,8 @@ const snapshot = {
   collections: [['items', [['one', stored(record({id: text, value: record({amount: integer})}), {id: 'one', value: {amount: '7'}})]]]],
   recipes: [
     ['weekly', {definition: {kind: 'closed', flow: 'Flows.review'}, state: stored(record({count: integer}), {count: '4'})}],
+    ['notAFlow', {definition: {kind: 'closed', flow: 'Flows.oldFlow'}, state: stored(record({}), {})}],
+    ['noContract', {definition: {kind: 'open', instructions: 'Obsolete', stateType: 'Flows.OldState'}, state: stored(record({}), {})}],
     ['obsolete', {definition: {kind: 'closed', flow: 'Missing.obsolete'}, state: stored(record({}), {})}],
   ],
 };
@@ -38,7 +40,7 @@ assert.deepEqual(result.value.after.facts, {items: [{id: 'one', value: {amount: 
 assert.equal(result.value.after.recipes.length, 1);
 assert.equal(result.value.after.recipes[0].id, 'weekly');
 assert.deepEqual(result.value.after.recipes[0].value.state, {runs: '4', reviewed: true});
-assert.deepEqual(result.value.steps.map(s => s.origin), ['authored', 'authored', 'authored', 'authored', 'target-projection']);
+assert.deepEqual(result.value.steps.map(s => s.origin), ['authored', 'authored', 'authored', 'authored', 'authored', 'authored', 'target-projection']);
 assert.deepEqual(result.value.steps[0].before, snapshot);
 for (let i = 1; i < result.value.steps.length; i++) assert.deepEqual(result.value.steps[i].before, result.value.steps[i-1].after);
 assert.equal(result.value.steps.at(-1).rationale.explanation, 'Fixture migration');

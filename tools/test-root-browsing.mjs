@@ -71,10 +71,9 @@ metadata = SchemaMetadata [RoleDecl "label" "Task title" Title]
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
-import qualified RootV1 as Before
 import qualified Tasks as After
-evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
-evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right
+evolution :: Evolution After.Root
+evolution = prepare (pure ()) $ edit (Rationale "Track tasks" []) (zoom facts (put
   (After.Root [Fact (FactId "some/♥ id") (After.Todo (Just "Review λ") Nothing),
                Fact (FactId "untitled") (After.Todo Nothing (Just (FactId "some/♥ id")))])))
 `);

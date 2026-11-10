@@ -11,9 +11,11 @@ import qualified Data.Text as Text
 import Effectful (Eff, (:>))
 import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (Diagnostic, errorDiagnostic)
-import Kyyn.Domain.Contract (CollectionContract(..), collectionContracts, rootSchema)
+import Kyyn.Domain.Contract (CollectionContract(..), collectionContracts, rootSchema, RootContract)
 import Kyyn.Domain.DataType (Shape(..), ScalarKind(..))
 import Kyyn.Domain.Evolution
+import Kyyn.Domain.SnapshotReport
+import Kyyn.Domain.StoredSnapshot (RecordedValue(..))
 import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..), Change(..), RecordedFact(..))
 import Kyyn.Domain.FileTree (FileTree, fileTree, files)
 import Kyyn.Domain.Failure (OperationalFailure(..), StorageDiagnostic(..), StorageOperation(..))
@@ -26,6 +28,7 @@ import Kyyn.Domain.Recipe (recipeId)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionState(Draft, Ready, Accepted))
 import qualified Kyyn.Domain.Workspace as Workspace
 import qualified Kyyn.Plumbing.Capability.FileSystem as FileSystem
+import Kyyn.Plumbing.Protocol.SnapshotArchive (encodeSnapshotArchive, decodeSnapshotArchive)
 import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as DhallHandling
@@ -46,8 +49,7 @@ runEvolutionStore = interpret $ \_ -> \case
     path <- checked (workspaceLocation workspace >>= \p -> relativePath (relativeName p ++ "/result.dhall"))
     bytes <- ExceptT (Right <$> FileSystem.readOptionalBytes scope path)
     traverse (\source -> do
-      decoded <- ExceptT (decodeEvolutionRecord source >>= pure . either
-        (Left . pure . errorDiagnostic "evolution.invalid-report") Right)
+      decoded <- ExceptT (fmap (either (Left . pure . errorDiagnostic "evolution.invalid-report") Right) (decodeReport source))
       (owner,_,_,report) <- either throwE pure decoded
       unless (owner == identity) (throwE [errorDiagnostic "evolution.invalid-report" "Archived report belongs to another evolution"])
       pure report) bytes
@@ -67,9 +69,10 @@ runEvolutionStore = interpret $ \_ -> \case
     pure state
   MarkReady workspace -> runExceptT (setState workspace Ready)
   MarkDraft workspace -> runExceptT (setState workspace Draft)
-  ExportAcceptedWorkspace (Candidate (EvolutionContext kb@(KnowledgeBase (Repository scope) _) identity (Before revision before)
+  ExportAcceptedWorkspace (Candidate (EvolutionContext kb@(KnowledgeBase (Repository scope) _) identity selectedBefore
       (WorkspaceSnapshot (WorkspaceManifest selected name explanation _ kind) source target change _)) report validated) -> runExceptT $ do
     let Root after _ code _ = validatedValue validated
+        revision = beforeRevision selectedBefore
     unless (revision == selected && target == code) (throwE [errorDiagnostic "evolution.archive-context"
       "Checked root or Before revision disagrees with captured workspace inputs"])
     notesPath <- checked (workspaceLocation (EvolutionWorkspace kb identity) >>= \p -> relativePath (relativeName p ++ "/notes"))
@@ -81,7 +84,7 @@ runEvolutionStore = interpret $ \_ -> \case
     encoded <- ExceptT (WorkspaceStore.encodeWorkspaceSnapshot
       (WorkspaceSnapshot (WorkspaceManifest revision name explanation Accepted kind) source target change notes))
     resultPath <- checked (relativePath "result.dhall")
-    document <- ExceptT (encodeEvolutionRecord identity before after report)
+    document <- ExceptT (encodeReport identity selectedBefore after report)
     archive <- checked (fileTree ((resultPath,document) : files encoded))
     destination <- checked (workspaceLocation (EvolutionWorkspace kb identity))
     pure (Subtree destination, archive)
@@ -89,9 +92,10 @@ runEvolutionStore = interpret $ \_ -> \case
   MatchesCapturedInputs (EvolutionContext kb identity _ captured) -> runExceptT $ do
     current <- readWorkspace (EvolutionWorkspace kb identity)
     pure (Workspace.matchesCapturedInputs captured current)
-  SaveCandidate (Candidate (EvolutionContext kb identity (Before revision before)
+  SaveCandidate (Candidate (EvolutionContext kb identity selectedBefore
       snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) _ target _ _)) report root@(Root after facts code recipes)) -> do
     parent <- candidateScope kb
+    let revision = beforeRevision selectedBefore
     unless (revision == selected && code == target)
       (storageFailure WriteFile "candidate.dhall" "Candidate disagrees with its captured Before or target")
     _ <- RootStore.loadRootValueForChecking root >>= stored WriteFile "root"
@@ -107,7 +111,7 @@ runEvolutionStore = interpret $ \_ -> \case
     writeTree location "capture/" capture
     writeTree location "root/" tree
     metadata <- stored WriteFile "candidate.dhall" (relativePath "candidate.dhall")
-    document <- encodeEvolutionRecord identity before after report >>= stored WriteFile "candidate.dhall"
+    document <- encodeReport identity selectedBefore after report >>= stored WriteFile "candidate.dhall"
     FileSystem.writeBytes location metadata document
     stateContracts <- encodeRecipeContracts recipes >>= stored WriteFile "recipe-contracts.dhall"
     contractsPath <- stored WriteFile "recipe-contracts.dhall" (relativePath "recipe-contracts.dhall")
@@ -127,7 +131,7 @@ runEvolutionStore = interpret $ \_ -> \case
         tree <- FileSystem.readTree location
         case lookup "candidate.dhall" [(relativeName p,b) | (p,b) <- files tree] of
           Just metadata -> do
-            decoded <- decodeEvolutionRecord metadata >>= stored ReadFile "candidate.dhall"
+            decoded <- decodeReport metadata >>= stored ReadFile "candidate.dhall"
             capture <- stored ReadFile "capture" (subtree "capture/" tree)
             captured <- WorkspaceStore.readWorkspaceSnapshot capture
             case (decoded,captured) of
@@ -150,7 +154,7 @@ runEvolutionStore = interpret $ \_ -> \case
                 let root = Root after facts code recipes
                 _ <- RootStore.loadRootValueForChecking root >>= stored ReadFile "root"
                 checkSavedReport ReadFile report
-                pure (Right (Just (Candidate (EvolutionContext kb identity (Before revision before) snapshot) report root)))
+                pure (Right (Just (Candidate (EvolutionContext kb identity (maybe (StoredBefore revision) (Before revision) before) snapshot) report root)))
               (Left diagnostics, _) -> pure (Left diagnostics)
               (_, Left diagnostics) -> pure (Left diagnostics)
           Nothing -> storageFailure ReadFile "candidate.dhall" "Missing candidate record"
@@ -198,6 +202,25 @@ requireWorkspace :: Maybe a -> ExceptT [Diagnostic] (Eff es) a
 requireWorkspace = maybe (throwE [errorDiagnostic "evolution.unknown" "No evolution workspace manifest was found"]) pure
 
 checkSavedReport :: (DhallHandling.DhallHandling :> es, Failure :> es) => StorageOperation -> EvolutionReport -> Eff es ()
+checkSavedReport operation (StoredEvolutionReport _ steps) = do
+  unless (length [() | SnapshotStep TargetProjection _ _ <- steps] == 1)
+    (storageFailure operation "candidate.dhall" "Stored report must contain one target projection")
+  forM_ steps $ \(SnapshotStep _ _ changes) -> forM_ changes $ \change -> case change of
+    SnapshotFactChange _ (FactId identity) before after -> do
+      present before after
+      forM_ [value | Just (RecordedValue _ value) <- [before,after]] $ \value -> do
+        recordedId <- stored operation "candidate.dhall" (parseEither (withObject "Fact" (.: "id")) value)
+        unless (recordedId == identity) (storageFailure operation "candidate.dhall" "Recorded fact ID disagrees with its change")
+    SnapshotRecipeChange (FactId identity) before after -> do
+      present before after
+      _ <- stored operation "candidate.dhall" (recipeId (Text.unpack identity))
+      pure ()
+    SnapshotFieldChange _ before after -> present before after
+    SnapshotMembershipChange _ before after -> present before after
+  where
+    present :: Failure :> xs => Maybe a -> Maybe a -> Eff xs ()
+    present before after = unless (maybe False (const True) before || maybe False (const True) after)
+      (storageFailure operation "candidate.dhall" "Change has neither a before nor an after value")
 checkSavedReport operation (EvolutionReport _ steps) = forM_ steps $ \(StepReport _ changes) ->
   forM_ changes check
   where
@@ -247,3 +270,23 @@ readWorkspace (EvolutionWorkspace kb@(KnowledgeBase (Repository scope) _) identi
 
 checked :: Either String a -> ExceptT [Diagnostic] (Eff es) a
 checked = either (throwE . pure . errorDiagnostic "evolution.capture") pure
+
+-- New archives carry only target contracts. Historical archives remain readable.
+encodeReport :: DhallHandling.DhallHandling :> es => EvolutionId -> Before -> RootContract -> EvolutionReport
+  -> Eff es (Either [Diagnostic] Bytes.ByteString)
+encodeReport identity _ target (StoredEvolutionReport plugins steps) = encodeSnapshotArchive identity target plugins steps
+encodeReport identity (Before _ source) target report = encodeEvolutionRecord identity source target report
+encodeReport _ (StoredBefore _) _ _ = pure (Left [errorDiagnostic "evolution.invalid-report" "Stored input requires a structural report"])
+
+decodeReport :: DhallHandling.DhallHandling :> es => Bytes.ByteString
+  -> Eff es (Either String (Either [Diagnostic] (EvolutionId,Maybe RootContract,RootContract,EvolutionReport)))
+decodeReport bytes = do
+  structural <- decodeSnapshotArchive bytes
+  case structural of
+    Right (identity,target,plugins,steps) -> pure (Right (Right (identity,Nothing,target,StoredEvolutionReport plugins steps)))
+    Left structuralErrors -> do
+      legacy <- decodeEvolutionRecord bytes
+      pure $ case legacy of
+        Right (Right (identity,source,target,report)) -> Right (Right (identity,Just source,target,report))
+        Right (Left diagnostics) -> Right (Left diagnostics)
+        _ -> Left (show structuralErrors)

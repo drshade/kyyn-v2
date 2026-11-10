@@ -48,6 +48,7 @@ recordFields selected = do
     ConT name -> reify name >>= \info -> case info of
       TyConI (DataD _ _ variables _ [RecC _ fields] _) -> instantiate variables arguments fields
       TyConI (NewtypeD _ _ variables _ (RecC _ fields) _) -> instantiate variables arguments fields
+      TyConI (DataD _ _ variables _ [NormalC _ []] _) -> instantiate variables arguments []
       _ -> fail "Bindings require a record with one constructor"
     _ -> fail "Bindings require a concrete record type"
   where

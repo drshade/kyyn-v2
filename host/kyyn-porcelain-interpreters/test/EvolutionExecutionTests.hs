@@ -76,6 +76,7 @@ evolutionExecutionTests contract facts = withSystemTempDirectory "kyyn-evolution
             (fail "Execution must describe its retained artifact exactly once")
           _ -> pure ()
         pure result
+      execute _ _ CapturedStoredEvolution{} = fail "Legacy execution fixture got structural input"
       captured = capture target
   expected@(CheckedValue _ inputValue) <- (runEff . runDhallHandling . runRootStore $ loadRootValueForChecking root) >>= right
   let response = object ["tag" .= ("Succeeded" :: String),"value" .= object
