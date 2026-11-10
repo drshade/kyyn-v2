@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings, writeRecipeEvolutionBindings) where
+module Kyyn.Build.RecipeBindings (writeRecipeBindings, writeEvolutionBindings, writeRecipeEvolutionBindings, writeTargetEvolutionBindings) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_, when, unless)
 import Data.List (nub)
 import qualified Data.Text as Text
 import System.Directory (createDirectoryIfMissing, doesFileExist)
@@ -16,7 +16,10 @@ writeRecipeBindings generated roots manifest metadata =
   writeEvolutionBindings generated roots (manifest.schemaType,metadata) (manifest.schemaType,metadata)
 
 writeEvolutionBindings :: FilePath -> [FilePath] -> (Reference,SchemaMetadata) -> (Reference,SchemaMetadata) -> IO ()
-writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetadata@(SchemaMetadata _ _ collections)) = do
+writeEvolutionBindings = writeBindings False
+
+writeBindings :: Bool -> FilePath -> [FilePath] -> (Reference,SchemaMetadata) -> (Reference,SchemaMetadata) -> IO ()
+writeBindings targetOnly generated roots (before,beforeMetadata) (after,afterMetadata@(SchemaMetadata _ _ collections)) = do
   let root = Text.unpack (referenceName after)
       beforeRoot = Text.unpack (referenceName before)
       imports = ["import qualified " ++ Text.unpack name | name <- nub [referenceModule before,referenceModule after]]
@@ -34,7 +37,7 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
       "import qualified Kyyn.Runtime.Bindings as Bindings", "rootCodec :: Codec RootEdit"] ++
      if null collections then ["rootCodec = Codec (\\value -> case value of {}) (\\_ -> Left \"This Root has no fact collections\")"]
      else ["rootCodec = either (error . show) id (Bindings.contractCodec @RootEdit)"]))
-  forM_ [("Before",beforeRoot,beforeMetadata),("After",root,afterMetadata)] $ \(endpoint,selected,SchemaMetadata _ _ fields) ->
+  forM_ (if targetOnly then [("Target",root,afterMetadata)] else [("Before",beforeRoot,beforeMetadata),("After",root,afterMetadata)]) $ \(endpoint,selected,SchemaMetadata _ _ fields) ->
     write ("Kyyn.Workspace." ++ endpoint) (unlines
       (header ("Kyyn.Workspace." ++ endpoint) ++
        ["import qualified " ++ Text.unpack (referenceModule (if endpoint == "Before" then before else after))] ++
@@ -48,7 +51,7 @@ writeEvolutionBindings generated roots (before,beforeMetadata) (after,afterMetad
       binding name selected metadata =
         [name ++ " :: Internal.RootBinding " ++ knowledge selected,
          name ++ " = either (error . show) id (Internal.rootBinding @" ++ selected ++ " (" ++ show metadata ++ "))"]
-  write "Kyyn.Workspace.Evolution" (unlines
+  unless targetOnly $ write "Kyyn.Workspace.Evolution" (unlines
     (["{-# LANGUAGE TypeApplications, OverloadedStrings #-}",
       "module Kyyn.Workspace.Evolution (module Kyyn.Evolution, editBefore, evolve, edit) where",
       "import Data.Text (Text)", "import Kyyn.Evolution", "import Kyyn.Types.SchemaMetadata", "import qualified Kyyn.Runtime.Bindings as Internal"] ++ imports ++
@@ -97,3 +100,25 @@ writeRecipeEvolutionBindings generated root metadata state imports = do
         "import Kyyn.Edit (Collection)", "import qualified Kyyn.Runtime.Bindings as Bindings", "import qualified Kyyn.Optics as Optics"] ++
        [Text.unpack field ++ " = Bindings.collection " ++ show label ++ " (Optics.field @" ++ show field ++ " @" ++ selected ++ ")"
         | CollectionDecl label field _ <- collections]))
+
+-- Target-only generation shares the fact-edit module with ordinary recipe runs.
+writeTargetEvolutionBindings :: FilePath -> [FilePath] -> Manifest -> SchemaMetadata -> IO ()
+writeTargetEvolutionBindings generated roots manifest metadata@(SchemaMetadata _ _ collections) = do
+  writeBindings True generated roots (manifest.schemaType,metadata) (manifest.schemaType,metadata)
+  let root = Text.unpack (referenceName manifest.schemaType)
+      rootModule = Text.unpack (referenceModule manifest.schemaType)
+      directory = generated </> "Kyyn/Workspace"
+  forM_ ["Kyyn/Workspace/Evolution","Kyyn/Workspace/Target/Fields"] $ \reserved -> do
+    occupied <- or <$> traverse doesFileExist [source </> reserved ++ extension | source <- roots, extension <- [".hs",".lhs"]]
+    when occupied (fail ("Authored source collides with generated module " ++ reserved))
+  createDirectoryIfMissing True (directory </> "Target")
+  writeFile (directory </> "Target/Fields.hs") (unlines
+    ["{-# LANGUAGE TemplateHaskell #-}","module Kyyn.Workspace.Target.Fields where",
+     "import Kyyn.Build.Edits (targetFields)","import qualified Kyyn.Runtime.TargetEvolution as Preparation",
+     "import qualified " ++ rootModule,
+     "$(targetFields ''" ++ root ++ " " ++ show [Text.unpack field | CollectionDecl _ field _ <- collections] ++ ")"])
+  writeFile (directory </> "Evolution.hs") (unlines
+    ["module Kyyn.Workspace.Evolution (module Kyyn.Evolution, module Preparation, Evolution, TargetEdits, prepare, edit, identityEvolution) where",
+     "import Kyyn.Evolution hiding (Evolution, identityEvolution, (>=>))",
+     "import Kyyn.Runtime.TargetEvolution (Evolution, TargetEdits, prepare, edit, identityEvolution)",
+     "import Kyyn.Runtime.TargetEvolution as Preparation (Preparation, TargetField, readCollection, migrateCollection, renameCollection, removeCollection, removeFact, readField, migrateField, putField, renameField, removeField, readRecipeState, migrateRecipe, retireRecipe)"])

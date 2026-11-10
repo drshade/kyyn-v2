@@ -1,5 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes, ScopedTypeVariables, TypeApplications, OverloadedStrings, OverloadedRecordDot #-}
-module Kyyn.Runtime.Guest (Entry, evolutionDescriptionEntry, describeState, recipeStateEntry, evolutionEntry, recipeEvolutionEntry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
+module Kyyn.Runtime.Guest (Entry, targetEvolutionEntry, evolutionDescriptionEntry, describeState, recipeStateEntry, evolutionEntry, recipeEvolutionEntry, recipeEntry, sourceConnectorEntry, sinkConnectorEntry, toolEntry, configurationEntry, loginEntry, sinkEntry, sinkDefaultsEntry, acquisitionEntry, capturedReadEntry, validationEntry, queryEntry, describeEntry, checkEntries, runGuest) where
 
 import Control.Monad (unless)
 import Kyyn.Evolution (RecipeDefinition)
@@ -21,6 +21,7 @@ import Kyyn.Types.Plugin (EvidenceSnapshot(..), FetchError)
 import Kyyn.Runtime.Plugin (executeCapturedReadAction)
 import Kyyn.Runtime.Query (executeQuery)
 import Kyyn.Runtime.Validation (encodeReportValue)
+import Kyyn.Runtime.TargetEvolution (targetEvolutionEntry)
 import Kyyn.Runtime.EvolutionEntry (evolutionEntry, recipeEvolutionEntry, evolutionDescriptionEntry, describeState)
 import Kyyn.Runtime.RecipeEntry (recipeEntry)
 import Kyyn.Runtime.ToolEntry (toolEntry)

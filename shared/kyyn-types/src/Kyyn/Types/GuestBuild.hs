@@ -7,7 +7,7 @@ import Data.List (nub, sort)
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 
 -- Private build input captured with the KB, rather than an environment override.
-data GuestSelection = RootEntries | PluginEntries | RecipeEntries [RecipeReference] | EvolutionEntries EvolutionSelection | DiscoveryEntries DiscoverySelection deriving (Eq, Show)
+data GuestSelection = RootEntries | PluginEntries | RecipeEntries [RecipeReference] | EvolutionEntries EvolutionSelection | TargetEvolutionEntries [RecipeReference] (Maybe [Text]) | DiscoveryEntries DiscoverySelection deriving (Eq, Show)
 data DiscoverySelection = RootSchema | RootApi (Maybe Text) | ModuleExports [Text] deriving (Eq, Show)
 
 -- Before source lives below .kyyn-before/ and transformation source below
@@ -28,6 +28,7 @@ canonicalSelection :: GuestSelection -> GuestSelection
 canonicalSelection (RecipeEntries references) = RecipeEntries (sort (nub references))
 canonicalSelection (EvolutionEntries (EvolutionSelection schema metadata references recipe modules)) =
   EvolutionEntries (EvolutionSelection schema metadata (sort (nub references)) recipe (sort . nub <$> modules))
+canonicalSelection (TargetEvolutionEntries references modules) = TargetEvolutionEntries (sort (nub references)) (sort . nub <$> modules)
 canonicalSelection selected = selected
 
 instance ToJSON RecipeReference where
@@ -45,6 +46,7 @@ instance ToJSON GuestSelection where
   toJSON RootEntries = object ["selection" .= String "root"]
   toJSON PluginEntries = object ["selection" .= String "plugins"]
   toJSON (RecipeEntries references) = object ["selection" .= String "recipes","references" .= sort (nub references)]
+  toJSON (TargetEvolutionEntries references modules) = object ["selection" .= String "targetEvolution", "references" .= sort (nub references), "modules" .= optionalValue modules]
   toJSON (EvolutionEntries details) = object ["selection" .= String "evolution","details" .= details]
   toJSON (DiscoveryEntries (RootApi selected)) = object ["selection" .= String "rootApi","selected" .= optionalValue selected]
   toJSON (DiscoveryEntries RootSchema) = object ["selection" .= String "schema"]
@@ -57,6 +59,9 @@ instance FromJSON GuestSelection where
       "plugins" -> exactObject "plugin selection" ["selection"] (const (pure PluginEntries)) value
       "recipes" -> exactObject "recipe selection" ["selection","references"]
         (\selected -> canonicalSelection . RecipeEntries <$> selected .: "references") value
+      "targetEvolution" -> exactObject "target evolution selection" ["selection","references","modules"]
+        (\selected -> canonicalSelection <$> (TargetEvolutionEntries <$> selected .: "references" <*>
+          (selected .: "modules" >>= parseOptionalValue))) value
       "evolution" -> exactObject "evolution selection" ["selection","details"]
         (\selected -> canonicalSelection . EvolutionEntries <$> selected .: "details") value
       "rootApi" -> exactObject "root API selection" ["selection","selected"]

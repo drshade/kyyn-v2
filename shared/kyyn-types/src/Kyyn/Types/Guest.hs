@@ -240,15 +240,18 @@ data QueryContracts contract = QueryContracts
   { rootContract :: contract, argumentContract :: contract, resultContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data EvolutionContracts contract = AdHocContracts contract contract | RecipeEvolutionContracts contract contract
+data EvolutionContracts contract = TargetEvolutionContracts contract | AdHocContracts contract contract | RecipeEvolutionContracts contract contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 instance ToJSON contract => ToJSON (EvolutionContracts contract) where
+  toJSON (TargetEvolutionContracts target) = object ["kind" .= String "target","target" .= target]
   toJSON (AdHocContracts before after) = object ["kind" .= String "ad-hoc","before" .= before,"after" .= after]
   toJSON (RecipeEvolutionContracts root state) = object ["kind" .= String "recipe","root" .= root,"state" .= state]
 instance FromJSON contract => FromJSON (EvolutionContracts contract) where
   parseJSON value = withObject "evolution contracts" (\fields -> do
     kind <- fields .: "kind"
     case kind :: Text of
+      "target" -> exactObject "target evolution contract" ["kind","target"]
+        (\entry -> TargetEvolutionContracts <$> entry .: "target") value
       "ad-hoc" -> exactObject "ad-hoc evolution contracts" ["kind","before","after"]
         (\entry -> AdHocContracts <$> entry .: "before" <*> entry .: "after") value
       "recipe" -> exactObject "recipe evolution contracts" ["kind","root","state"]

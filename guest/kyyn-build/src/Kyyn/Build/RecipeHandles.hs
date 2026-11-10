@@ -17,9 +17,9 @@ data Handle = StateHandle String String String | FlowHandle String String
 handleImports :: [String] -> [Handle]
 handleImports names = concatMap selected (nub names)
   where
-    selected name = [StateHandle endpoint reference name | endpoint <- ["Before","After"],
+    selected name = [StateHandle endpoint reference name | endpoint <- ["Before","After","Target"],
       Just reference <- [stripPrefix ("Kyyn.Workspace." ++ endpoint ++ ".RecipeTypes.") name]] ++
-      [FlowHandle reference name | Just reference <- [stripPrefix "Kyyn.Workspace.After.RecipeFlows." name]]
+      [FlowHandle reference name | endpoint <- ["After","Target"], Just reference <- [stripPrefix ("Kyyn.Workspace." ++ endpoint ++ ".RecipeFlows.") name]]
 
 handleModules :: [Handle] -> Either String [String]
 handleModules handles = nub . concat <$> traverse selected handles
@@ -28,7 +28,7 @@ handleModules handles = nub . concat <$> traverse selected handles
     selected (FlowHandle reference _) = Right [reference]
 
 writeRecipeHandles :: FilePath -> FilePath -> [String] -> [FilePath] -> [FilePath]
-  -> Reference -> [Handle] -> IO ([FilePath],[String],[String])
+  -> Reference -> [Handle] -> IO ([FilePath],[String],[String],[String])
 writeRecipeHandles libdir generated packages beforeRoots afterRoots root handles = do
   let roots :: String -> [FilePath]
       roots endpoint = (if endpoint == "Before" then beforeRoots else afterRoots) ++ [generated]
@@ -55,7 +55,8 @@ writeRecipeHandles libdir generated packages beforeRoots afterRoots root handles
       (closure,_) <- inspectExports libdir (roots endpoint) packages [name]
       pure ([path | path <- closure, endpoint == "Before"],[name,Text.unpack (referenceModule selected)],
         ["describeEntry @" ++ reference ++ " " ++ show ("$import.state." ++ endpoint ++ "." ++ reference) ++
-         " (SchemaMetadata [] [] []) " ++ show closure])
+         " (SchemaMetadata [] [] []) " ++ show closure],
+        ["TargetEvolution.RecipeBinding (OpenState " ++ show reference ++ ") " ++ name ++ ".recipeType"])
     FlowHandle reference name -> do
       (closure,exports) <- inspectExports libdir (roots "After") packages [reference]
       let candidates = nub [Text.unpack symbol.exportName | entry <- exports, symbol <- entry.moduleExports, symbol.exportKind == ExportValue]
@@ -68,6 +69,8 @@ writeRecipeHandles libdir generated packages beforeRoots afterRoots root handles
         "$(flowDefinitions ''" ++ Text.unpack (referenceName root) ++ " [" ++ Text.unpack (Text.intercalate "," (map (Text.pack . candidate) candidates)) ++ "])"])
       (_,bindings) <- inspectExports libdir (roots "After") packages [name]
       let names = nub [Text.unpack symbol.exportName | entry <- bindings, symbol <- entry.moduleExports, symbol.exportKind == ExportValue]
-      pure ([],[name],["recipeStateEntry " ++ show ("$import.flow." ++ reference ++ "." ++ value) ++ " " ++ show closure ++ " " ++ name ++ "." ++ value | value <- names])
-  pure (nub (concat [closure | (closure,_,_) <- descriptions]),
-    nub (concat [names | (_,names,_) <- descriptions]),concat [entries | (_,_,entries) <- descriptions])
+      pure ([],[name],["recipeStateEntry " ++ show ("$import.flow." ++ reference ++ "." ++ value) ++ " " ++ show closure ++ " " ++ name ++ "." ++ value | value <- names],
+        ["TargetEvolution.definitionBinding " ++ name ++ "." ++ value | value <- names])
+  pure (nub (concat [closure | (closure,_,_,_) <- descriptions]),
+    nub (concat [names | (_,names,_,_) <- descriptions]),concat [entries | (_,_,entries,_) <- descriptions],
+    concat [bindings | (_,_,_,bindings) <- descriptions])

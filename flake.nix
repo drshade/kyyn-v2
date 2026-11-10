@@ -241,6 +241,7 @@
           guest-root-api = self.lib.mkGuest { inherit system; src = rootApiSource; };
           guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };
           guest-evolution-api = self.lib.mkGuest { inherit system; src = evolutionApiSource; };
+          guest-target-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/target-evolution-guest; };
           guest-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/evolution-guest; };
           guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };
           guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
