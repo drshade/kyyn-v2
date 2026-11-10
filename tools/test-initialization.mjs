@@ -89,7 +89,7 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
   const schemaPath = path.join(target, 'src', 'RootV2.hs');
   const validSchema = fs.readFileSync(schemaPath, 'utf8');
   fs.writeFileSync(schemaPath, 'module RootV2 where\nthis is invalid\n');
-  // Discovery omits the unfinished transformation, but both Root contracts must
+  // Discovery omits the unfinished transformation, but the target Root contract must
   // compile under the target lock (ADR 0010). There is no host SDK fallback.
   const badSchema = cli(kb, ['guest', 'module', 'list', '--evolution', created.id], 1);
   assert.equal(badSchema.outcome, 'Refused');

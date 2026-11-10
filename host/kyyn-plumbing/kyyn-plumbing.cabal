@@ -35,9 +35,9 @@ library
     Kyyn.Plumbing.Protocol.FactEdits
     Kyyn.Plumbing.Protocol.FactProposal
     Kyyn.Plumbing.Protocol.Recipes
-    
+
     Kyyn.Plumbing.Protocol.SnapshotArchive
-    
+
     Kyyn.Plumbing.Protocol.EvolutionRecord.Contract
     Kyyn.Plumbing.Capability.SchemaInspection.Metadata
     Kyyn.Plumbing.Capability.SchemaInspection

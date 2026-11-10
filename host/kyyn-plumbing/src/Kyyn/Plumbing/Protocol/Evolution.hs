@@ -14,4 +14,3 @@ identityEvolutionSource selected = Text.encodeUtf8 (Text.pack (unlines
   , "evolution :: Evolution " ++ selected
   , "evolution = identityEvolution"
   ]))
-

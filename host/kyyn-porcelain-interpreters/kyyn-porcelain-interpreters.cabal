@@ -19,7 +19,7 @@ library
     Kyyn.Porcelain.Protocol.EvidenceIndex
     Kyyn.Porcelain.Protocol.EvidencePayload
     Kyyn.Porcelain.Protocol.RecipePersistence
-    
+
     Kyyn.Porcelain.Protocol.StoredSnapshot
     Kyyn.Porcelain.Protocol.SnapshotWire
     Kyyn.Porcelain.Protocol.InputTypes

@@ -10,4 +10,3 @@ identityRecipeEvolutionSource _ = Text.encodeUtf8 . Text.pack $ unlines
    "import qualified Kyyn.Workspace.Target as Collections",
    "",
    "evolution :: RecipeEvolution Root RecipeState", "evolution = identityEvolution"]
-

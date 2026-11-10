@@ -115,18 +115,19 @@ reconcile = A.note (T.pack "Read λ notes") (T.pack "Inspect captured notes") (A
     const file = path.join(changedTarget, name);
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('RootV2', 'RootV3'));
   }
-  // Before and After share one module namespace: version changed flows too.
-  fs.writeFileSync(path.join(changedTarget, 'src/TasksV2.hs'),
+  // Flow modules may retain their names while their target root type changes.
+  fs.writeFileSync(path.join(changedTarget, 'src/Tasks.hs'),
     fs.readFileSync(path.join(changedTarget, 'src/Tasks.hs'), 'utf8')
-      .replace('module Tasks where', 'module TasksV2 where').replaceAll('RootV2', 'RootV3'));
+      .replaceAll('RootV2', 'RootV3'));
   const targetScope = ['--evolution', changed.id];
   const recipeApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.FactEdits', ...targetScope]).result;
   assert.match(recipeApi.symbols.find(s => s.name === 'applyRootEdit').signature, /RootV3.Root/);
   assert.doesNotMatch(recipeApi.symbols.find(s => s.name === 'applyRootEdit').signature, /RootV2.Root/);
-  assert(cli(['guest', 'module', 'show', 'TasksV2', ...targetScope]).result.symbols.some(s => s.name === 'reconcile'));
+  assert(cli(['guest', 'module', 'show', 'Tasks', ...targetScope]).result.symbols.some(s => s.name === 'reconcile'));
   const evolutionApi = cli(['guest', 'module', 'show', 'Kyyn.Workspace.Evolution', ...targetScope]).result;
-  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').signature, /RootV2.Root/);
-  assert.match(evolutionApi.symbols.find(s => s.name === 'evolve').signature, /RootV3.Root/);
+  assert.match(evolutionApi.symbols.find(s => s.name === 'prepare').signature, /Preparation/);
+  assert.match(evolutionApi.symbols.find(s => s.name === 'prepare').signature, /Evolution/);
+  assert(!evolutionApi.symbols.some(s => s.name === 'evolve'));
   fs.writeFileSync(path.join(kb, 'root/src/Validate.hs'), 'module Validate where\nvalidate :: Bool\nvalidate = "wrong type"\n');
   fs.writeFileSync(path.join(kb, 'root/facts/root.dhall'), 'False');
   for (const args of [['add', 'root/src/Validate.hs', 'root/facts/root.dhall'], ['commit', '-m', 'Broken validation fixture']]) {

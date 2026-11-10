@@ -52,4 +52,3 @@ knowledgeBaseCodec valueCodec = Codec encode decode
           values <- fields ["flow"] contents
           ClosedAgent . FlowEntryRef <$> field "flow" textCodec values
         _ -> Left "Expected OpenAgent or ClosedAgent recipe"
-
