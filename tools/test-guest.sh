@@ -32,7 +32,7 @@ protocol evolution-api guest-evolution-api
 protocol recipe-evolution guest-recipe-evolution
 protocol frozen-api guest-frozen-api
 cabal test native-guest --test-show-details=direct --test-options="$guest_stage/guest/bin/kyyn-guest"
-for pair in Model:guest-model PluginPreparation:guest-plugins ToolPreparation:guest-tool Output:guest-output Recipe:guest-recipe Evolution:guest-evolution EvolutionPreparation:guest-evolution-api; do
+for pair in Model:guest-model PluginPreparation:guest-plugins ToolPreparation:guest-tool Output:guest-output Recipe:guest-recipe Evolution:guest-evolution EvolutionPreparation:guest-evolution-api StoredEvolution:guest-target-evolution; do
   cabal exec -- runghc -XGHC2021 -XOverloadedStrings -XNoFieldSelectors -Wall -Werror \
     -package=kyyn-domain -package=kyyn-types -package=kyyn-porcelain -package=kyyn-porcelain-interpreters \
     -package=kyyn-plumbing -package=kyyn-plumbing-interpreters \

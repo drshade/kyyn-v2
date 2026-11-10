@@ -423,7 +423,7 @@ buildTargetEvolution compiler libdir generated basePackages destination referenc
       description = "describeEntry @" ++ rootName ++ " \"$evolution.target\" (" ++ show metadata ++ ") " ++ show closure
   (_,exports) <- inspectExports libdir (roots ++ [generated]) packages inspected
   writeGuest generated exports (nub (inspected ++ [Text.unpack (referenceModule manifest.schemaType)]))
-    (description : execution ++ importedEntries)
+    (description : "describeEntry @() \"$import.unit\" (SchemaMetadata [] [] []) []" : execution ++ importedEntries)
   finishGuest compiler generated packages destination
 
 writeGuest :: FilePath -> [ModuleDescription] -> [String] -> [String] -> IO ()
