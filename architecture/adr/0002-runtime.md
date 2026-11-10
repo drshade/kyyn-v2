@@ -93,7 +93,7 @@ fails the build.
 
 Discovery selection compiles only the exports/schema dependencies needed for the
 requested catalogue (ADR 0018). An incomplete evolution body must not prevent
-Before/After schema or generated-handle discovery. Root and evolution selections
+target schema or generated-handle discovery. Root and evolution selections
 compile the corresponding runnable entries. Discovery builds do not establish
 that the full root or transformation compiles or passes semantic validation.
 When full compilation fails, source-only discovery can still report valid schema
@@ -120,6 +120,11 @@ locked Nix build path. Never cache failed builds. This is disposable build data,
 not a second dependency lock or an accepted-revision registry.
 Never return a bare temporary build-directory path. Cache deletion discards
 derived code, not accepted knowledge.
+
+Evolution builds include target code and migration-local input helpers only.
+Accepted application source is not a compiler input. The host supplies the selected
+revision's structurally checked stored data at runtime, without compiling old
+schemas or flows; ADR 0010 owns preparation, target edits and reporting.
 
 ### Describe and invoke the same build
 

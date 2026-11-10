@@ -209,7 +209,7 @@ A full build does not publish a description if a registered implementation fails
 its signature check.
 
 Root-specific collection handles and edit bindings retain a narrow schema-only
-prepass. It derives `KyynQueryBindings`, workspace Before/After handles and
+prepass. It derives `KyynQueryBindings`, workspace Target handles and
 FactEdits before compiling their consumers, in the same derivation and under the
 same dependencies. The Root schema must not import its own generated bindings;
 there is no general restriction separating type definitions from flows or other
@@ -253,18 +253,22 @@ invocation, not a request to negotiate an older contract.
 
 The description retains resolved declaration names and local source dependencies.
 `loadedSources` identifies captured files needed by a schema, excluding external
-locked packages and metadata-only dependencies. Evolution preparation uses it to
-select Before source; it is neither a second lock nor a hand-authored registry.
+locked packages and metadata-only dependencies. It identifies dependencies within the selected target/helper build; it never
+requires copying old application source into a migration. It is neither a second
+lock nor a hand-authored registry.
 Compiler implementation objects do not cross the protocol.
 
 Description is build-derived and may be cached by immutable build identity. Do
 not commit a parallel description file requiring authors to synchronize it with
 source. Reading stored values checks their shape against the selected description;
 fact files do not persist an independent authoritative contract identity.
-Evolution checks decode their existing input facts through the target build's
-Before contract, then validate the resulting After (ADR 0010). Ordinary decode,
-type and validation errors apply to lock changes too; no independent historical
-build or committed-description comparison is required.
+Evolution preparation reads a structurally checked stored snapshot without an old
+Haskell contract. Authored migration-local types are strict decoding views of
+selected documents; they are not assertions about historical nominal identity.
+The complete prepared data then decodes under the target contracts and undergoes
+normal validation (ADR 0010), including untouched facts and recipe state. Ordinary
+decode, type and validation errors apply to lock changes too. No historical
+application build, stored-description registry or extra roundtrip gate is required.
 A CheckedValue proves structural conformity, not semantic validation of the KB.
 Its constructor remains private to checking code.
 

@@ -977,101 +977,91 @@ The CheckedContract above is an inspected in-memory value. Missing, mismatched o
 malformed state fails loading/checking; it is never silently initialized.
 Recipe IDs retain the existing unique binding-identifier rule.
 
-Ad hoc evolution bindings support typed creation, removal and updates of recipes,
-including state-schema migration. The contract-bearing handles are generated,
-not assembled by the author:
+Ad hoc work has two phases under ADR 0010. Preparation reads a state's stored
+shape/value without inspecting the old flow. `migrateRecipe` strictly decodes an
+authored input type and installs a target definition plus converted state together;
+`retireRecipe` explicitly removes a recipe and its state. Untouched state is
+preserved, but every retained definition/state must resolve and decode under the
+target before typed editing starts. Missing state is never initialized implicitly.
+
+After preparation the typed recipe operations apply. `updateRecipe` is a
+target-to-target change; stored state requiring conversion before target decoding
+uses `migrateRecipe` instead:
 
 ```haskell
-data RecipeType state        -- generated type reference and codec
-data RecipeDefinition state  -- method and its generated state binding
+data RecipeType state        -- generated target/helper type reference and codec
+data RecipeDefinition state -- target method and its generated state binding
 
 openRecipe :: RecipeType state -> Text -> RecipeDefinition state
 unitRecipeType :: RecipeType ()
-
-createRecipe
-  :: RecipeId -> RecipeDefinition state -> state
-  -> Edit (KnowledgeBase root) ()
-
-updateRecipe
-  :: RecipeType before -> RecipeId -> RecipeDefinition after
-  -> (before -> Either EvolutionFailure after)
-  -> Edit (KnowledgeBase root) ()
-
+createRecipe :: RecipeId -> RecipeDefinition state -> state
+             -> Edit (KnowledgeBase root) ()
+updateRecipe :: RecipeType input -> RecipeId -> RecipeDefinition output
+             -> (input -> Either EvolutionFailure output)
+             -> Edit (KnowledgeBase root) ()
 removeRecipe :: RecipeId -> Edit (KnowledgeBase root) ()
 ```
 
-An author requests a state handle by importing
-`Kyyn.Workspace.Before.RecipeTypes.<Module>.<Type>` or
-`Kyyn.Workspace.After.RecipeTypes.<Module>.<Type>`; each exports `recipeType`.
-Before uses the selected Git revision's source closure. After uses the captured
-target sources, including newly authored types. A defining module must not import its own generated handle. Resolve these
-handle imports through guest-build compiler parsing; no extra type registration
-list or generated Contract instance is needed. Ordinary aliases keep imports
-readable. Unit uses the SDK's unitRecipeType, with its codec, instead of a
-fabricated authored declaration.
+An author requests a handle from
+`Kyyn.Workspace.Target.RecipeTypes.<Module>.<Type>`, exporting `recipeType`.
+Its type comes from the current target/helper sources, not a selected historical
+source closure. Resolve imports through the compiler, with no extra authored type
+registry or generated Contract instance. A type's defining module must not import
+its own generated handle. Unit uses `unitRecipeType`.
 
-Closed definitions are requested through
-`Kyyn.Workspace.After.RecipeFlows.<Module>`, which exports selected flow names
-as typed RecipeDefinition values. For example, importing this module as Flows
-makes `Flows.captureNotes :: RecipeDefinition ReviewState` available when the
-authored flow has the corresponding state type. Generation inspects the actual
-flow signature; no author-supplied state type, request codec or flow registry.
-These are definition handles, not executable flows inside the pure evolution.
-Source modules and their ordinary flows remain available through ordinary imports.
+`Kyyn.Workspace.Target.RecipeFlows.<Module>` exports selected target flow names as
+typed `RecipeDefinition` handles. Their state type is derived from the actual
+target signature. These handles do not execute the flow during the pure evolution.
+Old flow references are read as stored definitions only; migration never imports
+them to discover their former state types.
 
-Creation refuses an existing ID; update/removal refuse a missing ID. Updating
-checks the selected existing state type before applying the transformation.
-Instruction-only updates use the same state type and an identity transformation.
-The heterogeneous recipe container stays behind the guest KnowledgeBase wrapper;
-generated adapters encode/decode each selected state contract. These operations
-do not require a universal guest Dynamic value or author-maintained codec.
+Creation refuses an existing ID; update/removal refuse a missing ID. Typed update
+checks the currently decoded state contract before applying its conversion. A
+state-shape change that cannot enter the target-typed phase uses preparation,
+not an attempt to load an obsolete flow. The heterogeneous container stays behind
+the KnowledgeBase wrapper; authors do not handle universal JSON values or codecs.
 
-For creation, suppose target sources introduce
-`ReviewV1.ReviewState { reviewedIds :: [String] }`. The complete workspace entry
-can add the recipe while retaining the existing domain schema:
+For creation, with `Review.State` defined in target source:
 
 ```haskell
 module Evolution where
-
 import Kyyn.Workspace.Evolution
-import qualified RootV1 as Root
-import qualified ReviewV1 as Review
-import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV1.ReviewState as State
+import Training.Schema (Root)
+import qualified Review
+import qualified Kyyn.Workspace.Target.RecipeTypes.Review.State as State
 
-evolution :: Evolution (KnowledgeBase Root.Root) (KnowledgeBase Root.Root)
-evolution = edit (Rationale "Add the email review recipe" []) $
-  createRecipe (RecipeId "reviewMail")
-    (openRecipe State.recipeType "Review relevant emails and propose useful tasks.")
-    (Review.ReviewState [])
+evolution :: Evolution Root
+evolution = prepare (pure ()) $
+  edit (Rationale "Add the email review recipe" []) $
+    createRecipe (RecipeId "reviewMail")
+      (openRecipe State.recipeType "Review relevant emails and propose tasks.")
+      (Review.State [])
 ```
 
-For a later migration, Before contains ReviewV1 and the target contains
-`ReviewV2.ReviewState { reviewedIds :: [String], lastWindow :: Maybe String }`:
+For a changed saved-state shape, the input helper describes the persisted fields;
+the live module can still be named `Review`:
 
 ```haskell
 module Evolution where
-
 import Kyyn.Workspace.Evolution
-import qualified RootV1 as Root
-import qualified ReviewV1 as Old
-import qualified ReviewV2 as New
-import qualified Kyyn.Workspace.Before.RecipeTypes.ReviewV1.ReviewState as BeforeState
-import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV2.ReviewState as AfterState
+import Training.Schema (Root)
+import qualified Input.Review as Input
+import qualified Review
+import qualified Kyyn.Workspace.Target.RecipeTypes.Review.State as State
 
-evolution :: Evolution (KnowledgeBase Root.Root) (KnowledgeBase Root.Root)
-evolution = edit (Rationale "Remember the last reviewed window" []) $
-  updateRecipe BeforeState.recipeType (RecipeId "reviewMail")
-    (openRecipe AfterState.recipeType "Review relevant emails in the requested window.")
-    (\(Old.ReviewState reviewed) -> Right (New.ReviewState reviewed Nothing))
+evolution :: Evolution Root
+evolution = prepare
+  (migrateRecipe (Rationale "Remember the last reviewed window" [])
+    (RecipeId "reviewMail")
+    (openRecipe State.recipeType "Review relevant emails in the requested window.")
+    (\(Input.State reviewed) -> Right (Review.State reviewed Nothing)))
+  mempty
 ```
 
-Before/After source closure naming follows ADR 0005, including its collision rules.
-An unchanged domain root type does not erase the changed recipe-state contract.
-The complete recipe set and state values are evaluated root material, not
-target-file overrides of the result. Generated bindings preserve untouched recipes.
-Endpoint
-inspection includes each selected recipe state type; state migration uses the
-same Before/After source and contract rules as domain migration.
+Input declarations are decoding views, not historical contracts. The host report
+uses the actual stored state as its Before baseline and the target-encoded state
+as After. The recipe set and state remain evaluated material, not target-file
+overrides; untouched definitions must still be valid in the target application.
 
 ### Recipe state changes only through evolutions
 
@@ -1086,7 +1076,8 @@ one closed run produces one evolution, never an aggregate of different recipes.
 State-only proposals are valid. Full candidate checking and the single expected-head
 acceptance publish facts, recipe state and the archive together. A failed, abandoned
 or merely evaluated proposal does not update accepted state. State is included in
-review with its before/after contracts and values; it is not hidden runtime metadata.
+review with its stored Before shape/value and checked target value/contract; it
+is not hidden runtime metadata.
 The SDK may provide State-style editing ergonomics without introducing a separate
 mutable store or acceptance protocol.
 
