@@ -95,10 +95,12 @@ main = do
       writeUtf8 (target </> "src" </> name) (replace "TodoSchemaV1" "TodoSchemaV2" source)
     writeUtf8 (target </> "kb.dhall") (manifest "TodoSchemaV2")
     saveExample target "report-done" "isDone" (described @Bool) (String "todo-001") (Bool True)
+    createDirectoryIfMissing True (workspace </> "change/Input")
+    copyFile (fixture </> "InputTodo.hs") (workspace </> "change/Input/Todo.hs")
     copyFile (fixture </> "Migrate.hs") (workspace </> "change/Evolution.hs")
     evaluated <- ok ["evolution","check",first]
     let report = at ["result","report"] evaluated
-    assert "Three composed steps were not reported" (length (array (at ["steps"] report)) == 3)
+    assert "Preparation, projection and two target edits were not reported" (length (array (at ["steps"] report)) == 4)
     unchanged <- git ["rev-parse","HEAD"]
     assert "Evaluation changed HEAD" (before == unchanged)
     void (ok ["evolution","ready",first])
@@ -119,8 +121,8 @@ main = do
     commitMessage <- git ["log","-1","--format=%s"]
     assert "Commit omitted the evolution name" ("simplify-todos" `isInfixOf` commitMessage)
     oldCurrent <- doesFileExist (root </> "src/TodoSchemaV1.hs")
-    oldArchived <- doesFileExist (workspace </> "before/TodoSchemaV1.hs")
-    assert "Schema replacement lost its archive or retained old current source" (not oldCurrent && oldArchived)
+    inputArchived <- doesFileExist (workspace </> "change/Input/Todo.hs")
+    assert "Schema replacement lost its input helper or retained old current source" (not oldCurrent && inputArchived)
 
     renameDirectory (kb </> ".kyyn") (kb </> "discarded-cache")
     archived <- ok ["--nix",kb </> "missing-runtime","evolution","show",first]

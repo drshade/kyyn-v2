@@ -23,7 +23,7 @@ captureEvolutionSources selection before target change = do
 
 captureStoredEvolutionSources :: [RecipeReference] -> Maybe [Data.Text.Text] -> FileTree -> FileTree -> Either String GuestSources
 captureStoredEvolutionSources references discovery target change = do
-  unless (all (\(path,_) -> not (any (`isPrefixOf` relativeName path) [".kyyn-before/",".kyyn-change/"])) (files target))
+  unless (all (\(path,_) -> not (any (\name -> relativeName path == name || (name ++ "/") `isPrefixOf` relativeName path) [".kyyn-before",".kyyn-change"])) (files target))
     (Left "Target source uses a reserved evolution input directory")
   transformation <- traverse (\(path,bytes) -> (,bytes) <$> relativePath (".kyyn-change/" ++ relativeName path)) (files change)
   guestSources (TargetEvolutionEntries references discovery) (files target ++ transformation)

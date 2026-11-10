@@ -19,7 +19,7 @@ writeFrozenProposal generated selected = writeFile (generated </> "KyynFrozenPro
    "-- | Apply the captured proposal without invoking its recipe again.",
    "frozen :: RecipeEvolution Root RecipeState",
    "frozen = case proposal of",
-   "  Right (RecipeProposal steps state) -> foldr ((>=>) . step) (" ++ finalStep ++ ") steps",
+   "  Right (RecipeProposal steps state) -> foldr ((<>) . step) (" ++ finalStep ++ ") steps",
    "  Left message -> rejectEvolution (EvolutionFailure [Diagnostic Error \"proposal.decode\" (Text.pack message) Nothing])",
    "step (ProposedStep why operations) = recipeEdit why (editFacts (mapM_ applyRootEdit operations))",
    "proposal :: Either String (RecipeProposal RootEdit RecipeState)",

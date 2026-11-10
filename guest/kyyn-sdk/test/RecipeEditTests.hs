@@ -63,10 +63,10 @@ main = do
       (Internal.EvolutionOutput (after, next)
         [Internal.StepObservation reason (encode pair) (encode (after, next))])
   assert "recipe evolution uses ordinary composition and identity" $
-    Internal.evaluateEvolution (step >=> stateStep >=> identityEvolution) pair ==
-      Internal.evaluateEvolution (identityEvolution >=> step >=> stateStep) pair
+    Internal.evaluateEvolution (step <> stateStep <> mempty) pair ==
+      Internal.evaluateEvolution (mempty <> step <> stateStep) pair
   assert "failed composed step returns no partial facts/state/report" $
-    Internal.evaluateEvolution (step >=> stop) pair == Left failure
+    Internal.evaluateEvolution (step <> stop) pair == Left failure
   putStrLn "Recipe state focusing and shared evolution semantics passed."
 
 assert :: String -> Bool -> IO ()

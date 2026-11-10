@@ -4,9 +4,9 @@ module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
 import qualified TodoSchemaV2 as Schema
-import qualified Kyyn.Workspace.After as AfterCollections
+import qualified Kyyn.Workspace.Target as AfterCollections
 
-evolution :: Evolution (KnowledgeBase Schema.Root) (KnowledgeBase Schema.Root)
-evolution =
+evolution :: Evolution Schema.Root
+evolution = prepare (pure ()) $
   edit (Rationale "Retire the completed report." [])
     (within AfterCollections.todos $ remove (FactId "todo-001"))
