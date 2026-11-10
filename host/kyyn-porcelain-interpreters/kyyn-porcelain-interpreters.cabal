@@ -21,6 +21,7 @@ library
     Kyyn.Porcelain.Protocol.RecipePersistence
     Kyyn.Porcelain.Protocol.EvolutionPreparation
     Kyyn.Porcelain.Protocol.StoredSnapshot
+    Kyyn.Porcelain.Protocol.SnapshotWire
     Kyyn.Porcelain.Protocol.RecipeContracts
     Kyyn.Porcelain.Protocol.PluginBroker
     Kyyn.Porcelain.Protocol.ToolBroker
@@ -122,3 +123,13 @@ test-suite evidence-store
   build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-plumbing, kyyn-porcelain, kyyn-porcelain-interpreters,
     kyyn-plumbing-interpreters, kyyn-types, effectful-core ==2.6.1.0,
     aeson, bytestring, text, time, directory, filepath, temporary ==1.3, async, transformers
+
+test-suite stored-snapshots
+  type: exitcode-stdio-1.0
+  main-is: StoredSnapshotTests.hs
+  hs-source-dirs: test
+  default-language: GHC2021
+  ghc-options: -Wall -Werror
+  build-depends: base >=4.20 && <4.21, kyyn-domain, kyyn-types,
+    kyyn-porcelain-interpreters, kyyn-plumbing-interpreters,
+    effectful-core ==2.6.1.0, aeson, bytestring

@@ -2,6 +2,7 @@
 -- Constructors used by compiler-generated modules, separate from the author SDK.
 module Kyyn.Runtime.Bindings (collection, contractCodec, RootBinding, rootBinding, recipeBinding, recipeCodec, recipeType, closedRecipe, evolve, edit, rejectEvolution) where
 
+import Kyyn.Types.StoredShape (storedShape)
 import Data.Text (Text)
 import Kyyn.Contract
 import Kyyn.Types.Fact (Fact)
@@ -36,7 +37,8 @@ recipeType name = do
   compiled <- compileContract (contract @state)
   let description = describeContract compiled.description (SchemaMetadata [] [] []) []
       codec = runtimeCodec compiled.codec
-  pure (Recipe.RecipeType name description.identity (Wire.encodeWith codec) (Wire.decodeWith codec))
+  shape <- either (Left . ProjectionError []) Right (storedShape compiled.description)
+  pure (Recipe.RecipeType name description.identity shape (Wire.encodeWith codec) (Wire.decodeWith codec))
 
 closedRecipe :: forall state. Contract state => Text -> Either ProjectionError (RecipeDefinition state)
 closedRecipe reference = do

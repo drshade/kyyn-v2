@@ -2,6 +2,7 @@
 module KnowledgeBaseTests (main) where
 
 import Kyyn.Evolution
+import Kyyn.Types.StoredShape (StoredShape(..))
 import qualified Kyyn.Edit.Internal as Internal
 import Kyyn.Recipe.Internal (KnowledgeBase(..), RecipeType(..), StoredRecipe(..), storeRecipe)
 import qualified Kyyn.Types.Contract as Contract
@@ -85,22 +86,22 @@ main = do
   putStrLn "Typed recipe creation, migration, isolation, removal and atomic refusal passed."
 
 boolType :: RecipeType Bool
-boolType = RecipeType "Flags.State" "flags-contract" JSBool decode
+boolType = RecipeType "Flags.State" "flags-contract" StoredBool JSBool decode
   where
     decode (JSBool value) = Right value
     decode _ = Left "Expected Bool"
 
 stringType :: RecipeType String
-stringType = RecipeType "Notes.State" "notes-contract" (JSString . toJSString) decode
+stringType = RecipeType "Notes.State" "notes-contract" StoredText (JSString . toJSString) decode
   where
     decode (JSString value) = Right (fromJSString value)
     decode _ = Left "Expected String"
 
 renamedType :: RecipeType state -> RecipeType state
-renamedType (RecipeType _ identity encode decode) = RecipeType "Other.State" identity encode decode
+renamedType (RecipeType _ identity shape encode decode) = RecipeType "Other.State" identity shape encode decode
 
 changedContract :: RecipeType state -> RecipeType state
-changedContract (RecipeType name _ encode _) = RecipeType name "changed-contract" encode
+changedContract (RecipeType name _ shape encode _) = RecipeType name "changed-contract" shape encode
   (\_ -> error "A mismatched contract must not reach the decoder")
 
 execute :: Edit a r -> a -> Either EvolutionFailure a

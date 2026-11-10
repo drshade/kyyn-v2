@@ -28,7 +28,7 @@ cabal test sync-timings cli-arguments cli-adapters guest-catalogue \
   processes frames concurrent-execution dhall-values roots git-snapshots file-trees \
   plugin-packages evidence-store blob-storage document-persistence file-acquisition \
   secret-store judgement-provider model-turn-provider contract-roles plugin-installation \
-  evolution-core evolution-reports recipe-state evidence-index plugin-host scalar-storage \
+  evolution-core snapshot-preparation target-evolution stored-snapshots evolution-reports recipe-state evidence-index plugin-host scalar-storage \
   description-storage guest-compilation-cache inspection captured-bindings edit-bindings source-merging recipe-bindings \
   wire-contracts guest-protocol capabilities plugin-contracts graph-retries guest-scheduler \
   --test-show-details=direct
