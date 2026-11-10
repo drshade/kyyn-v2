@@ -293,6 +293,16 @@ fact edits and the next state. Generated bindings expose the selected recipe's
 state without Dhall or protocol plumbing. Recipe discovery does not launch an
 agent or prescribe its steps. ADR 0028 owns explicit closed-flow execution.
 
+### Migration authoring
+
+ADR 0010 owns `Evolution root`: pure snapshot preparation followed by typed target
+edits. The target keeps stable live module names. Only authored input helpers and
+target source compile; the old application is not imported. `evolution new
+--input-types` optionally emits editable input carriers from stored Dhall shapes
+under `change/Input/`, with precise omissions/errors for absent or unsupported
+shapes. It never copies old flows, validators or plugin implementations and is
+not a prerequisite for ordinary evolution creation or checking.
+
 ### Shared authoring vocabulary
 
 Pure calculations are reusable from validation, queries and views. Provide a
@@ -300,7 +310,7 @@ small SDK for identified facts, diagnostics, selected existing exact-value libra
 types/adapters and evolution composition. Do not create a Kyyn arithmetic library
 in place of evaluating existing Haskell implementations. Use the maintained `lens` library for optics and `generic-lens` for
 record-field lenses; `Kyyn.Optics` is a convenience re-export, not an independent
-optics implementation. Keep `After` imports qualified in evolution scaffolds.
+optics implementation. Keep generated `Target` handle imports qualified in evolution scaffolds.
 
 ## Alternatives and consequences
 
@@ -319,7 +329,7 @@ invent a span or parse compiler prose merely to make it clickable.
 ## Verification
 
 First prove the reporting tool and schema-changing evolution in ADR 0021, including
-scaffolded Before/After modules and generated bindings, several host requests and no codec/transport
+optional migration-local input types and target-generated bindings, several host requests and no codec/transport
 imports in authored code. Then implement the synthetic training tool. Its
 request includes structured people and sessions, not `record_json`/`record_dhall`
 strings. Break a result type and see a compile error. Change an imported plugin

@@ -295,13 +295,13 @@ Extend the same discovery commands with an explicit `--evolution ID` context:
 ```sh
 kyyn-v2 --kb PATH guest module list --evolution 000001-add-todos
 kyyn-v2 --kb PATH guest module show Kyyn.Workspace.Evolution --evolution 000001-add-todos
-kyyn-v2 --kb PATH guest symbol show Kyyn.Workspace.After.todos --evolution 000001-add-todos
+kyyn-v2 --kb PATH guest symbol show Kyyn.Workspace.Target.todos --evolution 000001-add-todos
 ```
 
 With `--evolution`, the catalogue also contains `Kyyn.Workspace.Evolution`,
-`Kyyn.Workspace.Before` and `Kyyn.Workspace.After`, as generated for the selected
-workspace's current source. The first exposes the typed `evolve`, `editBefore`
-and `edit` combinators; the other two expose collection handles. Use the existing
+`Kyyn.Workspace.Target` and `Kyyn.Workspace.Target.Fields`, generated from the
+workspace's target source. The first exposes the preparation/edit API of ADR 0010;
+the others expose target collection and residual-field handles. Use the existing
 public-export projection, documentation and human/JSON renderers. A generated-module response
 identifies the selected workspace and its declared Before revision; it does not
 claim that a checked candidate or accepted result exists.
@@ -310,9 +310,9 @@ This is discovery during authoring, not evaluation with its result discarded.
 The author's `change/Evolution.hs` may be absent, incomplete or ill-typed. It is
 not included in the compiler's discovery source set. There is no dependency on
 candidate materialization, facts, semantic validation, query execution or readiness.
-In contrast, endpoint schemas and their metadata must be valid: the generated
-handles depend on their types and collection declarations. An invalid endpoint
-produces an actionable diagnostic, not a stale catalogue or placeholder types.
+The target schema and metadata must be valid because the handles depend on their
+types and declarations. Invalid target source produces a diagnostic, not a stale
+catalogue or placeholder types. Old application source is not inspected.
 Outside a KB, the host may show its bundled reference SDK catalogue, clearly
 identified as reference documentation rather than the selected KB's environment.
 Within a KB/workspace, authoritative discovery uses the selected flake's SDK and
@@ -342,7 +342,7 @@ Recipe-flow modules receive the same root-specific fact-edit bindings used to
 check and execute closed recipes. Expose `Kyyn.Workspace.FactEdits` when the
 selected root has fact collections. Recipe inspection uses a same-schema binding
 for that root (the target root in a draft); it must not merge those modules with
-the draft evolution's distinct Before/After bindings. Inspect each context with
+the evolution's KnowledgeBase-focused target editing bindings. Inspect each context with
 its own generated sources.
 
 ### Root browsing
@@ -434,20 +434,17 @@ data ApiInspection :: Effect where
     -> ApiInspection m (Either [Diagnostic] [ApiModule])
 ```
 
-`WorkspaceApi` is porcelain. Factor endpoint preparation into one shared porcelain
-function used by discovery and evolution capture/evaluation, rather than copying
-their snapshot-loading or Before-copy checks. The common source-only preparation
-reads the workspace snapshot through EvolutionStore, opens the declared Before
-revision through RootOpening, verifies the copied Before source, and opens the
-target source. Evolution capture additionally loads the required fact input;
-discovery stops at the source endpoints. Discovery neither reads accepted facts
-nor requires Before to equal current HEAD: discovery is useful while repairing an
-outdated workspace too. Source inspection includes the existing pure schema-metadata
-evaluation; it must not execute the evolution, validator or queries.
+`WorkspaceApi` is porcelain. Discovery and evolution preparation share capture of
+the declared base revision and target/change source selection. Discovery inspects
+the target schema and metadata only; it does not open the old executable Root,
+read facts, check a copied Before tree or require the base to equal current HEAD.
+It remains useful while repairing an outdated workspace. Evaluation separately
+loads the base's stored data through ADR 0010's structural snapshot checks.
+Source inspection must not execute the evolution, validator or queries.
 
-Reuse `evolutionBindings` and the same schema-closure combination/collision rules
-as evolution execution. The compiler source set consists only of captured endpoint
-schema closures, target-locked SDK dependencies and those generated bindings. No new
+Reuse the target binding generator used by evolution execution. The compiler
+source set consists of the required target schema closures, target-locked SDK
+dependencies and those generated bindings; it has no Before source namespace. No new
 hand-maintained signatures, metadata inventory or discovery-specific combinator
 generator is introduced. ApiInspection obtains compiler-derived exports through
 the guest description protocol; guest build tooling owns generation and inspection.
@@ -455,10 +452,10 @@ Only the three selected public generated modules enter the workspace catalogue;
 codecs, entry adapters and private root bindings remain absent.
 
 The binding generator emits `-- |` documentation alongside its public declarations.
-Document `evolve`, `editBefore` and `edit` with their concrete endpoint types and
-the rule that each supplied rationale describes one recorded step and its diff.
+Document `prepare`, migration operations and `edit` with their concrete target
+types, phase ordering and per-operation rationale/report rules from ADR 0010.
 Document each collection handle with its logical collection name, root field and
-fact type. Derive these details from the checked endpoint contracts and metadata
+fact type. Derive these details from the checked target contracts and metadata
 already used to generate the bindings, not a separate documentation manifest.
 Extend documentation coverage tests to these generated declarations.
 Generated public declarations spell their types in the facade vocabulary already
@@ -480,11 +477,11 @@ selected this context. JSON retains a flat symbol list with exact origins.
 Prove discovery in a newly created
 workspace with an intentionally invalid evolution body; same-schema and changed-schema
 targets; empty and populated collections; repair after an invalid target schema;
-stale Before without a HEAD restriction; mismatched Before copies; and absence of
+stale bases without a HEAD restriction; uncompilable old application source; and absence of
 private generated exports. Assert that workspace-scoped declarations expose no
 internal module qualifiers. Recording handlers must show no fact reads, candidate
 operations, semantic validator calls or evolution execution. An installed CLI
-journey must discover `edit`, `evolve` and an After collection handle, then use
+journey must discover `prepare`, `edit` and a Target collection handle, then use
 those signatures to author and check a real evolution. Existing unscoped discovery
 must continue to work without a KB, Git or compiler sources.
 

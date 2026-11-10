@@ -295,8 +295,10 @@ interpreter answers from an already loaded snapshot.
 `LoadRootValueForChecking` is the explicit diagnostic/execution path for a
 structurally readable but not yet semantically validated root. It is not used to
 silently weaken the validation requirement on ordinary fact browsing.
-Evolution execution uses this path for its source too: domain-invalid facts may
-be transformed into a valid candidate without first earning `Validated`.
+Ad hoc evolution input instead uses the structurally checked stored snapshot
+specified in ADR 0010, without compiling or validating an old application.
+Domain-invalid but structurally readable data may become a valid target. Ordinary
+root browsing still requires the current application's normal validation.
 
 On the guest side, identity remains outside the typed payload so migration can
 change payload shape without accidentally replacing record identity:
