@@ -95,7 +95,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
           (path pluginFile,pluginBytes),(path "flake.nix","recorded fixture"),(path "flake.lock","recorded lock")]
         described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) []
         guest = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
-          [G.EvolutionDescriptionEntry described described []] []))
+          [G.ContractEntry "$evolution.target" described] []))
         compiled :: Eff (GuestCompilation : es) a -> Eff es a
         compiled operation = interpret (\_ (CompileGuest _) -> pure (Right (fixtureProgram "not executed"))) operation
         inspected :: Eff (GuestInspection : es) a -> Eff es a
@@ -271,7 +271,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
     archive <- publication (Git.readTreeAt repo accepted (Subtree (path workspacePath))) >>= right
     recordBytes <- maybe (fail "Missing archive report") pure (lookup (path "result.dhall") (files archive))
     (owner,targetContract,plugins,steps) <- right (runPureEff (runDhallHandling (decodeSnapshotArchive recordBytes)))
-    assert "Archive lost fixed report/contracts" (owner == identity && targetContract == contract && StoredEvolutionReport plugins steps == report)
+    assert "Archive lost fixed report/contracts" (owner == identity && targetContract == contract && EvolutionReport plugins steps == report)
     forM_ (files facts) $ \(p,_) -> when (relativeName p == "facts/todos/a.dhall") $ do
       exists <- doesPathExist (directory </> relativeName rootPath </> relativeName p)
       assert "Deleted fact remains in checkout" (not exists)
@@ -293,10 +293,10 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
       else pure accepted
     stale <- publication (acceptEvolution branch metadata otherChecked)
     assert "Parallel draft was not stale" (stale == NotAccepted (BaseMismatch base (Just rebaseHead)))
-    let EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ name explanation state _) before target change notes) =
+    let EvolutionContext _ _ _ (WorkspaceSnapshot (WorkspaceManifest _ name explanation state _) target change notes) =
           case otherCandidate of Candidate otherContext _ _ -> otherContext
     rebasedFiles <- publication (encodeWorkspaceSnapshot (WorkspaceSnapshot
-      (WorkspaceManifest rebaseHead name explanation state AdHoc) before target change notes)) >>= right
+      (WorkspaceManifest rebaseHead name explanation state AdHoc) target change notes)) >>= right
     writeTreeAt otherPath rebasedFiles
     rebasedCapture <- normal (captureEvolution other) >>= right
     _ <- normal (applyEvolution rebasedCapture) >>= right
@@ -343,16 +343,15 @@ schemaMock contract = interpret $ \_ -> \case
 
 evaluationMock :: (RootStore :> es, DhallHandling :> es) => RootContract -> Value -> Eff (EvolutionExecution : es) a -> Eff es a
 evaluationMock contract output = interpret $ \_ -> \case
-  EvaluateEvolution captured@(CapturedStoredEvolution (EvolutionContext _ _ _
-      (WorkspaceSnapshot (WorkspaceManifest _ _ explanation _ _) _ code _ _)) input _) -> do
+  EvaluateEvolution captured@(CapturedEvolution (EvolutionContext _ _ _
+      (WorkspaceSnapshot (WorkspaceManifest _ _ explanation _ _) code _ _)) input _) -> do
     checked <- checkRootValue contract output >>= either (error . show) pure
     Root _ facts _ _ <- materializeRoot contract code (KB.KnowledgeBase checked []) >>= either (error . show) pure
     after <- readStoredSnapshot facts >>= either (error . show) pure
-    let report = StoredEvolutionReport []
+    let report = EvolutionReport []
           [SnapshotStep TargetProjection (Rationale (Text.pack explanation) []) [],
            SnapshotStep Authored (Rationale "Clear completed work" []) (snapshotChanges input after)]
     pure (Right (EvaluatedEvolution captured (After contract) (KB.KnowledgeBase checked []) report))
-  _ -> error "Publication fixture requires a stored capture"
 
 gitHook :: (Git.Git :> es, IOE :> es) => (String -> IO ()) -> Eff (Git.Git : es) a -> Eff es a
 gitHook hook = interpret $ \_ operation -> case operation of

@@ -24,13 +24,12 @@ import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Path (relativeName, scopePath, scopedPath)
 import Kyyn.Domain.Publication
 import Kyyn.Domain.Root (Root(..), CheckedValue(..))
-import Kyyn.Domain.Recipe (StoredRecipe(..))
 import Kyyn.Domain.Workspace (EvolutionState(..))
 import Kyyn.Porcelain.Validated (Validated, validatedValue)
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (FactId(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..))
 
 data Outcome = Succeeded | Refused | Failed | Incomplete | Interrupted deriving (Eq, Show)
 data Response = Response Outcome Value [String] [Diagnostic] deriving (Eq, Show)
@@ -204,61 +203,28 @@ summaryText (EvolutionSummary (EvolutionWorkspace _ identity) (EvolutionName nam
   evolutionIdName identity ++ "  " ++ show state ++ "  " ++ name
 
 reportJson :: EvolutionReport -> Value
-reportJson (StoredEvolutionReport plugins steps) = object
+reportJson (EvolutionReport plugins steps) = object
   ["steps" .= map snapshotStepJson steps, "plugins" .= map pluginJson plugins]
   where
     pluginJson (PluginChange name old new paths) = object
       ["name" .= pluginNameText name, "before" .= fmap originJson old,
        "after" .= fmap originJson new, "files" .= map relativeName paths]
-reportJson (EvolutionReport plugins steps) = object
-  ["steps" .= map step steps,
-   "plugins" .= [object ["name" .= pluginNameText name, "before" .= fmap originJson old,
-      "after" .= fmap originJson new, "files" .= map relativeName paths] | PluginChange name old new paths <- plugins]]
-  where
-    step (StepReport (Rationale explanation evidence) changes) = object
-      ["explanation" .= explanation, "evidence" .= map evidenceJson evidence, "changes" .= map change changes]
-    change (FactChange collection (FactId identity) before after) = object
-      ["kind" .= ("Fact" :: String), "collection" .= collection, "id" .= identity, "before" .= fmap recorded before, "after" .= fmap recorded after]
-    change (RecipeChange (FactId identity) before after) = object
-      ["kind" .= ("Recipe" :: String), "id" .= identity, "before" .= fmap recipeJson before, "after" .= fmap recipeJson after]
-    recipeJson (StoredRecipe method stateType _ (CheckedValue _ state)) = object
-      ["method" .= methodJson method,"stateType" .= stateType,"state" .= state]
-    methodJson (OpenAgent instructions) = object ["kind" .= ("OpenAgent" :: String),"instructions" .= instructions]
-    methodJson (ClosedAgent (FlowEntryRef entry)) = object ["kind" .= ("ClosedAgent" :: String),"flow" .= entry]
-    recorded (RecordedFact contract value) = object ["schema" .= describeRootContract contract, "value" .= value]
-    evidenceJson (EvidenceRef producer connector source references) = object
-      ["producer" .= producer, "instance" .= connector, "source" .= source, "externalReferences" .= references]
-
 reportText :: EvolutionReport -> [String]
-reportText (StoredEvolutionReport plugins steps) = reportText (EvolutionReport plugins []) ++ concatMap step steps
+reportText (EvolutionReport plugins steps) = concatMap pluginLines plugins ++ concatMap step steps
   where
     step value@(SnapshotStep origin (Rationale explanation evidence) _) =
       [show origin ++ ": " ++ Text.unpack explanation]
-      ++ ["  Declared citations: " ++ show evidence | not (null evidence)]
+      ++ (if null evidence then [] else "  Declared citations:" : concatMap citation evidence)
       ++ ["  " ++ jsonText (snapshotStepJson value)]
-reportText (EvolutionReport plugins steps) = concatMap pluginLines plugins ++ concatMap step steps
-  where
-    pluginLines (PluginChange name old new paths) =
-      ["Plugin " ++ pluginNameText name ++ ": " ++ revision old ++ " → " ++ revision new]
-      ++ ["  before source: " ++ maybe "(absent)" originText old, "  after source:  " ++ maybe "(absent)" originText new]
-      ++ ["  changed: " ++ relativeName path | path <- paths]
-    revision = maybe "(absent)" (\(PluginOrigin _ _ selected) -> take 8 (revisionName selected))
-    step (StepReport (Rationale explanation evidence) changes) = [Text.unpack explanation]
-      ++ ["  Declared citations:" | not (null evidence)]
-      ++ ["    " ++ Text.unpack source ++ " " ++ unwords (map Text.unpack references) | EvidenceRef _ _ source references <- evidence]
-      ++ concatMap change changes
-    change (FactChange collection (FactId identity) before after) =
-      ["  " ++ collection ++ "/" ++ Text.unpack identity]
-      ++ ["    before: " ++ maybe "(absent)" value before, "    after:  " ++ maybe "(absent)" value after]
-    change (RecipeChange (FactId identity) before after) =
-      ["  Recipe: " ++ Text.unpack identity,
-       "    before: " ++ maybe "(absent)" recipeText before,
-       "    after:  " ++ maybe "(absent)" recipeText after]
-    recipeText (StoredRecipe method stateType _ (CheckedValue _ state)) =
-      methodText method ++ "; state (" ++ stateType ++ "): " ++ Text.unpack (Text.decodeUtf8 (Bytes.toStrict (encode state)))
-    methodText (OpenAgent instructions) = "Open agent: " ++ Text.unpack instructions
-    methodText (ClosedAgent (FlowEntryRef entry)) = "Closed agent: " ++ Text.unpack entry
-    value (RecordedFact _ contents) = jsonText contents
+    citation (EvidenceRef producer instanceName source references) =
+      ["    " ++ Text.unpack producer ++ " / instance " ++ Text.unpack instanceName ++ " / " ++ Text.unpack source]
+      ++ ["      " ++ Text.unpack reference | reference <- references]
+pluginLines :: PluginChange -> [String]
+pluginLines (PluginChange name old new paths) =
+  ["Plugin " ++ pluginNameText name ++ ": " ++ revision old ++ " → " ++ revision new]
+  ++ ["  before source: " ++ maybe "(absent)" originText old, "  after source:  " ++ maybe "(absent)" originText new]
+  ++ ["  changed: " ++ relativeName path | path <- paths]
+  where revision = maybe "(absent)" (\(PluginOrigin _ _ selected) -> take 8 (revisionName selected))
 
 snapshotStepJson :: SnapshotStep -> Value
 snapshotStepJson (SnapshotStep origin (Rationale explanation evidence) changes) = object

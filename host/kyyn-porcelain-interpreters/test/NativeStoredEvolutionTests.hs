@@ -61,7 +61,7 @@ main = do
                (path "src/Schema.hs","this old application does not compile")])
         input <- ExceptT (readStoredSnapshot stored)
         guest <- ExceptT (describeGuest program)
-        ExceptT (executeStoredEvolution program guest code (Rationale "Native target migration" []) input)
+        ExceptT (executeStoredEvolution program guest code (Rationale "Native target migration" []) Nothing input)
     (Root _ _ _ recipes,steps) <- right result >>= right
     unless (length recipes == 1 && length steps == 7) (fail "Wrong recipe or observation membership")
     unless ([origin | SnapshotStep origin _ _ <- steps] == [Authored,Authored,Authored,Authored,Authored,Authored,TargetProjection])

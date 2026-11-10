@@ -10,7 +10,6 @@ module Kyyn.Types.Guest
 
 import Data.Aeson (ToJSON(..), FromJSON(..), Value(..), object, (.=), (.:), withObject, withText)
 import Data.Text (Text)
-import Kyyn.Types.GuestBuild (RecipeReference)
 import Kyyn.Types.Contract
 import Kyyn.Types.Json (exactObject, optionalValue, parseOptionalValue)
 import Kyyn.Types.SchemaMetadata
@@ -163,7 +162,6 @@ data DescribedContract = DescribedContract
 data GuestEntry contract
   = ValidatorEntry { entryName :: Text, validatorContract :: contract }
   | EvolutionEntry { entryName :: Text, evolutionContracts :: EvolutionContracts contract }
-  | EvolutionDescriptionEntry contract contract [(RecipeReference,contract)]
   | RecipeEntry { entryName :: Text, recipeName :: Text, recipeContracts :: RecipeContracts contract }
   | ToolEntry { entryName :: Text, toolName :: Text, toolDescription :: Text, toolContracts :: ToolContracts contract }
   | QueryEntry { entryName :: Text, queryContracts :: QueryContracts contract }
@@ -198,7 +196,6 @@ entryNames (ConnectorEntry _ (SourceEntries config acquisition authentication ca
   map (invocationName . capturedInvocation) captured
 entryNames (ConnectorEntry _ (SinkEntries config publication options)) =
   [invocationName config,invocationName publication,invocationName options]
-entryNames EvolutionDescriptionEntry{} = []
 entryNames entry = [entryName entry]
 
 instance ToJSON contract => ToJSON (Invocation contract) where
@@ -240,22 +237,16 @@ data QueryContracts contract = QueryContracts
   { rootContract :: contract, argumentContract :: contract, resultContract :: contract }
   deriving (Eq, Show, Functor, Foldable, Traversable)
 
-data EvolutionContracts contract = TargetEvolutionContracts contract | AdHocContracts contract contract | RecipeEvolutionContracts contract contract
+newtype EvolutionContracts contract = TargetEvolutionContracts contract
   deriving (Eq, Show, Functor, Foldable, Traversable)
 instance ToJSON contract => ToJSON (EvolutionContracts contract) where
   toJSON (TargetEvolutionContracts target) = object ["kind" .= String "target","target" .= target]
-  toJSON (AdHocContracts before after) = object ["kind" .= String "ad-hoc","before" .= before,"after" .= after]
-  toJSON (RecipeEvolutionContracts root state) = object ["kind" .= String "recipe","root" .= root,"state" .= state]
 instance FromJSON contract => FromJSON (EvolutionContracts contract) where
   parseJSON value = withObject "evolution contracts" (\fields -> do
     kind <- fields .: "kind"
     case kind :: Text of
       "target" -> exactObject "target evolution contract" ["kind","target"]
         (\entry -> TargetEvolutionContracts <$> entry .: "target") value
-      "ad-hoc" -> exactObject "ad-hoc evolution contracts" ["kind","before","after"]
-        (\entry -> AdHocContracts <$> entry .: "before" <*> entry .: "after") value
-      "recipe" -> exactObject "recipe evolution contracts" ["kind","root","state"]
-        (\entry -> RecipeEvolutionContracts <$> entry .: "root" <*> entry .: "state") value
       _ -> fail "Unknown evolution kind") value
 
 data RecipeContracts contract = RecipeContracts contract contract contract
@@ -318,9 +309,6 @@ instance FromJSON DescribedContract where
 instance ToJSON contract => ToJSON (GuestEntry contract) where
   toJSON (ValidatorEntry name root) = object ["entryName" .= name,"kind" .= String "validator","root" .= root]
   toJSON (EvolutionEntry name contracts) = object ["kind" .= String "evolution","entryName" .= name,"contracts" .= contracts]
-  toJSON (EvolutionDescriptionEntry before after states) = object
-    ["kind" .= String "evolutionDescription","before" .= before,"after" .= after,
-     "beforeStates" .= [object ["reference" .= reference,"contract" .= contract] | (reference,contract) <- states]]
   toJSON (RecipeEntry entry name contracts) = object
     ["entryName" .= entry,"kind" .= String "recipe","name" .= name,"contracts" .= contracts]
   toJSON (ToolEntry entry name description (ToolContracts input result)) = object
@@ -339,10 +327,6 @@ instance FromJSON contract => FromJSON (GuestEntry contract) where
         (\entry -> ValidatorEntry <$> entry .: "entryName" <*> entry .: "root") value
       "evolution" -> exactObject "evolution entry" ["entryName","kind","contracts"]
         (\entry -> EvolutionEntry <$> entry .: "entryName" <*> entry .: "contracts") value
-      "evolutionDescription" -> exactObject "evolution description" ["kind","before","after","beforeStates"]
-        (\entry -> EvolutionDescriptionEntry <$> entry .: "before" <*> entry .: "after" <*>
-          (entry .: "beforeStates" >>= traverse (exactObject "Before state" ["reference","contract"]
-            (\state -> (,) <$> state .: "reference" <*> state .: "contract")))) value
       "recipe" -> exactObject "recipe entry" ["entryName","kind","name","contracts"]
         (\entry -> RecipeEntry <$> entry .: "entryName" <*> entry .: "name" <*> entry .: "contracts") value
       "tool" -> exactObject "tool entry" ["entryName","kind","name","description","input","result"]

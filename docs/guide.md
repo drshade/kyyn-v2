@@ -179,7 +179,7 @@ editable helpers, not a second schema that must be maintained.
 Discover `Kyyn.Workspace.Target` for collection handles and
 `Kyyn.Workspace.Target.Fields` for residual-field handles. Use explicit
 rename/remove operations for stored fields, collections, facts and obsolete
-recipes. A changed fact ID is a removal and addition; target validation checks
+recipes. A changed fact ID is a removal and addition; the authored target validator must check
 references to the removed identity. Unchanged compatible data needs no conversion.
 For later same-schema edits, use `prepare (pure ())` with the desired `edit`s.
 

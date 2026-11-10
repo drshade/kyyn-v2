@@ -1,7 +1,7 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 module Kyyn.Domain.Evolution
   ( EvolutionId, evolutionId, evolutionIdName, nextEvolutionId, EvolutionName(..), EvolutionWorkspace(..), Before(..), beforeRevision
-  , EvolutionContext(..), PreparedEvolution(..), CapturedEvolution(..)
+  , EvolutionContext(..), CapturedEvolution(..)
   , After(..), EvaluatedEvolution(..), PreviewRejection(..), Candidate(..)
   , EvolutionFilter(..), EvolutionSummary(..)
   ) where
@@ -9,18 +9,15 @@ module Kyyn.Domain.Evolution
 import Data.Coerce (coerce)
 import Data.Char (isAsciiLower, toLower)
 import Data.List (intercalate)
-import Kyyn.Domain.Contract (RootContract, CheckedContract)
+import Kyyn.Domain.Contract (RootContract)
 import Kyyn.Domain.Git (GitRevision)
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase)
 import Kyyn.Domain.Workspace (WorkspaceSnapshot, EvolutionState)
 import Kyyn.Domain.Value (CheckedValue)
-import Kyyn.Domain.Root (Root, SourceRoot)
 import Kyyn.Domain.StoredSnapshot (StoredSnapshot)
 import Kyyn.Domain.FileTree (FileTree)
-import Kyyn.Domain.Path (RelativePath)
 import Kyyn.Domain.EvolutionReport (EvolutionReport)
 import Kyyn.Domain.Diagnostic (Diagnostic)
-import Kyyn.Types.Fact (Fact)
 import Kyyn.Types.Evolution (EvolutionFailure)
 import qualified Kyyn.Domain.Recipe as Value
 
@@ -64,14 +61,9 @@ data EvolutionWorkspace = EvolutionWorkspace
   , workspace :: EvolutionId
   } deriving (Eq, Show)
 
-data Before = Before
-  { revision :: GitRevision
-  , schema :: RootContract
-  } | StoredBefore GitRevision deriving (Eq, Show)
-
+newtype Before = Before GitRevision deriving (Eq, Show)
 beforeRevision :: Before -> GitRevision
-beforeRevision (Before revision _) = revision
-beforeRevision (StoredBefore revision) = revision
+beforeRevision (Before revision) = revision
 
 data EvolutionContext = EvolutionContext
   { knowledgeBase :: KnowledgeBase
@@ -80,14 +72,7 @@ data EvolutionContext = EvolutionContext
   , material :: WorkspaceSnapshot
   } deriving (Eq, Show)
 
-data PreparedEvolution = PreparedEvolution
-  { context :: EvolutionContext, beforeSource :: SourceRoot, afterSource :: SourceRoot
-  , beforeRecipeContracts :: [(Fact Value.RecipeDefinition,String,CheckedContract)] }
-  deriving (Eq, Show)
-
-data CapturedEvolution = CapturedEvolution
-  { context :: EvolutionContext, input :: Root, sourceClosure :: [RelativePath], preparedAfter :: SourceRoot }
-  | CapturedStoredEvolution EvolutionContext StoredSnapshot FileTree
+data CapturedEvolution = CapturedEvolution EvolutionContext StoredSnapshot FileTree
   deriving (Eq, Show)
 
 data Candidate a = Candidate

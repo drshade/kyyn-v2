@@ -36,7 +36,7 @@ readRecipeState (RecipeId ident) (RecipeType name identity _ _ decode)
     (StoredRecipe _ actualName actualIdentity value)
   | identity /= actualIdentity = failure
       "recipe.state-type" ("Expected state type " <> name <> "; found " <> actualName <>
-        ". Use the matching Before state binding to migrate this recipe.")
+        ". Use preparation to decode and migrate the stored recipe state.")
   | otherwise = either (failure "recipe.state-invalid" . Text.pack) Right (decode value)
   where
     failure code message = Left (EvolutionFailure

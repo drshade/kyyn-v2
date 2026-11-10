@@ -26,7 +26,7 @@ library internal
   exposed-modules: Kyyn.Contract Kyyn.Schema Kyyn.Validation Kyyn.Query Kyyn.Evolution Kyyn.Edit Kyyn.Optics
     Kyyn.Evolution.Proposal Kyyn.Recipe
     Kyyn.Plugin Kyyn.Plugin.Host Kyyn.Plugin.Sink
-     Kyyn.Contract.Scalars Kyyn.Contract.Wire Kyyn.Evolution.Stored Kyyn.Evolution.Target Kyyn.Evolution.Preparation Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Internal
+     Kyyn.Contract.Scalars Kyyn.Contract.Wire Kyyn.Evolution.Stored Kyyn.Evolution.Target Kyyn.Evolution.Preparation Kyyn.Evolution.KnowledgeBase Kyyn.Edit.Internal Kyyn.Recipe.Edit Kyyn.Recipe.Evolution Kyyn.Recipe.Internal
   default-language: Haskell2010
   ghc-options: -Wall -Werror
   build-depends: base >=4.20 && <4.21, kyyn-types, agentic ==0.2.1.0, lens ==5.3.6, generic-lens ==2.2.2.0, time, json ==0.11, transformers ==0.6.1.1, text, bytestring
@@ -57,23 +57,21 @@ library runtime
     Kyyn.Runtime.ToolEntry
     Kyyn.Runtime.Transport
     Kyyn.Runtime.Validation
-  other-modules: Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry Kyyn.Runtime.PluginEntry Kyyn.Runtime.RecipeEntry Kyyn.Runtime.EvolutionEntry
+  other-modules: Kyyn.Runtime.Entry Kyyn.Runtime.AcquisitionEntry Kyyn.Runtime.PluginEntry Kyyn.Runtime.RecipeEntry 
   default-language: GHC2021
   ghc-options: -Wall -Werror
-  build-depends: base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-types,
+  build-depends: transformers, base >=4.20 && <4.21, kyyn-sdk:internal, kyyn-types,
     agentic ==0.2.1.0, agentic-aeson ==0.2.1.0, aeson ==2.2.5.0, json ==0.11, text, bytestring
 
 test-suite evolution-core
   type: exitcode-stdio-1.0
   main-is: EvolutionCore.hs
-  hs-source-dirs: test src
-  other-modules: Kyyn.Evolution Kyyn.Evolution.Internal Kyyn.Evolution.KnowledgeBase
-    Kyyn.Edit Kyyn.Edit.Internal Kyyn.Optics Kyyn.Recipe Kyyn.Evolution.Proposal
-    Kyyn.Recipe.Edit Kyyn.Recipe.Internal EditTests KnowledgeBaseTests RecipeTests RecipeEditTests
+  hs-source-dirs: test
+  other-modules: EditTests KnowledgeBaseTests RecipeTests RecipeEditTests
   default-language: Haskell2010
   ghc-options: -Wall -Werror -main-is EvolutionCore.main
   default-extensions: OverloadedStrings
-  build-depends: agentic ==0.2.1.0, base >=4.20 && <4.21, kyyn-types, lens ==5.3.6, generic-lens ==2.2.2.0, json ==0.11, transformers ==0.6.1.1, text
+  build-depends: kyyn-sdk:internal, agentic ==0.2.1.0, base >=4.20 && <4.21, kyyn-types, lens ==5.3.6, generic-lens ==2.2.2.0, json ==0.11, transformers ==0.6.1.1, text
 
 test-suite wire-contracts
   type: exitcode-stdio-1.0

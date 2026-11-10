@@ -30,7 +30,7 @@ import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem)
-import Kyyn.Plumbing.Protocol.Evolution (identityTargetEvolutionSource)
+import Kyyn.Plumbing.Protocol.Evolution (identityEvolutionSource)
 import qualified Kyyn.Plumbing.Capability.FileSystem as FS
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
@@ -77,7 +77,7 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
   let initialManifest = maybe (error "Missing fixture manifest") id (lookup (either error id (relativePath "kb.dhall")) (files sourceCode))
       described = G.describeContract (descriptionOf (rootSchema contract)) (metadataOf (rootSchema contract)) [".kyyn-before/Schema.hs",".kyyn-before/Helpers.hs"]
       guest = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
-        [G.EvolutionDescriptionEntry described described []] []))
+        [G.ContractEntry "$evolution.target" described] []))
       compiled :: Eff (GuestCompilation : es) a -> Eff es a
       compiled operation = interpret (\_ (CompileGuest _) -> pure (Right (fixtureProgram "not executed"))) operation
       inspected :: Eff (GuestInspection : es) a -> Eff es a
@@ -111,13 +111,13 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     created@(EvolutionWorkspace createdKb createdId) <- success (createEvolution kb (EvolutionName displayName) revision AdHoc) >>= right >>= right
     unless (createdKb == kb && evolutionIdName createdId == "000001-sales-september")
       (fail "Creation returned an invalid KB or directory ID")
-    CapturedStoredEvolution (EvolutionContext _ _ (StoredBefore createdBase) (WorkspaceSnapshot
-      (WorkspaceManifest _ actualName explanation state _) createdBefore createdTarget createdChange createdNotes)) _ _ <-
+    CapturedEvolution (EvolutionContext _ _ (Before createdBase) (WorkspaceSnapshot
+      (WorkspaceManifest _ actualName explanation state _) createdTarget createdChange createdNotes)) _ _ <-
         success (captureEvolution created) >>= right >>= right
     empty <- tree []
-    identityEntry <- tree [("Evolution.hs",identityTargetEvolutionSource "Schema.Root")]
+    identityEntry <- tree [("Evolution.hs",identityEvolutionSource "Schema.Root")]
     unless (createdBase == revision && actualName == displayName && null explanation && state == Draft &&
-      createdBefore == empty && createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
+      createdTarget == sourceCode && createdChange == identityEntry && createdNotes == empty)
       (fail "Created draft did not capture selected source, full non-fact code and empty editable inputs")
     another@(EvolutionWorkspace _ anotherId) <- success (createEvolution kb (EvolutionName displayName) revision AdHoc) >>= right >>= right
     unless (another /= created && evolutionIdName anotherId == "000002-sales-september") (fail "Repeated creation did not advance the local sequence")
@@ -129,18 +129,16 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     unless (denied == Right (Left sourceError) && beforeRejection == afterRejection)
       (fail "Source rejection created a draft or lost diagnostics")
     write "manifest.dhall" (manifest 'a' "Draft")
-    write "before/Schema.hs" "selected source"
-    write "before/Helpers.hs" "selected helper"
     write "target/kb.dhall" initialManifest
     write "target/flake.nix" "recorded fixture"
     write "target/flake.lock" "recorded lock"
     write "target/src/Schema.hs" "unfinished target source"
     write "change/Evolution.hs" "unfinished entry"
     write "notes/review.md" "original note"
-    captured@(CapturedStoredEvolution context@(EvolutionContext actualKb actualId (StoredBefore base)
-      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _ _) before target _ _)) _ capturedCode) <-
+    captured@(CapturedEvolution context@(EvolutionContext actualKb actualId (Before base)
+      (WorkspaceSnapshot (WorkspaceManifest manifestBase _ _ _ _) target _ _)) _ capturedCode) <-
       success (captureEvolution location) >>= right >>= right
-    unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision && before == sourceTree)
+    unless (actualKb == kb && actualId == identity && base == revision && manifestBase == revision)
       (fail "Capture did not retain its selected KB, workspace, Before revision/contract/source")
     expectedTarget <- tree [("kb.dhall", initialManifest), ("src/Schema.hs", "unfinished target source"),("flake.nix","recorded fixture"),("flake.lock","recorded lock")]
     unless (capturedCode == sourceCode) (fail "Capture lost accepted code")
@@ -159,13 +157,10 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     noOpening (matchesCapturedInputs context) >>= right >>= right >>= assertFalse
     rebased <- execute revisionB (Right (Right source)) (captureEvolution location) >>= right >>= right
     case rebased of
-      CapturedStoredEvolution (EvolutionContext _ _ (StoredBefore selected) _) _ _ ->
+      CapturedEvolution (EvolutionContext _ _ (Before selected) _) _ _ ->
         unless (selected == revisionB) (fail "Capture reused the old Before revision")
-      _ -> fail "Capture required an old contract"
     write "manifest.dhall" (manifest 'a' "Draft")
-    write "before/Schema.hs" "edited copy, same schema type"
     success (captureEvolution location) >>= right >>= right >> pure ()
-    write "before/Schema.hs" "selected source"
     let diagnostic = [errorDiagnostic "test.source-rejected" "Source schema rejected"]
     sourceRejected <- execute revision (Right (Left diagnostic)) (captureEvolution location)
     unless (sourceRejected == Right (Left diagnostic)) (fail "Source diagnostics were rewritten")
@@ -178,9 +173,8 @@ evolutionCaptureTests contract = withSystemTempDirectory "kyyn-evolution-capture
     write "manifest.dhall" (manifest 'a' "Draft")
     recaptured <- success (captureEvolution location) >>= right >>= right
     case (captured, recaptured) of
-      (CapturedStoredEvolution (EvolutionContext _ _ _ original) _ _, CapturedStoredEvolution (EvolutionContext _ _ _ current) _ _) ->
+      (CapturedEvolution (EvolutionContext _ _ _ original) _ _, CapturedEvolution (EvolutionContext _ _ _ current) _ _) ->
         unless (original /= current) (fail "Later note unexpectedly changed the original snapshot")
-      _ -> fail "Stored captures unexpectedly carry old contracts"
     missingResult <- noOpening (captureEvolution (EvolutionWorkspace kb missing))
     case missingResult of
       Left (StorageUnavailable _) -> pure ()

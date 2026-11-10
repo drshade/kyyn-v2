@@ -27,7 +27,7 @@ import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..))
-import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
+import Kyyn.Types.KnowledgeBase (Recipe(..), RecipeId(..), FlowEntryRef(..))
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Types.SnapshotWire (SnapshotWire)
 import Kyyn.Plumbing.Capability.Failure (Failure)
@@ -40,9 +40,9 @@ import Kyyn.Porcelain.Protocol.StoredSnapshot (readStoredSnapshot)
 import Kyyn.Porcelain.Protocol.SnapshotWire (encodeSnapshotWire, decodeSnapshotWire)
 
 executeStoredEvolution :: (GuestExecution :> es, DhallHandling :> es, RootStore :> es, Failure :> es)
-  => CompiledProgram -> CheckedGuest -> FileTree -> Rationale -> StoredSnapshot
+  => CompiledProgram -> CheckedGuest -> FileTree -> Rationale -> Maybe RecipeId -> StoredSnapshot
   -> Eff es (Either [Diagnostic] (Root,[SnapshotStep]))
-executeStoredEvolution program guest targetCode reason input = runExceptT $ do
+executeStoredEvolution program guest targetCode reason selectedRecipe input = runExceptT $ do
   target <- case [schema.contract | G.EvolutionEntry "Evolution.evolution" (G.TargetEvolutionContracts schema) <- checkedEntries guest] of
     [contract] -> checked (checkRootLayout contract)
     _ -> bad "Expected one target-only evolution entry"
@@ -73,7 +73,8 @@ executeStoredEvolution program guest targetCode reason input = runExceptT $ do
         _ -> bad "Missing or duplicate target evolution entry"
       wire <- either bad pure (encodeSnapshotWire snapshot)
       let Rationale explanation _ = reason
-      bytes <- ExceptT (Right <$> executeEntry entry (object ["snapshot" .= wire,"explanation" .= explanation]))
+      bytes <- ExceptT (Right <$> executeEntry entry (object (["snapshot" .= wire,"explanation" .= explanation] ++
+        ["recipe" .= identity | name == "Evolution.evolution", Just (RecipeId identity) <- [selectedRecipe]])))
       decoded <- either bad pure (eitherDecodeStrict' bytes >>= parseEither reply)
       case decoded of
         Left (EvolutionFailure diagnostics) -> throwE diagnostics

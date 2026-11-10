@@ -15,7 +15,8 @@ import Kyyn.Domain.Contract
 import qualified Kyyn.Types.Contract as D
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..))
+import Kyyn.Domain.SnapshotReport (SnapshotStep(..), StepOrigin(..))
+import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.FileTree (fileTree)
 import Kyyn.Domain.Git
 import qualified Kyyn.Domain.GuestApi as Api
@@ -137,10 +138,10 @@ main = do
       revision = right (gitRevision (replicate 40 'a'))
       identity = right (evolutionId "abc")
       workspace = EvolutionWorkspace kb identity
-      captured = EvolutionContext kb identity (Before revision schema)
-        (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft AdHoc) empty empty empty empty)
+      captured = EvolutionContext kb identity (Before revision)
+        (WorkspaceSnapshot (WorkspaceManifest revision "Example" "" Draft AdHoc) empty empty empty)
       candidate = Candidate captured (EvolutionReport [] []) root
-      citedCandidate = Candidate captured (EvolutionReport [] [StepReport (Rationale "Because" [citation]) []]) root
+      citedCandidate = Candidate captured (EvolutionReport [] [SnapshotStep Authored (Rationale "Because" [citation]) []]) root
       assert label condition = unless condition (fail label)
       runRoot :: RootCommand -> (Response, [String])
       runRoot request = runPureEff . runState ([] :: [String]) . storeRoot value . execution

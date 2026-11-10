@@ -1,16 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Kyyn.Build.Sources (sourceFiles, moduleHeader, mergeSources) where
+module Kyyn.Build.Sources (sourceFiles, moduleHeader) where
 
-import Control.Monad (forM, unless)
+import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
-import Data.List (nub, sort)
-import qualified Data.ByteString as Bytes
+import Data.List (sort)
 import GHC
 import GHC.Parser.Header (getImports, getOptions)
 import GHC.Driver.Config.Parser (initParserOpts)
 import GHC.Data.StringBuffer (hGetStringBuffer)
-import System.Directory (doesDirectoryExist, listDirectory, createDirectoryIfMissing)
-import System.FilePath ((</>), takeExtension, takeDirectory)
+import System.Directory (doesDirectoryExist, listDirectory)
+import System.FilePath ((</>), takeExtension)
 
 -- Inventory only parses module headers/imports. Unfinished transformation bodies
 -- remain available to discovery without being typechecked.
@@ -41,24 +40,3 @@ sourceFiles root = do
         ".lhs" -> fail ("Only .hs authored Haskell source is supported: " ++ path)
         ".hsc" -> fail ("Only .hs authored Haskell source is supported: " ++ path)
         _ -> pure [])
-
--- Import-path order must never select between different definitions. Shared
--- byte-identical modules are emitted once; the map retains their source origin.
-mergeSources :: FilePath -> FilePath -> [FilePath] -> IO [(FilePath,FilePath)]
-mergeSources libdir destination paths = do
-  modules <- forM (nub paths) $ \path -> do
-    (name,_) <- moduleHeader libdir path
-    bytes <- Bytes.readFile path
-    pure (name,path,bytes)
-  forM (sort (nub [name | (name,_,_) <- modules])) $ \name -> do
-    let definitions = [(path,bytes) | (actual,path,bytes) <- modules, actual == name]
-    unless (length (nub (map snd definitions)) == 1) (fail
-      ("Different definitions of module " ++ name ++ " at " ++ show (map fst definitions) ++
-       "; rename modules whose Before and After definitions must coexist"))
-    case definitions of
-      (origin,bytes):_ -> do
-        let output = destination </> map (\c -> if c == '.' then '/' else c) name ++ ".hs"
-        createDirectoryIfMissing True (takeDirectory output)
-        Bytes.writeFile output bytes
-        pure (output,origin)
-      [] -> fail "Empty module group"

@@ -4,13 +4,11 @@
 module RecipeEditTests (main) where
 
 import Kyyn.Evolution
-import Kyyn.Recipe (RecipeEdit, RecipeEvolution, editFacts, getRecipeState,
+import Kyyn.Recipe (RecipeEdit, editFacts, getRecipeState,
   putRecipeState, modifyRecipeState)
 import Kyyn.Edit.Internal (Collection(..), execStateT)
-import qualified Kyyn.Evolution.Internal as Internal
 import Kyyn.Types.Diagnostic (errorDiagnostic)
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Text.JSON.Types (JSValue(..), toJSString)
 
 data Root = Root [Fact String] deriving (Eq, Show)
 data ReviewState = ReviewState [String] deriving (Eq, Show)
@@ -50,23 +48,6 @@ main = do
     execStateT (putRecipeState next >> editFacts (refuse refusal)) pair == Left failure
   assert "state refusal discards earlier fact edit" $
     execStateT (editFacts (put after) >> refuse refusal) pair == Left failure
-  let binding = Internal.RootBinding "recipe-pair" (JSString . toJSString . show)
-      reason = Rationale "Review email" []
-      step :: RecipeEvolution Root ReviewState
-      step = Internal.edit binding reason action
-      stateStep = Internal.edit binding (Rationale "Remember another email" [])
-        (putRecipeState state)
-      stop = Internal.edit binding reason (editFacts (refuse refusal))
-      encode value = Internal.RecordedRoot "recipe-pair" (JSString (toJSString (show value)))
-  assert "one shared observation includes root and state" $
-    Internal.evaluateEvolution step pair == Right
-      (Internal.EvolutionOutput (after, next)
-        [Internal.StepObservation reason (encode pair) (encode (after, next))])
-  assert "recipe evolution uses ordinary composition and identity" $
-    Internal.evaluateEvolution (step <> stateStep <> mempty) pair ==
-      Internal.evaluateEvolution (mempty <> step <> stateStep) pair
-  assert "failed composed step returns no partial facts/state/report" $
-    Internal.evaluateEvolution (step <> stop) pair == Left failure
   putStrLn "Recipe state focusing and shared evolution semantics passed."
 
 assert :: String -> Bool -> IO ()

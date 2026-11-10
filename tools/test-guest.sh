@@ -9,7 +9,7 @@ guest_stage=$(mktemp -d "${TMPDIR:-/tmp}/kyyn-guest-tests.XXXXXXXX")
 trap 'rm -rf -- "$guest_stage"' EXIT
 guest_source=$("${nix_command[@]}" flake metadata --json --no-update-lock-file | node -e 'let s="";process.stdin.on("data",x=>s+=x);process.stdin.on("end",()=>console.log(JSON.parse(s).path))')
 checks=(guest-frozen-api guest-model guest guest-schema guest-api guest-api-bindings guest-api-tools guest-plugins
-  guest-tool guest-root-api guest-recipe guest-output guest-target-evolution guest-evolution guest-evolution-api
+  guest-tool guest-root-api guest-recipe guest-output guest-target-evolution
   guest-recipe-evolution guest-first-party)
 for check in "${checks[@]}"; do
   "${nix_command[@]}" build "path:$guest_source#checks.$guest_system.$check" --no-update-lock-file --out-link "$guest_stage/$check"
@@ -27,12 +27,10 @@ protocol tool guest-tool
 protocol root-api guest-root-api
 protocol recipe guest-recipe
 node tools/test-target-evolution.mjs "$guest_stage/guest-target-evolution/bin/kyyn-guest"
-protocol evolution guest-evolution
-protocol evolution-api guest-evolution-api
-protocol recipe-evolution guest-recipe-evolution
+node tools/test-recipe-evolution.mjs "$guest_stage/guest-recipe-evolution/bin/kyyn-guest"
 protocol frozen-api guest-frozen-api
 cabal test native-guest --test-show-details=direct --test-options="$guest_stage/guest/bin/kyyn-guest"
-for pair in Model:guest-model PluginPreparation:guest-plugins ToolPreparation:guest-tool Output:guest-output Recipe:guest-recipe Evolution:guest-evolution EvolutionPreparation:guest-evolution-api StoredEvolution:guest-target-evolution; do
+for pair in Model:guest-model PluginPreparation:guest-plugins ToolPreparation:guest-tool Output:guest-output Recipe:guest-recipe StoredEvolution:guest-target-evolution; do
   cabal exec -- runghc -XGHC2021 -XOverloadedStrings -XNoFieldSelectors -Wall -Werror \
     -package=kyyn-domain -package=kyyn-types -package=kyyn-porcelain -package=kyyn-porcelain-interpreters \
     -package=kyyn-plumbing -package=kyyn-plumbing-interpreters \

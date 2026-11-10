@@ -29,7 +29,6 @@ import Kyyn.Schema
 import Kyyn.Types.Query (Query, CollectionBinding(..), readCollection)
 import Kyyn.Types.Diagnostic (ValidationReport(..))
 import qualified Kyyn.Types.Contract as D
-import Kyyn.Types.GuestBuild (RecipeReference(..))
 import qualified Kyyn.Types.Guest as G
 import Kyyn.Runtime.Guest
 import qualified Kyyn.Plumbing.Protocol.Frame as Frame
@@ -61,10 +60,7 @@ main = do
     ["--captured-guest"] -> capturedGuest
     ["--guest"] -> guest
     ["--frozen-api-built",path] -> checkFrozenApi (path,[])
-    ["--evolution-api-built",path] -> checkEvolutionApi (path,[])
     ["--root-api-built",path] -> checkRootApi (path,[])
-    ["--recipe-evolution-built",path] -> checkRecipeEvolution (path,[])
-    ["--evolution-built",path] -> checkEvolution (path,[])
     ["--recipe-built",path] -> checkRecipe (path,[])
     ["--tool-built",path] -> checkTool (path,[])
     ["--captured-built",path] -> checkCaptured (path,[]) >> checkAcquisition (path,[]) >> checkPlugin (path,[])
@@ -93,7 +89,7 @@ checkFrozenApi executable = do
     (fail "Frozen proposal facade exports missing")
   unless (any (\entry -> entry.exportName == "frozen" && "RecipeEvolution" `Text.isInfixOf` entry.exportSignature) exports)
     (fail "Frozen proposal signature missing")
-  unless (all (\entry -> case entry of G.EvolutionDescriptionEntry {} -> True; G.ContractEntry {} -> True; _ -> False) described.entries)
+  unless (all (\entry -> case entry of G.ContractEntry {} -> True; _ -> False) described.entries)
     (fail "Discovery artifact contains runnable entries")
   (status,_,_) <- call executable (toJSON (G.Invoke "frozen" (object [])))
   unless (status /= ExitSuccess) (fail "Discovery facade was invocable")
@@ -523,77 +519,6 @@ checkRecipe executable@(path,args) = do
     (bad,_,_) <- call executable (toJSON (G.Invoke entry malformed))
     unless (bad /= ExitSuccess) (fail "Malformed recipe invocation accepted")
   putStrLn "Recipe guest describes private state, renders flows, exchanges connector callbacks and returns typed fact edits."
-
-checkEvolution :: (FilePath,[String]) -> IO ()
-checkEvolution executable = do
-  described <- invoke executable (toJSON G.Describe)
-  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode described)) :: Either String G.GuestDescription)
-  _ <- right (Host.checkGuest description)
-  (entry,before,after) <- case [(name,before,after) | G.EvolutionEntry name (G.AdHocContracts before after) <- description.entries] of
-    [selected] -> pure selected
-    _ -> fail "Missing evolution endpoints"
-  case [states | G.EvolutionDescriptionEntry _ _ states <- description.entries] of
-    [states] | all (`elem` map fst states) [OpenState "()",OpenState "BeforeProgress.State",ClosedFlow "BeforeFlows.review"] -> pure ()
-    _ -> fail "Before states are missing from the typed evolution description"
-  unless (all (`elem` [name | G.ContractEntry name _ <- description.entries])
-    ["$import.state.Before.BeforeProgress.State","$import.state.After.After.Item","$import.flow.AfterFlows.review"])
-    (fail "Imported recipe handles were not described")
-  let node = G.EvolutionDescriptionEntry before after [(OpenState "()",before)]
-      malformed = case toJSON node of Object fields -> Object (Keys.delete "beforeStates" fields); value -> value
-  unless (isLeft (eitherDecodeStrict' (Lazy.toStrict (encode malformed)) :: Either String G.EntryDescription))
-    (fail "Partial evolution description accepted")
-  unless (isLeft (Host.checkGuest (description { G.entries = [G.EvolutionDescriptionEntry before after [(OpenState "()",before),(OpenState "()",before)]] })))
-    (fail "Duplicate typed Before references accepted")
-  unless (before.loadedSources == [".kyyn-before/Before.hs"] && after.loadedSources == ["src/After.hs"])
-    (fail "Endpoint source closure includes metadata-only dependencies")
-  let fact payload = object ["id" .= String "one","value" .= payload]
-      knowledge payload = object ["facts" .= object ["items" .= [fact payload]],"recipes" .= ([] :: [Value])]
-      original = knowledge (object ["amount" .= String "7"])
-      migrated = knowledge (object ["amount" .= String "7","note" .= String "migrated"])
-      observed identity value = object ["contract" .= identity,"value" .= value]
-      expected = object ["tag" .= String "Succeeded","value" .= object ["after" .= migrated,"steps" .=
-        [object ["rationale" .= object ["explanation" .= String "Add notes","evidence" .= ([] :: [Value])],
-          "before" .= observed before.identity original,"after" .= observed after.identity migrated]]]]
-  actual <- invoke executable (toJSON (G.Invoke entry original))
-  unless (actual == expected) (fail ("Wrong evolution reply: " ++ show actual))
-  (status,_,_) <- call executable (toJSON (G.Invoke entry (knowledge (object ["amount" .= String "invalid"]))))
-  unless (status /= ExitSuccess) (fail "Evolution accepted invalid Before facts")
-  putStrLn "Evolution guest describes both endpoints, migrates facts and records target-built contract identities."
-
-checkEvolutionApi :: (FilePath,[String]) -> IO ()
-checkEvolutionApi executable = do
-  value <- invoke executable (toJSON G.Describe)
-  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode value)) :: Either String G.GuestDescription)
-  _ <- right (Host.checkGuest description)
-  unless (length [() | G.EvolutionDescriptionEntry{} <- description.entries] == 1)
-    (fail "Discovery did not return one structured evolution description")
-  unless (all (`elem` map G.moduleName description.modules)
-    ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After","Kyyn.Workspace.FactEdits"])
-    (fail "Missing generated evolution API modules")
-  (status,_,_) <- call executable (toJSON (G.Invoke "Evolution.evolution" (object [])))
-  unless (status /= ExitSuccess) (fail "Discovery build exposed an unfinished migration")
-  putStrLn "Workspace API describes endpoint contracts and bindings despite an unfinished transformation body."
-
-checkRecipeEvolution :: (FilePath,[String]) -> IO ()
-checkRecipeEvolution executable = do
-  described <- invoke executable (toJSON G.Describe)
-  description <- right (eitherDecodeStrict' (Lazy.toStrict (encode described)) :: Either String G.GuestDescription)
-  _ <- right (Host.checkGuest description)
-  (entry,root) <- case [(name,root) | G.EvolutionEntry name (G.RecipeEvolutionContracts root _) <- description.entries] of
-    [selected] -> pure selected
-    _ -> fail "Missing recipe evolution contracts"
-  let state = object ["reviewed" .= String "4"]
-      input = object ["facts" .= object ["items" .= ([] :: [Value])],"state" .= state]
-      output = object ["facts" .= object ["items" .= [object ["id" .= String "new","value" .= object ["amount" .= String "9"]]]],"state" .= state]
-      observed value = object ["contract" .= root.identity,"value" .= value]
-      expected = object ["tag" .= String "Succeeded","value" .= object ["after" .= output,"steps" .=
-        [object ["rationale" .= object ["explanation" .= String "Append a fact and preserve private state","evidence" .= ([] :: [Value])],
-          "before" .= observed input,"after" .= observed output]]]]
-  actual <- invoke executable (toJSON (G.Invoke entry input))
-  unless (actual == expected) (fail ("Wrong recipe evolution result: " ++ show actual))
-  (status,_,_) <- call executable (toJSON (G.Invoke entry (object ["facts" .= object ["items" .= ([] :: [Value])],"state" .= object []])))
-  unless (status /= ExitSuccess) (fail "Recipe evolution accepted invalid private state")
-  putStrLn "Recipe evolution edits facts through generated collections and preserves private state with checked contract identities."
 
 checkRootApi :: (FilePath,[String]) -> IO ()
 checkRootApi executable = do

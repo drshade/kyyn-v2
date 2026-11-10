@@ -31,7 +31,7 @@ sourceRootAt kb@(KnowledgeBase repository _) revision workspace = runExceptT $ c
     location <- ExceptT (pure (either (Left . pure . errorDiagnostic "kb.path") Right (rootLocation kb)))
     ExceptT (loadSourceAt repository revision (Subtree location))
   Just identity -> do
-    WorkspaceSnapshot _ _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
+    WorkspaceSnapshot _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
     ExceptT (openCapturedSource code)
 
 selectSchemaType :: RootContract -> String -> Either [Diagnostic] DataType
@@ -54,7 +54,7 @@ sourceCodeAt kb@(KnowledgeBase repository _) revision workspace = runExceptT $ c
     SourceRoot _ code _ _ <- ExceptT (loadSourceAt repository revision (Subtree location))
     pure code
   Just identity -> do
-    WorkspaceSnapshot _ _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
+    WorkspaceSnapshot _ code _ _ <- ExceptT (Evolution.readWorkspace (EvolutionWorkspace kb identity))
     pure code
 
 listRootTools :: (ToolPreparation :> es, RootOpening :> es, Evolution.EvolutionStore :> es)

@@ -1,14 +1,16 @@
 module Kyyn.Recipe.Edit
-  ( RecipeEvolution, RecipeEdit
+  ( RecipeEvolution, RecipeEdit, recipeEdit
   , editFacts, getRecipeState, putRecipeState, modifyRecipeState
   ) where
 
 import Kyyn.Edit (Edit, zoom, get, put, modify)
 import Kyyn.Optics (lens)
-import Kyyn.Evolution.Internal (Evolution)
+import Kyyn.Recipe.Evolution (RecipeEvolution(..))
+import Kyyn.Types.Evolution (Rationale)
 
--- | A same-schema evolution of domain facts and one recipe's state.
-type RecipeEvolution root state = Evolution (root, state) (root, state)
+-- | Record one same-schema edit of domain facts and selected recipe state.
+recipeEdit :: Rationale -> RecipeEdit root state () -> RecipeEvolution root state
+recipeEdit reason action = RecipeEvolution [(reason,action)]
 
 -- | A fallible edit of domain facts and the selected recipe's state.
 type RecipeEdit root state = Edit (root, state)

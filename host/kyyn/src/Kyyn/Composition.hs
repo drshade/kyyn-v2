@@ -219,7 +219,7 @@ dispatchWorkspaceApi host workspace request = withRuntime host $ \settings ->
       Right context@(WorkspaceCatalogue _ _ generated) -> case request of
         Cli.ListGuestModules -> do
           source <- Store.readWorkspace workspace
-          tools <- either (pure . Left) (\(WorkspaceSnapshot _ _ code _ _) -> WorkspaceApi.inspectRootApi code ListApiModules) source
+          tools <- either (pure . Left) (\(WorkspaceSnapshot _ code _ _) -> WorkspaceApi.inspectRootApi code ListApiModules) source
           case tools of
             Left diagnostics -> pure (refusal diagnostics)
             Right bindings -> ApiResult.workspaceResult context <$>
