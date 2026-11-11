@@ -216,8 +216,7 @@ duplicating it throughout the implementation or UI.
 
 ## Build and review through useful work
 
-Web and MCP are equally important and share application operations; CLI supports
-development and automation. Implement small end-to-end journeys across these
+CLI and MCP change a KB; Web shows it. All three share application operations. Implement small end-to-end journeys across these
 boundaries, not a forest of placeholders. Prototypes prove particular claims;
 they do not prescribe production structure or prove untested compatibility.
 

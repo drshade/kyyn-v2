@@ -1,133 +1,95 @@
 ---
 id: 0023
-title: 'Two first-class interfaces with a shared design and review loop'
+title: 'Web is a read-only surface for showing a KB'
 ---
 
-# Two first-class interfaces with a shared design and review loop
+# Web is a read-only surface for showing a KB
 
 ## Context
 
-A web dashboard that only approves completed agent work is not a design tool.
-An MCP interface that only edits records is not a capable collaborator's interface.
-Conversely, presenting every internal technical object to humans is not parity.
+Kyyn is a set of tools for whoever works on a KB, human or AI. Those working
+together on a KB need a way to show each other the thing under discussion: a
+record, a type, a query, a flow or a proposed change. Dhall facts, Haskell
+source and evolution directories are a poor way to see it.
 
 ## Decision
 
-Design Web for humans and MCP for agents as equally important product surfaces.
-Humans will generally work at the level of meaning, design, examples, results
-and review; agents will generally do more technical construction, code/schema
-editing and repeatable execution. Both can work across those levels.
+Web is a tool for showing a KB; CLI and MCP change it. Whoever is working on
+the KB starts `kyyn-v2 web serve` and opens or shares a link, for example an AI
+agent showing a proposed change to the person it works with. Web has no mutation
+endpoints, forms that change a KB, accept control, review notes or inbox.
 
-Web includes a host-owned authoring workbench and KB-owned domain views. Domain
-views are for readers of results: open HTML/JavaScript pages that consume named
-queries. They do not need schema, evidence or evolution controls. The workbench
-provides the shared design/review loop described below; those controls are not
-required chrome around a domain view. [ADR 0018](0018-surfaces.md#kb-owned-domain-views)
-owns live serving, draft selection and the explicitly included browser helper.
+Web has two kinds of page:
 
-An author previews a domain view with `web serve --evolution ID`, independently
-of whether the evolution checks. Pages/assets reflect live target edits on browser
-refresh; queries require a usable checked candidate. This mixed authoring preview
-is explicitly a draft, not proof that its current page and candidate data agree.
-Acceptance still requires a fresh check after page edits. Preview does not require
-a graphical evolution editor or side-by-side comparison. View parameters are plain URL parameters, checked only
-when used as named-query arguments. Do not impose a typed view vocabulary,
-view-to-query declarations, type-link checking or a default-view setting.
+- **Inspection pages** are host-owned and generated. They render what Kyyn
+  already knows about any KB, so nothing is authored to use them.
+- **Domain views** are KB-owned HTML and JavaScript for readers of results.
+  [ADR 0018](0018-surfaces.md#kb-owned-domain-views) owns their serving and
+  [ADR 0008](0008-authoring.md) their declaration.
 
-The evolution-authoring workflow is explicit: an agent creates a workspace,
-populates its single `evolution` binding and supporting files, trials and refines
-the result, then marks it Ready for review. The human inspects its changes,
-outputs, checks and rationale, requests revisions as needed, and may accept the
-checked result as the new head. Ready is not proof of validation, and acceptance
-still checks the local Before revision. These are workflow expectations, not
-role-based permissions restricting who may use the underlying operations.
+### Inspection pages
 
-Equal importance means access to shared review objects and operations, not a
-graphical equivalent of every source-authoring operation. Web need not create an
-evolution by selecting a reusable Haskell helper and filling in its arguments.
-There is no helper-launch catalog, argument-to-source generator or separate
-invocation model required for this flow. Query/example forms remain useful typed
-data interfaces; they do not imply graphical evolution-source authoring.
+| Route | Shows |
+| --- | --- |
+| `GET /` | Index: evolutions, collections, types, queries, tools, recipes and a link to `/kb/` |
+| `GET /evolutions/<id>` | Explanation, lifecycle state, the step report with each changed record's before and after values, and the source diff against the base |
+| `GET /collections/<collection>` | The records of one collection |
+| `GET /records/<collection>/<id>` | One record as labelled fields, with references to other records as links |
+| `GET /types/<name>` | A schema type's fields, their types and descriptions |
+| `GET /queries/<name>` | Description, input and result types, the module that implements it and, when `input` is given, the result |
+| `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
+| `GET /recipes/<name>` | Instructions or flow structure and its state type, without executing actions |
 
-A request for new work before any evolution exists goes to the user's agent,
-not a new Kyyn task/inbox object. Once work exists, Kyyn-native examples and review
-notes support human design feedback without orchestrating the agent that responds.
-External schedulers can use the same agent-and-ordinary-operations workflow for
-settled work; agent-less preparation conveniences are not an initial requirement.
+Each page is complete when opened directly from a link, and links to related
+pages and to the index. The routes are stable and listed in the guide, so a link
+can be composed from a name.
 
-| Shared activity | Human-oriented workbench | Agent-oriented MCP |
-| --- | --- | --- |
-| Understand the system | Model browser, examples, assumptions, connected views | Exact contracts, documentation, source/binding locations |
-| Explore knowledge | Tables, filtering, drill-down, alternate policies | Typed queries, identified collection reads, reusable calculation tools |
-| Design a change | Describe intent, adjust examples, inspect alternatives | Scaffold/edit workspace, implement functions, execute examples |
-| Review consequences | Data/schema/rule/report comparison; focused diagnostics | Structured diffs, failed examples, affected identities and comments |
-| Explain a record | Timeline of changes, reasons and cited evidence | Revision-scoped record history with step diffs and declared rationale |
-| Operate and repair | Progress, source status, missing-secret setup guidance | Typed errors, resumable input references, explicit repeatable operations |
+Every page shows the accepted KB or one draft, and states which. `?evolution=ID`
+selects a draft for that page, and its links carry the parameter; without it the
+page shows the accepted KB. The server's `--evolution` option applies only to
+domain views under `/kb/`.
 
-Share concrete objects, not a mandatory conversation platform: selected KB/root,
-evolution workspace, evaluated candidate, example, diagnostic, artifact and review
-feedback. Feedback can target a fact/field, source location, example or artifact,
-and is tied to the candidate version the reviewer saw. Store workspace review
-notes through EvolutionStore, not an independent approval/ticket subsystem.
-Notes can request changes without being automatically executable instructions.
+Draft facts, types, declarations and query results come from the evolution's
+last successfully checked candidate, not from live target source, so the pages
+of one draft agree with each other. Pages read current state on each request, so
+a reload shows the latest successful check. A GET never runs a check.
 
-Separate free-text feedback from the executable data examples defined in
-[validation](0011-validation.md). The latter name a query and contain typed
-arguments/expected results; Web can build a form from those contracts without
-asking the human to write a Haskell expression. A note saying "this looks too high"
-does not automatically become a check, whereas a saved expectation for a named
-monthly-total query does. This data-example representation is a design proposal,
-not an assertion-language requirement or an owner-decided UI layout.
+The evolution page takes its step report from that candidate, or from the
+archived report of an accepted evolution. The report carries each change's
+before and after values, so removed records and intermediate steps are shown
+there. A changed record links to its record page only when it exists in the
+context shown. The source diff is that candidate's captured source against
+the base. An evolution with no checked candidate shows its explanation and a
+source diff of the live target, labelled as unchecked. Check diagnostics are
+not stored; the command that ran the check reports them.
 
-The selected operations belong to EvolutionStore even though they serve Web/MCP:
+Query and tool pages show the captured module that contains the implementation,
+whole, not an extracted definition.
 
-```haskell
-data ReviewSubject
-  = CapturedWork EvolutionContext
-  | EvaluatedResult (Candidate Root)
+Rendering is generic. Records and types are laid out from the checked contract
+and its role metadata under [ADR 0005](0005-contracts.md), not from a second
+reading of authored source. A query's `input` URL parameter is a Dhall expression
+checked against its input contract, as `--input` is on the CLI. Presentation
+designed for a domain belongs in a domain view. A one-off explanatory page is a
+view declared in a draft; its pages are served live without a check.
 
-data ReviewTarget
-  = WholeSubject
-  | FactTarget CollectionId FactId
-  | ExampleTarget ExampleId
-  | SourceTarget RelativePath SourceSpan
-  | ArtifactTarget ArtifactId
+Pages are server-rendered HTML produced by the host from the same typed
+operations CLI and MCP use. No client framework or separate JSON API is needed
+for them.
 
-addReviewNote
-  :: (EvolutionStore :> es, Failure :> es)
-  => ReviewSubject -> ReviewTarget -> Text -> Eff es ReviewNoteId
+### Authoring workflow
 
-saveExample
-  :: (EvolutionStore :> es, Failure :> es)
-  => EvolutionWorkspace -> Example -> Eff es ExampleId
-```
+An author creates an evolution workspace, populates its `evolution` binding and
+supporting files, trials and refines the result, then marks it Ready. The
+evolution page and its linked pages explain the change to whoever reviews it.
+Revision and acceptance are CLI or MCP operations. Ready is not proof of
+validation, and acceptance still checks the local Before revision under
+[ADR 0012](0012-acceptance.md).
 
-A note references fixed captured work or the actual evaluated root, not simply
-the workspace name that will later contain different code. `CapturedWork` supports
-source/whole-proposal feedback even if the proposed schema or Haskell never compiled
-and no candidate root exists. `EvaluatedResult` retains exact result identity for
-data/artifact feedback and failed semantic checks as well as successful checks.
-Targets must be meaningful within their subject; capture alone does not invent
-an evaluated fact or artifact. The workspace supplies its owning KB for saving
-examples, avoiding a second KB argument.
-Saving an example writes `target/examples/` under the ADR 0010 layout,
-marks the workspace Draft and requires recapturing, evaluation and checking;
-it cannot retroactively validate an earlier preview. It becomes current-root
-material on acceptance, following [the example lifecycle](0011-validation.md),
-rather than remaining an archive-only attachment. The store returns
-identifiers/data, not a printed success or an implicit request to run an agent.
+Executable examples are KB material written under
+[ADR 0011](0011-validation.md), not entered through Web.
 
-Review presents four related dimensions: fact/schema differences, selected
-view-output differences, source changes in KB modules, and changed or removed
-checks/examples. These are not four mandatory screens. A policy-only evolution
-may have no fact changes but substantial report differences; passing a weakened
-check does not establish that the previous intended rule still holds.
-
-Alongside the overall diff, show the ordered step report defined in
-[evolutions](0010-evolutions.md). Each step pairs actual changed records with its
-declared explanation and evidence. Preserve intermediate changes even when the
-net diff is empty. These authored rationales are distinct from reviewer notes;
-neither observed reads nor a review comment silently becomes supporting evidence.
+### Record history
 
 Record history is a read operation on the existing EvolutionStore, not a new
 provenance service or a guest query that executes archived code:
@@ -168,33 +130,21 @@ whose evidence list is empty. Source-only changes remain available in workspace
 and Git review; a per-record timeline does not claim to explain every change in
 the algorithms that interpret that record.
 
-Both surfaces identify the base and evaluated result a preview depicts. Editing
-or rebasing the evolution requires fresh checks and diffs; the old preview is not
-evidence about the revised result. Review is an aid to judgment, not a sealed
-authorization transaction. No cross-client editing coordinator is required.
-Acceptance is an explicit operation on a checked evolution, conditional on its
-`Before.revision` still matching local head, regardless of the client. Actor names and
-method-role metadata describe work; they do not establish a universal authority
-hierarchy. Delegation is an explicit owner choice, not inferred from transport.
-
 ## Boundaries and alternatives
 
-Transport adapters handle presentation, navigation and client interaction. Shared
-application operations own mutations/checking and return structured results.
-Avoid both extreme UI symmetry and asymmetric capabilities that force an agent
-to scrape a screen or a human to use a terminal for ordinary design feedback.
-MCP and Web do not call each other to reach the engine.
+Reject a Web workbench with review notes, example forms and an accept button.
+It duplicates the conversation collaborators already have and the operations
+CLI and MCP already provide.
 
-A Web update notification or refresh mechanism may project operation/workspace
-state; it is not a new canonical state store. Initial local single-owner use can
-support multiple clients with revision checks without implementing collaborative
-text editing, chat orchestration or presence protocols.
+The server binds to loopback and serves one KB. Inspection pages and domain views
+share an origin; isolation between them is not provided.
 
 ## Verification
 
-Test a complete handoff: human supplies a counterexample in Web; agent sees it
-through MCP, changes an evolution and checks it; human compares the resulting
-report and requests a revision; agent fixes it; either explicitly authorized
-client accepts the checked evolution against its current local base. Also test an agent reviewing a
-human-authored change. Neither path should depend on private chat history,
-screen scraping or an assumption that “human means approver, agent means writer”.
+Test the journey from the guide: prepare an evolution that changes schema, facts
+and a query, start the server and compose links from names alone.
+The evolution page lists the changed records and links to record pages showing
+draft values; the same record URL without `?evolution` shows the accepted value.
+A removed record appears in the step report with its former value and no link.
+The query page shows its module and a result for a given input. After a failed
+check the pages still show the last checked candidate. No request changes the KB.

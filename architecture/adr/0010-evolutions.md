@@ -388,7 +388,7 @@ evolutions/<id>/
   manifest.dhall   base revision, name, explanation, kind and lifecycle state
   target/          complete proposed code/configuration/examples for root/
   change/          Evolution.hs and optional Input/ migration helpers
-  notes/           review notes, excluded from evaluation inputs
+  notes/           the author's working notes, excluded from evaluation inputs
 ```
 
 There is no copied `before/` source tree. Creation copies accepted code/configuration
@@ -405,7 +405,7 @@ worktree or executable closure. Checking, examples and acceptance use this same
 result. Evaluation returns `Candidate Root`; normal checking produces
 `Candidate (Validated Root)` for ADR 0012. Acceptance does not silently rerun the migration. Capture comparison
 includes base, kind, name/explanation and exact evaluation-source paths/bytes;
-lifecycle readiness and review notes are excluded. Actual edits invalidate the
+lifecycle readiness and notes are excluded. Actual edits invalidate the
 saved result even if an external editor left the Ready label unchanged.
 
 Domain-view authoring preview under [ADR 0018](0018-surfaces.md#accepted-snapshots-and-live-draft-pages)

@@ -36,7 +36,7 @@ and reconciliation follow [the SDLC](../docs/SDLC.md#5-significant-decisions-are
 | [0020](adr/0020-distribution.md) | Native installation and explicit Nix guest provisioning |
 | [0021](adr/0021-quality.md) | Architecture checks and outcome-based implementation slices |
 | [0022](adr/0022-open-source.md) | Proprietary now; future licensing kept explicit |
-| [0023](adr/0023-interaction.md) | Equally important human and agent interfaces |
+| [0023](adr/0023-interaction.md) | Web is a read-only surface for showing a KB |
 | [0024](adr/0024-field-experience.md) | Repeatable fresh-agent scenarios and field reports |
 | [0025](adr/0025-lifecycle.md) | Agent setup, per-KB open/close and headless operation |
 | [0026](adr/0026-repository-layout.md) | Monorepo with explicit host/guest and interpreter package boundaries |

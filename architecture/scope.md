@@ -40,7 +40,7 @@ curation records are legitimate KB models, not mandatory kernel lifecycles.
 | Repair an integration update | Refresh its contract, fix callers and refetch evidence | 0005, 0014, 0015 |
 | Run outside the developer's machine | Nix and the KB flake explicitly supply the compiler and dependencies; credentials remain explicit | 0020–0022 |
 | Stop, reopen and automate settled work | Drafts survive; CLI can check/accept/render without Web or MCP servers | 0012, 0019, 0025 |
-| Hand design/review work between human and agent | Shared snapshot, feedback and candidate identity across Web/MCP | 0018, 0023 |
+| Show work to a collaborator | Linked read-only pages for a record, type, query, flow or evolution, accepted or draft | 0018, 0023 |
 
 ## Synthetic acceptance fixtures
 
@@ -70,11 +70,9 @@ change a rule, inspect a candidate, and explain the remaining uncertainty. Recor
 calls spent learning Kyyn mechanics separately from actual domain work. Passing
 unit tests alone does not establish a good authoring or human-review surface.
 
-Web and MCP have equal importance. Exercise the loop in both directions: a human
-changes an expectation and an agent implements it; an agent finds an ambiguity
-and the human explores examples before deciding. Their shared middle includes
-inspection, experimentation, diagnosis, proposals and review. Technical depth
-and high-level design are emphases, not exclusive permissions or personas.
+Exercise the loop a person has with their agent: the person states an
+expectation and the agent implements it; the agent finds an ambiguity and shows
+the person the relevant records and examples before they decide.
 
 Installation targets Linux, macOS and Windows (WSL acceptable initially). Agents
 can bootstrap dependencies and configure a tested client invocation on behalf of

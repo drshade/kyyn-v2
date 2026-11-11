@@ -345,8 +345,8 @@ Checking still captures every page and asset with the source, and acceptance
 requires those captured files to match. Accepted serving uses captured files. Queries own domain calculations and checked input/result types.
 Views own presentation, can use ordinary browser libraries, and carry no typed
 parameter declarations or query-usage list. A change to a query does not trigger
-a separate view compatibility check. The host's role-driven generic workbench
-presentation remains distinct from these open authored pages.
+a separate view compatibility check. The host's generic inspection pages
+remain distinct from these open authored pages.
 
 ### Shared authoring vocabulary
 
