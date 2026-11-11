@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Kyyn.Build.Edits (rootEdits) where
+module Kyyn.Build.Edits (rootEdits, targetFields) where
 
 import Control.Monad (forM, unless)
 import Data.List (nub)
@@ -42,3 +42,14 @@ rootEdits root collections = do
       clauses = if null selected then [Clause [VarP empty] (NormalB (CaseE (VarE empty) [])) []] else map snd selected
   pure [DataD [] name [] Nothing (map fst selected) derives,
     SigD apply (AppT (AppT ArrowT (ConT name)) edit),FunD apply clauses]
+
+-- Residual handles are selected from the actual target record, not authored DTOs.
+targetFields :: Name -> [String] -> Q [Dec]
+targetFields root collections = do
+  fields <- recordFields (ConT root)
+  pure (concat
+    [[SigD (mkName (nameBase name)) (AppT (AppT (ConT (mkName "Preparation.TargetField")) (ConT root)) kind),
+      ValD (VarP (mkName (nameBase name)))
+        (NormalB (AppE (ConE (mkName "Preparation.TargetField"))
+          (AppE (VarE 'Text.pack) (LitE (StringL (nameBase name)))))) []]
+    | (name,kind) <- fields, nameBase name `notElem` collections])

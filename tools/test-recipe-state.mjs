@@ -26,8 +26,8 @@ module Evolution where
 import Kyyn.Workspace.Evolution
 import qualified RootV1
 ${imports}
-evolution :: Evolution (KnowledgeBase RootV1.Root) (KnowledgeBase RootV1.Root)
-evolution = ${body}
+evolution :: Evolution RootV1.Root
+evolution = prepare (pure ()) $ ${body}
 `);
 }
 function accept(draft) {
@@ -47,7 +47,7 @@ try {
   fs.writeFileSync(path.join(creation.path, 'target/src/ReviewV1.hs'),
     '{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies #-}\nmodule ReviewV1 where\nimport GHC.Generics (Generic)\nimport Kyyn.Schema (Contract)\nimport Data.Text (Text)\ndata State = State { reviewed :: [Text] } deriving stock Generic deriving anyclass Contract\n');
   author(creation, `import qualified ReviewV1
-import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV1.State as State`,
+import qualified Kyyn.Workspace.Target.RecipeTypes.ReviewV1.State as State`,
     `edit (Rationale "Teach two independent recipes" []) $ do
   createRecipe (RecipeId "mail") (openRecipe State.recipeType "Review mail") (ReviewV1.State ["mail-1"])
   createRecipe (RecipeId "calendar") (openRecipe State.recipeType "Review calendar") (ReviewV1.State [])
@@ -77,8 +77,8 @@ evolution = recipeEdit (Rationale "Reviewed another message" []) $
     '{-# LANGUAGE DeriveAnyClass, DeriveGeneric, DerivingStrategies #-}\nmodule ReviewV2 where\nimport GHC.Generics (Generic)\nimport Kyyn.Schema (Contract)\nimport Data.Text (Text)\ndata State = State { reviewed :: [Text], window :: Maybe Text } deriving stock Generic deriving anyclass Contract\n');
   author(migration, `import qualified ReviewV1
 import qualified ReviewV2
-import qualified Kyyn.Workspace.Before.RecipeTypes.ReviewV1.State as Old
-import qualified Kyyn.Workspace.After.RecipeTypes.ReviewV2.State as New`,
+import qualified Kyyn.Workspace.Target.RecipeTypes.ReviewV1.State as Old
+import qualified Kyyn.Workspace.Target.RecipeTypes.ReviewV2.State as New`,
     `edit (Rationale "Limit the mail review window" []) $
   updateRecipe Old.recipeType (RecipeId "mail") (openRecipe New.recipeType "Review recent mail")
     (\\(ReviewV1.State seen) -> Right (ReviewV2.State seen (Just "October")))`);

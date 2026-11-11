@@ -64,16 +64,14 @@ proposalChange contract state proposal@(FactProposal _ (CheckedValue identity _)
      "evolution = frozen"])))])
 
 -- | Decode captured Dhall inputs before compiling their ordinary pure entry.
-lowerProposal :: DhallHandling :> es => RootContract -> RootContract -> Maybe (CheckedContract, CheckedValue) -> FileTree -> Eff es (Either [Diagnostic] FileTree)
-lowerProposal before after selectedState change = runExceptT $ do
+lowerProposal :: DhallHandling :> es => RootContract -> Maybe (CheckedContract, CheckedValue) -> FileTree -> Eff es (Either [Diagnostic] FileTree)
+lowerProposal target selectedState change = runExceptT $ do
   path <- checked (relativePath "proposal.dhall")
   case lookup path (files change) of
     Nothing -> pure change
     Just bytes -> do
       (state,previous) <- checked (maybe (Left "Frozen proposals require a recipe-based workspace") Right selectedState)
-      unless (contractId (rootSchema before) == contractId (rootSchema after))
-        (throwE [errorDiagnostic "proposal.schema-changed" "Fact proposals require the same Before and After schema and metadata"])
-      shape <- checked (proposalShape before state)
+      shape <- checked (proposalShape target state)
       source <- checked (either (Left . show) Right (Text.decodeUtf8' bytes))
       value <- ExceptT (decodeValue shape source)
       FactProposal _ next <- checked (parseEither (parseProposal state) value)

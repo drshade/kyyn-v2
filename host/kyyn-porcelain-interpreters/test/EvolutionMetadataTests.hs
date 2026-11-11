@@ -28,7 +28,7 @@ import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
 import Kyyn.Plumbing.Interpreter.ProcessExecution
-import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord)
+import Kyyn.Plumbing.Protocol.SnapshotArchive (encodeSnapshotArchive)
 import Kyyn.Porcelain.Capability.EvolutionStore
 import Kyyn.Porcelain.Capability.RootStore (RootStore)
 import Kyyn.Porcelain.Capability.WorkspaceStore
@@ -87,7 +87,6 @@ evolutionMetadataTests contract = withSystemTempDirectory "kyyn-evolution-metada
   base <- process ["rev-parse","HEAD"] >>= right . gitRevision . Bytes.unpack . Bytes.strip
   let initialSnapshot = WorkspaceSnapshot
         (WorkspaceManifest base "Same label λ" "Keep this explanation" Draft AdHoc)
-        (tree [(path "Schema.hs","unfinished schema")])
         (tree [(path "src/Schema.hs","broken Haskell")])
         (tree [(path "Evolution.hs","not compilable")])
         (tree [(path "review.md","unchanged notes")])
@@ -113,20 +112,20 @@ evolutionMetadataTests contract = withSystemTempDirectory "kyyn-evolution-metada
   currentTree <- runEff (runFailure (runFileSystemIO scope (FS.readTree liveScope))) >>= right
   current <- right $ runPureEff . runDhallHandling . runWorkspaceStore $ readWorkspaceSnapshot currentTree
   assert "State transition altered captured inputs" (Workspace.matchesCapturedInputs initialSnapshot current)
-  let WorkspaceSnapshot _ b t c ns = initialSnapshot
-      WorkspaceSnapshot _ b' t' c' ns' = current
-  assert "State transition changed files" ((b,t,c,ns) == (b',t',c',ns'))
+  let WorkspaceSnapshot _ t c ns = initialSnapshot
+      WorkspaceSnapshot _ t' c' ns' = current
+  assert "State transition changed files" ((t,c,ns) == (t',c',ns'))
   beforeFailure <- Bytes.readFile livePath
   let failure = StorageUnavailable (StorageDiagnostic ReplaceFile livePath "Injected transition failure")
   failed <- lifecycle (Just failure) (markDraft workspace)
   afterFailure <- Bytes.readFile livePath
   assert "Failed replacement changed metadata" (failed == Left failure && beforeFailure == afterFailure)
   runLifecycle (markDraft workspace) >>= right
-  writeWorkspace "e001" (WorkspaceSnapshot (WorkspaceManifest base "Accepted locally" "Reason" Accepted AdHoc) b t c ns)
+  writeWorkspace "e001" (WorkspaceSnapshot (WorkspaceManifest base "Accepted locally" "Reason" Accepted AdHoc) t c ns)
   repaired <- Bytes.readFile livePath
   let old = Bytes.concat ["(",repaired,").{before, name, explanation, state}"]
       report = EvolutionReport [] []
-  bytes <- right $ runPureEff $ runDhallHandling (encodeEvolutionRecord identity contract contract report)
+  bytes <- right $ runPureEff $ runDhallHandling (encodeSnapshotArchive identity contract [] [])
   Bytes.writeFile reportPath bytes
   Bytes.writeFile livePath old
   _ <- process ["add","nested/kb/evolutions"]
@@ -142,7 +141,7 @@ evolutionMetadataTests contract = withSystemTempDirectory "kyyn-evolution-metada
   assert "Archived report requires history/cache/compiler" (inspected == (summary,Just report))
   expectDiagnostic (markReady workspace)
   expectDiagnostic (markDraft workspace)
-  wrongOwner <- right $ runPureEff $ runDhallHandling (encodeEvolutionRecord secondId contract contract report)
+  wrongOwner <- right $ runPureEff $ runDhallHandling (encodeSnapshotArchive secondId contract [] [])
   Bytes.writeFile reportPath wrongOwner
   expectDiagnostic (inspectEvolution workspace)
   Bytes.writeFile reportPath "True"

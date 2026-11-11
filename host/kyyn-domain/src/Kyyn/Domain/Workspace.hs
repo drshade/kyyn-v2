@@ -23,7 +23,6 @@ data WorkspaceManifest = WorkspaceManifest
 
 data WorkspaceSnapshot = WorkspaceSnapshot
   { manifest :: WorkspaceManifest
-  , beforeSource :: FileTree
   , targetCode :: FileTree
   , changeSource :: FileTree
   , notes :: FileTree
@@ -38,16 +37,16 @@ projectWorkspace manifest tree
       Left "Target recipes must be produced by the evolution"
   | any (\(p,_) -> "target/recipes/" `isPrefixOf` relativeName p) (files tree) =
       Left "Target recipe state must be produced by the evolution"
-  | otherwise = WorkspaceSnapshot manifest <$> subtree "before/" <*> subtree "target/" <*>
+  | otherwise = WorkspaceSnapshot manifest <$> subtree "target/" <*>
       subtree "change/" <*> subtree "notes/"
   where
     targetFacts = "target/" ++ relativeName factsLocation
-    allowed p = p `elem` ["manifest.dhall", "result.dhall"] || any (`isPrefixOf` p) ["before/", "target/", "change/", "notes/"]
+    allowed p = p `elem` ["manifest.dhall", "result.dhall"] || any (`isPrefixOf` p) ["target/", "change/", "notes/"]
     subtree prefix = traverse (\(p,b) -> (,b) <$> relativePath p)
       [(p,b) | (path,b) <- files tree, Just p <- [stripPrefix prefix (relativeName path)]] >>= fileTree
 
 matchesCapturedInputs :: WorkspaceSnapshot -> WorkspaceSnapshot -> Bool
 matchesCapturedInputs left right = inputs left == inputs right
   where
-    inputs (WorkspaceSnapshot (WorkspaceManifest revision name explanation _ kind) before target change _) =
-      (revision, name, explanation, kind, before, target, change)
+    inputs (WorkspaceSnapshot (WorkspaceManifest revision name explanation _ kind) target change _) =
+      (revision, name, explanation, kind, target, change)

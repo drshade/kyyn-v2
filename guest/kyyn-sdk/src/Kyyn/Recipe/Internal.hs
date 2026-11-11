@@ -4,6 +4,7 @@ module Kyyn.Recipe.Internal
   , storeRecipe, readRecipeState
   ) where
 
+import Kyyn.Types.StoredShape (StoredShape)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Text.JSON.Types (JSValue)
@@ -17,7 +18,7 @@ import Kyyn.Types.Fact (Fact)
 data KnowledgeBase root = KnowledgeBase root [Fact StoredRecipe] deriving (Eq, Show)
 
 -- | A generated binding identifying and encoding a recipe's state type.
-data RecipeType state = RecipeType Text Text
+data RecipeType state = RecipeType Text Text StoredShape
   (state -> JSValue) (JSValue -> Either String state)
 
 -- | A recipe's instructions or flow and its typed state binding.
@@ -26,16 +27,16 @@ data RecipeDefinition state = RecipeDefinition Recipe (RecipeType state)
 data StoredRecipe = StoredRecipe Recipe Text Text JSValue deriving (Eq, Show)
 
 storeRecipe :: RecipeDefinition state -> state -> StoredRecipe
-storeRecipe (RecipeDefinition method (RecipeType name identity encode _)) state =
+storeRecipe (RecipeDefinition method (RecipeType name identity _ encode _)) state =
   StoredRecipe method name identity (encode state)
 
 readRecipeState :: RecipeId -> RecipeType state -> StoredRecipe
   -> Either EvolutionFailure state
-readRecipeState (RecipeId ident) (RecipeType name identity _ decode)
+readRecipeState (RecipeId ident) (RecipeType name identity _ _ decode)
     (StoredRecipe _ actualName actualIdentity value)
   | identity /= actualIdentity = failure
       "recipe.state-type" ("Expected state type " <> name <> "; found " <> actualName <>
-        ". Use the matching Before state binding to migrate this recipe.")
+        ". Use preparation to decode and migrate the stored recipe state.")
   | otherwise = either (failure "recipe.state-invalid" . Text.pack) Right (decode value)
   where
     failure code message = Left (EvolutionFailure

@@ -1,21 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE GADTs, EmptyDataDecls, EmptyCase #-}
-module Kyyn.Runtime.Evolution (NoRequests, executeEvolution, evolutionReplyValue, encodeEvolutionReply, knowledgeBaseCodec) where
-
-import Kyyn.Evolution.Internal (EvolutionOutput(..), StepObservation(..), RecordedRoot(..))
-import Kyyn.Types.Evolution (EvolutionFailure(..), Rationale(..))
-import Kyyn.Types.Evidence (EvidenceRef(..))
+module Kyyn.Runtime.Evolution (knowledgeBaseCodec, rejectionValue) where
+import Kyyn.Types.Evolution (EvolutionFailure(..))
 import Kyyn.Types.KnowledgeBase (Recipe(..), FlowEntryRef(..))
 import Kyyn.Recipe.Internal (KnowledgeBase(..), StoredRecipe(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.Diagnostic (ValidationReport(..))
-import Kyyn.Types.Program (Program, interpretProgram)
-import Data.Functor.Identity (runIdentity)
+import Text.JSON.Types (JSValue)
 import Kyyn.Runtime.Json
 import Kyyn.Runtime.Validation (encodeReportValue)
-import Text.JSON.Types (JSValue(JSArray))
 
-data NoRequests a
+rejectionValue :: EvolutionFailure -> Either String JSValue
+rejectionValue (EvolutionFailure diagnostics) = tagged "Rejected" . Just <$> encodeReportValue (ValidationReport diagnostics)
 
 knowledgeBaseCodec :: Codec a -> Codec (KnowledgeBase a)
 knowledgeBaseCodec valueCodec = Codec encode decode
@@ -57,33 +52,3 @@ knowledgeBaseCodec valueCodec = Codec encode decode
           values <- fields ["flow"] contents
           ClosedAgent . FlowEntryRef <$> field "flow" textCodec values
         _ -> Left "Expected OpenAgent or ClosedAgent recipe"
-
-executeEvolution :: Codec a -> Codec b
-  -> (a -> Program NoRequests (Either EvolutionFailure (EvolutionOutput b)))
-  -> String -> Either String JSValue
-executeEvolution beforeCodec afterCodec selected input = do
-  before <- parseValue input >>= decodeWith beforeCodec
-  evolutionReplyValue afterCodec (runIdentity (interpretProgram (\operation -> case operation of {}) (selected before)))
-
-encodeEvolutionReply :: Codec a -> Either EvolutionFailure (EvolutionOutput a) -> Either String String
-encodeEvolutionReply codec result = evolutionReplyValue codec result >>= printValue
-
-evolutionReplyValue :: Codec a -> Either EvolutionFailure (EvolutionOutput a) -> Either String JSValue
-evolutionReplyValue codec result = do
-  value <- case result of
-    Left (EvolutionFailure diagnostics) -> do
-      report <- encodeReportValue (ValidationReport diagnostics)
-      pure (tagged "Rejected" (Just report))
-    Right (EvolutionOutput output steps) -> pure (tagged "Succeeded" (Just (record
-      [("after", encodeWith codec output), ("steps", JSArray (map encodeStep steps))])))
-  pure value
-  where
-    text = encodeWith textCodec
-    encodeRoot (RecordedRoot contract value) = record [("contract",text contract),("value",value)]
-    encodeStep (StepObservation rationale before after) = record
-      [("rationale",encodeRationale rationale),("before",encodeRoot before),("after",encodeRoot after)]
-    encodeRationale (Rationale explanation evidence) = record
-      [("explanation",text explanation),("evidence",JSArray (map encodeEvidence evidence))]
-    encodeEvidence (EvidenceRef producer connector source references) = record
-      [("producer",text producer),("connector",text connector),("source",text source),
-       ("externalReferences",encodeWith (listCodec textCodec) references)]

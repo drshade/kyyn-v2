@@ -152,19 +152,16 @@
           '';
           recipeEvolutionSource = p.pkgs.runCommand "kyyn-recipe-evolution-source" { } ''
             mkdir -p "$out"
-            cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
+            cp -R ${./tools/fixtures/target-evolution-guest}/. "$out/"
             chmod -R u+w "$out"
-            rm -rf "$out/src"
-            cp -R "$out/.kyyn-before" "$out/src"
             cp -R ${./tools/fixtures/recipe-evolution-guest}/. "$out/"
-            sed -i 's/After.Root/Before.Root/g' "$out/kb.dhall"
-            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"None"}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' '{"selection":"evolution","details":{"recipes":[{"kind":"flow","name":"Flows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"Flows.review"}},"modules":{"tag":"None"}}}' > "$out/.kyyn-build.json"
           '';
           frozenApiSource = p.pkgs.runCommand "kyyn-frozen-api-source" { } ''
             mkdir -p "$out"
             cp -R ${recipeEvolutionSource}/. "$out/"
             chmod -R u+w "$out"
-            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"BeforeFlows.review"}},"modules":{"tag":"Some","value":["KyynFrozenProposal"]}}}' > "$out/.kyyn-build.json"
+            printf '%s\n' '{"selection":"evolution","details":{"recipes":[{"kind":"flow","name":"Flows.review"}],"recipe":{"tag":"Some","value":{"kind":"flow","name":"Flows.review"}},"modules":{"tag":"Some","value":["KyynFrozenProposal"]}}}' > "$out/.kyyn-build.json"
             printf '%s\n' 'deliberately invalid proposal data; discovery must not decode it' > "$out/.kyyn-change/proposal.dhall"
             printf '%s\n' 'module Evolution where' 'import KyynFrozenProposal' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
           '';
@@ -174,13 +171,6 @@
             chmod -R u+w "$out"
             printf '%s\n' '{"selection":"rootApi","selected":{"tag":"None"}}' > "$out/.kyyn-build.json"
             printf '%s\n' 'module Unfinished where' 'unfinished =' > "$out/src/Unfinished.hs"
-          '';
-          evolutionApiSource = p.pkgs.runCommand "kyyn-evolution-api-source" { } ''
-            mkdir -p "$out"
-            cp -R ${./tools/fixtures/evolution-guest}/. "$out/"
-            chmod -R u+w "$out"
-            printf '%s\n' '{"selection":"evolution","details":{"beforeType":"Before.Root","beforeMetadata":"Annotations.metadata","beforeRecipes":[{"kind":"state","name":"()"},{"kind":"state","name":"BeforeProgress.State"},{"kind":"flow","name":"BeforeFlows.review"}],"recipe":{"tag":"None"},"modules":{"tag":"Some","value":[]}}}' > "$out/.kyyn-build.json"
-            printf '%s\n' 'module Evolution where' 'unfinished =' > "$out/.kyyn-change/Evolution.hs"
           '';
           outputSource = p.pkgs.runCommand "kyyn-output-source" { } ''
             mkdir -p "$out"
@@ -240,8 +230,7 @@
           guest-tool = self.lib.mkGuest { inherit system; src = toolSource; };
           guest-root-api = self.lib.mkGuest { inherit system; src = rootApiSource; };
           guest-recipe-evolution = self.lib.mkGuest { inherit system; src = recipeEvolutionSource; };
-          guest-evolution-api = self.lib.mkGuest { inherit system; src = evolutionApiSource; };
-          guest-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/evolution-guest; };
+          guest-target-evolution = self.lib.mkGuest { inherit system; src = ./tools/fixtures/target-evolution-guest; };
           guest-recipe = self.lib.mkGuest { inherit system; src = recipeSource; };
           guest-output = self.lib.mkGuest { inherit system; src = outputSource; };
           guest-api-tools = self.lib.mkGuest { inherit system; src = toolApiSource; };

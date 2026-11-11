@@ -45,9 +45,9 @@ applyEvolution captured = do
   evaluated <- evaluateEvolution captured
   case evaluated of
     Left rejection -> pure (Left rejection)
-    Right (EvaluatedEvolution (CapturedEvolution context@(EvolutionContext _ _ _
-        (WorkspaceSnapshot _ _ target _ _)) _ _ _)
-        (After schema) value report) -> do
+    Right (EvaluatedEvolution capturedValue (After schema) value report) -> do
+      let CapturedEvolution context _ _ = capturedValue
+          EvolutionContext _ _ _ (WorkspaceSnapshot _ target _ _) = context
       materialized <- materializeRoot schema target value
       case materialized of
         Left diagnostics -> pure (Left (ProposedCodeRejected diagnostics))

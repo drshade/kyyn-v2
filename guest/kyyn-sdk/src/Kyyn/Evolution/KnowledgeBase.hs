@@ -6,6 +6,7 @@ module Kyyn.Evolution.KnowledgeBase
   ) where
 
 import Control.Monad.Trans.State.Strict (StateT(..))
+import Kyyn.Types.StoredShape (StoredShape(..))
 import Data.Text (Text)
 import Text.JSON.Types (JSValue(..), toJSObject, fromJSObject)
 import Kyyn.Recipe.Internal
@@ -38,7 +39,7 @@ openRecipe state instructions = RecipeDefinition (OpenAgent instructions) state
 unitRecipeType :: RecipeType ()
 unitRecipeType = RecipeType "()"
   (Contract.fingerprint (Contract.contractIdentity Contract.UnitDescription (SchemaMetadata [] [] [])))
-  (\() -> JSObject (toJSObject [])) decode
+  (StoredRecord []) (\() -> JSObject (toJSObject [])) decode
   where
     decode (JSObject fields) | null (fromJSObject fields) = Right ()
     decode _ = Left "Expected unit state"

@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, EmptyCase, DerivingStrategies, DeriveGeneric #-}
 module EmptyEditProvider (Root(..), RootEdit, applyRootEdit) where
 
-import Kyyn.Build.Edits (rootEdits)
+import Kyyn.Build.Edits (rootEdits, targetFields)
 import qualified Kyyn.Edit as Edit
 
 -- The initial KB has a nullary Root and no collections. Its generated edit
@@ -9,3 +9,5 @@ import qualified Kyyn.Edit as Edit
 data Root = Root
 
 $(rootEdits ''Root [])
+
+$(targetFields ''Root [])

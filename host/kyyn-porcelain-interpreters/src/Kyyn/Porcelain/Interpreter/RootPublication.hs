@@ -22,7 +22,8 @@ runRootPublication
   => Eff (RootPublication : es) a -> Eff es a
 runRootPublication = interpret $ \_ -> \case
   AcceptEvolution branch metadata candidate@(Candidate context@(EvolutionContext kb@(KnowledgeBase repository _)
-      identity (Before expected _) _) _ root) -> fmap (either id id) . runExceptT $ do
+      identity selectedBefore _) _ root) -> fmap (either id id) . runExceptT $ do
+    let expected = beforeRevision selectedBefore
     state <- material (EvolutionStore.readEvolutionState (EvolutionWorkspace kb identity))
     unless (state == Ready) (refuse (NotReady state))
     requireBranch repository branch

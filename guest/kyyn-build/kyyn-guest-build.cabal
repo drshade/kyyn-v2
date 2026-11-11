@@ -49,7 +49,7 @@ test-suite edit-bindings
   build-depends: base >=4.20 && <4.21, kyyn-guest-build, kyyn-sdk, kyyn-sdk:runtime, kyyn-types,
     agentic ==0.2.1.0, template-haskell, text, transformers
 
-test-suite source-merging
+test-suite source-inventory
   type: exitcode-stdio-1.0
   hs-source-dirs: test
   main-is: SourceTests.hs

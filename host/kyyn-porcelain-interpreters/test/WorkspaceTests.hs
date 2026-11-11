@@ -25,11 +25,10 @@ workspaceTests = do
     Left _ -> pure ()
     Right _ -> fail "Active workspace accepted an unsupported manifest field"
   revision <- right (gitRevision (replicate 40 'a'))
-  before <- tree [("SchemaV1.hs", "before source")]
   target <- tree [("kb.dhall", "unfinished target manifest"), ("src/SchemaV2.hs", "unfinished target source")]
   change <- tree [("Evolution.hs", "unfinished transformation"), ("inputs.csv", "a,b")]
   notes <- tree [("review.md", "please review")]
-  unless (snapshot == WorkspaceSnapshot (WorkspaceManifest revision "September" "Import sales" Draft AdHoc) before target change notes)
+  unless (snapshot == WorkspaceSnapshot (WorkspaceManifest revision "September" "Import sales" Draft AdHoc) target change notes)
     (fail "Workspace projection changed manifest, bytes or relative paths")
   let compareWith entries' expected = do
         changed <- tree entries' >>= right . readSnapshot
@@ -57,12 +56,12 @@ workspaceTests = do
         , manifest "a" "Draft" "October" "Import sales"
         , manifest "a" "Draft" "September" "Correct sales"
         ] $ \edited -> compareWith (replace "manifest.dhall" edited) False
-  forM_ ["before/SchemaV1.hs", "target/kb.dhall", "target/src/SchemaV2.hs", "change/Evolution.hs", "change/inputs.csv"] $ \path -> do
+  forM_ ["target/kb.dhall", "target/src/SchemaV2.hs", "change/Evolution.hs", "change/inputs.csv"] $ \path -> do
     compareWith (replace path "same type, changed contents") False
     compareWith (filter ((/= path) . fst) entries) False
-  forM_ ["before/Helper.hs", "target/config/plugin.dhall", "change/new.csv"] $ \path ->
+  forM_ ["target/config/plugin.dhall", "change/new.csv"] $ \path ->
     compareWith ((path, "new input") : entries) False
-  forM_ ["target/facts/root.dhall", "target/facts", "target/recipes.dhall", "target/recipes/mail/state.dhall", "random/file", "notes", "result.dhall/child"] $ \path ->
+  forM_ ["before/Schema.hs", "target/facts/root.dhall", "target/facts", "target/recipes.dhall", "target/recipes/mail/state.dhall", "random/file", "notes", "result.dhall/child"] $ \path ->
     tree ((path, "unexpected") : filter ((/= "notes/review.md") . fst) entries) >>= rejected . readSnapshot
   forM_ ["True", "./other.dhall", Bytes.pack [255], manifest "0" "Draft" "September" "Import sales",
     manifest "a" "Unknown" "September" "Import sales"] $ \bad ->
@@ -72,9 +71,9 @@ workspaceTests = do
   draft <- tree [("manifest.dhall", manifest "a" "Draft" "New" "Work in progress")]
   _ <- right (readSnapshot draft)
   illegalTarget <- tree [("facts/root.dhall", "parallel facts")]
-  let WorkspaceSnapshot definition beforeFiles _ changeFiles noteFiles = snapshot
+  let WorkspaceSnapshot definition _ changeFiles noteFiles = snapshot
   rejected (runPureEff (runDhallHandling (runWorkspaceStore
-    (encodeWorkspaceSnapshot (WorkspaceSnapshot definition beforeFiles illegalTarget changeFiles noteFiles)))))
+    (encodeWorkspaceSnapshot (WorkspaceSnapshot definition illegalTarget changeFiles noteFiles)))))
   putStrLn "Workspace manifest, projection and captured-input matching checks passed."
   where
     readSnapshot = runPureEff . runDhallHandling . runWorkspaceStore . readWorkspaceSnapshot
@@ -83,7 +82,6 @@ workspaceTests = do
 entries :: [(FilePath, Bytes.ByteString)]
 entries =
   [ ("manifest.dhall", manifest "a" "Draft" "September" "Import sales")
-  , ("before/SchemaV1.hs", "before source")
   , ("target/kb.dhall", "unfinished target manifest")
   , ("target/src/SchemaV2.hs", "unfinished target source")
   , ("change/Evolution.hs", "unfinished transformation")

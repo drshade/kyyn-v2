@@ -8,14 +8,22 @@ import Effectful.Dispatch.Dynamic (interpret)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.FileTree (files)
+import Kyyn.Domain.Git (TreePath(..))
+import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
+import Kyyn.Domain.Workspace (WorkspaceSnapshot(..), WorkspaceManifest(..), EvolutionKind(..))
+import Kyyn.Domain.Root (factsLocation, recipeStatesLocation)
+import Kyyn.Domain.Recipe (RecipeDefinition(..))
+import Kyyn.Types.Fact (Fact(..), FactId(..))
+import Kyyn.Types.KnowledgeBase (FlowEntryRef(..), RecipeId(..))
+import Kyyn.Plumbing.Protocol.EvolutionSources (captureEvolutionSources)
+import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Domain.Guest (checkedModules)
 import Kyyn.Domain.GuestApi (WorkspaceCatalogue(..), ModuleDescription(..), ApiEntry(..), ApiOrigin(..), ApiSelection(..))
 import Kyyn.Plumbing.Capability.Git (Git)
 import Kyyn.Plumbing.Capability.GuestCompilation
 import Kyyn.Plumbing.Capability.GuestInspection (GuestInspection, describeGuest)
-import Kyyn.Porcelain.Protocol.EvolutionPreparation (prepareEvolutionDescription, prepareEvolutionApi)
-import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore)
-import Kyyn.Porcelain.Capability.RootStore (RootStore)
+import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore, readWorkspace)
+import Kyyn.Porcelain.Capability.RootStore (RootStore, rootLocation, readRootRecipes)
 import Kyyn.Porcelain.Capability.WorkspaceApi (WorkspaceApi(..))
 
 runWorkspaceApi :: (EvolutionStore :> es, RootStore :> es, Git :> es, GuestCompilation :> es, GuestInspection :> es)
@@ -31,16 +39,30 @@ runWorkspaceApi = interpret $ \_ operation -> case operation of
     program <- ExceptT (compileGuest source)
     described <- ExceptT (describeGuest program)
     pure [ApiEntry (origin entry.moduleSource) entry | entry <- checkedModules described]
-  InspectWorkspaceApi workspace selection -> runExceptT $ case selection of
-    ListApiModules -> do
-      (PreparedEvolution (EvolutionContext _ _ (Before revision _) _) _ _ _,described) <-
-        ExceptT (prepareEvolutionDescription workspace)
-      pure (WorkspaceCatalogue workspace revision (filter public (checkedModules described)))
-    _ -> do
-      let selected = case selection of InspectApiModule name -> name; InspectApiSymbol name -> name
-      (revision,described) <- ExceptT (prepareEvolutionApi workspace [Text.pack selected])
-      pure (WorkspaceCatalogue workspace revision (checkedModules described))
+  InspectWorkspaceApi workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) selection -> runExceptT $ do
+    WorkspaceSnapshot (WorkspaceManifest revision _ _ _ kind) target change _ <- ExceptT (readWorkspace workspace)
+    let names = case selection of
+          ListApiModules -> []
+          InspectApiModule name -> [Text.pack name]
+          InspectApiSymbol name -> [Text.pack name]
+    path <- checked (rootLocation kb)
+    accepted <- ExceptT (Git.readTreeExcluding repository revision (Subtree path) [factsLocation,recipeStatesLocation])
+    definitions <- ExceptT (readRootRecipes accepted)
+    let reference (OpenRecipe _ name) = OpenState (Text.pack name)
+        reference (ClosedRecipe (FlowEntryRef name)) = ClosedFlow name
+    selected <- case kind of
+      AdHoc -> pure Nothing
+      RecipeBased (RecipeId name) -> case [reference recipe | Fact (FactId identity) recipe <- definitions, name == identity] of
+        [value] -> pure (Just value)
+        _ -> throwE [errorDiagnostic "recipe.unknown" "The selected recipe must exist in the stored snapshot"]
+    source <- checked (captureEvolutionSources (EvolutionSelection [reference recipe | Fact _ recipe <- definitions] selected (Just names)) target change)
+    program <- ExceptT (compileGuest source)
+    described <- ExceptT (describeGuest program)
+    pure (WorkspaceCatalogue workspace revision (case selection of
+      ListApiModules -> filter public (checkedModules described)
+      _ -> checkedModules described))
   where
+    checked value = either (throwE . pure . errorDiagnostic "evolution.capture") pure value
     origin path
       | Text.null path = SdkOrigin
       | ".kyyn-generated/" `Text.isPrefixOf` path = GeneratedOrigin

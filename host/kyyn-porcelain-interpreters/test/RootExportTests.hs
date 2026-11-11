@@ -17,7 +17,8 @@ import Kyyn.Domain.Git
 import Kyyn.Domain.Path
 import Kyyn.Domain.Root
 import Kyyn.Domain.Evolution
-import Kyyn.Domain.EvolutionReport (EvolutionReport(..), StepReport(..))
+import Kyyn.Domain.SnapshotReport (SnapshotStep(..), StepOrigin(..))
+import Kyyn.Domain.EvolutionReport (EvolutionReport(..))
 import Kyyn.Domain.KnowledgeBase (KnowledgeBase(..))
 import Kyyn.Domain.Workspace
 import Kyyn.Types.Evolution (Rationale(..))
@@ -28,7 +29,7 @@ import qualified Kyyn.Plumbing.Capability.ProcessExecution as Process
 import Kyyn.Plumbing.Interpreter.DhallHandling
 import Kyyn.Plumbing.Interpreter.Failure
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
-import Kyyn.Plumbing.Protocol.EvolutionRecord (decodeEvolutionRecord)
+import Kyyn.Plumbing.Protocol.SnapshotArchive (decodeSnapshotArchive)
 import Kyyn.Plumbing.Interpreter.Git
 import Kyyn.Plumbing.Interpreter.ProcessExecution
 import Kyyn.Porcelain.Capability.RootExecution
@@ -90,11 +91,10 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
   parent <- readGit (resolveRevision repo "HEAD")
   workspaceId <- either fail pure (evolutionId "e001")
   let kb = KnowledgeBase repo (Subtree (path "kb"))
-      beforeSource = tree [(path "Schema.hs","captured before source")]
       changeSource = tree [(path "Evolution.hs","captured change source")]
-      captured = WorkspaceSnapshot (WorkspaceManifest parent "Export" "Fixed proposal" Ready AdHoc) beforeSource completeCode changeSource (tree [])
-      report = EvolutionReport [] [StepReport (Rationale "Retain this explanation" []) []]
-      candidate = Candidate (EvolutionContext kb workspaceId (Before parent contract) captured) report checked
+      captured = WorkspaceSnapshot (WorkspaceManifest parent "Export" "Fixed proposal" Ready AdHoc) completeCode changeSource (tree [])
+      report = EvolutionReport [] [SnapshotStep TargetProjection (Rationale "Retain this explanation" []) []]
+      candidate = Candidate (EvolutionContext kb workspaceId (Before parent) captured) report checked
   createDirectoryIfMissing True (directory </> "kb/evolutions/e001/notes")
   Bytes.writeFile (directory </> "kb/evolutions/e001/notes/review.md") "later review note"
   archiveResult <- runEff . runFailure . runFileSystemIO scope . noGitExport
@@ -120,8 +120,9 @@ rootExportTests original@(Root contract facts code _) = withSystemTempDirectory 
   reopenedArchive <- readGit (readTreeAt repo revision archivePrefix)
   unless (reopenedArchive == archiveFiles) (fail "Committed archive differed from exported capture/report/notes")
   recordBytes <- maybe (fail "Committed archive lacks result.dhall") pure (lookup (path "result.dhall") (files reopenedArchive))
-  decodedRecord <- either fail pure (runPureEff (runDhallHandling (decodeEvolutionRecord recordBytes))) >>= either (fail . show) pure
-  unless (decodedRecord == (workspaceId,contract,contract,report)) (fail "Committed record changed contracts/report")
+  decodedRecord <- either (fail . show) pure (runPureEff (runDhallHandling (decodeSnapshotArchive recordBytes)))
+  let EvolutionReport plugins steps = report
+  unless (decodedRecord == (workspaceId,contract,plugins,steps)) (fail "Committed record changed contracts/report")
   opened <- runEff . runFailure . runProcessExecutionIO . runGit executable [] . schemaMock (rootSchema contract)
     . runDhallHandling . runRootStore . noGuest . runRootOpening $ openCapturedRoot reopened
   unless (opened == Right (Right (validatedValue checked))) (fail "Reopened Root differs from the validated input")

@@ -104,12 +104,10 @@ reconcileStep (RecipeInput (RootV2.Root facts) mode runs) = do
   fs.writeFileSync(path.join(setup.path, 'change/Evolution.hs'), `{-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
-import qualified Kyyn.Workspace.After.RecipeFlows.Tasks as Tasks
-import qualified RootV1 as Before
+import qualified Kyyn.Workspace.Target.RecipeFlows.Tasks as Tasks
 import qualified RootV2 as After
-evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
-evolution = evolve (Rationale "Track tasks" []) (onFacts (\\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Teach recipes" []) (do
+evolution :: Evolution After.Root
+evolution = prepare (pure ()) $ edit (Rationale "Teach recipes" []) (do
     createRecipe (RecipeId "open") (openRecipe unitRecipeType "Use an external agent") ()
     createRecipe (RecipeId "sync") Tasks.reconcile 0
     createRecipe (RecipeId "untouched") Tasks.reconcile 100)

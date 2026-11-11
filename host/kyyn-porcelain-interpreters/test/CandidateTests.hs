@@ -10,17 +10,15 @@ import qualified Kyyn.Domain.Recipe as Value
 
 import Control.Monad (unless, forM_)
 import Data.Aeson (Value(..), object, (.=))
-import Data.Aeson.Types (parseEither)
 import qualified Data.Aeson.KeyMap as KeyMap
 import qualified Data.ByteString as Bytes
 import qualified Data.ByteString.Char8 as Char8
-import Data.Text (pack)
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import Effectful (Eff, IOE, (:>), runEff, runPureEff)
 import Effectful.Dispatch.Dynamic (interpret, send)
 import Kyyn.Domain.Contract
-import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldStyle(..), FieldDescription(..), CaseDescription(..), ScalarKind(..))
+import Kyyn.Types.Contract (Description(..), TypeIdentity(..), FieldDescription(..), ScalarKind(..))
 import Kyyn.Domain.Diagnostic
 import Kyyn.Domain.Evolution
 import Kyyn.Domain.EvolutionReport
@@ -36,15 +34,17 @@ import Kyyn.Types.Evolution (Rationale(..))
 import Kyyn.Types.Evidence (EvidenceRef(..))
 import Kyyn.Types.Fact (Fact(..), FactId(..))
 import Kyyn.Types.SchemaMetadata
-import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling, encodeValue, decodeValue)
+import Kyyn.Plumbing.Capability.DhallHandling (DhallHandling)
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.Git as Git
 import Kyyn.Plumbing.Capability.FileSystem (FileSystem(..))
 import Kyyn.Plumbing.Interpreter.DhallHandling (runDhallHandling)
 import Kyyn.Plumbing.Interpreter.Failure (runFailure)
 import Kyyn.Plumbing.Interpreter.FileSystem (runFileSystemIO)
-import Kyyn.Plumbing.Protocol.EvolutionRecord (encodeEvolutionRecord, decodeEvolutionRecord)
-import Kyyn.Plumbing.Protocol.EvolutionRecord.Contract (snapshotShape, snapshotValue, restoreSnapshot)
+import Kyyn.Plumbing.Protocol.SnapshotArchive (decodeSnapshotArchive)
+import Kyyn.Domain.StoredSnapshot (StoredSnapshot(..), RecordedValue(..))
+import Kyyn.Domain.SnapshotReport (SnapshotStep(..), StepOrigin(..), SnapshotChange(..))
+import qualified Kyyn.Domain.DataType as Shape
 import Kyyn.Porcelain.Capability.Evolution (applyEvolution, checkEvolution)
 import Kyyn.Porcelain.Capability.EvidenceStore (EvidenceStore)
 import Kyyn.Porcelain.Capability.EvolutionAuthoring (EvolutionAuthoring(..))
@@ -67,30 +67,26 @@ type StoreEffects = '[EvidenceStore, EvolutionStore, Git.Git, WorkspaceStore, Ro
 
 candidateTests :: RootContract -> FileTree -> IO ()
 candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \directory -> do
-  contractDescriptions schema
   scope <- right (directoryScope directory)
   revision <- right (gitRevision (replicate 40 'a'))
   identity <- right (evolutionId "e001")
   prefix <- Subtree <$> right (relativePath "nested/kb")
   empty <- right (fileTree [])
   code <- right (fileTree [(either error id (relativePath "src/Schema.hs"), "captured source λ")])
-  beforeFiles <- right (fileTree [(either error id (relativePath "Before.hs"),"captured Before")])
   changeFiles <- right (fileTree [(either error id (relativePath "Evolution.hs"),"captured entry")])
   capturedNotes <- right (fileTree [(either error id (relativePath "old.md"),"old review note")])
   let kb = KnowledgeBase (Repository scope) prefix
       location = EvolutionWorkspace kb identity
-      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) beforeFiles code changeFiles capturedNotes
-      context = EvolutionContext kb identity (Before revision schema) snapshot
-      captured = CapturedEvolution context (Root schema facts code []) []
-        (SourceRoot schema code (RootDefinition "Schema.Root" "Schema.metadata" "Validate.validate" [] [] beforeFiles []) [])
+      snapshot = WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) code changeFiles capturedNotes
+      context = EvolutionContext kb identity (Before revision) snapshot
+      captured = CapturedEvolution context (StoredSnapshot [] [] []) code
       factValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("one" :: String)]]
       previousValue = object ["id" .= ("a" :: String), "value" .= object ["title" .= ("previous" :: String)]]
       recipeValues = [Fact (FactId "syncTodos") (unitRecipe (KB.OpenAgent "Read and explain λ"))]
       report = EvolutionReport [PluginChange (either error id (pluginName "local-file")) Nothing
         (Just (PluginOrigin (LocalRepository scope) WholeTree revision)) [either error id (relativePath "source/README.md")]]
-        [StepReport (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
-          [FactChange "todos" (FactId "a") (Just (RecordedFact schema previousValue)) (Just (RecordedFact schema factValue))],
-         StepReport (Rationale "Teach recipe" []) [RecipeChange (FactId "syncTodos") Nothing (Just (unitRecipe (KB.OpenAgent "Read and explain λ")))]]
+        [SnapshotStep TargetProjection (Rationale "Keep rationale λ" [EvidenceRef "graph" "mail" "inbox" ["https://example.test/mail/1"]])
+          [SnapshotFactChange "todos" (FactId "a") (Just (recordedFact previousValue)) (Just (recordedFact factValue))]]
       root = Root schema facts code recipeValues
       candidate = Candidate context report root
       execute :: Eff StoreEffects a -> IO (Either OperationalFailure a)
@@ -131,15 +127,10 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
     Right (Left (_:_)) -> pure ()
     other -> fail ("Malformed captured manifest lost its decode diagnostic: " ++ show other)
   Bytes.writeFile capturedManifest currentManifest
-  case runPureEff (runDhallHandling (decodeEvolutionRecord "{ content = True }")) of
+  case runPureEff (runDhallHandling (decodeSnapshotArchive "{ content = True }")) of
     Left _ -> pure ()
     other -> fail ("Malformed archive did not return its decode error: " ++ show other)
-  let fingerprint = pack (contractFingerprint (contractId (rootSchema schema)))
-      replace from to = Text.encodeUtf8 (Text.replace from to (Text.decodeUtf8 metadata))
-  Bytes.writeFile metadataPath (replace fingerprint "different-contract")
-  execute (loadCandidate location) >>= \case
-    Right (Left (_:_)) -> pure ()
-    other -> fail ("Changed contract did not report integrity failure: " ++ show other)
+  let replace from to = Text.encodeUtf8 (Text.replace from to (Text.decodeUtf8 metadata))
   Bytes.writeFile metadataPath "{"
   execute (loadCandidate location) >>= storageRejected
   Bytes.writeFile metadataPath (replace "\"one\"" "True")
@@ -164,12 +155,11 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   let migratedValue = case checked of
         CheckedValue _ (Object values) -> Object (KeyMap.insert "confirmed" (Bool True) values)
         _ -> error "Expected record root value"
-      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft AdHoc) empty migratedCode empty empty
-      migratedContext = EvolutionContext kb migratedId (Before revision schema) migratedSnapshot
-      migratedCapture = CapturedEvolution migratedContext (Root schema facts code []) []
-        (SourceRoot migratedSchema migratedCode (RootDefinition "Migrated.Root" "Migrated.metadata" "Validate.validate" [] [] empty []) [])
-      migratedReport = EvolutionReport [] [StepReport (Rationale "New schema" [])
-        [FactChange "todos" (FactId "a") (Just (RecordedFact schema factValue)) (Just (RecordedFact migratedSchema factValue))]]
+      migratedSnapshot = WorkspaceSnapshot (WorkspaceManifest revision "Migration" "Add confirmation" Draft AdHoc) migratedCode empty empty
+      migratedContext = EvolutionContext kb migratedId (Before revision) migratedSnapshot
+      migratedCapture = CapturedEvolution migratedContext (StoredSnapshot [] [] []) code
+      migratedReport = EvolutionReport [] [SnapshotStep TargetProjection (Rationale "New schema" [])
+        [SnapshotFieldChange "confirmed" Nothing (Just (RecordedValue (Shape.Scalar Shape.BoolScalar) (Bool True)))]]
   migratedChecked <- runEff . runDhallHandling . runRootStore $ checkRootValue migratedSchema migratedValue
   migratedInput <- right migratedChecked
   migrated <- execute (evaluationMock migratedCapture
@@ -225,13 +215,14 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       unless (archivePrefix == expectedPrefix) (fail "Archive export escaped its KB/workspace prefix")
       let entries = [(relativeName p,b) | (p,b) <- files exported]
       recordBytes <- maybe (fail "Missing archive record") pure (lookup "result.dhall" entries)
-      decoded <- right (runPureEff (runDhallHandling (decodeEvolutionRecord recordBytes))) >>= right
-      unless (decoded == (identity,schema,schema,report)) (fail "Archive changed contract identities, step report or rationale")
+      decoded <- right (runPureEff (runDhallHandling (decodeSnapshotArchive recordBytes)))
+      let EvolutionReport plugins steps = report
+      unless (decoded == (identity,schema,plugins,steps)) (fail "Archive changed contract identities, step report or rationale")
       workspaceFiles <- right (fileTree [(p,b) | (p,b) <- files exported, relativeName p /= "result.dhall"])
       archived <- runEff . runDhallHandling . runWorkspaceStore $ readWorkspaceSnapshot workspaceFiles
       currentNotes <- right (fileTree [(either error id (relativePath "new.md"),noteBytes)])
       unless (archived == Right (WorkspaceSnapshot
-          (WorkspaceManifest revision "Review λ" "Explain this" Accepted AdHoc) beforeFiles code changeFiles currentNotes))
+          (WorkspaceManifest revision "Review λ" "Explain this" Accepted AdHoc) code changeFiles currentNotes))
         (fail "Archive substituted live source/manifest or failed to preserve current notes/deletions")
       liveManifest <- Bytes.readFile (liveWorkspace </> "manifest.dhall")
       unless (liveManifest == "invalid live manifest") (fail "Export modified the live lifecycle state")
@@ -240,8 +231,8 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
       unless (all (\(p,_) -> take 6 (relativeName p) /= "notes/") (files withoutNotes))
         (fail "Export resurrected captured notes after deletion")
       let Candidate _ _ checkedRoot = checkedCandidate
-          wrongContext = EvolutionContext kb identity (Before revision schema)
-            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) beforeFiles empty changeFiles capturedNotes)
+          wrongContext = EvolutionContext kb identity (Before revision)
+            (WorkspaceSnapshot (WorkspaceManifest revision "Review λ" "Explain this" Draft AdHoc) empty changeFiles capturedNotes)
       execute (exportAcceptedWorkspace (Candidate wrongContext report checkedRoot)) >>= right >>= \case
         Left [Diagnostic Error "evolution.archive-context" _ _] -> pure ()
         _ -> fail "Archive accepted code differing from the checked root"
@@ -283,67 +274,6 @@ candidateTests schema facts = withSystemTempDirectory "kyyn-candidates" $ \direc
   entries <- listDirectory candidateDir
   unless (length entries >= 3) (fail "Completed private directories were not retained")
   putStrLn "Candidate persistence, immutable reload, stale contracts, publication failure, application and checking passed."
-
-contractDescriptions :: RootContract -> IO ()
-contractDescriptions baseline = do
-  let typeIdentity name = TypeIdentity "fixture" "Saved" name []
-      named name = NamedDescription (typeIdentity name)
-      field name kind = FieldDescription name "" kind
-      text = scalar "Text" TextScalar
-      integer = scalar "Integer" IntegerScalar
-      status = named "Status" (SumDescription [CaseDescription "Open" "" PositionalFields [], CaseDescription "Done" "" PositionalFields []])
-      payload = named "Payload" (SumDescription
-        [CaseDescription "Named" "" NamedFields [field "label" text], CaseDescription "Number" "" PositionalFields [field "value" integer]])
-      todo = named "Todo" (RecordDescription "Todo" NamedFields
-        [field "title" text, field "status" status, field "parent" (OptionalDescription (scalar "FactId" FactIdScalar))])
-      fact = NamedDescription (TypeIdentity "kyyn-types" "Kyyn.Types.Fact" "Fact" [typeIdentity "Todo"])
-        (RecordDescription "Fact" NamedFields [field "id" (scalar "FactId" FactIdScalar),field "value" todo])
-      rootType' = named "Root" (RecordDescription "Root" NamedFields
-        [field "todos" (ListDescription fact),field "count" integer,field "enabled" (scalar "Bool" BoolScalar),
-         field "optional" (OptionalDescription text),field "payloads" (ListDescription payload)])
-      metadata = SchemaMetadata
-        [RoleDecl "name" "Readable name" Title, RoleDecl "badge" "Status" Badge, RoleDecl "time" "Unused timeline" Timeline]
-        [FieldRole "Saved.Todo" "title" "name", FieldRole "Saved.Todo" "status" "badge"]
-        [CollectionDecl "todos" "todos" [("parent","todos")]]
-  schema <- right (checkContract rootType' metadata >>= checkRootLayout)
-  identity <- right (evolutionId "e003")
-  let envelope contents = object ["id" .= ("a" :: String),"value" .= contents]
-      old = RecordedFact baseline (envelope (object ["title" .= ("Before" :: String)]))
-      changed = RecordedFact baseline (envelope (object ["title" .= ("Edited" :: String)]))
-      new = RecordedFact schema (envelope (object ["title" .= ("München 🌍" :: String),
-        "status" .= object ["tag" .= ("Done" :: String)],
-        "parent" .= object ["tag" .= ("Some" :: String), "value" .= ("b" :: String)]]))
-      step description before after = StepReport (Rationale description [])
-        [FactChange "todos" (FactId "a") before after]
-      report = EvolutionReport [] [step "Edit" (Just old) (Just changed),
-        step "Migrate" (Just changed) (Just new), step "Delete" (Just new) Nothing,
-        step "Add" Nothing (Just new), StepReport (Rationale "No change" []) []]
-  encoded <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema report)))
-  decodedReport <- right (runPureEff (runDhallHandling (decodeEvolutionRecord encoded))) >>= right
-  unless (decodedReport == (identity,baseline,schema,report))
-    (fail "Dhall record changed migration steps, typed payloads or optional fact sides")
-  let open = unitRecipe (KB.OpenAgent "Inspect todos")
-      closed = unitRecipe (KB.ClosedAgent (KB.FlowEntryRef "Tasks.reconcile"))
-      recipeReport oldRecipe newRecipe = EvolutionReport []
-        [StepReport (Rationale "Change recipe" []) [RecipeChange (FactId "syncTodos") oldRecipe newRecipe]]
-      closedReport = recipeReport (Just open) (Just closed)
-  closedBytes <- right (runPureEff (runDhallHandling (encodeEvolutionRecord identity baseline schema closedReport)))
-  closedRead <- right (runPureEff (runDhallHandling (decodeEvolutionRecord closedBytes))) >>= right
-  unless (closedRead == (identity,baseline,schema,closedReport)) (fail "Archive lost recipe constructor change")
-  forM_ [baseline,schema] $ \selected -> do
-    source <- right (runPureEff (runDhallHandling (encodeValue snapshotShape (snapshotValue selected))))
-    document <- right (runPureEff (runDhallHandling (decodeValue snapshotShape source)))
-    decoded <- right (parseEither restoreSnapshot document) >>= right
-    unless (decoded == selected) (fail "Dhall snapshot changed types, metadata, layout or fingerprint")
-  forM_ ["-1","0","1","999999999999999999999999999999999999999999"] $ \index -> do
-    let malformed = object ["fingerprint" .= ("unused" :: String), "types" .=
-          [object ["tag" .= ("List" :: String), "value" .= (index :: String)]], "metadata" .= object []]
-    case parseEither restoreSnapshot malformed of
-      Left _ -> pure ()
-      other -> fail ("Forward, cyclic or out-of-range type reference accepted: " ++ show other)
-  case parseEither restoreSnapshot Null of
-    Left _ -> pure ()
-    other -> fail ("Malformed contract description accepted: " ++ show other)
 
 unitRecipe :: KB.Recipe -> Value.StoredRecipe
 unitRecipe method = Value.StoredRecipe method "()" contract (CheckedValue (contractId contract) (object []))
@@ -396,6 +326,9 @@ right = either (fail . show) pure
 storageRejected :: Show a => Either OperationalFailure a -> IO ()
 storageRejected (Left (StorageUnavailable _)) = pure ()
 storageRejected other = fail ("Expected storage failure: " ++ show other)
+
+recordedFact :: Value -> RecordedValue
+recordedFact = RecordedValue (Shape.Record [("id",(Shape.Scalar Shape.TextScalar)),("value",Shape.Record [("title",(Shape.Scalar Shape.TextScalar))])])
 
 scalar :: Text.Text -> ScalarKind -> Description
 scalar name kind = ScalarDescription (TypeIdentity "fixture" "Fixture" name []) kind name []

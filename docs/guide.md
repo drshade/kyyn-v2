@@ -61,11 +61,11 @@ configuration, and `flake.nix`/`flake.lock`. The flake declares the guest build;
 the lock pins its compiler, SDK and library inputs. Haskell types are authoritative; derived contracts and
 bindings describe those types rather than introducing another schema to maintain.
 
-An evolution workspace has three useful parts:
+An evolution workspace identifies an immutable input revision and has two editable parts:
 
-- `before/` and its selected Git revision identify the starting point.
+- The manifest selects stored facts and recipe states from a Git revision; old application code is not compiled.
 - `target/` holds proposed schema, validator, helper code and configuration.
-- `change/Evolution.hs` computes the fact and recipe changes.
+- `change/Evolution.hs` prepares stored data and edits the typed target. Helper modules live alongside it.
 
 Author changes in that workspace, not directly in the accepted facts. Kyyn
 materializes the evaluated result when it accepts the evolution. Code/config
@@ -138,41 +138,50 @@ validate (Root todos) = ValidationReport
   ]
 ```
 
-Leave Before unchanged. Write `change/Evolution.hs`:
+Write `change/Evolution.hs`:
 
 ```haskell
 {-# LANGUAGE OverloadedStrings #-}
 module Evolution where
 import Kyyn.Workspace.Evolution
 import Kyyn.Schema
-import qualified RootV1 as Before
-import qualified RootV2 as After
-import qualified Kyyn.Workspace.After as Collections
+import qualified RootV2 as Target
+import qualified Kyyn.Workspace.Target as Collections
 
-evolution :: Evolution (KnowledgeBase Before.Root) (KnowledgeBase After.Root)
-evolution =
-  evolve (Rationale "Start tracking work." [])
-    (onFacts (\Before.Root -> Right (After.Root [])))
-  >=> edit (Rationale "Record the first task." [])
+evolution :: Evolution Target.Root
+evolution = prepare (pure ()) $
+  edit (Rationale "Record the first task." [])
     (within Collections.todos $
-      append (Fact (FactId "todo-001") (After.Todo "First task")))
+      append (Fact (FactId "todo-001") (Target.Todo "First task")))
 ```
 
-`evolve` changes the schema; `onFacts` preserves recipes while transforming domain
-data. `edit` uses state operations to change the resulting KB. Generated collection
-handles focus edits on the right collection. Fact IDs are stable identities, not
-list positions. Put explanations and supporting evidence references in each
-step's `Rationale`.
+`prepare` first runs typed operations on stored data, then decodes it using the
+new target contracts. New collections start empty. Residual fields need an
+explicit `putField`; Kyyn does not invent values. A system-labelled
+`TargetProjection` step records this boundary using the workspace explanation.
+`edit` then changes the typed target KB. Compose ordered edits with `<>`; use
+`mempty` when preparation is the only authored work. Fact IDs are identities, not
+list positions. Each operation records its rationale and declared evidence.
 
-For a later same-schema edit, import the current schema as both Before and After
-and use `edit` without `evolve`. Discover collection updates and optics through
-`Kyyn.Edit` and `Kyyn.Optics`; ordinary record updates preserve unchanged fields.
-You do not write the generated bindings or the execution wrapper.
+Keep schema module names stable. Only target code and the change helpers compile.
+When stored shapes change, define small input decoding types in `change/` and use
+`migrateCollection`, `migrateField` or `migrateRecipe`. Their input types describe
+the stored shape, not the old executable. `migrateRecipe` converts stored state;
+`updateRecipe` changes already decoded target state or its definition.
 
-Before and After compile together. Give changed schema modules distinct names
-and import them with readable aliases. An unchanged shared type can be imported
-by both endpoints; declaring the same-looking type twice creates distinct Haskell
-types and requires conversion. Do not change a shared module out from under Before.
+`kyyn-v2 evolution new NAME --input-types` can scaffold those input declarations
+from stored Dhall shapes. `change/Input/README.md` identifies empty collections
+whose payload shape cannot be recovered. Text carriers do not recover historical
+scalar semantics; replace them with compatible target types where useful. Empty
+lists and `None` retain their stored annotations. The generated declarations are
+editable helpers, not a second schema that must be maintained.
+
+Discover `Kyyn.Workspace.Target` for collection handles and
+`Kyyn.Workspace.Target.Fields` for residual-field handles. Use explicit
+rename/remove operations for stored fields, collections, facts and obsolete
+recipes. A changed fact ID is a removal and addition; the authored target validator must check
+references to the removed identity. Unchanged compatible data needs no conversion.
+For later same-schema edits, use `prepare (pure ())` with the desired `edit`s.
 
 ### Review the result
 
@@ -195,7 +204,7 @@ when authorized by that workflow.
 
 Acceptance rechecks the saved result without rerunning the evolution. It requires
 unchanged proposal inputs and the same local Git head as Before. If head advanced,
-update Before and the transformation, then check and review again. Acceptance
+update the manifest base revision and preparation, then check and review again. Acceptance
 commits the new root and retained workspace; it does not push remotely. Accepted
 evolutions are history, not programs replayed on every read.
 
@@ -321,7 +330,7 @@ review :: Flow (RecipeInput Root Request ReviewState)
 It receives the accepted root, request and state, and returns proposed fact-edit
 steps with rationales plus the complete next state. Inspect `Kyyn.Recipe` and
 generated `Kyyn.Workspace.FactEdits` for those constructors. Generated
-`Kyyn.Workspace.After.RecipeTypes.*` and `RecipeFlows.*` handles supply the typed
+`Kyyn.Workspace.Target.RecipeTypes.*` and `RecipeFlows.*` handles supply the typed
 recipe definitions used in an ad hoc evolution; list them in that draft's context.
 
 A successful closed run creates a draft with a saved proposal and

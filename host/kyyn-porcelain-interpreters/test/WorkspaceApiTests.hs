@@ -1,5 +1,5 @@
 -- Recorded target guest plus real manifest/store/Dhall: discovery builds once,
--- reads accepted bytes without its lock, verifies Before copies, reports failure
+-- reads accepted bytes without its lock, ignores historical source copies, reports failure
 -- and repairs without stale state. Real source closure/GHC checks live in the
 -- source-merging and Nix workspace-discovery fixtures.
 {-# LANGUAGE DataKinds, GADTs, LambdaCase, OverloadedStrings #-}
@@ -44,18 +44,17 @@ workspaceApiTests = do
       repo = Repository (either error id (directoryScope "/fixture"))
       kb = KnowledgeBase repo (Subtree (path "nested"))
       workspace = EvolutionWorkspace kb (either error id (evolutionId "000001-test"))
-      before = tree [("Before.hs","before schema"),("Unused.hs","invalid unused code")]
-      beforeCode = tree [("kb.dhall",manifest "Before"),("src/Before.hs","before schema"),
+      beforeCode = tree [("kb.dhall",manifest "Historical"),("src/Historical.hs","before schema"),
         ("src/Unused.hs","invalid unused code"),("flake.nix","must not build accepted flake"),("flake.lock","invalid accepted lock")]
-      target = tree [("kb.dhall",manifest "After"),("src/After.hs","after schema"),("flake.nix","target flake"),("flake.lock","target lock")]
-      snapshot beforeCopy targetCode change = WorkspaceSnapshot
-        (WorkspaceManifest revision "Test" "" Draft AdHoc) beforeCopy targetCode change (tree [])
+      target = tree [("kb.dhall",manifest "Target"),("src/Target.hs","after schema"),("flake.nix","target flake"),("flake.lock","target lock")]
+      snapshot targetCode change = WorkspaceSnapshot
+        (WorkspaceManifest revision "Test" "" Draft AdHoc) targetCode change (tree [])
       expected = [ModuleDescription name ".kyyn-generated/Fixture.hs" Nothing [] [] |
-        name <- ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Before","Kyyn.Workspace.After"]]
+        name <- ["Kyyn.Workspace.Evolution","Kyyn.Workspace.Target","Kyyn.Workspace.Target.Fields"]]
       program = fixtureProgram "not executed"
       checked = either (error . show) id (checkGuest (G.GuestDescription G.protocolIdentity
-        [G.EvolutionDescriptionEntry (described "Before" ".kyyn-before/Before.hs") (described "After" "src/After.hs") []]
-        (ModuleDescription "Private" "src/After.hs" Nothing [] [] : expected)))
+        [G.ContractEntry "$evolution.target" (described "Target" "src/Target.hs")]
+        (ModuleDescription "Private" "src/Target.hs" Nothing [] [] : expected)))
       perform :: Bool -> WorkspaceSnapshot -> IO (Either [Diagnostic] WorkspaceCatalogue, [String])
       perform refuseBuild material = do
         trace <- newIORef ([] :: [String])
@@ -68,9 +67,8 @@ workspaceApiTests = do
               pure (Right checked))
           . interpret (\_ (CompileGuest source) -> do
               record "build"
-              unless (selectedBuild source == EvolutionEntries (EvolutionSelection "Before.Root" "Before.metadata" [] Nothing (Just []))
+              unless (selectedBuild source == EvolutionEntries (EvolutionSelection [] Nothing (Just []))
                 && lookup (path "flake.lock") (sourceFiles source) == Just "target lock"
-                && lookup (path ".kyyn-before/Before.hs") (sourceFiles source) == Just "before schema"
                 && all (not . isRootMaterial . fst) (sourceFiles source))
                 (error "Discovery lost typed target selection or included facts")
               pure (if refuseBuild then Left [errorDiagnostic "guest.build" "Rejected fixture"] else Right program))
@@ -86,13 +84,13 @@ workspaceApiTests = do
         events <- readIORef trace
         pure (result,events)
   let expectedTrace = ["workspace","before","build","describe"]
-      selected = snapshot before target (tree [("Evolution.hs","not valid Haskell")])
+      selected = snapshot target (tree [("Evolution.hs","not valid Haskell")])
   (result,events) <- perform False selected
   assert "source-only discovery" (result == Right (WorkspaceCatalogue workspace revision expected) && events == expectedTrace)
-  (absent,_) <- perform False (snapshot before target (tree []))
+  (absent,_) <- perform False (snapshot target (tree []))
   assert "missing evolution body" (absent == result)
-  (mismatch,mismatchTrace) <- perform False (snapshot (tree []) target (tree []))
-  assert "Before mismatch stops before build" (refused mismatch && mismatchTrace == take 2 expectedTrace)
+  (mismatch,mismatchTrace) <- perform False (snapshot target (tree []))
+  assert "Old source copies are not required" (mismatch == result && mismatchTrace == expectedTrace)
   (invalid,invalidTrace) <- perform True selected
   assert "build failure stops before description" (refused invalid && invalidTrace == take 3 expectedTrace)
   (repaired,repairTrace) <- perform False selected

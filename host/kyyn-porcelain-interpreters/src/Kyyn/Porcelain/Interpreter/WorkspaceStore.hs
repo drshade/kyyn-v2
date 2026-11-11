@@ -29,7 +29,7 @@ runWorkspaceStore = interpret $ \_ -> \case
       (Dhall.decodeValue manifestShape source))
     manifest <- checked (parseManifest decoded)
     checked (projectWorkspace manifest tree)
-  EncodeWorkspaceSnapshot (WorkspaceSnapshot manifest@(WorkspaceManifest revision name explanation state kind) before target change notes) -> runExceptT $ do
+  EncodeWorkspaceSnapshot (WorkspaceSnapshot manifest@(WorkspaceManifest revision name explanation state kind) target change notes) -> runExceptT $ do
     encoded <- ExceptT (Dhall.encodeValue manifestShape (object
       [ "before" .= object ["revision" .= revisionName revision]
       , "name" .= name, "explanation" .= explanation, "state" .= object ["tag" .= show state]
@@ -40,7 +40,7 @@ runWorkspaceStore = interpret $ \_ -> \case
     manifestPath <- checked (relativePath "manifest.dhall")
     entries <- checked (traverse (\(pathName,bytes) -> (,bytes) <$> relativePath pathName)
       [(prefix ++ relativeName path,bytes) | (prefix,tree) <-
-        [("before/",before),("target/",target),("change/",change),("notes/",notes)], (path,bytes) <- files tree])
+        [("target/",target),("change/",change),("notes/",notes)], (path,bytes) <- files tree])
     tree <- checked (fileTree ((manifestPath,Text.encodeUtf8 encoded) : entries))
     _ <- checked (projectWorkspace manifest tree)
     pure tree

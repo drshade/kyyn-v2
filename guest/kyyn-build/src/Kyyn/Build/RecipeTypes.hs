@@ -1,8 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Kyyn.Build.RecipeTypes (flowStateAlias, flowDefinition, flowDefinitions) where
+module Kyyn.Build.RecipeTypes (flowStateAlias, flowDefinition, flowDefinitions, optionalStateDefinition) where
 
 import Control.Monad (unless)
 import qualified Agentic as A
+import Agentic.Contract (Contract)
 import Language.Haskell.TH
 import Kyyn.Build.Reification (expandSynonyms)
 
@@ -33,6 +34,8 @@ flowStateAlias alias root implementation = do
 flowDefinition :: Name -> Name -> Name -> String -> Q [Dec]
 flowDefinition binding root implementation reference = do
   state <- flowState root implementation
+  supported <- isInstance ''Contract [state]
+  unless supported (fail "Recipe state has no Contract instance")
   definition <- lookupTypeName "RecipeDefinition" >>= maybe (fail "Missing RecipeDefinition import") pure
   let selected = AppE (AppTypeE (VarE (mkName "Bindings.closedRecipe")) state) (LitE (StringL reference))
       body = AppE (AppE (AppE (VarE 'either) (InfixE (Just (VarE 'error)) (VarE '(.)) (Just (VarE 'show)))) (VarE 'id)) selected
@@ -43,3 +46,14 @@ flowDefinition binding root implementation reference = do
 flowDefinitions :: Name -> [(String,Name,String)] -> Q [Dec]
 flowDefinitions root candidates = concat <$> traverse
   (\(binding,implementation,reference) -> recover (pure []) (flowDefinition (mkName binding) root implementation reference)) candidates
+
+-- Stored open-state references are optional candidates, not imports demanded by
+-- the evolution author. A target type without Contract is unresolved data.
+optionalStateDefinition :: Name -> Name -> String -> Q [Dec]
+optionalStateDefinition binding state reference = recover (pure []) $ do
+  kind <- expandSynonyms (ConT state)
+  supported <- isInstance ''Contract [kind]
+  unless supported (fail "Stored state candidate has no Contract instance")
+  let selected = AppE (AppTypeE (VarE (mkName "Bindings.recipeType")) kind) (LitE (StringL reference))
+      body = AppE (AppE (AppE (VarE 'either) (InfixE (Just (VarE 'error)) (VarE '(.)) (Just (VarE 'show)))) (VarE 'id)) selected
+  pure [SigD binding (AppT (ConT (mkName "RecipeType")) kind),ValD (VarP binding) (NormalB body) []]

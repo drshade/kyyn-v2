@@ -40,7 +40,7 @@ assigning :: Lens' s a -> a -> Edit s ()
 assigning optic value = modify (set optic value)
 
 -- | Run fact operations inside a collection selected from the root.
--- Use the collection handles exported by Kyyn.Workspace.Before or Kyyn.Workspace.After.
+-- Use the collection handles exported by Kyyn.Workspace.Target.
 within :: Collection root a -> CollectionEdit a r -> Edit root r
 within (Collection name optic) action = zoom optic (runReaderT action name)
 

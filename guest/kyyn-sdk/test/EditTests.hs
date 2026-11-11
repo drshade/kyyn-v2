@@ -5,10 +5,8 @@ import GHC.Generics (Generic)
 import Kyyn.Evolution
 import qualified Data.Text as Text
 import Kyyn.Edit.Internal (Collection(..), execStateT)
-import qualified Kyyn.Evolution.Internal as Internal
 import Kyyn.Types.Diagnostic (Diagnostic(Diagnostic), Severity(Error), DiagnosticLocation(FactLocation), errorDiagnostic)
 import Kyyn.Types.Fact
-import Text.JSON.Types (JSValue(..))
 
 data Todo = Todo { title :: String, priority :: Integer } deriving (Eq, Show, Generic)
 data Root = Root { todos :: [Fact Todo], notes :: [Fact String], label :: String } deriving (Eq, Show, Generic)
@@ -74,14 +72,6 @@ main = do
   assert "zoom and composition" (execStateT (zoom nested (modifying priorityLens (+ 1))) (t,True) ==
     execStateT (modifying (nested . priorityLens) (+ 1)) (t,True))
   assert "type-changing optics" (over pairFirst show ((7 :: Integer),True) == ("7",True))
-  let binding = Internal.RootBinding "test" (const JSNull)
-      step = Internal.edit binding (Rationale "Prepare review" []) action
-      stop = Internal.edit binding (Rationale "Refuse" []) (refuse refusal)
-  case Internal.evaluateEvolution step input of
-    Right (Internal.EvolutionOutput value observations) ->
-      assert "one observation for multiple within blocks" (value == expected && length observations == 1)
-    Left err -> fail (show err)
-  assert "evolution refusal drops earlier observations" (Internal.evaluateEvolution (step >=> stop) input == Left (EvolutionFailure refusal))
   putStrLn "Fact-aware State edits and composable optics passed."
 
 pairFirst :: Lens (a,c) (b,c) a b

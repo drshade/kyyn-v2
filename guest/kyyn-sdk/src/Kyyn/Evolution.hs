@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Evolution
-  ( Evolution, Rationale(..), EvolutionFailure(..)
-  , EvidenceRef(..), EvidenceId(..), (>=>), identityEvolution, RecipeId(..)
+  ( Evolution, TargetEdits, prepare, edit, identityEvolution, module Kyyn.Evolution.Preparation, Rationale(..), EvolutionFailure(..)
+  , EvidenceRef(..), EvidenceId(..), RecipeId(..)
   , KnowledgeBase, RecipeType, RecipeDefinition, facts, onFacts
   , openRecipe, unitRecipeType, createRecipe, updateRecipe, removeRecipe
   , module Kyyn.Edit
@@ -10,19 +10,7 @@ module Kyyn.Evolution
 import Kyyn.Types.Evolution (Rationale(..), EvolutionFailure(..))
 import Kyyn.Types.Evidence (EvidenceRef(..), EvidenceId(..))
 import Kyyn.Types.KnowledgeBase (RecipeId(..))
-import Kyyn.Evolution.Internal
+import Kyyn.Evolution.Target (Evolution, TargetEdits, prepare, edit, identityEvolution)
+import Kyyn.Evolution.Preparation (Preparation, TargetField, readCollection, migrateCollection, renameCollection, removeCollection, removeFact, readField, migrateField, putField, renameField, removeField, readRecipeState, migrateRecipe, retireRecipe)
 import Kyyn.Evolution.KnowledgeBase
 import Kyyn.Edit
-
-infixr 1 >=>
-
--- | Compose two evolutions, preserving the order of their recorded steps.
-(>=>) :: Evolution a b -> Evolution b c -> Evolution a c
-Evolution first >=> Evolution second = Evolution $ \before -> do
-  EvolutionOutput middle earlier <- first before
-  EvolutionOutput after later <- second middle
-  pure (EvolutionOutput after (earlier ++ later))
-
--- | Leave the root unchanged without recording a step.
-identityEvolution :: Evolution a a
-identityEvolution = Evolution (\value -> Right (EvolutionOutput value []))
