@@ -17,7 +17,9 @@ import GHC.Tc.Types (tcg_rdr_env)
 import GHC.Types.Name.Ppr (mkNamePprCtx)
 import GHC.Types.TyThing.Ppr (pprTyThing)
 import GHC.Driver.Ppr (showSDocForUser)
-import GHC.Driver.Env (hsc_units, hsc_unit_env)
+import GHC.Driver.Env (hsc_units, hsc_unit_env, hscEPS)
+import GHC.Core.InstEnv (instEnvElts)
+import GHC.Unit.External (eps_inst_env)
 import GHC.Unit.State (listUnitInfo, unwireUnit)
 import GHC.Unit.Info (unitIsExposed, unitId, unitExposedModules)
 import GHC.Unit.Types (GenUnit(..), Definite(..), unitString)
@@ -86,13 +88,13 @@ inspectExports libdir roots options modules = runGhc (Just libdir) $
         pure (ExportDescription (Text.pack (getOccString exported))
           (Text.pack (render (pprTyThing declaration thing)))
           (Text.pack origin) documentation (kind thing))
+      -- Loaded package interfaces discard instances; their environment retains them.
+      availableInstances <- if null source
+        then liftIO (instEnvElts . eps_inst_env <$> hscEPS environment)
+        else pure (modInfoInstances info)
       let documentation = renderDoc <$> (modInfoIface info >>= mi_docs >>= docs_mod_hdr)
-          -- GHC's ModuleInfo instance accessor is deliberately undefined for
-          -- package modules. Their instances are available on the interface.
-          instances
-            | not (null source) = [Text.pack (render (ppr entry)) | entry <- modInfoInstances info,
-                nameModule_maybe (getName entry) == Just selected]
-            | otherwise = maybe [] (map (Text.pack . render . ppr) . mi_insts) (modInfoIface info)
+          instances = [Text.pack (render (ppr entry)) | entry <- availableInstances,
+            nameModule_maybe (getName entry) == Just selected]
       pure (ModuleDescription (Text.pack name) (Text.pack source) documentation instances symbols)
     pure (sources,exports)
 
