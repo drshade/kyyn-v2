@@ -206,15 +206,22 @@ checkInspection = do
     Left _ -> pure ()
     Right _ -> fail "Configuration import accepted"
   let validManifest = Text.unlines
-        ["{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Schema.validate\"",
+        ["{ model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text }, outputs = [] : List { name : Text, description : Text, query : Text, sink : { plugin : Text, instanceName : Text, method : Text } }, views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Schema.validate\"",
          ", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }",
          ", tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"]
   case parseManifest validManifest of
     Left problem -> fail problem
     Right _ -> pure ()
+  case parseManifest ("(" <> validManifest <> ") // { model = Some { provider = < OpenAI | Anthropic >.Anthropic, model = \"fixture\", credential = \"KEY\" } }") of
+    Left problem -> fail problem
+    Right _ -> pure ()
   let rejects source = case parseManifest source of
         Left _ -> pure ()
         Right _ -> fail "Malformed manifest accepted"
+  rejects ("(" <> validManifest <> ").{schemaType,schemaMetadata,validator,queries,tools,views,outputs}")
+  rejects ("(" <> validManifest <> ").{schemaType,schemaMetadata,validator,queries,tools,views,model}")
+  rejects ("(" <> validManifest <> ") // { model = None Text }")
+  rejects ("(" <> validManifest <> ") // { model = { provider = < OpenAI | Anthropic >.Anthropic, model = \"fixture\", credential = \"KEY\" } }")
   rejects "./some-other-manifest.dhall"
   rejects (Text.replace "Schema.Root" "Schema.Root; error \"injected\"" validManifest)
   rejects (Text.replace "Schema.validate" "validate" validManifest)

@@ -1,4 +1,4 @@
-{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
+{ outputs = [] : List { name : Text, description : Text, query : Text, sink : { plugin : Text, instanceName : Text, method : Text } }, model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text }, views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
 , schemaMetadata = "Annotations.metadata"
 , validator = "Main.validate"
 , queries =

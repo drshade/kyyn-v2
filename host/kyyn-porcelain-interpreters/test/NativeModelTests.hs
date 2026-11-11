@@ -48,7 +48,7 @@ main = do
   arguments <- getArgs
   executable <- case arguments of [selected] -> canonicalizePath selected; _ -> fail "Expected native model guest"
   let path = either error id . relativePath
-  fixture <- mapM (\name -> (,) (path name) <$> Bytes.readFile ("tools/fixtures/model-guest/" ++ name)) ["kb.dhall","model.dhall"]
+  fixture <- mapM (\name -> (,) (path name) <$> Bytes.readFile ("tools/fixtures/model-guest/" ++ name)) ["kb.dhall"]
   code <- right (fileTree (fixture ++ [(path "flake.nix","{}"),(path "flake.lock","{}")] ))
   source <- right (guestSources RootEntries (files code))
   let program = CompiledProgram (BuildIdentity (sourceIdentity source) "fixture-system" "fixture.drv" (takeDirectory (takeDirectory executable))) executable ".build/model-guest"
@@ -64,12 +64,22 @@ main = do
     key <- right (secretName "MODEL_KEY")
     let expected = ModelConfiguration Anthropic "fixture-model" key
     assert "Model selection was not captured" (model == Just expected && null plugins)
-    forM_ ["{ provider = < OpenAI | Anthropic >.OpenAI, model = \" \", credential = \"KEY\" }",
-      "{ provider = < OpenAI | Anthropic >.OpenAI, model = \"model\", credential = \"bad/key\" }",
-      "{ model = \"missing fields\" }", "\255"] $ \bad -> do
-      tree <- right (fileTree [(name,if relativeName name == "model.dhall" then bad else bytes) | (name,bytes) <- files code])
+    forM_ ["Some { provider = < OpenAI | Anthropic >.OpenAI, model = \" \", credential = \"KEY\" }",
+      "Some { provider = < OpenAI | Anthropic >.OpenAI, model = \"model\", credential = \"bad/key\" }",
+      "Some { model = \"missing fields\" }", "\255"] $ \bad -> do
+      tree <- right (fileTree [(name,if relativeName name == "kb.dhall" then "(" <> bytes <> ") // { model = " <> bad <> " }" else bytes) | (name,bytes) <- files code])
       assert "Root accepted malformed model configuration"
         (case runPureEff (runDhallHandling (runRootStore (readRootDefinition tree))) of Left _ -> True; Right _ -> False)
+    withoutModel <- right (fileTree [(name,if relativeName name == "kb.dhall"
+      then "(" <> bytes <> ") // { model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text } }" else bytes) | (name,bytes) <- files code])
+    assert "Root refused an explicit absent model"
+      (case runPureEff (runDhallHandling (runRootStore (readRootDefinition withoutModel))) of Right _ -> True; Left _ -> False)
+    forM_ ["schemaType,schemaMetadata,validator,queries,tools,views,outputs",
+      "schemaType,schemaMetadata,validator,queries,tools,views,model"] $ \projection -> do
+      missingField <- right (fileTree [(name,if relativeName name == "kb.dhall"
+        then "(" <> bytes <> ").{" <> projection <> "}" else bytes) | (name,bytes) <- files code])
+      assert "Root accepted missing model or outputs"
+        (case runPureEff (runDhallHandling (runRootStore (readRootDefinition missingField))) of Left _ -> True; Right _ -> False)
     let invoke selected handler = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
           . runGuestExecution [("LC_ALL","C.UTF-8")] . noEvidence . noReads . noJudgement . handler $
             executeToolProgram entry plugins selected [] (toJSON ("input" :: String))
@@ -79,7 +89,7 @@ main = do
     assert "Nested draft/retry did not stay in guest" (turns == 4)
     missing <- invoke Nothing (recording expected) >>= right
     assert "Unconfigured model contacted provider" (snd missing == 0)
-    assert "Missing model not actionable" (hasDiagnostic "root/model.dhall" (fst missing))
+    assert "Missing model not actionable" (hasDiagnostic "root/kb.dhall" (fst missing))
     (failed,_) <- invoke model refusing >>= right
     assert "Provider refusal not actionable" (hasDiagnostic "model refused" failed)
     forM_ [Normal, Refused, MissingAnswer, ExtraAnswer, WrongAnswer] $ \scenario -> do

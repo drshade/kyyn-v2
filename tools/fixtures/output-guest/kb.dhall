@@ -1,4 +1,4 @@
-{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
+{ model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text }, views = [] : List { name : Text, description : Text, path : Text }, schemaType = "Main.Root"
 , schemaMetadata = "Annotations.metadata"
 , validator = "Main.validate"
 , queries =

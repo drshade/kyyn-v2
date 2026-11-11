@@ -26,11 +26,10 @@ try {
   cli(['kb', 'init']);
   const draft = cli(['evolution', 'new', 'model-tool']).result;
   const target = path.join(draft.path, 'target');
-  fs.writeFileSync(path.join(target, 'model.dhall'),
-    '{ provider = < OpenAI | Anthropic >.OpenAI, model = "fixture-model", credential = "MODEL_FIXTURE_KEY" }');
+  const modelConfiguration = 'Some { provider = < OpenAI | Anthropic >.OpenAI, model = "fixture-model", credential = "MODEL_FIXTURE_KEY" }';
   const manifest = path.join(target, 'kb.dhall');
   const empty = '[] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text }';
-  const original = fs.readFileSync(manifest, 'utf8');
+  const original = '(' + fs.readFileSync(manifest, 'utf8') + ') // { model = ' + modelConfiguration + ' }';
   assert(original.includes(empty));
   fs.writeFileSync(manifest, original.replace(empty,
     '[{ name = "summary", description = "Summarise supplied text", implementation = "Helpers.summary", inputType = "Helpers.Input", resultType = "Helpers.Output" }]'));

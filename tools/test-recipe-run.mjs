@@ -37,8 +37,7 @@ try {
   assert(!cli(['guest', 'module', 'list', '--evolution', setup.id]).result.modules.includes('KyynFrozenProposal'));
   cli(['plugin', 'install', '--evolution', setup.id, '--from', plugin]);
   const target = path.join(setup.path, 'target');
-  fs.writeFileSync(path.join(target, 'model.dhall'),
-    '{ provider = < OpenAI | Anthropic >.OpenAI, model = "fixture", credential = "RECIPE_TEST_KEY" }');
+  const modelConfiguration = 'Some { provider = < OpenAI | Anthropic >.OpenAI, model = "fixture", credential = "RECIPE_TEST_KEY" }';
   const config = path.join(target, 'plugins/config/local-file.dhall');
   fs.mkdirSync(path.dirname(config), { recursive: true });
   fs.writeFileSync(config, `let Connector = < Folder : { directory : Text, recursive : Bool } | File : { path : Text } >
@@ -57,6 +56,8 @@ metadata = SchemaMetadata [] [] [CollectionDecl "todos" "todos" []]
     const file = path.join(target, name);
     fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replaceAll('Schema', 'RootV2'));
   }
+  const manifest = path.join(target, 'kb.dhall');
+  fs.writeFileSync(manifest, '(' + fs.readFileSync(manifest, 'utf8') + ') // { model = ' + modelConfiguration + ' }');
   fs.writeFileSync(path.join(target, 'src/Tasks.hs'), `{-# LANGUAGE OverloadedStrings #-}
 module Tasks where
 import qualified Agentic as A

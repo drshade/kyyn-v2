@@ -53,7 +53,7 @@ runRootStore = interpret $ \_ -> \case
       source <- liftChecked (either (Left . show) Right (Text.decodeUtf8' bytes))
       (_,value) <- ExceptT (Dhall.inferValue source)
       fields <- record value
-      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs","views"]) (Keys.keys fields)) "Unexpected kb.dhall field"
+      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs","views","model"]) (Keys.keys fields)) "Unexpected kb.dhall field"
       _ <- ExceptT (Dhall.decodeValue (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
           ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]])),
@@ -81,7 +81,7 @@ runRootStore = interpret $ \_ -> \case
     let toolNames = [name | ToolDefinition name _ _ _ _ <- tools]
     ensure (length toolNames == length (nub toolNames)) "Tool names must be unique"
     outputs <- case Keys.lookup "outputs" manifest of
-      Nothing -> pure []
+      Nothing -> problem "Missing kb.dhall outputs field"
       Just value -> do
         let textShape = Scalar TextScalar
             sinkShape = Record [(name,textShape) | name <- ["plugin","instanceName","method"]]

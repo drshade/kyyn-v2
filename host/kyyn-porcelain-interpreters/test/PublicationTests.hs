@@ -88,7 +88,7 @@ publicationTests (Root contract facts _ _) = forM_ [False, True] $ \interrupt ->
         kb = KnowledgeBase repo prefix
         kbPath name = either error relativeName (relativePath name >>= knowledgeBasePath kb)
         rootPath = either error id (rootLocation kb)
-        manifest = "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
+        manifest = "{ model = None { provider : < OpenAI | Anthropic >, model : Text, credential : Text }, outputs = [] : List { name : Text, description : Text, query : Text, sink : { plugin : Text, instanceName : Text, method : Text } }, views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Example.Root\", schemaMetadata = \"Example.schemaMetadata\", validator = \"Example.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"
         pluginFile = "plugins/packages/existing/source/src/Plugin.hs"
         pluginBytes = "module Plugin where\n"
         code = tree [(path "kb.dhall",manifest), (path "src/Schema.hs","authored source"),
