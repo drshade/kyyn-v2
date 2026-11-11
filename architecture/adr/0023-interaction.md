@@ -59,8 +59,9 @@ The evolution page takes its step report from that candidate, or from the
 archived report of an accepted evolution. The report carries each change's
 before and after values, so removed records and intermediate steps are shown
 there. A changed record links to its record page only when it exists in the
-context shown. An evolution with no checked candidate shows its explanation and
-source diff. Check diagnostics are not stored; the agent has them from the
+context shown. The source diff is that candidate's captured source against
+the base. An evolution with no checked candidate shows its explanation and a
+source diff of the live target, labelled as unchecked. Check diagnostics are not stored; the agent has them from the
 check it ran.
 
 Query and tool pages show the captured module that contains the implementation,
