@@ -70,10 +70,10 @@ main = do
       tree <- right (fileTree [(name,if relativeName name == "kb.dhall" then "(" <> bytes <> ") // { model = " <> bad <> " }" else bytes) | (name,bytes) <- files code])
       assert "Root accepted malformed model configuration"
         (case runPureEff (runDhallHandling (runRootStore (readRootDefinition tree))) of Left _ -> True; Right _ -> False)
-    noModel <- right (fileTree [(name,if relativeName name == "kb.dhall"
+    withoutModel <- right (fileTree [(name,if relativeName name == "kb.dhall"
       then "(" <> bytes <> ").{schemaType,schemaMetadata,validator,queries,tools,views}" else bytes) | (name,bytes) <- files code])
     assert "Root refused an omitted model field"
-      (case runPureEff (runDhallHandling (runRootStore (readRootDefinition noModel))) of Right _ -> True; Left _ -> False)
+      (case runPureEff (runDhallHandling (runRootStore (readRootDefinition withoutModel))) of Right _ -> True; Left _ -> False)
     let invoke selected handler = runEff . runFailure . runProcessExecutionIO . runFileSystemIO scope . runDhallHandling
           . runGuestExecution [("LC_ALL","C.UTF-8")] . noEvidence . noReads . noJudgement . handler $
             executeToolProgram entry plugins selected [] (toJSON ("input" :: String))
