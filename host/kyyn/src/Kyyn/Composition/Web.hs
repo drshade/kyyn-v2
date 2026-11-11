@@ -6,6 +6,7 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Aeson (Value(Null), object, (.=))
 import Data.List (stripPrefix)
 import Kyyn.Configuration
+import Kyyn.Composition.Inspection (inspectPage)
 import Kyyn.Composition.Runtime
 import Kyyn.Domain.Contract (contractId, contractShape)
 import Kyyn.Domain.Diagnostic (errorDiagnostic)
@@ -41,7 +42,7 @@ serveWeb host scope port draft
       selected <- selectKnowledgeBase host scope
       case selected of
         Left failure -> pure failure
-        Right _ -> runServer port pages invoke
+        Right _ -> runServer port pages invoke (inspectPage host scope)
   where
     pages = do
       selected <- selectKnowledgeBase host scope

@@ -319,6 +319,39 @@ ignored local storage. Use `secret set` with its hidden prompt or stdin rather
 than placing credentials in source, connector options or shell arguments. Follow
 the plugin/provider guide for the required secret names.
 
+## Inspect a KB in the browser
+
+Run `kyyn-v2 web serve` and open `http://127.0.0.1:8080/`. Web shows the KB;
+CLI and MCP change it. Each inspection page works from a direct link and links
+back to the index and related pages.
+
+| Route | Shows |
+| --- | --- |
+| `/` | Evolutions, collections and types; link to domain views |
+| `/evolutions/ID` | Explanation, lifecycle state, recorded step values and source changes against the base |
+| `/collections/NAME` | Collection records and their titles |
+| `/records/COLLECTION/ID` | Labelled record fields and links for declared references |
+| `/types/NAME` | Checked fields, types, descriptions and presentation roles |
+
+URL-encode each name or ID as a path segment. For example,
+`/records/people/alex?evolution=000009-update-people` shows a draft record.
+`?evolution=ID` selects the last successfully checked candidate for inspection
+pages; without it they show the accepted KB. Links retain that selection.
+The server's `--evolution` flag selects **only domain views under `/kb/`**.
+
+An unchecked evolution still has an explanation and a live source comparison.
+After a successful check, its source comparison and step report use that saved
+capture, including when later edits or checks fail. Record and type pages also
+use the saved candidate. Source comparisons are labelled and show each changed
+file before and after; removed and intermediate records remain in the step
+report even when there is no current record to link to. Archived evolution
+reports show their recorded values; record links open the explicitly shown KB
+context, not a historical snapshot.
+
+Reload after a check or acceptance to see the new snapshot. GET requests do not
+run checks or evaluate evolutions. Check diagnostics remain in the command that
+ran the check. Query, tool and recipe inspection pages are not provided yet.
+
 ## Add a browser view
 
 Domain views are ordinary HTML/JavaScript pages for readers. They get KB data

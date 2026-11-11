@@ -42,7 +42,7 @@ runInspection = interpret $ \_ -> \case
     pure (SnapshotInspection base selected contract value)
   InspectEvolutionSource workspace@(EvolutionWorkspace kb@(KnowledgeBase repository _) _) -> runExceptT $ do
     live@(WorkspaceSnapshot manifest@(WorkspaceManifest _ _ _ state _) _ _ _) <- ExceptT (Store.readWorkspace workspace)
-    (WorkspaceSnapshot captured@(WorkspaceManifest base name explanation _ kind) target _ _,saved,report) <-
+    (WorkspaceSnapshot (WorkspaceManifest base name explanation _ kind) target _ _,saved,report) <-
       case state of
         Accepted -> (live,True,) <$> ExceptT (Store.readArchivedReport workspace)
         _ -> do
@@ -58,5 +58,5 @@ runInspection = interpret $ \_ -> \case
           let old = lookup key before, let new = lookup key after, old /= new]
         selectedManifest = if saved then WorkspaceManifest base name explanation state kind else manifest
     -- Lifecycle state is current; explanation/base/source belong to the labelled capture.
-    captured `seq` pure (EvolutionInspection selectedManifest saved report changes)
+    pure (EvolutionInspection selectedManifest saved report changes)
   where checked = either (throwE . pure . errorDiagnostic "inspection.source") pure

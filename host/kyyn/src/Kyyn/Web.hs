@@ -12,6 +12,7 @@ import qualified Data.Text.Encoding as Text
 import Language.Haskell.TH.Syntax (addDependentFile, lift, runIO, loc_filename)
 import qualified Language.Haskell.TH.Syntax as TH
 import Network.HTTP.Types
+import Lucid (Html, renderBS)
 import Network.HTTP.Types.Header (hAllow)
 import Network.Mime (defaultMimeLookup)
 import Network.Socket hiding (socket)
@@ -29,8 +30,9 @@ import qualified Kyyn.Surfaces.Result as Result
 data ViewSource = ViewSource Value [ViewDefinition] FileTree
 
 runServer :: Int -> IO (Either Result.Response ViewSource)
-  -> (String -> Value -> IO (Value,Result.Response)) -> IO Result.Response
-runServer port pages query = bracket (try @IOException acquire) (either (const (pure ())) close) $ \opened ->
+  -> (String -> Value -> IO (Value,Result.Response))
+  -> ([Text.Text] -> Query -> IO (Either Result.Response (Html ()))) -> IO Result.Response
+runServer port pages query inspect = bracket (try @IOException acquire) (either (const (pure ())) close) $ \opened ->
   case opened of
     Left err -> pure (Result.refusal [errorDiagnostic "web.listen"
       ("Cannot listen on 127.0.0.1:" ++ show port ++ ": " ++ displayException err)])
@@ -53,8 +55,12 @@ runServer port pages query = bracket (try @IOException acquire) (either (const (
       result <- try @IOException (route request)
       respond $ either (\err -> failure status500 "web.io" (displayException err)) id result
     route request
-      | pathInfo request == [] = pure $ if requestMethod request == methodGet
-          then responseLBS status302 [(hLocation,"/kb/"),noStore] "" else method "GET"
+      | take 1 (pathInfo request) /= ["kb"] =
+          if requestMethod request /= methodGet then pure (method "GET") else do
+            page <- inspect (pathInfo request) (queryString request)
+            pure $ case page of
+              Left result -> jsonResponse (resultStatus result) Null result
+              Right html -> responseLBS status200 [(hContentType,"text/html; charset=utf-8"),noStore] (renderBS html)
       | ["kb","queries",name] <- pathInfo request =
           if requestMethod request /= methodPost then pure (method "POST")
           else if fmap (Char8.map lower . Char8.takeWhile (/= ';')) (lookup hContentType (requestHeaders request)) /= Just "application/json"
@@ -136,8 +142,8 @@ jsonResponse status context result = responseLBS status [(hContentType,"applicat
 resultStatus :: Result.Response -> Status
 resultStatus (Result.Response outcome _ _ diagnostics)
   | outcome == Result.Succeeded = status200
-  | any (`elem` ["query.unknown","view.unknown","view.asset"]) codes = status404
-  | any (`elem` ["evolution.no-candidate","web.accepted"]) codes = status409
+  | any (`elem` ["query.unknown","view.unknown","view.asset","inspection.unknown"]) codes = status404
+  | any (`elem` ["evolution.no-candidate","web.accepted","inspection.accepted"]) codes = status409
   | outcome == Result.Failed = status500
   | otherwise = status400
   where codes = [code | Diagnostic _ code _ _ <- diagnostics]

@@ -85,6 +85,11 @@
                   }) ];
                 });
                 # Remove bound patches when upstream Hackage revisions admit GHC 9.14.
+                lucid = pkgs.haskell.lib.overrideCabal prev.lucid (old: {
+                  postPatch = (old.postPatch or "") + ''
+                    substituteInPlace lucid.cabal --replace-fail '<4.22' '<4.23'
+                  '';
+                });
                 cborg-json = pkgs.haskell.lib.overrideCabal prev.cborg-json (old: {
                   postPatch = (old.postPatch or "") + ''
                     substituteInPlace cborg-json.cabal --replace-fail '< 4.22' '< 4.23'
