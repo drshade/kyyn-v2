@@ -14,7 +14,7 @@ import qualified MicrosoftGraph.Files.Api as Api
 import qualified MicrosoftGraph.Auth as Auth
 import qualified MicrosoftGraph.Json as Json
 import qualified MicrosoftGraph.Http as Http
-import Text.JSON.Types (JSValue(..))
+import qualified Data.Aeson as Aeson
 
 fetch :: FilesConfig -> EvidenceSnapshot FilePayload -> Acquisition FilePayload (Either FetchError [EvidenceChange FilePayload])
 fetch config@(FilesConfig auth _ _ _) snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
@@ -56,13 +56,13 @@ fetch config@(FilesConfig auth _ _ _) snapshot = fmap (either (Left . FetchError
   where
     failure = either (\(FetchError message) -> Left message) Right
 
-modifierName :: JSValue -> Either Text Text
+modifierName :: Aeson.Value -> Either Text Text
 modifierName value = case Api.optional "lastModifiedBy" value of
-  JSNull -> Right ""
+  Aeson.Null -> Right ""
   actor -> case Api.optional "user" actor of
-    JSNull -> case Api.optional "application" actor of
-      JSNull -> case Api.optional "device" actor of
-        JSNull -> Right ""
+    Aeson.Null -> case Api.optional "application" actor of
+      Aeson.Null -> case Api.optional "device" actor of
+        Aeson.Null -> Right ""
         device -> maybe "" id <$> Json.optionalText "displayName" device
       application -> maybe "" id <$> Json.optionalText "displayName" application
     user -> maybe "" id <$> Json.optionalText "displayName" user

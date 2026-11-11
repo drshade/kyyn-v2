@@ -9,7 +9,7 @@ import MicrosoftGraph.Types (GraphAuth(..))
 import MicrosoftGraph.Config (graphRoot)
 import qualified MicrosoftGraph.Json as Json
 import qualified MicrosoftGraph.Http as Http
-import Text.JSON.Types (JSValue)
+import qualified Data.Aeson as Aeson
 
 endpoint :: Text -> Text -> Text
 endpoint tenant operation = "https://login.microsoftonline.com/" <> Json.escape tenant <> "/oauth2/v2.0/" <> operation
@@ -77,7 +77,7 @@ login auth = fmap (either (Left . LoginError) Right) $ runExceptT $ case auth of
 delegatedScopes :: [Text] -> Text
 delegatedScopes scopes = Text.unwords (scopes <> ["offline_access" | "offline_access" `notElem` scopes])
 
-tokenField :: Text -> JSValue -> Either Text Text
+tokenField :: Text -> Aeson.Value -> Either Text Text
 tokenField key value = do
   token <- Json.member key value >>= Json.text
   if Text.null token then Left ("Provider returned an empty " <> key) else Right token

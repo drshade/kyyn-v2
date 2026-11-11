@@ -3,7 +3,8 @@ import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (group, sort)
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Text.JSON.Types (JSValue(..), fromJSObject)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.KeyMap as KeyMap
 import Kyyn.Plugin.Host
 import Salesforce.Query.Types
 import qualified Salesforce.Http as Http
@@ -23,8 +24,6 @@ records token (QueryConfig origin _ version query field) = runExceptT $ do
           response <- ExceptT (Http.send (HttpRequest "GET" (origin <> relative)
             [("Authorization","Bearer " <> token),("Accept","application/json")] ""))
           value <- either throwE pure (Http.requireSuccess response >>= Json.parse)
-          -- Reject ambiguous object keys before interpreting control fields.
-          _ <- either throwE pure (Json.canonical value)
           total <- either throwE pure (Json.member "totalSize" value >>= Json.integer)
           done <- either throwE pure (Json.member "done" value >>= Json.boolean)
           batch <- either throwE pure (Json.member "records" value >>= Json.array)
@@ -42,22 +41,22 @@ records token (QueryConfig origin _ version query field) = runExceptT $ do
     validNext link = case Text.stripPrefix (path <> "/") link of
       Just suffix -> not (Text.null suffix) && Text.all (\c -> c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c `elem` ("-_" :: String)) suffix
       Nothing -> False
-    row value@(JSObject _) = do
+    row value@(Aeson.Object _) = do
       key <- Json.member field value >>= Json.text
       if Text.null (Text.strip key) then Left "SOQL record has a blank identity" else pure ()
       completeRelationships value
-      body <- Json.canonical value
+      let body = Json.canonical value
       pure (key,Record key body)
     row _ = Left "SOQL records must be JSON objects"
 
 -- A nested query can have its own continuation. Do not publish a partial child
 -- collection as a complete record; query that child object separately instead.
-completeRelationships :: JSValue -> Either Text ()
-completeRelationships (JSObject object) = do
-  let fields = fromJSObject object
+completeRelationships :: Aeson.Value -> Either Text ()
+completeRelationships (Aeson.Object object) = do
+  let fields = KeyMap.toList object
   case (lookup "records" fields,lookup "done" fields) of
-    (Just (JSArray _),Just (JSBool False)) -> Left "Nested relationship result is paginated; query the child object separately"
+    (Just (Aeson.Array _),Just (Aeson.Bool False)) -> Left "Nested relationship result is paginated; query the child object separately"
     _ -> pure ()
   mapM_ (completeRelationships . snd) fields
-completeRelationships (JSArray values) = mapM_ completeRelationships values
+completeRelationships (Aeson.Array values) = mapM_ completeRelationships values
 completeRelationships _ = Right ()

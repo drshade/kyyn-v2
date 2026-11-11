@@ -11,27 +11,29 @@ import MicrosoftGraph.Files.Types
 import qualified MicrosoftGraph.Files.Config as Config
 import qualified MicrosoftGraph.Json as Json
 import qualified MicrosoftGraph.Http as Http
-import Text.JSON.Types (JSValue(..), fromJSObject)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 
-field :: Text -> JSValue -> Either Text Text
+field :: Text -> Aeson.Value -> Either Text Text
 field key value = do
   result <- Json.member key value >>= Json.text
   if Text.null result then Left ("Empty Graph field: " <> key) else Right result
 
-optional :: Text -> JSValue -> JSValue
-optional key (JSObject values) = maybe JSNull id (lookup (Text.unpack key) (fromJSObject values))
-optional _ _ = JSNull
+optional :: Text -> Aeson.Value -> Aeson.Value
+optional key (Aeson.Object values) = maybe Aeson.Null id (KeyMap.lookup (Key.fromText key) values)
+optional _ _ = Aeson.Null
 
 itemUrl :: Text -> Text -> Text
 itemUrl drive item = graphApiBase <> "drives/" <> Json.escape drive <> "/items/" <> Json.escape item
 
-document :: Text -> Text -> Acquisition payload (Either Text JSValue)
+document :: Text -> Text -> Acquisition payload (Either Text Aeson.Value)
 document token url
   | not (graphApiBase `Text.isPrefixOf` url) = pure (Left "Unexpected Graph Files pagination URL")
   | otherwise = fmap (>>= \response -> Http.requireSuccess response >>= Json.parse)
       (Http.send (HttpRequest "GET" url [("Authorization","Bearer " <> token)] ""))
 
-collection :: Text -> Text -> Acquisition payload (Either Text [JSValue])
+collection :: Text -> Text -> Acquisition payload (Either Text [Aeson.Value])
 collection token = runExceptT . pages []
   where
     pages seen url
@@ -44,7 +46,7 @@ collection token = runExceptT . pages []
           pure (entries ++ rest)
 
 -- No hierarchy survives this invocation: every fetch resolves and walks anew.
-listing :: Text -> FilesConfig -> Acquisition FilePayload (Either Text [(Text,Text,Text,JSValue)])
+listing :: Text -> FilesConfig -> Acquisition FilePayload (Either Text [(Text,Text,Text,Aeson.Value)])
 listing token (FilesConfig _ scope path globs) = runExceptT $ do
   base <- case scope of
     SiteLibrary site library -> do
@@ -61,14 +63,14 @@ listing token (FilesConfig _ scope path globs) = runExceptT $ do
   drive <- either throwE pure (Json.member "parentReference" root >>= field "driveId")
   rootId <- either throwE pure (field "id" root)
   selected <- if Text.null path then pure root else do
-    if optional "folder" root == JSNull then throwE "Configured path requires a folder scope" else pure ()
+    if optional "folder" root == Aeson.Null then throwE "Configured path requires a folder scope" else pure ()
     ExceptT (document token (itemUrl drive rootId <> ":/" <> Text.intercalate "/" (map Json.escape (Text.splitOn "/" path))))
   (_,rows) <- walk drive "" [] selected
   -- Stable sorting retains the first observed occurrence of a repeated file.
   pure [row | row:_ <- groupBy sameId (sortOn (\(key,_,_,_) -> key) rows)]
   where
-    unsupported value = optional "remoteItem" value /= JSNull || optional "package" value /= JSNull ||
-      (optional "file" value == JSNull && optional "folder" value == JSNull)
+    unsupported value = optional "remoteItem" value /= Aeson.Null || optional "package" value /= Aeson.Null ||
+      (optional "file" value == Aeson.Null && optional "folder" value == Aeson.Null)
     sameId (left,_,_,_) (right,_,_,_) = left == right
     walk drive prefix seen value = do
         key <- either throwE pure (field "id" value)
@@ -76,7 +78,7 @@ listing token (FilesConfig _ scope path globs) = runExceptT $ do
         if Text.any (== '/') name || name `elem` [".",".."] then throwE "Invalid Graph file name" else pure ()
         let relative = if Text.null prefix then name else prefix <> "/" <> name
             identity = Json.escape drive <> "/" <> Json.escape key
-        if unsupported value then pure (seen,[]) else if optional "file" value /= JSNull then
+        if unsupported value then pure (seen,[]) else if optional "file" value /= Aeson.Null then
           pure (seen, [(identity,drive,relative,value) | Config.matches globs relative])
         else if identity `elem` seen then pure (seen,[]) else do
           children <- ExceptT (collection token (itemUrl drive key <> "/children"))

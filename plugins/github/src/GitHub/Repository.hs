@@ -14,7 +14,7 @@ import GitHub.Fingerprint (canonicalItem)
 import Kyyn.Plugin
 import Kyyn.Plugin.Host
 import Kyyn.Validation (ValidationReport(..))
-import Text.JSON.Types (JSValue)
+import qualified Data.Aeson as Aeson
 
 fetch :: RepositoryConfig -> EvidenceSnapshot RepositoryItem
   -> Acquisition RepositoryItem (Either FetchError [EvidenceChange RepositoryItem])
@@ -99,7 +99,7 @@ checked = either throwE pure
 
 -- Commit detail pages repeat commit metadata but paginate the changed-file list.
 commitFiles :: Text -> Maybe Text -> [Text] -> Text
-  -> Acquisition RepositoryItem (Either Text (JSValue,[FileChange]))
+  -> Acquisition RepositoryItem (Either Text (Aeson.Value,[FileChange]))
 commitFiles base token seen url = runExceptT $ do
   if url `elem` seen then throwE "GitHub commit pagination repeated a page" else pure ()
   (value,next) <- ExceptT (Http.get base token url)

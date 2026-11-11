@@ -12,7 +12,9 @@ import MicrosoftGraph.Meetings.Types hiding (id)
 import MicrosoftGraph.Timestamp (timestamp)
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
-import Text.JSON.Types (JSValue(..), fromJSObject)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 
 data Pending = Pending Text Text Text Text MeetingRef -- kind, provider id, first time, end, meeting
 
@@ -36,7 +38,7 @@ requestHeaders token = [("Authorization","Bearer " <> token),("Prefer","outlook.
 
 data RequestError = Denied | MailboxUnavailable Text | UnresolvedMeeting | Failed Text
 
-document :: Text -> Text -> Acquisition payload (Either RequestError JSValue)
+document :: Text -> Text -> Acquisition payload (Either RequestError Aeson.Value)
 document token url
   | not (graphApiBase `Text.isPrefixOf` url) = pure (Left (Failed "Unexpected Graph pagination URL"))
   | otherwise = do
@@ -52,7 +54,7 @@ document token url
             Right "NotFound" <- Json.parse body >>= Json.member "error" >>= required "code" -> Left UnresolvedMeeting
         _ -> either (Left . Failed) Right (result >>= Http.requireSuccess >>= Json.parse)
 
-collection :: Text -> Text -> Acquisition payload (Either RequestError [JSValue])
+collection :: Text -> Text -> Acquisition payload (Either RequestError [Aeson.Value])
 collection token = runExceptT . pages []
   where
     pages seen url
@@ -187,7 +189,7 @@ capture token context base (Pending kind key first end meeting@(MeetingRef meeti
       pure (Attendance meeting first end <$> attendees,denied)
     _ -> throwE "Unsupported meeting artifact kind"
 
-attendance :: JSValue -> Either Text AttendanceRecord
+attendance :: Aeson.Value -> Either Text AttendanceRecord
 attendance value = AttendanceRecord <$> optional participant "identity" value
   <*> Json.optionalText "emailAddress" value <*> Json.optionalText "role" value
   <*> optional (fmap toInteger . Json.integer) "totalAttendanceInSeconds" value
@@ -203,14 +205,14 @@ attendance value = AttendanceRecord <$> optional participant "identity" value
       _ <- timestamp text
       pure text
 
-required :: Text -> JSValue -> Either Text Text
+required :: Text -> Aeson.Value -> Either Text Text
 required key value = do
   text <- Json.member key value >>= Json.text
   if Text.null text then Left ("Empty response field: " <> key) else Right text
 
-optional :: (JSValue -> Either Text a) -> Text -> JSValue -> Either Text (Maybe a)
-optional decode key (JSObject fields) = case lookup (Text.unpack key) (fromJSObject fields) of
+optional :: (Aeson.Value -> Either Text a) -> Text -> Aeson.Value -> Either Text (Maybe a)
+optional decode key (Aeson.Object fields) = case KeyMap.lookup (Key.fromText key) fields of
   Nothing -> Right Nothing
-  Just JSNull -> Right Nothing
+  Just Aeson.Null -> Right Nothing
   Just value -> Just <$> decode value
 optional _ _ _ = Left "Expected response object"

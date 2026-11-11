@@ -10,7 +10,9 @@ import MicrosoftGraph.Types (Person(..))
 import MicrosoftGraph.Config (graphApiBase)
 import qualified MicrosoftGraph.Http as Http
 import qualified MicrosoftGraph.Json as Json
-import Text.JSON.Types (JSValue(..), fromJSObject)
+import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Key as Key
+import qualified Data.Aeson.KeyMap as KeyMap
 
 baseUrl :: Text -> Text
 baseUrl mailbox = graphApiBase <> "users/" <> Json.escape mailbox
@@ -24,10 +26,10 @@ get token url
   | graphApiBase `Text.isPrefixOf` url = Http.send (HttpRequest "GET" url (requestHeaders token) "")
   | otherwise = pure (Left "Unexpected Graph pagination URL")
 
-document :: Text -> Text -> Acquisition payload (Either Text JSValue)
+document :: Text -> Text -> Acquisition payload (Either Text Aeson.Value)
 document token url = fmap (\response -> response >>= Http.requireSuccess >>= Json.parse) (get token url)
 
-collection :: Text -> Text -> Acquisition payload (Either Text [JSValue])
+collection :: Text -> Text -> Acquisition payload (Either Text [Aeson.Value])
 collection token = runExceptT . pages []
   where
     pages seen url
@@ -54,7 +56,7 @@ folderId token base (FolderPath path) = runExceptT (walk (base <> "/mailFolders"
         _ -> throwE ("Mail folder path is ambiguous: " <> name)
       if null rest then pure key else walk (base <> "/mailFolders/" <> Json.escape key <> "/childFolders") rest
 
-delta :: Text -> Text -> Acquisition payload (Either Text (Maybe ([JSValue],Text)))
+delta :: Text -> Text -> Acquisition payload (Either Text (Maybe ([Aeson.Value],Text)))
 delta token = runExceptT . pages []
   where
     pages seen url
@@ -89,7 +91,7 @@ captureMessage token base folder key = runExceptT $ do
     name <- either throwE pure (descriptive "name" attachment)
     media <- either throwE pure (descriptive "contentType" attachment)
     size <- either throwE pure (Json.optionalInteger "size" 0 attachment)
-    inline <- either throwE pure (case optional "isInline" attachment of JSNull -> Right False; v -> Json.boolean v)
+    inline <- either throwE pure (case optional "isInline" attachment of Aeson.Null -> Right False; v -> Json.boolean v)
     let endpoint = url <> "/attachments/" <> Json.escape identity
     case kind of
       "#microsoft.graph.referenceAttachment" -> pure (Attachment name media (toInteger size) inline (Link endpoint))
@@ -104,17 +106,17 @@ captureMessage token base folder key = runExceptT $ do
     <*> descriptive "conversationId" value <*> descriptive "internetMessageId" value
     <*> pure folder <*> textField "content" bodyValue <*> pure attachments
 
-textField :: Text -> JSValue -> Either Text Text
+textField :: Text -> Aeson.Value -> Either Text Text
 textField name value = Json.member name value >>= Json.text
-descriptive :: Text -> JSValue -> Either Text Text
+descriptive :: Text -> Aeson.Value -> Either Text Text
 descriptive name value = maybe "" id <$> Json.optionalText name value
-optional :: Text -> JSValue -> JSValue
-optional name (JSObject fields) = maybe JSNull id (lookup (Text.unpack name) (fromJSObject fields))
-optional _ _ = JSNull
-person :: JSValue -> Either Text Person
-person JSNull = Right (Person "" "")
+optional :: Text -> Aeson.Value -> Aeson.Value
+optional name (Aeson.Object fields) = maybe Aeson.Null id (KeyMap.lookup (Key.fromText name) fields)
+optional _ _ = Aeson.Null
+person :: Aeson.Value -> Either Text Person
+person Aeson.Null = Right (Person "" "")
 person value = do
   email <- Json.member "emailAddress" value
   Person <$> descriptive "name" email <*> descriptive "address" email
-people :: Text -> JSValue -> Either Text [Person]
-people name value = case optional name value of JSNull -> Right []; entries -> Json.array entries >>= mapM person
+people :: Text -> Aeson.Value -> Either Text [Person]
+people name value = case optional name value of Aeson.Null -> Right []; entries -> Json.array entries >>= mapM person

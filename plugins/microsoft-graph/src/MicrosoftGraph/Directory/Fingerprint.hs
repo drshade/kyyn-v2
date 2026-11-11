@@ -1,15 +1,18 @@
 module MicrosoftGraph.Directory.Fingerprint (canonicalDirectory) where
 import Data.Text (Text)
-import qualified Data.Text as Text
 import MicrosoftGraph.Directory.Types
-import Text.JSON.Types (JSValue(..), toJSString)
-import Text.JSON.String (showJSValue)
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString.Lazy as Lazy
+import qualified Data.Text.Encoding as Encoding
 
 canonicalDirectory :: DirectoryPayload -> Text
-canonicalDirectory (DirectoryPayload users) = Text.pack (showJSValue (JSArray (map row users)) "")
+canonicalDirectory (DirectoryPayload users) = render (Aeson.toJSON (map row users))
   where
-    string = JSString . toJSString . Text.unpack
-    optional = maybe JSNull string
-    row (DirectoryUser key name given surname mail upn enabled kind) = JSArray
+    string = Aeson.String
+    optional = maybe Aeson.Null string
+    row (DirectoryUser key name given surname mail upn enabled kind) = Aeson.toJSON
       [string key, optional name, optional given, optional surname, optional mail, optional upn,
-       maybe JSNull JSBool enabled, optional kind]
+       maybe Aeson.Null Aeson.Bool enabled, optional kind]
+
+render :: Aeson.Value -> Text
+render = Encoding.decodeUtf8 . Lazy.toStrict . Aeson.encode

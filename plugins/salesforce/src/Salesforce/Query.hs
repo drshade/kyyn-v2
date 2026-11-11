@@ -11,7 +11,7 @@ import qualified Salesforce.Query.Config as Config
 import qualified Salesforce.Query.Api as Api
 import qualified Salesforce.Auth as Auth
 import qualified Salesforce.Json as Json
-import Text.JSON.Types (JSValue(..), toJSString)
+import qualified Data.Aeson as Aeson
 
 fetch :: QueryConfig -> EvidenceSnapshot Record -> Acquisition Record (Either FetchError [EvidenceChange Record])
 fetch config@(QueryConfig origin auth version query _) snapshot = fmap (either (Left . FetchError) Right) $ runExceptT $ do
@@ -21,7 +21,7 @@ fetch config@(QueryConfig origin auth version query _) snapshot = fmap (either (
   token <- ExceptT (Auth.accessToken origin auth)
   rows <- sortOn fst <$> ExceptT (Api.records token config)
   let reference = origin <> "/services/data/" <> version <> "/query?q=" <> Json.escape query
-  inputs <- either throwE pure (mapM (\(_,Record _ body) -> Json.canonical (JSArray [JSString (toJSString (Text.unpack reference)),JSString (toJSString (Text.unpack body))])) rows)
+  let inputs = [Json.canonical (Aeson.toJSON [reference,body]) | (_,Record _ body) <- rows]
   digests <- ExceptT (Right <$> digestText inputs)
   if length digests /= length rows then throwE "Host returned the wrong number of Salesforce digests" else pure ()
   oldKeys <- ExceptT (fmap failure (listEvidenceIds snapshot))
