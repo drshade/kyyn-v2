@@ -649,7 +649,10 @@ allowed methods. Page directories are not listed. Resolve declared pages and
 assets only within the selected immutable source tree and the view's directory;
 reject absolute paths, traversal components and symlinks. Never serve the checkout,
 `.kyyn/`, stored facts or recipe state as a filesystem tree. The declaration's
-source-relative page path selects the asset directory, not arbitrary host paths.
+source-relative page path must be beneath its dedicated `views/<directory>/`
+subtree and selects the asset directory, not arbitrary host paths. The `views/`
+subtree is retained as KB/evolution source but excluded from guest build capture
+and source identity; changing HTML or CSS does not rebuild executable guests.
 Serve HTML, JavaScript, CSS, JSON, common images and fonts with their corresponding
 media types; unknown file extensions use `application/octet-stream`. Host-generated
 index text is HTML-escaped. URL components are encoded independently.
@@ -744,7 +747,12 @@ promise browser network confinement or isolation between authored pages. It does
 not host workbench mutation endpoints. Workbench/domain-view origin isolation and
 static publishing are separate decisions, not hidden prerequisites for this
 surface. Do not enable permissive cross-origin access to the local query endpoint;
-loopback binding is not a claim of hosted or multi-tenant security.
+loopback binding is not a claim of hosted or multi-tenant security. Before serving
+any route, require exactly one valid `Host` authority matching `127.0.0.1` or
+`localhost` and the actual bound port (the HTTP default port may be implicit only
+when it equals that port). Reject missing, malformed, duplicate or different
+host/port authorities with 400. Do not trust forwarded-host headers. This prevents
+DNS rebinding from presenting another hostname as the local query origin.
 
 An installed journey must start from the guide and CLI discovery: declare a view
 in an evolution, check it, serve its draft, fetch the page and `kyyn.js`, call a
@@ -752,7 +760,10 @@ named query, and receive ordinary diagnostics for wrong arguments and an unknown
 query. Accept and verify the accepted data/page; change accepted head while the
 server runs and verify refresh observes it. Verify that edits in the working tree
 are not served, stale drafts request a new check, and asset traversal cannot read
-outside the captured view source. Exercise the helper's query errors, encoded
+outside the captured view source. Reject page declarations outside dedicated
+`views/` subdirectories and prove a view-only edit reuses the guest build. Test
+Host-header rejection, including a foreign hostname resolving to loopback and a
+wrong port. Exercise the helper's query errors, encoded
 view links, undeclared-name failure and URL-parameter behavior. These checks do
 not require the workbench, static publishing or a view/query type-link checker.
 

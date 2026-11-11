@@ -327,8 +327,13 @@ A KB with no views declares
 `views = [] : List { name : Text, description : Text, path : Text }`.
 Names use the existing connector-binding identifier rule and are unique among
 views, independently of query/tool names. Check declaration shape, names, relative
-paths and existence of the entry page in captured source. The page's directory
-contains its assets. Reject traversal and symlinks; do not parse HTML/JavaScript,
+paths and existence of the entry page in captured source. Every page must live
+under a dedicated subdirectory of the root's top-level `views/` directory, for
+example `views/training-register/index.html`. The page's directory contains its
+assets; declaring a page at the source root is invalid. Exclude the entire
+`views/` subtree from guest build inputs and their source identity, while retaining
+it in evolution capture, review and acceptance. A page or asset edit must not
+force a guest rebuild. Reject traversal and symlinks; do not parse HTML/JavaScript,
 infer dependencies or require a query declaration to be mentioned by any page.
 A page may include `/kb/kyyn.js` explicitly and use its named-query, navigation
 and URL-parameter functions as defined in [ADR 0018](0018-surfaces.md#kb-owned-domain-views).
