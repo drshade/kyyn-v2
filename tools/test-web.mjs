@@ -132,8 +132,11 @@ evolution = prepare (pure ()) $ edit (Rationale "First task" [])
   const accepted=await serve();
   cli(['evolution','ready',d.id]);cli(['evolution','accept',d.id]);
   assert.deepEqual((await query(accepted,'titles',{})).result,['First lesson']);
-  write(path.join(kb,'root/views/training/index.html'),'UNCOMMITTED');
+  const acceptedPage=path.join(kb,'root/views/training/index.html');
+  const committedPage=fs.readFileSync(acceptedPage);
+  write(acceptedPage,'UNCOMMITTED');
   assert(!(await (await request(accepted,'/kb/views/training/')).text()).includes('UNCOMMITTED'));
+  fs.writeFileSync(acceptedPage,committedPage);
   const e=cli(['evolution','new','next-lesson']);
   write(path.join(e.path,'change/Evolution.hs'),evolution.replace('"one"','"two"').replace('First lesson','Second lesson'));
   cli(['evolution','check',e.id]);cli(['evolution','ready',e.id]);cli(['evolution','accept',e.id]);
