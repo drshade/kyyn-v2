@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module Kyyn.Build.Driver (buildGuest) where
 
+import Kyyn.Build.Language (guestLanguageFlags)
+
 import Control.Monad (unless, forM, when)
 import Data.Aeson (eitherDecodeStrict', encode)
 import qualified Data.ByteString as Bytes
@@ -429,7 +431,7 @@ compile :: FilePath -> FilePath -> String -> [String] -> FilePath -> FilePath ->
 compile compiler generated stage options entry output = do
   let objects = generated </> stage
   createDirectoryIfMissing True objects
-  callProcess compiler (["--make","-XGHC2021","-odir",objects,"-hidir",objects] ++ options ++ ["-main-is",takeBaseName entry ++ ".main",entry,"-o",output])
+  callProcess compiler (["--make"] ++ guestLanguageFlags ++ ["-odir",objects,"-hidir",objects] ++ options ++ ["-main-is",takeBaseName entry ++ ".main",entry,"-o",output])
 
 singleLine :: String -> String -> IO String
 singleLine label output = case lines output of

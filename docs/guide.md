@@ -101,6 +101,11 @@ evolution has the narrower role described below.
 This complete example starts from a newly initialized empty KB. In the draft,
 edit `target/src/Schema.hs` in place:
 
+KB modules use GHC2024 plus `OverloadedStrings`, `DeriveAnyClass`,
+`OverloadedRecordDot`, `DuplicateRecordFields`, `NoFieldSelectors`,
+`RecordWildCards`, `BlockArguments` and `MultiWayIf`. Compilation and discovery
+use the same defaults. Module pragmas can enable or disable extensions locally.
+
 ```haskell
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, OverloadedStrings #-}
 module Schema where

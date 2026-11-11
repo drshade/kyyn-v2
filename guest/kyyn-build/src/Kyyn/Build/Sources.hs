@@ -1,6 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Kyyn.Build.Sources (sourceFiles, moduleHeader) where
 
+import Kyyn.Build.Language (guestLanguageFlags)
+
 import Control.Monad (forM)
 import Control.Monad.IO.Class (liftIO)
 import Data.List (sort)
@@ -17,7 +19,7 @@ moduleHeader :: FilePath -> FilePath -> IO (String,[String])
 moduleHeader libdir path = runGhc (Just libdir) $ do
   initial <- getSessionDynFlags
   logger <- getLogger
-  (base,_,_) <- parseDynamicFlags logger initial [noLoc "-XGHC2021"]
+  (base,_,_) <- parseDynamicFlags logger initial (map noLoc guestLanguageFlags)
   buffer <- liftIO (hGetStringBuffer path)
   let (_,options) = getOptions (initParserOpts base) buffer path
   (configured,_,_) <- parseDynamicFlags logger base options
