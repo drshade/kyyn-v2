@@ -15,9 +15,10 @@ import qualified Kyyn.Types.Plugin as P
 writeToolBindings :: FilePath -> [FilePath] -> [RegisteredPlugin] -> IO ()
 writeToolBindings generated roots plugins = do
   let connectors = zip [0 :: Int ..]
-        [(plugin,connector) | RegisteredPlugin plugin declarations <- plugins, connector@P.SourceConnector{} <- declarations]
-      methods = [(index,plugin,connector,method) | (index,(plugin,connector)) <- connectors, method <- connector.methods]
-      references = [connector.fetch | (_index,(_plugin,connector)) <- connectors] ++
+        [(plugin,connector,fetch,captured) | RegisteredPlugin plugin declarations <- plugins,
+          connector@P.SourceConnector{P.fetch = fetch, P.methods = captured} <- declarations]
+      methods = [(index,plugin,connector,method) | (index,(plugin,connector,_,captured)) <- connectors, method <- captured]
+      references = [fetch | (_index,(_plugin,_connector,fetch,_)) <- connectors] ++
         [method.implementation | (_index,_plugin,_connector,method) <- methods]
   modules <- traverse (fmap (Text.unpack . referenceModule) . either fail pure . qualifiedReference False) references
   write "KyynToolCalls" (unlines
@@ -25,18 +26,18 @@ writeToolBindings generated roots plugins = do
       "module KyynToolCalls where", "import Kyyn.Build.Captured", "import Language.Haskell.TH (mkName)"] ++
       map ("import qualified " ++) (nub modules) ++
       ["$(toolCalls (mkName \"Calls\")",
-       "  [" ++ intercalate "," ["ConnectorBinding (mkName " ++ show (tag index) ++ ") '" ++ Text.unpack connector.fetch ++
-         " " ++ show (plugin.sourceRoot ++ ": " ++ Text.unpack connector.name) | (index,(plugin,connector)) <- connectors] ++ "]",
+       "  [" ++ intercalate "," ["ConnectorBinding (mkName " ++ show (tag index) ++ ") '" ++ Text.unpack fetch ++
+         " " ++ show (plugin.sourceRoot ++ ": " ++ Text.unpack connector.name) | (index,(plugin,connector,fetch,_)) <- connectors] ++ "]",
        "  [" ++ intercalate "," ["CapturedBinding (mkName " ++ show (call index method) ++ ") (mkName " ++ show (proxy index method) ++
          ") (mkName " ++ show (tag index) ++ ") '" ++ Text.unpack method.implementation ++ " " ++
          show (plugin.sourceRoot ++ ": " ++ Text.unpack connector.name) | (index,plugin,connector,method) <- methods] ++ "])"]))
-  forM_ connectors $ \(index,(plugin,connector)) -> do
+  forM_ connectors $ \(index,(plugin,connector,_,captured)) -> do
     let name = proxyModule plugin.pluginName connector.name
     write name (unlines
       (["{-# LANGUAGE NoMonomorphismRestriction #-}","module " ++ name ++ " where",
         "import Kyyn.Types.Plugin (ConnectorInstance)","import qualified KyynToolCalls as Calls",
         "type Instance = ConnectorInstance Calls." ++ tag index] ++
-       [Text.unpack method.methodName ++ " = Calls." ++ proxy index method | method <- connector.methods]))
+       [Text.unpack method.methodName ++ " = Calls." ++ proxy index method | method <- captured]))
     write (name ++ ".Evidence") (unlines
       ["{-# LANGUAGE NoMonomorphismRestriction #-}","module " ++ name ++ ".Evidence where",
        "import qualified KyynToolCalls as Calls",
@@ -60,7 +61,7 @@ writeToolBindings generated roots plugins = do
      concat [[Text.unpack selected.instanceBinding ++ " :: ConnectorInstance Calls." ++ tag index,
        Text.unpack selected.instanceBinding ++ " = ConnectorInstance " ++ show selected.instanceName] |
        (plugin,selected,True) <- configured,
-       (index,(actual,connector)) <- connectors,
+       (index,(actual,connector,_,_)) <- connectors,
        actual.pluginName == plugin.pluginName, connector.name == selected.instanceConnector]))
   write "Kyyn.Agentic" agenticModule
   write "KyynGuestDispatch" (unlines
@@ -76,7 +77,7 @@ writeToolBindings generated roots plugins = do
        "  exchangeEvidenceList transport requestId " ++ identity plugin connector ++ " name",
        "dispatch transport requestId (Calls.ReadEvidence_" ++ tag index ++ " (ConnectorInstance name) key) =",
        "  exchangeEvidenceRead transport requestId " ++ identity plugin connector ++ " name key"] |
-       (index,(plugin,connector)) <- connectors] ++
+       (index,(plugin,connector,_,_)) <- connectors] ++
      concat [["dispatch transport requestId (Calls." ++ call index method ++ " (ConnectorInstance name) arguments) =",
        "  exchangeCaptured transport requestId (CapturedMethodIdentity " ++ unwords (map show
          [plugin.pluginName,connector.name,method.methodName,method.methodDescription]) ++ ") name arguments"] |
