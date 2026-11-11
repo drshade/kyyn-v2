@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DuplicateRecordFields #-}
 module MicrosoftGraph.Types where
 
 import GHC.Generics (Generic)

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Json (parse, member, text, integer, boolean, array, optionalText, optionalInteger, canonical, escape, form) where
 
 import Data.Text (Text)

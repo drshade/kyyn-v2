@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
-{-# LANGUAGE DuplicateRecordFields #-}
 module MicrosoftGraph.Meetings.Types where
 
 import GHC.Generics (Generic)

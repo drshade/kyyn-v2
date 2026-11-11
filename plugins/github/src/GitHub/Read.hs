@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Read (item, issue, pullRequest, commit) where
 
 import Data.Text (Text)

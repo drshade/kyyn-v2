@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
 module MicrosoftGraph.Directory.Types where
 
 import GHC.Generics (Generic)

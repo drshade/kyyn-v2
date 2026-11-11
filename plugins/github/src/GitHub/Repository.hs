@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Repository (fetch) where
 
 import Control.Monad (forM, unless)

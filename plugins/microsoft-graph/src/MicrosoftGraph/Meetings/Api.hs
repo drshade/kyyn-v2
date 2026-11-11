@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Meetings.Api (Pending(..), discover, artifacts, capture, targets, Discovery(..)) where
 
 import Control.Monad (filterM)

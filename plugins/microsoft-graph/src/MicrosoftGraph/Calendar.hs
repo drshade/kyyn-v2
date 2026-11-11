@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Calendar (fetch) where
 
 import qualified Data.Text as Text

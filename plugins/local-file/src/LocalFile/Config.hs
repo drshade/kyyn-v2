@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Config (validate) where
 
 import qualified Data.Text as Text

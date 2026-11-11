@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Directory.Read (directory) where
 import Data.Text (Text)
 import Kyyn.Plugin

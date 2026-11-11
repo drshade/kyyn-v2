@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Json (parse, member, text, integer, boolean, array, optionalText, optionalInteger, escape, form) where
 
 import Data.Text (Text)

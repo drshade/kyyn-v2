@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Calendar.Config (validate, login, window) where
 
 import qualified Data.Text as Text

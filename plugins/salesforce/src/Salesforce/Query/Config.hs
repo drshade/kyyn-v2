@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Query.Config (validate, login) where
 import Data.Char (isAsciiLower, isAsciiUpper, isSpace)
 import qualified Data.Text as Text

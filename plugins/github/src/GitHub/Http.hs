@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Http (get, pages, nextPage) where
 
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)

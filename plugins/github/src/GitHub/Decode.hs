@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module GitHub.Decode (issue, comment, review, pullRequest, commit, fileChange, textField, numberField) where
 
 import Data.Text (Text)

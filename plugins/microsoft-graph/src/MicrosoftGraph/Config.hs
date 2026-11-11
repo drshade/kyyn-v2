@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Config (graphRoot, graphApiBase, authentication) where
 
 import qualified Data.Text as Text

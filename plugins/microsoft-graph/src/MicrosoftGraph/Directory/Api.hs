@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings, OverloadedRecordDot #-}
 module MicrosoftGraph.Directory.Api (listing, endpoint) where
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (sortOn, groupBy)

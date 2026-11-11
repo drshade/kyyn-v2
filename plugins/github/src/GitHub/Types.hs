@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
-{-# LANGUAGE DuplicateRecordFields, NoFieldSelectors #-}
 module GitHub.Types where
 
 import GHC.Generics (Generic)

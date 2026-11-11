@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Http (send, download, downloadOptional, postForm, requireSuccess) where
 
 import qualified Data.Text as Text

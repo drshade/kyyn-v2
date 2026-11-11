@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module LocalFile.Folder (fetch) where
 
 import Kyyn.Plugin

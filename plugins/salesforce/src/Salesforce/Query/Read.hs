@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Query.Read (record) where
 import Data.Text (Text)
 import Kyyn.Plugin

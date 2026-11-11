@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Meetings.Config (validate, login) where
 
 import qualified Data.Text as Text

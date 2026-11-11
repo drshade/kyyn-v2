@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies #-}
-{-# LANGUAGE DuplicateRecordFields #-}
 module MicrosoftGraph.Calendar.Types where
 
 import GHC.Generics (Generic)

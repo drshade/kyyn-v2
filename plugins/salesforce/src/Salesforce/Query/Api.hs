@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Salesforce.Query.Api (records) where
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.List (group, sort)

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Meetings (fetch) where
 
 import Control.Monad (forM)

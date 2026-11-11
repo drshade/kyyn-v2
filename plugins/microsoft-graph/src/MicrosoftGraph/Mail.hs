@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Mail (fetch) where
 
 import Data.Text (Text)

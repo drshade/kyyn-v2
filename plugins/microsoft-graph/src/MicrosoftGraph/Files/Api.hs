@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Files.Api (listing, itemUrl, field, optional, shareToken) where
 import Control.Monad.Trans.Except (ExceptT(..), runExceptT, throwE)
 import Data.Text (Text)

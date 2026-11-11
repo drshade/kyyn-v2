@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Calendar.Read (event) where
 import Kyyn.Plugin
 import MicrosoftGraph.Calendar.Types

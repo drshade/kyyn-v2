@@ -30,8 +30,9 @@ cabal test sync-timings cli-arguments cli-adapters guest-catalogue \
   secret-store judgement-provider model-turn-provider contract-roles plugin-installation \
   evolution-core snapshot-preparation target-evolution stored-snapshots snapshot-reports snapshot-archives input-types recipe-state evidence-index plugin-host scalar-storage \
   description-storage guest-compilation-cache inspection captured-bindings edit-bindings source-inventory recipe-bindings \
-  wire-contracts guest-protocol capabilities plugin-contracts graph-retries guest-scheduler \
+  wire-contracts guest-protocol capabilities guest-scheduler \
   --test-show-details=direct
+cabal exec -- runghc -package=kyyn-guest-build tools/test-plugin-source.hs
 node tools/test-framing.mjs
 node tools/test-cli-selection.mjs "$(cabal list-bin exe:kyyn-v2)"
 if [[ "${1:-}" == --full ]]; then

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module MicrosoftGraph.Mail.Fingerprint (canonicalMessage) where
 
 import Data.Text (Text)
