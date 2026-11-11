@@ -33,34 +33,46 @@ Web has two kinds of page:
 | Route | Shows |
 | --- | --- |
 | `GET /` | Index: evolutions, collections, types, queries, tools, recipes and a link to `/kb/` |
-| `GET /evolutions/<id>` | Explanation, lifecycle state, check result and diagnostics, the step report with changed records linked to their record pages, and the source diff against the base |
+| `GET /evolutions/<id>` | Explanation, lifecycle state, the step report with each changed record's before and after values, and the source diff against the base |
 | `GET /collections/<collection>` | The records of one collection |
 | `GET /records/<collection>/<id>` | One record as labelled fields, with references to other records as links |
 | `GET /types/<name>` | A schema type's fields, their types and descriptions |
-| `GET /queries/<name>` | Description, input and result types, implementation source and, when `input` is given, the result |
-| `GET /tools/<name>` | Description, input and result types, model selection and implementation source |
-| `GET /recipes/<name>` | Instructions or flow structure and typed state, without executing actions |
+| `GET /queries/<name>` | Description, input and result types, the module that implements it and, when `input` is given, the result |
+| `GET /tools/<name>` | Description, input and result types, model selection and the module that implements it |
+| `GET /recipes/<name>` | Instructions or flow structure and its state type, without executing actions |
 
 Each page stands alone: a person arrives from a link, not through navigation.
 The routes are stable and listed in the guide so an agent can compose a link
 from a name it already has.
 
-Every page shows the accepted KB or one draft. `?evolution=ID` selects a draft
-for that page, and its links carry the parameter. Without it, the page uses the
-server's selection (`--evolution ID`, otherwise accepted). Every page states
-which it shows. Draft facts, types and query results come from the evolution's
-last successfully checked candidate, as draft queries do under ADR 0018; an
-evolution that has never checked still shows its explanation, diagnostics and
-source diff. Pages read current state on each request, so a reload shows the
-agent's latest edit or check.
+Every page shows the accepted KB or one draft, and states which. `?evolution=ID`
+selects a draft for that page, and its links carry the parameter; without it the
+page shows the accepted KB. The server's `--evolution` option applies only to
+domain views under `/kb/`.
+
+Draft facts, types, declarations and query results come from the evolution's
+last successfully checked candidate, not from live target source, so the pages
+of one draft agree with each other. Pages read current state on each request, so
+a reload shows the agent's latest successful check. A GET never runs a check.
+
+The evolution page takes its step report from that candidate, or from the
+archived report of an accepted evolution. The report carries each change's
+before and after values, so removed records and intermediate steps are shown
+there. A changed record links to its record page only when it exists in the
+context shown. An evolution with no checked candidate shows its explanation and
+source diff. Check diagnostics are not stored; the agent has them from the
+check it ran.
+
+Query and tool pages show the captured module that contains the implementation,
+whole, not an extracted definition.
 
 Rendering is generic. Records and types are laid out from the checked contract
 and its role metadata under [ADR 0005](0005-contracts.md), not from a second
 reading of authored source. A query's `input` URL parameter is a Dhall expression
 checked against its input contract, as `--input` is on the CLI. Presentation
 designed for a domain belongs in a domain view. An agent that wants a one-off
-explanatory page writes one under a draft's `target/views/`, which is served
-live without a check.
+explanatory page declares a view in a draft; its pages are served live without
+a check.
 
 Pages are server-rendered HTML produced by the host from the same typed
 operations CLI and MCP use. No client framework or separate JSON API is needed
@@ -135,5 +147,6 @@ Test the journey from the guide: an agent prepares an evolution that changes
 schema, facts and a query, starts the server and composes links from names alone.
 The evolution page lists the changed records and links to record pages showing
 draft values; the same record URL without `?evolution` shows the accepted value.
-The query page shows its source and a result for a given input. A failing check
-shows diagnostics on the evolution page. No request changes the KB.
+A removed record appears in the step report with its former value and no link.
+The query page shows its module and a result for a given input. After a failed
+check the pages still show the last checked candidate. No request changes the KB.
