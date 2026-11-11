@@ -13,6 +13,10 @@ import MicrosoftGraph.Timestamp (timestamp, daysBefore)
 
 main :: IO ()
 main = do
+  forM_ [Graph.escape, Salesforce.escape, GitHub.escape] $ \escape ->
+    check "URI escaping changed" (escape "a b/+?é" == "a%20b%2F%2B%3F%C3%A9")
+  forM_ [Graph.form, Salesforce.form] $ \form ->
+    check "Form encoding changed" (form [("a b","+&"),("a b","é")] == "a%20b=%2B%26&a%20b=%C3%A9")
   check "Graph first duplicate wins" $
     (Graph.parse "{\"x\":\"first\",\"x\":null}" >>= Graph.member "x" >>= Graph.text) == Right "first"
   check "GitHub first duplicate wins" $

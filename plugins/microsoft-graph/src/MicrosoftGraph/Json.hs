@@ -1,10 +1,8 @@
 module MicrosoftGraph.Json (parse, member, text, integer, boolean, array, optionalText, optionalInteger, escape, form) where
 
 import Data.Text (Text)
-import Data.Char (chr)
+import Network.HTTP.Types.URI (urlEncode, renderSimpleQuery)
 import Data.Foldable (toList)
-import qualified Data.ByteString as Bytes
-import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
@@ -47,11 +45,8 @@ optionalInteger key fallback value@(Aeson.Object values) = case KeyMap.lookup (K
 optionalInteger _ _ _ = Left "Expected response object"
 
 escape :: Text -> Text
-escape = Text.pack . concatMap encode . Bytes.unpack . Text.encodeUtf8
-  where
-    encode byte | byte >= 65 && byte <= 90 || byte >= 97 && byte <= 122 || byte >= 48 && byte <= 57 || byte `elem` [45,46,95,126] = [chr (fromIntegral byte)]
-                | otherwise = ['%',hex (byte `div` 16),hex (byte `mod` 16)]
-    hex n = "0123456789ABCDEF" !! fromIntegral n
+escape = Text.decodeUtf8 . urlEncode True . Text.encodeUtf8
 
 form :: [(Text,Text)] -> Text
-form = Text.intercalate "&" . map (\(key,value) -> escape key <> "=" <> escape value)
+form = Text.decodeUtf8 . renderSimpleQuery False .
+  map (\(key,value) -> (Text.encodeUtf8 key,Text.encodeUtf8 value))

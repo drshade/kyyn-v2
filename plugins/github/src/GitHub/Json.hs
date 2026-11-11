@@ -1,11 +1,9 @@
 module GitHub.Json (parse, field, text, integer, boolean, array, nullable, optional, has, escape) where
 
-import Data.Char (chr)
 import Data.Foldable (toList)
 import Data.Text (Text)
-import qualified Data.Text as Text
+import Network.HTTP.Types.URI (urlEncode)
 import qualified Data.Text.Encoding as Encoding
-import qualified Data.ByteString as Bytes
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Key as Key
 import qualified Data.Aeson.KeyMap as KeyMap
@@ -37,8 +35,4 @@ has :: Text -> Aeson.Value -> Bool
 has key (Aeson.Object fields) = KeyMap.member (Key.fromText key) fields
 has _ _ = False
 escape :: Text -> Text
-escape = Text.pack . concatMap encode . Bytes.unpack . Encoding.encodeUtf8
-  where
-    encode byte | byte >= 65 && byte <= 90 || byte >= 97 && byte <= 122 || byte >= 48 && byte <= 57 || byte `elem` [45,46,95,126] = [chr (fromIntegral byte)]
-                | otherwise = ['%',hex (byte `div` 16),hex (byte `mod` 16)]
-    hex n = "0123456789ABCDEF" !! fromIntegral n
+escape = Encoding.decodeUtf8 . urlEncode True . Encoding.encodeUtf8
