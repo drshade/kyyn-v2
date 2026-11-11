@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Porcelain.Capability.EvolutionStore
-  ( EvolutionStore(..), readWorkspace, matchesCapturedInputs, saveCandidate, loadCandidate
+  ( EvolutionStore(..), StoredCandidate(..), readWorkspace, matchesCapturedInputs, saveCandidate, loadCandidate
+  , saveCheckedCandidate, loadCheckedCandidate
   , listEvolutions, resolveEvolution, readEvolutionState, markReady, markDraft, exportAcceptedWorkspace, workspaceLocation
   , readEvolutionSummary, readArchivedReport, inspectEvolution ) where
 
@@ -21,6 +22,8 @@ workspaceLocation :: EvolutionWorkspace -> Either String RelativePath
 workspaceLocation (EvolutionWorkspace kb identity) =
   relativePath ("evolutions/" ++ evolutionIdName identity) >>= knowledgeBasePath kb
 
+newtype StoredCandidate = StoredCandidate RelativePath deriving (Eq, Show)
+
 data EvolutionStore :: Effect where
   ReadEvolutionSummary :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] EvolutionSummary)
   ReadArchivedReport :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe EvolutionReport))
@@ -32,7 +35,9 @@ data EvolutionStore :: Effect where
   ExportAcceptedWorkspace :: Candidate (Validated Root) -> EvolutionStore m (Either [Diagnostic] (TreePath, FileTree))
   ReadWorkspace :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] WorkspaceSnapshot)
   MatchesCapturedInputs :: EvolutionContext -> EvolutionStore m (Either [Diagnostic] Bool)
-  SaveCandidate :: Candidate Root -> EvolutionStore m ()
+  SaveCheckedCandidate :: StoredCandidate -> Candidate (Validated Root) -> EvolutionStore m ()
+  LoadCheckedCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
+  SaveCandidate :: Candidate Root -> EvolutionStore m StoredCandidate
   LoadCandidate :: EvolutionWorkspace -> EvolutionStore m (Either [Diagnostic] (Maybe (Candidate Root)))
 
 type instance DispatchOf EvolutionStore = Dynamic
@@ -61,7 +66,7 @@ readWorkspace = send . ReadWorkspace
 matchesCapturedInputs :: EvolutionStore :> es => EvolutionContext -> Eff es (Either [Diagnostic] Bool)
 matchesCapturedInputs = send . MatchesCapturedInputs
 
-saveCandidate :: EvolutionStore :> es => Candidate Root -> Eff es ()
+saveCandidate :: EvolutionStore :> es => Candidate Root -> Eff es StoredCandidate
 saveCandidate = send . SaveCandidate
 
 loadCandidate :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
@@ -84,3 +89,9 @@ markDraft = send . MarkDraft
 
 exportAcceptedWorkspace :: EvolutionStore :> es => Candidate (Validated Root) -> Eff es (Either [Diagnostic] (TreePath, FileTree))
 exportAcceptedWorkspace = send . ExportAcceptedWorkspace
+
+saveCheckedCandidate :: EvolutionStore :> es => StoredCandidate -> Candidate (Validated Root) -> Eff es ()
+saveCheckedCandidate stored = send . SaveCheckedCandidate stored
+
+loadCheckedCandidate :: EvolutionStore :> es => EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
+loadCheckedCandidate = send . LoadCheckedCandidate

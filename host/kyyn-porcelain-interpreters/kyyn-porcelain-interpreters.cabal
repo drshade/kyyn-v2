@@ -16,6 +16,7 @@ library
     Kyyn.Porcelain.Interpreter.EvidenceAcquisition
     Kyyn.Porcelain.Interpreter.EvidenceInspection
     Kyyn.Porcelain.Interpreter.EvidenceStore
+    Kyyn.Porcelain.Protocol.Views
     Kyyn.Porcelain.Protocol.EvidenceIndex
     Kyyn.Porcelain.Protocol.EvidencePayload
     Kyyn.Porcelain.Protocol.RecipePersistence

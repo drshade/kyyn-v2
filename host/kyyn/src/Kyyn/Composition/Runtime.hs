@@ -1,5 +1,5 @@
 {-# LANGUAGE DataKinds #-}
-module Kyyn.Composition.Runtime (Base, Runtime, runBase, runRuntime, withRuntime, finish) where
+module Kyyn.Composition.Runtime (Base, Runtime, runBase, runRuntime, withRuntime, withRuntimeResult, finish) where
 
 import Effectful (Eff, IOE, runEff)
 import System.Directory (findExecutable, canonicalizePath)
@@ -48,10 +48,13 @@ finish :: IO (Either OperationalFailure Response) -> IO Response
 finish action = either operationalFailure id <$> action
 
 withRuntime :: Host -> (GuestBuildEnvironment -> IO Response) -> IO Response
-withRuntime host@(Host _ _ temp override cache environment _) action = do
+withRuntime host action = either id id <$> withRuntimeResult host action
+
+withRuntimeResult :: Host -> (GuestBuildEnvironment -> IO a) -> IO (Either Response a)
+withRuntimeResult host@(Host _ _ temp override cache environment _) action = do
   located <- findExecutable (maybe "nix" id override)
   case located of
-    Nothing -> pure (refusal [errorDiagnostic "setup.nix" "Nix was not found; install Nix or supply --nix EXECUTABLE"])
+    Nothing -> pure (Left (refusal [errorDiagnostic "setup.nix" "Nix was not found; install Nix or supply --nix EXECUTABLE"]))
     Just path -> do
       executable <- canonicalizePath path
       result <- runBase host $ Process.withProcess
@@ -62,7 +65,7 @@ withRuntime host@(Host _ _ temp override cache environment _) action = do
           status <- Process.awaitExit
           pure (output,status)
       case result of
-        Left failure -> pure (operationalFailure failure)
+        Left failure -> pure (Left (operationalFailure failure))
         Right (output,Process.ProcessExit 0 _) | not (Bytes.null output) ->
-          action (GuestBuildEnvironment executable (Bytes.unpack output) environment cache)
-        Right (_,Process.ProcessExit _ errors) -> pure (refusal [errorDiagnostic "setup.nix" (Bytes.unpack errors)])
+          Right <$> action (GuestBuildEnvironment executable (Bytes.unpack output) environment cache)
+        Right (_,Process.ProcessExit _ errors) -> pure (Left (refusal [errorDiagnostic "setup.nix" (Bytes.unpack errors)]))

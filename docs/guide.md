@@ -295,6 +295,99 @@ ignored local storage. Use `secret set` with its hidden prompt or stdin rather
 than placing credentials in source, connector options or shell arguments. Follow
 the plugin/provider guide for the required secret names.
 
+## Add a browser view
+
+Domain views are ordinary HTML/JavaScript pages for readers. They get KB data
+through named queries; they do not use raw fact endpoints or publish outputs.
+Start an evolution and create a page under its `target/views/<directory>/`:
+
+```sh
+kyyn-v2 evolution new training-view
+```
+
+In the returned draft's `target/kb.dhall`, replace the empty `views` list with:
+
+```dhall
+views =
+  [ { name = "training_register"
+    , description = "Browse the training register"
+    , path = "views/training-register/index.html"
+    }
+  ]
+```
+
+Use an existing named query, discovering its arguments with
+`kyyn-v2 root query show NAME`, or author and register one in the same draft.
+For example, a KB with a `trainingRegister` query taking `fromDate`, `toDate` and
+`minConfidence` can put this in `target/views/training-register/index.html`:
+
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>Training register</title>
+<script src="/kb/kyyn.js"></script>
+<h1>Training register</h1>
+<pre id="report">Loading…</pre>
+<script>
+const params = kyyn.params();
+const input = {
+  fromDate: params.get('from') || '2026-11-01',
+  toDate: params.get('to') || '2026-11-30',
+  minConfidence: { tag: 'Low' }
+};
+kyyn.query('trainingRegister', input)
+  .then(result => document.querySelector('#report').textContent = JSON.stringify(result, null, 2))
+  .catch(error => document.querySelector('#report').textContent = error.message);
+</script>
+```
+
+Replace that query name and argument with your KB's actual contract. JSON uses
+the same structural representations as CLI JSON output: strings remain strings,
+union cases use `tag`, and exact numeric scalars use their declared encoding.
+Unit arguments are `{}`. The host checks arguments before invoking the query;
+errors preserve Kyyn's diagnostics. The helper rejects an Error with `status`,
+`outcome`, `diagnostics` and `context` for a failed query response.
+
+```sh
+kyyn-v2 web serve --evolution ID --port 8080
+```
+
+Open the printed `/kb/` address and select the view. The page and its CSS/JS/assets
+serve immediately, even if the evolution has never checked or its Haskell is
+broken. Edit a page file and refresh; no guest rebuild or automatic browser reload
+is required. Relative asset URLs resolve within that view's directory.
+
+Queries use the latest successfully checked candidate, so run
+`kyyn-v2 evolution check ID` to provide query data. A failed check does not replace
+that successful candidate. Until a successful check exists, query calls return a
+diagnostic requesting one, while the page stays available. In this first slice,
+queries keep using that candidate after other source edits too; recheck explicitly
+to update their data. Non-view freshness detection is tracked in #304.
+
+Before acceptance, check all changes again, inspect the result, and follow the
+normal ready/accept workflow. Stop the draft server with Ctrl-C, then run:
+
+```sh
+kyyn-v2 web serve
+```
+
+Accepted serving reads committed source and facts, ignoring uncommitted edits.
+Each request selects the accepted revision anew; accepting another evolution is
+visible on refresh. A page and its later query requests can see different accepted
+revisions. This is not a browser-session snapshot or a query-result cache.
+
+Pages include `kyyn.js` explicitly. `kyyn.viewUrl('training_register', {from:
+'2026-11-01'})` constructs a link to a declared view and encodes its parameters;
+an undeclared view is an error. `kyyn.params()` returns `URLSearchParams`, so use
+`.get(...)` or `.getAll(...)`. View parameters have no declared types; checking
+happens only when the page passes values to a query.
+
+The server binds only to `127.0.0.1`, defaults to port 8080, and supports `--port 0`
+to choose a free port. It has no authoring workbench, mutation endpoints, static
+publishing or cross-view isolation. Host-header validation is deferred to #304;
+this first slice is not hardened against DNS rebinding. Keep routine use with
+personal-data KBs for after that follow-up.
+
 ## Choose the right entry point
 
 - **Query:** a typed read of accepted KB facts. Register it in `kb.dhall` to expose

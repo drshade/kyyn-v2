@@ -13,7 +13,7 @@ library
     Kyyn.Domain.StoragePath Kyyn.Domain.StoredSnapshot Kyyn.Domain.SnapshotReport
     Kyyn.Domain.CompiledProgram Kyyn.Domain.CompiledEntry Kyyn.Domain.GuestApi Kyyn.Domain.Guest
     Kyyn.Domain.Plugin
-    Kyyn.Domain.Output
+    Kyyn.Domain.Output Kyyn.Domain.View
     Kyyn.Domain.Tap
     Kyyn.Domain.Tool
     Kyyn.Domain.Evidence

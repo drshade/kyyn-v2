@@ -31,7 +31,7 @@ main :: IO ()
 main = do
   let path = either error id . relativePath
       code = [(path "flake.nix","{}"),(path "flake.lock","{}"),(path "src/Main.hs","module Main where")]
-      material = [(path "facts/items/a.dhall","private fact"),(path ".kyyn/secrets/graph.dhall","private token"),
+      material = [(path "views/report/index.html","page"),(path "views/report/style.css","styles"),(path "facts/items/a.dhall","private fact"),(path ".kyyn/secrets/graph.dhall","private token"),
         (path ".git/config","private configuration"),(path ".env","private environment"),
         (path "dist-newstyle/cache/plan.json","cache"),(path "recipes/state.dhall","private state")]
   captured <- right (guestSources RootEntries (code ++ material))

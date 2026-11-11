@@ -1,6 +1,6 @@
 {-# LANGUAGE DataKinds, TypeFamilies #-}
 module Kyyn.Plumbing.Capability.FileSystem
-  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, publishBytes, replaceTree, readTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
+  ( FileSystem(..), withTemporaryScope, readBytes, readOptionalBytes, writeBytes, replaceBytes, publishBytes, replaceTree, readTree, readSelectedTree, listDirectory, fileSize, removeFile, entryExists, directoryExists, createUniqueDirectory, createDirectory, ensureDirectory, ensureIgnoredDirectory ) where
 
 import Data.ByteString (ByteString)
 import Effectful (Eff, Effect, DispatchOf, Dispatch(..), (:>))
@@ -17,6 +17,7 @@ data FileSystem :: Effect where
   PublishBytes :: DirectoryScope -> RelativePath -> ByteString -> FileSystem m (Either String ())
   ReplaceTree :: DirectoryScope -> DirectoryScope -> RelativePath -> FileTree -> FileSystem m ()
   ReadTree :: DirectoryScope -> FileSystem m FileTree
+  ReadSelectedTree :: DirectoryScope -> [RelativePath] -> FileSystem m FileTree
   ListDirectory :: DirectoryScope -> FileSystem m (Maybe [RelativePath])
   FileSize :: DirectoryScope -> RelativePath -> FileSystem m (Maybe Integer)
   RemoveFile :: DirectoryScope -> RelativePath -> FileSystem m ()
@@ -54,6 +55,10 @@ replaceTree staging scope path = send . ReplaceTree staging scope path
 
 readTree :: FileSystem :> es => DirectoryScope -> Eff es FileTree
 readTree = send . ReadTree
+
+-- Read only these files/subtrees, rejecting symlinks along their ancestor paths.
+readSelectedTree :: FileSystem :> es => DirectoryScope -> [RelativePath] -> Eff es FileTree
+readSelectedTree scope = send . ReadSelectedTree scope
 
 listDirectory :: FileSystem :> es => DirectoryScope -> Eff es (Maybe [RelativePath])
 listDirectory = send . ListDirectory

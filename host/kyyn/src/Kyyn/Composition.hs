@@ -3,6 +3,7 @@ module Kyyn.Composition (execute) where
 
 import Effectful (Eff, runEff, (:>))
 import qualified Data.Text as Text
+import Kyyn.Composition.Web (serveWeb)
 import Kyyn.Composition.Runtime
 import Kyyn.Composition.Connectors (dispatchConnectors, dispatchEvidence)
 import Kyyn.Composition.Tools (dispatchTools)
@@ -112,6 +113,7 @@ execute (Cli.Invocation selection _ command) = do
     Left response -> pure response
     Right (host,scope) -> do
       case command of
+        Cli.WebServe port draft -> serveWeb host scope port draft
         Cli.Kb Cli.InitKb -> executeInitialization host scope
         Cli.Root request -> selectKnowledgeBase host scope >>= either pure (dispatchRoot host request)
         Cli.Evolution request -> selectKnowledgeBase host scope >>= either pure (dispatchEvolution host request)

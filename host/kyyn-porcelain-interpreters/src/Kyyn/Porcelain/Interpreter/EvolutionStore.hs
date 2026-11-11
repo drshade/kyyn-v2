@@ -31,7 +31,7 @@ import Kyyn.Plumbing.Protocol.SnapshotArchive (encodeSnapshotArchive, decodeSnap
 import Kyyn.Plumbing.Capability.Failure (Failure, raiseFailure)
 import qualified Kyyn.Plumbing.Capability.DhallHandling as DhallHandling
 import Kyyn.Types.Fact (Fact(..), FactId(..))
-import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..), workspaceLocation)
+import Kyyn.Porcelain.Capability.EvolutionStore (EvolutionStore(..), StoredCandidate(..), workspaceLocation)
 import qualified Kyyn.Porcelain.Capability.WorkspaceStore as WorkspaceStore
 import qualified Kyyn.Porcelain.Capability.RootStore as RootStore
 import Kyyn.Porcelain.Validated (validatedValue)
@@ -89,8 +89,18 @@ runEvolutionStore = interpret $ \_ -> \case
   MatchesCapturedInputs (EvolutionContext kb identity _ captured) -> runExceptT $ do
     current <- readWorkspace (EvolutionWorkspace kb identity)
     pure (Workspace.matchesCapturedInputs captured current)
-  SaveCandidate (Candidate (EvolutionContext kb identity selectedBefore
-      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) target _ _)) report root@(Root after facts code recipes)) -> do
+  SaveCandidate candidate -> storeCandidate "latest" candidate
+  SaveCheckedCandidate (StoredCandidate allocated) (Candidate (EvolutionContext kb identity _ _) _ _) -> do
+    parent <- candidateScope kb
+    pointer <- stored WriteFile "checked" (relativePath ("checked/" ++ evolutionIdName identity))
+    -- Promote the exact directory saved by this check, not a potentially newer latest pointer.
+    FileSystem.replaceBytes parent pointer (Bytes.pack (relativeName allocated))
+  LoadCandidate workspace -> loadCandidateAt "latest" workspace
+  LoadCheckedCandidate workspace -> loadCandidateAt "checked" workspace
+
+storeCandidate :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es) => String -> Candidate Root -> Eff es StoredCandidate
+storeCandidate prefix (Candidate (EvolutionContext kb identity selectedBefore
+      snapshot@(WorkspaceSnapshot (WorkspaceManifest selected _ _ _ _) target _ _)) report root@(Root after facts code recipes)) = do
     parent <- candidateScope kb
     let revision = beforeRevision selectedBefore
     unless (revision == selected && code == target)
@@ -113,11 +123,14 @@ runEvolutionStore = interpret $ \_ -> \case
     stateContracts <- encodeRecipeContracts recipes >>= stored WriteFile "recipe-contracts.dhall"
     contractsPath <- stored WriteFile "recipe-contracts.dhall" (relativePath "recipe-contracts.dhall")
     FileSystem.writeBytes location contractsPath stateContracts
-    pointer <- stored WriteFile "latest" (relativePath ("latest/" ++ evolutionIdName identity))
+    pointer <- stored WriteFile "latest" (relativePath (prefix ++ "/" ++ evolutionIdName identity))
     FileSystem.replaceBytes parent pointer (Bytes.pack (relativeName allocated))
-  LoadCandidate (EvolutionWorkspace kb identity) -> do
+    pure (StoredCandidate allocated)
+
+loadCandidateAt :: (FileSystem.FileSystem :> es, WorkspaceStore.WorkspaceStore :> es, RootStore.RootStore :> es, DhallHandling.DhallHandling :> es, Failure :> es) => String -> EvolutionWorkspace -> Eff es (Either [Diagnostic] (Maybe (Candidate Root)))
+loadCandidateAt prefix (EvolutionWorkspace kb identity) = do
     parent <- candidateScope kb
-    pointer <- stored ReadFile "latest" (relativePath ("latest/" ++ evolutionIdName identity))
+    pointer <- stored ReadFile "latest" (relativePath (prefix ++ "/" ++ evolutionIdName identity))
     selected <- FileSystem.readOptionalBytes parent pointer
     case selected of
       Nothing -> pure (Right Nothing)

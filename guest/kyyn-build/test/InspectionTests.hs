@@ -177,7 +177,7 @@ checkInspection = do
     Left _ -> pure ()
     Right _ -> fail "Configuration import accepted"
   let validManifest = Text.unlines
-        ["{ schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Schema.validate\"",
+        ["{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = \"Schema.Root\", schemaMetadata = \"Schema.metadata\", validator = \"Schema.validate\"",
          ", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }",
          ", tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"]
   case parseManifest validManifest of

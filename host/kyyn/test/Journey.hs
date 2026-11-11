@@ -171,7 +171,7 @@ saveExample destination name query resultType arguments expected = do
     Bytes.writeFile target bytes
 
 manifest :: String -> String
-manifest schema = "{ schemaType = " ++ show (schema ++ ".Root") ++
+manifest schema = "{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = " ++ show (schema ++ ".Root") ++
   ", schemaMetadata = " ++ show (schema ++ ".metadata") ++
   ", validator = \"Validate.validate\", queries = [" ++ declaration "titleFor" "Result" ++
   "," ++ declaration "isDone" "DoneResult" ++ "], tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }"

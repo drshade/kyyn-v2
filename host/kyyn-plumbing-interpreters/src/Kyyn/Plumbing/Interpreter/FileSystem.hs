@@ -5,7 +5,7 @@ import Control.Exception (IOException, displayException, try)
 import qualified Control.Exception as IO
 import Control.Monad (forM, forM_, when, unless)
 import qualified Data.ByteString as Bytes
-import Data.List (sort)
+import Data.List (sort, isPrefixOf)
 import Data.Word (Word64)
 import Numeric (showHex)
 import Effectful (Eff, IOE, (:>), liftIO)
@@ -67,6 +67,8 @@ runFileSystemIO parent = interpret $ \env -> \case
         (\(temporary,handle) -> Bytes.hPut handle bytes >> hClose handle >> renameFile temporary target)
     pure (either (Left . displayException @IOException) Right result)
   ReadTree scope -> native Failure.ReadDirectoryTree (scopePath scope) (captureTree (scopePath scope))
+  ReadSelectedTree scope selected -> native Failure.ReadDirectoryTree (scopePath scope)
+    (captureSelectedTree (Just (map relativeName selected)) (scopePath scope))
   ReplaceTree staging scope path tree -> native Failure.ReplaceDirectoryTree (scopedPath scope path)
     (replaceDirectoryTree (scopePath staging) (scopedPath scope path) tree)
   ListDirectory scope -> native Failure.ListDirectory (scopePath scope) $ do
@@ -146,14 +148,21 @@ allocateDirectory parent = createDirectoryIfMissing True parent >> allocate
                  | otherwise -> ioError err
 
 captureTree :: FilePath -> IO FileTree
-captureTree base = do
+captureTree = captureSelectedTree Nothing
+
+captureSelectedTree :: Maybe [String] -> FilePath -> IO FileTree
+captureSelectedTree selected base = do
   linked <- pathIsSymbolicLink base
   if linked then ioError (userError "Directory scope must not be a symlink") else pure ()
   entries <- walk ""
   either (ioError . userError) pure (fileTree entries)
   where
+    wanted path = case selected of
+      Nothing -> True
+      Just paths -> any (\p -> p == path || (p ++ "/") `isPrefixOf` path || (path ++ "/") `isPrefixOf` p) paths
     walk prefix = do
-      names <- sort <$> Directory.listDirectory (base </> prefix)
+      allNames <- sort <$> Directory.listDirectory (base </> prefix)
+      let names = filter (wanted . (\name -> if null prefix then name else prefix ++ "/" ++ name)) allNames
       fmap concat $ forM names $ \name -> do
         let relative = if null prefix then name else prefix ++ "/" ++ name
             absolute = base </> relative

@@ -98,7 +98,7 @@ workspaceApiTests = do
   putStrLn "Workspace discovery uses one target build and checked typed description, with no accepted-lock fallback."
 
 manifest :: String -> Bytes.ByteString
-manifest name = Bytes.pack ("{ schemaType = " ++ show (name ++ ".Root") ++
+manifest name = Bytes.pack ("{ views = [] : List { name : Text, description : Text, path : Text }, schemaType = " ++ show (name ++ ".Root") ++
   ", schemaMetadata = " ++ show (name ++ ".metadata") ++
   ", validator = \"Validate.validate\", queries = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, inputMetadata : Text, resultType : Text, resultMetadata : Text }, tools = [] : List { name : Text, description : Text, implementation : Text, inputType : Text, resultType : Text } }")
 

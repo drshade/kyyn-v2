@@ -31,11 +31,13 @@ import Kyyn.Domain.Example (Example(..), ExampleRequirement(..))
 import Kyyn.Domain.FileTree
 import qualified Kyyn.Plumbing.Capability.DhallHandling as Dhall
 import Kyyn.Porcelain.Capability.RootStore (RootStore(..))
+import Kyyn.Porcelain.Protocol.Views (readViews)
 import Kyyn.Porcelain.Protocol.ModelConfiguration (readModelConfiguration)
 import Kyyn.Porcelain.Validated (validatedValue)
 
 runRootStore :: Dhall.DhallHandling :> es => Eff (RootStore : es) a -> Eff es a
 runRootStore = interpret $ \_ -> \case
+  ReadViews tree -> readViews tree
   ReadRootRecipes tree -> decodeRecipes (lookup recipesLocation (files tree))
   ReadRecipeStates definitions tree -> decodeStoredRecipes definitions tree
   EncodeRootRecipes recipes -> encodeStoredRecipes recipes
@@ -44,13 +46,14 @@ runRootStore = interpret $ \_ -> \case
     pure (CheckedValue (contractId contract) value)
   ReadRootDefinition code -> runExceptT $ do
     _ <- ExceptT (readModelConfiguration code)
+    _ <- ExceptT (readViews code)
     (manifest,manifestSource) <- withExceptT (map manifestDiagnostic) $ do
       path <- liftChecked (relativePath "kb.dhall")
       bytes <- maybe (problem "Missing kb.dhall") pure (lookup path (files code))
       source <- liftChecked (either (Left . show) Right (Text.decodeUtf8' bytes))
       (_,value) <- ExceptT (Dhall.inferValue source)
       fields <- record value
-      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs"]) (Keys.keys fields)) "Unexpected kb.dhall field"
+      ensure (all (`elem` ["schemaType","schemaMetadata","validator","queries","tools","outputs","views"]) (Keys.keys fields)) "Unexpected kb.dhall field"
       _ <- ExceptT (Dhall.decodeValue (Record ([(name, Scalar TextScalar) | name <- ["schemaType", "schemaMetadata", "validator"]] ++
         [("queries", List (Record [(name, Scalar TextScalar) | name <-
           ["name", "description", "implementation", "inputType", "inputMetadata", "resultType", "resultMetadata"]])),
