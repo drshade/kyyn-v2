@@ -7,19 +7,17 @@ title: 'Web is a read-only surface for showing a KB'
 
 ## Context
 
-Work on a KB is usually a conversation between a person and their agent, with
-authoring, checking and acceptance done through CLI and MCP. What that
-conversation lacks is a way to look at the thing under discussion: a record, a
-type, a query, a flow or a proposed change. Dhall facts, Haskell source and
-evolution directories are a poor way to see it.
+Kyyn is a set of tools for whoever works on a KB, human or AI. Those working
+together on a KB need a way to show each other the thing under discussion: a
+record, a type, a query, a flow or a proposed change. Dhall facts, Haskell
+source and evolution directories are a poor way to see it.
 
 ## Decision
 
-Web shows a KB; CLI and MCP change it. Whoever is working on the KB starts
-`kyyn-v2 web serve` and opens or shares a link. Typically an agent sends a link
-to the person it is working with, and the reply comes back in their
-conversation. Web has no mutation endpoints, forms that change a KB, accept
-control, review notes or inbox.
+Web is a tool for showing a KB; CLI and MCP change it. Whoever is working on
+the KB starts `kyyn-v2 web serve` and opens or shares a link, for example an AI
+agent showing a proposed change to the person it works with. Web has no mutation
+endpoints, forms that change a KB, accept control, review notes or inbox.
 
 Web has two kinds of page:
 
@@ -135,8 +133,8 @@ the algorithms that interpret that record.
 ## Boundaries and alternatives
 
 Reject a Web workbench with review notes, example forms and an accept button.
-It duplicates the conversation a person already has with their agent and
-duplicates operations CLI and MCP already provide.
+It duplicates the conversation collaborators already have and the operations
+CLI and MCP already provide.
 
 The server binds to loopback and serves one KB. Inspection pages and domain views
 share an origin; isolation between them is not provided.

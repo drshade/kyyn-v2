@@ -40,7 +40,7 @@ curation records are legitimate KB models, not mandatory kernel lifecycles.
 | Repair an integration update | Refresh its contract, fix callers and refetch evidence | 0005, 0014, 0015 |
 | Run outside the developer's machine | Nix and the KB flake explicitly supply the compiler and dependencies; credentials remain explicit | 0020–0022 |
 | Stop, reopen and automate settled work | Drafts survive; CLI can check/accept/render without Web or MCP servers | 0012, 0019, 0025 |
-| Show work to a person | Linked read-only pages for a record, type, query, flow or evolution, accepted or draft | 0018, 0023 |
+| Show work to a collaborator | Linked read-only pages for a record, type, query, flow or evolution, accepted or draft | 0018, 0023 |
 
 ## Synthetic acceptance fixtures
 
